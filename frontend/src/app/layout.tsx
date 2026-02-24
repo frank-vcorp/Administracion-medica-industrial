@@ -1,0 +1,70 @@
+import Link from 'next/link'
+import { ReactNode } from 'react'
+
+import './globals.css'
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="es">
+      <body className="min-h-screen bg-slate-50 text-slate-900">
+        <div className="flex h-screen bg-slate-50">
+          {/* Sidebar */}
+          <aside className="w-64 bg-slate-900 text-white hidden md:block">
+            <div className="p-6">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">
+                Residente Digital
+              </h1>
+              <p className="text-xs text-slate-400 mt-1">Administración Médica v0.1</p>
+            </div>
+
+            <nav className="mt-6 px-4 space-y-2">
+              <NavItem href="/dashboard" icon="📊" label="Dashboard" />
+              <NavItem href="/workers" icon="👥" label="Trabajadores" />
+              <NavItem href="/reception" icon="🏥" label="Recepción / Citas" />
+              <div className="pt-4 pb-2">
+                <p className="text-xs uppercase text-slate-500 font-semibold px-2">Médico</p>
+              </div>
+              <NavItem href="/events" icon="📁" label="Expedientes Activos" />
+              <NavItem href="/validation" icon="✅" label="Validación" />
+
+              <div className="pt-4 pb-2">
+                <p className="text-xs uppercase text-slate-500 font-semibold px-2">Administración</p>
+              </div>
+              <NavItem href="/companies" icon="🏢" label="Empresas" />
+              <NavItem href="/workers" icon="👷" label="Trabajadores" />
+              <NavItem href="/branches" icon="🏪" label="Sucursales" />
+              <NavItem href="/services" icon="🩺" label="Servicios" />
+              <NavItem href="/reports" icon="📈" label="Reportes" />
+            </nav>
+          </aside>
+
+          {/* Main Content */}
+          <main className="flex-1 overflow-y-auto">
+            <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shadow-sm">
+              <h2 className="text-lg font-medium text-slate-700">Panel de Control</h2>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-slate-500">Dr. Usuario Demo</span>
+                <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-300"></div>
+              </div>
+            </header>
+            <div className="p-8">
+              {children}
+            </div>
+          </main>
+        </div>
+      </body>
+    </html>
+  )
+}
+
+function NavItem({ href, icon, label }: { href: string, icon: string, label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+    >
+      <span>{icon}</span>
+      <span className="font-medium">{label}</span>
+    </Link>
+  )
+}

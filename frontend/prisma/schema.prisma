@@ -1,0 +1,272 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --------------------------------------------------------
+// CORE / ACCESS
+// --------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  RECEPTIONIST
+  DOCTOR_GENERAL
+  DOCTOR_VALIDATOR
+  CAPTURIST
+  COMPANY_CLIENT
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   // Hashed
+  fullName  String
+  role      UserRole @default(DOCTOR_GENERAL)
+  isActive  Boolean  @default(true)
+  
+  // Relations
+  signatures MedicalVerdict[] // Dictamenes firmados por este usuario
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  config      Json?
+  
+  branches    Branch[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("tenants")
+}
+
+model Branch {
+  id          String   @id @default(uuid())
+  name        String
+  address     String?
+  phone       String?
+  managerName String?
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  events      MedicalEvent[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("branches")
+}
+
+// --------------------------------------------------------
+// CLIENTES Y TRABAJADORES
+// --------------------------------------------------------
+
+model Company {
+  id          String   @id @default(uuid())
+  name        String
+  rfc         String?  // Tax ID
+  address     String?
+  contactName String?
+  email       String?
+  phone       String?
+  
+  workers     Worker[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("companies")
+}
+
+model Worker {
+  id          String   @id @default(uuid())
+  
+  // ID Universal (Vital para el sistema)
+  universalId String   @unique 
+  
+  firstName   String
+  lastName    String
+  nationalId  String?  // CURP/DNI
+  dob         DateTime? // Date of Birth
+  email       String?
+  phone       String?
+
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id])
+
+  medicalHistory MedicalEvent[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("workers")
+}
+
+// --------------------------------------------------------
+// SERVICIOS Y CATÁLOGOS
+// --------------------------------------------------------
+
+model Service {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique // Internal code e.g. "AUD-01"
+  description String?
+  price       Decimal?
+  category    String?  // 'Medical', 'Lab', 'Package'
+
+  // Relation to profiles (ManyToMany via implicit or explicit? Implicit is fine for now)
+  profiles    ServiceProfile[] @relation("ProfileServices")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("services")
+}
+
+model ServiceProfile {
+  id          String   @id @default(uuid())
+  name        String   // e.g. "Batería Ingreso Operativo"
+  description String?
+  
+  services    Service[] @relation("ProfileServices")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("service_profiles")
+}
+
+// --------------------------------------------------------
+// FLUJO MEDICO (EXPEDIENTE)
+// --------------------------------------------------------
+
+enum EventStatus {
+  SCHEDULED
+  CHECKED_IN
+  IN_PROGRESS
+  VALIDATING
+  COMPLETED
+  CANCELED
+}
+
+model MedicalEvent {
+  id          String      @id @default(uuid())
+  status      EventStatus @default(SCHEDULED)
+  
+  workerId    String
+  worker      Worker      @relation(fields: [workerId], references: [id])
+
+  branchId    String
+  branch      Branch      @relation(fields: [branchId], references: [id])
+
+  checkInDate DateTime?
+
+  // Sub-documents / Components of the Event
+  exam        MedicalExam?
+  
+  // Array of studies/labs linked to this event
+  studies     StudyRecord[]
+  labs        LabRecord[]
+
+  // Final Output
+  verdict     MedicalVerdict?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("medical_events")
+}
+
+model MedicalExam {
+  id              String   @id @default(uuid())
+  eventId         String   @unique
+  event           MedicalEvent @relation(fields: [eventId], references: [id])
+
+  // Campos básicos examen físico (se expandirá)
+  weight          Float?
+  height          Float?
+  bloodPressure   String?
+  heartRate       Int?
+  notes           String?  @db.Text
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("medical_exams")
+}
+
+model StudyRecord {
+  id              String   @id @default(uuid())
+  eventId         String
+  event           MedicalEvent @relation(fields: [eventId], references: [id])
+
+  serviceName     String   // Copia del nombre del servicio para histórico
+  
+  // Archivo
+  fileUrl         String?  // Path to PDF/Image
+
+  // AI & Data
+  extractedData   Json?    // OCR results
+  aiPrediction    String?  // AI suggestion
+  
+  // Status
+  isCompleted     Boolean  @default(false)
+  validatorNotes  String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("study_records")
+}
+
+model LabRecord {
+  id              String   @id @default(uuid())
+  eventId         String
+  event           MedicalEvent @relation(fields: [eventId], references: [id])
+
+  serviceName     String
+  
+  fileUrl         String?
+  
+  extractedData   Json?
+  aiPrediction    String?
+  
+  isCompleted     Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("lab_records")
+}
+
+model MedicalVerdict {
+  id              String   @id @default(uuid())
+  eventId         String   @unique
+  event           MedicalEvent @relation(fields: [eventId], references: [id])
+
+  finalDiagnosis  String   @db.Text
+  recommendations String?  @db.Text
+
+  // Firma
+  validatorId     String
+  validator       User     @relation(fields: [validatorId], references: [id])
+  signedAt        DateTime @default(now())
+  signatureHash   String?  // Digital signature string
+
+  pdfUrl          String?  // Generado final
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("medical_verdicts")
+}
