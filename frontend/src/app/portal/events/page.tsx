@@ -3,10 +3,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import Link from 'next/link'
+import { EventRowButtons } from '@/components/EventRowButtons'
 
 /**
- * @id IMPL-20260225-01
+ * @id IMPL-20260225-03
  * Historial de eventos médicos del portal B2B - Obtiene datos seguros de la sesión
+ * Integración de Firma Digital y Reportes Masivos
  */
 export default async function PortalEventsPage() {
     const session = await getServerSession(authOptions)
@@ -76,18 +78,12 @@ export default async function PortalEventsPage() {
                                         )}
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        {isCompleted && hasVerdict ? (
-                                            <a
-                                                href={`/api/pdf/${event.id}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-block text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                                            >
-                                                📥 Descargar PDF
-                                            </a>
-                                        ) : (
-                                            <span className="text-slate-300 text-xs italic">No disponible</span>
-                                        )}
+                                        <EventRowButtons
+                                            eventId={event.id}
+                                            isCompleted={isCompleted}
+                                            hasVerdict={hasVerdict}
+                                            isApto={isApto}
+                                        />
                                     </td>
                                 </tr>
                             )
