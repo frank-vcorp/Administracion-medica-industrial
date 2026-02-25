@@ -6,6 +6,11 @@ import { revalidatePath } from 'next/cache'
 import * as EventService from '@/services/medical-event.service'
 import prisma from '@/lib/prisma'
 
+/**
+ * @id IMPL-20260225-01
+ * @fix FIX-20260225-03
+ * Server Action para subir archivos y enviarlos al pipeline de IA
+ */
 export async function uploadFile(formData: FormData) {
     const file = formData.get('file') as File
     const eventId = formData.get('eventId') as string
@@ -41,9 +46,9 @@ export async function uploadFile(formData: FormData) {
 
         try {
             // Should be env var, defaulting to docker service name
-            const PYTHON_API = process.env.PYTHON_API_URL || 'http://backend:8000'
+            const PYTHON_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-            const response = await fetch(`${PYTHON_API}/analyze`, {
+            const response = await fetch(`${PYTHON_API}/api/v1/analyze`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ file_path: relativePath })

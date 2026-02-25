@@ -1,17 +1,26 @@
-# AGENTS.md - Metodología INTEGRA v2.4.0
+# AGENTS.md - Metodología INTEGRA v3.0.0 (Edición VS Code - 5 Agentes)
 
 ## Ecosistema de Agentes IA
 
+### Filosofía de Distribución (VS Code vs Antigravity)
+
+| Entorno | Agentes | Razón |
+|---------|---------|-------|
+| **VS Code** | 5 (INTEGRA, SOFIA, GEMINI, DEBY, CRONISTA) | Más especialización: QA/Infra separado de Debugging, Estados separado de Arquitectura |
+| **Antigravity** | 3 (INTEGRA, SOFIA, DEBY) | DEBY absorbe QA+Infra, INTEGRA absorbe Estados+Diario |
+
 ### Agentes Disponibles
-| Agente | Descripción | Modelo | Puede Escalar a |
-|--------|-------------|--------|-----------------|
-| **INTEGRA - Arquitecto** | Define qué construir, prioriza backlog y toma decisiones de arquitectura | Gemini 3 Pro | SOFIA, GEMINI, Deby, CRONISTA |
-| **SOFIA - Builder** | Implementa código, escribe tests y genera checkpoints de cada entrega | Claude Haiku 4.5 | INTEGRA, GEMINI, Deby, CRONISTA |
-| **GEMINI-CLOUD-QA** | Configura hosting (Vercel/GCP), valida Soft Gates y revisa código | Gemini 3 Pro | SOFIA, Deby, CRONISTA |
-| **Deby** | Analiza errores complejos, identifica causa raíz y genera dictámenes técnicos | Claude Opus 4.5 | ❌ (Solo recibe, no escala) |
-| **CRONISTA-Estados-Notas** | Mantiene PROYECTO.md actualizado, sincroniza estados y detecta inconsistencias | GPT-5.1 | Todos (notificaciones) |
+
+| Agente | Rol | Prefijos | Puede Escalar a |
+|--------|-----|----------|-----------------|
+| **INTEGRA - Arquitecto** | Arquitecto / Product Owner. Define qué construir, prioriza backlog, toma decisiones de arquitectura y genera SPECs. | `ARCH`, `DOC` | SOFIA, GEMINI, Deby, CRONISTA |
+| **SOFIA - Builder** | Builder / Implementadora. Construye código, UI y tests. Sigue SPECs y genera checkpoints de entrega. | `IMPL` | INTEGRA, GEMINI, Deby, CRONISTA |
+| **GEMINI-CLOUD-QA** | QA / Infra / Hosting. Configura hosting (Vercel/GCP), valida Soft Gates, revisa código y gestiona CI/CD. | `INFRA` | SOFIA, Deby, CRONISTA |
+| **Deby** | Forense / Debugger. Analiza errores complejos, identifica causa raíz y genera dictámenes técnicos. | `FIX` | ❌ (Solo recibe, no escala) |
+| **CRONISTA-Estados-Notas** | Administrador de Estado. Mantiene PROYECTO.md actualizado, sincroniza estados y detecta inconsistencias. | `DOC` | Todos (notificaciones) |
 
 ### Mapa de Interconsultas
+
 ```
        ┌──────────┐
  ┌────►│  DEBY    │◄────┐  (Consultor - Solo recibe)
@@ -35,23 +44,45 @@
 ```
 
 ### Cómo Invocar una Interconsulta
+
 ```javascript
-runSubagent(agentName='[NOMBRE-EXACTO]', prompt='ID:[tu-ID] Contexto:[descripción]')
+runSubagent(
+  agentName='[NOMBRE-EXACTO]', 
+  prompt='ID:[tu-ID] Contexto:[descripción] Problema:[qué resolver] Expectativa:[qué esperas]'
+)
 ```
 
+**Nombres exactos:** `INTEGRA - Arquitecto`, `SOFIA - Builder`, `GEMINI-CLOUD-QA`, `Deby`, `CRONISTA-Estados-Notas`
+
 ### Triggers de Escalamiento
-| Situación | Agente a Invocar |
-|-----------|------------------|
-| Error no resuelto en 2 intentos | `Deby` |
-| Decisión arquitectónica | `INTEGRA - Arquitecto` |
-| Implementación de SPEC | `SOFIA - Builder` |
-| Auditoría de calidad | `GEMINI-CLOUD-QA` |
-| Sincronizar PROYECTO.md | `CRONISTA-Estados-Notas` |
+
+| Situación | Agente a Invocar | Trigger |
+|-----------|------------------|---------|
+| Planificación, Priorización, Arquitectura | `INTEGRA - Arquitecto` | Inicio de tarea o duda de diseño |
+| Implementación de Código, UI y Tests | `SOFIA - Builder` | SPEC autorizada |
+| Auditoría de Calidad, Hosting, CI/CD | `GEMINI-CLOUD-QA` | Código listo para QA o deploy |
+| Error no resuelto en 2 intentos, Debugging | `Deby` | Automático tras 2 fallos |
+| Sincronizar estados en PROYECTO.md | `CRONISTA-Estados-Notas` | Al cambiar estado de tarea |
 
 ### Artefactos de Interconsulta
-- **Dictámenes:** `context/interconsultas/DICTAMEN_FIX-[ID].md`
-- **ADRs:** `context/decisions/ADR-[NNN]-[titulo].md`
-- **Handoffs:** `context/HANDOFF-[FEATURE].md`
+
+| Tipo | Ubicación | Genera |
+|------|-----------|--------|
+| Dictámenes | `context/interconsultas/DICTAMEN_FIX-[ID].md` | DEBY |
+| ADRs | `context/decisions/ADR-[NNN]-[titulo].md` | INTEGRA |
+| Handoffs | `context/HANDOFF-[FEATURE].md` | INTEGRA |
+| Checkpoints | `context/checkpoints/CHK_YYYY-MM-DD_HHMM.md` | SOFIA / CRONISTA |
+| Auditorías | Comentarios en PR o Checkpoint | GEMINI |
+
+### Commits por Agente
+
+| Agente | Prefijo típico | Ejemplo |
+|--------|---------------|---------|
+| INTEGRA | `docs`, `feat` | `docs: crear SPEC de facturación` |
+| SOFIA | `feat`, `fix`, `refactor` | `feat(clientes): IMPL-20260126-01` |
+| GEMINI | `chore`, `docs`, `ci` | `chore(infra): configurar Vercel` |
+| DEBY | `fix` | `fix(api): FIX-20260126-01 - resolver timeout` |
+| CRONISTA | `docs` | `docs(proyecto): sincronizar estados del sprint` |
 
 ---
 

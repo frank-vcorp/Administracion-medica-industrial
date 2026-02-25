@@ -4,9 +4,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { renderToStream } from '@react-pdf/renderer'
+import { MedicalDictamenPDF } from '@/components/pdf/MedicalDictamenPDF'
+import { writeFile } from 'fs/promises'
+import { join } from 'path'
 
 /**
  * @id IMPL-20260225-03
+ * @fix FIX-20260225-03
  * Server Action para firmar un dictamen médico (PDF)
  * Obtiene el evento, genera el PDF del dictamen y lo firma
  */
@@ -73,30 +78,34 @@ export async function signMedicalDictamPDF(eventId: string) {
 
     // Preparar datos para enviar al backend
     const dictamData = {
+      id: event.verdict.id,
       eventId: event.id,
-      worker: {
-        firstName: event.worker.firstName,
-        lastName: event.worker.lastName,
-        universalId: event.worker.universalId,
-        dob: event.worker.dob?.toISOString() || '',
-        nationalId: event.worker.nationalId || ''
-      },
-      verdict: {
-        finalDiagnosis: event.verdict.finalDiagnosis,
-        recommendations: event.verdict.recommendations,
-        createdAt: event.verdict.createdAt.toISOString()
-      },
-      branch: {
-        name: event.branch?.name || 'Clínica AMI',
-        address: event.branch?.address || ''
-      },
-      signedBy: {
-        email: session.user.email,
-        name: session.user.fullName || 'Validador'
-      },
-      timestamp: new Date().toISOString()
+      signedAt: event.verdict.signedAt || new Date(),
+      finalDiagnosis: event.verdict.finalDiagnosis,
+      recommendations: event.verdict.recommendations,
+      worker: event.worker,
+      company: { name: event.branch?.name || 'Clínica AMI' },
+      validator: { name: session.user.fullName || 'Validador' }
     }
 
+    try {
+      // Generar PDF
+      const stream = await renderToStream(<MedicalDictamenPDF data={dictamData as any} />)
+      const chunks = []
+      for await (const chunk of stream as any) {
+        chunks.push(chunk)
+      }
+      const buffer = Buffer.concat(chunks)
+      
+      // Guardar PDF en uploads
+      const uploadDir = join(process.cwd(), '../uploads')
+      const savePath = join(uploadDir, fileName)
+      await writeFile(savePath, buffer)
+      console.log(`✅ PDF generado y guardado en ${savePath}`)
+    } catch (error) {
+      console.error('Error generando PDF:', error)
+      return { success: false, error: 'Error al generar el PDF' }
+    }
 
     // Llamar al backend para firmar
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'

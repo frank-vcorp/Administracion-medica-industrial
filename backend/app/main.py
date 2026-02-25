@@ -20,7 +20,7 @@ app = FastAPI(
     description="Pipeline IA modular para análisis de documentos médicos"
 )
 
-UPLOAD_DIR = "/app/uploads"
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/uploads")
 # Using the key provided by user (Temporary for MVP)
 # In production this MUST be an env variable.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyC5bVos0JwqdutC3JsQf6I3sNY7NVv2qlQ")
@@ -342,6 +342,7 @@ def generate_excel_report(request: GenerateReportRequest):
     Endpoint especializado para generar reporte en Excel.
     
     IMPL-20260225-02: Generación de Excel
+    FIX-20260225-03: Retorno de Excel en Base64
     """
     if not reporter:
         return {
@@ -356,6 +357,12 @@ def generate_excel_report(request: GenerateReportRequest):
             data_list=request.data_list
         )
         
+        if result.get("status") == "success" and "output_file" in result:
+            import base64
+            with open(result["output_file"], "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+            result["data"] = {"xlsx": encoded}
+            
         return result
     
     except Exception as e:
