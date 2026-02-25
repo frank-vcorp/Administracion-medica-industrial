@@ -1,8 +1,6 @@
 import { createWorker, getWorkers } from "@/actions/worker.actions"
 import { getCompanies } from "@/actions/admin.actions"
 
-export const dynamic = 'force-dynamic'
-
 export default async function WorkersPage() {
     const workers = await getWorkers()
     const companies = await getCompanies()

@@ -1,7 +1,5 @@
 import prisma from "@/lib/prisma"
 
-export const dynamic = 'force-dynamic'
-
 async function getValidationQueue() {
     // For demo purposes, we show all events so the user can see the flow immediately.
     // In production: where: { status: 'VALIDATING' }

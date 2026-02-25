@@ -1,8 +1,8 @@
 # PROYECTO: Residente Digital
 
-**Estado:** 🟡 EN PROGRESO (Fase 2)
-**Fase:** Desarrollo Portal B2B
-**ID Actual:** ARCH-20260224-02
+**Estado:** 🟡 EN PROGRESO (Fase 3)
+**Fase:** Infraestructura de Producción (DB)
+**ID Actual:** INFRA-20260225-01
 
 ## 📋 Descripción
 Sistema de Administración Médica Industrial (AMI) para gestión de empresas, trabajadores, expedientes, citas y estudios médicos con integración de IA para lectura de documentos y pre-diagnóstico.

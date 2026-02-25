@@ -1,9 +1,6 @@
 import Link from 'next/link'
 import prisma from "@/lib/prisma"
 
-// Force dynamic rendering to fetch fresh data on every request
-export const dynamic = 'force-dynamic'
-
 async function getEvents() {
     return await prisma.medicalEvent.findMany({
         include: {

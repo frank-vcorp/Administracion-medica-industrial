@@ -2,8 +2,6 @@ import { getCompanyDashboardStats } from '@/actions/portal.actions'
 import prisma from '@/lib/prisma'
 import Link from 'next/link'
 
-export const dynamic = 'force-dynamic'
-
 export default async function PortalDashboardPage() {
     // 1. MIP (Mínima Intervención): Simular que estamos logueados como la primera empresa disponible
     const currentCompany = await prisma.company.findFirst()
