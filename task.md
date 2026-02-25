@@ -69,11 +69,11 @@
     - [x] Implementar Logout y manejo de sesiones
     - [x] Testing E2E de flujo de autenticación completo
 
-- [/] Refinamiento de Pipeline IA y Ofimática (SOFÍA - Fase 6)
-    - [ ] Mejorar clasificación de documentos con Vision API (filtros por tipo)
-    - [ ] Implementar extracción de datos específicos por estudio (Laboratorio, Radiología, etc.)
-    - [ ] Generar reportes de análisis masivo con histórico
-    - [ ] Integración de firma digital avanzada en PDFs (RFC/Certificado digital)
+- [✓] Refinamiento de Pipeline IA y Ofimática (SOFÍA - Fase 6)
+    - [x] Mejorar clasificación de documentos con Vision API (filtros por tipo)
+    - [x] Implementar extracción de datos específicos por estudio (Laboratorio, Radiología, etc.)
+    - [x] Generar reportes de análisis masivo con histórico
+    - [x] Integración de firma digital avanzada en PDFs (RFC/Certificado digital)
 
 - [x] Auditoría de Seguridad y QA (DEBY - Fase 5)
     - [x] Ejecutar Qodo CLI para analizar cambios de autenticación
