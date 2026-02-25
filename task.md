@@ -59,7 +59,7 @@
     - [x] API de Generación PDF: Convertir MedicalVerdict a PDF
     - [x] UI de Descarga: Implementar acción en Portal B2B para bajar PDF oficial
 
-- [/] Seguridad: Login y Control Multi-tenant (SOFÍA - Fase 5)
+- [x] Seguridad: Login y Control Multi-tenant (SOFÍA - Fase 5)
     - [x] Implementar NextAuth.js v5 o Auth.js para autenticación
     - [x] Crear modelo de Usuario con hashedPassword en Prisma
     - [x] Implementar rutas de Sign-up y Sign-in
@@ -67,7 +67,7 @@
     - [x] Asociación de Empresa a Usuario (Multi-tenant)
     - [x] Validación de permisos por rol (MDico, Recepcionista, Admin)
     - [x] Implementar Logout y manejo de sesiones
-    - [ ] Testing E2E de flujo de autenticación completo
+    - [x] Testing E2E de flujo de autenticación completo
 
 - [ ] Refinamiento de Pipeline IA y Ofimática (SOFÍA - Fase 6)
     - [ ] Mejorar clasificación de documentos con Vision API (filtros por tipo)

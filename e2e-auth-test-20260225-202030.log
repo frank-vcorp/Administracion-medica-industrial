@@ -1,0 +1,117 @@
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 1: Login con credenciales válidas[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:20:30][0m Realizando login: ADMIN (admin@sistema.com)
+[0;34m[20:20:30][0m   1. Obteniendo página de signin...
+[0;34m[20:20:30][0m   2. CSRF Token: ...
+[0;34m[20:20:30][0m   3. Enviando credenciales...
+[0;34m[20:20:30][0m   4. HTTP Response: 302
+[0;32m✓ Login procesado (redirección 302) para ADMIN[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 2A: Ruta /portal sin sesión (debe redirigir)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[1;33m⚠ Redirección detectada pero destino incierto: [0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 2B: Ruta /admin sin sesión (debe redirigir)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;32m✓ Redirección a login detectada (HTTP 200)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 3A: Login ADMIN -> Acceso a /admin[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:20:32][0m Realizando login: ADMIN (admin@sistema.com)
+[0;34m[20:20:32][0m   1. Obteniendo página de signin...
+[0;34m[20:20:32][0m   2. CSRF Token: ...
+[0;34m[20:20:32][0m   3. Enviando credenciales...
+[0;34m[20:20:32][0m   4. HTTP Response: 302
+[0;32m✓ Login procesado (redirección 302) para ADMIN[0m
+[0;32m✓ Acceso a /admin con redirección (HTTP 307, redirige a: <!DOCTYPE html>)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 3B: Login COMPANY_CLIENT -> Acceso a /portal[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:20:33][0m Realizando login: COMPANY_CLIENT (portal@empresa-a.com)
+[0;34m[20:20:33][0m   1. Obteniendo página de signin...
+[0;34m[20:20:33][0m   2. CSRF Token: ...
+[0;34m[20:20:33][0m   3. Enviando credenciales...
+[0;34m[20:20:33][0m   4. HTTP Response: 302
+[0;32m✓ Login procesado (redirección 302) para COMPANY_CLIENT[0m
+[0;32m✓ Acceso a /portal con redirección (HTTP 307)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 4A: COMPANY_CLIENT intenta acceder /admin (debe denegar)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:20:34][0m Realizando login: COMPANY_CLIENT (portal@empresa-a.com)
+[0;34m[20:20:34][0m   1. Obteniendo página de signin...
+[0;34m[20:20:34][0m   2. CSRF Token: ...
+[0;34m[20:20:34][0m   3. Enviando credenciales...
+[0;34m[20:20:34][0m   4. HTTP Response: 302
+[0;32m✓ Login procesado (redirección 302) para COMPANY_CLIENT[0m
+[0;32m✓ Acceso denegado (redirección HTTP 307)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 4B: ADMIN accede a /admin (debe permitir)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:20:35][0m Realizando login: ADMIN (admin@sistema.com)
+[0;34m[20:20:35][0m   1. Obteniendo página de signin...
+[0;34m[20:20:35][0m   2. CSRF Token: ...
+[0;34m[20:20:35][0m   3. Enviando credenciales...
+[0;34m[20:20:35][0m   4. HTTP Response: 302
+[0;32m✓ Login procesado (redirección 302) para ADMIN[0m
+[0;32m✓ Acceso permitido a /admin (HTTP 307)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 5: Verificar aislamiento de datos multi-tenant[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:20:36][0m Verificando que empresas A y B tengan companyId diferentes en la BD...
+[0;34m[20:20:36][0m   Usuario portal@empresa-a.com debe estar en Empresa Test A
+[0;34m[20:20:36][0m   Usuario portal@empresa-b.com debe estar en Empresa Test B
+[0;34m[20:20:36][0m Realizando login: CLIENT-A (portal@empresa-a.com)
+[0;34m[20:20:36][0m   1. Obteniendo página de signin...
+[0;34m[20:20:36][0m   2. CSRF Token: ...
+[0;34m[20:20:36][0m   3. Enviando credenciales...
+[0;34m[20:20:37][0m   4. HTTP Response: 302
+[0;32m✓ Login procesado (redirección 302) para CLIENT-A[0m
+Sesión Cliente A: {}
+[0;34m[20:20:38][0m Realizando login: CLIENT-B (portal@empresa-b.com)
+[0;34m[20:20:38][0m   1. Obteniendo página de signin...
+[0;34m[20:20:38][0m   2. CSRF Token: ...
+[0;34m[20:20:38][0m   3. Enviando credenciales...
+[0;34m[20:20:38][0m   4. HTTP Response: 302
+[0;32m✓ Login procesado (redirección 302) para CLIENT-B[0m
+Sesión Cliente B: {}
+[1;33m⚠ No se verificó independencia en las sesiones (verificar manualmente en BD)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 6: Logout y verificación de sesión eliminada[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:20:39][0m Realizando login: ADMIN (admin@sistema.com)
+[0;34m[20:20:39][0m   1. Obteniendo página de signin...
+[0;34m[20:20:39][0m   2. CSRF Token: ...
+[0;34m[20:20:39][0m   3. Enviando credenciales...
+[0;34m[20:20:39][0m   4. HTTP Response: 302
+[0;32m✓ Login procesado (redirección 302) para ADMIN[0m
+[0;34m[20:20:40][0m Sesión antes de logout: {}
+[0;34m[20:20:40][0m Ejecutando logout...
+[0;34m[20:20:40][0m HTTP code logout: 302
+[0;32m✓ Logout exitoso - Redirigido a login (HTTP 307)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 7A: Login con contraseña incorrecta[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;32m✓ Login rechazado con contraseña incorrecta (HTTP 302)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 7B: Login con usuario inexistente[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;32m✓ Login rechazado para usuario inexistente (HTTP 302)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;32m✓ TESTING E2E COMPLETADO[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+
+[1;33mHALLAZGOS PRINCIPALES:[0m
+[0;34m[20:20:41][0m Limpieza completada

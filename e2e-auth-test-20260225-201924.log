@@ -1,0 +1,82 @@
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 1A: Login con credenciales válidas (admin@sistema.com / Admin@123)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:19:24][0m Obteniendo CSRF token...
+[1;33m⚠ No se pudo extraer CSRF token de HTML, intentando con HTTP-only cookie...[0m
+[0;34m[20:19:26][0m Intentando login como ADMIN...
+[0;32m✓ Login como ADMIN exitoso (HTTP 200)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 1B: Verificar sesión activa (GET /api/auth/session)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+Respuesta de sesión:
+{}
+[1;33m⚠ No se confirmó sesión en respuesta JSON, pero la cookie podría estar HTTP-only[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 2A: Ruta protegida /portal sin sesión (debería redirigir a login)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;32m✓ Redirección correcta sin sesión (HTTP 307)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 2B: Ruta protegida /admin sin sesión (debería redirigir a login)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;32m✓ Redirección correcta sin sesión (HTTP 307)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 3A: Login y acceso a /admin (usuario ADMIN)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[1;33m⚠ HTTP code: 307 (podría ser redirección o protección adicional)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 3B: Login y acceso a /portal (usuario COMPANY_CLIENT - Empresa A)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[1;33m⚠ HTTP code: 307[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 4A: Usuario Empresa A intenta acceder a datos de Empresa B (negación esperada)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:19:28][0m Verificando usuarios de diferentes empresas en la BD...
+Sesión Empresa A:
+{}
+Sesión Empresa B:
+{}
+[1;33m⚠ Verificar manualmente que companyId es diferente en ambas sesiones[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 5A: Login con contraseña incorrecta[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[1;33m⚠ Verificar respuesta de error: [0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 5B: Login con usuario inexistente[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[1;33m⚠ Verificar respuesta de error[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 6A: Logout y verificación de sesión eliminada[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34m[20:19:32][0m Sesión antes de logout: {}
+[0;34m[20:19:33][0m Sesión después de logout: {}
+[0;32m✓ Sesión eliminada correctamente. Redirección a login (HTTP 307)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 7A: Usuario COMPANY_CLIENT intenta acceder a /admin (negación esperada)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;32m✓ Acceso denegado a /admin para COMPANY_CLIENT (redirección HTTP 307)[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;34mTEST: 7B: Usuario ADMIN accede a /admin (acceso permitido)[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+[1;33m⚠ HTTP code: 307[0m
+
+[0;34m═══════════════════════════════════════════════════════════[0m
+[0;32m✓ TESTING E2E COMPLETADO[0m
+[0;34m═══════════════════════════════════════════════════════════[0m
+
+[0;34mArchivo de log: e2e-auth-test-20260225-201924.log[0m
+[0;34mCookies utilizadas: cookies.txt (se borrará al finalizar)[0m
+
+[1;33mRESUMEN DE HALLAZGOS:[0m
+[0;34m[20:19:35][0m Limpieza completada
