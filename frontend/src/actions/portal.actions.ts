@@ -40,33 +40,29 @@ export async function getCompanyDashboardStats() {
       where: { companyId }
     })
 
-    const events = await prisma.medicalEvent.findMany({
-      where: { worker: { companyId } },
-      select: {
-        id: true,
-        status: true,
-        verdict: {
-          select: {
-            id: true,
-            finalDiagnosis: true,
-          }
-        }
-      }
+    // FIX REFERENCE: FIX-20260225-02 - Optimización de consultas para evitar DoS lógico
+    const totalEvents = await prisma.medicalEvent.count({
+      where: { worker: { companyId } }
     })
 
-    const totalEvents = events.length
-    const completedEvents = events.filter(e => e.status === 'COMPLETED').length
+    const completedEvents = await prisma.medicalEvent.count({
+      where: { worker: { companyId }, status: 'COMPLETED' }
+    })
+
     const inProgressEvents = totalEvents - completedEvents
 
-    // Calcular dictámenes aptos vs no aptos
+    // Calcular dictámenes aptos vs no aptos usando agregaciones
+    const verdicts = await prisma.medicalVerdict.findMany({
+      where: { event: { worker: { companyId } } },
+      select: { finalDiagnosis: true }
+    })
+
     let aptos = 0
     let noAptos = 0
-    events.forEach(e => {
-      if (e.verdict) {
-        const diag = e.verdict.finalDiagnosis.toLowerCase()
-        if (diag.includes('no apto')) noAptos++
-        else aptos++
-      }
+    verdicts.forEach(v => {
+      const diag = v.finalDiagnosis.toLowerCase()
+      if (diag.includes('no apto')) noAptos++
+      else aptos++
     })
 
     return {
@@ -81,7 +77,8 @@ export async function getCompanyDashboardStats() {
       }
     }
   } catch (error) {
-    console.error("Error fetching company stats:", error)
+    // FIX REFERENCE: FIX-20260225-02 - Sanitización de logs
+    console.error("Error fetching company stats:", error instanceof Error ? error.message : "Unknown error")
     return { success: false, error: 'Hubo un error al cargar las métricas.' }
   }
 }

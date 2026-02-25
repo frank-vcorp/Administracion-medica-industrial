@@ -45,7 +45,8 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!user || !user.isActive) {
-          throw new Error("Usuario no encontrado o inactivo")
+          // FIX REFERENCE: FIX-20260225-02 - Mensaje genérico para evitar enumeración de usuarios
+          throw new Error("Credenciales inválidas")
         }
 
         const passwordMatch = await compare(
@@ -54,7 +55,8 @@ export const authOptions: NextAuthOptions = {
         )
 
         if (!passwordMatch) {
-          throw new Error("Contraseña incorrecta")
+          // FIX REFERENCE: FIX-20260225-02 - Mensaje genérico para evitar enumeración de usuarios
+          throw new Error("Credenciales inválidas")
         }
 
         return {
