@@ -79,4 +79,58 @@
     - [x] Ejecutar Qodo CLI para analizar cambios de autenticación
     - [x] Generar QODO_AUDIT_RAW para seguridad post-implementación
     - [x] Testing manual de acceso multi-tenant (validar aislamiento de datos)
-    - [x] Crear DICTAMEN de seguridad (DICTAMEN_FIX-20260225-02.md)
+
+- [/] Módulos Complementarios Fase 2: Citas, Dashboard y Bitácora (SOFIA - Sprint 7)
+    - [ ] MOD-CITAS: Extensión del schema Prisma
+        - [ ] Crear modelo `Appointment` (branchId, workerId, serviceProfileId, scheduledStart, scheduledEnd, status)
+        - [ ] Crear enum `AppointmentStatus` (SCHEDULED, CONFIRMED, CANCELLED, NO_SHOW, COMPLETED)
+        - [ ] Agregar índices para optimización (branchId, scheduledStart)
+        - [ ] Ejecutar migración de base de datos
+    - [ ] MOD-CITAS: Server Actions y Lógica
+        - [ ] Implementar `createAppointment()` Server Action
+        - [ ] Implementar `updateAppointmentStatus()` Server Action
+        - [ ] Implementar `getDailyAppointments(branchId, date)` Server Action (optimizada)
+        - [ ] Implementar `cancelAppointment()` Server Action
+        - [ ] Implementar conversión de Cita a Evento Médico en Check-in
+    - [ ] MOD-CITAS: UI Components
+        - [ ] Crear componente `AppointmentForm` (Reserva)
+        - [ ] Crear componente `AppointmentList` (Agenda por sucursal)
+        - [ ] Crear componente `AppointmentCalendar` (Vista calendario)
+        - [ ] Crear página `/admin/appointments`
+        - [ ] Crear página `/admin/appointments/new`
+    - [ ] MOD-DASHBOARD: Extensión del schema Prisma
+        - [ ] Crear modelo `AuditLog` (userId, action, entity, entityId, details, ipAddress, userAgent)
+        - [ ] Agregar índices (entityId, userId)
+        - [ ] Ejecutar migración de base de datos
+    - [ ] MOD-DASHBOARD: Server Actions y Analytics
+        - [ ] Implementar `getDashboardMetrics(tenantId)` con aggregations
+        - [ ] Implementar KPI Citas hoy (Total vs Atendidas)
+        - [ ] Implementar KPI Estado de eventos (En proceso vs Terminados)
+        - [ ] Implementar gráfico de atenciones por empresa (Top 5)
+    - [ ] MOD-DASHBOARD: UI Components
+        - [ ] Crear widget `AppointmentMetrics` (Citas hoy)
+        - [ ] Crear widget `EventStatusMetrics` (Estados de eventos)
+        - [ ] Crear widget `CompanyPerformance` (Top 5 empresas)
+        - [ ] Crear página `/dashboard` (Panel operativo)
+    - [ ] MOD-BITACORA: Servicio de Auditoría
+        - [ ] Implementar `createAuditLog()` (función utilitaria)
+        - [ ] Integrar logging en `createMedicalEvent()`
+        - [ ] Integrar logging en `updateMedicalVerdict()`
+        - [ ] Integrar logging en `updateAppointmentStatus()`
+        - [ ] Integrar logging en login/logout (NextAuth.js callback)
+    - [ ] MOD-BITACORA: UI Components
+        - [ ] Crear componente `AuditLogList` (Historial de auditoría)
+        - [ ] Crear página `/admin/audit-logs`
+        - [ ] Filtros por usuario, entidad, fecha
+    - [ ] Validación y Testing
+        - [ ] Testing E2E: Flujo completo Reserva -> Check-in -> Evento Médico
+        - [ ] Testing E2E: Dashboard muestra métricas correctas
+        - [ ] Testing E2E: Bitácora registra todas las acciones críticas
+        - [ ] Performance: Consultas de Dashboard no deben exceder 2s
+        - [ ] Auditoría: Verificar que AuditLog es append-only
+    - [ ] Documentación
+        - [ ] Actualizar DATA_DICTIONARY.md con nuevos modelos
+        - [ ] Generar SPEC final de implementación
+        - [ ] Crear Checkpoint de Sprint 7
+
+```
