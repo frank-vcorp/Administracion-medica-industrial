@@ -1,5 +1,7 @@
 import { createBranch, getBranches } from "@/actions/admin.actions"
 
+export const dynamic = 'force-dynamic'
+
 export default async function BranchesPage() {
     const branches = await getBranches()
 

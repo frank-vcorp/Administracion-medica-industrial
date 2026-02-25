@@ -2,6 +2,8 @@ import { getCompanyEventsHistory } from '@/actions/portal.actions'
 import prisma from '@/lib/prisma'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 export default async function PortalEventsPage() {
     const currentCompany = await prisma.company.findFirst()
     if (!currentCompany) return <div>No hay empresa configurada.</div>
