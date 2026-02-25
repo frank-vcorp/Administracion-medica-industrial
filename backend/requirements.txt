@@ -6,4 +6,5 @@ psycopg2-binary
 pytesseract
 pdf2image
 Pillow
-requests
+requestspydantic>=2.0
+google-generativeai

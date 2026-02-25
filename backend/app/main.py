@@ -1,151 +1,153 @@
+"""
+Residente Digital API - Backend con Pipeline IA Modular
+IMPL-20260225-01: Clasificação y extracción inteligentes de documentos médicos.
+"""
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import os
 import time
-import base64
-import requests
 import json
-import mimetypes
-from pdf2image import convert_from_path
-import io
 
-app = FastAPI(title="Residente Digital API")
+from services.ai import DocumentClassifierService, ExtractorService
+from schemas import DocumentClassification, ExtractedDataUnion
+
+app = FastAPI(
+    title="Residente Digital API",
+    description="Pipeline IA modular para análisis de documentos médicos"
+)
 
 UPLOAD_DIR = "/app/uploads"
 # Using the key provided by user (Temporary for MVP)
 # In production this MUST be an env variable.
-GEMINI_API_KEY = "AIzaSyC5bVos0JwqdutC3JsQf6I3sNY7NVv2qlQ" 
-GEMINI_MODEL = "gemini-2.5-flash" 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyC5bVos0JwqdutC3JsQf6I3sNY7NVv2qlQ")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+# Inicializar servicios de IA
+try:
+    classifier = DocumentClassifierService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
+    extractor = ExtractorService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
+except Exception as e:
+    print(f"⚠️ Error inicializando servicios de IA: {e}")
+    classifier = None
+    extractor = None 
 
 class AnalyzeRequest(BaseModel):
+    """Solicitud de análisis de documento médico."""
     file_path: str
-    expected_type: str | None = None
+    expected_type: str | None = None  # Para retrocompatibilidad (ahora se detecta automáticamente)
+
 
 @app.get("/")
 def read_root():
-    return {"status": "ok", "service": "Residente Digital Backend (Gemini AI)"}
+    """Health check endpoint."""
+    return {
+        "status": "ok",
+        "service": "Residente Digital Backend (Pipeline IA Modular)",
+        "version": "2.0",
+        "pipeline": "Clasificador + Extractor Especializado"
+    }
 
 def get_b64_content(file_path):
     """
     Returns base64 string of the image. 
     If PDF, converts first page to JPEG first.
+    DEPRECATED: Use GeminiBase.get_b64_content() from services instead.
     """
-    mime_type, _ = mimetypes.guess_type(file_path)
-    
-    if mime_type == 'application/pdf' or file_path.lower().endswith('.pdf'):
-        try:
-            print(f"📄 Converting PDF to Image: {file_path}")
-            pages = convert_from_path(file_path, first_page=1, last_page=1)
-            if pages:
-                img_byte_arr = io.BytesIO()
-                pages[0].save(img_byte_arr, format='JPEG')
-                return base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
-        except Exception as e:
-            print(f"⚠️ PDF Conversion Error: {e}")
-            # Fallback to reading raw file (will probably fail in Vision API but worth a shot)
-            pass
+    pass  # Implementado en services/ai/base.py
 
-    # Standard Image Read
-    with open(file_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
 
 def get_prompt_for_type(filename: str):
-    filename_lower = filename.lower()
-    
-    if "audio" in filename_lower:
-        return """Tu tarea es analizar la imagen de este estudio de Audiometría y extraer sus datos.
-**Regla Crítica:** El nombre del **Paciente** está en la parte superior. El nombre del **Médico** está al final. **NO LOS CONFUNDAS**.
-**Formato de Salida Obligatorio (SOLO JSON):**
-{
-  "tipo_detectado": "Audiometría",
-  "paciente": "Nombre extraído",
-  "fecha_estudio": "dd/mm/yyyy",
-  "oido_derecho": { "500": 0, "1000": 0, "2000": 0, "3000": 0, "4000": 0, "diagnostico": "..." },
-  "oido_izquierdo": { "500": 0, "1000": 0, "2000": 0, "3000": 0, "4000": 0, "diagnostico": "..." },
-  "interpretacion": "Resumen de 2 líneas"
-}"""
+    """
+    DEPRECATED: Las prompts están especializadas en ExtractorService.
+    Este método se mantiene por retrocompatibilidad solo.
+    """
+    pass  # Implementado en services/ai/extractor.py
 
-    if "lab" in filename_lower or "biometria" in filename_lower:
-        return """Analiza este resultado de Laboratorio Clínico.
-**Formato de Salida Obligatorio (SOLO JSON):**
-{
-  "tipo_detectado": "Laboratorio",
-  "paciente": "Nombre extraído",
-  "fecha": "dd/mm/yyyy",
-  "parametros_anormales": ["Lista de parámetros fuera de rango"],
-  "interpretacion": "Resumen breve"
-}"""
-
-    # Default
-    return """Analiza este documento médico. Extrae los datos clave.
-**Formato de Salida Obligatorio (SOLO JSON):**
-{
-  "tipo_detectado": "General",
-  "paciente": "Nombre",
-  "fecha": "Fecha",
-  "resumen": "Descripción del documento"
-}"""
 
 def call_gemini(local_path, prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    """
+    DEPRECATED: Use GeminiBase.call_gemini() from services.
+    """
+    pass  # Implementado en services/ai/base.py
+
+
+@app.post("/api/v1/analyze")
+def analyze_document_v2(request: AnalyzeRequest):
+    """
+    Endpoint mejorado que usa el Pipeline IA Modular.
     
-    b64_data = get_b64_content(local_path)
-
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": prompt},
-                {
-                    "inline_data": {
-                        "mime_type": "image/jpeg", # Always sending as JPEG to Gemini
-                        "data": b64_data
-                    }
-                }
-            ]
-        }]
-    }
-
-    try:
-        response = requests.post(url, headers={"Content-Type": "application/json"}, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        
-        text_resp = data.get('candidates', [])[0].get('content', {}).get('parts', [])[0].get('text', '')
-        text_resp = text_resp.replace('```json', '').replace('```', '').strip()
-        
-        return json.loads(text_resp)
-    except Exception as e:
-        print(f"Gemini Error: {e}")
-        if 'text_resp' in locals():
-            return {"raw_text": text_resp, "error": "JSON parse failed"}
-        return {"error": str(e)}
-
-
-@app.post("/analyze")
-def analyze_document(request: AnalyzeRequest):
+    1. Clasifica el documento (Audiometría, Laboratorio, etc.)
+    2. Extrae datos estructurados según el tipo específico.
+    3. Retorna JSON con validación Pydantic.
+    
+    IMPL-20260225-01: Pipeline IA modular.
+    """
+    if not classifier or not extractor:
+        return {
+            "status": "error",
+            "error": "Servicios de IA no están disponibles"
+        }
+    
     filename = os.path.basename(request.file_path)
     local_path = os.path.join(UPLOAD_DIR, filename)
     
     if not os.path.exists(local_path):
-        return {"status": "error", "error": "File not found"}
+        raise HTTPException(
+            status_code=404,
+            detail=f"Archivo no encontrado: {filename}"
+        )
+    
+    try:
+        print(f"\n🚀 Analizando documento: {filename}")
+        pipeline_start = time.time()
+        
+        # PASO 1: CLASIFICACIÓN
+        print("► Paso 1: Clasificación de documento")
+        classification = classifier.classify(local_path)
+        classification_time = time.time() - pipeline_start
+        print(f"   ✓ Clasificado como: {classification.tipo} (confianza: {classification.confianza:.2f})")
+        
+        # PASO 2: EXTRACCIÓN ESPECIALIZADA
+        print(f"► Paso 2: Extracción de datos para {classification.tipo}")
+        extraction_start = time.time()
+        extracted_data = extractor.extract_by_type(local_path, classification.tipo)
+        extraction_time = time.time() - extraction_start
+        print(f"   ✓ Datos extraídos correctamente")
+        
+        # PASO 3: RETORNAR RESULTADO ESTRUCTURADO
+        total_time = time.time() - pipeline_start
+        
+        return {
+            "status": "success",
+            "file": filename,
+            "classification": {
+                "detected_type": classification.tipo,
+                "confidence": classification.confianza,
+                "reason": classification.razon,
+            },
+            "extraction": extracted_data if isinstance(extracted_data, dict) else extracted_data.model_dump(),
+            "timings": {
+                "classification_seconds": round(classification_time, 2),
+                "extraction_seconds": round(extraction_time, 2),
+                "total_seconds": round(total_time, 2),
+            },
+            "pipeline_version": "2.0"
+        }
+    
+    except Exception as e:
+        print(f"❌ Error en pipeline: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "file": filename
+        }
 
-    print(f"🧠 Gemini Processing: {filename}")
-    start_time = time.time()
-    
-    prompt = get_prompt_for_type(filename)
-    ai_result = call_gemini(local_path, prompt)
-    
-    duration = time.time() - start_time
-    print(f"✅ Gemini Complete in {duration:.2f}s")
-    
-    doc_type = ai_result.get("tipo_detectado", "Desconocido")
-    
-    return {
-        "status": "success",
-        "file": filename,
-        "classification": {
-            "detected_type": doc_type.upper(),
-            "confidence": 0.95
-        },
-        "extraction": ai_result
-    }
+
+@app.post("/analyze")
+def analyze_document(request: AnalyzeRequest):
+    """
+    DEPRECATED: Endpoint legacy para retrocompatibilidad.
+    Use /api/v1/analyze en su lugar.
+    """
+    return analyze_document_v2(request)
