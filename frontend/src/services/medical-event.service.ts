@@ -20,7 +20,9 @@ export const getEventById = async (id: string) => {
     return await prisma.medicalEvent.findUnique({
         where: { id },
         include: {
-            worker: true,
+            worker: {
+                include: { company: true }
+            },
             branch: true,
             exam: true,
             studies: true,

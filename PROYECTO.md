@@ -1,8 +1,8 @@
 # PROYECTO: Residente Digital
 
-**Estado:** 🟢 INICIO
-**Fase:** Discovery / Arquitectura
-**ID Actual:** ARCH-20260203-01
+**Estado:** 🟡 EN PROGRESO (Fase 2)
+**Fase:** Desarrollo Portal B2B
+**ID Actual:** ARCH-20260224-02
 
 ## 📋 Descripción
 Sistema de Administración Médica Industrial (AMI) para gestión de empresas, trabajadores, expedientes, citas y estudios médicos con integración de IA para lectura de documentos y pre-diagnóstico.
@@ -13,6 +13,7 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - **@DEBY**: QA e Infraestructura
 
 ## 📅 Diario de Cambios
+- **2026-02-24 (INTEGRA):** Inicio del Sprint 2: Portal B2B Empresarial. Especificación creada (`ARCH-20260224-02-PORTAL-EMPRESAS.md`) y handoff a `@SOFIA` (Planificado).
 - **2026-02-03 (INTEGRA):** Inicio del proyecto. Definición de módulos iniciales.
 - **2026-02-03 (INTEGRA/SOFIA):** Infraestructura desplegada (Next.js + FastAPI + Postgres). Verificación exitosa en puerto 3001.
 - **2026-02-03 (INTEGRA/SOFIA):** Modelado de Base de Datos completado (Prisma). Diccionario de Datos creado.

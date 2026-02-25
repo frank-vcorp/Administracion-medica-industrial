@@ -26,7 +26,7 @@ export default async function ReceptionPage() {
                         <h3 className="text-lg font-bold">Ingreso de Paciente</h3>
                         <label htmlFor="new-appt-modal" className="cursor-pointer text-slate-400 hover:text-red-500 font-bold">✕</label>
                     </div>
-                    <form action={createEvent} className="space-y-4">
+                    <form action={async (formData) => { "use server"; await createEvent(formData); }} className="space-y-4">
                         <div>
                             <label className="text-xs font-bold text-slate-500 block mb-1">Seleccionar Trabajador</label>
                             <select name="workerId" required className="w-full border p-2 rounded bg-white">

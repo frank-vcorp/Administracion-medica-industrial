@@ -35,6 +35,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <NavItem href="/branches" icon="🏪" label="Sucursales" />
               <NavItem href="/services" icon="🩺" label="Servicios" />
               <NavItem href="/reports" icon="📈" label="Reportes" />
+
+              <div className="pt-4 pb-2">
+                <p className="text-xs uppercase text-blue-400 font-semibold px-2">B2B Cliente</p>
+              </div>
+              <NavItem href="/portal" icon="🌐" label="Portal de Empresas" />
             </nav>
           </aside>
 

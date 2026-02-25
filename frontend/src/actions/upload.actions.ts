@@ -12,7 +12,7 @@ export async function uploadFile(formData: FormData) {
     const type = (formData.get('type') as string) || 'study' // 'study' | 'lab'
 
     if (!file || !eventId) {
-        throw new Error('Missing file or eventId')
+        return { success: false, error: 'Missing file or eventId' }
     }
 
     const bytes = await file.arrayBuffer()

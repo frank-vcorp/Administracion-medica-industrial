@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { uploadStudy } from '@/actions/upload.actions'
+import { uploadFile } from '@/actions/upload.actions'
 
 export default function UploadModal({ eventId }: { eventId: string }) {
     const [isOpen, setIsOpen] = useState(false)
@@ -11,7 +11,7 @@ export default function UploadModal({ eventId }: { eventId: string }) {
         setIsUploading(true)
         try {
             formData.append('eventId', eventId)
-            await uploadStudy(formData)
+            await uploadFile(formData)
             setIsOpen(false)
         } finally {
             setIsUploading(false)
