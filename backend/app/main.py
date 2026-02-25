@@ -21,9 +21,8 @@ app = FastAPI(
 )
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/uploads")
-# Using the key provided by user (Temporary for MVP)
 # In production this MUST be an env variable.
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyC5bVos0JwqdutC3JsQf6I3sNY7NVv2qlQ")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # Inicializar servicios de IA
