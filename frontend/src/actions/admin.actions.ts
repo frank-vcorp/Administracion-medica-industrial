@@ -74,3 +74,24 @@ export async function createService(formData: FormData) {
     })
     revalidatePath('/services')
 }
+
+// --- PROFILES (BATERÍAS) ---
+export async function getProfiles() {
+    return await prisma.serviceProfile.findMany({
+        include: { services: true },
+        orderBy: { createdAt: 'desc' }
+    })
+}
+
+export async function createProfile(formData: FormData) {
+    const name = formData.get('name') as string
+    const description = formData.get('description') as string
+    // Por MVP, el create de un perfil vacío. Se le añadirán servicios después en una UI avanzada.
+    await prisma.serviceProfile.create({
+        data: {
+            name,
+            description
+        }
+    })
+    revalidatePath('/admin/profiles')
+}

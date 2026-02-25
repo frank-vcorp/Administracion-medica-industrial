@@ -61,9 +61,14 @@ export default async function PortalEventsPage() {
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         {isCompleted && hasVerdict ? (
-                                            <button className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                                            <a
+                                                href={`/api/pdf/${event.id}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-block text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                                            >
                                                 📥 Descargar PDF
-                                            </button>
+                                            </a>
                                         ) : (
                                             <span className="text-slate-300 text-xs italic">No disponible</span>
                                         )}

@@ -28,13 +28,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <NavItem href="/validation" icon="✅" label="Validación" />
 
               <div className="pt-4 pb-2">
-                <p className="text-xs uppercase text-slate-500 font-semibold px-2">Administración</p>
+                <p className="text-xs uppercase text-slate-500 font-semibold px-2">Administración Clínica</p>
               </div>
-              <NavItem href="/companies" icon="🏢" label="Empresas" />
-              <NavItem href="/workers" icon="👷" label="Trabajadores" />
-              <NavItem href="/branches" icon="🏪" label="Sucursales" />
-              <NavItem href="/services" icon="🩺" label="Servicios" />
-              <NavItem href="/reports" icon="📈" label="Reportes" />
+              <NavItem href="/admin/users" icon="🏥" label="Personal AMI" />
+              <NavItem href="/admin/services" icon="🩺" label="Catálogo Servicios" />
+              <NavItem href="/admin/profiles" icon="📦" label="Baterías (Paquetes)" />
+              <NavItem href="/companies" icon="🏢" label="Empresas Cliente" />
 
               <div className="pt-4 pb-2">
                 <p className="text-xs uppercase text-blue-400 font-semibold px-2">B2B Cliente</p>

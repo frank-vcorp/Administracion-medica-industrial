@@ -1,8 +1,8 @@
 # PROYECTO: Residente Digital
 
-**Estado:** 🟡 EN PROGRESO (Fase 3)
-**Fase:** Infraestructura de Producción (DB)
-**ID Actual:** INFRA-20260225-01
+**Estado:** 🟡 EN PROGRESO (Fase 4)
+**Fase:** Panel de Administración y Motor PDF
+**ID Actual:** ARCH-20260225-04
 
 ## 📋 Descripción
 Sistema de Administración Médica Industrial (AMI) para gestión de empresas, trabajadores, expedientes, citas y estudios médicos con integración de IA para lectura de documentos y pre-diagnóstico.
@@ -13,6 +13,8 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - **@DEBY**: QA e Infraestructura
 
 ## 📅 Diario de Cambios
+- **2026-02-25 (INTEGRA):** Inicio del Sprint 4: Panel de Administración y Motor PDF de Dictámenes. Especificación creada (`ARCH-20260225-04-ADMIN-Y-PDF.md`) y handoff a `@SOFIA` (Planificado).
+- **2026-02-25 (INTEGRA/DEBY):** Aprovisionamiento de DB de Producción en Railway. Vercel conectado. Resolvimos vulnerabilidades reportadas por Qodo (DICTAMEN_FIX-20260225-01): Login formal y control multi-tenant diferidos a Sprint futuro por decisión de negocio.
 - **2026-02-24 (INTEGRA):** Inicio del Sprint 2: Portal B2B Empresarial. Especificación creada (`ARCH-20260224-02-PORTAL-EMPRESAS.md`) y handoff a `@SOFIA` (Planificado).
 - **2026-02-03 (INTEGRA):** Inicio del proyecto. Definición de módulos iniciales.
 - **2026-02-03 (INTEGRA/SOFIA):** Infraestructura desplegada (Next.js + FastAPI + Postgres). Verificación exitosa en puerto 3001.
