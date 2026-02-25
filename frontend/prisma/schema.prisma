@@ -34,6 +34,7 @@ model User {
   
   // Relations
   signatures       MedicalVerdict[] // Dictamenes firmados por este usuario
+  auditLogs        AuditLog[]       // Acciones registradas en auditoría
 
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -64,6 +65,7 @@ model Branch {
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   
   events      MedicalEvent[]
+  appointments Appointment[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -86,6 +88,7 @@ model Company {
   
   workers     Worker[]
   users       User[]   // Usuarios CLIENT vinculados a esta empresa
+  appointments Appointment[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -110,6 +113,7 @@ model Worker {
   company     Company? @relation(fields: [companyId], references: [id])
 
   medicalHistory MedicalEvent[]
+  appointments   Appointment[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -164,6 +168,14 @@ enum EventStatus {
   CANCELED
 }
 
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+}
+
 model MedicalEvent {
   id          String      @id @default(uuid())
   status      EventStatus @default(SCHEDULED)
@@ -185,6 +197,10 @@ model MedicalEvent {
 
   // Final Output
   verdict     MedicalVerdict?
+  
+  // Relación opcional 1:1 con Appointment
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  appointmentId String?    @unique
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -274,4 +290,51 @@ model MedicalVerdict {
   updatedAt       DateTime @updatedAt
 
   @@map("medical_verdicts")
+}
+
+// --------------------------------------------------------
+// CITAS Y AUDITORÍA (Sprint 7)
+// --------------------------------------------------------
+
+model Appointment {
+  id          String              @id @default(uuid())
+  
+  workerId    String
+  worker      Worker              @relation(fields: [workerId], references: [id])
+  
+  companyId   String
+  company     Company             @relation(fields: [companyId], references: [id])
+  
+  branchId    String
+  branch      Branch              @relation(fields: [branchId], references: [id])
+  
+  scheduledAt DateTime            // Fecha y hora de la cita
+  status      AppointmentStatus   @default(SCHEDULED)
+  notes       String?             @db.Text
+  
+  // Relación opcional 1:1 con MedicalEvent (una cita puede generar un evento médico)
+  medicalEvents MedicalEvent[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("appointments")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  
+  userId    String?  // Quién realizó la acción (opcional, por si es el sistema)
+  user      User?    @relation(fields: [userId], references: [id])
+  
+  action    String   // ej. "CREATE", "UPDATE", "DELETE", "LOGIN"
+  entity    String   // ej. "Worker", "Appointment", "MedicalEvent"
+  entityId  String?  // ID de la entidad afectada
+  
+  details   Json?    // Datos adicionales (ej. valores antes/después)
+  ipAddress String?  // IP del cliente
+  
+  createdAt DateTime @default(now())
+  
+  @@map("audit_logs")
 }
