@@ -72,7 +72,8 @@ class GeminiBase:
             response = requests.post(
                 url,
                 headers={"Content-Type": "application/json"},
-                json=payload
+                json=payload,
+                timeout=(10, 60)  # 10s connect, 60s read timeout
             )
             response.raise_for_status()
             data = response.json()

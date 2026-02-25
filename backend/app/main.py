@@ -54,7 +54,7 @@ class SignPdfRequest(BaseModel):
     input_pdf: str
     output_pdf: Optional[str] = None
     reason: Optional[str] = "Certificado Médico AMI"
-    password: Optional[str] = "test1234"
+    password: str  # Requerido, sin valor por defecto por seguridad
 
 
 class GenerateReportRequest(BaseModel):
@@ -73,29 +73,6 @@ def read_root():
         "version": "2.0",
         "pipeline": "Clasificador + Extractor Especializado"
     }
-
-def get_b64_content(file_path):
-    """
-    Returns base64 string of the image. 
-    If PDF, converts first page to JPEG first.
-    DEPRECATED: Use GeminiBase.get_b64_content() from services instead.
-    """
-    pass  # Implementado en services/ai/base.py
-
-
-def get_prompt_for_type(filename: str):
-    """
-    DEPRECATED: Las prompts están especializadas en ExtractorService.
-    Este método se mantiene por retrocompatibilidad solo.
-    """
-    pass  # Implementado en services/ai/extractor.py
-
-
-def call_gemini(local_path, prompt):
-    """
-    DEPRECATED: Use GeminiBase.call_gemini() from services.
-    """
-    pass  # Implementado en services/ai/base.py
 
 
 @app.post("/api/v1/analyze")

@@ -36,7 +36,6 @@ export async function uploadFile(formData: FormData) {
         // await fs.mkdir(uploadDir, { recursive: true }).catch(() => {})
 
         await writeFile(savePath, buffer)
-        console.log(`✅ File saved locally to ${savePath}`)
 
         // ---------------------------------------------------------
         // 🧠 CALL AI BRAIN
@@ -56,7 +55,6 @@ export async function uploadFile(formData: FormData) {
 
             if (response.ok) {
                 const result = await response.json()
-                console.log('🧠 AI Result:', result)
 
                 // Update name based on AI classification
                 if (result.classification?.detected_type) {
