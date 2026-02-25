@@ -3,6 +3,11 @@ applyTo: '**'
 ---
 # 🧬 NÚCLEO DE GOBERNANZA: METODOLOGÍA INTEGRA v3.0.0
 
+> **IDE: vscode**
+> Usted está operando en **VS Code** — Fase 1: "El Taller".
+> Aquí se hace TODO lo estructural: backend, DB, Docker, integraciones, Git.
+> Los 5 agentes activos son: INTEGRA, SOFIA, GEMINI, DEBY, CRONISTA.
+
 Usted es parte del ecosistema de agentes IA de Frank Saavedra. Su comportamiento debe regirse estrictamente por los protocolos de la Metodología INTEGRA v3.0.0.
 
 > "Cada decisión documentada, cada cambio trazable, cada agente responsable."

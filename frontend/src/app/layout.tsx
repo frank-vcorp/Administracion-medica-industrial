@@ -21,6 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <NavItem href="/dashboard" icon="📊" label="Dashboard" />
               <NavItem href="/workers" icon="👥" label="Trabajadores" />
               <NavItem href="/reception" icon="🏥" label="Recepción / Citas" />
+              <NavItem href="/appointments" icon="📅" label="Gestión de Citas" />
               <div className="pt-4 pb-2">
                 <p className="text-xs uppercase text-slate-500 font-semibold px-2">Médico</p>
               </div>
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <NavItem href="/admin/users" icon="🏥" label="Personal AMI" />
               <NavItem href="/admin/services" icon="🩺" label="Catálogo Servicios" />
               <NavItem href="/admin/profiles" icon="📦" label="Baterías (Paquetes)" />
+              <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" />
               <NavItem href="/companies" icon="🏢" label="Empresas Cliente" />
 
               <div className="pt-4 pb-2">

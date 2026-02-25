@@ -1,23 +1,91 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { getDashboardKPIs } from '@/actions/dashboard.actions'
+
+/**
+ * Dashboard KPIs - Página principal del sistema
+ * Muestra métricas clave en tiempo real
+ * 
+ * IMPL-20260225-06-UI: Implementación de UI Sprint 7
+ */
 export default function DashboardPage() {
+    const [kpis, setKpis] = useState({
+        appointmentsToday: 0,
+        activeEvents: 0,
+        completedEvents: 0,
+        totalWorkers: 0,
+    })
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState('')
+
+    useEffect(() => {
+        async function loadKPIs() {
+            try {
+                const result = await getDashboardKPIs()
+                if (result.success) {
+                    setKpis(result.kpis)
+                } else {
+                    setError(result.error || 'Error al cargar KPIs')
+                }
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Error desconocido')
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        loadKPIs()
+    }, [])
+
+    if (loading) {
+        return <div className="text-center py-8">Cargando métricas...</div>
+    }
+
+    if (error) {
+        return <div className="text-red-600 py-8">Error: {error}</div>
+    }
+
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-slate-800">Bienvenido, Dr. Usuario</h2>
+            <h2 className="text-2xl font-bold text-slate-800">Dashboard Operativo</h2>
 
-            {/* Stats Grid */}
+            {/* Stats Grid - KPIs del Sistema */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <StatCard title="Pacientes Hoy" value="24" icon="👥" color="blue" />
-                <StatCard title="Evaluaciones Completas" value="18" icon="✅" color="green" />
-                <StatCard title="Pendientes de Lab" value="6" icon="🧪" color="yellow" />
-                <StatCard title="Dictámenes Emitidos" value="12" icon="📝" color="purple" />
+                <StatCard 
+                    title="Citas de Hoy" 
+                    value={kpis.appointmentsToday.toString()} 
+                    icon="📅" 
+                    color="blue" 
+                />
+                <StatCard 
+                    title="Eventos en Proceso" 
+                    value={kpis.activeEvents.toString()} 
+                    icon="⚙️" 
+                    color="green" 
+                />
+                <StatCard 
+                    title="Eventos Completados" 
+                    value={kpis.completedEvents.toString()} 
+                    icon="✅" 
+                    color="emerald" 
+                />
+                <StatCard 
+                    title="Total Trabajadores" 
+                    value={kpis.totalWorkers.toString()} 
+                    icon="👥" 
+                    color="purple" 
+                />
             </div>
 
-            {/* Recent Activity */}
+            {/* Quick Stats Info */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="font-bold text-slate-700 mb-4">Actividad Reciente</h3>
-                <div className="space-y-3">
-                    <ActivityRow user="Juan Pérez" action="Check-in completado" time="10:00 AM" />
-                    <ActivityRow user="Maria López" action="Resultados de Lab cargados" time="09:45 AM" />
-                    <ActivityRow user="Carlos Ruiz" action="Evaluación Médica iniciada" time="09:30 AM" />
+                <h3 className="font-semibold text-slate-700 mb-4">Estado del Sistema</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <InfoBox label="Citas pendientes" value={`${kpis.appointmentsToday} de hoy`} />
+                    <InfoBox label="Capacidad actual" value={`${kpis.activeEvents} en progreso`} />
+                    <InfoBox label="Productividad" value={`${kpis.completedEvents} completados`} />
+                    <InfoBox label="Base de datos" value={`${kpis.totalWorkers} trabajadores`} />
                 </div>
             </div>
         </div>
@@ -27,8 +95,8 @@ export default function DashboardPage() {
 function StatCard({ title, value, icon, color }: any) {
     const colors = {
         blue: "bg-blue-50 text-blue-600",
-        green: "bg-emerald-50 text-emerald-600",
-        yellow: "bg-amber-50 text-amber-600",
+        green: "bg-green-50 text-green-600",
+        emerald: "bg-emerald-50 text-emerald-600",
         purple: "bg-purple-50 text-purple-600"
     } as any
 
@@ -47,19 +115,12 @@ function StatCard({ title, value, icon, color }: any) {
     )
 }
 
-function ActivityRow({ user, action, time }: any) {
+function InfoBox({ label, value }: { label: string; value: string }) {
     return (
-        <div className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-100">
-            <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">
-                    {user.charAt(0)}
-                </div>
-                <div>
-                    <p className="text-sm font-medium text-slate-800">{user}</p>
-                    <p className="text-xs text-slate-500">{action}</p>
-                </div>
-            </div>
-            <span className="text-xs text-slate-400">{time}</span>
+        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <p className="text-xs text-slate-500 font-medium mb-1">{label}</p>
+            <p className="text-lg font-semibold text-slate-800">{value}</p>
         </div>
     )
 }
+
