@@ -58,3 +58,25 @@
     - [x] Módulo Administrativo: CRUD de Servicios y Perfiles (Baterías de Laboratorio)
     - [x] API de Generación PDF: Convertir MedicalVerdict a PDF
     - [x] UI de Descarga: Implementar acción en Portal B2B para bajar PDF oficial
+
+- [ ] Seguridad: Login y Control Multi-tenant (SOFÍA - Fase 5)
+    - [ ] Implementar NextAuth.js v5 o Auth.js para autenticación
+    - [ ] Crear modelo de Usuario con hashedPassword en Prisma
+    - [ ] Implementar rutas de Sign-up y Sign-in
+    - [ ] Middleware de protección de rutas (`/portal/*`, `/admin/*`)
+    - [ ] Asociación de Empresa a Usuario (Multi-tenant)
+    - [ ] Validación de permisos por rol (MDico, Recepcionista, Admin)
+    - [ ] Implementar Logout y manejo de sesiones
+    - [ ] Testing E2E de flujo de autenticación completo
+
+- [ ] Refinamiento de Pipeline IA y Ofimática (SOFÍA - Fase 6)
+    - [ ] Mejorar clasificación de documentos con Vision API (filtros por tipo)
+    - [ ] Implementar extracción de datos específicos por estudio (Laboratorio, Radiología, etc.)
+    - [ ] Generar reportes de análisis masivo con histórico
+    - [ ] Integración de firma digital avanzada en PDFs (RFC/Certificado digital)
+
+- [ ] Auditoría de Seguridad y QA (DEBY - Fase 5)
+    - [ ] Ejecutar Qodo CLI para analizar cambios de autenticación
+    - [ ] Generar QODO_AUDIT_RAW para seguridad post-implementación
+    - [ ] Testing manual de acceso multi-tenant (validar aislamiento de datos)
+    - [ ] Crear DICTAMEN de seguridad (DICTAMEN_FIX-20260225-02.md)
