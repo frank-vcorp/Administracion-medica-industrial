@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { renderToStream } from '@react-pdf/renderer'
 import { MedicalDictamenPDF } from "@/components/pdf/MedicalDictamenPDF"
+import { readFile } from "fs/promises"
+import { join } from "path"
 
 export async function GET(
     request: NextRequest,
@@ -25,6 +27,25 @@ export async function GET(
 
         if (!verdict) {
             return new NextResponse("El dictamen aún no ha sido emitido.", { status: 404 })
+        }
+
+        // Si el dictamen ya fue firmado, devolver el PDF firmado desde el disco
+        if (verdict.pdfUrl) {
+            try {
+                const uploadDir = join(process.cwd(), '../uploads')
+                const filePath = join(uploadDir, verdict.pdfUrl)
+                const fileBuffer = await readFile(filePath)
+                
+                return new NextResponse(fileBuffer, {
+                    headers: {
+                        'Content-Type': 'application/pdf',
+                        'Content-Disposition': `inline; filename="${verdict.pdfUrl}"`
+                    }
+                })
+            } catch (fsError) {
+                console.error("Error reading signed PDF from disk, falling back to generation:", fsError)
+                // Fallback to generation if file is missing
+            }
         }
 
         const data = {

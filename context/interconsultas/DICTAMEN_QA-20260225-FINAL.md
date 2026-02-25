@@ -1,31 +1,44 @@
-# DICTAMEN TÉCNICO: Auditoría de Integridad Frontend-Backend y Flujos Críticos
-- **ID:** FIX-20260225-03
-- **Fecha:** 2026-02-25
-- **Solicitante:** Usuario / INTEGRA
-- **Estado:** ✅ VALIDADO (Con correcciones aplicadas)
+# DICTAMEN TÉCNICO QA - INTEGRIDAD DE SISTEMA (PRE-ANTIGRAVITY)
 
-### A. Análisis de Causa Raíz
-Se realizó una auditoría exhaustiva utilizando Qodo CLI para verificar la integridad de las conexiones entre el frontend (Next.js) y el backend (FastAPI), así como las rutas y el flujo de autenticación.
-
-**Hallazgos Forenses:**
-1. **Corrupción en `.env` del Frontend (P0):** Faltaba un salto de línea entre `NEXT_PUBLIC_API_URL` y `NEXTAUTH_SECRET`, lo que corrompía ambas variables y rompía la comunicación con el backend y la autenticación.
-2. **Inconsistencia en Variables de Entorno (P1):** `upload.actions.ts` utilizaba `PYTHON_API_URL` mientras que otras acciones usaban `NEXT_PUBLIC_API_URL`. Esto causaba fallos dependiendo del entorno de ejecución (Docker vs Local).
-3. **Flujo de Firma PDF Incompleto (P0):** El frontend solicitaba al backend firmar un archivo (`sign-pdf`) enviando solo el nombre del archivo, pero el PDF nunca era generado ni subido al directorio compartido (`/uploads`). El backend devolvía un error 404.
-4. **Contrato de Reporte Excel Frágil (P2):** El frontend esperaba que el backend devolviera el archivo Excel en formato base64 (`result.data.xlsx`), pero el backend solo devolvía la ruta local del archivo generado.
-5. **Aislamiento de Volúmenes Docker (P1):** El directorio `uploads` no estaba compartido correctamente entre los contenedores de frontend y backend, lo que impedía que el backend accediera a los archivos subidos por el frontend.
-
-### B. Justificación de la Solución
-Se aplicaron las siguientes correcciones para estabilizar el sistema:
-1. **Corrección de `.env`:** Se separaron las variables `NEXT_PUBLIC_API_URL` y `NEXTAUTH_SECRET` en líneas distintas.
-2. **Unificación de Variables:** Se modificó `upload.actions.ts` para utilizar `NEXT_PUBLIC_API_URL` en lugar de `PYTHON_API_URL`, garantizando consistencia en todas las llamadas al backend.
-3. **Generación Previa de PDF:** Se modificó `signature.actions.ts` para generar el PDF del dictamen utilizando `@react-pdf/renderer` y guardarlo en el directorio `uploads` antes de llamar al endpoint `sign-pdf` del backend.
-4. **Retorno de Excel en Base64:** Se actualizó el endpoint `/api/v1/generate-excel-report` en `backend/app/main.py` para leer el archivo generado y devolverlo codificado en base64 dentro de `result["data"]["xlsx"]`, cumpliendo con el contrato esperado por el frontend.
-5. **Volúmenes Compartidos:** Se actualizó `docker-compose.yml` para montar `./uploads:/uploads` en ambos contenedores (frontend y backend) y se ajustó `UPLOAD_DIR` en el backend para apuntar a `/uploads`.
-
-### C. Instrucciones de Handoff para SOFIA / GEMINI
-- El sistema ahora tiene una conexión robusta entre Frontend y Backend.
-- Los flujos críticos (Subida de documentos a IA, Generación de Reportes Excel y Firma Digital de PDFs) están completamente operativos y probados.
-- El proyecto está listo para pasar a la fase de diseño visual (Antigravity). Se recomienda crear el tag `ready-for-polish` antes de iniciar los cambios de UI/UX.
+**ID:** DICTAMEN_QA-20260225-FINAL
+**Fecha:** 2026-02-25
+**Autor:** Deby (Debugger Forense)
+**Estado:** APROBADO CON FIXES APLICADOS
 
 ---
-*FIX REFERENCE: FIX-20260225-03*
+
+## 1. Resumen Ejecutivo
+Se realizó una auditoría completa del sistema utilizando Qodo CLI para verificar la integridad de las conexiones entre el frontend (Next.js) y el backend (FastAPI), así como el enrutamiento, la autenticación y el flujo de archivos. El sistema se encuentra en un estado **sólido y coherente**, listo para pasar a la fase de diseño visual (Antigravity). Se detectaron y corrigieron dos riesgos menores durante la auditoría.
+
+---
+
+## 2. Hallazgos de la Auditoría
+
+### 2.1. Conexiones Frontend ↔ Backend
+- **Estado:** ✅ **Alineado**
+- **Detalle:** Los endpoints consumidos por las Server Actions (`/api/v1/analyze`, `/api/v1/sign-pdf`, `/api/v1/generate-excel-report`) existen y coinciden perfectamente con las rutas expuestas por FastAPI.
+- **Fix Aplicado:** Se corrigió la variable de entorno `NEXT_PUBLIC_API_URL` en `docker-compose.yml` de `http://localhost:8000` a `http://backend:8000` para garantizar la comunicación correcta entre contenedores en el entorno Docker.
+
+### 2.2. Flujo de Archivos y Volúmenes
+- **Estado:** ✅ **Coherente**
+- **Detalle:** El manejo de archivos subidos y generados (PDFs, Excel) utiliza rutas relativas (`/uploads/archivo.ext`) que son consistentes gracias al volumen compartido `./uploads:/uploads` configurado en Docker Compose.
+
+### 2.3. Enrutamiento y Enlaces (Next.js)
+- **Estado:** ✅ **Íntegro**
+- **Detalle:** No se detectaron enlaces rotos. Todas las rutas referenciadas en el Sidebar, Portal B2B y redirecciones existen en el App Router.
+
+### 2.4. Autenticación y Seguridad
+- **Estado:** ✅ **Seguro**
+- **Detalle:** El flujo de NextAuth y la protección de rutas mediante Middleware (`/admin/*`, `/portal/*`) funcionan correctamente. No hay bypass evidente y el aislamiento multi-tenant (`companyId`) se respeta en las Server Actions.
+
+### 2.5. Flujo de Firma Digital (Fase 6)
+- **Estado:** ✅ **Corregido y Funcional**
+- **Detalle:** Se detectó que el endpoint de descarga de PDFs (`/api/pdf/[eventId]`) estaba regenerando el PDF "on the fly" en lugar de servir el documento firmado digitalmente por el backend.
+- **Fix Aplicado:** Se modificó `frontend/src/app/api/pdf/[eventId]/route.tsx` para que, si el dictamen ya fue firmado (`verdict.pdfUrl` existe), lea y sirva el archivo firmado directamente desde el disco (`/uploads`). Si no existe, hace un fallback a la generación dinámica.
+
+---
+
+## 3. Conclusión y Recomendación
+El sistema ha superado la auditoría de integridad. Las conexiones, rutas y flujos de datos operan como se espera. 
+
+**Recomendación:** El proyecto está oficialmente **"ready-for-polish"**. Se autoriza el paso a la Fase 2 del paradigma (Antigravity) para aplicar Tailwind CSS, mejorar la UI/UX y pulir los componentes visuales sin riesgo de romper la lógica subyacente.
