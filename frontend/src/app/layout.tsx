@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { ReactNode } from 'react'
 
+export const dynamic = 'force-dynamic'
+
 import './globals.css'
 
 export default function RootLayout({ children }: { children: ReactNode }) {
