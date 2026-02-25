@@ -1,6 +1,7 @@
 """
 Residente Digital API - Backend con Pipeline IA Modular
 IMPL-20260225-01: Clasificação y extracción inteligentes de documentos médicos.
+IMPL-20260225-02: Firma Digital Avanzada y Motor de Reportes Masivos.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -8,8 +9,10 @@ from pydantic import BaseModel
 import os
 import time
 import json
+from typing import List, Dict, Any, Optional
 
 from services.ai import DocumentClassifierService, ExtractorService
+from services.pdf import SignerService, ReportService
 from schemas import DocumentClassification, ExtractedDataUnion
 
 app = FastAPI(
@@ -32,10 +35,34 @@ except Exception as e:
     classifier = None
     extractor = None 
 
+# Inicializar servicios de PDF
+try:
+    signer = SignerService(cert_dir="/app/certs")
+    reporter = ReportService(output_dir="/app/reports")
+except Exception as e:
+    print(f"⚠️ Error inicializando servicios de PDF: {e}")
+    signer = None
+    reporter = None
+
 class AnalyzeRequest(BaseModel):
     """Solicitud de análisis de documento médico."""
     file_path: str
     expected_type: str | None = None  # Para retrocompatibilidad (ahora se detecta automáticamente)
+
+
+class SignPdfRequest(BaseModel):
+    """Solicitud para firmar un PDF."""
+    input_pdf: str
+    output_pdf: Optional[str] = None
+    reason: Optional[str] = "Certificado Médico AMI"
+    password: Optional[str] = "test1234"
+
+
+class GenerateReportRequest(BaseModel):
+    """Solicitud para generar un reporte masivo."""
+    data_list: List[Dict[str, Any]]
+    formats: Optional[List[str]] = ["excel", "json", "html"]  # Formatos a generar
+    title: Optional[str] = "Reporte de Consolidación"
 
 
 @app.get("/")
@@ -151,3 +178,220 @@ def analyze_document(request: AnalyzeRequest):
     Use /api/v1/analyze en su lugar.
     """
     return analyze_document_v2(request)
+
+
+# ========================================
+# ENDPOINTS DE FIRMA DIGITAL (IMPL-20260225-02)
+# ========================================
+
+@app.post("/api/v1/sign-pdf")
+def sign_pdf(request: SignPdfRequest):
+    """
+    Endpoint para firmar un PDF con certificado X.509.
+    
+    Aplica una firma digital avanzada a un documento PDF.
+    Genera certificado autofirmado de prueba si no existe.
+    
+    Args:
+        input_pdf: Ruta del PDF a firmar
+        output_pdf: Ruta del PDF firmado (se genera automáticamente si no se proporciona)
+        reason: Razón de la firma
+        password: Contraseña del certificado
+    
+    IMPL-20260225-02: Firma Digital Avanzada
+    """
+    if not signer:
+        return {
+            "status": "error",
+            "error": "Servicio de firma no está disponible"
+        }
+    
+    try:
+        input_path = os.path.join(UPLOAD_DIR, os.path.basename(request.input_pdf))
+        
+        if not os.path.exists(input_path):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Archivo no encontrado: {request.input_pdf}"
+            )
+        
+        # Generar nombre de salida si no se proporciona
+        output_path = request.output_pdf
+        if not output_path:
+            base_name = os.path.splitext(os.path.basename(request.input_pdf))[0]
+            output_path = os.path.join(UPLOAD_DIR, f"{base_name}_signed.pdf")
+        
+        print(f"\n🔐 Firmando PDF: {os.path.basename(input_path)}")
+        print(f"   → Certificado: {signer.cert_path}")
+        
+        result = signer.sign_pdf(
+            input_pdf=input_path,
+            output_pdf=output_path,
+            reason=request.reason,
+            password=request.password
+        )
+        
+        if result["status"] == "success":
+            print(f"   ✓ PDF firmado exitosamente")
+        else:
+            print(f"   ❌ Error: {result.get('message')}")
+        
+        return result
+    
+    except Exception as e:
+        print(f"❌ Error en sign_pdf: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.post("/api/v1/verify-signature")
+def verify_pdf_signature(file_path: str):
+    """
+    Endpoint para verificar la firma digital de un PDF.
+    
+    Args:
+        file_path: Ruta del PDF a verificar
+    
+    IMPL-20260225-02: Verificación de firmas
+    """
+    if not signer:
+        return {
+            "status": "error",
+            "error": "Servicio de firma no está disponible"
+        }
+    
+    try:
+        pdf_path = os.path.join(UPLOAD_DIR, os.path.basename(file_path))
+        
+        if not os.path.exists(pdf_path):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Archivo no encontrado: {file_path}"
+            )
+        
+        print(f"\n🔍 Verificando firma de: {os.path.basename(pdf_path)}")
+        result = signer.verify_signature(pdf_path)
+        
+        return result
+    
+    except Exception as e:
+        print(f"❌ Error en verify_signature: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+# ========================================
+# ENDPOINTS DE REPORTES MASIVOS (IMPL-20260225-02)
+# ========================================
+
+@app.post("/api/v1/generate-report")
+def generate_report(request: GenerateReportRequest):
+    """
+    Endpoint para generar reportes masivos consolidados.
+    
+    Acepta una lista de datos y genera reportes en múltiples formatos:
+    - Excel (XLSX) con formato básico
+    - JSON estructurado
+    - HTML para visualización
+    
+    Args:
+        data_list: Lista de diccionarios con datos (ej. múltiples audiometrías)
+        formats: Formatos a generar (['excel', 'json', 'html'])
+        title: Título del reporte
+    
+    IMPL-20260225-02: Motor de Reportes Masivos
+    """
+    if not reporter:
+        return {
+            "status": "error",
+            "error": "Servicio de reportes no está disponible"
+        }
+    
+    try:
+        print(f"\n📊 Generando reporte masivo para {len(request.data_list)} registros")
+        print(f"   → Formatos: {request.formats}")
+        
+        result = reporter.batch_process(
+            data_list=request.data_list,
+            formats=request.formats
+        )
+        
+        if result["status"] == "success":
+            print(f"   ✓ Reportes generados exitosamente")
+            print(f"   → Batch ID: {result.get('batch_id')}")
+        else:
+            print(f"   ⚠️ Errores: {result.get('errors')}")
+        
+        return result
+    
+    except Exception as e:
+        print(f"❌ Error en generate_report: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.post("/api/v1/generate-excel-report")
+def generate_excel_report(request: GenerateReportRequest):
+    """
+    Endpoint especializado para generar reporte en Excel.
+    
+    IMPL-20260225-02: Generación de Excel
+    """
+    if not reporter:
+        return {
+            "status": "error",
+            "error": "Servicio de reportes no está disponible"
+        }
+    
+    try:
+        print(f"\n📈 Generando reporte Excel para {len(request.data_list)} registros")
+        
+        result = reporter.generate_excel_report(
+            data_list=request.data_list
+        )
+        
+        return result
+    
+    except Exception as e:
+        print(f"❌ Error en generate_excel_report: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.post("/api/v1/generate-json-report")
+def generate_json_report(request: GenerateReportRequest):
+    """
+    Endpoint especializado para generar reporte en JSON.
+    
+    IMPL-20260225-02: Generación de JSON
+    """
+    if not reporter:
+        return {
+            "status": "error",
+            "error": "Servicio de reportes no está disponible"
+        }
+    
+    try:
+        print(f"\n📋 Generando reporte JSON para {len(request.data_list)} registros")
+        
+        result = reporter.generate_json_report(
+            data_list=request.data_list
+        )
+        
+        return result
+    
+    except Exception as e:
+        print(f"❌ Error en generate_json_report: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
