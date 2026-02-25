@@ -16,11 +16,15 @@ export async function createUser(formData: FormData) {
     const password = formData.get('password') as string // In production, hash this!!
     const role = formData.get('role') as UserRole
 
+    // Hash the password before saving
+    const bcrypt = require('bcryptjs')
+    const hashedPassword = await bcrypt.hash(password, 10)
+
     await prisma.user.create({
         data: {
             fullName,
             email,
-            password, // MVP: storing plain text, but need bcrypt in full prod
+            hashedPassword,
             role
         }
     })

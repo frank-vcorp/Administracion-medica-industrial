@@ -1,4 +1,5 @@
 import { PrismaClient, EventStatus } from '@prisma/client'
+import { hash } from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
@@ -13,7 +14,7 @@ async function main() {
     const doctor = await prisma.user.create({
         data: {
             email: `doc${Date.now()}@ami.com`,
-            password: 'hash',
+            hashedPassword: await hash('test123', 10),
             fullName: 'Dr. House'
         }
     })

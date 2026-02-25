@@ -1,12 +1,28 @@
 import { getCompanyEventsHistory } from '@/actions/portal.actions'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import Link from 'next/link'
 
+/**
+ * @id IMPL-20260225-01
+ * Historial de eventos médicos del portal B2B - Obtiene datos seguros de la sesión
+ */
 export default async function PortalEventsPage() {
-    const currentCompany = await prisma.company.findFirst()
-    if (!currentCompany) return <div>No hay empresa configurada.</div>
+    const session = await getServerSession(authOptions)
+    
+    if (!session?.user?.companyId) {
+        return <div className="p-8 text-red-600">Error: No hay sesión válida.</div>
+    }
 
-    const { events } = await getCompanyEventsHistory(currentCompany.id)
+    const currentCompany = await prisma.company.findUnique({
+        where: { id: session.user.companyId }
+    })
+    
+    if (!currentCompany) return <div className="p-8 text-red-600">Error: Empresa no encontrada.</div>
+
+    const result = await getCompanyEventsHistory()
+    const events = result.success ? result.events : []
 
     return (
         <div className="space-y-6">

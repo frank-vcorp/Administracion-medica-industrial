@@ -1,6 +1,7 @@
 import { PrismaClient, EventStatus } from '@prisma/client'
 import fs from 'fs/promises'
 import path from 'path'
+import { hash } from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
@@ -155,7 +156,7 @@ async function main() {
 
         // Create a doctor user first
         const doctor = await prisma.user.create({
-            data: { email: `doc_${uniqueId}@test.com`, fullName: 'Dr. House', password: 'hash', role: 'DOCTOR_VALIDATOR' }
+            data: { email: `doc_${uniqueId}@test.com`, fullName: 'Dr. House', hashedPassword: await hash('test123', 10), role: 'DOCTOR_VALIDATOR' }
         })
 
         const verdict = await prisma.medicalVerdict.create({
