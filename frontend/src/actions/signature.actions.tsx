@@ -4,10 +4,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
-import { renderToStream } from '@react-pdf/renderer'
-import { MedicalDictamenPDF } from '@/components/pdf/MedicalDictamenPDF'
-import { writeFile } from 'fs/promises'
-import { join } from 'path'
 
 /**
  * @id IMPL-20260225-03
@@ -88,24 +84,9 @@ export async function signMedicalDictamPDF(eventId: string) {
       validator: { name: session.user.fullName || 'Validador' }
     }
 
-    try {
-      // Generar PDF
-      const stream = await renderToStream(<MedicalDictamenPDF data={dictamData as any} />)
-      const chunks = []
-      for await (const chunk of stream as any) {
-        chunks.push(chunk)
-      }
-      const buffer = Buffer.concat(chunks)
-      
-      // Guardar PDF en uploads
-      const uploadDir = join(process.cwd(), '../uploads')
-      const savePath = join(uploadDir, fileName)
-      await writeFile(savePath, buffer)
-      console.log(`✅ PDF generado y guardado en ${savePath}`)
-    } catch (error) {
-      console.error('Error generando PDF:', error)
-      return { success: false, error: 'Error al generar el PDF' }
-    }
+    // TODO: Mover PDF rendering a API Route (renderToStream requiere contexto de cliente)
+    // Por ahora se envía directamente al backend para firmar
+    // const stream = await renderToStream(<MedicalDictamenPDF data={dictamData as any} />)
 
     // Llamar al backend para firmar
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
