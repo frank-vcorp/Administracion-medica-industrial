@@ -69,7 +69,7 @@
     - [x] Implementar Logout y manejo de sesiones
     - [x] Testing E2E de flujo de autenticación completo
 
-- [ ] Refinamiento de Pipeline IA y Ofimática (SOFÍA - Fase 6)
+- [/] Refinamiento de Pipeline IA y Ofimática (SOFÍA - Fase 6)
     - [ ] Mejorar clasificación de documentos con Vision API (filtros por tipo)
     - [ ] Implementar extracción de datos específicos por estudio (Laboratorio, Radiología, etc.)
     - [ ] Generar reportes de análisis masivo con histórico
