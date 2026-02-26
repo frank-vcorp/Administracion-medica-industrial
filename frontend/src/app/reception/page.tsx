@@ -1,6 +1,7 @@
 import { createEvent, getEventsKanban } from "@/actions/event.actions"
 import { getWorkers } from "@/actions/worker.actions"
 import CheckInModal from "@/components/CheckInModal"
+import Link from "next/link"
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,7 @@ function Lane({ title, count, children, color, borderColor }: any) {
 
 function PatientCard({ event, status }: any) {
     const workerName = event.worker ? `${event.worker.firstName} ${event.worker.lastName}` : "Desconocido"
+    const companyName = event.worker?.company?.name || 'Empresa Vinculada'
     // Mock company name visual as it's not eager loaded deep in this quick implementation, or we can assume worker has it.
     // For MVP we just show the name.
 
@@ -60,23 +62,25 @@ function PatientCard({ event, status }: any) {
     } as any
 
     return (
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 cursor-grab hover:shadow-md transition-all active:cursor-grabbing">
-            <div className="flex justify-between items-start mb-2">
-                <span className="font-bold text-slate-800 text-sm">{workerName}</span>
-                <span className="text-xs font-mono text-slate-400">#{event.id.slice(0, 4)}</span>
-            </div>
-            <p className="text-xs text-slate-500 mb-3">Empresa Vinculada</p> {/* Future: Load real company name */}
-
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
-                <div className="flex gap-1">
-                    <span className="w-2 h-2 rounded-full bg-red-400" title="Pendiente"></span>
-                    <span className="w-2 h-2 rounded-full bg-slate-200" title="Pendiente"></span>
-                    <span className="w-2 h-2 rounded-full bg-slate-200" title="Pendiente"></span>
+        <Link href={`/events/${event.id}`} className="block">
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer">
+                <div className="flex justify-between items-start mb-2">
+                    <span className="font-bold text-slate-800 text-sm">{workerName}</span>
+                    <span className="text-xs font-mono text-slate-400">#{event.id.slice(0, 4)}</span>
                 </div>
-                <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500 font-medium">
-                    Ingreso
-                </span>
+                <p className="text-xs text-slate-500 mb-3">{companyName}</p>
+
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
+                    <div className="flex gap-1">
+                        <span className="w-2 h-2 rounded-full bg-red-400" title="Pendiente"></span>
+                        <span className="w-2 h-2 rounded-full bg-slate-200" title="Pendiente"></span>
+                        <span className="w-2 h-2 rounded-full bg-slate-200" title="Pendiente"></span>
+                    </div>
+                    <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded font-medium">
+                        Ver Expediente →
+                    </span>
+                </div>
             </div>
-        </div>
+        </Link>
     )
 }

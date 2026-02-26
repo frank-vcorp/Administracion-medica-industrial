@@ -7,7 +7,9 @@ export async function getEventsKanban() {
     try {
         const events = await prisma.medicalEvent.findMany({
             include: {
-                worker: true,
+                worker: {
+                    include: { company: true }
+                },
                 branch: true
             },
             orderBy: { createdAt: 'desc' }

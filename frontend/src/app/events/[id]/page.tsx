@@ -1,6 +1,9 @@
 import { getEventById } from '@/actions/medical-event.actions'
 import { notFound } from 'next/navigation'
 import SmartDropzone from '@/components/SmartDropzone'
+import Link from 'next/link'
+
+export const dynamic = 'force-dynamic'
 
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params

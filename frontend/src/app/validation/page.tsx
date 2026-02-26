@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import prisma from "@/lib/prisma"
+import Link from "next/link"
 
 async function getValidationQueue() {
     // For demo purposes, we show all events so the user can see the flow immediately.
@@ -90,9 +91,9 @@ function ValidationCard({ id, name, company, studies, risk, phone }: any) {
                 </div>
 
                 <div className="flex gap-2">
-                    <button className="flex-1 bg-slate-900 text-white py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">
+                    <Link href={`/events/${id}`} className="flex-1 bg-slate-900 text-white py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors text-center">
                         Revisar y Firmar
-                    </button>
+                    </Link>
                     <button className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 rounded-lg text-xl transition-colors relative group/tooltip">
                         <a href={waLink} target="_blank" rel="noopener noreferrer">
                             📱
