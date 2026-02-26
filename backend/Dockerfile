@@ -11,5 +11,9 @@ RUN mkdir -p /uploads /app/certs /app/reports
 
 COPY . .
 
+# PYTHONPATH: los módulos services/ y schemas/ viven dentro de /app/app/
+ENV PYTHONPATH="/app/app"
+
 # Railway asigna un puerto dinámico via $PORT; shell form permite la expansión
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+
