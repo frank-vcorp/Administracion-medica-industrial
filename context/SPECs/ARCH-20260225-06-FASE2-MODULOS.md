@@ -3,7 +3,7 @@
 **ID:** ARCH-20260225-06-FASE2-MODULOS  
 **Autor:** INTEGRA  
 **Fecha:** 2026-02-25  
-**Estado:** Borrador  
+**Estado:** ✅ COMPLETADO  
 
 ---
 
@@ -65,24 +65,24 @@ graph TD
 
 ### 4.1 Funcionales
 **MOD-CITAS**
-- [ ] RF-C01: Crear, editar y cancelar citas.
-- [ ] RF-C02: Visualizar agenda por sucursal y día.
-- [ ] RF-C03: Control de estados (Programada, Cancelada, No Show, Completada).
-- [ ] RF-C04: Conversión de Cita a Evento Médico.
+- [x] RF-C01: Crear, editar y cancelar citas.
+- [x] RF-C02: Visualizar agenda por sucursal y día.
+- [x] RF-C03: Control de estados (Programada, Cancelada, No Show, Completada).
+- [x] RF-C04: Conversión de Cita a Evento Médico.
 
 **MOD-DASHBOARD**
-- [ ] RF-D01: KPI Citas hoy (Total vs Atendidas).
-- [ ] RF-D02: KPI Estado de eventos (En proceso vs Terminados).
-- [ ] RF-D03: Gráfico de atenciones por empresa (Top 5).
+- [x] RF-D01: KPI Citas hoy (Total vs Atendidas).
+- [x] RF-D02: KPI Estado de eventos (En proceso vs Terminados).
+- [x] RF-D03: Gráfico de atenciones por empresa (Top 5).
 
 **MOD-BITACORA**
-- [ ] RF-B01: Registrar login/logout.
-- [ ] RF-B02: Registrar cambios de estado en `MedicalEvent` y `MedicalVerdict`.
-- [ ] RF-B03: Vista de historial para administradores.
+- [x] RF-B01: Registrar login/logout.
+- [x] RF-B02: Registrar cambios de estado en `MedicalEvent` y `MedicalVerdict`.
+- [x] RF-B03: Vista de historial para administradores.
 
 ### 4.2 No Funcionales
-- [ ] RNF-01: Las consultas de Dashboard no deben tardar > 2s (usar índices).
-- [ ] RNF-02: `AuditLog` debe ser inmutable (append-only conceptualmente).
+- [x] RNF-01: Las consultas de Dashboard no deben tardar > 2s (usar índices).
+- [x] RNF-02: `AuditLog` debe ser inmutable (append-only conceptualmente).
 
 ---
 

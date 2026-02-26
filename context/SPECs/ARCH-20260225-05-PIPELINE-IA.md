@@ -3,7 +3,7 @@
 **ID:** ARCH-20260225-05-PIPELINE-IA
 **Autor:** INTEGRA (Arquitecto)
 **Fecha:** 2026-02-25
-**Estado:** Borrador
+**Estado:** ✅ COMPLETADO
 **Version:** 1.0
 
 ---
@@ -53,20 +53,20 @@ El procesamiento se dividirá en 2 etapas:
 ## 4. Requisitos
 
 ### 4.1 Funcionales (Pipeline IA)
-- [ ] **RF-IA-01:** Clasificación automática de documentos sin depender del nombre del archivo.
-- [ ] **RF-IA-02:** Extracción estructurada para **Audiometría** (Hz por oído, promedios).
-- [ ] **RF-IA-03:** Extracción estructurada para **Laboratorio** (tabla de analitos fuera de rango).
-- [ ] **RF-IA-04:** Extracción estructurada para **Espirometría** (FEV1, FVC, % predicho).
-- [ ] **RF-IA-05:** Detección de anomalías (highlighting) en los valores extraídos.
+- [x] **RF-IA-01:** Clasificación automática de documentos sin depender del nombre del archivo.
+- [x] **RF-IA-02:** Extracción estructurada para **Audiometría** (Hz por oído, promedios).
+- [x] **RF-IA-03:** Extracción estructurada para **Laboratorio** (tabla de analitos fuera de rango).
+- [x] **RF-IA-04:** Extracción estructurada para **Espirometría** (FEV1, FVC, % predicho).
+- [x] **RF-IA-05:** Detección de anomalías (highlighting) en los valores extraídos.
 
 ### 4.2 Funcionales (Ofimática y Firma)
-- [ ] **RF-PDF-01:** Generación de "Dictamen Final" en PDF con layout corporativo.
-- [ ] **RF-PDF-02:** Integración de Firma Digital (e.firma / certificado sello digital) en el PDF final.
-- [ ] **RF-REP-01:** Generación de Reporte Epidemiológico (Excel/PDF) consolidando datos de N expedientes.
+- [x] **RF-PDF-01:** Generación de "Dictamen Final" en PDF con layout corporativo.
+- [x] **RF-PDF-02:** Integración de Firma Digital (e.firma / certificado sello digital) en el PDF final.
+- [x] **RF-REP-01:** Generación de Reporte Epidemiológico (Excel/PDF) consolidando datos de N expedientes.
 
 ### 4.3 No Funcionales
-- [ ] **RNF-01:** Tiempo de procesamiento IA < 10 segundos por página.
-- [ ] **RNF-02:** Seguridad: Las llaves privadas de firma NUNCA deben exponerse ni guardarse en texto plano en DB.
+- [x] **RNF-01:** Tiempo de procesamiento IA < 10 segundos por página.
+- [x] **RNF-02:** Seguridad: Las llaves privadas de firma NUNCA deben exponerse ni guardarse en texto plano en DB.
 
 ---
 
