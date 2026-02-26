@@ -331,6 +331,9 @@ model Appointment {
   status      AppointmentStatus   @default(SCHEDULED)
   notes       String?             @db.Text
   
+  // Origen de la cita
+  source      String              @default("SUCURSAL") // TELEFONO, WHATSAPP, CORREO, SUCURSAL, OTRO
+  
   // Documento generado (QR + Pase)
   qrCode      String?             @db.Text
   

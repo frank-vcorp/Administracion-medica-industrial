@@ -23,6 +23,7 @@ export default function AppointmentFormModal() {
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
+    const [successData, setSuccessData] = useState<{ success: boolean, appointment?: any } | null>(null)
     const [workers, setWorkers] = useState<Worker[]>([])
     const [branches, setBranches] = useState<Branch[]>([])
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
@@ -50,6 +51,7 @@ export default function AppointmentFormModal() {
             const date = formData.get('date') as string
             const time = formData.get('time') as string
             const notes = formData.get('notes') as string
+            const source = formData.get('source') as string
 
             if (!workerId || !branchId || !date || !time) {
                 setError('Todos los campos son obligatorios')
@@ -70,11 +72,12 @@ export default function AppointmentFormModal() {
                     companyId: selectedWorker.companyId,
                     branchId,
                     scheduledAt,
-                    notes
+                    notes,
+                    source
                 })
 
                 if (result.success) {
-                    setIsOpen(false)
+                    setSuccessData(result)
                     router.refresh()
                 } else {
                     setError(result.error || 'Error al agendar la cita')
@@ -83,6 +86,43 @@ export default function AppointmentFormModal() {
                 setError('Error de conexión')
             }
         })
+    }
+
+    if (successData && successData.appointment) {
+        const apt = successData.appointment;
+        const workerPhone = apt.worker?.phone || '';
+        const message = `Hola ${apt.worker?.firstName}, tu cita médica en AMI está confirmada para el ${new Date(apt.scheduledAt).toLocaleDateString('es-ES')} a las ${new Date(apt.scheduledAt).toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'})}. Tu número de expediente es: ${apt.expedientId}. Por favor presenta este mensaje en recepción.`;
+        const whatsappUrl = `https://wa.me/${workerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+
+        return (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
+                <div className="bg-white p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center space-y-6">
+                    <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-4xl animate-bounce">
+                        ✅
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-black text-slate-800">¡Cita Agendada!</h3>
+                        <p className="text-slate-500 mt-2 text-sm font-medium">Expediente: <span className="font-mono font-bold text-slate-800">{apt.expedientId}</span></p>
+                    </div>
+                    <div className="space-y-3 pt-2">
+                        <a
+                            href={whatsappUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+                        >
+                            <span>📱</span> Enviar Pase por WhatsApp
+                        </a>
+                        <button
+                            onClick={() => { setSuccessData(null); setIsOpen(false); }}
+                            className="block w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -162,6 +202,22 @@ export default function AppointmentFormModal() {
                                         className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none" 
                                     />
                                 </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Origen de la Cita</label>
+                                <select 
+                                    name="source" 
+                                    required 
+                                    defaultValue="SUCURSAL"
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
+                                >
+                                    <option value="SUCURSAL">En Sucursal (Presencial)</option>
+                                    <option value="TELEFONO">Llamada Telefónica</option>
+                                    <option value="WHATSAPP">WhatsApp</option>
+                                    <option value="CORREO">Correo Electrónico</option>
+                                    <option value="OTRO">Otro</option>
+                                </select>
                             </div>
 
                             <div className="space-y-1">

@@ -24,7 +24,7 @@ import { generateExpedientId } from '@/lib/id.utils'
 
 /**
  * Crea una nueva cita y registra en auditoría
- * @param data - Datos de la cita (workerId, companyId, branchId, scheduledAt, notes)
+ * @param data - Datos de la cita (workerId, companyId, branchId, scheduledAt, notes, source)
  * @returns Cita creada o error
  */
 export async function createAppointment(data: {
@@ -33,6 +33,7 @@ export async function createAppointment(data: {
   branchId: string
   scheduledAt: Date | string
   notes?: string
+  source?: string
 }) {
   try {
     const session = await getServerSession(authOptions)
@@ -59,19 +60,20 @@ export async function createAppointment(data: {
         branchId: data.branchId,
         scheduledAt: scheduledDate,
         notes: data.notes || null,
+        source: data.source || 'SUCURSAL',
         status: 'SCHEDULED',
         expedientId,
         qrCode
       },
       include: {
         worker: {
-          select: { id: true, firstName: true, lastName: true, universalId: true },
+          select: { id: true, firstName: true, lastName: true, universalId: true, phone: true },
         },
         company: {
           select: { id: true, name: true },
         },
         branch: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, address: true },
         },
       },
     })
@@ -82,6 +84,7 @@ export async function createAppointment(data: {
       companyId: data.companyId,
       branchId: data.branchId,
       scheduledAt: scheduledDate,
+      source: data.source || 'SUCURSAL'
     })
 
     revalidatePath('/appointments')
