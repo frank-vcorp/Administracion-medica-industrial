@@ -6,7 +6,7 @@ IMPL-20260225-01: Clasificador inteligente usando Gemini Vision.
 import time
 from typing import Dict, Any
 from .base import GeminiBase
-from ..schemas.medical import DocumentClassification
+from app.schemas.medical import DocumentClassification
 
 
 class DocumentClassifierService(GeminiBase):

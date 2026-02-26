@@ -212,10 +212,12 @@ class ReportService:
             <tr>
 """
             
+            import html
+            
             # Agregar encabezados
             if data_list:
                 for key in data_list[0].keys():
-                    html_content += f"                <th>{key}</th>\n"
+                    html_content += f"                <th>{html.escape(str(key))}</th>\n"
             
             html_content += """            </tr>
         </thead>
@@ -226,7 +228,7 @@ class ReportService:
             for record in data_list:
                 html_content += "            <tr>\n"
                 for value in record.values():
-                    html_content += f"                <td>{value}</td>\n"
+                    html_content += f"                <td>{html.escape(str(value))}</td>\n"
                 html_content += "            </tr>\n"
             
             html_content += """        </tbody>

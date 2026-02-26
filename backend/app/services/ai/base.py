@@ -78,15 +78,23 @@ class GeminiBase:
             response.raise_for_status()
             data = response.json()
             
+            candidates = data.get('candidates', [])
+            if not candidates:
+                raise ValueError(f"Gemini API no devolvió candidatos: {data}")
+                
             text_resp = (
-                data.get('candidates', [])[0]
+                candidates[0]
                 .get('content', {})
                 .get('parts', [])[0]
                 .get('text', '')
             )
             text_resp = text_resp.replace('```json', '').replace('```', '').strip()
             
-            return json.loads(text_resp)
+            try:
+                return json.loads(text_resp)
+            except json.JSONDecodeError as e:
+                print(f"❌ Error parseando JSON de Gemini: {text_resp}")
+                raise ValueError(f"Respuesta de Gemini no es JSON válido: {e}")
         except Exception as e:
             print(f"❌ Gemini Error: {e}")
             raise

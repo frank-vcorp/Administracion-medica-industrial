@@ -192,8 +192,10 @@ def sign_pdf(request: SignPdfRequest):
             )
         
         # Generar nombre de salida si no se proporciona
-        output_path = request.output_pdf
-        if not output_path:
+        if request.output_pdf:
+            safe_filename = os.path.basename(request.output_pdf)
+            output_path = os.path.join(UPLOAD_DIR, safe_filename)
+        else:
             base_name = os.path.splitext(os.path.basename(request.input_pdf))[0]
             output_path = os.path.join(UPLOAD_DIR, f"{base_name}_signed.pdf")
         
