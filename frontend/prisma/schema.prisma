@@ -56,19 +56,27 @@ model Tenant {
 }
 
 model Branch {
-  id          String   @id @default(uuid())
-  name        String
-  address     String?
-  phone       String?
-  managerName String?
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  id             String   @id @default(uuid())
+  name           String
+  address        String?
+  phone          String?
+  managerName    String?
   
-  events      MedicalEvent[]
-  appointments Appointment[]
+  // Configuración de Capacidad y Horarios
+  hourlyCapacity Int      @default(15)      // Pacientes por hora
+  openingTime    String   @default("07:00") // Hora de apertura (HH:mm)
+  closingTime    String   @default("17:00") // Hora de cierre (HH:mm)
+  
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  
+  events         MedicalEvent[]
+  appointments   Appointment[]
+  companies      Company[] // Empresas que tienen esta sucursal por defecto
+  workers        Worker[]  // Trabajadores asignados a esta sucursal
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("branches")
 }
@@ -78,20 +86,24 @@ model Branch {
 // --------------------------------------------------------
 
 model Company {
-  id          String   @id @default(uuid())
-  name        String
-  rfc         String?  // Tax ID
-  address     String?
-  contactName String?
-  email       String?
-  phone       String?
+  id              String   @id @default(uuid())
+  name            String
+  rfc             String?  // Tax ID
+  address         String?
+  contactName     String?
+  email           String?
+  phone           String?
   
-  workers     Worker[]
-  users       User[]   // Usuarios CLIENT vinculados a esta empresa
-  appointments Appointment[]
+  // Sucursal predeterminada para esta empresa
+  defaultBranchId String?
+  defaultBranch   Branch?  @relation(fields: [defaultBranchId], references: [id])
+  
+  workers         Worker[]
+  users           User[]   // Usuarios CLIENT vinculados a esta empresa
+  appointments    Appointment[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("companies")
 }
@@ -111,6 +123,10 @@ model Worker {
 
   companyId   String?
   company     Company? @relation(fields: [companyId], references: [id])
+
+  // Sucursal asignada (heredada de la empresa o asignada manualmente)
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
 
   medicalHistory MedicalEvent[]
   appointments   Appointment[]

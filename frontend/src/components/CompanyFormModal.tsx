@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { createCompany } from '@/actions/admin.actions'
+import { useState, useTransition, useEffect } from 'react'
+import { createCompany, getBranches } from '@/actions/admin.actions'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -10,7 +10,14 @@ export default function CompanyFormModal() {
     const [isPending, startTransition] = useTransition()
     const [successData, setSuccessData] = useState<{ success: boolean, company?: { id: string, name: string } } | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [branches, setBranches] = useState<{ id: string, name: string }[]>([])
     const router = useRouter()
+
+    useEffect(() => {
+        if (isOpen) {
+            getBranches().then(data => setBranches(data))
+        }
+    }, [isOpen])
 
     async function handleSubmit(formData: FormData) {
         startTransition(async () => {
@@ -103,6 +110,16 @@ export default function CompanyFormModal() {
                                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Email</label>
                                     <input name="email" placeholder="email@ejemplo.com" type="email" className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none" />
                                 </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal Predeterminada</label>
+                                <select name="defaultBranchId" className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none">
+                                    <option value="">Seleccionar Sucursal...</option>
+                                    {branches.map(b => (
+                                        <option key={b.id} value={b.id}>{b.name}</option>
+                                    ))}
+                                </select>
                             </div>
 
                             {error && <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-lg border border-red-100 animate-shake">⚠️ {error}</p>}

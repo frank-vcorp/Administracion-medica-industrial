@@ -5,13 +5,17 @@ import { revalidatePath } from "next/cache"
 
 // --- COMPANIES ---
 export async function getCompanies() {
-    return await prisma.company.findMany({ orderBy: { createdAt: 'desc' } })
+    return await prisma.company.findMany({ 
+        include: { defaultBranch: true },
+        orderBy: { createdAt: 'desc' } 
+    })
 }
 
 export async function createCompany(formData: FormData) {
     try {
         const name = formData.get('name') as string
         const rfc = formData.get('rfc') as string
+        const defaultBranchId = formData.get('defaultBranchId') as string
 
         if (!name || !rfc) {
             return { success: false, error: 'Nombre y RFC son obligatorios' }
@@ -25,6 +29,7 @@ export async function createCompany(formData: FormData) {
                 contactName: formData.get('contactName') as string,
                 email: formData.get('email') as string,
                 phone: formData.get('phone') as string,
+                defaultBranchId: defaultBranchId || null
             }
         })
         revalidatePath('/companies')
@@ -58,6 +63,9 @@ export async function createBranch(formData: FormData) {
             address: formData.get('address') as string,
             phone: formData.get('phone') as string,
             managerName: formData.get('managerName') as string,
+            hourlyCapacity: Number(formData.get('hourlyCapacity')) || 15,
+            openingTime: formData.get('openingTime') as string || '07:00',
+            closingTime: formData.get('closingTime') as string || '17:00',
             tenantId: tenant.id
         }
     })

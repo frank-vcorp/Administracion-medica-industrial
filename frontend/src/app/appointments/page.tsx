@@ -21,7 +21,7 @@ interface AppointmentWithWorker {
         universalId: string | null;
     };
     company: { name: string } | null;
-    branch: { name: string } | null;
+    branch: { name: string, hourlyCapacity: number, openingTime: string, closingTime: string } | null;
 }
 
 export default function AppointmentsPage() {
@@ -29,18 +29,33 @@ export default function AppointmentsPage() {
     const [loading, setLoading] = useState(true)
     const [selectedApt, setSelectedApt] = useState<AppointmentWithWorker | null>(null)
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
+    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
     const router = useRouter()
 
     const loadData = async () => {
         setLoading(true)
-        const result = await getAppointments()
+        const result = await getAppointments(selectedDate)
         if (result.success) setAppointments(result.appointments as unknown as AppointmentWithWorker[] || [])
         setLoading(false)
     }
 
     useEffect(() => {
         loadData()
-    }, [])
+    }, [selectedDate])
+
+    // Agrupar citas por hora
+    const groupedAppointments = appointments.reduce((acc, apt) => {
+        const hour = new Date(apt.scheduledAt).getHours();
+        if (!acc[hour]) acc[hour] = [];
+        acc[hour].push(apt);
+        return acc;
+    }, {} as Record<number, AppointmentWithWorker[]>);
+
+    // Obtener configuración de la sucursal (asumiendo la primera por ahora, idealmente se filtra por sucursal seleccionada)
+    const branchConfig = appointments.length > 0 && appointments[0].branch ? appointments[0].branch : { hourlyCapacity: 15, openingTime: '07:00', closingTime: '17:00' };
+    const startHour = parseInt(branchConfig.openingTime.split(':')[0]);
+    const endHour = parseInt(branchConfig.closingTime.split(':')[0]);
+    const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
 
     const handleCheckIn = async (id: string) => {
         setCheckingIn(id)
@@ -69,8 +84,14 @@ export default function AppointmentsPage() {
                     <p className="text-slate-500 text-sm">Panel de control de ingresos y expedientes EXP</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm text-sm font-bold text-slate-600">
-                        📅 {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm flex items-center gap-2">
+                        <span className="text-slate-400">📅</span>
+                        <input 
+                            type="date" 
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 cursor-pointer"
+                        />
                     </div>
                 </div>
             </div>
@@ -94,65 +115,78 @@ export default function AppointmentsPage() {
                 </div>
 
                 <div className="divide-y divide-slate-100">
-                    {appointments.length === 0 ? (
-                        <div className="p-20 text-center space-y-4">
-                            <div className="text-4xl">📭</div>
-                            <p className="text-slate-400 font-medium">No hay citas programadas para hoy</p>
-                        </div>
-                    ) : (
-                        appointments.map((apt) => (
-                            <div key={apt.id} className="group hover:bg-slate-50 transition-all p-6 flex flex-col md:flex-row md:items-center gap-6">
-                                {/* Time marker */}
-                                <div className="md:w-32 flex-shrink-0">
-                                    <div className="text-xl font-black text-slate-800">
-                                        {new Date(apt.scheduledAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                                    </div>
-                                    <div className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter">
-                                        {apt.expedientId || 'Papeleta Pendiente'}
-                                    </div>
-                                </div>
+                    {hours.map(hour => {
+                        const hourApts = groupedAppointments[hour] || [];
+                        const capacity = branchConfig.hourlyCapacity;
+                        const isFull = hourApts.length >= capacity;
+                        const isAlmostFull = hourApts.length >= capacity * 0.8;
 
-                                {/* Worker Info */}
-                                <div className="flex-grow flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform">
-                                        👤
+                        return (
+                            <div key={hour} className="flex flex-col md:flex-row border-b border-slate-100 last:border-0">
+                                {/* Time Block Header */}
+                                <div className="md:w-48 p-6 bg-slate-50/50 border-r border-slate-100 flex flex-col justify-center">
+                                    <div className="text-2xl font-black text-slate-800">
+                                        {hour.toString().padStart(2, '0')}:00
                                     </div>
-                                    <div>
-                                        <h3 className="font-bold text-slate-800 text-lg leading-tight">
-                                            {apt.worker?.firstName} {apt.worker?.lastName}
-                                        </h3>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-xs font-medium text-slate-400">{apt.company?.name}</span>
-                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-mono">{apt.worker?.universalId}</span>
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <div className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${isFull ? 'bg-red-100 text-red-700' : isAlmostFull ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                            {hourApts.length} / {capacity} Lugares
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Status & Actions */}
-                                <div className="flex items-center gap-4">
-                                    <StatusBadge status={apt.status} />
-
-                                    <button
-                                        onClick={() => setSelectedApt(apt)}
-                                        className="p-3 bg-white border border-slate-200 rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm active:scale-95"
-                                        title="Ver Papeleta / Ticket"
-                                    >
-                                        🎫
-                                    </button>
-
-                                    {apt.status === 'SCHEDULED' && (
-                                        <button
-                                            onClick={() => handleCheckIn(apt.id)}
-                                            disabled={checkingIn === apt.id}
-                                            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50"
-                                        >
-                                            {checkingIn === apt.id ? '...' : 'INICIAR ATENCIÓN'}
-                                        </button>
+                                {/* Appointments List for this hour */}
+                                <div className="flex-grow p-4">
+                                    {hourApts.length === 0 ? (
+                                        <div className="h-full flex items-center justify-center text-slate-400 text-sm font-medium italic py-4">
+                                            Bloque disponible
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                            {hourApts.map((apt) => (
+                                                <div key={apt.id} className="group bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-4 flex items-center gap-4 transition-all shadow-sm hover:shadow-md">
+                                                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
+                                                        👤
+                                                    </div>
+                                                    <div className="flex-grow min-w-0">
+                                                        <h3 className="font-bold text-slate-800 text-sm truncate">
+                                                            {apt.worker?.firstName} {apt.worker?.lastName}
+                                                        </h3>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <span className="text-[10px] font-medium text-slate-500 truncate">{apt.company?.name}</span>
+                                                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">{apt.expedientId || 'PENDIENTE'}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                                        <StatusBadge status={apt.status} />
+                                                        <div className="flex gap-1">
+                                                            <button
+                                                                onClick={() => setSelectedApt(apt)}
+                                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                title="Ver Pase"
+                                                            >
+                                                                🎫
+                                                            </button>
+                                                            {apt.status === 'SCHEDULED' && (
+                                                                <button
+                                                                    onClick={() => handleCheckIn(apt.id)}
+                                                                    disabled={checkingIn === apt.id}
+                                                                    className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-xs"
+                                                                    title="Check-in"
+                                                                >
+                                                                    {checkingIn === apt.id ? '...' : '▶'}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
                             </div>
-                        ))
-                    )}
+                        )
+                    })}
                 </div>
             </div>
 

@@ -151,7 +151,7 @@ export async function getAppointments(date?: string, branchId?: string) {
           select: { id: true, name: true },
         },
         branch: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, hourlyCapacity: true, openingTime: true, closingTime: true },
         },
       },
       orderBy: {

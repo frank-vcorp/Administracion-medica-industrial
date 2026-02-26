@@ -31,7 +31,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <div className="pt-4 pb-2">
                 <p className="text-xs uppercase text-slate-500 font-semibold px-2">Administración Clínica</p>
               </div>
-              <NavItem href="/admin/users" icon="🏥" label="Personal AMI" />
+              <NavItem href="/branches" icon="🏥" label="Sucursales AMI" />
+              <NavItem href="/admin/users" icon="👨‍⚕️" label="Personal AMI" />
               <NavItem href="/admin/services" icon="🩺" label="Catálogo Servicios" />
               <NavItem href="/admin/profiles" icon="📦" label="Baterías (Paquetes)" />
               <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" />

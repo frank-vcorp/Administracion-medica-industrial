@@ -31,6 +31,20 @@ export default async function BranchesPage() {
                             <input name="phone" placeholder="Teléfono" className="border p-2 rounded" />
                             <input name="managerName" placeholder="Encargado" className="border p-2 rounded" />
                         </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="flex flex-col">
+                                <label className="text-xs text-slate-500 mb-1">Apertura</label>
+                                <input type="time" name="openingTime" defaultValue="07:00" required className="border p-2 rounded" />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-xs text-slate-500 mb-1">Cierre</label>
+                                <input type="time" name="closingTime" defaultValue="17:00" required className="border p-2 rounded" />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-xs text-slate-500 mb-1">Capacidad/Hr</label>
+                                <input type="number" name="hourlyCapacity" defaultValue="15" min="1" required className="border p-2 rounded" />
+                            </div>
+                        </div>
 
                         <div className="flex justify-end pt-4">
                             <button type="submit" className="bg-purple-600 text-white px-4 py-2 rounded shadow hover:bg-purple-700 font-medium">
@@ -54,6 +68,9 @@ export default async function BranchesPage() {
                         address={b.address}
                         phone={b.phone || 'N/A'}
                         manager={b.managerName || 'N/A'}
+                        openingTime={b.openingTime}
+                        closingTime={b.closingTime}
+                        hourlyCapacity={b.hourlyCapacity}
                     />
                 ))}
             </div>
@@ -61,7 +78,7 @@ export default async function BranchesPage() {
     )
 }
 
-function BranchCard({ name, address, phone, manager }: { name: string, address: string | null, phone: string, manager: string }) {
+function BranchCard({ name, address, phone, manager, openingTime, closingTime, hourlyCapacity }: { name: string, address: string | null, phone: string, manager: string, openingTime: string, closingTime: string, hourlyCapacity: number }) {
     return (
         <div className="bg-white p-0 rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-all">
             <div className="h-24 bg-slate-100 flex items-center justify-center text-4xl border-b border-slate-100">
@@ -80,6 +97,12 @@ function BranchCard({ name, address, phone, manager }: { name: string, address: 
                     </div>
                     <div className="flex items-center gap-2 text-slate-600">
                         <span>👨‍⚕️</span> {manager}
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                        <span>⏱️</span> {openingTime} - {closingTime}
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                        <span>👥</span> {hourlyCapacity} pacientes / hora
                     </div>
                 </div>
 

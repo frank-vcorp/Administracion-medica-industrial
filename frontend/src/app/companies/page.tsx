@@ -30,6 +30,7 @@ export default async function CompaniesPage() {
                         rfc={c.rfc || 'Sin RFC'}
                         contact={c.contactName || '---'}
                         email={c.email}
+                        defaultBranch={c.defaultBranch?.name}
                     />
                 ))}
             </div>
@@ -37,7 +38,7 @@ export default async function CompaniesPage() {
     )
 }
 
-function CompanyCard({ name, rfc, contact, email }: { name: string, rfc: string, contact: string, email: string | null }) {
+function CompanyCard({ name, rfc, contact, email, defaultBranch }: { name: string, rfc: string, contact: string, email: string | null, defaultBranch?: string }) {
     return (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all group">
             <div className="flex justify-between items-start mb-4">
@@ -61,6 +62,12 @@ function CompanyCard({ name, rfc, contact, email }: { name: string, rfc: string,
                     <span className="text-slate-500">Email</span>
                     <span className="font-medium text-slate-700">{email || '-'}</span>
                 </div>
+                {defaultBranch && (
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Sucursal</span>
+                        <span className="font-medium text-slate-700">{defaultBranch}</span>
+                    </div>
+                )}
             </div>
 
             <div className="mt-4 pt-3 flex gap-2">
