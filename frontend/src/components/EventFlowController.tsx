@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useTransition, useRef } from 'react'
 import { updateEventStatus, saveVerdict } from '@/actions/medical-event.actions'
 import { signMedicalDictamPDF } from '@/actions/signature.actions'
