@@ -41,8 +41,8 @@ export async function createAppointment(data: {
     }
 
     // Convertir scheduledAt a Date si es string
-    const scheduledDate = typeof data.scheduledAt === 'string' 
-      ? new Date(data.scheduledAt) 
+    const scheduledDate = typeof data.scheduledAt === 'string'
+      ? new Date(data.scheduledAt)
       : data.scheduledAt
 
     const appointment = await prisma.appointment.create({
@@ -105,7 +105,7 @@ export async function getAppointments(date?: string, branchId?: string) {
       throw new Error('Usuario no autenticado')
     }
 
-    const filters: any = {}
+    const filters: Record<string, unknown> = {}
 
     // Filtro por fecha
     if (date) {

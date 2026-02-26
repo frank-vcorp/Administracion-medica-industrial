@@ -1,0 +1,8 @@
+*.js
+*.mjs
+check-railway-users.js
+cleanup.js
+seed-branch.js
+verify-auth-data.js
+.next/
+node_modules/

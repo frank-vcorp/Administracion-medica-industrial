@@ -62,12 +62,12 @@ export default async function ValidationPage() {
     )
 }
 
-function ValidationCard({ id, name, company, studies, risk, phone }: any) {
-    const risks = {
+function ValidationCard({ id, name, company, studies, risk, phone }: { id: string, name: string, company: string, studies: string[], risk: 'Alto' | 'Medio' | 'Bajo', phone: string | null }) {
+    const risks: Record<string, string> = {
         "Alto": "bg-red-50 text-red-600 border-red-100 shadow-red-100/50",
         "Medio": "bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/50",
         "Bajo": "bg-emerald-50 text-emerald-600 border-emerald-100 shadow-emerald-100/50"
-    } as any
+    }
 
     const waLink = phone
         ? `https://wa.me/${phone}?text=Hola ${name}, su dictamen de ${company} está listo. Descárguelo aquí: https://ami.com/d/${id}`

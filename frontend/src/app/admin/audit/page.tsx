@@ -10,7 +10,7 @@ import { getAuditLogs } from '@/actions/audit.actions'
  * IMPL-20260225-06-UI: Implementación de UI Sprint 7
  */
 export default function AuditPage() {
-    const [logs, setLogs] = useState<any[]>([])
+    const [logs, setLogs] = useState<{ id: string, action: string, entity: string, entityId: string | null, createdAt: Date, details: Record<string, any> | null, user: { fullName: string | null, email: string | null } | null }[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [offset, setOffset] = useState(0)
@@ -21,7 +21,7 @@ export default function AuditPage() {
             try {
                 const result = await getAuditLogs(pageSize, offset)
                 if (result.success) {
-                    setLogs(result.logs || [])
+                    setLogs((result.logs as unknown as any) || [])
                 } else {
                     setError(result.error || 'Error al cargar auditoría')
                 }
@@ -70,7 +70,7 @@ export default function AuditPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                            {logs.map((log: any) => (
+                            {logs.map((log) => (
                                 <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-sm text-slate-900">
                                         <div>

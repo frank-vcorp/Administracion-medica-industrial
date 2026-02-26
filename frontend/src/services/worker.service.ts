@@ -1,19 +1,14 @@
 import prisma from '@/lib/prisma'
-import { Worker, Prisma } from '@prisma/client'
-
-export const getWorkers = async () => {
-    return await prisma.worker.findMany({
-        include: { company: true },
-        orderBy: { updatedAt: 'desc' }
-    })
-}
+import { Prisma } from '@prisma/client'
 
 export const getWorkerById = async (id: string) => {
     return await prisma.worker.findUnique({
         where: { id },
         include: {
             company: true,
-            medicalHistory: true
+            medicalHistory: {
+                orderBy: { createdAt: 'desc' }
+            }
         }
     })
 }
@@ -35,5 +30,11 @@ export const updateWorker = async (id: string, data: Prisma.WorkerUpdateInput) =
     return await prisma.worker.update({
         where: { id },
         data
+    })
+}
+
+export const deleteWorker = async (id: string) => {
+    return await prisma.worker.delete({
+        where: { id }
     })
 }

@@ -35,7 +35,7 @@ export async function GET(
                 const uploadDir = join(process.cwd(), '../uploads')
                 const filePath = join(uploadDir, verdict.pdfUrl)
                 const fileBuffer = await readFile(filePath)
-                
+
                 return new NextResponse(fileBuffer, {
                     headers: {
                         'Content-Type': 'application/pdf',
@@ -53,10 +53,18 @@ export async function GET(
             eventId: verdict.eventId,
             signedAt: verdict.signedAt,
             finalDiagnosis: verdict.finalDiagnosis,
-            recommendations: verdict.recommendations,
-            worker: verdict.event.worker,
-            company: verdict.event.worker.company,
-            validator: verdict.validator
+            recommendations: verdict.recommendations || undefined,
+            worker: {
+                firstName: verdict.event.worker.firstName,
+                lastName: verdict.event.worker.lastName,
+                universalId: verdict.event.worker.universalId
+            },
+            company: {
+                name: verdict.event.worker.company?.name || 'Clínica AMI'
+            },
+            validator: {
+                fullName: verdict.validator?.fullName || 'Médico Validador'
+            }
         }
 
         const stream = await renderToStream(<MedicalDictamenPDF data={data} />)

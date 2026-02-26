@@ -5,10 +5,10 @@ import { createWorker } from '@/actions/worker.actions'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-export default function WorkerFormModal({ companies }: { companies: any[] }) {
+export default function WorkerFormModal({ companies }: { companies: { id: string, name: string }[] }) {
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
-    const [successData, setSuccessData] = useState<any>(null)
+    const [successData, setSuccessData] = useState<{ success: boolean, worker?: { id: string, firstName: string, lastName: string } } | null>(null)
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
 
@@ -16,14 +16,14 @@ export default function WorkerFormModal({ companies }: { companies: any[] }) {
         startTransition(async () => {
             setError(null)
             try {
-                const result = await createWorker(formData)
+                const result = await createWorker(formData) as { success: boolean, worker?: { id: string, firstName: string, lastName: string }, error?: string }
                 if (result.success) {
                     setSuccessData(result)
                     router.refresh()
                 } else {
                     setError(result.error || 'Error al guardar')
                 }
-            } catch (e) {
+            } catch {
                 setError('Error de conexión')
             }
         })

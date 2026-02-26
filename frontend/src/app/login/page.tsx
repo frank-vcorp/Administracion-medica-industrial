@@ -37,7 +37,7 @@ function LoginForm() {
       } else if (result?.ok) {
         router.push(callbackUrl)
       }
-    } catch (err) {
+    } catch {
       setError('Error al iniciar sesión. Por favor, intenta de nuevo.')
     } finally {
       setLoading(false)

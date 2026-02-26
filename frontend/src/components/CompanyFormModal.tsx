@@ -8,7 +8,7 @@ import Link from 'next/link'
 export default function CompanyFormModal() {
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
-    const [successData, setSuccessData] = useState<any>(null)
+    const [successData, setSuccessData] = useState<{ success: boolean, company?: { id: string, name: string } } | null>(null)
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
 
@@ -16,14 +16,14 @@ export default function CompanyFormModal() {
         startTransition(async () => {
             setError(null)
             try {
-                const result = await createCompany(formData)
+                const result = await createCompany(formData) as { success: boolean, company?: { id: string, name: string }, error?: string }
                 if (result.success) {
                     setSuccessData(result)
                     router.refresh()
                 } else {
                     setError(result.error || 'Error al guardar')
                 }
-            } catch (e) {
+            } catch {
                 setError('Error de conexión')
             }
         })

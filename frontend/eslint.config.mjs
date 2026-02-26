@@ -7,11 +7,20 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
+    // Default ignores:
     ".next/**",
+    "node_modules/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "prisma/**",
+    // Maintenance & Utility scripts (exclude from lint)
+    "*.js",
+    "scripts/**",
+    "seed-branch.js",
+    "check-railway-users.js",
+    "cleanup.js",
+    "verify-auth-data.js",
   ]),
 ]);
 

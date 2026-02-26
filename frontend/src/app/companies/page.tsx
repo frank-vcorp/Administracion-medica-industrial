@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 
-import { createCompany, getCompanies } from "@/actions/admin.actions"
+import { getCompanies } from "@/actions/admin.actions"
 import CompanyFormModal from "@/components/CompanyFormModal"
 
 export default async function CompaniesPage() {
@@ -30,7 +30,6 @@ export default async function CompaniesPage() {
                         rfc={c.rfc || 'Sin RFC'}
                         contact={c.contactName || '---'}
                         email={c.email}
-                        status="active"
                     />
                 ))}
             </div>
@@ -38,7 +37,7 @@ export default async function CompaniesPage() {
     )
 }
 
-function CompanyCard({ name, rfc, contact, email, status }: any) {
+function CompanyCard({ name, rfc, contact, email }: { name: string, rfc: string, contact: string, email: string | null }) {
     return (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all group">
             <div className="flex justify-between items-start mb-4">

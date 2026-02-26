@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma'
-import { Company, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 
 export const getCompanies = async () => {
     return await prisma.company.findMany({
@@ -28,7 +28,6 @@ export const updateCompany = async (id: string, data: Prisma.CompanyUpdateInput)
 }
 
 export const deleteCompany = async (id: string) => {
-    // Soft delete logic could go here, but for now strict delete
     return await prisma.company.delete({
         where: { id }
     })

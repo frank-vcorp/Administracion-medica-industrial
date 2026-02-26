@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma'
-import { MedicalEvent, Prisma, EventStatus } from '@prisma/client'
+import { Prisma, EventStatus } from '@prisma/client'
 
 // --- EVENT ---
 

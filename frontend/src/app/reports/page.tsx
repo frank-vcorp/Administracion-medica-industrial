@@ -50,7 +50,7 @@ export default function ReportsPage() {
     )
 }
 
-function StatBox({ label, value, trend, color }: any) {
+function StatBox({ label, value, trend, color }: { label: string, value: string, trend: string, color?: 'red' | 'green' }) {
     return (
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <p className="text-xs text-slate-500 uppercase font-semibold">{label}</p>
@@ -62,7 +62,7 @@ function StatBox({ label, value, trend, color }: any) {
     )
 }
 
-function ReportItem({ title, desc, icon }: any) {
+function ReportItem({ title, desc, icon }: { title: string, desc: string, icon: string }) {
     return (
         <div className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-100 group">
             <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xl group-hover:bg-blue-100 transition-colors">

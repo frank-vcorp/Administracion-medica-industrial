@@ -12,6 +12,7 @@
 
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 
 /**
@@ -26,12 +27,12 @@ export async function logAudit(
   action: string,
   entity: string,
   entityId?: string,
-  details?: any
+  details?: Record<string, unknown>
 ) {
   try {
     // Obtener usuario autenticado de la sesión
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       throw new Error('Usuario no autenticado para registrar auditoría')
     }
@@ -41,7 +42,7 @@ export async function logAudit(
         action,
         entity,
         entityId,
-        details: details || null,
+        details: (details as Prisma.InputJsonValue) || {},
         userId: session.user.id,
         // ipAddress se podría obtener de headers si fuera necesario
         // Por ahora se omite por simplicidad

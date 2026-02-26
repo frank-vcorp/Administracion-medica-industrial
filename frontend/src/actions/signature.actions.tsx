@@ -73,17 +73,6 @@ export async function signMedicalDictamPDF(eventId: string) {
     const fileName = `dictamen-${event.id}-${Date.now()}.pdf`
 
     // Preparar datos para enviar al backend
-    const dictamData = {
-      id: event.verdict.id,
-      eventId: event.id,
-      signedAt: event.verdict.signedAt || new Date(),
-      finalDiagnosis: event.verdict.finalDiagnosis,
-      recommendations: event.verdict.recommendations,
-      worker: event.worker,
-      company: { name: event.branch?.name || 'Clínica AMI' },
-      validator: { name: session.user.fullName || 'Validador' }
-    }
-
     // TODO: Mover PDF rendering a API Route (renderToStream requiere contexto de cliente)
     // Por ahora se envía directamente al backend para firmar
     // const stream = await renderToStream(<MedicalDictamenPDF data={dictamData as any} />)

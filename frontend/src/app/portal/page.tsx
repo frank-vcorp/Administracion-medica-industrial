@@ -11,7 +11,7 @@ import Link from 'next/link'
 export default async function PortalDashboardPage() {
     // Obtener sesión segura del servidor
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.companyId) {
         return (
             <div className="p-8 text-center text-slate-500">
@@ -186,7 +186,7 @@ export default async function PortalDashboardPage() {
     )
 }
 
-function StatCard({ title, value, subtitle, icon, color, bg }: any) {
+function StatCard({ title, value, subtitle, icon, color, bg }: { title: string, value: number, subtitle: string, icon: string, color: string, bg: string }) {
     return (
         <div className={`p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col ${bg}`}>
             <div className="flex justify-between items-start mb-4">

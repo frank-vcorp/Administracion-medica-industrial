@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation'
 interface EventFlowControllerProps {
     eventId: string
     currentStatus: string
-    hasVerdict: boolean
     verdictData?: {
         finalDiagnosis?: string
         recommendations?: string
@@ -18,7 +17,6 @@ interface EventFlowControllerProps {
 export default function EventFlowController({
     eventId,
     currentStatus,
-    hasVerdict,
     verdictData
 }: EventFlowControllerProps) {
     const [isPending, startTransition] = useTransition()
@@ -36,7 +34,7 @@ export default function EventFlowController({
                 // In a real app we might want to save some initial verdict draft here
                 await updateEventStatus(eventId, 'VALIDATING')
                 router.refresh()
-            } catch (e) {
+            } catch {
                 setError('Error al cambiar estado')
             }
         })
@@ -51,7 +49,7 @@ export default function EventFlowController({
                 } else {
                     setError(result.error || 'Error al firmar')
                 }
-            } catch (e) {
+            } catch {
                 setError('Error de conexión al firmar')
             }
         })

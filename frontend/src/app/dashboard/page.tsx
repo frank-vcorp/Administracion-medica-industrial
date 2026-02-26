@@ -28,8 +28,8 @@ export default function DashboardPage() {
                 } else {
                     setError(result.error || 'Error al cargar KPIs')
                 }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Error desconocido')
+            } catch {
+                setError('Error desconocido')
             } finally {
                 setLoading(false)
             }
@@ -136,13 +136,13 @@ export default function DashboardPage() {
     )
 }
 
-function StatCard({ title, value, icon, color, description }: any) {
-    const variants = {
+function StatCard({ title, value, icon, color, description }: { title: string, value: number, icon: string, color: 'sky' | 'amber' | 'emerald' | 'indigo', description: string }) {
+    const variants: Record<string, string> = {
         sky: "bg-sky-50 text-sky-600 border-sky-100 shadow-sky-100/50",
         amber: "bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/50",
         emerald: "bg-emerald-50 text-emerald-600 border-emerald-100 shadow-emerald-100/50",
         indigo: "bg-indigo-50 text-indigo-600 border-indigo-100 shadow-indigo-100/50"
-    } as any
+    }
 
     return (
         <div className={`bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40 hover:scale-[1.02] transition-all group cursor-default`}>

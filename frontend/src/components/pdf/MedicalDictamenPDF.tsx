@@ -18,7 +18,18 @@ const styles = StyleSheet.create({
     signatureName: { fontSize: 10, fontWeight: 'bold' }
 })
 
-export const MedicalDictamenPDF = ({ data }: { data: any }) => (
+export const MedicalDictamenPDF = ({ data }: {
+    data: {
+        signedAt: string | Date,
+        eventId: string,
+        worker: { firstName: string, lastName: string, universalId: string },
+        company?: { name: string },
+        finalDiagnosis: string,
+        recommendations?: string,
+        validator: { fullName: string },
+        id: string
+    }
+}) => (
     <Document>
         <Page size="A4" style={styles.page}>
             {/* HEADER */}

@@ -12,7 +12,7 @@ import { EventRowButtons } from '@/components/EventRowButtons'
  */
 export default async function PortalEventsPage() {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.companyId) {
         return <div className="p-8 text-red-600">Error: No hay sesión válida.</div>
     }
@@ -20,7 +20,7 @@ export default async function PortalEventsPage() {
     const currentCompany = await prisma.company.findUnique({
         where: { id: session.user.companyId }
     })
-    
+
     if (!currentCompany) return <div className="p-8 text-red-600">Error: Empresa no encontrada.</div>
 
     const result = await getCompanyEventsHistory()
@@ -82,7 +82,6 @@ export default async function PortalEventsPage() {
                                             eventId={event.id}
                                             isCompleted={isCompleted}
                                             hasVerdict={hasVerdict}
-                                            isApto={isApto}
                                         />
                                     </td>
                                 </tr>

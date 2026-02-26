@@ -59,14 +59,14 @@ export default async function EventsIndexPage() {
     )
 }
 
-function EventRow({ id, name, company, date, status }: any) {
-    const statusMap = {
+function EventRow({ id, name, company, date, status }: { id: string, name: string, company: string, date: string, status: string }) {
+    const statusMap: Record<string, { label: string, class: string }> = {
         'scheduled': { label: 'Agendado', class: 'bg-slate-100 text-slate-600' },
         'checked_in': { label: 'En Sala', class: 'bg-amber-100 text-amber-700' },
         'in_progress': { label: 'En Curso', class: 'bg-blue-100 text-blue-700' },
         'validating': { label: 'Validando', class: 'bg-purple-100 text-purple-700' },
         'completed': { label: 'Completado', class: 'bg-emerald-100 text-emerald-700' }
-    } as any
+    }
 
     const badge = statusMap[status] || { label: status, class: 'bg-gray-100' }
 

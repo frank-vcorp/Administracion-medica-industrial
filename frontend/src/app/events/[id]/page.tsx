@@ -64,8 +64,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                         return (
                             <div key={s} className="relative z-10 flex flex-col items-center">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border-2 ${step <= currentStep
-                                        ? 'bg-teal-500 text-white border-teal-500 scale-110 shadow-lg shadow-teal-100'
-                                        : 'bg-white text-slate-400 border-slate-200'
+                                    ? 'bg-teal-500 text-white border-teal-500 scale-110 shadow-lg shadow-teal-100'
+                                    : 'bg-white text-slate-400 border-slate-200'
                                     }`}>
                                     {step < currentStep ? '✓' : step}
                                 </div>
@@ -151,7 +151,6 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
             <EventFlowController
                 eventId={event.id}
                 currentStatus={event.status}
-                hasVerdict={!!event.verdict}
                 verdictData={event.verdict ? {
                     finalDiagnosis: event.verdict.finalDiagnosis as string,
                     recommendations: event.verdict.recommendations as string

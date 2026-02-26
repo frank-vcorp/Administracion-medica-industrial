@@ -63,10 +63,9 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.fullName,
-          image: null,
           role: user.role,
           companyId: user.companyId,
-        } as any
+        }
       },
     }),
   ],
@@ -76,20 +75,18 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.email = user.email || ""
         token.name = user.name || ""
-        token.role = (user as any).role
-        token.companyId = (user as any).companyId
+        token.role = user.role
+        token.companyId = user.companyId
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user = {
-          id: token.id as string,
-          email: token.email as string,
-          fullName: token.name as string,
-          role: token.role as any,
-          companyId: token.companyId as string | null,
-        }
+        session.user.id = token.id as string
+        session.user.email = token.email || ""
+        session.user.fullName = token.name || ""
+        session.user.role = token.role
+        session.user.companyId = token.companyId
       }
       return session
     },

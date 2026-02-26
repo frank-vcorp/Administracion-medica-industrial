@@ -65,7 +65,7 @@ export default async function ServicesPage() {
                             <tr><td colSpan={5} className="p-8 text-center text-slate-400">Sin servicios registrados</td></tr>
                         )}
                         {services.map(s => (
-                            <ServiceRow key={s.id} code={s.code} name={s.name} category={s.category} price={`$${s.price}`} />
+                            <ServiceRow key={s.id} code={s.code} name={s.name} category={s.category || 'General'} price={`$${s.price || '0'}`} />
                         ))}
                     </tbody>
                 </table>
@@ -74,7 +74,7 @@ export default async function ServicesPage() {
     )
 }
 
-function ServiceRow({ code, name, category, price }: any) {
+function ServiceRow({ code, name, category, price }: { code: string, name: string, category: string, price: string }) {
     return (
         <tr className="hover:bg-slate-50 transition-colors group">
             <td className="px-6 py-4 font-mono text-xs text-slate-500">{code}</td>

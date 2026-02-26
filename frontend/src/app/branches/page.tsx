@@ -54,7 +54,6 @@ export default async function BranchesPage() {
                         address={b.address}
                         phone={b.phone || 'N/A'}
                         manager={b.managerName || 'N/A'}
-                        status="active"
                     />
                 ))}
             </div>
@@ -62,7 +61,7 @@ export default async function BranchesPage() {
     )
 }
 
-function BranchCard({ name, address, phone, manager, status }: any) {
+function BranchCard({ name, address, phone, manager }: { name: string, address: string | null, phone: string, manager: string }) {
     return (
         <div className="bg-white p-0 rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-all">
             <div className="h-24 bg-slate-100 flex items-center justify-center text-4xl border-b border-slate-100">

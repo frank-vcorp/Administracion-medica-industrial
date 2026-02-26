@@ -11,7 +11,7 @@ import { checkInAppointment } from '@/actions/appointment.actions'
  * IMPL-20260225-06-UI: Implementación de UI Sprint 7
  */
 export default function AppointmentsPage() {
-    const [appointments, setAppointments] = useState<any[]>([])
+    const [appointments, setAppointments] = useState<{ id: string, scheduledAt: Date, status: string, worker: { firstName: string, lastName: string, universalId: string | null }, company: { name: string } | null, branch: { name: string } | null }[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
@@ -100,7 +100,7 @@ export default function AppointmentsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                            {appointments.map((apt: any) => (
+                            {appointments.map((apt) => (
                                 <tr key={apt.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-sm text-slate-900">
                                         <div>

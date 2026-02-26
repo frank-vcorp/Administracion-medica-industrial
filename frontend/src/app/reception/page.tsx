@@ -1,4 +1,4 @@
-import { createEvent, getEventsKanban } from "@/actions/event.actions"
+import { getEventsKanban } from "@/actions/event.actions"
 import { getWorkers } from "@/actions/worker.actions"
 import CheckInModal from "@/components/CheckInModal"
 import Link from "next/link"
@@ -35,7 +35,7 @@ export default async function ReceptionPage() {
     )
 }
 
-function Lane({ title, count, children, color, borderColor, icon }: any) {
+function Lane({ title, count, children, color, icon }: { title: string, count: number, children: React.ReactNode, color: string, borderColor: string, icon: string }) {
     return (
         <div className={`flex flex-col h-full rounded-3xl ${color} border border-slate-100 p-6 shadow-sm overflow-hidden relative`}>
             <div className="flex justify-between items-center mb-6 relative z-10">
@@ -52,17 +52,17 @@ function Lane({ title, count, children, color, borderColor, icon }: any) {
     )
 }
 
-function PatientCard({ event, status }: any) {
+function PatientCard({ event, status }: {
+    event: {
+        id: string,
+        worker: { firstName: string, lastName: string, company: { name: string } | null }
+    },
+    status: 'waiting' | 'progress' | 'done'
+}) {
     const workerName = event.worker ? `${event.worker.firstName} ${event.worker.lastName}` : "Desconocido"
     const companyName = event.worker?.company?.name || 'Empresa Vinculada'
     // Mock company name visual as it's not eager loaded deep in this quick implementation, or we can assume worker has it.
     // For MVP we just show the name.
-
-    const statusMeta = {
-        waiting: { time: '10:30 AM', badge: 'bg-amber-100 text-amber-700' },
-        progress: { time: '10:45 AM', badge: 'bg-blue-100 text-blue-700' },
-        done: { time: '11:15 AM', badge: 'bg-emerald-100 text-emerald-700' },
-    } as any
 
     return (
         <Link href={`/events/${event.id}`} className="block group">
