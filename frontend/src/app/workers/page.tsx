@@ -2,65 +2,24 @@ export const dynamic = 'force-dynamic'
 
 import { createWorker, getWorkers } from "@/actions/worker.actions"
 import { getCompanies } from "@/actions/admin.actions"
+import WorkerFormModal from "@/components/WorkerFormModal"
 
 export default async function WorkersPage() {
     const workers = await getWorkers()
     const companies = await getCompanies()
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
+        <div className="space-y-8 pb-12">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Padron de Trabajadores</h2>
-                    <p className="text-sm text-slate-500">Gestión de empleados y afiliación a empresas</p>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Padrón de Trabajadores</h2>
+                    <p className="text-sm text-slate-500 font-medium">Gestión integral de empleados y afiliaciones.</p>
                 </div>
 
-                <label htmlFor="new-worker-modal" className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow flex items-center gap-2">
-                    <span>+</span> Registrar Trabajador
-                </label>
+                <WorkerFormModal companies={companies} />
             </div>
 
-            {/* Modal Logic */}
-            <input type="checkbox" id="new-worker-modal" className="peer hidden" />
-            <div className="fixed inset-0 bg-black/50 hidden peer-checked:flex items-center justify-center z-50 backdrop-blur-sm">
-                <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold">Nuevo Trabajador</h3>
-                        <label htmlFor="new-worker-modal" className="cursor-pointer text-slate-400 hover:text-red-500 font-bold">✕</label>
-                    </div>
-                    <form action={createWorker} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <input name="firstName" placeholder="Nombre(s)" required className="border p-2 rounded" />
-                            <input name="lastName" placeholder="Apellidos" required className="border p-2 rounded" />
-                        </div>
-                        <input name="universalId" placeholder="ID Universal (Empleado #)" required className="w-full border p-2 rounded" />
-                        <input name="nationalId" placeholder="CURP / DNI" className="w-full border p-2 rounded" />
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500">Asignar a Empresa</label>
-                            <select name="companyId" className="w-full border p-2 rounded mt-1 bg-white">
-                                <option value="">-- Sin Asignar --</option>
-                                {companies.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <input name="email" placeholder="Email" type="email" className="border p-2 rounded" />
-                            <input name="phone" placeholder="Teléfono" className="border p-2 rounded" />
-                        </div>
-
-                        <div className="flex justify-end pt-4">
-                            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 font-medium">
-                                Guardar Trabajador
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-100 border border-slate-100 overflow-hidden">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-medium">
                         <tr>

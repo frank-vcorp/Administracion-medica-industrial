@@ -10,24 +10,24 @@ export default async function ReceptionPage() {
     const allWorkers = await getWorkers() // For the dropdown in modal
 
     return (
-        <div className="space-y-6 h-[calc(100vh-100px)] flex flex-col">
+        <div className="space-y-8 h-[calc(100vh-100px)] flex flex-col pb-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Recepción / Triage</h2>
-                    <p className="text-sm text-slate-500">Gestión de flujo de pacientes</p>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Centro de Control</h2>
+                    <p className="text-sm text-slate-500 font-medium">Recepción, Triage y Flujo de Pacientes en Tiempo Real.</p>
                 </div>
 
                 <CheckInModal workers={allWorkers} />
             </div>
 
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden">
-                <Lane title="En Sala de Espera" count={scheduled.length} color="bg-slate-100" borderColor="border-slate-300">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-hidden">
+                <Lane title="SALA DE ESPERA" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
                     {scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" />)}
                 </Lane>
-                <Lane title="En Consultorio / Estudios" count={inProgress.length} color="bg-blue-50" borderColor="border-blue-200">
+                <Lane title="EN CONSULTORIO" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
                     {inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" />)}
                 </Lane>
-                <Lane title="Finalizados" count={completed.length} color="bg-emerald-50" borderColor="border-emerald-200">
+                <Lane title="POR VALIDAR" count={completed.length} color="bg-emerald-50/30" borderColor="border-emerald-100" icon="🛡️">
                     {completed.map(e => <PatientCard key={e.id} event={e} status="done" />)}
                 </Lane>
             </div>
@@ -35,14 +35,17 @@ export default async function ReceptionPage() {
     )
 }
 
-function Lane({ title, count, children, color, borderColor }: any) {
+function Lane({ title, count, children, color, borderColor, icon }: any) {
     return (
-        <div className={`flex flex-col h-full rounded-xl ${color} border-t-4 ${borderColor} p-4`}>
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-slate-700">{title}</h3>
-                <span className="bg-white/50 text-slate-600 px-2 py-0.5 rounded text-xs font-bold shadow-sm">{count}</span>
+        <div className={`flex flex-col h-full rounded-3xl ${color} border border-slate-100 p-6 shadow-sm overflow-hidden relative`}>
+            <div className="flex justify-between items-center mb-6 relative z-10">
+                <div className="flex items-center gap-2">
+                    <span className="text-lg">{icon}</span>
+                    <h3 className="font-black text-slate-400 text-[10px] tracking-[0.2em] uppercase">{title}</h3>
+                </div>
+                <span className="bg-white text-slate-800 px-3 py-1 rounded-full text-xs font-black shadow-sm border border-slate-50">{count}</span>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin relative z-10">
                 {children}
             </div>
         </div>
@@ -62,22 +65,26 @@ function PatientCard({ event, status }: any) {
     } as any
 
     return (
-        <Link href={`/events/${event.id}`} className="block">
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer">
-                <div className="flex justify-between items-start mb-2">
-                    <span className="font-bold text-slate-800 text-sm">{workerName}</span>
-                    <span className="text-xs font-mono text-slate-400">#{event.id.slice(0, 4)}</span>
-                </div>
-                <p className="text-xs text-slate-500 mb-3">{companyName}</p>
+        <Link href={`/events/${event.id}`} className="block group">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 group-hover:shadow-xl group-hover:shadow-slate-200/50 group-hover:border-indigo-200 transition-all duration-300 cursor-pointer relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-bl-full"></div>
 
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
-                    <div className="flex gap-1">
-                        <span className="w-2 h-2 rounded-full bg-red-400" title="Pendiente"></span>
-                        <span className="w-2 h-2 rounded-full bg-slate-200" title="Pendiente"></span>
-                        <span className="w-2 h-2 rounded-full bg-slate-200" title="Pendiente"></span>
+                <div className="flex justify-between items-start mb-2">
+                    <span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{workerName}</span>
+                    <span className="text-[10px] font-black text-slate-300 font-mono">#{event.id.slice(0, 4)}</span>
+                </div>
+                <p className="text-[11px] font-bold text-slate-400 mb-4">{companyName}</p>
+
+                <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-50">
+                    <div className="flex gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${status === 'waiting' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+                        <div className="flex -space-x-1">
+                            <div className="w-4 h-4 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[7px]">📄</div>
+                            <div className="w-4 h-4 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[7px]">🧪</div>
+                        </div>
                     </div>
-                    <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded font-medium">
-                        Ver Expediente →
+                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 group-hover:gap-2 transition-all">
+                        Abrir <span className="text-xs">→</span>
                     </span>
                 </div>
             </div>

@@ -1,47 +1,23 @@
 export const dynamic = 'force-dynamic'
 
 import { createCompany, getCompanies } from "@/actions/admin.actions"
+import CompanyFormModal from "@/components/CompanyFormModal"
 
 export default async function CompaniesPage() {
     const companies = await getCompanies()
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
+        <div className="space-y-8 pb-12">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Directorio de Empresas</h2>
-                    <p className="text-sm text-slate-500">Gestión de clientes corporativos y convenios (DB Real)</p>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Directorio de Empresas</h2>
+                    <p className="text-sm text-slate-500 font-medium">Gestión de clientes corporativos y convenios activos.</p>
                 </div>
 
-                {/* Simple Form Trigger */}
-                <label htmlFor="new-company-modal" className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow flex items-center gap-2">
-                    <span>+</span> Nueva Empresa
-                </label>
+                <CompanyFormModal />
             </div>
 
-            {/* Modal Logic (CSS only for MVP speed) */}
-            <input type="checkbox" id="new-company-modal" className="peer hidden" />
-            <div className="fixed inset-0 bg-black/50 hidden peer-checked:flex items-center justify-center z-50 backdrop-blur-sm">
-                <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold">Registrar Nueva Empresa</h3>
-                        <label htmlFor="new-company-modal" className="cursor-pointer text-slate-400 hover:text-red-500 font-bold">✕</label>
-                    </div>
-                    <form action={createCompany} className="space-y-4">
-                        <input name="name" placeholder="Razón Social" required className="w-full border p-2 rounded" />
-                        <input name="rfc" placeholder="RFC" required className="w-full border p-2 rounded" />
-                        <input name="contactName" placeholder="Nombre de Contacto" className="w-full border p-2 rounded" />
-                        <input name="email" placeholder="Email Contacto" type="email" className="w-full border p-2 rounded" />
-                        <div className="flex justify-end pt-4">
-                            <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded shadow hover:bg-emerald-700 font-medium">
-                                Guardar Empresa
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {companies.length === 0 && (
                     <div className="col-span-3 text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
                         No hay empresas registradas aun.

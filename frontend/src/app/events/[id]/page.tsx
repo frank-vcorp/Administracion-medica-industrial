@@ -2,6 +2,7 @@ import { getEventById } from '@/actions/medical-event.actions'
 import { notFound } from 'next/navigation'
 import SmartDropzone from '@/components/SmartDropzone'
 import Link from 'next/link'
+import EventFlowController from '@/components/EventFlowController'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,57 +14,100 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         notFound()
     }
 
+    const statusNames: Record<string, string> = {
+        'SCHEDULED': 'Ingreso',
+        'CHECKED_IN': 'En Sala',
+        'IN_PROGRESS': 'Estudios',
+        'VALIDATING': 'Validación',
+        'COMPLETED': 'Completado'
+    }
+
+    const steps = ['SCHEDULED', 'CHECKED_IN', 'IN_PROGRESS', 'VALIDATING', 'COMPLETED']
+    const currentStep = steps.indexOf(event.status) + 1
+
     return (
-        <div className="space-y-8">
-            {/* 1. Header Green (Mockup) */}
-            <div className="bg-teal-600 text-white p-4 rounded-lg shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-col">
-                    <span className="text-teal-200 text-xs uppercase font-semibold">Paciente</span>
-                    <span className="text-lg font-bold">{event.worker.lastName}, {event.worker.firstName}</span>
+        <div className="space-y-8 max-w-6xl mx-auto pb-20">
+            {/* 1. Header Premium with Stepper */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-teal-500 text-white rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-teal-100">
+                            👤
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-800">{event.worker.lastName}, {event.worker.firstName}</h1>
+                            <div className="flex items-center gap-2 text-sm text-slate-500">
+                                <span className="font-semibold text-slate-700">{event.worker.company?.name || '---'}</span>
+                                <span>•</span>
+                                <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-xs">#{event.id.slice(0, 8)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                        <div className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${event.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                            {statusNames[event.status] || event.status}
+                        </div>
+                        <Link href="/reception" className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center">
+                            ← Volver
+                        </Link>
+                    </div>
                 </div>
-                <div className="flex flex-col">
-                    <span className="text-teal-200 text-xs uppercase font-semibold">Empresa</span>
-                    <span className="font-medium">{event.worker.company?.name || '---'}</span>
-                </div>
-                <div className="flex flex-col text-right">
-                    <span className="text-teal-200 text-xs uppercase font-semibold">Folio</span>
-                    <span className="font-mono bg-teal-700 px-2 py-0.5 rounded text-sm">#{event.id.slice(0, 8)}</span>
+
+                {/* Stepper Logic */}
+                <div className="relative flex justify-between items-center max-w-2xl mx-auto px-4">
+                    <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2 z-0"></div>
+                    <div className="absolute top-1/2 left-0 h-0.5 bg-teal-500 -translate-y-1/2 z-0 transition-all duration-700" style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}></div>
+
+                    {steps.map((s, index) => {
+                        const step = index + 1
+                        return (
+                            <div key={s} className="relative z-10 flex flex-col items-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border-2 ${step <= currentStep
+                                        ? 'bg-teal-500 text-white border-teal-500 scale-110 shadow-lg shadow-teal-100'
+                                        : 'bg-white text-slate-400 border-slate-200'
+                                    }`}>
+                                    {step < currentStep ? '✓' : step}
+                                </div>
+                                <span className={`text-[10px] absolute -bottom-6 font-bold uppercase tracking-tighter whitespace-nowrap ${step <= currentStep ? 'text-teal-600' : 'text-slate-400'}`}>
+                                    {['Ingreso', 'Sala', 'Estudios', 'Firma', 'Fin'][index]}
+                                </span>
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
 
-            {/* 2. Upload Section (Two Cards) */}
-            <div>
-                <p className="text-sm text-slate-500 mb-2">Arrastra y suelta los PDFs de estudios - La IA los clasificará automáticamente</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                    {/* Card Left: SIM / Clinical */}
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                        <h3 className="font-bold text-slate-800 mb-4">Estudios SIM (Clínicos)</h3>
-                        <div className="bg-white">
-                            <SmartDropzone
-                                eventId={event.id}
-                                type="study"
-                                title="Arrastra archivos aquí"
-                                subtitle="Espirometría, Audiometría, ECG, Campimetría"
-                                icon="cloud"
-                            />
-                        </div>
+            {/* 2. Upload Section (Two Cards) - Visual Cleanup */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Card Left: SIM / Clinical */}
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">☁️</div>
+                        <h3 className="font-bold text-slate-800 text-lg">Estudios SIM (Clínicos)</h3>
                     </div>
+                    <SmartDropzone
+                        eventId={event.id}
+                        type="study"
+                        title="Selecciona archivos para SIM"
+                        subtitle="Espirometría, Audiometría, ECG, Campimetría"
+                        icon="cloud"
+                    />
+                </div>
 
-                    {/* Card Right: NOVA / Labs */}
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                        <h3 className="font-bold text-slate-800 mb-4">Estudios NOVA (Laboratorio)</h3>
-                        <div className="bg-white">
-                            <SmartDropzone
-                                eventId={event.id}
-                                type="lab"
-                                title="Arrastra archivos aquí"
-                                subtitle="Biometría Hemática, EGO, Química Sanguínea"
-                                icon="flask"
-                            />
-                        </div>
+                {/* Card Right: NOVA / Labs */}
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl">🧪</div>
+                        <h3 className="font-bold text-slate-800 text-lg">Estudios NOVA (Laboratorio)</h3>
                     </div>
-
+                    <SmartDropzone
+                        eventId={event.id}
+                        type="lab"
+                        title="Selecciona archivos para NOVA"
+                        subtitle="Biometría Hemática, EGO, Química Sanguínea"
+                        icon="flask"
+                    />
                 </div>
             </div>
 
@@ -73,7 +117,6 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                 <p className="text-sm text-slate-500 mb-6">Expediente completo procesado y clasificado por IA</p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
                     {/* List Left: Studies */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
@@ -101,10 +144,19 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                             ))}
                         </div>
                     </div>
-
                 </div>
             </div>
 
+            {/* 4. Flow Controller Section */}
+            <EventFlowController
+                eventId={event.id}
+                currentStatus={event.status}
+                hasVerdict={!!event.verdict}
+                verdictData={event.verdict ? {
+                    finalDiagnosis: event.verdict.finalDiagnosis as string,
+                    recommendations: event.verdict.recommendations as string
+                } : undefined}
+            />
         </div>
     )
 }
