@@ -6,7 +6,7 @@ IMPL-20260225-01: Extractores por tipo de documento.
 import time
 from typing import Dict, Any, Union
 from .base import GeminiBase
-from ..schemas.medical import (
+from schemas.medical import (
     AudiometriaData,
     LaboratorioData,
     EspirometriaData,
