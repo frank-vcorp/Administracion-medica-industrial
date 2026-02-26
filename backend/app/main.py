@@ -4,7 +4,8 @@ IMPL-20260225-01: Clasificação y extracción inteligentes de documentos médic
 IMPL-20260225-02: Firma Digital Avanzada y Motor de Reportes Masivos.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import time
@@ -18,6 +19,15 @@ from schemas import DocumentClassification, ExtractedDataUnion
 app = FastAPI(
     title="Residente Digital API",
     description="Pipeline IA modular para análisis de documentos médicos"
+)
+
+# CORS: permitir al frontend de Vercel comunicarse con este backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/uploads")
@@ -70,9 +80,61 @@ def read_root():
     return {
         "status": "ok",
         "service": "Residente Digital Backend (Pipeline IA Modular)",
-        "version": "2.0",
+        "version": "2.1",
         "pipeline": "Clasificador + Extractor Especializado"
     }
+
+
+@app.post("/api/v1/upload-and-analyze")
+async def upload_and_analyze(file: UploadFile = File(...)):
+    """
+    Endpoint combinado: recibe un archivo multipart, lo guarda en /uploads,
+    ejecuta el pipeline IA completo y retorna el resultado.
+    Diseñado para ser llamado desde Vercel (serverless, sin filesystem propio).
+    """
+    if not classifier or not extractor:
+        return {
+            "status": "error",
+            "error": "Servicios de IA no están disponibles"
+        }
+    
+    filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
+    local_path = os.path.join(UPLOAD_DIR, filename)
+    
+    try:
+        # Guardar archivo en disco de Railway
+        contents = await file.read()
+        with open(local_path, "wb") as f:
+            f.write(contents)
+        
+        print(f"\n🚀 Upload+Analyze: {filename} ({len(contents)} bytes)")
+        pipeline_start = time.time()
+        
+        # PASO 1: CLASIFICACIÓN
+        classification = classifier.classify(local_path)
+        print(f"   ✓ Clasificado: {classification.tipo} ({classification.confianza:.2f})")
+        
+        # PASO 2: EXTRACCIÓN
+        extracted_data = extractor.extract_by_type(local_path, classification.tipo)
+        
+        total_time = time.time() - pipeline_start
+        print(f"   ✓ Pipeline completo en {total_time:.2f}s")
+        
+        return {
+            "status": "success",
+            "file": filename,
+            "classification": {
+                "detected_type": classification.tipo,
+                "confidence": classification.confianza,
+                "reason": classification.razon,
+            },
+            "extraction": extracted_data if isinstance(extracted_data, dict) else extracted_data.model_dump(),
+            "timings": {"total_seconds": round(total_time, 2)},
+        }
+    
+    except Exception as e:
+        print(f"❌ Error en upload-and-analyze: {e}")
+        return {"status": "error", "error": str(e), "file": filename}
 
 
 @app.post("/api/v1/analyze")
