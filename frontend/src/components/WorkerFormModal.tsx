@@ -90,14 +90,23 @@ export default function WorkerFormModal({ companies }: { companies: { id: string
                                     <input name="firstName" placeholder="Nombre" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none" />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Apellidos</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Apellidos (Paterno Materno)</label>
                                     <input name="lastName" placeholder="Apellidos" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none" />
                                 </div>
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">ID Universal / Nómina</label>
-                                <input name="universalId" placeholder="Emp-001" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none" />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Fecha de Nacimiento</label>
+                                    <input name="dob" type="date" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Género</label>
+                                    <select name="gender" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none appearance-none">
+                                        <option value="M">Masculino</option>
+                                        <option value="F">Femenino</option>
+                                    </select>
+                                </div>
                             </div>
 
                             <div className="space-y-1">
@@ -118,6 +127,16 @@ export default function WorkerFormModal({ companies }: { companies: { id: string
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Teléfono</label>
                                     <input name="phone" placeholder="10 digitos" className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none" />
+                                </div>
+                            </div>
+
+                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">🆔</div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-blue-600 uppercase">Seguridad AMI</p>
+                                        <p className="text-[9px] text-blue-400 font-bold uppercase tracking-tighter">ID Universal se generará automáticamente</p>
+                                    </div>
                                 </div>
                             </div>
 

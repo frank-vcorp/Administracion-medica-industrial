@@ -1,9 +1,8 @@
-'use client'
-
-import { useState, useTransition } from 'react'
-import { updateEventStatus } from '@/actions/medical-event.actions'
+import { useState, useTransition, useRef } from 'react'
+import { updateEventStatus, saveVerdict } from '@/actions/medical-event.actions'
 import { signMedicalDictamPDF } from '@/actions/signature.actions'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 
 interface EventFlowControllerProps {
     eventId: string
@@ -22,6 +21,10 @@ export default function EventFlowController({
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
+    const { data: session } = useSession()
+
+    const diagRef = useRef<HTMLTextAreaElement>(null)
+    const recRef = useRef<HTMLTextAreaElement>(null)
 
     // Status logic
     const isInProgress = currentStatus === 'IN_PROGRESS' || currentStatus === 'CHECKED_IN' || currentStatus === 'SCHEDULED'
@@ -31,7 +34,6 @@ export default function EventFlowController({
     const handleFinishCapture = () => {
         startTransition(async () => {
             try {
-                // In a real app we might want to save some initial verdict draft here
                 await updateEventStatus(eventId, 'VALIDATING')
                 router.refresh()
             } catch {
@@ -41,16 +43,33 @@ export default function EventFlowController({
     }
 
     const handleSign = () => {
+        if (!session?.user?.id) {
+            setError('No se pudo identificar al validador')
+            return
+        }
+
+        const diagnosis = diagRef.current?.value || ''
+        if (!diagnosis) {
+            setError('El diagnóstico es obligatorio para firmar')
+            return
+        }
+
         startTransition(async () => {
             try {
+                // 1. Save verdict synchronously
+                const recommendations = recRef.current?.value || ''
+                await saveVerdict(eventId, diagnosis, recommendations, session.user.id)
+
+                // 2. Sign
                 const result = await signMedicalDictamPDF(eventId)
                 if (result.success) {
                     router.refresh()
                 } else {
                     setError(result.error || 'Error al firmar')
                 }
-            } catch {
-                setError('Error de conexión al firmar')
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : 'Error de conexión'
+                setError('Error en el proceso de firma: ' + message)
             }
         })
     }
@@ -96,6 +115,7 @@ export default function EventFlowController({
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Diagnóstico Final</label>
                                 <textarea
+                                    ref={diagRef}
                                     className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none min-h-[100px]"
                                     placeholder="Ej: Apto para el puesto sin restricciones..."
                                     defaultValue={verdictData?.finalDiagnosis}
@@ -104,6 +124,7 @@ export default function EventFlowController({
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Recomendaciones</label>
                                 <textarea
+                                    ref={recRef}
                                     className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                                     placeholder="Ej: Uso de protección auditiva..."
                                     defaultValue={verdictData?.recommendations}

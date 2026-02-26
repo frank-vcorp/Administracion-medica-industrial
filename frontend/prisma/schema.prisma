@@ -299,6 +299,9 @@ model MedicalVerdict {
 model Appointment {
   id          String              @id @default(uuid())
   
+  // ID de papeleta (formato EXP-YYYYNNN)
+  expedientId String?             @unique 
+  
   workerId    String
   worker      Worker              @relation(fields: [workerId], references: [id])
   
@@ -312,7 +315,10 @@ model Appointment {
   status      AppointmentStatus   @default(SCHEDULED)
   notes       String?             @db.Text
   
-  // Relación opcional 1:1 con MedicalEvent (una cita puede generar un evento médico)
+  // Documento generado (QR + Pase)
+  qrCode      String?             @db.Text
+  
+  // Relación opcional 1:1 con MedicalEvent
   medicalEvents MedicalEvent[]
   
   createdAt   DateTime @default(now())

@@ -18,7 +18,9 @@ export async function GET(
             include: {
                 event: {
                     include: {
-                        worker: { include: { company: true } }
+                        worker: { include: { company: true } },
+                        studies: true,
+                        labs: true
                     }
                 },
                 validator: true
@@ -64,7 +66,15 @@ export async function GET(
             },
             validator: {
                 fullName: verdict.validator?.fullName || 'Médico Validador'
-            }
+            },
+            studies: verdict.event.studies.map(s => ({
+                serviceName: s.serviceName,
+                extractedData: s.extractedData
+            })),
+            labs: verdict.event.labs.map(l => ({
+                serviceName: l.serviceName,
+                extractedData: l.extractedData
+            }))
         }
 
         const stream = await renderToStream(<MedicalDictamenPDF data={data} />)

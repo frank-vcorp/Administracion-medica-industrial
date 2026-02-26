@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 
-import { createWorker, getWorkers } from "@/actions/worker.actions"
+import { getWorkers } from "@/actions/worker.actions"
 import { getCompanies } from "@/actions/admin.actions"
 import WorkerFormModal from "@/components/WorkerFormModal"
 

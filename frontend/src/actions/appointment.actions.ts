@@ -20,6 +20,7 @@ import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { logAudit } from '@/actions/audit.actions'
+import { generateExpedientId } from '@/lib/id.utils'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -45,6 +46,12 @@ export async function createAppointment(data: {
       ? new Date(data.scheduledAt)
       : data.scheduledAt
 
+    // Generar ID de Papeleta automático (EXP-YYYYNNN)
+    const expedientId = await generateExpedientId(prisma)
+
+    // Generar QR (Mock Base64 por ahora para evitar dependencias pesadas en el build)
+    const qrCode = `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200 text-anchor="middle"><rect width="100%" height="100%" fill="white"/><text x="100" y="100" font-family="Arial" font-size="12" fill="black">${expedientId}</text></svg>`).toString('base64')}`
+
     const appointment = await prisma.appointment.create({
       data: {
         workerId: data.workerId,
@@ -53,6 +60,8 @@ export async function createAppointment(data: {
         scheduledAt: scheduledDate,
         notes: data.notes || null,
         status: 'SCHEDULED',
+        expedientId,
+        qrCode
       },
       include: {
         worker: {

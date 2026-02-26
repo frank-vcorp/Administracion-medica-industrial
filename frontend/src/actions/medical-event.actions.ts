@@ -36,9 +36,10 @@ export const addStudy = async (eventId: string, serviceName: string, fileUrl?: s
 
 // --- VERDICT ---
 
-export const saveVerdict = async (eventId: string, diagnosis: string, validatorId: string) => {
+export const saveVerdict = async (eventId: string, diagnosis: string, recommendations: string, validatorId: string) => {
     const verdict = await EventService.upsertVerdict(eventId, {
         finalDiagnosis: diagnosis,
+        recommendations,
         validator: { connect: { id: validatorId } }
     })
     revalidatePath(`/events/${eventId}`)

@@ -27,7 +27,9 @@ export const MedicalDictamenPDF = ({ data }: {
         finalDiagnosis: string,
         recommendations?: string,
         validator: { fullName: string },
-        id: string
+        id: string,
+        studies?: { serviceName: string, extractedData: unknown }[],
+        labs?: { serviceName: string, extractedData: unknown }[]
     }
 }) => (
     <Document>
@@ -61,9 +63,32 @@ export const MedicalDictamenPDF = ({ data }: {
                 </View>
             </View>
 
+            {/* AI FINDINGS */}
+            {(data.studies && data.studies.length > 0) || (data.labs && data.labs.length > 0) ? (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>III. AUXILIARES DE DIAGNÓSTICO (HALLAZGOS IA)</Text>
+                    {data.studies?.map((s, idx) => (
+                        <View key={idx} style={{ marginBottom: 8, paddingLeft: 10 }}>
+                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#1e293b' }}>• {s.serviceName}:</Text>
+                            <Text style={styles.verdictText}>
+                                {s.extractedData ? JSON.stringify(s.extractedData, null, 2) : 'Procesado exitosamente'}
+                            </Text>
+                        </View>
+                    ))}
+                    {data.labs?.map((l, idx) => (
+                        <View key={idx} style={{ marginBottom: 8, paddingLeft: 10 }}>
+                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#1e293b' }}>• {l.serviceName}:</Text>
+                            <Text style={styles.verdictText}>
+                                {l.extractedData ? JSON.stringify(l.extractedData, null, 2) : 'Resultado disponible'}
+                            </Text>
+                        </View>
+                    ))}
+                </View>
+            ) : null}
+
             {/* FINAL VERDICT */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>II. CONCLUSIÓN MÉDICA (DICTAMEN)</Text>
+                <Text style={styles.sectionTitle}>IV. CONCLUSIÓN MÉDICA (DICTAMEN)</Text>
                 <View style={styles.verdictBox}>
                     <Text style={styles.verdictText}>{data.finalDiagnosis}</Text>
                 </View>
@@ -72,7 +97,7 @@ export const MedicalDictamenPDF = ({ data }: {
             {/* RECOMMENDATIONS */}
             {data.recommendations && (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>III. RECOMENDACIONES Y SEGUIMIENTO</Text>
+                    <Text style={styles.sectionTitle}>V. RECOMENDACIONES Y SEGUIMIENTO</Text>
                     <Text style={styles.verdictText}>{data.recommendations}</Text>
                 </View>
             )}

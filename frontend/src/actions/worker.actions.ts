@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { generateUniversalId } from "@/lib/id.utils"
 
 // Get all workers with their company name
 export async function getWorkers() {
@@ -25,11 +26,16 @@ export async function createWorker(formData: FormData) {
             return { success: false, error: 'Nombre y apellidos son obligatorios' }
         }
 
+        const dob = formData.get('dob') as string
+        const gender = formData.get('gender') as string
+        const universalId = generateUniversalId({ firstName, lastName, dob, gender })
+
         const worker = await prisma.worker.create({
             data: {
                 firstName,
                 lastName,
-                universalId: formData.get('universalId') as string,
+                universalId,
+                dob: dob ? new Date(dob) : null,
                 nationalId: formData.get('nationalId') as string,
                 email: formData.get('email') as string,
                 phone: formData.get('phone') as string,
