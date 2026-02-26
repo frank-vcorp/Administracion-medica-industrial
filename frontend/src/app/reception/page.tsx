@@ -1,6 +1,8 @@
 import { createEvent, getEventsKanban } from "@/actions/event.actions"
 import { getWorkers } from "@/actions/worker.actions"
 
+export const dynamic = 'force-dynamic'
+
 export default async function ReceptionPage() {
     const { scheduled, inProgress, completed } = await getEventsKanban()
     const allWorkers = await getWorkers() // For the dropdown in modal

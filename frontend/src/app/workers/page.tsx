@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { createWorker, getWorkers } from "@/actions/worker.actions"
 import { getCompanies } from "@/actions/admin.actions"
 

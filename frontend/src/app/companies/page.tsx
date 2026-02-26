@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { createCompany, getCompanies } from "@/actions/admin.actions"
 
 export default async function CompaniesPage() {
