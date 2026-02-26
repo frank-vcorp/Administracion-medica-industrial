@@ -1,5 +1,6 @@
 import { createEvent, getEventsKanban } from "@/actions/event.actions"
 import { getWorkers } from "@/actions/worker.actions"
+import CheckInModal from "@/components/CheckInModal"
 
 export const dynamic = 'force-dynamic'
 
@@ -15,45 +16,7 @@ export default async function ReceptionPage() {
                     <p className="text-sm text-slate-500">Gestión de flujo de pacientes</p>
                 </div>
 
-                <label htmlFor="new-appt-modal" className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow flex items-center gap-2">
-                    <span>➕</span> Nueva Cita / Ingreso
-                </label>
-            </div>
-
-            {/* --- MODAL NUEVA CITA --- */}
-            <input type="checkbox" id="new-appt-modal" className="peer hidden" />
-            <div className="fixed inset-0 bg-black/50 hidden peer-checked:flex items-center justify-center z-50 backdrop-blur-sm">
-                <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold">Ingreso de Paciente</h3>
-                        <label htmlFor="new-appt-modal" className="cursor-pointer text-slate-400 hover:text-red-500 font-bold">✕</label>
-                    </div>
-                    <form action={async (formData) => { "use server"; await createEvent(formData); }} className="space-y-4">
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">Seleccionar Trabajador</label>
-                            <select name="workerId" required className="w-full border p-2 rounded bg-white">
-                                <option value="">Buscar por nombre...</option>
-                                {allWorkers.map(w => (
-                                    <option key={w.id} value={w.id}>
-                                        {w.firstName} {w.lastName} ({w.company?.name || 'Sin Empresa'})
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-[10px] text-slate-400 mt-1">* Si no aparece, regístralo primero en módulo de Trabajadores.</p>
-                        </div>
-
-                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                            <h4 className="text-sm font-bold text-blue-800 mb-1">Detalles de Visita</h4>
-                            <p className="text-xs text-blue-600">Se registrará el Check-In en la sucursal actual automáticamente.</p>
-                        </div>
-
-                        <div className="flex justify-end pt-4">
-                            <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded shadow hover:bg-slate-800 font-medium w-full">
-                                Confirmar Check-In 🏥
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                <CheckInModal workers={allWorkers} />
             </div>
 
             <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden">
