@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { getAppointments, checkInAppointment } from '@/actions/appointment.actions'
 import { useRouter } from 'next/navigation'
+import AppointmentFormModal from '@/components/AppointmentFormModal'
 
 /**
  * Vista de Agenda de Citas Premium v2.2
@@ -93,6 +94,7 @@ export default function AppointmentsPage() {
                             className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 cursor-pointer"
                         />
                     </div>
+                    <AppointmentFormModal />
                 </div>
             </div>
 
