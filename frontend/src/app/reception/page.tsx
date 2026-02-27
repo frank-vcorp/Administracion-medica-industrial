@@ -30,7 +30,7 @@ export default async function ReceptionPage() {
                     {scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" nextStatus="IN_PROGRESS" />)}
                 </Lane>
                 <Lane title="EN CONSULTORIO" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
-                    {inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" nextStatus="VALIDATING" />)}
+                    {inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" />)}
                 </Lane>
                 <Lane title="POR VALIDAR" count={completed.length} color="bg-emerald-50/30" borderColor="border-emerald-100" icon="🛡️">
                     {completed.map(e => <PatientCard key={e.id} event={e} status="done" />)}

@@ -95,7 +95,7 @@ export default function EventFlowController({
                             disabled={isPending}
                             className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 flex items-center gap-2 mx-auto"
                         >
-                            {isPending ? 'Procesando...' : '✅ Finalizar Captura e Ir a Validación'}
+                            {isPending ? 'Procesando...' : '✅ Finalizar Cita y Pasar a Validación'}
                         </button>
                     </div>
                 )}
