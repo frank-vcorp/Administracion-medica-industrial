@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { processQRCheckIn } from '@/actions/appointment.actions'
 
+import { Scanner } from '@yudiel/react-qr-scanner';
+
 export default function QRScannerModal() {
     const [isOpen, setIsOpen] = useState(false)
     const [qrCode, setQrCode] = useState('')
@@ -14,23 +16,23 @@ export default function QRScannerModal() {
 
     // Focus input when modal opens to catch scanner input
     useEffect(() => {
-        if (isOpen && inputRef.current) {
+        if (isOpen && inputRef.current && status.type === 'idle') {
             inputRef.current.focus()
         }
-    }, [isOpen])
+    }, [isOpen, status.type])
 
-    const handleScan = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!qrCode) return
+    const processCode = async (code: string) => {
+        if (isProcessing) return
+        if (!code) return
 
         setIsProcessing(true)
         setStatus({ type: 'idle' })
         
         try {
-            console.log('Processing QR:', qrCode)
+            console.log('Processing QR:', code)
             
             // Llamada al Server Action real
-            const result = await processQRCheckIn(qrCode)
+            const result = await processQRCheckIn(code)
             
             if (result.success) {
                 const workerName = result.medicalEvent?.worker?.firstName || 'Trabajador';
@@ -45,8 +47,6 @@ export default function QRScannerModal() {
                 }, 2000);
             } else {
                 setStatus({ type: 'error', message: result.error || 'Error al procesar el QR.' })
-                // Enfocar de nuevo para reintentar rápido
-                inputRef.current?.focus()
             }
         } catch (error) {
             console.error('Error processing QR:', error)
@@ -54,6 +54,11 @@ export default function QRScannerModal() {
         } finally {
             setIsProcessing(false)
         }
+    }
+
+    const handleManualScan = (e: React.FormEvent) => {
+        e.preventDefault()
+        processCode(qrCode)
     }
 
     return (
@@ -90,30 +95,38 @@ export default function QRScannerModal() {
                                 </div>
                             ) : (
                                 <>
-                                    <div className={`w-48 h-48 border-4 border-dashed rounded-3xl flex items-center justify-center mb-6 relative overflow-hidden transition-colors ${status.type === 'error' ? 'border-red-200 bg-red-50' : 'border-indigo-100'}`}>
+                                    <div className={`w-full max-w-[300px] h-64 border-4 border-dashed rounded-3xl flex items-center justify-center mb-6 relative overflow-hidden transition-colors ${status.type === 'error' ? 'border-red-200 bg-red-50' : 'border-indigo-100'}`}>
                                         {status.type === 'error' ? (
                                             <div className="text-center p-4">
                                                 <span className="text-4xl">⚠️</span>
                                                 <p className="text-xs font-bold text-red-500 mt-2">{status.message}</p>
+                                                <button onClick={() => setStatus({type: 'idle'})} className="mt-2 text-[10px] bg-red-100 px-2 py-1 rounded-md text-red-700">Intentar de nuevo</button>
                                             </div>
                                         ) : (
-                                            <>
-                                                <div className="absolute inset-0 bg-indigo-50/50 animate-pulse"></div>
-                                                <svg className="w-16 h-16 text-indigo-300 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-                                                
-                                                {/* Scanning line animation */}
-                                                {!isProcessing && <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-[scan_2s_ease-in-out_infinite]"></div>}
-                                            </>
+                                            /* Camera View */
+                                            <div className="w-full h-full relative">
+                                                <Scanner 
+                                                    onScan={(result) => {
+                                                        if (result && result.length > 0) {
+                                                            processCode(result[0].rawValue)
+                                                        }
+                                                    }}
+                                                    onError={(error) => console.log(error)}
+                                                    allowMultiple={true}
+                                                    scanDelay={2000}
+                                                />
+                                                <div className="absolute inset-0 border-2 border-indigo-500/50 pointer-events-none z-10"></div>
+                                            </div>
                                         )}
                                     </div>
 
                                     <p className="text-center text-slate-600 text-sm mb-6">
-                                        {isProcessing ? 'Verificando expediente...' : (status.type === 'error' ? 'Intenta de nuevo' : 'Esperando lectura del escáner...')}
+                                        {isProcessing ? 'Verificando expediente...' : 'Coloca el código frente a la cámara'}
                                         <br/>
-                                        <span className="text-xs text-slate-400">Asegúrate de que el cursor esté en el campo de abajo</span>
+                                        <span className="text-xs text-slate-400">O ingresa el código manualmente (pistola lectora)</span>
                                     </p>
 
-                                    <form onSubmit={handleScan} className="w-full">
+                                    <form onSubmit={handleManualScan} className="w-full">
                                         <input
                                             ref={inputRef}
                                             type="text"
@@ -124,7 +137,7 @@ export default function QRScannerModal() {
                                             }}
                                             placeholder="Código QR..."
                                             className={`w-full px-4 py-3 rounded-xl border focus:ring-2 outline-none transition-all text-center font-mono text-sm ${status.type === 'error' ? 'border-red-300 ring-red-200 focus:border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-indigo-500 focus:border-indigo-500'}`}
-                                            autoFocus
+                                            // autoFocus removed to prevent keyboard from popping up on mobile immediately
                                             disabled={isProcessing}
                                         />
                                         <button 
@@ -132,7 +145,7 @@ export default function QRScannerModal() {
                                             disabled={!qrCode || isProcessing}
                                             className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-3 rounded-xl transition-all"
                                         >
-                                            {isProcessing ? 'Procesando...' : 'Procesar Check-in'}
+                                            {isProcessing ? 'Procesando...' : 'Procesar Manualmente'}
                                         </button>
                                     </form>
                                 </>

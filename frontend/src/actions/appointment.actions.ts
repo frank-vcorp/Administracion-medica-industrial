@@ -383,7 +383,12 @@ export async function processQRCheckIn(qrContent: string) {
     // Buscar cita por Expedient ID
     const appointment = await prisma.appointment.findUnique({
       where: { expedientId: data.exp },
-      select: { id: true, status: true, worker: { select: { firstName: true, lastName: true } } }
+      select: { 
+        id: true, 
+        status: true, 
+        scheduledAt: true,
+        worker: { select: { firstName: true, lastName: true } } 
+    }
     });
 
     if (!appointment) {
@@ -396,6 +401,34 @@ export async function processQRCheckIn(qrContent: string) {
 
     if (appointment.status === 'CANCELLED') {
       return { success: false, error: 'Esta cita fue cancelada.' }
+    }
+
+    // Validación de horario
+    const now = new Date();
+    const scheduledDate = new Date(appointment.scheduledAt);
+
+    // Margen de tolerancia: permitir Check-in desde 1 hora antes hasta 4 horas después
+    // Esto es configurable, pero es un buen default para evitar largas filas si llegan temprano
+    const timeDiff = now.getTime() - scheduledDate.getTime();
+    const hoursDiff = timeDiff / (1000 * 60 * 60);
+
+    // Si llega mas de 1 hora TEMPRANO
+    if (hoursDiff < -1) {
+        return { 
+            success: false, 
+            error: `Cita programada para las ${scheduledDate.toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}. Demasiado temprano.` 
+        }
+    }
+
+    // Si llega mas de 4 horas TARDE (y no es el mismo día laboral, asumimos día laboral de 8h pero permitimos check-in flexible si es mismo día)
+    // Validación más estricta: Que sea el mismo día calendario (en UTC o local del server)
+    const isSameDay = now.toDateString() === scheduledDate.toDateString();
+    
+    if (!isSameDay && Math.abs(hoursDiff) > 24) {
+         return { 
+            success: false, 
+            error: `Cita válida solo para el día agendado (${scheduledDate.toLocaleDateString()}).` 
+        }
     }
 
     // Ejecutar check-in estándar
