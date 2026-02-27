@@ -222,6 +222,13 @@ const result = await prisma.$transaction(async (tx) => {
 - [ ] Sistema de "Puntos de Control" en flujo médico
 - [ ] Plantillas de dictamen por tipo de estudio
 
+## 🔮 Backlog Futuro (Roadmap)
+
+**MOD-CITAS-EXT (Self-Service Widget)**
+- [ ] Crear componente `AppointmentWidget` isolado (sin auth requerida) para incrustar en sitios web externos
+- [ ] API Pública para agendamiento externo (con rate limiting y captcha)
+- [ ] Panel de configuración de widget (colores, logo, horarios visibles)
+
 ---
 
 **Última actualización:** 2026-02-27 | **ID:** DOC-20260227-01
