@@ -133,4 +133,93 @@
         - [x] Generar SPEC final de implementación
         - [x] Crear Checkpoint de Sprint 7
 
+- [✓] Sprint: Gestión de Citas y Piso Clínico - Correcciones de Calidad (CRONISTA - 2026-02-27)
+    - [x] Renombrado módulo "Piso Clínico" (antes "Sala Clínica")
+    - [x] Ajustado flujo Kanban: Sala → Consultorio → Validación
+    - [x] Implementado modal de Check-in con código QR (🎫)
+    - [x] Estandarización de `prisma.$transaction` para operaciones compuestas
+        - [x] Check-in = Update Appointment Status + Create Medical Event (atómico)
+        - [x] Integración de auditoría en transacciones críticas
+    - [x] Corrección de bugs de timezone y WhatsApp
+        - [x] Normalización de fechas a ISO string en cliente
+        - [x] Validación de `workerPhone` antes de generar enlaces `wa.me`
+    - [x] Auditoría de Calidad completada (DICTAMEN_DEBY_20260227-01)
+
+## 📌 Deuda Técnica Identificada
+
+### Quick Wins - Prioridad Alto
+- [ ] **UI Bug: `borderColor` en componente `Lane`** (reception/page.tsx)
+  - **Problema:** Prop recibida pero no aplicada en clases CSS (hardcodeado `border-slate-100`)
+  - **Impacto:** Visual (bordes de columnas Kanban no coinciden con encabezado)
+  - **Fix:** Aplicar `borderColor` dinámicamente en elemento `div` de Lane
+  
+- [ ] **Refactorización: `handleSubmit` en `AppointmentFormModal.tsx`**
+  - **Problema:** Depende del estado `selectedWorker` que puede desincronizarse
+  - **Solución:** Buscar objeto `worker` directamente en `handleSubmit` usando `workerId` del Config
+  - **Impacto:** Elimina race condition en selección de trabajador
+
+### Notas Técnicas
+- [ ] **Evaluación:** Datos en URL de WhatsApp (`expedientId` y nombre completo)
+  - Aunque `wa.me` es seguro, considerar si es necesario enviar el ID interno o solo confirmación genérica
+
+## 🔧 Estándares Técnicos Implementados
+
+### `prisma.$transaction()` - Patrón Estándar para Operaciones Compuestas
+
+**Archivo:** `frontend/src/actions/appointment.actions.ts` (línea 263)
+
+**Contexto:** Operación de Check-in requiere actualizar estado de cita Y crear evento médico de forma atómica.
+
+**Implementación:**
+\`\`\`typescript
+const result = await prisma.$transaction(async (tx) => {
+  // 1. Obtener cita y verificar estado
+  const existingAppointment = await tx.appointment.findUnique({
+    where: { id: appointmentId },
+    include: { worker: true, company: true, branch: true, medicalEvents: true }
+  })
+  
+  // 2. Actualizar estado de cita
+  const updatedAppointment = await tx.appointment.update({
+    where: { id: appointmentId },
+    data: { status: 'COMPLETED' }
+  })
+  
+  // 3. Crear evento médico
+  const medicalEvent = await tx.medicalEvent.create({
+    data: { /* ... */ }
+  })
+  
+  // 4. Log de auditoría dentro de la transacción
+  await tx.auditLog.create({
+    data: {
+      action: 'CHECK_IN',
+      entity: 'Appointment',
+      entityId: appointmentId,
+      // ...
+    }
+  })
+  
+  return { updatedAppointment, medicalEvent }
+})
+\`\`\`
+
+**Ventajas:**
+- ✅ **Atomicidad:** Todas las operaciones se ejecutan juntas o ninguna
+- ✅ **Consistencia:** Si hay error en paso 3, pasos 1-2 se revierten automáticamente
+- ✅ **Auditoría integrada:** El log es parte de la transacción (no puede fallar parcialmente)
+
+**Aplicación futura:** Usar este patrón para cualquier operación compuesta (ej: transferencia de trabajador entre empresas, creación de evento + expediente, etc.).
+
+## ⏭️ Próximo Sprint
+
+**Validación Médica & Dictamen Avanzado** (Pendiente)
+- [ ] Implementar validación manual de dictámenes por médico
+- [ ] Sistema de "Puntos de Control" en flujo médico
+- [ ] Plantillas de dictamen por tipo de estudio
+
+---
+
+**Última actualización:** 2026-02-27 | **ID:** DOC-20260227-01
+
 ```
