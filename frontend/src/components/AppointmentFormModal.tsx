@@ -58,7 +58,9 @@ export default function AppointmentFormModal() {
                 return
             }
 
-            if (!selectedWorker?.companyId) {
+            // FIX: Find worker from list instead of relying on state to avoid race conditions
+            const currentWorker = workers.find(w => w.id === workerId)
+            if (!currentWorker?.companyId) {
                 setError('El trabajador seleccionado no tiene una empresa asignada')
                 return
             }
@@ -69,7 +71,7 @@ export default function AppointmentFormModal() {
             try {
                 const result = await createAppointment({
                     workerId,
-                    companyId: selectedWorker.companyId,
+                    companyId: currentWorker.companyId,
                     branchId,
                     scheduledAt,
                     notes,
@@ -90,9 +92,13 @@ export default function AppointmentFormModal() {
 
     if (successData && successData.appointment) {
         const apt = successData.appointment;
-        const workerPhone = apt.worker?.phone || '';
+        // FIX: Validate phone exists before generating link
+        const rawPhone = apt.worker?.phone || '';
+        const cleanPhone = rawPhone.replace(/\D/g, '');
+        const hasValidPhone = cleanPhone.length >= 10;
+        
         const message = `Hola ${apt.worker?.firstName}, tu cita médica en AMI está confirmada para el ${new Date(apt.scheduledAt).toLocaleDateString('es-ES')} a las ${new Date(apt.scheduledAt).toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'})}. Tu número de expediente es: ${apt.expedientId}. Por favor presenta este mensaje en recepción.`;
-        const whatsappUrl = `https://wa.me/${workerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+        const whatsappUrl = hasValidPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}` : '#';
 
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
@@ -105,14 +111,20 @@ export default function AppointmentFormModal() {
                         <p className="text-slate-500 mt-2 text-sm font-medium">Expediente: <span className="font-mono font-bold text-slate-800">{apt.expedientId}</span></p>
                     </div>
                     <div className="space-y-3 pt-2">
-                        <a
-                            href={whatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
-                        >
-                            <span>📱</span> Enviar Pase por WhatsApp
-                        </a>
+                        {hasValidPhone ? (
+                            <a
+                                href={whatsappUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+                            >
+                                <span>📱</span> Enviar Pase por WhatsApp
+                            </a>
+                        ) : (
+                            <div className="bg-slate-100 text-slate-500 py-3 rounded-xl font-medium text-xs px-4">
+                                ⚠️ El trabajador no tiene número de celular registrado.
+                            </div>
+                        )}
                         <button
                             onClick={() => { setSuccessData(null); setIsOpen(false); }}
                             className="block w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all"

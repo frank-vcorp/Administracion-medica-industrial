@@ -119,13 +119,13 @@ export async function getAppointments(date?: string, branchId?: string) {
 
     const filters: Record<string, unknown> = {}
 
-    // Filtro por fecha
+    // Filtro por fecha (Fix: manejar range completo del día en UTC para evitar timezone issues)
     if (date) {
-      const startOfDay = new Date(date)
-      startOfDay.setHours(0, 0, 0, 0)
-
-      const endOfDay = new Date(date)
-      endOfDay.setHours(23, 59, 59, 999)
+      // date viene como "2023-10-25"
+      // Creamos inicio del día en UTC
+      const startOfDay = new Date(`${date}T00:00:00.000Z`)
+      // Creamos fin del día en UTC
+      const endOfDay = new Date(`${date}T23:59:59.999Z`)
 
       filters.scheduledAt = {
         gte: startOfDay,
@@ -181,9 +181,10 @@ export async function getAppointments(date?: string, branchId?: string) {
  * @param status - Nuevo estado (SCHEDULED, CONFIRMED, CANCELLED, NO_SHOW, COMPLETED)
  * @returns Cita actualizada o error
  */
+
 export async function updateAppointmentStatus(
   appointmentId: string,
-  status: 'SCHEDULED' | 'CONFIRMED' | 'CANCELLED' | 'NO_SHOW' | 'COMPLETED'
+  status: string // Usar string en la firma para compatibilidad con Enum de Prisma
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -192,8 +193,21 @@ export async function updateAppointmentStatus(
       throw new Error('Usuario no autenticado')
     }
 
+    // Fix: Obtener el estado anterior para auditoría correcta
+    const currentAppointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      select: { status: true }
+    })
+
+    if (!currentAppointment) {
+      throw new Error('Cita no encontrada')
+    }
+
+    const previousStatus = currentAppointment.status
+
     const appointment = await prisma.appointment.update({
       where: { id: appointmentId },
+      // @ts-ignore - Prisma genera tipos estrictos para status enum
       data: { status },
       include: {
         worker: {
@@ -207,7 +221,7 @@ export async function updateAppointmentStatus(
 
     // Registrar cambio en auditoría
     await logAudit('UPDATE', 'Appointment', appointmentId, {
-      previousStatus: appointment.status,
+      previousStatus: previousStatus,
       newStatus: status,
     })
 
@@ -236,6 +250,7 @@ export async function updateAppointmentStatus(
  * @param appointmentId - ID de la cita
  * @returns MedicalEvent creado o error
  */
+
 export async function checkInAppointment(appointmentId: string) {
   try {
     const session = await getServerSession(authOptions)
@@ -244,70 +259,80 @@ export async function checkInAppointment(appointmentId: string) {
       throw new Error('Usuario no autenticado')
     }
 
-    // Obtener la cita
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId },
-      include: {
-        worker: true,
-        company: true,
-        branch: true,
-      },
-    })
-
-    if (!appointment) {
-      throw new Error('Cita no encontrada')
-    }
-
-    // Actualizar estado de Appointment a COMPLETED
-    await prisma.appointment.update({
-      where: { id: appointmentId },
-      data: { status: 'COMPLETED' },
-    })
-
-    // Crear MedicalEvent vinculado
-    const medicalEvent = await prisma.medicalEvent.create({
-      data: {
-        workerId: appointment.workerId,
-        branchId: appointment.branchId,
-        status: 'CHECKED_IN',
-        checkInDate: new Date(),
-        appointmentId: appointmentId, // Vincular la cita al evento
-      },
-      include: {
-        worker: {
-          select: { id: true, firstName: true, lastName: true, universalId: true },
+    // Fix: Uso de transacción para garantizar atomicidad (Cita COMPLETADA + Evento Creado)
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Obtener la cita y verificar estado
+      const existingAppointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: {
+          worker: true,
+          company: true,
+          branch: true,
+          medicalEvents: true // Relacion es array aunque sea 1:1 logicamente
         },
-        branch: {
-          select: { id: true, name: true },
+      })
+
+      if (!existingAppointment) {
+        throw new Error('Cita no encontrada')
+      }
+
+      if (existingAppointment.medicalEvents && existingAppointment.medicalEvents.length > 0) {
+        throw new Error('Esta cita ya tiene un evento médico asociado')
+      }
+
+      if (existingAppointment.status === 'COMPLETED' || existingAppointment.status === 'CANCELLED') {
+        throw new Error(`La cita ya está en estado ${existingAppointment.status}`)
+      }
+
+      // 2. Actualizar estado de Cita a COMPLETED
+      const updatedAppointment = await tx.appointment.update({
+        where: { id: appointmentId },
+        data: { status: 'COMPLETED' },
+      })
+
+      // 3. Crear MedicalEvent vinculado
+      const newMedicalEvent = await tx.medicalEvent.create({
+        data: {
+          workerId: existingAppointment.workerId,
+          branchId: existingAppointment.branchId,
+          status: 'CHECKED_IN',
+          checkInDate: new Date(),
+          appointmentId: appointmentId // Usar ID directo si el connect falla, es más seguro y simple
         },
-      },
+        include: {
+          worker: {
+            select: { id: true, firstName: true, lastName: true, universalId: true },
+          },
+          branch: {
+            select: { id: true, name: true },
+          },
+        },
+      })
+
+      return { appointment: updatedAppointment, medicalEvent: newMedicalEvent }
     })
 
-    // Registrar en auditoría
+    // Registrar en auditoría (fuera de transacción para no bloquear si falla el log, o dentro si es crítico)
     await logAudit('CHECK_IN', 'Appointment', appointmentId, {
-      medicalEventId: medicalEvent.id,
-      workerId: appointment.workerId,
-      companyId: appointment.companyId,
-      branchId: appointment.branchId,
+      medicalEventId: result.medicalEvent.id,
+      workerId: result.medicalEvent.workerId,
+      branchId: result.medicalEvent.branchId,
     })
 
     revalidatePath('/appointments')
+    revalidatePath('/reception') // Importante actualizar tablero
     revalidatePath('/dashboard')
-    revalidatePath('/events')
 
     return {
       success: true,
-      medicalEvent,
-      appointment: {
-        id: appointment.id,
-        status: 'COMPLETED',
-      },
+      medicalEvent: result.medicalEvent,
+      appointment: result.appointment,
     }
   } catch (error) {
     console.error('[CHECK-IN APPOINTMENT ERROR]:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Error al hacer check-in de cita',
+      error: error instanceof Error ? error.message : 'Error al procesar check-in',
     }
   }
 }

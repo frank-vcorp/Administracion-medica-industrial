@@ -40,9 +40,9 @@ export default async function ReceptionPage() {
     )
 }
 
-function Lane({ title, count, children, color, icon }: { title: string, count: number, children: React.ReactNode, color: string, borderColor: string, icon: string }) {
+function Lane({ title, count, children, color, borderColor, icon }: { title: string, count: number, children: React.ReactNode, color: string, borderColor: string, icon: string }) {
     return (
-        <div className={`flex flex-col h-full rounded-3xl ${color} border border-slate-100 p-6 shadow-sm overflow-hidden relative`}>
+        <div className={`flex flex-col h-full rounded-3xl ${color} border ${borderColor} p-6 shadow-sm overflow-hidden relative`}>
             <div className="flex justify-between items-center mb-6 relative z-10">
                 <div className="flex items-center gap-2">
                     <span className="text-lg">{icon}</span>
