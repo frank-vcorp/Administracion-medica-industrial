@@ -42,10 +42,10 @@ export default function WorkerFormModal({ companies }: { companies: { id: string
                     </div>
                     <div className="space-y-3 pt-2">
                         <Link
-                            href="/reception"
+                            href="/appointments"
                             className="block w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
                         >
-                            🗓️ Iniciar Cita (Recepción)
+                            🗓️ Agendar Consulta
                         </Link>
                         <button
                             onClick={() => { setSuccessData(null); setIsOpen(false); }}
