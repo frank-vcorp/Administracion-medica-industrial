@@ -43,7 +43,19 @@ export async function createWorker(formData: FormData) {
             }
         })
         revalidatePath('/workers')
-        return { success: true, worker }
+        // Retornamos también el Id de la empresa y Sucursal Default si la tiene para redirecciones
+        const company = await prisma.company.findUnique({
+            where: { id: companyId },
+            select: { id: true, defaultBranchId: true }
+        })
+        
+        return { 
+            success: true, 
+            worker: { 
+                ...worker, 
+                company: company ? { id: company.id, defaultBranchId: company.defaultBranchId } : null 
+            } 
+        }
     } catch (e: unknown) {
         const error = e as Error
         console.error('Error creating worker:', error)

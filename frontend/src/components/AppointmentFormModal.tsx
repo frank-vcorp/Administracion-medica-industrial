@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from 'react'
 import { createAppointment } from '@/actions/appointment.actions'
 import { getWorkers } from '@/actions/worker.actions'
 import { getBranches } from '@/actions/admin.actions'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
@@ -48,6 +48,29 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
     const [selectedBranchId, setSelectedBranchId] = useState<string>('')
     const [preselectedWorkerId, setPreselectedWorkerId] = useState<string | null>(null)
     const router = useRouter()
+    const searchParams = useSearchParams()
+
+    // Detect URL params (e.g. from create-worker redirect)
+    useEffect(() => {
+        const action = searchParams.get('action')
+        const workerId = searchParams.get('workerId')
+        const branchId = searchParams.get('branchId')
+        
+        if (action === 'new-appointment' && !isOpen) {
+             setIsOpen(true)
+             if (workerId) setPreselectedWorkerId(workerId)
+             if (branchId) setSelectedBranchId(branchId)
+             
+             // Clean URL to prevent re-open
+             const newParams = new URLSearchParams(searchParams.toString())
+             newParams.delete('action')
+             newParams.delete('workerId')
+             newParams.delete('branchId')
+             
+             // Use replace to update URL without adding history entry
+             router.replace(`/appointments?${newParams.toString()}`)
+        }
+    }, [searchParams, isOpen, router])
     
     // Cargar datos una sola vez cuando el modal se abre
     useEffect(() => {

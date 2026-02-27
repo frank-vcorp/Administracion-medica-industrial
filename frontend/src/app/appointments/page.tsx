@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { getAppointments, checkInAppointment } from '@/actions/appointment.actions'
 import { getBranches } from '@/actions/admin.actions'
 import { useRouter } from 'next/navigation'
@@ -173,7 +173,9 @@ export default function AppointmentsPage() {
                             className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 cursor-pointer"
                         />
                     </div>
-                    <AppointmentFormModal onSuccess={loadData} />
+                    <Suspense fallback={null}>
+                        <AppointmentFormModal onSuccess={loadData} />
+                    </Suspense>
                 </div>
             </div>
 

@@ -55,7 +55,13 @@ export default function WorkerFormModal({ companies }: { companies: { id: string
                                 onClick={() => {
                                     setSuccessData(null)
                                     setIsOpen(false)
-                                    // Trigger custom event to open appointment modal with pre-selected worker
+                                    // Use router navigation with query params for cross-page modal triggering
+                                    const params = new URLSearchParams();
+                                    params.set('action', 'new-appointment');
+                                    if (successData.worker?.id) params.set('workerId', successData.worker.id);
+                                    if (successData.worker?.company?.defaultBranchId) params.set('branchId', successData.worker.company.defaultBranchId);
+                                    
+                                    // Also dispatch local event in case we are already on the page
                                     const event = new CustomEvent<OpenAppointmentModalDetail>(EVENTS.OPEN_APPOINTMENT_MODAL, { 
                                         detail: { 
                                             workerId: successData.worker?.id,
@@ -63,6 +69,9 @@ export default function WorkerFormModal({ companies }: { companies: { id: string
                                         } 
                                     })
                                     window.dispatchEvent(event)
+                                    
+                                    // Navigate to appointments page
+                                    router.push(`/appointments?${params.toString()}`);
                                 }}
                                 className="block w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
                             >
