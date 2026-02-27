@@ -21,6 +21,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { logAudit } from '@/actions/audit.actions'
 import { generateExpedientId } from '@/lib/id.utils'
+import QRCode from 'qrcode'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -50,8 +51,23 @@ export async function createAppointment(data: {
     // Generar ID de Papeleta automático (EXP-YYYYNNN)
     const expedientId = await generateExpedientId(prisma)
 
-    // Generar QR (Mock Base64 por ahora para evitar dependencias pesadas en el build)
-    const qrCode = `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200 text-anchor="middle"><rect width="100%" height="100%" fill="white"/><text x="100" y="100" font-family="Arial" font-size="12" fill="black">${expedientId}</text></svg>`).toString('base64')}`
+    // Generar QR Real usando librería 'qrcode'
+    // Almacenamos DataURL (Base64) directamente en DB para evitar hosting externo
+    const qrData = JSON.stringify({
+       exp: expedientId,
+       uid: data.workerId,
+       date: scheduledDate.toISOString()
+    });
+    
+    const qrCode = await QRCode.toDataURL(qrData, {
+      errorCorrectionLevel: 'H',
+      margin: 2,
+      scale: 8,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
 
     const appointment = await prisma.appointment.create({
       data: {

@@ -19,7 +19,7 @@ interface Branch {
     name: string
 }
 
-export default function AppointmentFormModal() {
+export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => void }) {
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
@@ -80,7 +80,8 @@ export default function AppointmentFormModal() {
 
                 if (result.success) {
                     setSuccessData(result)
-                    router.refresh()
+                    router.refresh() // Revalida server components
+                    if (onSuccess) onSuccess() // Actualiza lista del cliente inmediatamente
                 } else {
                     setError(result.error || 'Error al agendar la cita')
                 }

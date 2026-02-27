@@ -133,7 +133,7 @@ export default function AppointmentsPage() {
                             className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 cursor-pointer"
                         />
                     </div>
-                    <AppointmentFormModal />
+                    <AppointmentFormModal onSuccess={loadData} />
                 </div>
             </div>
 
