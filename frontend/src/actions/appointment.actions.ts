@@ -369,6 +369,13 @@ export async function checkInAppointment(appointmentId: string) {
  */
 export async function processQRCheckIn(qrContent: string) {
   try {
+    // 🛡️ SECURITY: Validación de sesión obligatoria
+    // Previene enumeración de datos sensibles de trabajadores a externos
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return { success: false, error: 'Sesión expirada o no autorizada.' }
+    }
+
     let data;
     try {
       data = JSON.parse(qrContent);
@@ -407,31 +414,24 @@ export async function processQRCheckIn(qrContent: string) {
     const now = new Date();
     const scheduledDate = new Date(appointment.scheduledAt);
 
-    // Margen de tolerancia: permitir Check-in desde 1 hora antes hasta 4 horas después
-    // Esto es configurable, pero es un buen default para evitar largas filas si llegan temprano
-    const timeDiff = now.getTime() - scheduledDate.getTime();
-    const hoursDiff = timeDiff / (1000 * 60 * 60);
+    // Margen de tolerancia: permitir Check-in desde 1 hora antes hasta 2 horas después
+    // Usamos diferencia absoluta en horas para manejar correctamente el salto de día (ej. 23:30 -> 00:15)
+    // Sin depender de "mismo día calendario", que rompe en la medianoche.
+    
+    // Cálculo de diferencia en minutos para mayor precisión
+    const diffMs = now.getTime() - scheduledDate.getTime();
+    const diffMinutes = Math.floor(diffMs / 60000); // positivo = tarde, negativo = temprano
 
-    // Si llega mas de 1 hora TEMPRANO
-    if (hoursDiff < -1) {
+    // Si llega mas de 60 minutos TEMPRANO (-60)
+    if (diffMinutes < -60) {
         return { 
             success: false, 
             error: `Cita programada para las ${scheduledDate.toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}. Llegaste demasiado temprano.` 
         }
     }
 
-    // Si llega mas de 2 horas TARDE
-    const isLate = hoursDiff > 2;
-    // Si no es el mismo día calendario (tolerancia de 24h para diferencia UTC vs Local bruta, pero el check principal es la fecha string)
-    const isSameDay = now.toDateString() === scheduledDate.toDateString();
-    
-    if (isLate || !isSameDay) {
-        // Opcional: Marcar como NO_SHOW automáticamente
-        /* await prisma.appointment.update({
-            where: { id: appointment.id },
-            data: { status: 'NO_SHOW' }
-        }) */
-        
+    // Si llega mas de 2 horas (120 min) TARDE
+    if (diffMinutes > 120) {
          return { 
             success: false, 
             error: `Tu cita expiró (Máx. 2 hrs de tolerancia). Es necesario reagendar.` 
