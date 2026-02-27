@@ -6,6 +6,8 @@ import { getWorkers } from '@/actions/worker.actions'
 import { getBranches } from '@/actions/admin.actions'
 import { useRouter } from 'next/navigation'
 
+import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
+
 interface Worker {
     id: string
     firstName: string
@@ -19,51 +21,87 @@ interface Branch {
     name: string
 }
 
+interface AppointmentResult {
+    success: boolean
+    appointment?: {
+        id: string
+        expedientId: string | null
+        workerId: string
+        worker?: {
+            firstName: string
+            lastName: string
+            phone: string | null
+        }
+        scheduledAt: Date | string
+    }
+    error?: string
+}
+
 export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => void }) {
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
-    const [successData, setSuccessData] = useState<{ success: boolean, appointment?: any } | null>(null)
+    const [successData, setSuccessData] = useState<AppointmentResult | null>(null)
     const [workers, setWorkers] = useState<Worker[]>([])
     const [branches, setBranches] = useState<Branch[]>([])
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
     const [selectedBranchId, setSelectedBranchId] = useState<string>('')
-    const [preselectedWorkerId, setPreselectedWorkerId] = useState<string | null>(null);
+    const [preselectedWorkerId, setPreselectedWorkerId] = useState<string | null>(null)
     const router = useRouter()
-
-    useEffect(() => {
-        // Escuchar eventos globales para abrir modal desde otros componentes (ej: Al crear trabajador)
-        const handleOpenEvent = (e: Event) => {
-            const customEvent = e as CustomEvent;
-            setIsOpen(true);
-            // Si viene con workerId pre-seleccionado, lo seteamos
-             if (customEvent.detail?.workerId) {
-                // Necesitamos cargar worker primero si no estan cargados, 
-                // pero como el effect de isOpen cargará todo, podemos setear un estado temporal o esperar
-                // Simplificación: Guardamos el ID en un estado temporal para seleccionarlo post-carga
-                setPreselectedWorkerId(customEvent.detail.workerId);
-             }
-             if (customEvent.detail?.branchId) {
-                setSelectedBranchId(customEvent.detail.branchId);
-             }
-        }
-
-        window.addEventListener('open-appointment-modal', handleOpenEvent);
-        return () => window.removeEventListener('open-appointment-modal', handleOpenEvent);
-    }, [])
     
+    // Cargar datos una sola vez cuando el modal se abre
     useEffect(() => {
-        if (isOpen) {
-            getWorkers().then(data => {
-                setWorkers(data);
+        if (!isOpen) return
+        
+        // Función asíncrona dentro del effect para manejar carga y pre-selección
+        async function fetchAndSelect() {
+            try {
+                // Hacer las peticiones
+                const [wData, bData] = await Promise.all([getWorkers(), getBranches()])
+                
+                // Actualizar estados
+                setWorkers(wData)
+                setBranches(bData)
+                
+                // Si hay un worker preseleccionado (seteado por el event listener antes de abrir)
                 if (preselectedWorkerId) {
-                    const worker = data.find(w => w.id === preselectedWorkerId) || null;
-                    setSelectedWorker(worker);
+                    const worker = wData.find(w => w.id === preselectedWorkerId)
+                    if (worker) {
+                        setSelectedWorker(worker)
+                        // FIX: Type assertion para company que viene del backend aunque Prisma type default no lo muestre completo aqui
+                        // @ts-expect-error - El backend incluye company con defaultBranchId aunque el tipo frontend basico no
+                        if (!selectedBranchId && worker.company?.defaultBranchId) {
+                            // @ts-expect-error - TS no reconoce defaultBranchId en company por fetch generico
+                            setSelectedBranchId(worker.company.defaultBranchId)
+                        }
+                    }
+                    // Limpiar el preselectedID para que no afecte futuros renders
+                    setPreselectedWorkerId(null)
                 }
-            })
-            getBranches().then(data => setBranches(data))
+            } catch (err) {
+                console.error("Error cargando datos:", err)
+                setError("Error al cargar datos del formulario")
+            }
         }
-    }, [isOpen, preselectedWorkerId])
+        
+        fetchAndSelect()
+        
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]) // Solo ejecutar al abrirse el modal
+
+    // Listener de eventos globales
+    useEffect(() => {
+        const handleOpenEvent = (e: CustomEvent<OpenAppointmentModalDetail>) => {
+            // Setear estados PREVIOS a abrir el modal para que el effect de isOpen los vea
+            if (e.detail?.workerId) setPreselectedWorkerId(e.detail.workerId)
+            if (e.detail?.branchId) setSelectedBranchId(e.detail.branchId)
+            
+            setIsOpen(true)
+        }
+
+        window.addEventListener(EVENTS.OPEN_APPOINTMENT_MODAL, handleOpenEvent as EventListener)
+        return () => window.removeEventListener(EVENTS.OPEN_APPOINTMENT_MODAL, handleOpenEvent as EventListener)
+    }, [])
 
     const handleWorkerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const workerId = e.target.value

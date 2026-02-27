@@ -5,10 +5,19 @@ import { createWorker } from '@/actions/worker.actions'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
+
+interface Worker {
+    id: string
+    firstName: string
+    lastName: string
+    company?: { id: string, defaultBranchId: string | null } | null
+}
+
 export default function WorkerFormModal({ companies }: { companies: { id: string, name: string }[] }) {
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
-    const [successData, setSuccessData] = useState<{ success: boolean, worker?: { id: string, firstName: string, lastName: string } } | null>(null)
+    const [successData, setSuccessData] = useState<{ success: boolean, worker?: Worker } | null>(null)
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
 
@@ -16,7 +25,7 @@ export default function WorkerFormModal({ companies }: { companies: { id: string
         startTransition(async () => {
             setError(null)
             try {
-                const result = await createWorker(formData) as { success: boolean, worker?: { id: string, firstName: string, lastName: string }, error?: string }
+                const result = await createWorker(formData) as { success: boolean, worker?: Worker, error?: string }
                 if (result.success) {
                     setSuccessData(result)
                     router.refresh()
@@ -47,13 +56,13 @@ export default function WorkerFormModal({ companies }: { companies: { id: string
                                     setSuccessData(null)
                                     setIsOpen(false)
                                     // Trigger custom event to open appointment modal with pre-selected worker
-                                    window.dispatchEvent(new CustomEvent('open-appointment-modal', { 
+                                    const event = new CustomEvent<OpenAppointmentModalDetail>(EVENTS.OPEN_APPOINTMENT_MODAL, { 
                                         detail: { 
                                             workerId: successData.worker?.id,
-                                            // @ts-ignore
-                                            branchId: successData.worker?.company?.defaultBranchId 
+                                            branchId: successData.worker?.company?.defaultBranchId || undefined
                                         } 
-                                    }))
+                                    })
+                                    window.dispatchEvent(event)
                                 }}
                                 className="block w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
                             >
