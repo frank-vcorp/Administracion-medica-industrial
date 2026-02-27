@@ -213,6 +213,10 @@ const result = await prisma.$transaction(async (tx) => {
 
 ## ⏭️ Próximo Sprint
 
+**Polished UX & Mejoras Visuales (Antigravity Handoff)**
+- [ ] Agregar campo `googleMapsUrl` a modelo Branch (Sucursal) para ubicación exacta
+- [ ] Heredar URL de Google Maps en el Pase de Confirmación (AppointmentFormModal)
+
 **Validación Médica & Dictamen Avanzado** (Pendiente)
 - [ ] Implementar validación manual de dictámenes por médico
 - [ ] Sistema de "Puntos de Control" en flujo médico
