@@ -68,11 +68,10 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                     const worker = wData.find(w => w.id === preselectedWorkerId)
                     if (worker) {
                         setSelectedWorker(worker)
-                        // FIX: Type assertion para company que viene del backend aunque Prisma type default no lo muestre completo aqui
-                        // @ts-expect-error - El backend incluye company con defaultBranchId aunque el tipo frontend basico no
-                        if (!selectedBranchId && worker.company?.defaultBranchId) {
-                            // @ts-expect-error - TS no reconoce defaultBranchId en company por fetch generico
-                            setSelectedBranchId(worker.company.defaultBranchId)
+                        // Verificar si existe defaultBranchId (type casting seguro)
+                        const workerWithCompany = worker as unknown as { company?: { defaultBranchId?: string } }
+                        if (!selectedBranchId && workerWithCompany.company?.defaultBranchId) {
+                            setSelectedBranchId(workerWithCompany.company.defaultBranchId)
                         }
                     }
                     // Limpiar el preselectedID para que no afecte futuros renders
