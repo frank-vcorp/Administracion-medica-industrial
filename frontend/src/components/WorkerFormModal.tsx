@@ -41,12 +41,25 @@ export default function WorkerFormModal({ companies }: { companies: { id: string
                         <p className="text-slate-500 mt-2 text-sm font-medium">El registro se completó correctamente.</p>
                     </div>
                     <div className="space-y-3 pt-2">
-                        <Link
-                            href="/appointments"
-                            className="block w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
-                        >
-                            🗓️ Agendar Consulta
-                        </Link>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => {
+                                    setSuccessData(null)
+                                    setIsOpen(false)
+                                    // Trigger custom event to open appointment modal with pre-selected worker
+                                    window.dispatchEvent(new CustomEvent('open-appointment-modal', { 
+                                        detail: { 
+                                            workerId: successData.worker?.id,
+                                            // @ts-ignore
+                                            branchId: successData.worker?.company?.defaultBranchId 
+                                        } 
+                                    }))
+                                }}
+                                className="block w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
+                            >
+                                🗓️ Agendar Consulta Aquí
+                            </button>
+                        </div>
                         <button
                             onClick={() => { setSuccessData(null); setIsOpen(false); }}
                             className="block w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all"

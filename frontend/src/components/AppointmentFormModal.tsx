@@ -28,14 +28,42 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
     const [branches, setBranches] = useState<Branch[]>([])
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
     const [selectedBranchId, setSelectedBranchId] = useState<string>('')
+    const [preselectedWorkerId, setPreselectedWorkerId] = useState<string | null>(null);
     const router = useRouter()
 
     useEffect(() => {
+        // Escuchar eventos globales para abrir modal desde otros componentes (ej: Al crear trabajador)
+        const handleOpenEvent = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            setIsOpen(true);
+            // Si viene con workerId pre-seleccionado, lo seteamos
+             if (customEvent.detail?.workerId) {
+                // Necesitamos cargar worker primero si no estan cargados, 
+                // pero como el effect de isOpen cargará todo, podemos setear un estado temporal o esperar
+                // Simplificación: Guardamos el ID en un estado temporal para seleccionarlo post-carga
+                setPreselectedWorkerId(customEvent.detail.workerId);
+             }
+             if (customEvent.detail?.branchId) {
+                setSelectedBranchId(customEvent.detail.branchId);
+             }
+        }
+
+        window.addEventListener('open-appointment-modal', handleOpenEvent);
+        return () => window.removeEventListener('open-appointment-modal', handleOpenEvent);
+    }, [])
+    
+    useEffect(() => {
         if (isOpen) {
-            getWorkers().then(data => setWorkers(data))
+            getWorkers().then(data => {
+                setWorkers(data);
+                if (preselectedWorkerId) {
+                    const worker = data.find(w => w.id === preselectedWorkerId) || null;
+                    setSelectedWorker(worker);
+                }
+            })
             getBranches().then(data => setBranches(data))
         }
-    }, [isOpen])
+    }, [isOpen, preselectedWorkerId])
 
     const handleWorkerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const workerId = e.target.value
@@ -173,7 +201,8 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Trabajador</label>
                                 <select 
                                     name="workerId" 
-                                    required 
+                                    required
+                                    value={selectedWorker?.id || ''} // Controlado por selectedWorker
                                     onChange={handleWorkerChange}
                                     className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
                                 >
