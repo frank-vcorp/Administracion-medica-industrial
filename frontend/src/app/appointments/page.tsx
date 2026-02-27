@@ -31,13 +31,24 @@ export default function AppointmentsPage() {
     const [selectedApt, setSelectedApt] = useState<AppointmentWithWorker | null>(null)
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+    const [error, setError] = useState<string | null>(null)
     const router = useRouter()
 
     const loadData = async () => {
         setLoading(true)
-        const result = await getAppointments(selectedDate)
-        if (result.success) setAppointments(result.appointments as unknown as AppointmentWithWorker[] || [])
-        setLoading(false)
+        setError(null)
+        try {
+            const result = await getAppointments(selectedDate)
+            if (result.success) {
+                setAppointments(result.appointments as unknown as AppointmentWithWorker[] || [])
+            } else {
+                setError(result.error || 'No se pudieron cargar las citas.')
+            }
+        } catch (err) {
+            setError('Error de conexión al cargar la agenda.')
+        } finally {
+            setLoading(false)
+        }
     }
 
     useEffect(() => {
@@ -73,6 +84,20 @@ export default function AppointmentsPage() {
         <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
             <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             <p className="text-slate-500 font-medium animate-pulse">Sincronizando Agenda...</p>
+        </div>
+    )
+
+    if (error) return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+            <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-3xl">⚠️</div>
+            <h3 className="text-xl font-bold text-slate-800">Error al Cargar</h3>
+            <p className="text-slate-500">{error}</p>
+            <button 
+                onClick={loadData}
+                className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2 rounded-xl text-sm font-bold transition-all"
+            >
+                Reintentar
+            </button>
         </div>
     )
 
