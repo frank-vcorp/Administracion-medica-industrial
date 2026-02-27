@@ -11,7 +11,7 @@ interface Worker {
     firstName: string
     lastName: string
     companyId: string | null
-    company?: { name: string } | null
+    company?: { name: string, defaultBranchId: string | null } | null
 }
 
 interface Branch {
@@ -27,6 +27,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
     const [workers, setWorkers] = useState<Worker[]>([])
     const [branches, setBranches] = useState<Branch[]>([])
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
+    const [selectedBranchId, setSelectedBranchId] = useState<string>('')
     const router = useRouter()
 
     useEffect(() => {
@@ -40,6 +41,11 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         const workerId = e.target.value
         const worker = workers.find(w => w.id === workerId) || null
         setSelectedWorker(worker)
+
+        // Auto-seleccionar sucursal si la empresa tiene una asignada
+        if (worker?.company?.defaultBranchId) {
+            setSelectedBranchId(worker.company.defaultBranchId)
+        }
     }
 
     async function handleSubmit(formData: FormData) {
@@ -184,7 +190,9 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal</label>
                                 <select 
                                     name="branchId" 
-                                    required 
+                                    required
+                                    value={selectedBranchId || ''}
+                                    onChange={(e) => setSelectedBranchId(e.target.value)}
                                     className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
                                 >
                                     <option value="">Seleccionar sucursal...</option>

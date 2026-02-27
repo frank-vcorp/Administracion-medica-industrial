@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getAppointments, checkInAppointment } from '@/actions/appointment.actions'
+import { getBranches } from '@/actions/admin.actions'
 import { useRouter } from 'next/navigation'
 import AppointmentFormModal from '@/components/AppointmentFormModal'
 
@@ -25,8 +26,18 @@ interface AppointmentWithWorker {
     branch: { name: string, hourlyCapacity: number, openingTime: string, closingTime: string } | null;
 }
 
+interface Branch {
+    id: string
+    name: string
+    hourlyCapacity: number
+    openingTime: string
+    closingTime: string
+}
+
 export default function AppointmentsPage() {
     const [appointments, setAppointments] = useState<AppointmentWithWorker[]>([])
+    const [branches, setBranches] = useState<Branch[]>([])
+    const [selectedBranchId, setSelectedBranchId] = useState<string>('')
     const [loading, setLoading] = useState(true)
     const [selectedApt, setSelectedApt] = useState<AppointmentWithWorker | null>(null)
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
@@ -41,11 +52,23 @@ export default function AppointmentsPage() {
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
 
+    useEffect(() => {
+        // Cargar sucursales al inicio
+        getBranches().then(data => {
+            setBranches(data as unknown as Branch[])
+            if (data.length > 0) {
+                setSelectedBranchId(data[0].id)
+            }
+        })
+    }, [])
+
     const loadData = async () => {
+        if (!selectedBranchId) return // Esperar a tener sucursal seleccionada
+
         setLoading(true)
         setError(null)
         try {
-            const result = await getAppointments(selectedDate)
+            const result = await getAppointments(selectedDate, selectedBranchId)
             if (result.success) {
                 setAppointments(result.appointments as unknown as AppointmentWithWorker[] || [])
             } else {
@@ -59,8 +82,10 @@ export default function AppointmentsPage() {
     }
 
     useEffect(() => {
-        loadData()
-    }, [selectedDate])
+        if (selectedBranchId) {
+            loadData()
+        }
+    }, [selectedDate, selectedBranchId])
 
     // Agrupar citas por hora (Filtrando localmente para asegurar que coincidan con el día seleccionado)
     const groupedAppointments = appointments.reduce((acc, apt) => {
@@ -77,8 +102,10 @@ export default function AppointmentsPage() {
         return acc;
     }, {} as Record<number, AppointmentWithWorker[]>);
 
-    // Obtener configuración de la sucursal (asumiendo la primera por ahora, idealmente se filtra por sucursal seleccionada)
-    const branchConfig = appointments.length > 0 && appointments[0].branch ? appointments[0].branch : { hourlyCapacity: 15, openingTime: '07:00', closingTime: '17:00' };
+    // Obtener configuración de la sucursal seleccionada
+    const currentBranch = branches.find(b => b.id === selectedBranchId);
+    const branchConfig = currentBranch || { hourlyCapacity: 15, openingTime: '07:00', closingTime: '17:00' };
+    
     const startHour = parseInt(branchConfig.openingTime.split(':')[0]);
     const endHour = parseInt(branchConfig.closingTime.split(':')[0]);
     const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
@@ -124,6 +151,19 @@ export default function AppointmentsPage() {
                     <p className="text-slate-500 text-sm">Panel de control de ingresos y expedientes EXP</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <div className="bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-sm flex items-center gap-2">
+                        <span className="text-slate-400">🏥</span>
+                        <select
+                            value={selectedBranchId}
+                            onChange={(e) => setSelectedBranchId(e.target.value)}
+                            className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 cursor-pointer w-32 md:w-auto"
+                            disabled={branches.length === 0}
+                        >
+                            {branches.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                        </select>
+                    </div>
                     <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm flex items-center gap-2">
                         <span className="text-slate-400">📅</span>
                         <input 

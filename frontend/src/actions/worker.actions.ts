@@ -9,7 +9,7 @@ export async function getWorkers() {
     return await prisma.worker.findMany({
         include: {
             company: {
-                select: { name: true }
+                select: { name: true, defaultBranchId: true }
             }
         },
         orderBy: { createdAt: 'desc' }
