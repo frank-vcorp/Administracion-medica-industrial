@@ -361,3 +361,48 @@ export async function checkInAppointment(appointmentId: string) {
     }
   }
 }
+
+/**
+ * Procesa el Check-in mediante escaneo de QR
+ * Decodifica el JSON del QR, busca la cita por expediente y ejecuta el check-in.
+ * @param qrContent - String JSON escaneado del código QR
+ */
+export async function processQRCheckIn(qrContent: string) {
+  try {
+    let data;
+    try {
+      data = JSON.parse(qrContent);
+    } catch (e) {
+      return { success: false, error: 'Código QR inválido o corrupto.' }
+    }
+
+    if (!data.exp) {
+      return { success: false, error: 'El QR no contiene un ID de expediente válido.' }
+    }
+
+    // Buscar cita por Expedient ID
+    const appointment = await prisma.appointment.findUnique({
+      where: { expedientId: data.exp },
+      select: { id: true, status: true, worker: { select: { firstName: true, lastName: true } } }
+    });
+
+    if (!appointment) {
+      return { success: false, error: 'No se encontró ninguna cita asociada a este QR.' }
+    }
+
+    if (appointment.status === 'COMPLETED') {
+      return { success: false, error: `El trabajador ${appointment.worker.firstName} ya realizó su Check-in.` }
+    }
+
+    if (appointment.status === 'CANCELLED') {
+      return { success: false, error: 'Esta cita fue cancelada.' }
+    }
+
+    // Ejecutar check-in estándar
+    return await checkInAppointment(appointment.id);
+
+  } catch (error) {
+    console.error('[QR CHECK-IN ERROR]:', error)
+    return { success: false, error: 'Error interno al procesar QR.' }
+  }
+}
