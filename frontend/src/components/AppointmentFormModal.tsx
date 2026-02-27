@@ -200,7 +200,10 @@ export default function AppointmentFormModal() {
                                         type="date" 
                                         name="date" 
                                         required 
-                                        defaultValue={new Date().toISOString().split('T')[0]}
+                                        defaultValue={(() => {
+                                            const now = new Date(); 
+                                            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                                        })()}
                                         className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none" 
                                     />
                                 </div>

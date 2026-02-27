@@ -119,18 +119,22 @@ export async function getAppointments(date?: string, branchId?: string) {
 
     const filters: Record<string, unknown> = {}
 
-    // Filtro por fecha (Fix: manejar range completo del día en UTC para evitar timezone issues)
+    // Filtro por fecha (Fix: manejar range ampliado para cubrir timezones)
     if (date) {
       // date viene como "2023-10-25"
-      // Creamos inicio del día en UTC
-      const startOfDay = new Date(`${date}T00:00:00.000Z`)
-      // Creamos fin del día en UTC
-      const endOfDay = new Date(`${date}T23:59:59.999Z`)
+      // Buscamos con holgura de +/- 1 día para capturar citas que por timezone caen en día anterior/siguiente UTC
+      const targetDate = new Date(`${date}T12:00:00.000Z`)
+      const startRange = new Date(targetDate)
+      startRange.setDate(startRange.getDate() - 1) // Día anterior
+      const endRange = new Date(targetDate)
+      endRange.setDate(endRange.getDate() + 1) // Día siguiente
 
       filters.scheduledAt = {
-        gte: startOfDay,
-        lte: endOfDay,
+        gte: startRange,
+        lte: endRange,
       }
+      
+      // NOTA: El frontend deberá filtrar visualmente las que no correspondan al día seleccionado localmente
     }
 
     // Filtro por sucursal
@@ -259,7 +263,7 @@ export async function checkInAppointment(appointmentId: string) {
       throw new Error('Usuario no autenticado')
     }
 
-    // Fix: Uso de transacción para garantizar atomicidad (Cita COMPLETADA + Evento Creado)
+    // Fix: Uso de transacción para garantizar atomicidad (Cita COMPLETADA + Evento Creado + Auditoría)
     const result = await prisma.$transaction(async (tx) => {
       // 1. Obtener la cita y verificar estado
       const existingAppointment = await tx.appointment.findUnique({
@@ -309,15 +313,20 @@ export async function checkInAppointment(appointmentId: string) {
         },
       })
 
+      // 4. Registrar en auditoría DENTRO de la transacción (Critical Path)
+      // Si falla la auditoría, se revierte todo el Check-in por seguridad/compliance.
+      await logAudit('CHECK_IN', 'Appointment', appointmentId, {
+        medicalEventId: newMedicalEvent.id,
+        workerId: newMedicalEvent.workerId,
+        branchId: newMedicalEvent.branchId,
+        timestamp: new Date().toISOString()
+      })
+
       return { appointment: updatedAppointment, medicalEvent: newMedicalEvent }
     })
 
-    // Registrar en auditoría (fuera de transacción para no bloquear si falla el log, o dentro si es crítico)
-    await logAudit('CHECK_IN', 'Appointment', appointmentId, {
-      medicalEventId: result.medicalEvent.id,
-      workerId: result.medicalEvent.workerId,
-      branchId: result.medicalEvent.branchId,
-    })
+    // Comentamos la auditoría externa antigua
+    /* await logAudit('CHECK_IN', 'Appointment', appointmentId, { ... }) */
 
     revalidatePath('/appointments')
     revalidatePath('/reception') // Importante actualizar tablero

@@ -30,7 +30,14 @@ export default function AppointmentsPage() {
     const [loading, setLoading] = useState(true)
     const [selectedApt, setSelectedApt] = useState<AppointmentWithWorker | null>(null)
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
-    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+    const [selectedDate, setSelectedDate] = useState<string>(() => {
+        // Fix: Usar fecha local real para el input default, no UTC
+        const now = new Date()
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+    })
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
 
@@ -55,9 +62,16 @@ export default function AppointmentsPage() {
         loadData()
     }, [selectedDate])
 
-    // Agrupar citas por hora
+    // Agrupar citas por hora (Filtrando localmente para asegurar que coincidan con el día seleccionado)
     const groupedAppointments = appointments.reduce((acc, apt) => {
-        const hour = new Date(apt.scheduledAt).getHours();
+        const aptDate = new Date(apt.scheduledAt);
+        // Construir fecha local YYYY-MM-DD para comparar con selectedDate
+        const aptDateString = `${aptDate.getFullYear()}-${String(aptDate.getMonth() + 1).padStart(2, '0')}-${String(aptDate.getDate()).padStart(2, '0')}`;
+        
+        // Si la cita no corresponde al día seleccionado (por diferencias de timezone traídas del server), la ignoramos visualmente
+        if (aptDateString !== selectedDate) return acc;
+
+        const hour = aptDate.getHours();
         if (!acc[hour]) acc[hour] = [];
         acc[hour].push(apt);
         return acc;

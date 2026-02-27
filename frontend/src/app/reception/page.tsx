@@ -1,9 +1,9 @@
-import { getEventsKanban, updateEventStatus } from "@/actions/event.actions"
+import { getEventsKanban } from "@/actions/event.actions"
 import { getWorkers } from "@/actions/worker.actions"
 import CheckInModal from "@/components/CheckInModal"
 import QRScannerModal from "@/components/QRScannerModal"
+import StatusUpdateButton from "@/components/StatusUpdateButton"
 import Link from "next/link"
-import { revalidatePath } from "next/cache"
 
 export const dynamic = 'force-dynamic'
 
@@ -90,15 +90,7 @@ function PatientCard({ event, status, nextStatus }: {
                 </div>
                 <div className="flex gap-2 items-center">
                     {nextStatus && (
-                        <form action={async () => {
-                            "use server"
-                            await updateEventStatus(event.id, nextStatus)
-                            revalidatePath('/reception')
-                        }}>
-                            <button type="submit" className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all bg-emerald-50 px-2 py-1 rounded-md hover:bg-emerald-100">
-                                {nextStatus === 'IN_PROGRESS' ? 'A Consultorio' : 'A Validar'} <span className="text-xs">→</span>
-                            </button>
-                        </form>
+                        <StatusUpdateButton eventId={event.id} nextStatus={nextStatus} />
                     )}
                     <Link href={`/events/${event.id}`} className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all">
                         Abrir <span className="text-xs">→</span>
