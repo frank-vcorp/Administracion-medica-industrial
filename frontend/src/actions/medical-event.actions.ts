@@ -15,6 +15,7 @@ export const createEvent = async (data: Prisma.MedicalEventCreateInput) => {
 export const updateEventStatus = async (id: string, status: EventStatus) => {
     const event = await EventService.updateEventStatus(id, status)
     revalidatePath(`/events/${id}`)
+    revalidatePath('/reception') // Update Kanban board when status changes from detail page
     return event
 }
 

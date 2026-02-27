@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <nav className="mt-6 px-4 space-y-2">
               <NavItem href="/dashboard" icon="📊" label="Dashboard" />
               <NavItem href="/workers" icon="👥" label="Trabajadores" />
-              <NavItem href="/reception" icon="🏥" label="Recepción / Citas" />
+              <NavItem href="/reception" icon="🏥" label="Piso Clínico" />
               <NavItem href="/appointments" icon="📅" label="Gestión de Citas" />
               <div className="pt-4 pb-2">
                 <p className="text-xs uppercase text-slate-500 font-semibold px-2">Médico</p>

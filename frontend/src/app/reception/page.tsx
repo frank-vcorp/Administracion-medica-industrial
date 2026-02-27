@@ -1,7 +1,9 @@
-import { getEventsKanban } from "@/actions/event.actions"
+import { getEventsKanban, updateEventStatus } from "@/actions/event.actions"
 import { getWorkers } from "@/actions/worker.actions"
 import CheckInModal from "@/components/CheckInModal"
+import QRScannerModal from "@/components/QRScannerModal"
 import Link from "next/link"
+import { revalidatePath } from "next/cache"
 
 export const dynamic = 'force-dynamic'
 
@@ -17,12 +19,15 @@ export default async function ReceptionPage() {
                     <p className="text-sm text-slate-500 font-medium">Recepción, Triage y Flujo de Pacientes en Tiempo Real.</p>
                 </div>
 
-                <CheckInModal workers={allWorkers} />
+                <div className="flex gap-3">
+                    <QRScannerModal />
+                    <CheckInModal workers={allWorkers} />
+                </div>
             </div>
 
             <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-hidden">
                 <Lane title="SALA DE ESPERA" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
-                    {scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" />)}
+                    {scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" nextStatus="IN_PROGRESS" />)}
                 </Lane>
                 <Lane title="EN CONSULTORIO" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
                     {inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" />)}
@@ -52,12 +57,13 @@ function Lane({ title, count, children, color, icon }: { title: string, count: n
     )
 }
 
-function PatientCard({ event, status }: {
+function PatientCard({ event, status, nextStatus }: {
     event: {
         id: string,
         worker: { firstName: string, lastName: string, company: { name: string } | null }
     },
-    status: 'waiting' | 'progress' | 'done'
+    status: 'waiting' | 'progress' | 'done',
+    nextStatus?: 'IN_PROGRESS' | 'VALIDATING'
 }) {
     const workerName = event.worker ? `${event.worker.firstName} ${event.worker.lastName}` : "Desconocido"
     const companyName = event.worker?.company?.name || 'Empresa Vinculada'
@@ -65,29 +71,40 @@ function PatientCard({ event, status }: {
     // For MVP we just show the name.
 
     return (
-        <Link href={`/events/${event.id}`} className="block group">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 group-hover:shadow-xl group-hover:shadow-slate-200/50 group-hover:border-indigo-200 transition-all duration-300 cursor-pointer relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-bl-full"></div>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-slate-200/50 hover:border-indigo-200 transition-all duration-300 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-bl-full"></div>
 
-                <div className="flex justify-between items-start mb-2">
-                    <span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{workerName}</span>
-                    <span className="text-[10px] font-black text-slate-300 font-mono">#{event.id.slice(0, 4)}</span>
-                </div>
-                <p className="text-[11px] font-bold text-slate-400 mb-4">{companyName}</p>
+            <div className="flex justify-between items-start mb-2">
+                <span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{workerName}</span>
+                <span className="text-[10px] font-black text-slate-300 font-mono">#{event.id.slice(0, 4)}</span>
+            </div>
+            <p className="text-[11px] font-bold text-slate-400 mb-4">{companyName}</p>
 
-                <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-50">
-                    <div className="flex gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${status === 'waiting' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
-                        <div className="flex -space-x-1">
-                            <div className="w-4 h-4 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[7px]">📄</div>
-                            <div className="w-4 h-4 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[7px]">🧪</div>
-                        </div>
+            <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-50">
+                <div className="flex gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${status === 'waiting' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+                    <div className="flex -space-x-1">
+                        <div className="w-4 h-4 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[7px]">📄</div>
+                        <div className="w-4 h-4 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[7px]">🧪</div>
                     </div>
-                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 group-hover:gap-2 transition-all">
+                </div>
+                <div className="flex gap-2 items-center">
+                    {nextStatus && (
+                        <form action={async () => {
+                            "use server"
+                            await updateEventStatus(event.id, nextStatus)
+                            revalidatePath('/reception')
+                        }}>
+                            <button type="submit" className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all bg-emerald-50 px-2 py-1 rounded-md hover:bg-emerald-100">
+                                {nextStatus === 'IN_PROGRESS' ? 'A Consultorio' : 'A Validar'} <span className="text-xs">→</span>
+                            </button>
+                        </form>
+                    )}
+                    <Link href={`/events/${event.id}`} className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all">
                         Abrir <span className="text-xs">→</span>
-                    </span>
+                    </Link>
                 </div>
             </div>
-        </Link>
+        </div>
     )
 }

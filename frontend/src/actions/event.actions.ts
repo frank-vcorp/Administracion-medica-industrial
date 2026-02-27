@@ -17,9 +17,9 @@ export async function getEventsKanban() {
 
         // Group by status for Kanban in a single pass O(N)
         return events.reduce((acc, e) => {
-            if (e.status === 'SCHEDULED') acc.scheduled.push(e)
-            else if (e.status === 'IN_PROGRESS' || e.status === 'CHECKED_IN') acc.inProgress.push(e)
-            else if (e.status === 'COMPLETED' || e.status === 'VALIDATING') acc.completed.push(e)
+            if (e.status === 'CHECKED_IN') acc.scheduled.push(e) // Sala de espera
+            else if (e.status === 'IN_PROGRESS') acc.inProgress.push(e) // En consultorio
+            else if (e.status === 'VALIDATING') acc.completed.push(e) // Por validar
             return acc
         }, { scheduled: [] as typeof events, inProgress: [] as typeof events, completed: [] as typeof events })
 
@@ -42,8 +42,8 @@ export async function createEvent(formData: FormData) {
             data: {
                 workerId,
                 branchId: branch.id,
-                status: 'SCHEDULED',
-                checkInDate: new Date() // Auto check-in for this MVP flow
+                status: 'CHECKED_IN', // Auto check-in for this MVP flow
+                checkInDate: new Date() 
             }
         })
         revalidatePath('/reception')
@@ -51,5 +51,19 @@ export async function createEvent(formData: FormData) {
     } catch (error) {
         console.error("Error creating event:", error)
         return { success: false, error: 'Hubo un error al crear el expediente.' }
+    }
+}
+
+export async function updateEventStatus(eventId: string, status: 'IN_PROGRESS' | 'VALIDATING') {
+    try {
+        await prisma.medicalEvent.update({
+            where: { id: eventId },
+            data: { status }
+        })
+        revalidatePath('/reception')
+        return { success: true }
+    } catch (error) {
+        console.error("Error updating event status:", error)
+        return { success: false, error: 'Hubo un error al actualizar el estado.' }
     }
 }
