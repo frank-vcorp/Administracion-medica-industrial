@@ -32,6 +32,10 @@ interface AppointmentResult {
             lastName: string
             phone: string | null
         }
+        branch?: {
+            name: string
+            address: string | null
+        }
         scheduledAt: Date | string
     }
     error?: string
@@ -202,8 +206,29 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                         ✅
                     </div>
                     <div>
-                        <h3 className="text-2xl font-black text-slate-800">¡Cita Agendada!</h3>
-                        <p className="text-slate-500 mt-2 text-sm font-medium">Expediente: <span className="font-mono font-bold text-slate-800">{apt.expedientId}</span></p>
+                        <h3 className="text-xl font-black text-slate-800">¡Cita Agendada!</h3>
+                        <p className="text-slate-500 mt-1 text-xs font-medium">Expediente: <span className="font-mono font-bold text-slate-800">{apt.expedientId}</span></p>
+
+                        <div className="mt-4 bg-slate-50 p-4 rounded-2xl text-left space-y-3 border border-slate-100 shadow-sm">
+                             <div className="flex justify-between items-center border-b border-dashed border-slate-200 pb-2">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fecha</span>
+                                <span className="text-xs font-black text-slate-700 capitalize">
+                                    {new Date(apt.scheduledAt).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })} • {new Date(apt.scheduledAt).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}
+                                </span>
+                             </div>
+                             
+                             {apt.branch && (
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ubicación</p>
+                                    <p className="text-xs font-black text-slate-800">{apt.branch.name}</p>
+                                    {apt.branch.address && (
+                                        <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                                            {apt.branch.address}
+                                        </p>
+                                    )}
+                                </div>
+                             )}
+                        </div>
                     </div>
                     <div className="space-y-3 pt-2">
                         {hasValidPhone ? (
