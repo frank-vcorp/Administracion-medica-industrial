@@ -416,18 +416,25 @@ export async function processQRCheckIn(qrContent: string) {
     if (hoursDiff < -1) {
         return { 
             success: false, 
-            error: `Cita programada para las ${scheduledDate.toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}. Demasiado temprano.` 
+            error: `Cita programada para las ${scheduledDate.toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}. Llegaste demasiado temprano.` 
         }
     }
 
-    // Si llega mas de 4 horas TARDE (y no es el mismo día laboral, asumimos día laboral de 8h pero permitimos check-in flexible si es mismo día)
-    // Validación más estricta: Que sea el mismo día calendario (en UTC o local del server)
+    // Si llega mas de 2 horas TARDE
+    const isLate = hoursDiff > 2;
+    // Si no es el mismo día calendario (tolerancia de 24h para diferencia UTC vs Local bruta, pero el check principal es la fecha string)
     const isSameDay = now.toDateString() === scheduledDate.toDateString();
     
-    if (!isSameDay && Math.abs(hoursDiff) > 24) {
+    if (isLate || !isSameDay) {
+        // Opcional: Marcar como NO_SHOW automáticamente
+        /* await prisma.appointment.update({
+            where: { id: appointment.id },
+            data: { status: 'NO_SHOW' }
+        }) */
+        
          return { 
             success: false, 
-            error: `Cita válida solo para el día agendado (${scheduledDate.toLocaleDateString()}).` 
+            error: `Tu cita expiró (Máx. 2 hrs de tolerancia). Es necesario reagendar.` 
         }
     }
 
