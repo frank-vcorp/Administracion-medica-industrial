@@ -8,16 +8,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="es">
       <body className="min-h-screen bg-slate-50 text-slate-900">
         <div className="flex h-screen bg-slate-50">
-          {/* Sidebar */}
-          <aside className="w-64 bg-slate-900 text-white hidden md:block">
-            <div className="p-6">
+          {/* Sidebar - FIX REFERENCE: FIX-20260303-01 - overflow-y-auto para sidebar scrollable */}
+          <aside className="w-64 bg-slate-900 text-white hidden md:flex md:flex-col flex-shrink-0">
+            <div className="p-6 flex-shrink-0">
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">
                 Residente Digital
               </h1>
               <p className="text-xs text-slate-400 mt-1">Administración Médica v0.1</p>
             </div>
 
-            <nav className="mt-6 px-4 space-y-2">
+            <nav className="flex-1 overflow-y-auto px-4 pb-6 space-y-2">
               <NavItem href="/dashboard" icon="📊" label="Dashboard" />
               <NavItem href="/workers" icon="👥" label="Trabajadores" />
               <NavItem href="/reception" icon="🏥" label="Piso Clínico" />
