@@ -18,7 +18,8 @@ export async function middleware(request: NextRequest) {
 
   // Rutas públicas (sin protección)
   // FIX REFERENCE: FIX-20260225-02 - Evitar startsWith("/") que hace match con todo
-  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth")
+  // FIX REFERENCE: FIX-20260303-01 - Temporalmente permitir /api/debug para diagnóstico
+  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/api/debug")
   if (isPublicRoute) {
     return NextResponse.next()
   }
