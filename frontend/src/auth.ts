@@ -12,8 +12,30 @@
 
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { compare } from "bcryptjs"
+import bcryptjs from "bcryptjs"
 import prisma from "@/lib/prisma"
+
+/**
+ * Helper defensivo para comparar contraseñas con bcryptjs v3
+ * FIX REFERENCE: FIX-20260303-01 - bcryptjs v3 ESM/CJS interop
+ */
+async function safeCompare(password: string, hash: string): Promise<boolean> {
+  // bcryptjs v3 puede exportar compare como named export o dentro de default
+  if (typeof bcryptjs === "function") {
+    // Si bcryptjs se importó como el objeto default que tiene .compare
+    return false
+  }
+  if (typeof bcryptjs.compare === "function") {
+    return bcryptjs.compare(password, hash)
+  }
+  // Fallback: import dinámico
+  const mod = await import("bcryptjs")
+  const compareFn = mod.compare || mod.default?.compare
+  if (typeof compareFn === "function") {
+    return compareFn(password, hash)
+  }
+  throw new Error("bcryptjs.compare no disponible")
+}
 
 /**
  * Opciones de NextAuth con tipos extendidos
@@ -31,40 +53,48 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email y contraseña requeridos")
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            hashedPassword: true,
-            role: true,
-            isActive: true,
-            companyId: true,
-          },
-        })
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email as string },
+            select: {
+              id: true,
+              email: true,
+              fullName: true,
+              hashedPassword: true,
+              role: true,
+              isActive: true,
+              companyId: true,
+            },
+          })
 
-        if (!user || !user.isActive) {
-          // FIX REFERENCE: FIX-20260225-02 - Mensaje genérico para evitar enumeración de usuarios
-          throw new Error("Credenciales inválidas")
-        }
+          if (!user || !user.isActive) {
+            // FIX REFERENCE: FIX-20260225-02 - Mensaje genérico para evitar enumeración de usuarios
+            throw new Error("Credenciales inválidas")
+          }
 
-        const passwordMatch = await compare(
-          credentials.password as string,
-          user.hashedPassword
-        )
+          // FIX REFERENCE: FIX-20260303-01 - Usar safeCompare para interop bcryptjs v3
+          const passwordMatch = await safeCompare(
+            credentials.password as string,
+            user.hashedPassword
+          )
 
-        if (!passwordMatch) {
-          // FIX REFERENCE: FIX-20260225-02 - Mensaje genérico para evitar enumeración de usuarios
-          throw new Error("Credenciales inválidas")
-        }
+          if (!passwordMatch) {
+            // FIX REFERENCE: FIX-20260225-02 - Mensaje genérico para evitar enumeración de usuarios
+            throw new Error("Credenciales inválidas")
+          }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.fullName,
-          role: user.role,
-          companyId: user.companyId,
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.fullName,
+            role: user.role,
+            companyId: user.companyId,
+          }
+        } catch (error: unknown) {
+          // FIX REFERENCE: FIX-20260303-01 - Log detallado para diagnosticar 401 en producción
+          const err = error as Error
+          console.error("[NextAuth authorize] Error:", err.message, err.stack)
+          throw error
         }
       },
     }),
