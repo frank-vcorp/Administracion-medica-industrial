@@ -130,11 +130,32 @@ model Worker {
 
   medicalHistory MedicalEvent[]
   appointments   Appointment[]
+  clinicalHistory ClinicalHistory?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@map("workers")
+}
+
+// --------------------------------------------------------
+// CLINICAL HISTORY (PERSISTENT / BACKGROUND)
+// --------------------------------------------------------
+
+model ClinicalHistory {
+  id          String   @id @default(uuid())
+  workerId    String   @unique
+  worker      Worker   @relation(fields: [workerId], references: [id])
+
+  // "Schema-Driven" Storage
+  // Modules: Pathological, NonPathological, Hereditary, Gynecological, etc.
+  // Structure defined in: src/config/clinical-schemas/*.ts
+  data        Json     @default("{}")
+
+  lastUpdated DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("clinical_histories")
 }
 
 // --------------------------------------------------------
@@ -229,7 +250,23 @@ model MedicalExam {
   eventId         String   @unique
   event           MedicalEvent @relation(fields: [eventId], references: [id])
 
-  // Campos básicos examen físico (se expandirá)
+  // ------------------------------------------------------
+  // MODULAR DYNAMIC SECTIONS (JSON-Based)
+  // ------------------------------------------------------
+  
+  // Module 1: Somatometry (Weight, Height, BMI, Waist, etc.)
+  somatometryData Json? @default("{}")
+
+  // Module 2: Vital Signs (BP, HR, RR, Temp, SatO2)
+  vitalSignsData  Json? @default("{}")
+
+  // Module 3: Visual/Eye Acuity (Snellen, Ishihara, Campimetry)
+  eyeAcuityData   Json? @default("{}")
+
+  // Module 4: Physical Exam (Head, Neck, Chest, Abdomen, Limbs...)
+  physicalExamData Json? @default("{}")
+
+  // Legacy/Cache fields (Optional, kept for backward compat if needed)
   weight          Float?
   height          Float?
   bloodPressure   String?
