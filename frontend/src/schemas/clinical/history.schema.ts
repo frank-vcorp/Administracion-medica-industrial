@@ -4,15 +4,15 @@ import { z } from 'zod';
 // 3. ANTECEDENTES HEREDO-FAMILIARES (Imagen 1)
 // ----------------------------------------------------------------------
 export const HeredoFamiliaresSchema = z.object({
-  diabetes: z.string().optional(),     // ej: "AB MA", "PADRE", etc.
-  has: z.string().optional(),          // Hipertensión
-  epilepsia: z.string().optional(),
-  cardiopatia: z.string().optional(),
-  renales: z.string().optional(),
-  asma: z.string().optional(),
-  cancer: z.string().optional(),
-  mentales: z.string().optional(),
-  otras: z.string().optional()         // Texto libre
+  diabetes: z.string().trim().max(500).optional(),     // ej: "AB MA", "PADRE", etc.
+  has: z.string().trim().max(500).optional(),          // Hipertensión
+  epilepsia: z.string().trim().max(500).optional(),
+  cardiopatia: z.string().trim().max(500).optional(),
+  renales: z.string().trim().max(500).optional(),
+  asma: z.string().trim().max(500).optional(),
+  cancer: z.string().trim().max(500).optional(),
+  mentales: z.string().trim().max(500).optional(),
+  otras: z.string().trim().max(1000).optional()         // Texto libre
 });
 
 // ----------------------------------------------------------------------
@@ -20,32 +20,32 @@ export const HeredoFamiliaresSchema = z.object({
 // ----------------------------------------------------------------------
 export const NoPatologicosSchema = z.object({
   alcohol: z.enum(['NEGADO', 'SI']).default('NEGADO'),
-  alcohol_edad_comienzo: z.number().or(z.string()).optional(),
-  alcohol_frecuencia: z.string().optional(), // ej: "SEMANAL"
-  alcohol_suspendido: z.enum(['SI', 'NO']).optional(),
-  alcohol_tiempo_suspendido: z.string().optional(),
+  alcohol_edad_comienzo: z.coerce.number().int().nonnegative().max(120).optional(),
+  alcohol_frecuencia: z.string().trim().max(200).optional(), // ej: "SEMANAL"
+  alcohol_suspendido: z.enum(['NEGADO', 'SI']).optional(), // STANDARDIZADO a NEGADO/SI
+  alcohol_tiempo_suspendido: z.string().trim().max(200).optional(),
 
   tabaco: z.enum(['NEGADO', 'SI']).default('NEGADO'),
-  tabaco_edad_comienzo: z.number().or(z.string()).optional(),
-  tabaco_frecuencia: z.string().optional(), // ej: "QUINCENAL"
-  tabaco_suspendido: z.enum(['SI', 'NO']).optional(),
-  tabaco_tiempo_suspendido: z.string().optional(),
-  tabaco_cigarros_dia: z.number().or(z.string()).optional(),
+  tabaco_edad_comienzo: z.coerce.number().int().nonnegative().max(120).optional(),
+  tabaco_frecuencia: z.string().trim().max(200).optional(), // ej: "QUINCENAL"
+  tabaco_suspendido: z.enum(['NEGADO', 'SI']).optional(), // STANDARDIZADO a NEGADO/SI
+  tabaco_tiempo_suspendido: z.string().trim().max(200).optional(),
+  tabaco_cigarros_dia: z.coerce.number().int().nonnegative().max(200).optional(),
 
   drogas_estimulantes: z.enum(['NEGADO', 'SI']).default('NEGADO'),
-  drogas_especifique: z.string().optional(),
-  drogas_frecuencia: z.string().optional(),
-  drogas_ultimo_consumo: z.string().optional(),
+  drogas_especifique: z.string().trim().max(500).optional(),
+  drogas_frecuencia: z.string().trim().max(200).optional(),
+  drogas_ultimo_consumo: z.string().trim().max(200).optional(),
 
   ejercicio: z.enum(['NEGADO', 'SI']).default('NEGADO'),
-  ejercicio_especifique: z.string().optional(),
-  ejercicio_frecuencia: z.string().optional(),
+  ejercicio_especifique: z.string().trim().max(500).optional(),
+  ejercicio_frecuencia: z.string().trim().max(200).optional(),
 
   alimentacion: z.enum(['BUENA', 'REGULAR', 'MALA']).default('BUENA'),
   grupo_y_rh: z.string().default('DESCONOCE'),
 
   tatuajes: z.enum(['NEGADO', 'SI']).default('NEGADO'),
-  tatuajes_especifique: z.string().optional(),
+  tatuajes_especifique: z.string().trim().max(500).optional(),
 });
 
 // ----------------------------------------------------------------------

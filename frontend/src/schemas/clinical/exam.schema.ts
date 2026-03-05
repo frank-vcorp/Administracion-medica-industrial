@@ -22,97 +22,115 @@ export const ReproductivosInmunizacionesSchema = z.object({
 
 // ----------------------------------------------------------------------
 // 7. SOMATOMETRÍA / SIGNOS VITALES (Imagen 6) - ¡Autocalculable!
+// IMPL-20260305-01: Refactorización Defensiva - validación clínica
 // ----------------------------------------------------------------------
 export const SomatometriaVitalesSchema = z.object({
-  ta_sistolica: z.number().optional(),      // Extraída de TA ej: 189
-  ta_diastolica: z.number().optional(),     // Extraída de TA ej: 89
-  ta_texto: z.string().optional(),          // ej "189/89" (Opcional, mejor campos sep)
+  ta_sistolica: z.coerce.number().nonnegative().max(300).optional(),      // Rango clínico: 0-300 mmHg
+  ta_diastolica: z.coerce.number().nonnegative().max(200).optional(),     // Rango clínico: 0-200 mmHg
+  // ta_texto: ELIMINADO para evitar inconsistencias (derivar si es necesario)
   
-  fc_min: z.number().optional(),            // Frecuencia Cardiaca
-  peso_kg: z.number().optional(),
-  perimetro_cintura: z.number().optional(),
+  fc_min: z.coerce.number().int().nonnegative().max(300).optional(),      // Frecuencia Cardiaca: 0-300 bpm
+  peso_kg: z.coerce.number().positive().max(300).optional(),              // Peso > 0, máx 300 kg
+  perimetro_cintura: z.coerce.number().positive().max(500).optional(),    // > 0 cm
   
-  talla_m: z.number().optional(),
-  perimetro_cadera: z.number().optional(),
+  talla_m: z.coerce.number().positive().max(3).optional(),                // Talla > 0 y máx 3m
+  perimetro_cadera: z.coerce.number().positive().max(500).optional(),     // > 0 cm
   
-  fr_min: z.number().optional(),            // Frecuencia Respiratoria
-  imc: z.number().optional(),               // Autocalculable (Peso / Talla^2)
-  indice_cadera: z.number().optional(),
+  fr_min: z.coerce.number().int().nonnegative().max(100).optional(),      // FR: 0-100 resp/min
+  // imc: MARCADO como derivado (no editable por usuario)
+  imc: z.number().nonnegative().max(100).optional(),                      // Solo lectura: derivado de peso/talla
+  indice_cadera: z.number().nonnegative().max(2).optional(),              // Índice cintura/cadera: 0-2
   
-  temperatura: z.number().optional(),
-  complexion: z.string().optional()         // ej: "OBESIDAD"
-});
+  temperatura: z.coerce.number().gt(30).lt(45).optional(),                // Temperatura: 30-45°C
+  complexion: z.enum(['BAJO PESO', 'NORMAL', 'SOBREPESO', 'OBESIDAD', 'OBESIDAD SEVERA']).optional()\n});
 
 // ----------------------------------------------------------------------
 // 8. AGUDEZA VISUAL (Imagen 7)
+// IMPL-20260305-01: Refactorización Defensiva - enum explícito
 // ----------------------------------------------------------------------
 export const AgudezaVisualSchema = z.object({
-  vision_lejana_od: z.string().default('NO APLICA'),
-  vision_lejana_oi: z.string().default('NO APLICA'),
-  vision_cercana_od: z.string().default('NO APLICA'),
-  vision_cercana_oi: z.string().default('NO APLICA'),
-  lejana_corregida_od: z.string().default('NO APLICA'),
-  lejana_corregida_oi: z.string().default('NO APLICA'),
-  cercana_corregida_od: z.string().default('NO APLICA'),
-  cercana_corregida_oi: z.string().default('NO APLICA'),
+  vision_lejana_od: z.enum(['NO APLICA', 'NORMAL', 'ANORMAL', 'CORREGIDA']).default('NO APLICA'),
+  vision_lejana_oi: z.enum(['NO APLICA', 'NORMAL', 'ANORMAL', 'CORREGIDA']).default('NO APLICA'),
+  vision_cercana_od: z.enum(['NO APLICA', 'NORMAL', 'ANORMAL', 'CORREGIDA']).default('NO APLICA'),
+  vision_cercana_oi: z.enum(['NO APLICA', 'NORMAL', 'ANORMAL', 'CORREGIDA']).default('NO APLICA'),
+  lejana_corregida_od: z.enum(['NO APLICA', 'NORMAL', 'ANORMAL']).default('NO APLICA'),
+  lejana_corregida_oi: z.enum(['NO APLICA', 'NORMAL', 'ANORMAL']).default('NO APLICA'),
+  cercana_corregida_od: z.enum(['NO APLICA', 'NORMAL', 'ANORMAL']).default('NO APLICA'),
+  cercana_corregida_oi: z.enum(['NO APLICA', 'NORMAL', 'ANORMAL']).default('NO APLICA'),
   
-  reflejos: z.string().default('PRESENTES Y NORMOREFLECTICOS'),
-  test_ishihara: z.string().optional(),
-  campimetria: z.string().optional()
+  reflejos: z.string().trim().max(500).default('PRESENTES Y NORMOREFLECTICOS'),
+  test_ishihara: z.string().trim().max(500).optional(),
+  campimetria: z.string().trim().max(500).optional()
 });
 
 // ----------------------------------------------------------------------
 // 9. EXPLORACIÓN FÍSICA GENERAL (Imagen 8)
+// IMPL-20260305-01: Refactorización Defensiva - validación de longitud
 // ----------------------------------------------------------------------
 export const ExploracionFisicaSchema = z.object({
-  neurologico: z.string().optional(),
-  cabeza: z.string().optional(),
-  piel_y_faneras: z.string().optional(),
+  neurologico: z.string().trim().max(1000).optional(),
+  cabeza: z.string().trim().max(1000).optional(),
+  piel_y_faneras: z.string().trim().max(1000).optional(),
   
-  oidos_cad: z.string().optional(),
-  oidos_cai: z.string().optional(),
-  ojos: z.string().optional(),
-  boca_estado: z.string().optional(), // SIN DATOS DE CARIES...
-  boca_alineacion: z.string().optional(), // CENTRADA...
-  nariz: z.string().optional(),
-  faringe: z.string().optional(),
-  cuello: z.string().optional(),
-  torax: z.string().optional(),
-  corazon: z.string().optional(),
-  campos_pulmonares: z.string().optional(),
-  abdomen: z.string().optional(),
-  genitourinario: z.string().optional(),
+  oidos_cad: z.string().trim().max(500).optional(),
+  oidos_cai: z.string().trim().max(500).optional(),
+  ojos: z.string().trim().max(500).optional(),
+  boca_estado: z.string().trim().max(500).optional(), // SIN DATOS DE CARIES...
+  boca_alineacion: z.string().trim().max(500).optional(), // CENTRADA...
+  nariz: z.string().trim().max(500).optional(),
+  faringe: z.string().trim().max(500).optional(),
+  cuello: z.string().trim().max(500).optional(),
+  torax: z.string().trim().max(500).optional(),
+  corazon: z.string().trim().max(500).optional(),
+  campos_pulmonares: z.string().trim().max(500).optional(),
+  abdomen: z.string().trim().max(500).optional(),
+  genitourinario: z.string().trim().max(500).optional(),
   
-  columna_vertebral: z.string().optional(),
-  test_adam: z.string().optional(),
-  ms_superiores: z.string().optional(),
-  fuerza_muscular_daniels_sup: z.string().optional(),
-  ms_inferiores: z.string().optional(),
-  fuerza_muscular_daniels_inf: z.string().optional(),
-  circulacion_venosa: z.string().optional(),
+  columna_vertebral: z.string().trim().max(500).optional(),
+  test_adam: z.string().trim().max(500).optional(),
+  ms_superiores: z.string().trim().max(500).optional(),
+  fuerza_muscular_daniels_sup: z.string().trim().max(500).optional(),
+  ms_inferiores: z.string().trim().max(500).optional(),
+  fuerza_muscular_daniels_inf: z.string().trim().max(500).optional(),
+  circulacion_venosa: z.string().trim().max(500).optional(),
   
-  arco_de_movilidad: z.string().optional(),
-  tono_muscular: z.string().optional(),
-  coordinacion: z.string().optional(),
-  test_romberg: z.string().optional(),
-  signo_bragard: z.string().optional(),
+  arco_de_movilidad: z.string().trim().max(500).optional(),
+  tono_muscular: z.string().trim().max(500).optional(),
+  coordinacion: z.string().trim().max(500).optional(),
+  test_romberg: z.string().trim().max(500).optional(),
+  signo_bragard: z.string().trim().max(500).optional(),
   
-  prueba_finkelstein: z.string().optional(),
-  signo_tinel: z.string().optional(),
-  prueba_phanel: z.string().optional(),
-  prueba_lasegue: z.string().optional(),
+  prueba_finkelstein: z.string().trim().max(500).optional(),
+  signo_tinel: z.string().trim().max(500).optional(),
+  prueba_phanel: z.string().trim().max(500).optional(),
+  prueba_lasegue: z.string().trim().max(500).optional(),
   
-  presencia_quiste_sinovial: z.string().optional(),
-  especificar_quiste: z.string().optional()
+  presencia_quiste_sinovial: z.string().trim().max(200).optional(),
+  especificar_quiste: z.string().trim().max(500).optional()
 });
 
 // ----------------------------------------------------------------------
 // 10. IMPRESIÓN DIAGNÓSTICA (Imagen 9) - Autocalculado por Backend/Frontend
+// IMPL-20260305-01: Refactorización Defensiva
 // ----------------------------------------------------------------------
 export const ImpresionDiagnosticaSchema = z.object({
-  estado_nutricional: z.string().optional(),  // Calculado del IMC
-  salud_bucal: z.string().optional(),         // Heredado de exploración
-  agudeza_visual: z.string().optional(),      // Normal / Anormal
-  presion_arterial: z.string().optional(),    // Calculado de TA
-  conclusiones: z.string().optional()         // Ej: "SIN OTROS DATOS PATOLOGICOS..."
+  estado_nutricional: z.string().trim().max(200).optional(),  // Calculado del IMC
+  salud_bucal: z.string().trim().max(200).optional(),         // Heredado de exploración
+  agudeza_visual: z.string().trim().max(200).optional(),      // Normal / Anormal
+  presion_arterial: z.string().trim().max(200).optional(),    // Calculado de TA
+  conclusiones: z.string().trim().max(2000).optional()        // Ej: "SIN OTROS DATOS PATOLOGICOS..."
+});
+
+// ============================================================================
+// ESQUEMA MAESTRO PARA EXAMEN MÉDICO (MedicalExamDataSchema)
+// ============================================================================
+export const MedicalExamDataSchema = z.object({
+  reproductivos_inmunizaciones: ReproductivosInmunizacionesSchema.optional(),
+  somatometria_vitales: SomatometriaVitalesSchema.optional(),
+  agudeza_visual: AgudezaVisualSchema.optional(),
+  exploracion_fisica: ExploracionFisicaSchema.optional(),
+  impresion_diagnostica: ImpresionDiagnosticaSchema.optional()
+});
+
+export type MedicalExamData = z.infer<typeof MedicalExamDataSchema>;..."
 });
