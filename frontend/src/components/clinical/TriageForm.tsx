@@ -1,339 +1,109 @@
-'use client'
+"use client"
 
-import React, { useState } from 'react'
-import { upsertMedicalExam } from '@/actions/medical-exam.actions'
+import { useState } from "react"
+import { updateSomatometria } from "@/actions/medical-exam.actions"
+import type { SomatometriaVitalesSchema } from "@/schemas/clinical/exam.schema"
 
-interface SomatometryData {
-  ta_sistolica?: number | string
-  ta_diastolica?: number | string
-  fc_min?: number | string
-  peso_kg?: number | string
-  talla_m?: number | string
-  temperatura?: number | string
-  perimetro_cintura?: number | string
-  perimetro_cadera?: number | string
-}
+export default function TriageForm({ eventId, initialData = {} }: { eventId: string, initialData?: any }) {
+  const [formData, setFormData] = useState(initialData)
+  const [isSaving, setIsSaving] = useState(false)
+  const [message, setMessage] = useState("")
 
-interface TriageFormProps {
-  eventId: string
-  workerName?: string
-  initialData?: { somatometry?: SomatometryData }
-  onSuccess?: () => void
-}
+  const handleChange = (field: string, value: string) => {
+    setFormData((prev: any) => ({ ...prev, [field]: value }))
+  }
 
-/**
- * IMPL-20260305-01: Formulario Rápido de Triaje/Enfermería
- * Somatometría (Peso, Talla, Perímetro) + Signos Vitales
- * 
- * Diseño ultra minimalista:
- * - Inputs numéricos para Tensión (Sistólica/Diastólica)
- * - Frecuencia Cardíaca
- * - Peso (kg), Talla (m), Temperatura (°C)
- * - Autocalcula IMC visualmente (Peso / Talla²)
- * - Envía datos CRUDOS (sin procesar) al servidor
- */
-export function TriageForm({
-  eventId,
-  workerName,
-  initialData,
-  onSuccess
-}: TriageFormProps) {
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  // Cálculos Automáticos
+  const peso = parseFloat(formData.peso_kg) || 0
+  const talla = parseFloat(formData.talla_m) || 0
+  const imc = (peso > 0 && talla > 0) ? (peso / (talla * talla)).toFixed(2) : "0.00"
+  
+  let complexion = "NORMAL"
+  if (parseFloat(imc) > 29.9) complexion = "OBESIDAD"
+  else if (parseFloat(imc) > 24.9) complexion = "SOBREPESO"
+  else if (parseFloat(imc) < 18.5 && parseFloat(imc) > 0) complexion = "BAJO PESO"
 
-  // Estado para Somatometría
-  const [somatometry, setSomatometry] = useState({
-    ta_sistolica: initialData?.somatometry?.ta_sistolica || '',
-    ta_diastolica: initialData?.somatometry?.ta_diastolica || '',
-    fc_min: initialData?.somatometry?.fc_min || '',
-    peso_kg: initialData?.somatometry?.peso_kg || '',
-    talla_m: initialData?.somatometry?.talla_m || '',
-    temperatura: initialData?.somatometry?.temperatura || '',
-    perimetro_cintura: initialData?.somatometry?.perimetro_cintura || '',
-    perimetro_cadera: initialData?.somatometry?.perimetro_cadera || ''
-  })
-
-  // Calcular IMC de forma visual (solo para mostrar)
-  const calculatedIMC = (() => {
-    const peso = parseFloat(String(somatometry.peso_kg))
-    const talla = parseFloat(String(somatometry.talla_m))
+  const handleSave = async () => {
+    setIsSaving(true)
+    setMessage("")
+    // Incluir IMC y complexion aunque sea calculado visualmente (opcional)
+    const payload = { ...formData, imc: parseFloat(imc), complexion }
     
-    if (peso > 0 && talla > 0) {
-      return (peso / (talla * talla)).toFixed(1)
+    const res = await updateSomatometria(eventId, payload)
+    if (res.success) {
+      setMessage("✅ Guardado con éxito. El paciente pasa a Consultorio.")
+    } else {
+      setMessage("❌ Error: " + res.error)
     }
-    return null
-  })()
-
-  // Determinar complejión basada en IMC (visual)
-  const getComplexionLabel = () => {
-    if (!calculatedIMC) return ''
-    const imc = parseFloat(calculatedIMC)
-    if (imc < 18.5) return 'BAJO PESO'
-    if (imc < 25) return 'NORMAL'
-    if (imc < 30) return 'SOBREPESO'
-    if (imc < 40) return 'OBESIDAD'
-    return 'OBESIDAD SEVERA'
-  }
-
-  const handleInputChange = (field: string, value: string | number) => {
-    setSomatometry(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setMessage(null)
-
-    try {
-      // Validar campos obligatorios mínimos
-      if (!somatometry.peso_kg || !somatometry.talla_m) {
-        setMessage({ type: 'error', text: 'Peso y Talla son obligatorios' })
-        setLoading(false)
-        return
-      }
-
-      // Enviar datos CRUDOS (sin procesar)
-      const result = await upsertMedicalExam(eventId, {
-        somatometryData: {
-          ta_sistolica: somatometry.ta_sistolica ? parseFloat(String(somatometry.ta_sistolica)) : null,
-          ta_diastolica: somatometry.ta_diastolica ? parseFloat(String(somatometry.ta_diastolica)) : null,
-          fc_min: somatometry.fc_min ? parseInt(String(somatometry.fc_min), 10) : null,
-          peso_kg: parseFloat(String(somatometry.peso_kg)),
-          talla_m: parseFloat(String(somatometry.talla_m)),
-          temperatura: somatometry.temperatura ? parseFloat(String(somatometry.temperatura)) : null,
-          perimetro_cintura: somatometry.perimetro_cintura ? parseFloat(String(somatometry.perimetro_cintura)) : null,
-          perimetro_cadera: somatometry.perimetro_cadera ? parseFloat(String(somatometry.perimetro_cadera)) : null,
-          // Nota: IMC se calcula en servidor si es necesario
-          // imc se deja para que el servidor o un paso posterior lo calcule
-        }
-      })
-
-      if (result.success) {
-        setMessage({ type: 'success', text: 'Triaje guardado correctamente' })
-        if (onSuccess) onSuccess()
-      } else {
-        setMessage({ type: 'error', text: result.error || 'Error al guardar' })
-      }
-    } catch (error) {
-      console.error('Error en handleSubmit:', error)
-      setMessage({ type: 'error', text: 'Error al procesar triaje' })
-    } finally {
-      setLoading(false)
-    }
+    setIsSaving(false)
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-sm">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">
-          Triaje / Enfermería
-        </h2>
-        {workerName && (
-          <p className="text-sm text-gray-500 mt-1">
-            Paciente: <span className="font-medium">{workerName}</span>
-          </p>
-        )}
+    <div className="bg-white p-6 rounded-2xl border border-slate-200">
+      <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+        <span className="bg-teal-100 text-teal-600 p-2 rounded-lg">⚖️</span>
+        Triaje y Somatometría
+      </h3>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+        <div>
+          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Peso (KG)</label>
+          <input type="number" step="0.1" value={formData.peso_kg || ''} onChange={e => handleChange('peso_kg', e.target.value)} 
+                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300" placeholder="Ej: 75.5" />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (Metros)</label>
+          <input type="number" step="0.01" value={formData.talla_m || ''} onChange={e => handleChange('talla_m', e.target.value)} 
+                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300" placeholder="Ej: 1.75" />
+        </div>
+        <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
+            <div>
+                <p className="text-xs font-bold text-slate-400 uppercase">IMC Calculado</p>
+                <div className="text-3xl font-black text-slate-700">{imc}</div>
+            </div>
+            <div className={`px-4 py-2 rounded-lg font-bold text-sm ${
+                complexion === "NORMAL" ? "bg-green-100 text-green-700" :
+                complexion === "SOBREPESO" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
+            }`}>
+                {complexion}
+            </div>
+        </div>
       </div>
 
-      {message && (
-        <div className={`mb-4 p-3 rounded-md text-sm ${
-          message.type === 'success'
-            ? 'bg-green-50 text-green-700 border border-green-200'
-            : 'bg-red-50 text-red-700 border border-red-200'
-        }`}>
-          {message.text}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* SIGNOS VITALES */}
-        <section>
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Signos Vitales</h3>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Tensión Arterial */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                TA Sistólica (mmHg)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="300"
-                step="1"
-                value={somatometry.ta_sistolica}
-                onChange={(e) => handleInputChange('ta_sistolica', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="p.ej. 120"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                TA Diastólica (mmHg)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="200"
-                step="1"
-                value={somatometry.ta_diastolica}
-                onChange={(e) => handleInputChange('ta_diastolica', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="p.ej. 80"
-              />
-            </div>
-
-            {/* Frecuencia Cardíaca */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                FC (bpm)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="300"
-                step="1"
-                value={somatometry.fc_min}
-                onChange={(e) => handleInputChange('fc_min', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="p.ej. 72"
-              />
-            </div>
-
-            {/* Temperatura */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Temperatura (°C)
-              </label>
-              <input
-                type="number"
-                min="30"
-                max="45"
-                step="0.1"
-                value={somatometry.temperatura}
-                onChange={(e) => handleInputChange('temperatura', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="p.ej. 36.5"
-              />
-            </div>
+      <h4 className="text-sm font-bold text-slate-600 mb-4 uppercase border-b pb-2">Signos Vitales</h4>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+         <div className="col-span-2">
+          <label className="block text-xs font-bold text-slate-500 mb-2">TENSIÓN ARTERIAL (Sist / Diast)</label>
+          <div className="flex items-center gap-2">
+            <input type="number" value={formData.ta_sistolica || ''} onChange={e => handleChange('ta_sistolica', e.target.value)} 
+                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 font-mono text-center" placeholder="120" />
+            <span className="text-slate-400 font-bold text-xl">/</span>
+            <input type="number" value={formData.ta_diastolica || ''} onChange={e => handleChange('ta_diastolica', e.target.value)} 
+                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 font-mono text-center" placeholder="80" />
           </div>
-        </section>
-
-        {/* SOMATOMETRÍA */}
-        <section>
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Somatometría</h3>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Peso */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Peso (kg) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="300"
-                step="0.1"
-                value={somatometry.peso_kg}
-                onChange={(e) => handleInputChange('peso_kg', e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="p.ej. 70"
-              />
-            </div>
-
-            {/* Talla */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Talla (m) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="3"
-                step="0.01"
-                value={somatometry.talla_m}
-                onChange={(e) => handleInputChange('talla_m', e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="p.ej. 1.75"
-              />
-            </div>
-
-            {/* Perímetro Cintura */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Perímetro Cintura (cm)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="500"
-                step="1"
-                value={somatometry.perimetro_cintura}
-                onChange={(e) => handleInputChange('perimetro_cintura', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="p.ej. 85"
-              />
-            </div>
-
-            {/* Perímetro Cadera */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Perímetro Cadera (cm)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="500"
-                step="1"
-                value={somatometry.perimetro_cadera}
-                onChange={(e) => handleInputChange('perimetro_cadera', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="p.ej. 95"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* IMC VISUAL (CALCULADO EN CLIENTE) */}
-        {calculatedIMC && (
-          <section className="bg-blue-50 border border-blue-200 rounded-md p-4">
-            <h3 className="text-sm font-semibold text-blue-900 mb-3">Cálculo del IMC (Visual)</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-sm text-blue-700">IMC Calculado:</span>
-                <p className="text-2xl font-bold text-blue-900">{calculatedIMC}</p>
-              </div>
-              <div>
-                <span className="text-sm text-blue-700">Complejión:</span>
-                <p className={`text-lg font-semibold ${
-                  getComplexionLabel() === 'NORMAL' ? 'text-green-600' :
-                  ['BAJO PESO', 'SOBREPESO'].includes(getComplexionLabel()) ? 'text-yellow-600' :
-                  'text-red-600'
-                }`}>
-                  {getComplexionLabel()}
-                </p>
-              </div>
-            </div>
-            <p className="text-xs text-blue-600 mt-2">
-              💡 Nota: El IMC se calcula visualmente pero se envían los datos crudos (peso/talla) al servidor
-            </p>
-          </section>
-        )}
-
-        {/* BOTONES */}
-        <div className="flex gap-3 pt-4">
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex-1 bg-blue-600 text-white font-medium py-2 rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Guardando...' : 'Guardar Triaje'}
-          </button>
         </div>
-      </form>
+        <div>
+          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Cardiaca</label>
+          <input type="number" value={formData.fc_min || ''} onChange={e => handleChange('fc_min', e.target.value)} 
+                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-center font-mono" placeholder="BPM" />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Temperatura</label>
+          <input type="number" step="0.1" value={formData.temperatura || ''} onChange={e => handleChange('temperatura', e.target.value)} 
+                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-center font-mono" placeholder="°C" />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-100">
+        <p className="text-sm font-medium text-slate-500">{message}</p>
+        <button 
+          onClick={handleSave} 
+          disabled={isSaving}
+          className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-teal-200 transition-all disabled:opacity-50"
+        >
+          {isSaving ? "Guardando..." : "Guardar y Pasar a Consultorio"}
+        </button>
+      </div>
     </div>
   )
 }
-
-export default TriageForm

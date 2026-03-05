@@ -1,170 +1,83 @@
-'use server'
+"use server"
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { 
+  SomatometriaVitalesSchema, 
+  AgudezaVisualSchema, 
+  ExploracionFisicaSchema 
+} from "@/schemas/clinical/exam.schema"
 
-interface MedicalExamData {
-  somatometryData?: Record<string, unknown>
-  vitalSignsData?: Record<string, unknown>
-  eyeAcuityData?: Record<string, unknown>
-  physicalExamData?: Record<string, unknown>
-  notes?: string
-  weight?: number
-  height?: number
-  bloodPressure?: string
-  heartRate?: number
-}
-
-/**
- * IMPL-20260305-01: Obtener el examen médico de un evento
- */
 export async function getMedicalExam(eventId: string) {
   try {
-    if (!eventId) {
-      return { success: false, error: 'ID del evento es obligatorio' }
-    }
-
-    const medicalExam = await prisma.medicalExam.findUnique({
+    const exam = await prisma.medicalExam.findUnique({
       where: { eventId }
     })
-
-    if (!medicalExam) {
-      return { success: true, data: null, message: 'Sin examen médico previo' }
-    }
-
-    return {
-      success: true,
-      data: {
-        id: medicalExam.id,
-        eventId: medicalExam.eventId,
-        somatometryData: medicalExam.somatometryData || {},
-        vitalSignsData: medicalExam.vitalSignsData || {},
-        eyeAcuityData: medicalExam.eyeAcuityData || {},
-        physicalExamData: medicalExam.physicalExamData || {},
-        weight: medicalExam.weight,
-        height: medicalExam.height,
-        bloodPressure: medicalExam.bloodPressure,
-        heartRate: medicalExam.heartRate,
-        notes: medicalExam.notes,
-        createdAt: medicalExam.createdAt,
-        updatedAt: medicalExam.updatedAt
-      }
-    }
+    return { success: true, data: exam }
   } catch (error) {
-    console.error('Error fetching medical exam:', error)
-    return { success: false, error: 'Error al obtener examen médico' }
+    console.error("Error fetching medical exam:", error)
+    return { success: false, error: "Error al obtener examen médico" }
   }
 }
 
-/**
- * IMPL-20260305-01: Crear o actualizar examen médico (partial updates)
- */
-export async function upsertMedicalExam(
-  eventId: string,
-  data: MedicalExamData
-) {
+export async function updateSomatometria(eventId: string, rawData: any) {
   try {
-    if (!eventId) {
-      return { success: false, error: 'ID del evento es obligatorio' }
-    }
-
-    // Verificar evento
-    const event = await prisma.medicalEvent.findUnique({
-      where: { id: eventId }
-    })
-
-    if (!event) {
-      return { success: false, error: 'Evento médico no encontrado' }
-    }
-
-    // Obtener examen actual para merges
-    const currentExam = await prisma.medicalExam.findUnique({
-      where: { eventId }
-    })
-
-    // Preparar payload con merges si es necesario
-    const payloadData: any = {}
+    const data = SomatometriaVitalesSchema.parse(rawData)
     
-    if (data.somatometryData) {
-      payloadData.somatometryData = currentExam?.somatometryData 
-        ? { ...(currentExam.somatometryData as Record<string, unknown>), ...data.somatometryData }
-        : data.somatometryData
-    }
-    if (data.vitalSignsData) {
-      payloadData.vitalSignsData = currentExam?.vitalSignsData 
-        ? { ...(currentExam.vitalSignsData as Record<string, unknown>), ...data.vitalSignsData }
-        : data.vitalSignsData
-    }
-    if (data.eyeAcuityData) {
-      payloadData.eyeAcuityData = currentExam?.eyeAcuityData 
-        ? { ...(currentExam.eyeAcuityData as Record<string, unknown>), ...data.eyeAcuityData }
-        : data.eyeAcuityData
-    }
-    if (data.physicalExamData) {
-      payloadData.physicalExamData = currentExam?.physicalExamData 
-        ? { ...(currentExam.physicalExamData as Record<string, unknown>), ...data.physicalExamData }
-        : data.physicalExamData
-    }
-
-    if (data.notes !== undefined) payloadData.notes = data.notes
-    if (data.weight !== undefined) payloadData.weight = data.weight
-    if (data.height !== undefined) payloadData.height = data.height
-    if (data.bloodPressure !== undefined) payloadData.bloodPressure = data.bloodPressure
-    if (data.heartRate !== undefined) payloadData.heartRate = data.heartRate
-
-    // Upsert
-    const medicalExam = await prisma.medicalExam.upsert({
+    await prisma.medicalExam.upsert({
       where: { eventId },
-      create: {
-        eventId,
-        somatometryData: payloadData.somatometryData || {},
-        vitalSignsData: payloadData.vitalSignsData || {},
-        eyeAcuityData: payloadData.eyeAcuityData || {},
-        physicalExamData: payloadData.physicalExamData || {}
-      } as any,
-      update: payloadData
+      update: { somatometryData: data },
+      create: { eventId, somatometryData: data }
     })
-
-    revalidatePath(`/app/events/${eventId}`)
+    
+    await prisma.medicalEvent.update({
+      where: { id: eventId },
+      data: { status: 'IN_PROGRESS' }
+    })
+    
     revalidatePath(`/events/${eventId}`)
-
-    return {
-      success: true,
-      data: {
-        id: medicalExam.id,
-        eventId: medicalExam.eventId,
-        somatometryData: medicalExam.somatometryData || {},
-        vitalSignsData: medicalExam.vitalSignsData || {},
-        eyeAcuityData: medicalExam.eyeAcuityData || {},
-        physicalExamData: medicalExam.physicalExamData || {},
-        weight: medicalExam.weight,
-        height: medicalExam.height,
-        bloodPressure: medicalExam.bloodPressure,
-        heartRate: medicalExam.heartRate,
-        notes: medicalExam.notes,
-        createdAt: medicalExam.createdAt,
-        updatedAt: medicalExam.updatedAt
-      }
-    }
-  } catch (error) {
-    console.error('Error upserting medical exam:', error)
-    return { success: false, error: 'Error al guardar examen médico' }
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error updating somatometry:", error)
+    return { success: false, error: "Datos de somatometría inválidos o error de servidor" }
   }
 }
 
-export function calculateBMIData(weightKg: number, heightM: number) {
-  if (!weightKg || !heightM || heightM <= 0) {
-    return { imc: null, complexion: null }
+export async function updateAgudezaVisual(eventId: string, rawData: any) {
+  try {
+    const data = AgudezaVisualSchema.parse(rawData)
+    
+    await prisma.medicalExam.upsert({
+      where: { eventId },
+      update: { eyeAcuityData: data },
+      create: { eventId, eyeAcuityData: data }
+    })
+    
+    revalidatePath(`/events/${eventId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error updating visual acuity:", error)
+    return { success: false, error: "Datos de agudeza visual inválidos o error de servidor" }
   }
+}
 
-  const imc = weightKg / (heightM * heightM)
-  let complexion = 'NORMAL'
-  
-  if (imc < 18.5) complexion = 'BAJO PESO'
-  else if (imc < 25) complexion = 'NORMAL'
-  else if (imc < 30) complexion = 'SOBREPESO'
-  else if (imc < 40) complexion = 'OBESIDAD'
-  else complexion = 'OBESIDAD SEVERA'
-
-  return { imc: Math.round(imc * 10) / 10, complexion }
+export async function updateExploracionFisica(eventId: string, rawData: any) {
+  try {
+    const data = ExploracionFisicaSchema.parse(rawData)
+    
+    await prisma.medicalExam.upsert({
+      where: { eventId },
+      update: { physicalExamData: data },
+      create: { eventId, physicalExamData: data }
+    })
+    
+    // Si queremos marcarlo completado despues de la exploración. 
+    // Por ahora solo guardamos. Se marca completado en otra accion final.
+    
+    revalidatePath(`/events/${eventId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error updating physical exam:", error)
+    return { success: false, error: "Datos de exploración inválidos o error de servidor" }
+  }
 }

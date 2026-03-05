@@ -3,12 +3,17 @@ import { notFound } from 'next/navigation'
 import SmartDropzone from '@/components/SmartDropzone'
 import Link from 'next/link'
 import EventFlowController from '@/components/EventFlowController'
+import TriageForm from '@/components/clinical/TriageForm'
+import DoctorExamForm from '@/components/clinical/DoctorExamForm'
+import { getMedicalExam } from '@/actions/medical-exam.actions'
 
 export const dynamic = 'force-dynamic'
 
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
     const event = await getEventById(id)
+    const examRes = await getMedicalExam(id)
+    const medicalExam = examRes.success ? examRes.data : null
 
     if (!event) {
         notFound()
@@ -77,6 +82,17 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                     })}
                 </div>
             </div>
+
+            
+            {/* TRIAJE / ENFERMERIA */}
+            {event.status === 'CHECKED_IN' && (
+                <TriageForm eventId={event.id} initialData={medicalExam?.somatometryData || {}} />
+            )}
+
+            {/* DOCTOR / EXPLORACION Y AGUDEZA */}
+            {event.status === 'IN_PROGRESS' && (
+                <DoctorExamForm eventId={event.id} initialData={medicalExam || {}} />
+            )}
 
             {/* 2. Upload Section (Two Cards) - Visual Cleanup */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
