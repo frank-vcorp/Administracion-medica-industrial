@@ -29,7 +29,8 @@ export default function EventFlowController({
     const recRef = useRef<HTMLTextAreaElement>(null)
 
     // Status logic
-    const isInProgress = currentStatus === 'IN_PROGRESS' || currentStatus === 'CHECKED_IN' || currentStatus === 'SCHEDULED'
+    // MODIFICADO: Fase de carga solo debe aparecer si ya es estrictamente IN_PROGRESS para que no manche las demás etapas
+    const isInProgress = currentStatus === 'IN_PROGRESS'
     const isValidating = currentStatus === 'VALIDATING'
     const isCompleted = currentStatus === 'COMPLETED'
 
