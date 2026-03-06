@@ -11,12 +11,13 @@ import Link from 'next/link'
  */
 
 interface HistoryPageProps {
-  params: {
+  params: Promise<{
     workerId: string
-  }
+  }>
 }
 
-export async function generateMetadata({ params }: HistoryPageProps) {
+export async function generateMetadata(props: HistoryPageProps) {
+  const params = await props.params
   const worker = await prisma.worker.findUnique({
     where: { id: params.workerId }
   })
@@ -28,7 +29,8 @@ export async function generateMetadata({ params }: HistoryPageProps) {
   }
 }
 
-export default async function HistoryPage({ params }: HistoryPageProps) {
+export default async function HistoryPage(props: HistoryPageProps) {
+  const params = await props.params
   // Validar que el trabajador existe
   const worker = await prisma.worker.findUnique({
     where: { id: params.workerId },
