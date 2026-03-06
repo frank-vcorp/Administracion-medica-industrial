@@ -78,3 +78,4 @@ function NavItem({ href, icon, label }: { href: string, icon: string, label: str
     </Link>
   )
 }
+ 
