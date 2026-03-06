@@ -88,10 +88,6 @@ export default async function HistoryPage(props: HistoryPageProps) {
           workerId={worker.id}
           workerName={`${worker.firstName} ${worker.lastName}`}
           initialData={initialData}
-          onSuccess={() => {
-            // Aquí se puede mostrar un toast o mensaje de éxito
-            console.log('Historia clínica guardada exitosamente')
-          }}
         />
       </div>
 
