@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { getWorkers } from "@/actions/worker.actions"
 import { getCompanies } from "@/actions/admin.actions"
 import WorkerFormModal from "@/components/WorkerFormModal"
+import Link from "next/link"
 
 export default async function WorkersPage() {
     const workers = await getWorkers()
@@ -49,7 +50,7 @@ export default async function WorkersPage() {
                                 </td>
                                 <td className="px-6 py-4 text-slate-500 text-xs">{w.email || w.phone || '-'}</td>
                                 <td className="px-6 py-4 text-right">
-                                    <button className="text-blue-600 hover:underline text-xs">Historial</button>
+                                    <Link href={`/history/${w.id}`} className="text-blue-600 hover:underline text-xs">Historial</Link>
                                 </td>
                             </tr>
                         ))}
