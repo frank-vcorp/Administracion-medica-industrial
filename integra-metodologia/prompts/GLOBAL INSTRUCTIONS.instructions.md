@@ -109,6 +109,7 @@ Este tag permite restaurar si Antigravity rompe algo.
 ### 6. 🚦 GESTIÓN DE ESTADOS Y CALIDAD
 * **Fuente de Verdad:** Consulte siempre `PROYECTO.md` para validar el backlog y estados.
 * **Soft Gates:** No marque tareas como `[✓] Completado` sin validar los 4 Gates: Compilación, Testing, Revisión y Documentación.
+* **Pruebas E2E y Visuales:** GEMINI-CLOUD-QA debe validar flujos clave de UI mediante **Playwright** para impedir regresiones, realizando capturas de prueba y emitiendo reportes de estabilidad visual antes del pase a Antigravity (Hibridación).
 * **Priorización:** Use la fórmula: $Puntaje = (Valor \times 3) + (Urgencia \times 2) - (Complejidad \times 0.5)$.
 * **Principio del Cañón y la Mosca:** Usa la herramienta más simple que resuelva el problema eficientemente.
 

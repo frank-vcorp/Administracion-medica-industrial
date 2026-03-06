@@ -2,8 +2,9 @@ import { getWorkerById } from '@/services/worker.service'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
-export default async function WorkerDetailPage({ params }: { params: { id: string } }) {
-    const worker = await getWorkerById(params.id)
+export default async function WorkerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params
+    const worker = await getWorkerById(id)
 
     if (!worker) {
         notFound()

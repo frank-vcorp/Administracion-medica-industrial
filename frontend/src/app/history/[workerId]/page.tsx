@@ -43,7 +43,22 @@ export default async function HistoryPage(props: HistoryPageProps) {
 
   // Obtener historial clínico existente
   const historyResult = await getWorkerClinicalHistory(params.workerId)
-  const initialData = historyResult.success ? historyResult.data?.data : null
+
+  if (!historyResult.success) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
+        <div className="bg-white p-6 rounded-lg shadow-md max-w-md w-full border-l-4 border-red-500">
+          <h2 className="text-xl font-bold text-red-600 mb-2">Error al cargar historial</h2>
+          <p className="text-gray-700 mb-4">{historyResult.error || 'Ocurrió un error inesperado al consultar los datos.'}</p>
+          <Link href="/workers" className="text-blue-600 hover:underline">
+            ← Volver a lista de trabajadores
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const initialData = historyResult.data?.data
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -80,17 +95,10 @@ export default async function HistoryPage(props: HistoryPageProps) {
         />
       </div>
 
-      {/* Debug Info (Solo en desarrollo) */}
+      {/* Debug Info (Safe Mode) */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="max-w-4xl mx-auto px-6 py-8 bg-gray-100 rounded-lg mt-8 mb-8">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">DEBUG INFO</h3>
-          <div className="bg-white p-4 rounded text-xs text-gray-600 font-mono overflow-auto">
-            <p>Worker ID: {worker.id}</p>
-            <p>Universal ID: {worker.universalId}</p>
-            <pre className="mt-4 whitespace-pre-wrap break-words">
-              {initialData ? JSON.stringify(initialData, null, 2) : 'Sin datos previos'}
-            </pre>
-          </div>
+        <div className="max-w-4xl mx-auto mt-8 border-t border-dashed pt-4 mb-8 text-center text-xs text-gray-400">
+          <p>Worker: {worker.id.slice(-6)} | History: {initialData ? 'Loaded' : 'New'}</p>
         </div>
       )}
     </div>
