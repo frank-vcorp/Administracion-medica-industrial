@@ -9,171 +9,195 @@ import { getMedicalExam } from '@/actions/medical-exam.actions'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * @intervention FIX-20260306-01
+ * @see context/interconsultas/DICTAMEN_FIX-20260306-01.md
+ */
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
-    const event = await getEventById(id)
-    const examRes = await getMedicalExam(id)
-    const medicalExam = examRes.success ? examRes.data : null
 
-    if (!event) {
-        notFound()
-    }
+    try {
+        const event = await getEventById(id)
+        const examRes = await getMedicalExam(id)
+        const medicalExam = examRes.success ? examRes.data : null
 
-    const statusNames: Record<string, string> = {
-        'SCHEDULED': 'Ingreso',
-        'CHECKED_IN': 'En Sala',
-        'IN_PROGRESS': 'Estudios',
-        'VALIDATING': 'Validación',
-        'COMPLETED': 'Completado'
-    }
+        if (!event) {
+            notFound()
+        }
 
-    const steps = ['SCHEDULED', 'CHECKED_IN', 'IN_PROGRESS', 'VALIDATING', 'COMPLETED']
-    const currentStep = steps.indexOf(event.status) + 1
+        // Serialización defensiva para evitar problemas con objetos Date en componentes cliente
+        const serializedExam = JSON.parse(JSON.stringify(medicalExam || {}))
+        const serializedEventId = event.id
+        const serializedStatus = event.status
+        const serializedVerdict = event.verdict ? JSON.parse(JSON.stringify({
+            finalDiagnosis: event.verdict.finalDiagnosis as string,
+            recommendations: event.verdict.recommendations as string
+        })) : undefined
 
-    return (
-        <div className="space-y-8 max-w-6xl mx-auto pb-20">
-            {/* 1. Header Premium with Stepper */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                    <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-teal-500 text-white rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-teal-100">
-                            👤
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-800">{event.worker.lastName}, {event.worker.firstName}</h1>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <span className="font-semibold text-slate-700">{event.worker.company?.name || '---'}</span>
-                                <span>•</span>
-                                <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-xs">#{event.id.slice(0, 8)}</span>
+        const statusNames: Record<string, string> = {
+            'SCHEDULED': 'Ingreso',
+            'CHECKED_IN': 'En Sala',
+            'IN_PROGRESS': 'Estudios',
+            'VALIDATING': 'Validación',
+            'COMPLETED': 'Completado'
+        }
+
+        const steps = ['SCHEDULED', 'CHECKED_IN', 'IN_PROGRESS', 'VALIDATING', 'COMPLETED']
+        const currentStep = steps.indexOf(event.status) + 1
+
+        return (
+            <div className="space-y-8 max-w-6xl mx-auto pb-20">
+                {/* 1. Header Premium with Stepper */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 bg-teal-500 text-white rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-teal-100">
+                                👤
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                        <div className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${event.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                            {statusNames[event.status] || event.status}
-                        </div>
-                        <Link href="/reception" className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center">
-                            ← Volver
-                        </Link>
-                    </div>
-                </div>
-
-                {/* Stepper Logic */}
-                <div className="relative flex justify-between items-center max-w-2xl mx-auto px-4">
-                    <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2 z-0"></div>
-                    <div className="absolute top-1/2 left-0 h-0.5 bg-teal-500 -translate-y-1/2 z-0 transition-all duration-700" style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}></div>
-
-                    {steps.map((s, index) => {
-                        const step = index + 1
-                        return (
-                            <div key={s} className="relative z-10 flex flex-col items-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border-2 ${step <= currentStep
-                                    ? 'bg-teal-500 text-white border-teal-500 scale-110 shadow-lg shadow-teal-100'
-                                    : 'bg-white text-slate-400 border-slate-200'
-                                    }`}>
-                                    {step < currentStep ? '✓' : step}
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-800">{event.worker.lastName}, {event.worker.firstName}</h1>
+                                <div className="flex items-center gap-2 text-sm text-slate-500">
+                                    <span className="font-semibold text-slate-700">{event.worker.company?.name || '---'}</span>
+                                    <span>•</span>
+                                    <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-xs">#{event.id.slice(0, 8)}</span>
                                 </div>
-                                <span className={`text-[10px] absolute -bottom-6 font-bold uppercase tracking-tighter whitespace-nowrap ${step <= currentStep ? 'text-teal-600' : 'text-slate-400'}`}>
-                                    {['Ingreso', 'Sala', 'Estudios', 'Firma', 'Fin'][index]}
-                                </span>
                             </div>
-                        )
-                    })}
+                        </div>
+
+                        <div className="flex gap-2">
+                            <div className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${event.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                {statusNames[event.status] || event.status}
+                            </div>
+                            <Link href="/reception" className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center">
+                                ← Volver
+                            </Link>
+                        </div>
+                    </div>
+
+                    {/* Stepper Logic */}
+                    <div className="relative flex justify-between items-center max-w-2xl mx-auto px-4">
+                        <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2 z-0"></div>
+                        <div className="absolute top-1/2 left-0 h-0.5 bg-teal-500 -translate-y-1/2 z-0 transition-all duration-700" style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}></div>
+
+                        {steps.map((s, index) => {
+                            const step = index + 1
+                            return (
+                                <div key={s} className="relative z-10 flex flex-col items-center">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border-2 ${step <= currentStep
+                                        ? 'bg-teal-500 text-white border-teal-500 scale-110 shadow-lg shadow-teal-100'
+                                        : 'bg-white text-slate-400 border-slate-200'
+                                        }`}>
+                                        {step < currentStep ? '✓' : step}
+                                    </div>
+                                    <span className={`text-[10px] absolute -bottom-6 font-bold uppercase tracking-tighter whitespace-nowrap ${step <= currentStep ? 'text-teal-600' : 'text-slate-400'}`}>
+                                        {['Ingreso', 'Sala', 'Estudios', 'Firma', 'Fin'][index]}
+                                    </span>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+
+
+                {/* TRIAJE / ENFERMERIA */}
+                {event.status === 'CHECKED_IN' && (
+                    <TriageForm eventId={serializedEventId} initialData={serializedExam.somatometryData || {}} />
+                )}
+
+                {/* DOCTOR / EXPLORACION Y AGUDEZA */}
+                {event.status === 'IN_PROGRESS' && (
+                    <DoctorExamForm eventId={serializedEventId} initialData={serializedExam || {}} />
+                )}
+
+                {/* 2. Upload Section (Two Cards) - Visual Cleanup */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Card Left: SIM / Clinical */}
+                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">☁️</div>
+                            <h3 className="font-bold text-slate-800 text-lg">Estudios SIM (Clínicos)</h3>
+                        </div>
+                        <SmartDropzone
+                            eventId={event.id}
+                            type="study"
+                            title="Selecciona archivos para SIM"
+                            subtitle="Espirometría, Audiometría, ECG, Campimetría"
+                            icon="cloud"
+                        />
+                    </div>
+
+                    {/* Card Right: NOVA / Labs */}
+                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl">🧪</div>
+                            <h3 className="font-bold text-slate-800 text-lg">Estudios NOVA (Laboratorio)</h3>
+                        </div>
+                        <SmartDropzone
+                            eventId={event.id}
+                            type="lab"
+                            title="Selecciona archivos para NOVA"
+                            subtitle="Biometría Hemática, EGO, Química Sanguínea"
+                            icon="flask"
+                        />
+                    </div>
+                </div>
+
+                {/* 3. Processed Lists */}
+                <div className="pt-4">
+                    <h2 className="text-xl font-bold text-slate-800 mb-1">Estudios Procesados</h2>
+                    <p className="text-sm text-slate-500 mb-6">Expediente completo procesado y clasificado por IA</p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* List Left: Studies */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
+                                <h3 className="font-bold text-slate-700">Estudios SIM (Clínicos)</h3>
+                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{event.studies.length} estudios</span>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {event.studies.length === 0 && <p className="p-6 text-center text-slate-400 text-xs">Sin registros</p>}
+                                {event.studies.map(s => (
+                                    <ItemRow key={s.id} name={s.serviceName} date={s.createdAt} type="study" />
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* List Right: Labs */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
+                                <h3 className="font-bold text-slate-700">Estudios NOVA (Laboratorio)</h3>
+                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{event.labs.length} estudios</span>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {event.labs.length === 0 && <p className="p-6 text-center text-slate-400 text-xs">Sin registros</p>}
+                                {event.labs.map(l => (
+                                    <ItemRow key={l.id} name={l.serviceName} date={l.createdAt} type="lab" />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Flow Controller Section */}
+                <EventFlowController
+                    eventId={serializedEventId}
+                    currentStatus={serializedStatus}
+                    verdictData={serializedVerdict}
+                />
+            </div>
+        )
+    } catch (error) {
+        console.error("Critical Error in EventPage:", error)
+        return (
+            <div className="p-8 bg-red-50 border border-red-200 rounded-2xl text-center">
+                <h2 className="text-xl font-bold text-red-700 mb-2">Error al cargar el expediente</h2>
+                <p className="text-red-500 text-sm">Hubo un problema de conexión con el servidor de base de datos o de serialización de datos.</p>
+                <div className="mt-4">
+                    <Link href="/reception" className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Volver al Piso Clínico</Link>
                 </div>
             </div>
-
-            
-            {/* TRIAJE / ENFERMERIA */}
-            {event.status === 'CHECKED_IN' && (
-                <TriageForm eventId={event.id} initialData={medicalExam?.somatometryData || {}} />
-            )}
-
-            {/* DOCTOR / EXPLORACION Y AGUDEZA */}
-            {event.status === 'IN_PROGRESS' && (
-                <DoctorExamForm eventId={event.id} initialData={medicalExam || {}} />
-            )}
-
-            {/* 2. Upload Section (Two Cards) - Visual Cleanup */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Card Left: SIM / Clinical */}
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">☁️</div>
-                        <h3 className="font-bold text-slate-800 text-lg">Estudios SIM (Clínicos)</h3>
-                    </div>
-                    <SmartDropzone
-                        eventId={event.id}
-                        type="study"
-                        title="Selecciona archivos para SIM"
-                        subtitle="Espirometría, Audiometría, ECG, Campimetría"
-                        icon="cloud"
-                    />
-                </div>
-
-                {/* Card Right: NOVA / Labs */}
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl">🧪</div>
-                        <h3 className="font-bold text-slate-800 text-lg">Estudios NOVA (Laboratorio)</h3>
-                    </div>
-                    <SmartDropzone
-                        eventId={event.id}
-                        type="lab"
-                        title="Selecciona archivos para NOVA"
-                        subtitle="Biometría Hemática, EGO, Química Sanguínea"
-                        icon="flask"
-                    />
-                </div>
-            </div>
-
-            {/* 3. Processed Lists */}
-            <div className="pt-4">
-                <h2 className="text-xl font-bold text-slate-800 mb-1">Estudios Procesados</h2>
-                <p className="text-sm text-slate-500 mb-6">Expediente completo procesado y clasificado por IA</p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* List Left: Studies */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="font-bold text-slate-700">Estudios SIM (Clínicos)</h3>
-                            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{event.studies.length} estudios</span>
-                        </div>
-                        <div className="divide-y divide-slate-100">
-                            {event.studies.length === 0 && <p className="p-6 text-center text-slate-400 text-xs">Sin registros</p>}
-                            {event.studies.map(s => (
-                                <ItemRow key={s.id} name={s.serviceName} date={s.createdAt} type="study" />
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* List Right: Labs */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="font-bold text-slate-700">Estudios NOVA (Laboratorio)</h3>
-                            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{event.labs.length} estudios</span>
-                        </div>
-                        <div className="divide-y divide-slate-100">
-                            {event.labs.length === 0 && <p className="p-6 text-center text-slate-400 text-xs">Sin registros</p>}
-                            {event.labs.map(l => (
-                                <ItemRow key={l.id} name={l.serviceName} date={l.createdAt} type="lab" />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* 4. Flow Controller Section */}
-            <EventFlowController
-                eventId={event.id}
-                currentStatus={event.status}
-                verdictData={event.verdict ? {
-                    finalDiagnosis: event.verdict.finalDiagnosis as string,
-                    recommendations: event.verdict.recommendations as string
-                } : undefined}
-            />
-        </div>
-    )
+        )
+    }
 }
 
 function ItemRow({ name, date, type }: { name: string, date: Date, type: 'study' | 'lab' }) {
