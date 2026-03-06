@@ -4,7 +4,7 @@ import { useState } from "react"
 import { updateSomatometria } from "@/actions/medical-exam.actions"
 import type { SomatometriaVitalesSchema } from "@/schemas/clinical/exam.schema"
 
-export default function TriageForm({ eventId, initialData = {} }: { eventId: string, initialData?: any }) {
+export default function TriageForm({ eventId, initialData = {}, readonly = false }: { eventId: string, initialData?: any, readonly?: boolean }) {
   const [formData, setFormData] = useState(initialData)
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState("")
@@ -96,13 +96,15 @@ export default function TriageForm({ eventId, initialData = {} }: { eventId: str
 
       <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-100">
         <p className="text-sm font-medium text-slate-500">{message}</p>
-        <button 
-          onClick={handleSave} 
-          disabled={isSaving}
-          className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-teal-200 transition-all disabled:opacity-50"
-        >
-          {isSaving ? "Guardando..." : "Guardar y Pasar a Consultorio"}
-        </button>
+        {!readonly && (
+          <button 
+            onClick={handleSave} 
+            disabled={isSaving}
+            className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-teal-200 transition-all disabled:opacity-50"
+          >
+            {isSaving ? "Guardando..." : "Guardar y Pasar a Consultorio"}
+          </button>
+        )}
       </div>
     </div>
   )

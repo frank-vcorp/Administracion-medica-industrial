@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { updateAgudezaVisual, updateExploracionFisica } from "@/actions/medical-exam.actions"
 
-export default function DoctorExamForm({ eventId, initialData }: { eventId: string, initialData: any }) {
+export default function DoctorExamForm({ eventId, initialData, readonly = false }: { eventId: string, initialData: any, readonly?: boolean }) {
   const [activeTab, setActiveTab] = useState<'visual'|'fisica'>('visual')
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -191,13 +191,15 @@ export default function DoctorExamForm({ eventId, initialData }: { eventId: stri
             </div>
           </div>
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-medical-600 text-white py-2 px-4 rounded hover:bg-medical-700 disabled:opacity-50"
-          >
-            {loading ? "Guardando..." : "Guardar Agudeza Visual"}
-          </button>
+          {!readonly && (
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-medical-600 text-white py-2 px-4 rounded hover:bg-medical-700 disabled:opacity-50"
+            >
+              {loading ? "Guardando..." : "Guardar Agudeza Visual"}
+            </button>
+          )}
         </form>
       )}
 
@@ -220,13 +222,15 @@ export default function DoctorExamForm({ eventId, initialData }: { eventId: stri
             ))}
           </div>
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-medical-600 text-white py-2 px-4 rounded hover:bg-medical-700 disabled:opacity-50"
-          >
-            {loading ? "Guardando..." : "Guardar Exploración Física"}
-          </button>
+          {!readonly && (
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-medical-600 text-white py-2 px-4 rounded hover:bg-medical-700 disabled:opacity-50"
+            >
+              {loading ? "Guardando..." : "Guardar Exploración Física"}
+            </button>
+          )}
         </form>
       )}
 
