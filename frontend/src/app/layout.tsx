@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ReactNode } from 'react'
+import Providers from '@/components/Providers'
 
 import './globals.css'
 
@@ -7,7 +8,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
       <body className="min-h-screen bg-slate-50 text-slate-900">
-        <div className="flex h-screen bg-slate-50">
+        <Providers>
+          <div className="flex h-screen bg-slate-50">
           {/* Sidebar - FIX REFERENCE: FIX-20260303-01 - overflow-y-auto para sidebar scrollable */}
           <aside className="w-64 bg-slate-900 text-white hidden md:flex md:flex-col flex-shrink-0">
             <div className="p-6 flex-shrink-0">
@@ -59,6 +61,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
           </main>
         </div>
+      </Providers>
       </body>
     </html>
   )
