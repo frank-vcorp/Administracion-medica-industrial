@@ -1,16 +1,36 @@
 "use client"
 
 import { useState } from "react"
-import { updateSomatometria } from "@/actions/medical-exam.actions"
-import type { SomatometriaVitalesSchema } from "@/schemas/clinical/exam.schema"
+import { updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 
 export default function TriageForm({ eventId, initialData = {}, readonly = false }: { eventId: string, initialData?: any, readonly?: boolean }) {
   const [formData, setFormData] = useState(initialData)
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState("")
 
+  // Estado para Agudeza Visual (IMPL-20260318-07: movido desde DoctorExamForm)
+  const [formVisual, setFormVisual] = useState(initialData?.eyeAcuityData || {
+    vision_lejana_od: 'NO APLICA',
+    vision_lejana_oi: 'NO APLICA',
+    vision_cercana_od: 'NO APLICA',
+    vision_cercana_oi: 'NO APLICA',
+    lejana_corregida_od: 'NO APLICA',
+    lejana_corregida_oi: 'NO APLICA',
+    cercana_corregida_od: 'NO APLICA',
+    cercana_corregida_oi: 'NO APLICA',
+    reflejos: 'PRESENTES Y NORMOREFLECTICOS',
+    test_ishihara: '',
+    campimetria: ''
+  })
+  const [isSavingVisual, setIsSavingVisual] = useState(false)
+  const [messageVisual, setMessageVisual] = useState("")
+
   const handleChange = (field: string, value: string) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }))
+  }
+
+  const handleVisualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormVisual((prev: any) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
   // Cálculos Automáticos
@@ -26,24 +46,37 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
   const handleSave = async () => {
     setIsSaving(true)
     setMessage("")
-    // Incluir IMC y complexion aunque sea calculado visualmente (opcional)
     const payload = { ...formData, imc: parseFloat(imc), complexion }
     
     const res = await updateSomatometria(eventId, payload)
     if (res.success) {
-      setMessage("✅ Guardado con éxito. El paciente pasa a Consultorio.")
+      setMessage("✅ Somatometría guardada.")
     } else {
       setMessage("❌ Error: " + res.error)
     }
     setIsSaving(false)
   }
 
+  const handleSaveVisual = async () => {
+    setIsSavingVisual(true)
+    setMessageVisual("")
+    const res = await updateAgudezaVisual(eventId, formVisual)
+    if (res.success) {
+      setMessageVisual("✅ Agudeza Visual guardada.")
+    } else {
+      setMessageVisual("❌ Error: " + res.error)
+    }
+    setIsSavingVisual(false)
+  }
+
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200">
-      <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <span className="bg-teal-100 text-teal-600 p-2 rounded-lg">⚖️</span>
-        Triaje y Somatometría
-      </h3>
+    <div className="space-y-6">
+      {/* Bloque 1: Somatometría y Signos Vitales */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200">
+        <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+          <span className="bg-teal-100 text-teal-600 p-2 rounded-lg">⚖️</span>
+          Sala y Somatometría
+        </h3>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
         <div>
@@ -102,9 +135,73 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
             disabled={isSaving}
             className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-teal-200 transition-all disabled:opacity-50"
           >
-            {isSaving ? "Guardando..." : "Guardar y Pasar a Consultorio"}
+            {isSaving ? "Guardando..." : "Guardar Somatometría"}
           </button>
         )}
+      </div>
+      </div>
+
+      {/* Bloque 2: Agudeza Visual — IMPL-20260318-07 (movido desde DoctorExamForm) */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200">
+        <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+          <span className="bg-blue-100 text-blue-600 p-2 rounded-lg">👁️</span>
+          Agudeza Visual
+        </h3>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          {[
+            { name: 'vision_lejana_od', label: 'Visión Lejana OD' },
+            { name: 'vision_lejana_oi', label: 'Visión Lejana OI' },
+            { name: 'vision_cercana_od', label: 'Visión Cercana OD' },
+            { name: 'vision_cercana_oi', label: 'Visión Cercana OI' },
+            { name: 'lejana_corregida_od', label: 'Lejana Corregida OD' },
+            { name: 'lejana_corregida_oi', label: 'Lejana Corregida OI' },
+            { name: 'cercana_corregida_od', label: 'Cercana Corregida OD' },
+            { name: 'cercana_corregida_oi', label: 'Cercana Corregida OI' },
+          ].map(f => (
+            <div key={f.name}>
+              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{f.label}</label>
+              <input
+                type="text"
+                name={f.name}
+                value={formVisual[f.name] || ''}
+                onChange={handleVisualChange}
+                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Campimetría</label>
+            <input type="text" name="campimetria" value={formVisual.campimetria || ''} onChange={handleVisualChange}
+                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Test Ishihara</label>
+            <input type="text" name="test_ishihara" value={formVisual.test_ishihara || ''} onChange={handleVisualChange}
+                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Reflejos</label>
+            <input type="text" name="reflejos" value={formVisual.reflejos || ''} onChange={handleVisualChange}
+                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+          <p className="text-sm font-medium text-slate-500">{messageVisual}</p>
+          {!readonly && (
+            <button
+              onClick={handleSaveVisual}
+              disabled={isSavingVisual}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-blue-200 transition-all disabled:opacity-50"
+            >
+              {isSavingVisual ? "Guardando..." : "Guardar Agudeza Visual"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

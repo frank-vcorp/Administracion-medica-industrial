@@ -4,10 +4,49 @@ import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 
 // --- COMPANIES ---
+/**
+ * @id IMPL-20260318-08
+ * Retorna empresas con sucursal predeterminada y sucursales permitidas
+ */
 export async function getCompanies() {
     return await prisma.company.findMany({ 
-        include: { defaultBranch: true },
+        include: {
+            defaultBranch: true,
+            allowedBranches: { select: { id: true, name: true } },
+        },
         orderBy: { createdAt: 'desc' } 
+    })
+}
+
+/**
+ * Actualiza las sucursales permitidas de una empresa (multi-sucursal).
+ * @id IMPL-20260318-08
+ */
+export async function updateCompanyAllowedBranches(companyId: string, branchIds: string[]) {
+    try {
+        await prisma.company.update({
+            where: { id: companyId },
+            data: {
+                allowedBranches: {
+                    set: branchIds.map(id => ({ id })),
+                },
+            },
+        })
+        revalidatePath('/companies')
+        revalidatePath(`/companies/${companyId}`)
+        return { success: true }
+    } catch (e: unknown) {
+        const error = e as Error
+        return { success: false, error: error.message }
+    }
+}
+
+// --- JOB POSITIONS ---
+// @id IMPL-20260318-01
+export async function getJobPositions() {
+    return await prisma.jobPosition.findMany({
+        select: { id: true, name: true, companyId: true },
+        orderBy: { name: 'asc' }
     })
 }
 
@@ -93,7 +132,7 @@ export async function createService(formData: FormData) {
 // --- PROFILES (BATERÍAS) ---
 export async function getProfiles() {
     return await prisma.serviceProfile.findMany({
-        include: { services: true },
+        include: { ProfileServices: true },
         orderBy: { createdAt: 'desc' }
     })
 }

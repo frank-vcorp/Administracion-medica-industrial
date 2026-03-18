@@ -7,6 +7,7 @@ export const EVENTS = {
 export interface OpenAppointmentModalDetail {
     workerId?: string;
     branchId?: string;
+    companyId?: string;
 }
 
 export interface CustomEventMap {

@@ -2,8 +2,9 @@
 
 import { useState, useTransition, useEffect } from 'react'
 import { createAppointment } from '@/actions/appointment.actions'
-import { getWorkers } from '@/actions/worker.actions'
-import { getBranches } from '@/actions/admin.actions'
+import { getWorkersByCompany } from '@/actions/worker.actions'
+import { getBranches, getCompanies } from '@/actions/admin.actions'
+import { getMedicalProfilesForCompany } from '@/actions/medical-profiles'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
@@ -14,11 +15,25 @@ interface Worker {
     lastName: string
     companyId: string | null
     company?: { name: string, defaultBranchId: string | null } | null
+    jobPosition?: { id: string; name: string; defaultProfileId: string | null } | null
+}
+
+interface Company {
+    id: string
+    name: string
+    defaultBranchId: string | null
+    allowedBranches?: { id: string; name: string }[]
 }
 
 interface Branch {
     id: string
     name: string
+}
+
+interface MedicalProfileOption {
+    id: string
+    name: string
+    companyId: string | null
 }
 
 interface AppointmentResult {
@@ -46,11 +61,16 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const [successData, setSuccessData] = useState<AppointmentResult | null>(null)
+    const [companies, setCompanies] = useState<Company[]>([])
     const [workers, setWorkers] = useState<Worker[]>([])
     const [branches, setBranches] = useState<Branch[]>([])
+    const [profiles, setProfiles] = useState<MedicalProfileOption[]>([])
+    const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
     const [selectedBranchId, setSelectedBranchId] = useState<string>('')
+    const [selectedProfileId, setSelectedProfileId] = useState<string>('')
     const [preselectedWorkerId, setPreselectedWorkerId] = useState<string | null>(null)
+    const [preselectedCompanyId, setPreselectedCompanyId] = useState<string | null>(null)
     const router = useRouter()
     const searchParams = useSearchParams()
 
@@ -59,17 +79,20 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         const action = searchParams.get('action')
         const workerId = searchParams.get('workerId')
         const branchId = searchParams.get('branchId')
+        const companyId = searchParams.get('companyId')
         
         if (action === 'new-appointment' && !isOpen) {
              setIsOpen(true)
              if (workerId) setPreselectedWorkerId(workerId)
              if (branchId) setSelectedBranchId(branchId)
+             if (companyId) setPreselectedCompanyId(companyId)
              
              // Clean URL to prevent re-open
              const newParams = new URLSearchParams(searchParams.toString())
              newParams.delete('action')
              newParams.delete('workerId')
              newParams.delete('branchId')
+             newParams.delete('companyId')
              
              // Use replace to update URL without adding history entry
              router.replace(`/appointments?${newParams.toString()}`)
@@ -83,27 +106,42 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         // Función asíncrona dentro del effect para manejar carga y pre-selección
         async function fetchAndSelect() {
             try {
-                // Hacer las peticiones
-                const [wData, bData] = await Promise.all([getWorkers(), getBranches()])
-                
-                // Actualizar estados
-                setWorkers(wData)
+                // Cargar empresas y sucursales (no todos los trabajadores)
+                const [cData, bData] = await Promise.all([getCompanies(), getBranches()])
+                setCompanies(cData as Company[])
                 setBranches(bData)
                 
-                // Si hay un worker preseleccionado (seteado por el event listener antes de abrir)
-                if (preselectedWorkerId) {
-                    const worker = wData.find(w => w.id === preselectedWorkerId)
-                    if (worker) {
-                        setSelectedWorker(worker)
-                        // Verificar si existe defaultBranchId (type casting seguro)
-                        const workerWithCompany = worker as unknown as { company?: { defaultBranchId?: string } }
-                        if (!selectedBranchId && workerWithCompany.company?.defaultBranchId) {
-                            setSelectedBranchId(workerWithCompany.company.defaultBranchId)
+                // Si hay una empresa preseleccionada (desde redirección de creación de trabajador)
+                const companyIdToUse = preselectedCompanyId
+                if (companyIdToUse) {
+                    setSelectedCompanyId(companyIdToUse)
+                    const wData = await getWorkersByCompany(companyIdToUse)
+                    setWorkers(wData)
+
+                    if (preselectedWorkerId) {
+                        const worker = wData.find(w => w.id === preselectedWorkerId)
+                        if (worker) {
+                            setSelectedWorker(worker)
+                            // Autoseleccionar sucursal por empresa si no hay una ya seleccionada
+                            const company = (cData as Company[]).find(c => c.id === companyIdToUse)
+                            if (!selectedBranchId && company?.defaultBranchId) {
+                                setSelectedBranchId(company.defaultBranchId)
+                            }
+                            // Auto-cargar y seleccionar perfil del jobPosition
+                            const pData = await getMedicalProfilesForCompany(companyIdToUse)
+                            setProfiles(pData)
+                            if (worker.jobPosition?.defaultProfileId) {
+                                setSelectedProfileId(worker.jobPosition.defaultProfileId)
+                            }
                         }
+                    } else {
+                        // Cargar perfiles para la empresa preseleccionada
+                        const pData = await getMedicalProfilesForCompany(companyIdToUse)
+                        setProfiles(pData)
                     }
-                    // Limpiar el preselectedID para que no afecte futuros renders
-                    setPreselectedWorkerId(null)
+                    setPreselectedCompanyId(null)
                 }
+                setPreselectedWorkerId(null)
             } catch (err) {
                 console.error("Error cargando datos:", err)
                 setError("Error al cargar datos del formulario")
@@ -121,6 +159,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
             // Setear estados PREVIOS a abrir el modal para que el effect de isOpen los vea
             if (e.detail?.workerId) setPreselectedWorkerId(e.detail.workerId)
             if (e.detail?.branchId) setSelectedBranchId(e.detail.branchId)
+            if (e.detail?.companyId) setPreselectedCompanyId(e.detail.companyId)
             
             setIsOpen(true)
         }
@@ -129,14 +168,58 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         return () => window.removeEventListener(EVENTS.OPEN_APPOINTMENT_MODAL, handleOpenEvent as EventListener)
     }, [])
 
+    // IMPL-20260318-09: Al elegir empresa, cargar sus trabajadores y perfiles
+    const handleCompanyChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const companyId = e.target.value
+        setSelectedCompanyId(companyId)
+        setSelectedWorker(null)
+        setWorkers([])
+        setProfiles([])
+        setSelectedProfileId('')
+
+        if (!companyId) {
+            setSelectedBranchId('')
+            return
+        }
+
+        // Auto-seleccionar sucursal default de la empresa, SOLO si pertenece a las permitidas
+        const company = companies.find(c => c.id === companyId)
+        const allowed = company?.allowedBranches ?? []
+
+        if (company?.defaultBranchId) {
+            // Solo autoseleccionar si la default está dentro de las permitidas (o si no hay restricción)
+            const defaultValid = allowed.length === 0 || allowed.some(b => b.id === company.defaultBranchId)
+            if (defaultValid) {
+                setSelectedBranchId(company.defaultBranchId)
+            } else {
+                // defaultBranch no está dentro de las permitidas: limpiar selección
+                setSelectedBranchId('')
+            }
+        } else {
+            setSelectedBranchId('')
+        }
+
+        try {
+            const [wData, pData] = await Promise.all([
+                getWorkersByCompany(companyId),
+                getMedicalProfilesForCompany(companyId),
+            ])
+            setWorkers(wData)
+            setProfiles(pData)
+        } catch (err) {
+            console.error('Error cargando trabajadores de la empresa:', err)
+        }
+    }
+
     const handleWorkerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const workerId = e.target.value
         const worker = workers.find(w => w.id === workerId) || null
         setSelectedWorker(worker)
+        setSelectedProfileId('')
 
-        // Auto-seleccionar sucursal si la empresa tiene una asignada
-        if (worker?.company?.defaultBranchId) {
-            setSelectedBranchId(worker.company.defaultBranchId)
+        // Auto-seleccionar perfil por puesto de trabajo
+        if (worker?.jobPosition?.defaultProfileId) {
+            setSelectedProfileId(worker.jobPosition.defaultProfileId)
         }
     }
 
@@ -150,6 +233,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
             const time = formData.get('time') as string
             const notes = formData.get('notes') as string
             const source = formData.get('source') as string
+            const serviceProfileId = formData.get('serviceProfileId') as string | null
 
             if (!workerId || !branchId || !date || !time) {
                 setError('Todos los campos son obligatorios')
@@ -158,8 +242,9 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
 
             // FIX: Find worker from list instead of relying on state to avoid race conditions
             const currentWorker = workers.find(w => w.id === workerId)
-            if (!currentWorker?.companyId) {
-                setError('El trabajador seleccionado no tiene una empresa asignada')
+            const companyId = currentWorker?.companyId || selectedCompanyId
+            if (!companyId) {
+                setError('Selecciona una empresa antes de agendar la cita')
                 return
             }
 
@@ -169,11 +254,12 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
             try {
                 const result = await createAppointment({
                     workerId,
-                    companyId: currentWorker.companyId,
+                    companyId,
                     branchId,
                     scheduledAt,
                     notes,
-                    source
+                    source,
+                    serviceProfileId: serviceProfileId || null,
                 })
 
                 if (result.success) {
@@ -260,7 +346,16 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
     return (
         <>
             <button
-                onClick={() => setIsOpen(true)}
+                onClick={() => {
+                    setSelectedCompanyId('')
+                    setSelectedWorker(null)
+                    setWorkers([])
+                    setProfiles([])
+                    setSelectedProfileId('')
+                    setSelectedBranchId('')
+                    setError(null)
+                    setIsOpen(true)
+                }}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-200 flex items-center gap-2"
             >
                 <span className="text-lg">+</span> Agendar Cita
@@ -282,22 +377,43 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                         </div>
 
                         <form action={handleSubmit} className="space-y-4">
+                            {/* IMPL-20260318-07: Flujo Empresa → Trabajador filtrado */}
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
+                                <select
+                                    name="companyId"
+                                    required
+                                    value={selectedCompanyId}
+                                    onChange={handleCompanyChange}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
+                                >
+                                    <option value="">Seleccionar empresa...</option>
+                                    {companies.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Trabajador</label>
                                 <select 
                                     name="workerId" 
                                     required
-                                    value={selectedWorker?.id || ''} // Controlado por selectedWorker
+                                    value={selectedWorker?.id || ''}
                                     onChange={handleWorkerChange}
-                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
+                                    disabled={!selectedCompanyId}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <option value="">Seleccionar trabajador...</option>
+                                    <option value="">{selectedCompanyId ? 'Seleccionar trabajador...' : 'Primero selecciona una empresa'}</option>
                                     {workers.map(w => (
                                         <option key={w.id} value={w.id}>
-                                            {w.firstName} {w.lastName} {w.company ? `(${w.company.name})` : '(Sin Empresa)'}
+                                            {w.firstName} {w.lastName}
                                         </option>
                                     ))}
                                 </select>
+                                {selectedCompanyId && workers.length === 0 && (
+                                    <p className="text-[10px] text-amber-500 ml-1">⚠️ Esta empresa no tiene trabajadores registrados.</p>
+                                )}
                             </div>
 
                             <div className="space-y-1">
@@ -310,10 +426,47 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                     className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
                                 >
                                     <option value="">Seleccionar sucursal...</option>
-                                    {branches.map(b => (
-                                        <option key={b.id} value={b.id}>{b.name}</option>
+                                    {/* IMPL-20260318-09: Filtrar por allowedBranches de la empresa; fallback a todas si no hay restricción */}
+                                    {(() => {
+                                        const selectedCompany = companies.find(c => c.id === selectedCompanyId)
+                                        const allowed = selectedCompany?.allowedBranches ?? []
+                                        const visibleBranches = allowed.length > 0
+                                            ? branches.filter(b => allowed.some(ab => ab.id === b.id))
+                                            : branches
+                                        return visibleBranches.map(b => (
+                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))
+                                    })()}
+                                </select>
+                            </div>
+
+                            {/* IMPL-20260313-07: Perfil Médico auto-asignado por Puesto de Trabajo */}
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-between ml-1 mb-0.5">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Perfil Médico</label>
+                                    {selectedWorker?.jobPosition?.defaultProfileId && selectedProfileId === selectedWorker.jobPosition.defaultProfileId && (
+                                        <span className="text-[9px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">
+                                            ✦ Auto por puesto: {selectedWorker.jobPosition.name}
+                                        </span>
+                                    )}
+                                </div>
+                                <select
+                                    name="serviceProfileId"
+                                    value={selectedProfileId}
+                                    onChange={(e) => setSelectedProfileId(e.target.value)}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-500 p-3 rounded-xl text-sm transition-all outline-none"
+                                >
+                                    <option value="">Sin perfil asignado</option>
+                                    {profiles.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
                                     ))}
                                 </select>
+                                {!selectedWorker && (
+                                    <p className="text-[10px] text-slate-400 ml-1">Selecciona un trabajador para ver los perfiles disponibles.</p>
+                                )}
+                                {selectedWorker && profiles.length === 0 && (
+                                    <p className="text-[10px] text-amber-500 ml-1">⚠️ Esta empresa no tiene perfiles médicos configurados.</p>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">

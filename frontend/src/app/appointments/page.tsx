@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { getAppointments, checkInAppointment } from '@/actions/appointment.actions'
+import { getAppointments, getAppointmentForCorroboration } from '@/actions/appointment.actions'
 import { getBranches } from '@/actions/admin.actions'
 import { useRouter } from 'next/navigation'
 import AppointmentFormModal from '@/components/AppointmentFormModal'
+import CorroborationModal from '@/components/CorroborationModal'
+import Link from 'next/link'
 
 /**
  * Vista de Agenda de Citas Premium v2.2
@@ -41,6 +43,8 @@ export default function AppointmentsPage() {
     const [loading, setLoading] = useState(true)
     const [selectedApt, setSelectedApt] = useState<AppointmentWithWorker | null>(null)
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
+    // IMPL-20260318-08: Estado del modal de corroboración
+    const [corroborationData, setCorroborationData] = useState<Parameters<typeof CorroborationModal>[0]['appointment'] | null>(null)
     const [selectedDate, setSelectedDate] = useState<string>(() => {
         // Fix: Usar fecha local real para el input default, no UTC
         const now = new Date()
@@ -111,12 +115,14 @@ export default function AppointmentsPage() {
     const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
 
     const handleCheckIn = async (id: string) => {
+        // IMPL-20260318-08: Abrir corroboración antes de crear el MedicalEvent
         setCheckingIn(id)
-        const res = await checkInAppointment(id)
-        if (res.success) {
-            setSelectedApt(null)
-            loadData()
-            router.push(`/events/${res.medicalEvent?.id}`)
+        const res = await getAppointmentForCorroboration(id)
+        if (res.success && res.appointment) {
+            setCorroborationData(res.appointment as Parameters<typeof CorroborationModal>[0]['appointment'])
+            setSelectedApt(null) // cerrar ticket si estaba abierto
+        } else {
+            setError(res.error || 'No se pudo cargar datos para corroboración')
         }
         setCheckingIn(null)
     }
@@ -150,7 +156,14 @@ export default function AppointmentsPage() {
                     <h1 className="text-3xl font-black text-slate-800 tracking-tight">Agenda de Citas</h1>
                     <p className="text-slate-500 text-sm">Panel de control de ingresos y expedientes EXP</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                    {/* IMPL-20260318-08: Link a vista de 3 agendas */}
+                    <Link
+                        href="/appointments/overview"
+                        className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
+                    >
+                        <span>🗓️</span> 3 Agendas
+                    </Link>
                     <div className="bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-sm flex items-center gap-2">
                         <span className="text-slate-400">🏥</span>
                         <select
@@ -272,6 +285,17 @@ export default function AppointmentsPage() {
                     })}
                 </div>
             </div>
+
+            {/* IMPL-20260318-09: Modal de Corroboración — montado y funcional antes del check-in */}
+            {corroborationData && (
+                <CorroborationModal
+                    appointment={corroborationData}
+                    onClose={() => {
+                        setCorroborationData(null)
+                        loadData()
+                    }}
+                />
+            )}
 
             {/* TICKET / QR MODAL */}
             {selectedApt && (

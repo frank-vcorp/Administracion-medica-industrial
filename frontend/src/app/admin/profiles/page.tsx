@@ -42,7 +42,7 @@ export default async function AdminProfilesPage() {
                     <div key={profile.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start mb-4">
                             <h3 className="font-bold text-slate-800 text-lg">{profile.name}</h3>
-                            <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-1 rounded-full">{profile.services.length} Serv.</span>
+                            <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-1 rounded-full">{profile.ProfileServices.length} Serv.</span>
                         </div>
                         <p className="text-sm text-slate-500 mb-6">{profile.description || 'Sin descripción'}</p>
 

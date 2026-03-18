@@ -7,9 +7,364 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --------------------------------------------------------
-// CORE / ACCESS
-// --------------------------------------------------------
+model User {
+  id             String           @id @default(uuid())
+  email          String           @unique
+  hashedPassword String
+  fullName       String
+  role           UserRole         @default(DOCTOR_GENERAL)
+  isActive       Boolean          @default(true)
+  companyId      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  auditLogs      AuditLog[]
+  performedTests EventTest[]
+  signatures     MedicalVerdict[]
+  company        Company?         @relation(fields: [companyId], references: [id])
+
+  @@map("users")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  config    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branches  Branch[]
+
+  @@map("tenants")
+}
+
+model Branch {
+  id                 String         @id @default(uuid())
+  name               String
+  address            String?
+  phone              String?
+  managerName        String?
+  tenantId           String
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  closingTime        String         @default("17:00")
+  hourlyCapacity     Int            @default(15)
+  openingTime        String         @default("07:00")
+  appointments       Appointment[]
+  tenant             Tenant         @relation(fields: [tenantId], references: [id])
+  companies          Company[]
+  allowedByCompanies Company[]      @relation("CompanyAllowedBranches")
+  events             MedicalEvent[]
+  workers            Worker[]
+
+  @@map("branches")
+}
+
+model Company {
+  id              String           @id @default(uuid())
+  name            String
+  rfc             String?
+  address         String?
+  contactName     String?
+  email           String?
+  phone           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  defaultBranchId String?
+  appointments    Appointment[]
+  defaultBranch   Branch?          @relation(fields: [defaultBranchId], references: [id])
+  allowedBranches Branch[]         @relation("CompanyAllowedBranches")
+  billedEvents    MedicalEvent[]   @relation("BillingCompany")
+  medicalProfiles MedicalProfile[]
+  jobPositions     JobPosition[]
+  users           User[]
+  workers         Worker[]
+
+  @@map("companies")
+}
+
+model Worker {
+  id              String           @id @default(uuid())
+  universalId     String           @unique
+  firstName       String
+  lastName        String
+  nationalId      String?
+  dob             DateTime?
+  email           String?
+  phone           String?
+  companyId       String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  branchId        String?
+  appointments    Appointment[]
+  clinicalHistory ClinicalHistory?
+  medicalHistory  MedicalEvent[]
+  jobPositionId    String?
+  branch          Branch?          @relation(fields: [branchId], references: [id])
+  company         Company?         @relation(fields: [companyId], references: [id])
+  jobPosition     JobPosition?     @relation(fields: [jobPositionId], references: [id])
+
+  @@map("workers")
+}
+
+model ClinicalHistory {
+  id          String   @id @default(uuid())
+  workerId    String   @unique
+  data        Json     @default("{}")
+  lastUpdated DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  worker      Worker   @relation(fields: [workerId], references: [id])
+
+  @@map("clinical_histories")
+}
+
+model Service {
+  id              String            @id @default(uuid())
+  name            String
+  code            String            @unique
+  description     String?
+  price           Decimal?
+  category        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  ProfileServices ProfileServices[]
+
+  @@map("services")
+}
+
+model ServiceProfile {
+  id              String            @id @default(uuid())
+  name            String
+  description     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  ProfileServices ProfileServices[]
+
+  @@map("service_profiles")
+}
+
+model TestCategory {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  tests       MedicalTest[]
+
+  @@map("test_categories")
+}
+
+model MedicalTest {
+  id           String            @id @default(uuid())
+  code         String            @unique
+  name         String
+  categoryId   String
+  options      Json              @default("[]")
+  targetGender GenderRestriction @default(ALL)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  eventTests   EventTest[]
+  category     TestCategory      @relation(fields: [categoryId], references: [id])
+  profiles     ProfileTest[]
+
+  @@map("medical_tests")
+}
+
+model MedicalProfile {
+  id           String        @id @default(uuid())
+  name         String
+  companyId    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  appointments  Appointment[]
+  company       Company?      @relation(fields: [companyId], references: [id])
+  jobPositions  JobPosition[]
+  tests         ProfileTest[]
+
+  @@map("medical_profiles")
+}
+
+model ProfileTest {
+  id        String         @id @default(uuid())
+  profileId String
+  testId    String
+  profile   MedicalProfile @relation(fields: [profileId], references: [id])
+  test      MedicalTest    @relation(fields: [testId], references: [id])
+
+  @@unique([profileId, testId])
+  @@map("profile_tests")
+}
+
+model EventTest {
+  id               String          @id @default(uuid())
+  eventId          String
+  testId           String?
+  testNameSnapshot String
+  selectedOption   String?
+  status           EventTestStatus @default(PENDING)
+  performedById    String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  event            MedicalEvent    @relation(fields: [eventId], references: [id])
+  performedBy      User?           @relation(fields: [performedById], references: [id])
+  test             MedicalTest?    @relation(fields: [testId], references: [id])
+
+  @@map("event_tests")
+}
+
+model MedicalEvent {
+  id               String          @id @default(uuid())
+  status           EventStatus     @default(SCHEDULED)
+  workerId         String
+  branchId         String
+  checkInDate      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  appointmentId    String?         @unique
+  billingCompanyId String?
+  eventTests       EventTest[]
+  labs             LabRecord[]
+  appointment      Appointment?    @relation(fields: [appointmentId], references: [id])
+  billingCompany   Company?        @relation("BillingCompany", fields: [billingCompanyId], references: [id])
+  branch           Branch          @relation(fields: [branchId], references: [id])
+  worker           Worker          @relation(fields: [workerId], references: [id])
+  exam             MedicalExam?
+  verdict          MedicalVerdict?
+  studies          StudyRecord[]
+
+  @@map("medical_events")
+}
+
+model MedicalExam {
+  id               String       @id @default(uuid())
+  eventId          String       @unique
+  weight           Float?
+  height           Float?
+  bloodPressure    String?
+  heartRate        Int?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  eyeAcuityData    Json?        @default("{}")
+  physicalExamData Json?        @default("{}")
+  somatometryData  Json?        @default("{}")
+  vitalSignsData   Json?        @default("{}")
+  event            MedicalEvent @relation(fields: [eventId], references: [id])
+
+  @@map("medical_exams")
+}
+
+model StudyRecord {
+  id             String       @id @default(uuid())
+  eventId        String
+  serviceName    String
+  fileUrl        String?
+  extractedData  Json?
+  aiPrediction   String?
+  isCompleted    Boolean      @default(false)
+  validatorNotes String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  event          MedicalEvent @relation(fields: [eventId], references: [id])
+
+  @@map("study_records")
+}
+
+model LabRecord {
+  id            String       @id @default(uuid())
+  eventId       String
+  serviceName   String
+  fileUrl       String?
+  extractedData Json?
+  aiPrediction  String?
+  isCompleted   Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  event         MedicalEvent @relation(fields: [eventId], references: [id])
+
+  @@map("lab_records")
+}
+
+model MedicalVerdict {
+  id              String       @id @default(uuid())
+  eventId         String       @unique
+  finalDiagnosis  String
+  recommendations String?
+  validatorId     String
+  signedAt        DateTime     @default(now())
+  signatureHash   String?
+  pdfUrl          String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  event           MedicalEvent @relation(fields: [eventId], references: [id])
+  validator       User         @relation(fields: [validatorId], references: [id])
+
+  @@map("medical_verdicts")
+}
+
+model Appointment {
+  id               String            @id @default(uuid())
+  workerId         String
+  companyId        String
+  branchId         String
+  scheduledAt      DateTime
+  status           AppointmentStatus @default(SCHEDULED)
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  expedientId      String?           @unique
+  qrCode           String?
+  source           String            @default("SUCURSAL")
+  serviceProfileId String?
+  branch           Branch            @relation(fields: [branchId], references: [id])
+  company          Company           @relation(fields: [companyId], references: [id])
+  serviceProfile   MedicalProfile?   @relation(fields: [serviceProfileId], references: [id])
+  worker           Worker            @relation(fields: [workerId], references: [id])
+  medicalEvents    MedicalEvent?
+
+  @@map("appointments")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model ProfileServices {
+  A                String
+  B                String
+  services         Service        @relation(fields: [A], references: [id], onDelete: Cascade)
+  service_profiles ServiceProfile @relation(fields: [B], references: [id], onDelete: Cascade)
+
+  @@unique([A, B], map: "_ProfileServices_AB_unique")
+  @@index([B], map: "_ProfileServices_B_index")
+  @@map("_ProfileServices")
+}
+
+// IMPL-20260313-05: Modelo de Puestos de Trabajo para arquitectura B2B
+model JobPosition {
+  id               String          @id @default(uuid())
+  name             String
+  description      String?
+  companyId        String
+  defaultProfileId String?
+
+  company          Company         @relation(fields: [companyId], references: [id])
+  defaultProfile   MedicalProfile? @relation(fields: [defaultProfileId], references: [id])
+  workers          Worker[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@map("job_positions")
+}
 
 enum UserRole {
   ADMIN
@@ -20,181 +375,18 @@ enum UserRole {
   COMPANY_CLIENT
 }
 
-model User {
-  id               String    @id @default(uuid())
-  email            String    @unique
-  hashedPassword   String    // Hashed with bcryptjs
-  fullName         String
-  role             UserRole  @default(DOCTOR_GENERAL)
-  isActive         Boolean   @default(true)
-  
-  // Multi-tenant: Si el usuario es COMPANY_CLIENT, debe estar vinculado a una empresa
-  companyId        String?
-  company          Company?  @relation(fields: [companyId], references: [id])
-  
-  // Relations
-  signatures       MedicalVerdict[] // Dictamenes firmados por este usuario
-  auditLogs        AuditLog[]       // Acciones registradas en auditoría
-
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  @@map("users")
+enum GenderRestriction {
+  ALL
+  MALE
+  FEMALE
 }
 
-model Tenant {
-  id          String   @id @default(uuid())
-  name        String
-  config      Json?
-  
-  branches    Branch[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("tenants")
+enum EventTestStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+  CANCELLED
 }
-
-model Branch {
-  id             String   @id @default(uuid())
-  name           String
-  address        String?
-  phone          String?
-  managerName    String?
-  
-  // Configuración de Capacidad y Horarios
-  hourlyCapacity Int      @default(15)      // Pacientes por hora
-  openingTime    String   @default("07:00") // Hora de apertura (HH:mm)
-  closingTime    String   @default("17:00") // Hora de cierre (HH:mm)
-  
-  tenantId       String
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
-  
-  events         MedicalEvent[]
-  appointments   Appointment[]
-  companies      Company[] // Empresas que tienen esta sucursal por defecto
-  workers        Worker[]  // Trabajadores asignados a esta sucursal
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@map("branches")
-}
-
-// --------------------------------------------------------
-// CLIENTES Y TRABAJADORES
-// --------------------------------------------------------
-
-model Company {
-  id              String   @id @default(uuid())
-  name            String
-  rfc             String?  // Tax ID
-  address         String?
-  contactName     String?
-  email           String?
-  phone           String?
-  
-  // Sucursal predeterminada para esta empresa
-  defaultBranchId String?
-  defaultBranch   Branch?  @relation(fields: [defaultBranchId], references: [id])
-  
-  workers         Worker[]
-  users           User[]   // Usuarios CLIENT vinculados a esta empresa
-  appointments    Appointment[]
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("companies")
-}
-
-model Worker {
-  id          String   @id @default(uuid())
-  
-  // ID Universal (Vital para el sistema)
-  universalId String   @unique 
-  
-  firstName   String
-  lastName    String
-  nationalId  String?  // CURP/DNI
-  dob         DateTime? // Date of Birth
-  email       String?
-  phone       String?
-
-  companyId   String?
-  company     Company? @relation(fields: [companyId], references: [id])
-
-  // Sucursal asignada (heredada de la empresa o asignada manualmente)
-  branchId    String?
-  branch      Branch?  @relation(fields: [branchId], references: [id])
-
-  medicalHistory MedicalEvent[]
-  appointments   Appointment[]
-  clinicalHistory ClinicalHistory?
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("workers")
-}
-
-// --------------------------------------------------------
-// CLINICAL HISTORY (PERSISTENT / BACKGROUND)
-// --------------------------------------------------------
-
-model ClinicalHistory {
-  id          String   @id @default(uuid())
-  workerId    String   @unique
-  worker      Worker   @relation(fields: [workerId], references: [id])
-
-  // "Schema-Driven" Storage
-  // Modules: Pathological, NonPathological, Hereditary, Gynecological, etc.
-  // Structure defined in: src/config/clinical-schemas/*.ts
-  data        Json     @default("{}")
-
-  lastUpdated DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("clinical_histories")
-}
-
-// --------------------------------------------------------
-// SERVICIOS Y CATÁLOGOS
-// --------------------------------------------------------
-
-model Service {
-  id          String   @id @default(uuid())
-  name        String
-  code        String   @unique // Internal code e.g. "AUD-01"
-  description String?
-  price       Decimal?
-  category    String?  // 'Medical', 'Lab', 'Package'
-
-  // Relation to profiles (ManyToMany via implicit or explicit? Implicit is fine for now)
-  profiles    ServiceProfile[] @relation("ProfileServices")
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("services")
-}
-
-model ServiceProfile {
-  id          String   @id @default(uuid())
-  name        String   // e.g. "Batería Ingreso Operativo"
-  description String?
-  
-  services    Service[] @relation("ProfileServices")
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("service_profiles")
-}
-
-// --------------------------------------------------------
-// FLUJO MEDICO (EXPEDIENTE)
-// --------------------------------------------------------
 
 enum EventStatus {
   SCHEDULED
@@ -211,192 +403,4 @@ enum AppointmentStatus {
   CANCELLED
   NO_SHOW
   COMPLETED
-}
-
-model MedicalEvent {
-  id          String      @id @default(uuid())
-  status      EventStatus @default(SCHEDULED)
-  
-  workerId    String
-  worker      Worker      @relation(fields: [workerId], references: [id])
-
-  branchId    String
-  branch      Branch      @relation(fields: [branchId], references: [id])
-
-  checkInDate DateTime?
-
-  // Sub-documents / Components of the Event
-  exam        MedicalExam?
-  
-  // Array of studies/labs linked to this event
-  studies     StudyRecord[]
-  labs        LabRecord[]
-
-  // Final Output
-  verdict     MedicalVerdict?
-  
-  // Relación opcional 1:1 con Appointment
-  appointment Appointment? @relation(fields: [appointmentId], references: [id])
-  appointmentId String?    @unique
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("medical_events")
-}
-
-model MedicalExam {
-  id              String   @id @default(uuid())
-  eventId         String   @unique
-  event           MedicalEvent @relation(fields: [eventId], references: [id])
-
-  // ------------------------------------------------------
-  // MODULAR DYNAMIC SECTIONS (JSON-Based)
-  // ------------------------------------------------------
-  
-  // Module 1: Somatometry (Weight, Height, BMI, Waist, etc.)
-  somatometryData Json? @default("{}")
-
-  // Module 2: Vital Signs (BP, HR, RR, Temp, SatO2)
-  vitalSignsData  Json? @default("{}")
-
-  // Module 3: Visual/Eye Acuity (Snellen, Ishihara, Campimetry)
-  eyeAcuityData   Json? @default("{}")
-
-  // Module 4: Physical Exam (Head, Neck, Chest, Abdomen, Limbs...)
-  physicalExamData Json? @default("{}")
-
-  // Legacy/Cache fields (Optional, kept for backward compat if needed)
-  weight          Float?
-  height          Float?
-  bloodPressure   String?
-  heartRate       Int?
-  notes           String?  @db.Text
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("medical_exams")
-}
-
-model StudyRecord {
-  id              String   @id @default(uuid())
-  eventId         String
-  event           MedicalEvent @relation(fields: [eventId], references: [id])
-
-  serviceName     String   // Copia del nombre del servicio para histórico
-  
-  // Archivo
-  fileUrl         String?  // Path to PDF/Image
-
-  // AI & Data
-  extractedData   Json?    // OCR results
-  aiPrediction    String?  // AI suggestion
-  
-  // Status
-  isCompleted     Boolean  @default(false)
-  validatorNotes  String?
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("study_records")
-}
-
-model LabRecord {
-  id              String   @id @default(uuid())
-  eventId         String
-  event           MedicalEvent @relation(fields: [eventId], references: [id])
-
-  serviceName     String
-  
-  fileUrl         String?
-  
-  extractedData   Json?
-  aiPrediction    String?
-  
-  isCompleted     Boolean  @default(false)
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("lab_records")
-}
-
-model MedicalVerdict {
-  id              String   @id @default(uuid())
-  eventId         String   @unique
-  event           MedicalEvent @relation(fields: [eventId], references: [id])
-
-  finalDiagnosis  String   @db.Text
-  recommendations String?  @db.Text
-
-  // Firma
-  validatorId     String
-  validator       User     @relation(fields: [validatorId], references: [id])
-  signedAt        DateTime @default(now())
-  signatureHash   String?  // Digital signature string
-
-  pdfUrl          String?  // Generado final
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("medical_verdicts")
-}
-
-// --------------------------------------------------------
-// CITAS Y AUDITORÍA (Sprint 7)
-// --------------------------------------------------------
-
-model Appointment {
-  id          String              @id @default(uuid())
-  
-  // ID de papeleta (formato EXP-YYYYNNN)
-  expedientId String?             @unique 
-  
-  workerId    String
-  worker      Worker              @relation(fields: [workerId], references: [id])
-  
-  companyId   String
-  company     Company             @relation(fields: [companyId], references: [id])
-  
-  branchId    String
-  branch      Branch              @relation(fields: [branchId], references: [id])
-  
-  scheduledAt DateTime            // Fecha y hora de la cita
-  status      AppointmentStatus   @default(SCHEDULED)
-  notes       String?             @db.Text
-  
-  // Origen de la cita
-  source      String              @default("SUCURSAL") // TELEFONO, WHATSAPP, CORREO, SUCURSAL, OTRO
-  
-  // Documento generado (QR + Pase)
-  qrCode      String?             @db.Text
-  
-  // Relación opcional 1:1 con MedicalEvent
-  medicalEvents MedicalEvent[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@map("appointments")
-}
-
-model AuditLog {
-  id        String   @id @default(uuid())
-  
-  userId    String?  // Quién realizó la acción (opcional, por si es el sistema)
-  user      User?    @relation(fields: [userId], references: [id])
-  
-  action    String   // ej. "CREATE", "UPDATE", "DELETE", "LOGIN"
-  entity    String   // ej. "Worker", "Appointment", "MedicalEvent"
-  entityId  String?  // ID de la entidad afectada
-  
-  details   Json?    // Datos adicionales (ej. valores antes/después)
-  ipAddress String?  // IP del cliente
-  
-  createdAt DateTime @default(now())
-  
-  @@map("audit_logs")
 }
