@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Detalle de expediente médico
+ * @id FIX-20260324-04
+ * @backup context/checkpoints/CHK_FIX-20260324-04-EXPEDIENTE-PAPELETA.md
+ */
+
 import { getEventById } from '@/actions/medical-event.actions'
 import { notFound } from 'next/navigation'
 import SmartDropzone from '@/components/SmartDropzone'
@@ -137,6 +143,43 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                     />
                 )}
 
+                {/* Papeleta de estudios programados desde la cita/perfil médico */}
+                {event.eventTests.length > 0 && (
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="px-6 py-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4">
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-800">Papeleta de Estudios</h2>
+                                <p className="text-sm text-slate-500">Lista de estudios programados para este expediente desde la cita y el perfil médico.</p>
+                            </div>
+                            <span className="text-xs bg-teal-100 text-teal-700 px-3 py-1 rounded-full font-bold">
+                                {event.eventTests.length} estudio{event.eventTests.length === 1 ? '' : 's'}
+                            </span>
+                        </div>
+
+                        <div className="divide-y divide-slate-100">
+                            {event.eventTests.map((eventTest) => (
+                                <div key={eventTest.id} className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-800">{eventTest.testNameSnapshot}</p>
+                                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                                            {eventTest.test?.code && (
+                                                <span className="font-mono bg-slate-100 px-2 py-0.5 rounded">{eventTest.test.code}</span>
+                                            )}
+                                            {eventTest.test?.category?.name && (
+                                                <span>{eventTest.test.category.name}</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${getEventTestBadgeClass(eventTest.status)}`}>
+                                        {getEventTestStatusLabel(eventTest.status)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* 2 & 3. Upload Section & Processed Lists (Solo a partir de Estudios) */}
                 {activeViewStep >= 3 && (
                     <>
@@ -260,4 +303,26 @@ function ItemRow({ name, date, type }: { name: string, date: Date, type: 'study'
             </div>
         </div>
     )
+}
+
+function getEventTestStatusLabel(status: string) {
+    const labels: Record<string, string> = {
+        PENDING: 'Pendiente',
+        COMPLETED: 'Completado',
+        SKIPPED: 'Omitido',
+        CANCELLED: 'Cancelado'
+    }
+
+    return labels[status] || status
+}
+
+function getEventTestBadgeClass(status: string) {
+    const classes: Record<string, string> = {
+        PENDING: 'bg-amber-100 text-amber-700',
+        COMPLETED: 'bg-emerald-100 text-emerald-700',
+        SKIPPED: 'bg-slate-100 text-slate-600',
+        CANCELLED: 'bg-red-100 text-red-700'
+    }
+
+    return classes[status] || 'bg-slate-100 text-slate-600'
 }

@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Servicio de expedientes médicos
+ * @id FIX-20260324-04
+ * @backup context/checkpoints/CHK_FIX-20260324-04-EXPEDIENTE-PAPELETA.md
+ */
+
 import prisma from '@/lib/prisma'
 import { Prisma, EventStatus } from '@prisma/client'
 
@@ -25,6 +31,20 @@ export const getEventById = async (id: string) => {
             },
             branch: true,
             exam: true,
+            eventTests: {
+                include: {
+                    test: {
+                        select: {
+                            id: true,
+                            code: true,
+                            category: {
+                                select: { name: true }
+                            }
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'asc' }
+            },
             studies: true,
             labs: true,
             verdict: true
