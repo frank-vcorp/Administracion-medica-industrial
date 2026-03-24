@@ -97,7 +97,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <NavSection label="Administración" />
               <NavItem href="/branches" icon="🏥" label="Sucursales AMI" />
               <NavItem href="/admin/users" icon="👨‍⚕️" label="Personal AMI" />
-              <NavItem href="/admin/services" icon="🩺" label="Catálogo Servicios" />
+              <NavItem href="/admin/services" icon="�" label="Catálogo de Pruebas" />
               <NavItem href="/admin/profiles" icon="🩻" label="Perfiles Médicos" />
               <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" />
             </>
