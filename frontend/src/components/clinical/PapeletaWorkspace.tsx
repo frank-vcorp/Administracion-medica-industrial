@@ -369,6 +369,9 @@ function StudyPanel({
   onFileUpload: (id: string, file: File) => void
 }) {
   const isMedico = isExamenMedico(test.testNameSnapshot)
+  const isLab = isLabTest(test)
+  const sampleTracked = isLab && ['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
+  const resultTracked = ['RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
 
   return (
     <div className="space-y-6">
@@ -397,6 +400,45 @@ function StudyPanel({
       </div>
 
       <hr className="border-slate-100" />
+
+      {/* Flujo visible de laboratorio para no esconder la etapa de muestra */}
+      {isLab && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-sm font-bold text-purple-800">Flujo de laboratorio</p>
+              <p className="text-xs text-purple-600 mt-1">
+                Este estudio requiere seguimiento de muestra y resultado.
+              </p>
+            </div>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-200 text-purple-800' : 'bg-white text-purple-700 border border-purple-200'}`}>
+              {sampleTracked ? 'Muestra tomada' : 'Muestra pendiente'}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-500'}`}>
+              1. Muestra
+            </span>
+            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${resultTracked ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'}`}>
+              2. Resultado
+            </span>
+            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${test.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
+              3. Cierre
+            </span>
+          </div>
+
+          {!readonly && !sampleTracked && (test.status === 'PENDING' || test.status === 'IN_PROGRESS') && (
+            <button
+              onClick={() => onStatusChange(test.id, 'SAMPLE_TAKEN')}
+              disabled={isPending}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+            >
+              🧪 Registrar muestra tomada
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Sección: Examen Médico (tipo formulario) */}
       {isMedico && (
@@ -512,7 +554,7 @@ function StudyPanel({
               </button>
             )}
             {/* Muestra tomada — útil para laboratorio y cualquier estudio que lo requiera */}
-            {(test.status === 'PENDING' || test.status === 'IN_PROGRESS') && !isMedico && (
+            {isLab && !sampleTracked && (test.status === 'PENDING' || test.status === 'IN_PROGRESS') && !isMedico && (
               <button
                 onClick={() => onStatusChange(test.id, 'SAMPLE_TAKEN')}
                 disabled={isPending}
