@@ -80,7 +80,7 @@ export default function JobPositionsPanel({ companyId, jobPositions, profiles }:
       {profiles.length === 0 && (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg text-sm">
           ⚠️ No hay perfiles médicos disponibles. Ve a{' '}
-          <a href="/admin/medical-profiles" className="font-semibold underline">
+          <a href="/admin/profiles" className="font-semibold underline">
             Perfiles Médicos
           </a>{' '}
           para crear uno antes de asociarlo a un puesto.

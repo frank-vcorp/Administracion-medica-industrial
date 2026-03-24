@@ -2,22 +2,23 @@
  * @fileoverview Página de login
  * @author SOFIA - Builder
  * @id IMPL-20260225-01
+ * @backup context/checkpoints/CHK_FIX-20260306-03-FULL-REVIEW.md
  */
 
 'use client'
 
 import { signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { FormEvent, useState, Suspense } from 'react'
 
 function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // FIX REFERENCE: FIX-20260324-01 — aterrizar en dashboard post-login
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -29,13 +30,18 @@ function LoginForm() {
       const result = await signIn('credentials', {
         email,
         password,
+        callbackUrl,
         redirect: false,
       })
 
       if (result?.error) {
         setError(result.error)
       } else if (result?.ok) {
-        router.push(callbackUrl)
+        // Fuerza navegación completa para que el middleware lea la cookie recién emitida.
+        window.location.assign(result.url || callbackUrl)
+        return
+      } else {
+        setError('No se pudo completar el inicio de sesión. Intenta nuevamente.')
       }
     } catch {
       setError('Error al iniciar sesión. Por favor, intenta de nuevo.')

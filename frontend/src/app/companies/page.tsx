@@ -72,15 +72,13 @@ function CompanyCard({ id, name, rfc, contact, email, defaultBranch }: { id: str
                 )}
             </div>
 
-            <div className="mt-4 pt-3 flex gap-2">
-                <button className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-medium transition-colors">
-                    Editar
-                </button>
+            {/* FIX REFERENCE: FIX-20260324-01 — CTA única y clara; eliminado botón Editar sin acción */}
+            <div className="mt-4 pt-3">
                 <Link
                     href={`/companies/${id}`}
-                    className="flex-1 text-center bg-slate-900 hover:bg-slate-800 text-white py-1.5 rounded text-xs font-medium transition-colors"
+                    className="block w-full text-center bg-slate-900 hover:bg-slate-800 text-white py-1.5 rounded text-xs font-medium transition-colors"
                 >
-                    Puestos de Trabajo
+                    Configurar Empresa
                 </Link>
             </div>
         </div>

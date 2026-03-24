@@ -57,6 +57,21 @@ function parseTestIds(formData: FormData): string[] {
 // QUERIES
 // ─────────────────────────────────────────────────────────────────────────────
 
+export async function getMedicalTests() {
+  return await prisma.medicalTest.findMany({
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      category: { select: { name: true } },
+    },
+    orderBy: [
+      { category: { name: 'asc' } },
+      { name: 'asc' },
+    ],
+  })
+}
+
 export async function getMedicalProfilesForCompany(companyId: string) {
   return await prisma.medicalProfile.findMany({
     where: {
@@ -122,7 +137,7 @@ export async function createMedicalProfile(
         },
       },
     })
-    revalidatePath('/admin/medical-profiles')
+    revalidatePath('/admin/profiles')
     return { success: true }
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error creando perfil:', e)
@@ -160,7 +175,7 @@ export async function updateMedicalProfile(
         },
       },
     })
-    revalidatePath('/admin/medical-profiles')
+    revalidatePath('/admin/profiles')
     return { success: true }
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error actualizando perfil:', e)
@@ -175,7 +190,7 @@ export async function deleteMedicalProfile(id: string): Promise<ActionResult> {
       prisma.profileTest.deleteMany({ where: { profileId: id } }),
       prisma.medicalProfile.delete({ where: { id } }),
     ])
-    revalidatePath('/admin/medical-profiles')
+    revalidatePath('/admin/profiles')
     return { success: true }
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error eliminando perfil:', e)
