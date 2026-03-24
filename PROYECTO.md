@@ -48,6 +48,17 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
     - Implementación de Integridad Referencial: Empresa -> Sucursal -> Trabajador -> Evento.
     - "Caso Francisco Saavedra": Demostración E2E de creación de cliente, trabajador y operación médica.
     - Integración WhatsApp Dinámica: Generación de enlaces `wa.me` personalizados con teléfono del trabajador para entrega de resultados.
+- **2026-03-24 (CRONISTA):** [✓] **Consolidación de Navegación, Perfiles Médicos y Validación Local.** Se completó la integración de navegación fluida y perfiles médicos oficiales, junto con la validación local de roles. Cambios principales:
+  1. **Bootstrap Local con Base Remota:** Configuración validada.
+  2. **Checkpoints:** `context/checkpoints/CHK_IMPL-20260324-01.md`, `context/checkpoints/CHK_ARCH-20260324-25.md`.
+  3. **Dictamen Técnico:** `context/interconsultas/DICTAMEN_FIX-20260324-01.md`.
+  4. **Validación por Rol:** Corroborada localmente.
+
+  **Pendientes diferidos para iteración posterior:**
+  - Restringir acceso directo de `COMPANY_CLIENT` a `/companies` y revisar si también debe bloquearse `/companies/[id]`.
+  - Evaluar ajuste de UX para que accesos no autorizados de `COMPANY_CLIENT` redirijan a `/portal` en lugar de `/dashboard`.
+
+  Sistema listo para próximas iteraciones. (ARCH-20260324-26)
 
 
 
