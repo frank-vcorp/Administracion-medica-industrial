@@ -27,10 +27,22 @@ export const getEventById = async (id: string) => {
         where: { id },
         include: {
             worker: {
-                include: { company: true }
+                include: {
+                    company: true,
+                    // IMPL-20260324-06: Incluir puesto para cabecera persistente del workspace
+                    jobPosition: true
+                }
             },
             branch: true,
             exam: true,
+            // IMPL-20260324-06: Incluir perfil médico desde la cita para cabecera
+            appointment: {
+                include: {
+                    serviceProfile: {
+                        select: { id: true, name: true }
+                    }
+                }
+            },
             eventTests: {
                 include: {
                     test: {

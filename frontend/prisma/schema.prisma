@@ -202,6 +202,8 @@ model EventTest {
   selectedOption   String?
   status           EventTestStatus @default(PENDING)
   performedById    String?
+  fileUrl          String?         // IMPL-20260324-06: Upload atómico por estudio
+  resultNotes      String?         // IMPL-20260324-06: Notas del resultado
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   event            MedicalEvent    @relation(fields: [eventId], references: [id])
@@ -382,9 +384,13 @@ enum GenderRestriction {
   FEMALE
 }
 
+// IMPL-20260324-06: Estados V1 para workflow de papeleta de estudios
 enum EventTestStatus {
-  PENDING
-  COMPLETED
+  PENDING            // Pendiente
+  IN_PROGRESS        // En proceso
+  SAMPLE_TAKEN       // Muestra tomada (principalmente laboratorios)
+  RESULT_REGISTERED  // Resultado registrado (archivo o formulario capturado)
+  COMPLETED          // Completado y cerrado
   SKIPPED
   CANCELLED
 }

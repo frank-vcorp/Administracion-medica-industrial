@@ -1,16 +1,16 @@
 /**
  * @fileoverview Detalle de expediente médico
- * @id FIX-20260324-04
- * @backup context/checkpoints/CHK_FIX-20260324-04-EXPEDIENTE-PAPELETA.md
+ * @id IMPL-20260324-06
+ * @backup context/checkpoints/CHK_IMPL-20260324-06-PAPELETA-WORKSPACE.md
  */
 
 import { getEventById } from '@/actions/medical-event.actions'
 import { notFound } from 'next/navigation'
-import SmartDropzone from '@/components/SmartDropzone'
 import Link from 'next/link'
 import EventFlowController from '@/components/EventFlowController'
 import TriageForm from '@/components/clinical/TriageForm'
 import DoctorExamForm from '@/components/clinical/DoctorExamForm'
+import PapeletaWorkspace from '@/components/clinical/PapeletaWorkspace'
 import { getMedicalExam } from '@/actions/medical-exam.actions'
 
 export const dynamic = 'force-dynamic'
@@ -40,6 +40,38 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
             finalDiagnosis: event.verdict.finalDiagnosis as string,
             recommendations: event.verdict.recommendations as string
         })) : undefined
+
+        // IMPL-20260324-06: Preparar datos del worker para cabecera persistente del workspace
+        // Type assertion para los includes de Prisma que no forman parte del tipo base generado
+        type WorkerExtras = { jobPosition?: { name: string } | null }
+        type AppointmentExtras = { serviceProfile?: { name: string } | null }
+        const workerWithPos = event.worker as typeof event.worker & WorkerExtras
+        const appointmentWithProfile = (event as typeof event & { appointment?: AppointmentExtras }).appointment
+
+        const workerInfo = {
+            name: `${event.worker.firstName} ${event.worker.lastName}`,
+            position: workerWithPos.jobPosition?.name || '',
+            company: event.worker.company?.name || '—',
+            profile: appointmentWithProfile?.serviceProfile?.name || ''
+        }
+
+        // IMPL-20260324-06: Serializar eventTests para el workspace (incluye fileUrl y status nuevos)
+        type EventTestWithExtras = typeof event.eventTests[0] & { fileUrl?: string | null, resultNotes?: string | null }
+        const serializedEventTests = JSON.parse(JSON.stringify(
+            event.eventTests.map((et: EventTestWithExtras) => ({
+                id: et.id,
+                testNameSnapshot: et.testNameSnapshot,
+                status: et.status,
+                fileUrl: et.fileUrl ?? null,
+                resultNotes: et.resultNotes ?? null,
+                test: et.test ? {
+                    code: et.test.code,
+                    category: et.test.category
+                } : null
+            }))
+        ))
+
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
         const statusNames: Record<string, string> = {
             'SCHEDULED': 'Ingreso',
@@ -125,7 +157,8 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                 </div>
 
 
-                {/* TRIAJE / ENFERMERIA */}
+                {/* PASO 2: TRIAJE + CAPTURA CLÍNICA BASE (CHECKED_IN) */}
+                {/* Somatometría y Agudeza Visual */}
                 {activeView === 'CHECKED_IN' && (
                     <TriageForm 
                         eventId={serializedEventId} 
@@ -134,122 +167,25 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                     />
                 )}
 
-                {/* DOCTOR / EXPLORACION Y AGUDEZA */}
-                {activeView === 'IN_PROGRESS' && (
+                {/* PASO 2: Exploración Física (reubicada desde paso 3 — ARCH-20260324-03) */}
+                {activeView === 'CHECKED_IN' && (
                     <DoctorExamForm 
                         eventId={serializedEventId} 
                         initialData={serializedExam || {}} 
-                        readonly={currentStep > 3}
+                        readonly={currentStep > 2}
                     />
                 )}
 
-                {/* Papeleta de estudios programados desde la cita/perfil médico */}
-                {event.eventTests.length > 0 && (
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="px-6 py-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4">
-                            <div>
-                                <h2 className="text-xl font-bold text-slate-800">Papeleta de Estudios</h2>
-                                <p className="text-sm text-slate-500">Lista de estudios programados para este expediente desde la cita y el perfil médico.</p>
-                            </div>
-                            <span className="text-xs bg-teal-100 text-teal-700 px-3 py-1 rounded-full font-bold">
-                                {event.eventTests.length} estudio{event.eventTests.length === 1 ? '' : 's'}
-                            </span>
-                        </div>
-
-                        <div className="divide-y divide-slate-100">
-                            {event.eventTests.map((eventTest) => (
-                                <div key={eventTest.id} className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
-                                    <div>
-                                        <p className="text-sm font-semibold text-slate-800">{eventTest.testNameSnapshot}</p>
-                                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
-                                            {eventTest.test?.code && (
-                                                <span className="font-mono bg-slate-100 px-2 py-0.5 rounded">{eventTest.test.code}</span>
-                                            )}
-                                            {eventTest.test?.category?.name && (
-                                                <span>{eventTest.test.category.name}</span>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${getEventTestBadgeClass(eventTest.status)}`}>
-                                        {getEventTestStatusLabel(eventTest.status)}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* 2 & 3. Upload Section & Processed Lists (Solo a partir de Estudios) */}
-                {activeViewStep >= 3 && (
-                    <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            {/* Card Left: SIM / Clinical */}
-                            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">☁️</div>
-                                    <h3 className="font-bold text-slate-800 text-lg">Estudios SIM (Clínicos)</h3>
-                                </div>
-                                <SmartDropzone
-                                    eventId={event.id}
-                                    type="study"
-                                    title="Selecciona archivos para SIM"
-                                    subtitle="Espirometría, Audiometría, ECG, Campimetría"
-                                    icon="cloud"
-                                />
-                            </div>
-
-                            {/* Card Right: NOVA / Labs */}
-                            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl">🧪</div>
-                                    <h3 className="font-bold text-slate-800 text-lg">Estudios NOVA (Laboratorio)</h3>
-                                </div>
-                                <SmartDropzone
-                                    eventId={event.id}
-                                    type="lab"
-                                    title="Selecciona archivos para NOVA"
-                                    subtitle="Biometría Hemática, EGO, Química Sanguínea"
-                                    icon="flask"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="pt-4">
-                            <h2 className="text-xl font-bold text-slate-800 mb-1">Estudios Procesados</h2>
-                            <p className="text-sm text-slate-500 mb-6">Expediente completo procesado y clasificado por IA</p>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* List Left: Studies */}
-                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
-                                        <h3 className="font-bold text-slate-700">Estudios SIM (Clínicos)</h3>
-                                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{event.studies.length} estudios</span>
-                                    </div>
-                                    <div className="divide-y divide-slate-100">
-                                        {event.studies.length === 0 && <p className="p-6 text-center text-slate-400 text-xs">Sin registros</p>}
-                                        {event.studies.map(s => (
-                                            <ItemRow key={s.id} name={s.serviceName} date={s.createdAt} type="study" />
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* List Right: Labs */}
-                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
-                                        <h3 className="font-bold text-slate-700">Estudios NOVA (Laboratorio)</h3>
-                                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{event.labs.length} estudios</span>
-                                    </div>
-                                    <div className="divide-y divide-slate-100">
-                                        {event.labs.length === 0 && <p className="p-6 text-center text-slate-400 text-xs">Sin registros</p>}
-                                        {event.labs.map(l => (
-                                            <ItemRow key={l.id} name={l.serviceName} date={l.createdAt} type="lab" />
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </>
+                {/* PASO 3: WORKSPACE DE GABINETE Y PAPELETA (IN_PROGRESS — IMPL-20260324-06) */}
+                {/* Las cajas globales SIM/NOVA han sido eliminadas. Cada estudio tiene su propia vista. */}
+                {activeView === 'IN_PROGRESS' && (
+                    <PapeletaWorkspace
+                        eventId={serializedEventId}
+                        eventTests={serializedEventTests}
+                        workerInfo={workerInfo}
+                        readonly={currentStep > 3}
+                        apiUrl={apiUrl}
+                    />
                 )}
 
                 {/* 4. Flow Controller Section (Solo visible en el paso activo real) */}
@@ -276,53 +212,5 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
     }
 }
 
-function ItemRow({ name, date, type }: { name: string, date: Date, type: 'study' | 'lab' }) {
-    const isAnalying = name.includes('Analizando')
-    return (
-        <div className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors group">
-            <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded flex items-center justify-center text-lg ${type === 'study' ? 'bg-blue-50 text-blue-500' : 'bg-purple-50 text-purple-500'}`}>
-                    {type === 'study' ? '🫁' : '🧪'}
-                </div>
-                <div>
-                    <p className="text-sm font-medium text-slate-700">{name}</p>
-                    <p className="text-xs text-slate-400">Subido: {new Date(date).toLocaleTimeString()}</p>
-                </div>
-            </div>
-            <div>
-                {isAnalying ? (
-                    <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded font-medium animate-pulse">
-                        Procesando
-                    </span>
-                ) : (
-                    <div className="flex items-center gap-3">
-                        <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-medium">Procesado</span>
-                        <button className="text-slate-300 hover:text-blue-500">👁️</button>
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-}
-
-function getEventTestStatusLabel(status: string) {
-    const labels: Record<string, string> = {
-        PENDING: 'Pendiente',
-        COMPLETED: 'Completado',
-        SKIPPED: 'Omitido',
-        CANCELLED: 'Cancelado'
-    }
-
-    return labels[status] || status
-}
-
-function getEventTestBadgeClass(status: string) {
-    const classes: Record<string, string> = {
-        PENDING: 'bg-amber-100 text-amber-700',
-        COMPLETED: 'bg-emerald-100 text-emerald-700',
-        SKIPPED: 'bg-slate-100 text-slate-600',
-        CANCELLED: 'bg-red-100 text-red-700'
-    }
-
-    return classes[status] || 'bg-slate-100 text-slate-600'
-}
+// IMPL-20260324-06: ItemRow, getEventTestStatusLabel y getEventTestBadgeClass eliminados.
+// La gestión de estudios ahora vive en PapeletaWorkspace con sus propios helpers.
