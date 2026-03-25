@@ -1,3 +1,8 @@
+/**
+ * @file Server actions administrativas generales.
+ * @id ARCH-20260325-02
+ * @backup context/checkpoints/CHK_ARCH-20260325-02.md
+ */
 'use server'
 
 import prisma from "@/lib/prisma"
@@ -111,40 +116,3 @@ export async function createBranch(formData: FormData) {
     revalidatePath('/branches')
 }
 
-// --- SERVICES ---
-export async function getServices() {
-    return await prisma.service.findMany({ orderBy: { code: 'asc' } })
-}
-
-export async function createService(formData: FormData) {
-    await prisma.service.create({
-        data: {
-            name: formData.get('name') as string,
-            code: formData.get('code') as string,
-            category: formData.get('category') as string,
-            price: Number(formData.get('price')),
-            description: formData.get('description') as string,
-        }
-    })
-    revalidatePath('/services')
-}
-
-// --- PROFILES (BATERÍAS) ---
-export async function getProfiles() {
-    return await prisma.serviceProfile.findMany({
-        include: { ProfileServices: true },
-        orderBy: { createdAt: 'desc' }
-    })
-}
-
-export async function createProfile(formData: FormData) {
-    const name = formData.get('name') as string
-    const description = formData.get('description') as string
-    await prisma.serviceProfile.create({
-        data: {
-            name,
-            description
-        }
-    })
-    revalidatePath('/admin/profiles')
-}

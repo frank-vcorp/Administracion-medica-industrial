@@ -59,6 +59,7 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
   - Evaluar ajuste de UX para que accesos no autorizados de `COMPANY_CLIENT` redirijan a `/portal` en lugar de `/dashboard`.
 
   Sistema listo para próximas iteraciones. (ARCH-20260324-26)
+- **2026-03-25 (INTEGRA):** [✓] **Limpieza Operativa del Catálogo Legacy.** Se verificaron y ajustaron los servicios relacionados en `frontend/src/app/services/page.tsx` y `frontend/src/actions/admin.actions.ts`. Cambios documentados en `context/checkpoints/CHK_ARCH-20260325-02.md`. (ARCH-20260325-02)
 
 
 

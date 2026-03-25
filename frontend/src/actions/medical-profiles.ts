@@ -1,8 +1,9 @@
 /**
  * @file Server Actions: Perfiles Médicos (Combos B2B)
- * @description CRUD con validación Zod server-side para MedicalProfile y tabla pivote ProfileTest.
+ * @description CRUD con validación Zod server-side para MedicalProfile y catálogo MedicalTest.
  * @see context/SPECs/ARCH-20260313-01-CATALOGO-ESTUDIOS-PERFILES.md
- * @id IMPL-20260313-03
+ * @id ARCH-20260325-01
+ * @backup context/checkpoints/CHK_ARCH-20260325-01.md
  */
 'use server'
 
@@ -27,6 +28,20 @@ const MedicalProfileSchema = z.object({
   testIds: z
     .array(z.string().uuid('ID de prueba inválido'))
     .min(1, 'Debe seleccionar al menos una prueba médica'),
+})
+
+const MedicalTestSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'El nombre de la prueba es obligatorio')
+    .max(200, 'El nombre no puede exceder 200 caracteres'),
+  code: z
+    .string()
+    .min(1, 'El código de la prueba es obligatorio')
+    .max(50, 'El código no puede exceder 50 caracteres'),
+  categoryId: z
+    .string()
+    .uuid('La categoría seleccionada es inválida'),
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,12 +78,23 @@ export async function getMedicalTests() {
       id: true,
       name: true,
       code: true,
+      categoryId: true,
       category: { select: { name: true } },
     },
     orderBy: [
       { category: { name: 'asc' } },
       { name: 'asc' },
     ],
+  })
+}
+
+export async function getTestCategories() {
+  return await prisma.testCategory.findMany({
+    select: {
+      id: true,
+      name: true,
+    },
+    orderBy: { name: 'asc' },
   })
 }
 
@@ -195,5 +221,35 @@ export async function deleteMedicalProfile(id: string): Promise<ActionResult> {
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error eliminando perfil:', e)
     return { success: false, error: 'Error al eliminar el perfil médico' }
+  }
+}
+
+export async function createMedicalTest(
+  formData: FormData
+): Promise<ActionResult> {
+  const parsed = MedicalTestSchema.safeParse({
+    name: formData.get('name'),
+    code: formData.get('code'),
+    categoryId: formData.get('categoryId'),
+  })
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  try {
+    await prisma.medicalTest.create({
+      data: {
+        name: parsed.data.name,
+        code: parsed.data.code.trim().toUpperCase(),
+        categoryId: parsed.data.categoryId,
+      },
+    })
+    revalidatePath('/admin/services')
+    revalidatePath('/admin/profiles')
+    return { success: true }
+  } catch (e: unknown) {
+    console.error('[MedicalProfiles] Error creando prueba médica:', e)
+    return { success: false, error: 'Error al crear la prueba médica' }
   }
 }

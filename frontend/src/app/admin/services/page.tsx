@@ -1,21 +1,14 @@
 /**
  * @fileoverview Catálogo de Pruebas con filtrado por categoría
- * @id IMPL-20260324-25
- * @backup context/checkpoints/CHK_IMPL-20260324-01.md
+ * @id ARCH-20260325-01
+ * @backup context/checkpoints/CHK_ARCH-20260325-01.md
  */
 import Link from "next/link"
-import { getServices, createService } from "@/actions/admin.actions"
-
-// Categorías disponibles — deben coincidir con el enum del modelo Prisma
-const CATEGORIES = [
-    { value: '', label: 'Todas las pruebas' },
-    { value: 'Medical', label: 'Consulta Médica' },
-    { value: 'Lab', label: 'Laboratorio Clínico' },
-    { value: 'XRay', label: 'Rayos X / Imagen' },
-    { value: 'Audio', label: 'Audiometría' },
-    { value: 'Spiro', label: 'Espirometría' },
-    { value: 'Other', label: 'Otro' },
-]
+import {
+    createMedicalTest,
+    getMedicalTests,
+    getTestCategories,
+} from "@/actions/medical-profiles"
 
 // searchParams es Promise en Next.js 16 (App Router)
 export default async function AdminServicesPage({
@@ -24,8 +17,20 @@ export default async function AdminServicesPage({
     searchParams: Promise<{ category?: string }>
 }) {
     const { category } = await searchParams
-    const allServices = await getServices()
-    const services = category ? allServices.filter((s) => s.category === category) : allServices
+    const [allTests, categories] = await Promise.all([
+        getMedicalTests(),
+        getTestCategories(),
+    ])
+    const tests = category
+        ? allTests.filter((test) => test.categoryId === category)
+        : allTests
+    const categoryTabs = [
+        { value: '', label: 'Todas las pruebas' },
+        ...categories.map((testCategory) => ({
+            value: testCategory.id,
+            label: testCategory.name,
+        })),
+    ]
 
     return (
         <div className="space-y-6">
@@ -42,7 +47,7 @@ export default async function AdminServicesPage({
 
             {/* Tabs de filtrado por categoría */}
             <div className="flex gap-2 flex-wrap">
-                {CATEGORIES.map((cat) => {
+                {categoryTabs.map((cat) => {
                     const isActive = (category ?? '') === cat.value
                     return (
                         <Link
@@ -68,25 +73,27 @@ export default async function AdminServicesPage({
                         <h3 className="text-lg font-bold">Registrar Prueba</h3>
                         <label htmlFor="new-service-modal" className="cursor-pointer text-slate-400 hover:text-red-500 font-bold">✕</label>
                     </div>
-                    <form action={createService} className="space-y-4">
+                    <form action={createMedicalTest} className="space-y-4">
                         <input name="name" placeholder="Nombre (ej. Audiometría Tonal)" required className="w-full border p-2 rounded" />
                         <div className="grid grid-cols-2 gap-4">
                             <input name="code" placeholder="Código Interno (ej. AUD-01)" required className="w-full border p-2 rounded" />
-                            <select name="category" className="w-full border p-2 rounded" required>
+                            <select name="categoryId" className="w-full border p-2 rounded" required>
                                 <option value="">Categoría</option>
-                                <option value="Medical">Consulta Médica</option>
-                                <option value="Lab">Laboratorio Clínico</option>
-                                <option value="XRay">Rayos X / Imagen</option>
-                                <option value="Audio">Audiometría</option>
-                                <option value="Spiro">Espirometría</option>
-                                <option value="Other">Otro</option>
+                                {categories.map((testCategory) => (
+                                    <option key={testCategory.id} value={testCategory.id}>
+                                        {testCategory.name}
+                                    </option>
+                                ))}
                             </select>
                         </div>
-                        <input type="number" step="0.01" name="price" placeholder="Precio Base ($)" className="w-full border p-2 rounded" />
-                        <textarea name="description" placeholder="Descripción breve" rows={3} className="w-full border p-2 rounded"></textarea>
+                        {categories.length === 0 && (
+                            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
+                                No hay categorías configuradas. Debes dar de alta al menos una categoría en la base de datos para registrar pruebas.
+                            </p>
+                        )}
 
                         <div className="flex justify-end pt-4">
-                            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 font-medium">
+                            <button type="submit" disabled={categories.length === 0} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">
                                 Guardar Prueba
                             </button>
                         </div>
@@ -101,19 +108,15 @@ export default async function AdminServicesPage({
                             <th className="px-6 py-4">Código</th>
                             <th className="px-6 py-4">Prueba</th>
                             <th className="px-6 py-4">Categoría</th>
-                            <th className="px-6 py-4 text-right">Precio</th>
                             <th className="px-6 py-4 text-right">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {services.map((srv) => (
-                            <tr key={srv.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 font-mono text-slate-400 text-xs">{srv.code}</td>
-                                <td className="px-6 py-4 font-medium text-slate-900">{srv.name}</td>
-                                <td className="px-6 py-4 text-slate-500">{srv.category}</td>
-                                <td className="px-6 py-4 text-right font-medium">
-                                    ${Number(srv.price || 0).toFixed(2)}
-                                </td>
+                        {tests.map((test) => (
+                            <tr key={test.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-6 py-4 font-mono text-slate-400 text-xs">{test.code}</td>
+                                <td className="px-6 py-4 font-medium text-slate-900">{test.name}</td>
+                                <td className="px-6 py-4 text-slate-500">{test.category.name}</td>
                                 <td className="px-6 py-4 text-right">
                                     <button className="text-slate-400 hover:text-blue-600 font-medium text-xs">
                                         Editar
@@ -121,9 +124,9 @@ export default async function AdminServicesPage({
                                 </td>
                             </tr>
                         ))}
-                        {services.length === 0 && (
+                        {tests.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
+                                <td colSpan={4} className="px-6 py-8 text-center text-slate-400">
                                     {category
                                         ? 'No hay pruebas en la categoría seleccionada.'
                                         : 'Aún no hay pruebas registradas en el catálogo.'}
