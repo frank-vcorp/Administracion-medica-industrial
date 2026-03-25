@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache"
 import { 
   SomatometriaVitalesSchema, 
   AgudezaVisualSchema, 
-  ExploracionFisicaSchema 
+  ExploracionFisicaSchema,
+  ExamenMedicoCompletoSchema,
 } from "@/schemas/clinical/exam.schema"
 
 export async function getMedicalExam(eventId: string) {
@@ -79,5 +80,44 @@ export async function updateExploracionFisica(eventId: string, rawData: any) {
   } catch (error: any) {
     console.error("Error updating physical exam:", error)
     return { success: false, error: "Datos de exploración inválidos o error de servidor" }
+  }
+}
+
+/**
+ * Guarda el Módulo 2 (médico) del Examen Médico dentro de la papeleta.
+ * Persiste en physicalExamData (exploración + impresión + antecedentes médico).
+ * Actualiza el estado del EventTest según el parámetro markComplete.
+ * @id IMPL-20260325-01
+ */
+export async function saveExamenMedicoPapeleta(
+  eventId: string,
+  eventTestId: string,
+  rawData: unknown,
+  markComplete = false
+) {
+  if (!eventId || !eventTestId) {
+    return { success: false, error: 'Parámetros incompletos' }
+  }
+
+  try {
+    const data = ExamenMedicoCompletoSchema.parse(rawData)
+
+    await prisma.medicalExam.upsert({
+      where: { eventId },
+      update: { physicalExamData: data },
+      create: { eventId, physicalExamData: data },
+    })
+
+    const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: { status: newStatus },
+    })
+
+    revalidatePath(`/events/${eventId}`)
+    return { success: true, status: newStatus }
+  } catch (error: any) {
+    console.error("Error saving examen médico papeleta:", error)
+    return { success: false, error: "Error al guardar Examen Médico" }
   }
 }

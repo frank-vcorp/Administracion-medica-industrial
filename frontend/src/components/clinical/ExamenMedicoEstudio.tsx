@@ -20,7 +20,16 @@ type ExamData = {
 } | null
 
 type Tab = 'sala' | 'declarativa' | 'exploracion' | 'impresion'
-type M1Tab = 'hl' | 'hf' | 'nopat' | 'pat' | 'gine' | 'inmuno'
+type M1Tab = 'dp' | 'hl' | 'hf' | 'nopat' | 'pat' | 'gine' | 'inmuno'
+
+/** Snapshot de datos maestros del trabajador para prellenar Datos Personales — IMPL-20260325-02 */
+type WorkerSnapshot = {
+  nombre: string
+  empresa: string
+  puesto: string
+  dobIso: string | null
+  phone: string | null
+}
 
 interface ExamenMedicoEstudioProps {
   eventId: string
@@ -30,6 +39,8 @@ interface ExamenMedicoEstudioProps {
   readonly?: boolean
   /** Callback para actualizar estado local en el workspace padre */
   onStatusChange?: (status: string) => void
+  /** Snapshot del trabajador para prellenar sección Datos Personales — IMPL-20260325-02 */
+  workerSnapshot?: WorkerSnapshot | null
 }
 
 // ─── Campos de Exploración Física (de ExploracionFisicaSchema) ───────────────
@@ -70,6 +81,19 @@ const EXPLORACION_FIELDS: { name: string; label: string }[] = [
   { name: "presencia_quiste_sinovial", label: "Quiste Sinovial" },
   { name: "especificar_quiste", label: "Especificar Quiste" },
 ]
+
+// ─── Helper: Cálculo de edad desde fecha ISO — IMPL-20260325-02 ────────────
+
+function calcEdad(isoDate: string | null | undefined): string {
+  if (!isoDate) return ''
+  const birth = new Date(isoDate)
+  if (isNaN(birth.getTime())) return ''
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const m = today.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+  return age >= 0 ? String(age) : ''
+}
 
 const APTITUD_OPTIONS = [
   { value: 'APTO', label: '✅ Apto', color: 'border-emerald-400 bg-emerald-50 text-emerald-800' },
@@ -159,6 +183,7 @@ export default function ExamenMedicoEstudio({
   prefilledData,
   readonly = false,
   onStatusChange,
+  workerSnapshot = null,
 }: ExamenMedicoEstudioProps) {
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
 
@@ -189,9 +214,18 @@ export default function ExamenMedicoEstudio({
         : {}
     // Inicializar patológicos en NEGADO si no existen
     PAT_FIELDS.forEach(f => { if (!base[f.key]) base[f.key] = 'NEGADO' })
+    // Sembrar campos dp desde workerSnapshot si no han sido persistidos aún — IMPL-20260325-02
+    if (workerSnapshot) {
+      if (!base['m1_dp_puesto_sol'] && workerSnapshot.puesto) base['m1_dp_puesto_sol'] = workerSnapshot.puesto
+      if (!base['m1_dp_telefono'] && workerSnapshot.phone) base['m1_dp_telefono'] = workerSnapshot.phone
+      if (!base['m1_dp_fech_nac'] && workerSnapshot.dobIso) {
+        base['m1_dp_fech_nac'] = workerSnapshot.dobIso.slice(0, 10)
+        if (!base['m1_dp_edad']) base['m1_dp_edad'] = calcEdad(workerSnapshot.dobIso)
+      }
+    }
     return base
   })
-  const [m1Tab, setM1Tab] = useState<M1Tab>('hl')
+  const [m1Tab, setM1Tab] = useState<M1Tab>('dp')
 
   function setM1Field(key: string, value: string) {
     setModulo1(prev => ({ ...prev, [key]: value }))
@@ -370,6 +404,7 @@ export default function ExamenMedicoEstudio({
           {/* Sub-tabs de Módulo 1 */}
           <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1">
             {([
+              ['dp', '👤', 'Datos Personales'],
               ['hl', '🏢', 'Historia Laboral'],
               ['hf', '👨‍👩‍👧', 'Heredo-Familiares'],
               ['nopat', '🍺', 'No Patológicos'],
@@ -389,6 +424,93 @@ export default function ExamenMedicoEstudio({
               </button>
             ))}
           </div>
+
+          {/* DP: Datos Personales — IMPL-20260325-02 */}
+          {m1Tab === 'dp' && (
+            <div className="space-y-3">
+              {/* Datos maestros readonly: nombre y empresa */}
+              {workerSnapshot && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Datos del expediente</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Nombre completo</label>
+                      <p className="mt-1 text-sm font-semibold text-slate-700 bg-white border border-slate-100 rounded-lg px-2.5 py-1.5">{workerSnapshot.nombre || '—'}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Empresa</label>
+                      <p className="mt-1 text-sm font-semibold text-slate-700 bg-white border border-slate-100 rounded-lg px-2.5 py-1.5">{workerSnapshot.empresa || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Campos editables / pre-llenados */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Datos personales del examen</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Ingreso</label>
+                    <input type="date" value={modulo1['m1_dp_fecha_ingreso'] ?? ''} onChange={e => setM1Field('m1_dp_fecha_ingreso', e.target.value)} disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Lugar de Nacimiento</label>
+                    <input type="text" value={modulo1['m1_dp_lugar_nac'] ?? ''} onChange={e => setM1Field('m1_dp_lugar_nac', e.target.value)} disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Ciudad, Estado" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Nacimiento</label>
+                    <input type="date" value={modulo1['m1_dp_fech_nac'] ?? ''}
+                      onChange={e => { setM1Field('m1_dp_fech_nac', e.target.value); setM1Field('m1_dp_edad', calcEdad(e.target.value)) }}
+                      disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Edad (años)</label>
+                    <input type="number" value={modulo1['m1_dp_edad'] ?? ''} onChange={e => setM1Field('m1_dp_edad', e.target.value)} disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Años" min="0" max="120" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Nacionalidad</label>
+                    <input type="text" value={modulo1['m1_dp_nacionalidad'] ?? ''} onChange={e => setM1Field('m1_dp_nacionalidad', e.target.value)} disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Ej: Mexicana" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Estado Civil</label>
+                    <select value={modulo1['m1_dp_edo_civil'] ?? ''} onChange={e => setM1Field('m1_dp_edo_civil', e.target.value)} disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none">
+                      <option value="">— Seleccionar —</option>
+                      {['Soltero/a', 'Casado/a', 'Unión libre', 'Divorciado/a', 'Viudo/a'].map(o => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Teléfono</label>
+                    <input type="tel" value={modulo1['m1_dp_telefono'] ?? ''} onChange={e => setM1Field('m1_dp_telefono', e.target.value)} disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="10 dígitos" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Escolaridad</label>
+                    <select value={modulo1['m1_dp_escolaridad'] ?? ''} onChange={e => setM1Field('m1_dp_escolaridad', e.target.value)} disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none">
+                      <option value="">— Seleccionar —</option>
+                      {['Primaria', 'Secundaria', 'Preparatoria / Bachillerato', 'Técnico', 'Licenciatura', 'Posgrado'].map(o => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Puesto Solicitado</label>
+                    <input type="text" value={modulo1['m1_dp_puesto_sol'] ?? ''} onChange={e => setM1Field('m1_dp_puesto_sol', e.target.value)} disabled={readonly}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Domicilio</label>
+                  <input type="text" value={modulo1['m1_dp_domicilio'] ?? ''} onChange={e => setM1Field('m1_dp_domicilio', e.target.value)} disabled={readonly}
+                    className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Calle, número, colonia, municipio" />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* HL: Historia Laboral */}
           {m1Tab === 'hl' && (

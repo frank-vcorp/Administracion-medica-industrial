@@ -34,6 +34,12 @@ export default function EventFlowController({
     const isValidating = currentStatus === 'VALIDATING'
     const isCompleted = currentStatus === 'COMPLETED'
 
+    // El Paso 3 ya se resuelve dentro de la papeleta-workspace; este bloque no
+    // debe renderizar ninguna UI para IN_PROGRESS aunque otro contenedor lo invoque.
+    if (isInProgress) {
+        return null
+    }
+
     const handleFinishCapture = () => {
         startTransition(async () => {
             try {
@@ -80,26 +86,6 @@ export default function EventFlowController({
     return (
         <div className="mt-12 p-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
             <div className="max-w-3xl mx-auto text-center">
-
-                {/* 1. SECCIÓN: CARGA EN CURSO */}
-                {isInProgress && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto text-2xl mb-4 shadow-inner">
-                            📄
-                        </div>
-                        <h3 className="text-2xl font-bold text-slate-800">Fase de Captura de Estudios</h3>
-                        <p className="text-slate-500 max-w-md mx-auto">
-                            Una vez que hayas subido toda la documentación del paciente (SIM y NOVA), presiona el botón para pasar a la validación médica.
-                        </p>
-                        <button
-                            onClick={handleFinishCapture}
-                            disabled={isPending}
-                            className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 flex items-center gap-2 mx-auto"
-                        >
-                            {isPending ? 'Procesando...' : '✅ Finalizar Cita y Pasar a Validación'}
-                        </button>
-                    </div>
-                )}
 
                 {/* 2. SECCIÓN: VALIDACIÓN Y FIRMA (El médico llena el diagnóstico) */}
                 {isValidating && (

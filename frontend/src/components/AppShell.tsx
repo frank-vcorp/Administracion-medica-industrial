@@ -48,7 +48,6 @@ function NavSection({ label, collapsed }: { label: string; collapsed?: boolean }
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const { data: session, status } = useSession()
 
   // Sin chrome en pantalla de login
@@ -65,7 +64,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showStaffItems = isLoading || (!isCompanyClient && !!role)
   const showAdminItems = isAdmin
   const showPortalItems = isCompanyClient
-  const isEventWorkspace = /^\/events\/[^/]+$/.test(pathname || '') && searchParams?.get('view') === 'IN_PROGRESS'
+  const isEventWorkspace = /^\/events\/[^/]+$/.test(pathname || '')
 
   return (
     <div className="flex h-screen bg-slate-50">

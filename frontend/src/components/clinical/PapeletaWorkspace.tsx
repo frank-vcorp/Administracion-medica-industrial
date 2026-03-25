@@ -9,6 +9,7 @@
 
 import { useState, useTransition } from "react"
 import { updateEventTestStatus, uploadEventTestFile } from "@/actions/event-test.actions"
+import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 
 // --- Tipos locales ---
 
@@ -33,12 +34,31 @@ type WorkerInfo = {
   profile: string
 }
 
+type MedicalExamData = {
+  somatometryData?: Record<string, unknown> | null
+  eyeAcuityData?: Record<string, unknown> | null
+  physicalExamData?: Record<string, unknown> | null
+} | null
+
+/** Snapshot de datos personales del trabajador para prellenar Datos Personales — IMPL-20260325-02 */
+type WorkerSnapshot = {
+  nombre: string
+  empresa: string
+  puesto: string
+  dobIso: string | null
+  phone: string | null
+}
+
 interface PapeletaWorkspaceProps {
   eventId: string
   eventTests: StudyTest[]
   workerInfo: WorkerInfo
   readonly?: boolean
   apiUrl: string
+  /** Datos del MedicalExam para heredar en el estudio Examen Médico (IMPL-20260325-01) */
+  examData?: MedicalExamData
+  /** Snapshot de datos personales del trabajador — IMPL-20260325-02 */
+  workerSnapshot?: WorkerSnapshot | null
 }
 
 // --- Labels y estilos para estados V1 ---
@@ -76,9 +96,14 @@ function isLabTest(test: StudyTest) {
   return (
     catName.includes('lab') ||
     catName.includes('laboratorio') ||
+    catName.includes('laborat') ||
     testName.includes('biometría') ||
     testName.includes('biometria') ||
+    testName.includes('orina') ||
     testName.includes('ego') ||
+    testName.includes('sangre') ||
+    testName.includes('sanguínea') ||
+    testName.includes('sanguinea') ||
     testName.includes('química') ||
     testName.includes('quimica')
   )
@@ -99,6 +124,8 @@ export default function PapeletaWorkspace({
   workerInfo,
   readonly = false,
   apiUrl,
+  examData = null,
+  workerSnapshot = null,
 }: PapeletaWorkspaceProps) {
   const [activeTestId, setActiveTestId] = useState<string | null>(null)
   const [localTests, setLocalTests] = useState<StudyTest[]>(eventTests)
@@ -264,7 +291,9 @@ export default function PapeletaWorkspace({
           {activeTest && (
             <StudyPanel
               test={activeTest}
-
+              eventId={eventId}
+              examData={examData}
+              workerSnapshot={workerSnapshot}
               readonly={readonly}
               isPending={isPending}
               isUploading={isUploading}
@@ -272,6 +301,7 @@ export default function PapeletaWorkspace({
               apiUrl={apiUrl}
               onStatusChange={handleStatusChange}
               onFileUpload={handleFileUpload}
+              onExamenMedicoStatusChange={(status) => updateLocalStatus(activeTest.id, status as StudyStatus)}
             />
           )}
         </div>
@@ -351,6 +381,9 @@ function WorkerHeader({
 
 function StudyPanel({
   test,
+  eventId,
+  examData,
+  workerSnapshot,
   readonly,
   isPending,
   isUploading,
@@ -358,8 +391,12 @@ function StudyPanel({
   apiUrl,
   onStatusChange,
   onFileUpload,
+  onExamenMedicoStatusChange,
 }: {
   test: StudyTest
+  eventId: string
+  examData: MedicalExamData
+  workerSnapshot: WorkerSnapshot | null | undefined
   readonly: boolean
   isPending: boolean
   isUploading: boolean
@@ -367,6 +404,7 @@ function StudyPanel({
   apiUrl: string
   onStatusChange: (id: string, status: StudyStatus) => void
   onFileUpload: (id: string, file: File) => void
+  onExamenMedicoStatusChange: (status: string) => void
 }) {
   const isMedico = isExamenMedico(test.testNameSnapshot)
   const isLab = isLabTest(test)
@@ -389,8 +427,8 @@ function StudyPanel({
             {test.test?.code && (
               <span className="text-xs font-mono text-slate-500">{test.test.code}</span>
             )}
-            <span className={`text-xs px-2 py-0.5 rounded font-medium ${isMedico ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-600'}`}>
-              {isMedico ? '📋 Formulario' : '📄 Documental'}
+            <span className={`text-xs px-2 py-0.5 rounded font-medium ${isMedico ? 'bg-blue-50 text-blue-600' : isLab ? 'bg-purple-50 text-purple-700' : 'bg-slate-50 text-slate-600'}`}>
+              {isMedico ? '📋 Formulario' : isLab ? '🧪 Con muestra y resultado' : '📄 Documental'}
             </span>
           </div>
         </div>
@@ -412,19 +450,19 @@ function StudyPanel({
               </p>
             </div>
             <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-200 text-purple-800' : 'bg-white text-purple-700 border border-purple-200'}`}>
-              {sampleTracked ? 'Muestra tomada' : 'Muestra pendiente'}
+              {sampleTracked ? '✓ Muestra tomada' : 'Muestra pendiente'}
             </span>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-500'}`}>
-              1. Muestra
+              {sampleTracked ? '✓ 1. Muestra' : '1. Muestra'}
             </span>
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${resultTracked ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'}`}>
-              2. Resultado
+              {resultTracked ? '✓ 2. Resultado' : '2. Resultado'}
             </span>
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${test.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
-              3. Cierre
+              {test.status === 'COMPLETED' ? '✓ 3. Cierre' : '3. Cierre'}
             </span>
           </div>
 
@@ -440,37 +478,27 @@ function StudyPanel({
         </div>
       )}
 
-      {/* Sección: Examen Médico (tipo formulario) */}
+      {/* Sección: Examen Médico (tipo formulario — IMPL-20260325-01) */}
       {isMedico && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center space-y-4">
-          <div className="text-4xl">📋</div>
-          <div>
-            <p className="font-bold text-blue-800 text-base">Examen Médico — Formulario Estructurado</p>
-            <p className="text-sm text-blue-600 mt-1">
-              Este estudio se resuelve mediante formulario clínico. No requiere carga de archivo.
-            </p>
-            <p className="text-xs text-blue-400 mt-2">
-              El formulario de Examen Médico estará disponible en la próxima fase.
-            </p>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
+            <span className="text-blue-600 text-base">📋</span>
+            <div>
+              <p className="text-sm font-bold text-blue-800">Examen Médico — Formulario Clínico</p>
+              <p className="text-xs text-blue-600">
+                Completa las secciones: Datos de Sala → Antecedentes → Exploración → Impresión/Aptitud
+              </p>
+            </div>
           </div>
-          {!readonly && test.status === 'PENDING' && (
-            <button
-              onClick={() => onStatusChange(test.id, 'IN_PROGRESS')}
-              disabled={isPending}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
-            >
-              Marcar como En Proceso
-            </button>
-          )}
-          {!readonly && test.status === 'IN_PROGRESS' && (
-            <button
-              onClick={() => onStatusChange(test.id, 'COMPLETED')}
-              disabled={isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
-            >
-              🏁 Marcar como Completado
-            </button>
-          )}
+          <ExamenMedicoEstudio
+            eventId={eventId}
+            eventTestId={test.id}
+            examData={examData}
+            prefilledData={null}
+            readonly={readonly}
+            workerSnapshot={workerSnapshot}
+            onStatusChange={onExamenMedicoStatusChange}
+          />
         </div>
       )}
 

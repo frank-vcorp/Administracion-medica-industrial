@@ -1,17 +1,17 @@
 ## 📋 SPEC: Reestructuración de Captura Clínica Base y Papeleta de Estudios
 **ID:** `ARCH-20260324-03`
-**Objetivo:** Eliminar la ambigüedad y duplicidad entre los pasos 2 y 3 del flujo clínico, reubicando la captura clínica base en el Paso 2 y transformando la Papeleta en un gestor atómico por estudio, incluyendo el Examen Médico como formulario específico dentro de la propia papeleta.
+**Objetivo:** Eliminar la ambigüedad y duplicidad entre los pasos 2 y 3 del flujo clínico, dejando en el Paso 2 únicamente la captura operativa de Sala y transformando la Papeleta en un gestor atómico por estudio, incluyendo el Examen Médico como formulario estructurado contenido por completo dentro de su propio estudio.
 
 ### 🎯 Criterios de Aceptación
 
 #### 1. Paso 2: "Captura Clínica Base"
-- **Contexto:** Pertenece al dominio exclusivo del médico en consulta y concentra los datos clínicos base previos a la papeleta.
+- **Contexto:** Corresponde a Sala y concentra únicamente la captura operativa previa a la evaluación médica completa.
 - **Formularios obligatorios:**
   - Somatometría (Peso, talla, signos vitales).
   - Agudeza Visual.
-  - **Exploración Física** (Se reubica aquí, dejando de pertenecer al paso 3).
 - **Formatos:** No requiere subida de archivos; todo se captura en formularios digitales de la base de datos a través de la UI.
-- **Aclaración:** El concepto de **Examen Médico** no vive en este paso; este paso solo reúne la captura clínica base.
+- **Aclaración:** La **Exploración Física** deja de pertenecer a Sala y pasa a formar parte del estudio **Examen Médico** dentro de la papeleta.
+- **Regla de integración:** Somatometría y Agudeza Visual capturadas en Sala deben estar disponibles dentro del estudio Examen Médico como información heredada, visible para el médico y susceptible de confirmación o complemento si se requiere.
 
 #### 2. Paso 3: "Gabinete y Papeleta"
 - **Contexto:** Punto de interacción para personal de laboratorio, rayos X o área médica que gestiona cada estudio solicitado desde la papeleta.
@@ -22,7 +22,8 @@
   - **Botón "Muestra Tomada"** (Opcional por prueba, pensado principalmente para laboratorios, de modo que recepción sepa qué falta procesar).
   - **Upload atómico:** Cada fila tiene su propio botón de "Subir Archivo" cuando la naturaleza de la prueba genera un entregable documental. El archivo se vincula a esa "Prueba" específica, no al evento completo.
   - **Visor Integrado:** Si una prueba ya tiene archivo, la fila permite abrirlo (View PDF/Imagen) directamente desde ese renglón.
-  - **Caso especial - Examen Médico:** Aunque aparece dentro de la papeleta como una prueba más, no se resuelve con upload. Debe abrir o enlazar un formulario específico que elaboraremos posteriormente para capturar su resultado estructurado.
+  - **Caso especial - Examen Médico:** Aunque aparece dentro de la papeleta como una prueba más, no se resuelve con upload. Debe abrir un formulario estructurado contenido por completo dentro del propio estudio.
+  - **Contenido del Examen Médico:** Dentro de ese estudio deben convivir la parte autollenable del trabajador, la información heredada desde Sala y la captura clínica exclusiva del médico.
   - **Regla funcional:** La papeleta debe soportar pruebas heterogéneas: algunas con archivo, otras con formulario, y otras con estados operativos como toma de muestra.
 
 #### 3. Navegación y Presentación del Paso 3
@@ -50,7 +51,7 @@
 - **Criterio de simplicidad:** En esta primera versión no se incluyen estados como rechazado, observado, reenviado o validado. Si AMI los pide después, se agregan en una iteración posterior.
 
 #### 5. Checklist de Implementación para SOFIA
-- [ ] El Paso 2 muestra únicamente captura clínica base: somatometría, agudeza visual y exploración física.
+- [ ] El Paso 2 muestra únicamente captura de Sala: somatometría y agudeza visual.
 - [ ] El Paso 3 deja de mostrar cajas globales SIM/NOVA para el evento completo.
 - [ ] La entrada al Paso 3 muestra un resumen inicial de estudios con estado visible.
 - [ ] Cada estudio se presenta como renglón seleccionable.
@@ -65,7 +66,9 @@
 - [ ] Los estudios de laboratorio pueden mostrar la acción de "Muestra tomada" cuando aplique.
 - [ ] Examen Médico aparece como estudio dentro de la papeleta.
 - [ ] Examen Médico no muestra upload como acción principal.
-- [ ] Examen Médico enlaza a formulario específico en una fase posterior.
+- [ ] Examen Médico contiene su formulario completo dentro del propio estudio.
+- [ ] Examen Médico hereda Somatometría y Agudeza Visual previamente capturadas en Sala.
+- [ ] Exploración Física se captura dentro de Examen Médico y no en Sala.
 - [ ] El resumen de estudios muestra, como mínimo, nombre del estudio, tipo de resolución y estatus actual.
 - [ ] La salida del workspace debe ser clara para regresar al evento o al resumen de estudios.
 - [ ] La experiencia debe evitar saturación visual y priorizar el estudio activo.

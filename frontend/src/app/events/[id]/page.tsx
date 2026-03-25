@@ -5,11 +5,10 @@
  */
 
 import { getEventById } from '@/actions/medical-event.actions'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import EventFlowController from '@/components/EventFlowController'
 import TriageForm from '@/components/clinical/TriageForm'
-import DoctorExamForm from '@/components/clinical/DoctorExamForm'
 import PapeletaWorkspace from '@/components/clinical/PapeletaWorkspace'
 import { getMedicalExam } from '@/actions/medical-exam.actions'
 
@@ -55,6 +54,17 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
             profile: appointmentWithProfile?.serviceProfile?.name || ''
         }
 
+        // IMPL-20260325-02: Snapshot de datos personales para sección Datos Personales del Examen Médico
+        type WorkerWithDobPhone = { dob?: Date | null; phone?: string | null }
+        const workerDobPhone = event.worker as typeof event.worker & WorkerWithDobPhone
+        const workerSnapshot = JSON.parse(JSON.stringify({
+            nombre: `${event.worker.firstName} ${event.worker.lastName}`,
+            empresa: event.worker.company?.name ?? '',
+            puesto: workerWithPos.jobPosition?.name ?? '',
+            dobIso: workerDobPhone.dob ?? null,
+            phone: workerDobPhone.phone ?? null,
+        }))
+
         // IMPL-20260324-06: Serializar eventTests para el workspace (incluye fileUrl y status nuevos)
         type EventTestWithExtras = typeof event.eventTests[0] & { fileUrl?: string | null, resultNotes?: string | null }
         const serializedEventTests = JSON.parse(JSON.stringify(
@@ -83,6 +93,12 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
 
         const steps = ['SCHEDULED', 'CHECKED_IN', 'IN_PROGRESS', 'VALIDATING', 'COMPLETED']
         const currentStep = steps.indexOf(event.status) + 1
+
+        // Cuando el evento ya esta en Estudios y la URL aun no fija la vista, redirigimos
+        // para que el shell principal entre correctamente en modo workspace.
+        if (!searchParams?.view && event.status === 'IN_PROGRESS') {
+            redirect(`/events/${id}?view=IN_PROGRESS`)
+        }
 
         // Determinamos la vista activa (por defecto el estado real, o el que el usuario haya cliqueado si es previo/actual)
         const requestedView = searchParams?.view || event.status
@@ -167,15 +183,6 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                     />
                 )}
 
-                {/* PASO 2: Exploración Física (reubicada desde paso 3 — ARCH-20260324-03) */}
-                {activeView === 'CHECKED_IN' && (
-                    <DoctorExamForm 
-                        eventId={serializedEventId} 
-                        initialData={serializedExam || {}} 
-                        readonly={currentStep > 2}
-                    />
-                )}
-
                 {/* PASO 3: WORKSPACE DE GABINETE Y PAPELETA (IN_PROGRESS — IMPL-20260324-06) */}
                 {/* Las cajas globales SIM/NOVA han sido eliminadas. Cada estudio tiene su propia vista. */}
                 {activeView === 'IN_PROGRESS' && (
@@ -183,13 +190,15 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         eventId={serializedEventId}
                         eventTests={serializedEventTests}
                         workerInfo={workerInfo}
+                        workerSnapshot={workerSnapshot}
                         readonly={currentStep > 3}
                         apiUrl={apiUrl}
+                        examData={serializedExam}
                     />
                 )}
 
-                {/* 4. Flow Controller Section (Solo visible en el paso activo real) */}
-                {activeView === event.status && (
+                {/* 4. Flow Controller Section (Fuera de Estudios, ya que Paso 3 ahora vive dentro de la papeleta) */}
+                {activeView === event.status && event.status !== 'IN_PROGRESS' && (
                     <EventFlowController
                         eventId={serializedEventId}
                         currentStatus={serializedStatus}
@@ -199,6 +208,19 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
             </div>
         )
     } catch (error) {
+        if (
+            typeof error === 'object' &&
+            error !== null &&
+            'digest' in error &&
+            typeof error.digest === 'string' &&
+            (
+                error.digest.startsWith('NEXT_REDIRECT') ||
+                error.digest.startsWith('NEXT_HTTP_ERROR_FALLBACK')
+            )
+        ) {
+            throw error
+        }
+
         console.error("Critical Error in EventPage:", error)
         return (
             <div className="p-8 bg-red-50 border border-red-200 rounded-2xl text-center">
