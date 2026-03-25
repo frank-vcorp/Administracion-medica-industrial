@@ -94,3 +94,34 @@ export const ExploracionFisicaSchema = z.object({
   presencia_quiste_sinovial: cleanString,
   especificar_quiste: cleanString
 });
+
+// ----------------------------------------------------------------------
+// 10. IMPRESIÓN DIAGNÓSTICA Y APTITUD (sección médico — IMPL-20260325-01)
+// Campos ampliados segun Esquema Examen Medico Dividido — ARCH-20260325-09
+// ----------------------------------------------------------------------
+export const ImpresiónAptitudSchema = z.object({
+  aptitud: z.enum(['APTO', 'APTO CON RESTRICCIONES', 'NO APTO', 'PENDIENTE DE RESULTADOS']).optional(),
+  restricciones: cleanString,
+  impresion_diagnostica: cleanString,
+  observaciones_finales: cleanString,
+  medico_evaluador: cleanString,
+  // Campos faltantes identificados en ARCH-20260325-09
+  estado_nutricional: cleanString,
+  salud_bucal: cleanString,
+  agudeza_visual_resumen: cleanString,
+  presion_arterial_resumen: cleanString,
+  medico_revisor: cleanString,
+});
+
+// ----------------------------------------------------------------------
+// 11. MÓDULO MÉDICO COMPLETO (Exploración + Impresión — IMPL-20260325-01)
+//     Se persiste en physicalExamData del MedicalExam.
+//     Incluye Módulo 1 capturado in-studio sin depender del portal público (ARCH-20260325-09).
+// ----------------------------------------------------------------------
+export const ExamenMedicoCompletoSchema = ExploracionFisicaSchema
+  .merge(ImpresiónAptitudSchema)
+  .extend({
+    antecedentes_medico: cleanString,
+    /** Módulo 1 — cuestionario del paciente capturado en sala (ARCH-20260325-09) */
+    modulo1: z.record(z.string(), z.any()).optional(),
+  });
