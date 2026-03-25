@@ -1,6 +1,7 @@
 /**
  * @fileoverview Detalle de expediente médico
  * @id IMPL-20260324-06
+ * @spec ARCH-20260325-05
  * @backup context/checkpoints/CHK_IMPL-20260324-06-PAPELETA-WORKSPACE.md
  */
 
@@ -8,7 +9,6 @@ import { getEventById } from '@/actions/medical-event.actions'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import EventFlowController from '@/components/EventFlowController'
-import TriageForm from '@/components/clinical/TriageForm'
 import PapeletaWorkspace from '@/components/clinical/PapeletaWorkspace'
 import { getMedicalExam } from '@/actions/medical-exam.actions'
 
@@ -173,19 +173,10 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                 </div>
 
 
-                {/* PASO 2: TRIAJE + CAPTURA CLÍNICA BASE (CHECKED_IN) */}
-                {/* Somatometría y Agudeza Visual */}
-                {activeView === 'CHECKED_IN' && (
-                    <TriageForm 
-                        eventId={serializedEventId} 
-                        initialData={serializedExam.somatometryData || {}} 
-                        readonly={currentStep > 2}
-                    />
-                )}
-
-                {/* PASO 3: WORKSPACE DE GABINETE Y PAPELETA (IN_PROGRESS — IMPL-20260324-06) */}
-                {/* Las cajas globales SIM/NOVA han sido eliminadas. Cada estudio tiene su propia vista. */}
-                {activeView === 'IN_PROGRESS' && (
+                {/* PASO 2 y 3: WORKSPACE DE PAPELETA DE ESTUDIOS (ARCH-20260325-05) */}
+                {/* Somatometría y Agudeza Visual son EventTests independientes dentro de la Papeleta. */}
+                {/* TriageForm global eliminado: CHECKED_IN e IN_PROGRESS comparten el mismo workspace. */}
+                {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') && (
                     <PapeletaWorkspace
                         eventId={serializedEventId}
                         eventTests={serializedEventTests}

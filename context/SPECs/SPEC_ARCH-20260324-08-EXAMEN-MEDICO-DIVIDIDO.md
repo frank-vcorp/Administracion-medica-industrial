@@ -70,10 +70,8 @@ Este modulo corresponde al contenido autollenable del esquema proporcionado por 
 Este modulo corresponde al contenido exclusivo del personal de salud.
 
 #### Secciones del modulo 2
-- Somatometria y signos vitales
-- Agudeza visual
 - Exploracion fisica general
-- Pruebas especificas
+- Pruebas especificas propias del acto medico
 - Impresion diagnostica y aptitud
 
 #### Reglas funcionales del modulo 2
@@ -81,17 +79,18 @@ Este modulo corresponde al contenido exclusivo del personal de salud.
 - Debe mostrar el resumen del modulo 1 ya contestado por el trabajador.
 - Debe permitir continuar sin prellenado previo.
 - Debe permitir al medico complementar o corregir datos del modulo 1 si es necesario.
-- Debe autocalcular IMC.
 - Debe autocompletar el medico que realiza con base en la sesion activa.
 - Debe dejar campo para medico revisor cuando aplique.
 - Debe incorporar la Exploracion Fisica como parte del modulo clinico del medico.
-- Debe heredar Somatometria y Agudeza Visual capturadas en Sala, mostrandolas dentro del estudio Examen Medico como base disponible para el medico.
+- No debe contener ni heredar Somatometria ni Agudeza Visual.
+- Somatometria y Agudeza Visual deben modelarse como estudios independientes seleccionables por perfil y ejecutados como EventTests propios dentro de la Papeleta.
 
 ### Integracion con la Papeleta
 - Dentro del Paso 3, el estudio "Examen Medico" sigue apareciendo como una prueba de la papeleta.
 - Su accion principal ya no debe ser un placeholder generico, sino **Abrir formulario** o **Continuar formulario**.
 - El estado visible del estudio debe considerar el avance de ambos modulos.
 - El estudio debe contener de principio a fin todo el formulario del Examen Medico; no debe fragmentarse entre Sala y pantallas externas independientes.
+- Somatometria y Agudeza Visual no forman parte del estudio Examen Medico; deben aparecer como estudios independientes cuando el perfil los incluya.
 
 ### Estados Propuestos del Estudio Examen Medico
 - Pendiente: no existe captura del trabajador ni del medico.
@@ -135,6 +134,7 @@ Este modulo corresponde al contenido exclusivo del personal de salud.
 - Obligar al medico a volver a escribir antecedentes que el trabajador ya capturo.
 - Mezclar respuestas autodeclaradas con hallazgos clinicos sin distinguir origen.
 - Asociar el prellenado solo al worker sin anclarlo a una cita concreta.
+- Duplicar Somatometria o Agudeza Visual dentro del Examen Medico cuando ya existen como estudios independientes del perfil.
 
 ### Archivos/Areas Impactadas en Futuras Implementaciones
 - Flujo de generacion de cita

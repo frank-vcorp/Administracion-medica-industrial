@@ -1,9 +1,9 @@
 /**
  * @fileoverview Formulario real del estudio "Examen Médico" dentro de la Papeleta de Estudios.
- * Implementa el Módulo 2 (evaluación clínica del médico), muestra datos heredados de Sala,
- * y captura: antecedentes (por médico si no hay prellenado), exploración física e impresión/aptitud.
+ * Implementa el Módulo 1 (antecedentes declarativos), Exploración Física e Impresión/Aptitud.
+ * Somatometría y Agudeza Visual operan como EventTests independientes (ARCH-20260325-05).
  * @id IMPL-20260325-01
- * @spec ARCH-20260324-04, ARCH-20260324-08
+ * @spec ARCH-20260324-04, ARCH-20260324-08, ARCH-20260325-05
  * @backup context/checkpoints/CHK_IMPL-20260325-01.md
  */
 "use client"
@@ -14,12 +14,10 @@ import { saveExamenMedicoPapeleta } from "@/actions/medical-exam.actions"
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type ExamData = {
-  somatometryData?: Record<string, unknown> | null
-  eyeAcuityData?: Record<string, unknown> | null
   physicalExamData?: Record<string, unknown> | null
 } | null
 
-type Tab = 'sala' | 'declarativa' | 'exploracion' | 'impresion'
+type Tab = 'declarativa' | 'exploracion' | 'impresion'
 type M1Tab = 'dp' | 'hl' | 'hf' | 'nopat' | 'pat' | 'gine' | 'inmuno'
 
 /** Snapshot de datos maestros del trabajador para prellenar Datos Personales — IMPL-20260325-02 */
@@ -147,33 +145,6 @@ const NOPAT_ITEMS: { key: string; lbl: string; subs: [string, string][] }[] = [
   { key: 'm1_ejercicio', lbl: 'Ejercicio', subs: [['m1_ej_tipo', 'Tipo y frecuencia']] },
 ]
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatSomatoValue(key: string, value: unknown): string {
-  if (value === undefined || value === null || value === '') return '—'
-  const units: Record<string, string> = {
-    ta_sistolica: ' mmHg', ta_diastolica: ' mmHg', fc_min: ' lpm',
-    peso_kg: ' kg', talla_m: ' m', perimetro_cintura: ' cm',
-    perimetro_cadera: ' cm', fr_min: ' rpm', temperatura: ' °C', imc: '',
-  }
-  return `${value}${units[key] ?? ''}`
-}
-
-const SOMATO_LABELS: Record<string, string> = {
-  ta_sistolica: 'TA Sistólica', ta_diastolica: 'TA Diastólica', fc_min: 'FC',
-  peso_kg: 'Peso', talla_m: 'Talla', perimetro_cintura: 'Cintura',
-  perimetro_cadera: 'Cadera', fr_min: 'FR', temperatura: 'Temperatura',
-  imc: 'IMC', complexion: 'Complexión',
-}
-
-const VISUAL_LABELS: Record<string, string> = {
-  vision_lejana_od: 'Visión Lejana OD', vision_lejana_oi: 'Visión Lejana OI',
-  vision_cercana_od: 'Visión Cercana OD', vision_cercana_oi: 'Visión Cercana OI',
-  lejana_corregida_od: 'Lejana Corregida OD', lejana_corregida_oi: 'Lejana Corregida OI',
-  cercana_corregida_od: 'Cercana Corregida OD', cercana_corregida_oi: 'Cercana Corregida OI',
-  reflejos: 'Reflejos', test_ishihara: 'Test Ishihara', campimetria: 'Campimetría',
-}
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function ExamenMedicoEstudio({
@@ -198,7 +169,7 @@ export default function ExamenMedicoEstudio({
     (physicalExamData.aptitud as string) ?? ''
   )
 
-  const [activeTab, setActiveTab] = useState<Tab>('sala')
+  const [activeTab, setActiveTab] = useState<Tab>('declarativa')
   const [isPending, startTransition] = useTransition()
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -231,11 +202,6 @@ export default function ExamenMedicoEstudio({
     setModulo1(prev => ({ ...prev, [key]: value }))
   }
 
-  const somatometryData = (examData?.somatometryData ?? {}) as Record<string, unknown>
-  const eyeAcuityData = (examData?.eyeAcuityData ?? {}) as Record<string, unknown>
-
-  const hasSomatometry = Object.keys(somatometryData).some(k => somatometryData[k] !== null && somatometryData[k] !== '')
-  const hasVisualAcuity = Object.keys(eyeAcuityData).some(k => eyeAcuityData[k] !== null && eyeAcuityData[k] !== '')
   const hasPhysicalExam = Object.keys(physicalExamData).some(k => physicalExamData[k] !== null && physicalExamData[k] !== '')
   const hasAptitud = !!physicalExamData.aptitud || !!physicalExamData.impresion_diagnostica
   const hasM1 = Object.entries(modulo1).some(
@@ -243,7 +209,6 @@ export default function ExamenMedicoEstudio({
   )
 
   const tabs: { id: Tab; label: string; icon: string; done: boolean }[] = [
-    { id: 'sala', label: 'Datos de Sala', icon: '📊', done: hasSomatometry || hasVisualAcuity },
     { id: 'declarativa', label: 'Módulo 1', icon: '📋', done: hasM1 },
     { id: 'exploracion', label: 'Exploración Física', icon: '🩺', done: hasPhysicalExam },
     { id: 'impresion', label: 'Impresión y Aptitud', icon: '✅', done: hasAptitud },
@@ -295,82 +260,7 @@ export default function ExamenMedicoEstudio({
         ))}
       </div>
 
-      {/* ── Tab 1: Datos heredados de Sala ──────────────────────────────── */}
-      {activeTab === 'sala' && (
-        <div className="space-y-4">
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
-            <span className="text-amber-500 text-sm mt-0.5">ℹ️</span>
-            <p className="text-xs text-amber-800">
-              Datos capturados en Sala. Son de referencia para el médico y no se modifican aquí.
-            </p>
-          </div>
-
-          {/* Somatometría */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-2.5 bg-teal-50 border-b border-teal-100 flex items-center gap-2">
-              <span className="text-teal-600">⚖️</span>
-              <p className="text-sm font-bold text-teal-800">Somatometría y Signos Vitales</p>
-              {!hasSomatometry && (
-                <span className="ml-auto text-[10px] text-amber-600 font-medium bg-amber-100 px-2 py-0.5 rounded-full">Sin datos</span>
-              )}
-            </div>
-            {hasSomatometry ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
-                {Object.entries(somatometryData)
-                  .filter(([, v]) => v !== null && v !== '' && v !== undefined)
-                  .map(([key, value]) => (
-                    <div key={key} className="bg-slate-50 rounded-lg p-2.5">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
-                        {SOMATO_LABELS[key] ?? key}
-                      </p>
-                      <p className="text-sm font-semibold text-slate-700 mt-0.5">
-                        {formatSomatoValue(key, value)}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            ) : (
-              <p className="p-4 text-sm text-slate-400">No se han capturado datos de somatometría en Sala.</p>
-            )}
-          </div>
-
-          {/* Agudeza Visual */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
-              <span className="text-blue-600">👁️</span>
-              <p className="text-sm font-bold text-blue-800">Agudeza Visual</p>
-              {!hasVisualAcuity && (
-                <span className="ml-auto text-[10px] text-amber-600 font-medium bg-amber-100 px-2 py-0.5 rounded-full">Sin datos</span>
-              )}
-            </div>
-            {hasVisualAcuity ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
-                {Object.entries(eyeAcuityData)
-                  .filter(([, v]) => v !== null && v !== '' && v !== undefined && v !== 'NO APLICA')
-                  .map(([key, value]) => (
-                    <div key={key} className="bg-slate-50 rounded-lg p-2.5">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
-                        {VISUAL_LABELS[key] ?? key}
-                      </p>
-                      <p className="text-sm font-semibold text-slate-700 mt-0.5">{String(value)}</p>
-                    </div>
-                  ))}
-              </div>
-            ) : (
-              <p className="p-4 text-sm text-slate-400">No se han capturado datos de agudeza visual en Sala.</p>
-            )}
-          </div>
-
-          <button
-            onClick={() => setActiveTab('declarativa')}
-            className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
-          >
-            Continuar → Antecedentes
-          </button>
-        </div>
-      )}
-
-      {/* ── Tab 2: Módulo 1 — Cuestionario del Paciente (ARCH-20260325-09) ── */}
+      {/* ── Tab 1: Módulo 1 — Cuestionario del Paciente (ARCH-20260325-09, ARCH-20260325-05) ── */}
       {activeTab === 'declarativa' && (
         <div className="space-y-3">
           {/* Banner info */}
@@ -751,10 +641,6 @@ export default function ExamenMedicoEstudio({
           </div>
 
           <div className="flex gap-2">
-            <button onClick={() => setActiveTab('sala')}
-              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold py-2.5 rounded-xl transition-colors">
-              ← Sala
-            </button>
             <button onClick={() => setActiveTab('exploracion')}
               className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors">
               Continuar → Exploración
@@ -763,7 +649,7 @@ export default function ExamenMedicoEstudio({
         </div>
       )}
 
-      {/* ── Tab 3: Exploración Física ────────────────────────────────────── */}
+      {/* ── Tab 2: Exploración Física ──────────────────────────────── */}
       {activeTab === 'exploracion' && (
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -817,7 +703,7 @@ export default function ExamenMedicoEstudio({
         </div>
       )}
 
-      {/* ── Tab 4: Impresión Diagnóstica y Aptitud ──────────────────────── */}
+      {/* ── Tab 3: Impresión Diagnóstica y Aptitud ────────────────── */}
       {activeTab === 'impresion' && (
         <div className="space-y-4">
           {/* Selección de Aptitud */}

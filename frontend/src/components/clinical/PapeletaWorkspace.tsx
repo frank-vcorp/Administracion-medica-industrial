@@ -10,6 +10,8 @@
 import { useState, useTransition } from "react"
 import { updateEventTestStatus, uploadEventTestFile } from "@/actions/event-test.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
+import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
+import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
 
 // --- Tipos locales ---
 
@@ -90,6 +92,20 @@ function isExamenMedico(name: string) {
   return lower.includes('examen medico') || lower.includes('examen médico')
 }
 
+function isSomatometria(name: string) {
+  const lower = name.toLowerCase().trim()
+  return (
+    lower.includes('somatometría') ||
+    lower.includes('somatometria') ||
+    lower.includes('signos vitales')
+  )
+}
+
+function isAgudezaVisual(name: string) {
+  const lower = name.toLowerCase().trim()
+  return lower.includes('agudeza visual')
+}
+
 function isLabTest(test: StudyTest) {
   const catName = test.test?.category?.name?.toLowerCase() || ''
   const testName = test.testNameSnapshot.toLowerCase()
@@ -111,6 +127,8 @@ function isLabTest(test: StudyTest) {
 
 function getStudyIcon(test: StudyTest): string {
   if (isExamenMedico(test.testNameSnapshot)) return '📋'
+  if (isSomatometria(test.testNameSnapshot)) return '⚖️'
+  if (isAgudezaVisual(test.testNameSnapshot)) return '👁️'
   if (test.fileUrl) return '📄'
   if (isLabTest(test)) return '🧪'
   return '🔬'
@@ -407,6 +425,8 @@ function StudyPanel({
   onExamenMedicoStatusChange: (status: string) => void
 }) {
   const isMedico = isExamenMedico(test.testNameSnapshot)
+  const isSomato = isSomatometria(test.testNameSnapshot)
+  const isAgudeza = isAgudezaVisual(test.testNameSnapshot)
   const isLab = isLabTest(test)
   const sampleTracked = isLab && ['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
   const resultTracked = ['RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
@@ -427,8 +447,13 @@ function StudyPanel({
             {test.test?.code && (
               <span className="text-xs font-mono text-slate-500">{test.test.code}</span>
             )}
-            <span className={`text-xs px-2 py-0.5 rounded font-medium ${isMedico ? 'bg-blue-50 text-blue-600' : isLab ? 'bg-purple-50 text-purple-700' : 'bg-slate-50 text-slate-600'}`}>
-              {isMedico ? '📋 Formulario' : isLab ? '🧪 Con muestra y resultado' : '📄 Documental'}
+            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+              isMedico ? 'bg-blue-50 text-blue-600' :
+              isSomato ? 'bg-teal-50 text-teal-700' :
+              isAgudeza ? 'bg-indigo-50 text-indigo-700' :
+              isLab ? 'bg-purple-50 text-purple-700' : 'bg-slate-50 text-slate-600'
+            }`}>
+              {isMedico ? '📋 Formulario' : isSomato ? '⚖️ Somatometría' : isAgudeza ? '👁️ Agudeza Visual' : isLab ? '🧪 Con muestra y resultado' : '📄 Documental'}
             </span>
           </div>
         </div>
@@ -478,6 +503,46 @@ function StudyPanel({
         </div>
       )}
 
+      {/* Sección: Somatometría (IMPL-20260325-05 — ARCH-20260325-05) */}
+      {isSomato && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5">
+            <span className="text-teal-600 text-base">⚖️</span>
+            <div>
+              <p className="text-sm font-bold text-teal-800">Somatometría — Formulario de Captura</p>
+              <p className="text-xs text-teal-600">Registra peso, talla, signos vitales y calcula IMC.</p>
+            </div>
+          </div>
+          <SomatometriaStudy
+            eventId={eventId}
+            eventTestId={test.id}
+            initialData={(examData?.somatometryData as Record<string, unknown>) ?? null}
+            readonly={readonly}
+            onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+          />
+        </div>
+      )}
+
+      {/* Sección: Agudeza Visual (IMPL-20260325-05 — ARCH-20260325-05) */}
+      {isAgudeza && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
+            <span className="text-indigo-600 text-base">👁️</span>
+            <div>
+              <p className="text-sm font-bold text-indigo-800">Agudeza Visual — Formulario de Captura</p>
+              <p className="text-xs text-indigo-600">Registra visión lejana, cercana, corregida y pruebas complementarias.</p>
+            </div>
+          </div>
+          <AgudezaVisualStudy
+            eventId={eventId}
+            eventTestId={test.id}
+            initialData={(examData?.eyeAcuityData as Record<string, unknown>) ?? null}
+            readonly={readonly}
+            onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+          />
+        </div>
+      )}
+
       {/* Sección: Examen Médico (tipo formulario — IMPL-20260325-01) */}
       {isMedico && (
         <div className="space-y-3">
@@ -486,7 +551,7 @@ function StudyPanel({
             <div>
               <p className="text-sm font-bold text-blue-800">Examen Médico — Formulario Clínico</p>
               <p className="text-xs text-blue-600">
-                Completa las secciones: Datos de Sala → Antecedentes → Exploración → Impresión/Aptitud
+                Completa las secciones: Módulo 1 → Exploración Física → Impresión / Aptitud
               </p>
             </div>
           </div>
@@ -502,8 +567,8 @@ function StudyPanel({
         </div>
       )}
 
-      {/* Sección: Upload atómico (estudios no Examen Médico) */}
-      {!isMedico && (
+      {/* Sección: Upload atómico (estudios documentales: no Examen Médico, Somatometría ni Agudeza Visual) */}
+      {!isMedico && !isSomato && !isAgudeza && (
         <div className="space-y-4">
           {/* Visor de archivo existente */}
           {test.fileUrl && (
