@@ -1,8 +1,14 @@
 'use client'
 
+/**
+ * Vista de Agenda de Citas Premium v2.3
+ * @description Agenda diaria con expedientes EXP, QR y acceso a Portal de Prellenado
+ * @id IMPL-20260325-01
+ */
 import { useEffect, useState, Suspense } from 'react'
 import { getAppointments, getAppointmentForCorroboration } from '@/actions/appointment.actions'
 import { getBranches } from '@/actions/admin.actions'
+import { generateInvitation } from '@/actions/prefilled-invitation.actions'
 import { useRouter } from 'next/navigation'
 import AppointmentFormModal from '@/components/AppointmentFormModal'
 import CorroborationModal from '@/components/CorroborationModal'
@@ -54,6 +60,11 @@ export default function AppointmentsPage() {
         return `${year}-${month}-${day}`
     })
     const [error, setError] = useState<string | null>(null)
+    // IMPL-20260325-01: Estado del modal de invitación de prellenado
+    const [inviteAptId, setInviteAptId] = useState<string | null>(null)
+    const [inviteLink, setInviteLink] = useState<string | null>(null)
+    const [inviteLoading, setInviteLoading] = useState(false)
+    const [inviteError, setInviteError] = useState<string | null>(null)
     const router = useRouter()
 
     useEffect(() => {
@@ -113,6 +124,21 @@ export default function AppointmentsPage() {
     const startHour = parseInt(branchConfig.openingTime.split(':')[0]);
     const endHour = parseInt(branchConfig.closingTime.split(':')[0]);
     const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
+
+    const handleGenerateInvite = async (aptId: string) => {
+        setInviteAptId(aptId)
+        setInviteLink(null)
+        setInviteError(null)
+        setInviteLoading(true)
+        const res = await generateInvitation({ appointmentId: aptId, channel: 'LINK' })
+        setInviteLoading(false)
+        if (res.success && res.data) {
+            const origin = window.location.origin
+            setInviteLink(`${origin}/prefill/${res.data.plainToken}`)
+        } else {
+            setInviteError(res.error ?? 'Error al generar el enlace.')
+        }
+    }
 
     const handleCheckIn = async (id: string) => {
         // IMPL-20260318-08: Abrir corroboración antes de crear el MedicalEvent
@@ -265,6 +291,15 @@ export default function AppointmentsPage() {
                                                             </button>
                                                             {apt.status === 'SCHEDULED' && (
                                                                 <button
+                                                                    onClick={() => handleGenerateInvite(apt.id)}
+                                                                    className="p-1.5 text-violet-500 hover:text-violet-700 hover:bg-violet-50 rounded-lg transition-colors"
+                                                                    title="Generar enlace de prellenado"
+                                                                >
+                                                                    📩
+                                                                </button>
+                                                            )}
+                                                            {apt.status === 'SCHEDULED' && (
+                                                                <button
                                                                     onClick={() => handleCheckIn(apt.id)}
                                                                     disabled={checkingIn === apt.id}
                                                                     className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-xs"
@@ -285,6 +320,69 @@ export default function AppointmentsPage() {
                     })}
                 </div>
             </div>
+
+            {/* IMPL-20260325-01: Modal de Invitación de Prellenado */}
+            {inviteAptId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="bg-violet-700 p-7 text-white">
+                            <button
+                                onClick={() => { setInviteAptId(null); setInviteLink(null); setInviteError(null) }}
+                                className="float-right text-white/50 hover:text-white"
+                            >
+                                ✕
+                            </button>
+                            <p className="text-violet-200 text-xs font-bold uppercase tracking-widest">Portal de Prellenado</p>
+                            <h2 className="text-xl font-black mt-1">Enlace de Invitación</h2>
+                        </div>
+                        <div className="p-7 space-y-5">
+                            {inviteLoading && (
+                                <div className="flex items-center gap-3 text-slate-500 text-sm">
+                                    <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
+                                    Generando enlace seguro…
+                                </div>
+                            )}
+                            {inviteError && (
+                                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                                    ⚠️ {inviteError}
+                                </div>
+                            )}
+                            {inviteLink && (
+                                <>
+                                    <p className="text-xs text-slate-500">
+                                        Comparte este enlace con el trabajador para que complete sus antecedentes médicos antes de la cita. Vigencia: 6 horas.
+                                    </p>
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-mono text-slate-700 break-all">
+                                        {inviteLink}
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(inviteLink!)}
+                                            className="flex-1 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all"
+                                        >
+                                            📋 Copiar enlace
+                                        </button>
+                                        <a
+                                            href={inviteLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex-1 text-center bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-all"
+                                        >
+                                            🔗 Abrir
+                                        </a>
+                                    </div>
+                                </>
+                            )}
+                            <button
+                                onClick={() => { setInviteAptId(null); setInviteLink(null); setInviteError(null) }}
+                                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2.5 rounded-xl font-bold text-sm transition-all"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* IMPL-20260318-09: Modal de Corroboración — montado y funcional antes del check-in */}
             {corroborationData && (

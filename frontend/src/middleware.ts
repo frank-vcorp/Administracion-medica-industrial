@@ -18,7 +18,8 @@ export async function middleware(request: NextRequest) {
 
   // Rutas públicas (sin protección)
   // FIX REFERENCE: FIX-20260225-02 - Evitar startsWith("/") que hace match con todo
-  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth")
+  // IMPL-20260325-01: /prefill es portal público de prellenado (sin sesión, validado por token)
+  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/prefill")
   if (isPublicRoute) {
     return NextResponse.next()
   }
