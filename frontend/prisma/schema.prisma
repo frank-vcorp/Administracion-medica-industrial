@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl"]
 }
 
@@ -9,19 +9,20 @@ datasource db {
 }
 
 model User {
-  id             String           @id @default(uuid())
-  email          String           @unique
-  hashedPassword String
-  fullName       String
-  role           UserRole         @default(DOCTOR_GENERAL)
-  isActive       Boolean          @default(true)
-  companyId      String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  auditLogs      AuditLog[]
-  performedTests EventTest[]
-  signatures     MedicalVerdict[]
-  company        Company?         @relation(fields: [companyId], references: [id])
+  id                   String                @id @default(uuid())
+  email                String                @unique
+  hashedPassword       String
+  fullName             String
+  role                 UserRole              @default(DOCTOR_GENERAL)
+  isActive             Boolean               @default(true)
+  companyId            String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  auditLogs            AuditLog[]
+  performedTests       EventTest[]
+  signatures           MedicalVerdict[]
+  company              Company?              @relation(fields: [companyId], references: [id])
+  generatedInvitations PrefilledInvitation[] // IMPL-20260324-07
 
   @@map("users")
 }
@@ -75,7 +76,7 @@ model Company {
   allowedBranches Branch[]         @relation("CompanyAllowedBranches")
   billedEvents    MedicalEvent[]   @relation("BillingCompany")
   medicalProfiles MedicalProfile[]
-  jobPositions     JobPosition[]
+  jobPositions    JobPosition[]
   users           User[]
   workers         Worker[]
 
@@ -98,7 +99,7 @@ model Worker {
   appointments    Appointment[]
   clinicalHistory ClinicalHistory?
   medicalHistory  MedicalEvent[]
-  jobPositionId    String?
+  jobPositionId   String?
   branch          Branch?          @relation(fields: [branchId], references: [id])
   company         Company?         @relation(fields: [companyId], references: [id])
   jobPosition     JobPosition?     @relation(fields: [jobPositionId], references: [id])
@@ -175,10 +176,10 @@ model MedicalProfile {
   companyId    String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
-  appointments  Appointment[]
-  company       Company?      @relation(fields: [companyId], references: [id])
-  jobPositions  JobPosition[]
-  tests         ProfileTest[]
+  appointments Appointment[]
+  company      Company?      @relation(fields: [companyId], references: [id])
+  jobPositions JobPosition[]
+  tests        ProfileTest[]
 
   @@map("medical_profiles")
 }
@@ -202,8 +203,8 @@ model EventTest {
   selectedOption   String?
   status           EventTestStatus @default(PENDING)
   performedById    String?
-  fileUrl          String?         // IMPL-20260324-06: Upload atómico por estudio
-  resultNotes      String?         // IMPL-20260324-06: Notas del resultado
+  fileUrl          String? // IMPL-20260324-06: Upload atómico por estudio
+  resultNotes      String? // IMPL-20260324-06: Notas del resultado
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   event            MedicalEvent    @relation(fields: [eventId], references: [id])
@@ -304,24 +305,25 @@ model MedicalVerdict {
 }
 
 model Appointment {
-  id               String            @id @default(uuid())
-  workerId         String
-  companyId        String
-  branchId         String
-  scheduledAt      DateTime
-  status           AppointmentStatus @default(SCHEDULED)
-  notes            String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  expedientId      String?           @unique
-  qrCode           String?
-  source           String            @default("SUCURSAL")
-  serviceProfileId String?
-  branch           Branch            @relation(fields: [branchId], references: [id])
-  company          Company           @relation(fields: [companyId], references: [id])
-  serviceProfile   MedicalProfile?   @relation(fields: [serviceProfileId], references: [id])
-  worker           Worker            @relation(fields: [workerId], references: [id])
-  medicalEvents    MedicalEvent?
+  id                  String               @id @default(uuid())
+  workerId            String
+  companyId           String
+  branchId            String
+  scheduledAt         DateTime
+  status              AppointmentStatus    @default(SCHEDULED)
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  expedientId         String?              @unique
+  qrCode              String?
+  source              String               @default("SUCURSAL")
+  serviceProfileId    String?
+  branch              Branch               @relation(fields: [branchId], references: [id])
+  company             Company              @relation(fields: [companyId], references: [id])
+  serviceProfile      MedicalProfile?      @relation(fields: [serviceProfileId], references: [id])
+  worker              Worker               @relation(fields: [workerId], references: [id])
+  medicalEvents       MedicalEvent?
+  prefilledInvitation PrefilledInvitation? // IMPL-20260324-07
 
   @@map("appointments")
 }
@@ -353,18 +355,18 @@ model ProfileServices {
 
 // IMPL-20260313-05: Modelo de Puestos de Trabajo para arquitectura B2B
 model JobPosition {
-  id               String          @id @default(uuid())
+  id               String  @id @default(uuid())
   name             String
   description      String?
   companyId        String
   defaultProfileId String?
 
-  company          Company         @relation(fields: [companyId], references: [id])
-  defaultProfile   MedicalProfile? @relation(fields: [defaultProfileId], references: [id])
-  workers          Worker[]
+  company        Company         @relation(fields: [companyId], references: [id])
+  defaultProfile MedicalProfile? @relation(fields: [defaultProfileId], references: [id])
+  workers        Worker[]
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("job_positions")
 }
@@ -386,11 +388,11 @@ enum GenderRestriction {
 
 // IMPL-20260324-06: Estados V1 para workflow de papeleta de estudios
 enum EventTestStatus {
-  PENDING            // Pendiente
-  IN_PROGRESS        // En proceso
-  SAMPLE_TAKEN       // Muestra tomada (principalmente laboratorios)
-  RESULT_REGISTERED  // Resultado registrado (archivo o formulario capturado)
-  COMPLETED          // Completado y cerrado
+  PENDING // Pendiente
+  IN_PROGRESS // En proceso
+  SAMPLE_TAKEN // Muestra tomada (principalmente laboratorios)
+  RESULT_REGISTERED // Resultado registrado (archivo o formulario capturado)
+  COMPLETED // Completado y cerrado
   SKIPPED
   CANCELLED
 }
@@ -410,4 +412,36 @@ enum AppointmentStatus {
   CANCELLED
   NO_SHOW
   COMPLETED
+}
+
+// IMPL-20260324-07: Estados del portal de prellenado temporal (SPEC ARCH-20260324-09)
+enum PrefilledStatus {
+  NOT_GENERATED // Nunca se generó invitación
+  INVITATION_ACTIVE // Token vigente, sin acceso del trabajador aún
+  OPENED // El trabajador accedió al portal
+  PARTIAL // Existe avance guardado parcialmente
+  SUBMITTED // El trabajador envió el módulo 1
+  EXPIRED // La vigencia terminó sin envío válido
+  CANCELLED // Invitación invalidada por reemplazo u operación
+}
+
+// IMPL-20260324-07: Invitación temporal para portal de prellenado (SPEC ARCH-20260324-09)
+model PrefilledInvitation {
+  id            String          @id @default(uuid())
+  appointmentId String          @unique // Una invitación activa por cita
+  tokenHash     String          @unique // SHA-256 del token aleatorio; nunca el token plano
+  expiresAt     DateTime
+  status        PrefilledStatus @default(INVITATION_ACTIVE)
+  module1Data   Json? // Payload estructurado del Módulo 1 (parcial o completo)
+  channel       String? // WHATSAPP | LINK | QR | TABLET
+  generatedById String? // Usuario staff que generó la invitación
+  openedCount   Int             @default(0) // Veces que se abrió el enlace
+  submittedAt   DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  generatedBy User?       @relation(fields: [generatedById], references: [id])
+
+  @@map("prefilled_invitations")
 }

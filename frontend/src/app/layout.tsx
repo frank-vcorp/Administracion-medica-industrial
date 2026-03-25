@@ -5,7 +5,7 @@
  * @backup context/checkpoints/CHK_IMPL-20260324-01.md
  * FIX REFERENCE: FIX-20260324-01 — sidebar/header ocultos en /login; nav filtrada por rol
  */
-import { ReactNode } from 'react'
+import { ReactNode, Suspense } from 'react'
 import Providers from '@/components/Providers'
 import AppShell from '@/components/AppShell'
 
@@ -16,7 +16,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="es">
       <body className="min-h-screen bg-slate-50 text-slate-900">
         <Providers>
-          <AppShell>{children}</AppShell>
+          {/* Suspense requerido por useSearchParams en AppShell — IMPL-20260324-07 */}
+          <Suspense>
+            <AppShell>{children}</AppShell>
+          </Suspense>
         </Providers>
       </body>
     </html>
