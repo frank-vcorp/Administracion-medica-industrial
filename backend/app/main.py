@@ -95,6 +95,30 @@ def read_root():
     }
 
 
+@app.post("/api/v1/upload-only")
+async def upload_only(file: UploadFile = File(...)):
+    """
+    Persiste físicamente el archivo en /uploads sin ejecutar análisis IA.
+    FIX ARCH-20260326-04: Fallback para cuando el pipeline IA V2 no está disponible.
+    Garantiza que fileUrl en DB apunte a un archivo que realmente existe.
+    """
+    filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
+    local_path = os.path.join(UPLOAD_DIR, filename)
+    try:
+        contents = await file.read()
+        with open(local_path, "wb") as f:
+            f.write(contents)
+        print(f"📁 Upload-only: {filename} ({len(contents)} bytes)")
+        return {
+            "status": "success",
+            "file": filename,
+            "file_url": f"/uploads/{filename}",
+        }
+    except Exception as e:
+        print(f"❌ Error en upload-only: {e}")
+        return {"status": "error", "error": str(e)}
+
+
 @app.post("/api/v1/upload-and-analyze")
 async def upload_and_analyze(file: UploadFile = File(...)):
     """

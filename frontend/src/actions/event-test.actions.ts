@@ -130,23 +130,48 @@ export async function uploadEventTestFile(formData: FormData) {
     }
   }
 
-  // FALLBACK V1: guardar referencia del archivo sin análisis IA
-  const fileUrl = `/uploads/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-
+  // FALLBACK V1 — FIX ARCH-20260326-04: subir físicamente al backend antes de guardar fileUrl.
+  // No se genera una ruta inventada; si el upload falla, fileUrl queda null y se informa al usuario.
   try {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const uploadForm = new FormData()
+    uploadForm.append('file', file)
+
+    let fileUrl: string | null = null
+    try {
+      const uploadResponse = await fetch(`${apiBase}/api/v1/upload-only`, {
+        method: 'POST',
+        body: uploadForm,
+      })
+      if (uploadResponse.ok) {
+        const uploadResult = await uploadResponse.json()
+        if (uploadResult?.status === 'success' && uploadResult?.file_url) {
+          fileUrl = uploadResult.file_url as string
+        }
+      }
+    } catch (uploadErr) {
+      console.warn('[FIX ARCH-20260326-04] upload-only falló:', uploadErr)
+    }
+
+    const resultNotes = fileUrl
+      ? buildAIResultNote({ success: false, error: 'Archivo guardado. Prediagnóstico IA no disponible; se requiere análisis manual.' })
+      : buildAIResultNote({ success: false, error: 'Pipeline IA y almacenamiento no disponibles. Suba el archivo nuevamente para regenerar el análisis.' })
+
     await prisma.eventTest.update({
       where: { id: eventTestId },
       data: {
-        fileUrl,
+        ...(fileUrl ? { fileUrl } : {}),
         status: 'RESULT_REGISTERED',
-        resultNotes: buildAIResultNote({ success: false, error: 'Fallback sin análisis IA disponible' }),
+        resultNotes,
       }
     })
     revalidatePath(`/events/${eventId}`)
-    return { success: true, fileUrl, aiAnalysis: null }
+    return fileUrl
+      ? { success: true, fileUrl, aiAnalysis: null }
+      : { success: false, error: 'No se pudo persistir el archivo físicamente. El pipeline IA tampoco está disponible. Intente subir el archivo nuevamente.' }
   } catch (error) {
-    console.error("Error saving event test file (fallback V1):", error)
-    return { success: false, error: "Error al vincular el archivo al estudio" }
+    console.error('[FIX ARCH-20260326-04] Error en fallback V1:', error)
+    return { success: false, error: 'Error al intentar guardar el archivo. Intente nuevamente.' }
   }
 }
 
@@ -186,7 +211,11 @@ export async function regenerateStudyAI(
     const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     const fileResponse = await fetch(`${apiBase}${eventTest.fileUrl}`)
     if (!fileResponse.ok) {
-      const errMsg = `No se pudo descargar el archivo para regenerar IA: HTTP ${fileResponse.status}`
+      // FIX ARCH-20260326-04: 404 ocurre cuando fileUrl fue inventada en el fallback anterior.
+      // Dar mensaje claro al usuario en lugar de exponer HTTP 404 internamente.
+      const errMsg = fileResponse.status === 404
+        ? 'El archivo del estudio ya no está disponible en el servidor. Vuelva a subir el archivo para regenerar el análisis IA.'
+        : `No se pudo descargar el archivo para regenerar IA: HTTP ${fileResponse.status}`
       await prisma.eventTest.update({
         where: { id: eventTestId },
         data: { resultNotes: `Error al regenerar IA: ${errMsg}` },
