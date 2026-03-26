@@ -17,7 +17,7 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { updateEventTestStatus, uploadEventTestFile } from "@/actions/event-test.actions"
+import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI } from "@/actions/event-test.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
@@ -198,6 +198,9 @@ export default function PapeletaWorkspace({
   const [isPending, startTransition] = useTransition()
   const [uploadError, setUploadError] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  // IMPL-20260326-03: Estado para regeneración IA desde archivo existente
+  const [isRegenerating, setIsRegenerating] = useState(false)
+  const [regenError, setRegenError] = useState('')
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
   const completedCount = localTests.filter(t =>
@@ -242,6 +245,19 @@ export default function PapeletaWorkspace({
       router.refresh()
     } else {
       setUploadError(res.error || 'Error al subir archivo')
+    }
+  }
+
+  // IMPL-20260326-03: Regenerar análisis IA desde archivo existente en fileUrl
+  const handleRegenerateAI = async (testId: string) => {
+    setIsRegenerating(true)
+    setRegenError('')
+    const res = await regenerateStudyAI(testId, eventId, reviewerUserId)
+    setIsRegenerating(false)
+    if (res.success) {
+      router.refresh()
+    } else {
+      setRegenError(res.error || 'Error al regenerar análisis IA')
     }
   }
 
@@ -372,9 +388,12 @@ export default function PapeletaWorkspace({
               isPending={isPending}
               isUploading={isUploading}
               uploadError={uploadError}
+              isRegenerating={isRegenerating}
+              regenError={regenError}
               apiUrl={apiUrl}
               onStatusChange={handleStatusChange}
               onFileUpload={handleFileUpload}
+              onRegenerateAI={handleRegenerateAI}
               onExamenMedicoStatusChange={(status) => {
                 updateLocalStatus(activeTest.id, status as StudyStatus)
                 router.refresh()
@@ -468,9 +487,12 @@ function StudyPanel({
   isPending,
   isUploading,
   uploadError,
+  isRegenerating,
+  regenError,
   apiUrl,
   onStatusChange,
   onFileUpload,
+  onRegenerateAI,
   onExamenMedicoStatusChange,
 }: {
   test: StudyTest
@@ -484,9 +506,12 @@ function StudyPanel({
   isPending: boolean
   isUploading: boolean
   uploadError: string
+  isRegenerating: boolean
+  regenError: string
   apiUrl: string
   onStatusChange: (id: string, status: StudyStatus) => void
   onFileUpload: (id: string, file: File) => void
+  onRegenerateAI: (id: string) => void
   onExamenMedicoStatusChange: (status: string) => void
 }) {
   const isMedico = isExamenMedico(test.testNameSnapshot)
@@ -708,6 +733,40 @@ function StudyPanel({
                 <p className="text-xs text-red-500 mt-2">{uploadError}</p>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* IMPL-20260326-03: Tarjeta de recuperación IA — archivo presente pero sin snapshots.
+          Visible cuando el estudio es elegible para IA, tiene fileUrl pero aún no hay aiSnapshot. */}
+      {isAIEligible && !test.aiSnapshot && test.fileUrl && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <span className="text-amber-500 text-xl shrink-0">⚠️</span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-amber-800">Análisis IA pendiente</p>
+              <p className="text-sm text-amber-700 mt-1">
+                El archivo fue cargado correctamente pero el análisis IA aún no se ejecutó
+                (o no se registraron snapshots). Puedes regenerarlo sin necesidad de volver a subir el archivo.
+              </p>
+              <p className="text-xs text-amber-600 font-mono mt-1 break-all">
+                {test.fileUrl.split('/').pop()}
+              </p>
+            </div>
+          </div>
+          {regenError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {regenError}
+            </p>
+          )}
+          {!readonly && (
+            <button
+              onClick={() => onRegenerateAI(test.id)}
+              disabled={isRegenerating}
+              className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+            >
+              {isRegenerating ? '⏳ Generando IA...' : '🤖 Generar IA ahora'}
+            </button>
           )}
         </div>
       )}

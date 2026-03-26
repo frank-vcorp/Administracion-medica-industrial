@@ -149,3 +149,96 @@ export async function uploadEventTestFile(formData: FormData) {
     return { success: false, error: "Error al vincular el archivo al estudio" }
   }
 }
+
+/**
+ * Regenera el análisis IA de un estudio que ya tiene fileUrl pero carece de snapshots.
+ * Descarga el archivo desde NEXT_PUBLIC_API_URL + fileUrl, reconstruye un File/Blob
+ * y reutiliza triggerStudyAIAnalysis para persistir los snapshots de forma inmutable.
+ * Si la regeneración falla, persiste el error en resultNotes.
+ *
+ * @id IMPL-20260326-03
+ * @backup context/checkpoints/CHK_IMPL-20260326-03.md
+ */
+export async function regenerateStudyAI(
+  eventTestId: string,
+  eventId: string,
+  triggeredByUserId: string = 'system'
+): Promise<{ success: boolean; error?: string }> {
+  if (!eventTestId || !eventId) {
+    return { success: false, error: 'Parámetros incompletos' }
+  }
+
+  try {
+    const eventTest = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: {
+        fileUrl: true,
+        testNameSnapshot: true,
+        test: { select: { code: true, category: { select: { name: true } } } },
+      },
+    })
+
+    if (!eventTest?.fileUrl) {
+      return { success: false, error: 'El estudio no tiene archivo vinculado' }
+    }
+
+    // Descargar el archivo desde el storage del backend
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const fileResponse = await fetch(`${apiBase}${eventTest.fileUrl}`)
+    if (!fileResponse.ok) {
+      const errMsg = `No se pudo descargar el archivo para regenerar IA: HTTP ${fileResponse.status}`
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: { resultNotes: `Error al regenerar IA: ${errMsg}` },
+      })
+      revalidatePath(`/events/${eventId}`)
+      return { success: false, error: errMsg }
+    }
+
+    const blob = await fileResponse.blob()
+    const fileName = eventTest.fileUrl.split('/').pop() || 'study-file.pdf'
+    const file = new File([blob], fileName, { type: blob.type || 'application/pdf' })
+
+    // Determinar tipo canónico para el backend V2
+    const canonicalType = getCanonicalAIStudyType(eventTest)
+
+    const formData = new FormData()
+    formData.set('eventTestId', eventTestId)
+    formData.set('eventId', eventId)
+    formData.set('file', file)
+    formData.set('triggeredByUserId', triggeredByUserId)
+    if (canonicalType) {
+      formData.set('study_type', canonicalType)
+    }
+
+    const aiResult = await triggerStudyAIAnalysis(formData)
+
+    // Persistir resultNotes según el resultado de la regeneración
+    const resultNotes = buildAIResultNote({
+      success: aiResult.success,
+      summary: aiResult.summary ?? null,
+      clinicalState: aiResult.clinicalState ?? null,
+      error: aiResult.error ?? null,
+    })
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: { resultNotes },
+    })
+
+    revalidatePath(`/events/${eventId}`)
+    return { success: aiResult.success, error: aiResult.error }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Error interno al regenerar IA'
+    console.error('[IMPL-20260326-03] Error en regenerateStudyAI:', error)
+    try {
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: { resultNotes: `Error al regenerar IA: ${msg}` },
+      })
+      revalidatePath(`/events/${eventId}`)
+    } catch (_persistErr) {
+      // No interrumpir si falla la persistencia del error
+    }
+    return { success: false, error: msg }
+  }
+}
