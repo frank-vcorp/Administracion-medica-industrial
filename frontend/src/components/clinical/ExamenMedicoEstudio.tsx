@@ -18,8 +18,6 @@ import { saveExamenMedicoPapeleta } from "@/actions/medical-exam.actions"
 type ExamData = {
   physicalExamData?: Record<string, unknown> | null
 } | null
- * @intervention ARCH-20260326-10
- * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
 
 type Tab = 'declarativa' | 'exploracion' | 'impresion'
 type M1Tab = 'gine' | 'inmuno'
