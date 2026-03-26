@@ -6,11 +6,16 @@
 'use client'
 
 import { SessionProvider } from 'next-auth/react'
+import type { Session } from 'next-auth'
 import { ReactNode } from 'react'
 
-export default function Providers({ children }: { children: ReactNode }) {
+/**
+ * @intervention ARCH-20260326-02
+ * @see context/checkpoints/CHK_ARCH-20260326-02.md
+ */
+export default function Providers({ children, session }: { children: ReactNode; session: Session | null }) {
     return (
-        <SessionProvider>
+        <SessionProvider session={session}>
             {children}
         </SessionProvider>
     )
