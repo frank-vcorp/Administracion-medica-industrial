@@ -423,7 +423,22 @@ Responde en JSON con esta estructura exacta:
         )
 
         print(f"🧠 Generando prediagnóstico IA para: {study_type}")
-        raw_result = self._call_gemini_text_only(prompt)
+        # IMPL-20260326-03: degradar a AI_NON_CONCLUSIVE en lugar de propagar excepción
+        try:
+            raw_result = self._call_gemini_text_only(prompt)
+        except Exception as e:
+            print(f"⚠️ Fallo al llamar/parsear Gemini (text-only) para {study_type}: {e}")
+            return AIPrediagnosisResult(
+                summary="No fue posible obtener análisis IA para este estudio debido a un error en la respuesta del modelo.",
+                confidence=0.0,
+                clinical_state="AI_NON_CONCLUSIVE",
+                justification=[],
+                clinical_basis=[],
+                citations=[],
+                limitations=["Error al parsear respuesta del modelo IA. La extracción de parámetros puede estar disponible."],
+                red_flags=[],
+                non_conclusive_reason=f"GeminiParseError: {str(e)[:300]}",
+            )
 
         try:
             result = AIPrediagnosisResult(**raw_result)
@@ -478,15 +493,10 @@ Responde en JSON con esta estructura exacta:
 
             text = candidates[0]["content"]["parts"][0]["text"].strip()
 
-            # Limpiar markdown si el modelo lo añade
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            text = text.strip().rstrip("```").strip()
+            # IMPL-20260326-03: stripping robusto de markdown (incondicional)
+            text = text.replace("```json", "").replace("```", "").strip()
 
-            import json as _json
-            return _json.loads(text)
+            return GeminiBase._tolerant_json_parse(text)
 
         except Exception as e:
             print(f"❌ Error llamando Gemini (text-only): {e}")

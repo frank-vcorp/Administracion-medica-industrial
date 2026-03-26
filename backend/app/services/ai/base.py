@@ -12,11 +12,48 @@ from typing import Dict, Any
 from pdf2image import convert_from_path
 
 
+def _read_env_var(key: str) -> str | None:
+    """ARCH-20260326-02: Normaliza variables con whitespace accidental. Respaldo: context/checkpoints/CHK_ARCH-20260326-02-GEMINI-ENV-NORMALIZATION.md."""
+    value = os.getenv(key)
+    if value:
+        return value.strip()
+
+    for env_key, env_value in os.environ.items():
+        if env_key.strip() == key and env_value:
+            return env_value.strip()
+
+    return None
+
+
 class GeminiBase:
     """Base class para interacción con Gemini API."""
+
+    @staticmethod
+    def _tolerant_json_parse(text: str) -> Dict[str, Any]:
+        """
+        Parseo tolerante de JSON: intenta recuperar respuestas de Gemini con texto extra
+        o cierres faltantes. Si falla, lanza ValueError informativo.
+        IMPL-20260326-03 — sin dependencias externas.
+        """
+        # Intento directo
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # Intento extrayendo primer { ... último } para ignorar texto extra al final
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError:
+                pass
+
+        raise ValueError(f"Respuesta de Gemini no es JSON parseable: {text[:300]!r}")
     
     def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash"):
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.api_key = api_key or _read_env_var("GEMINI_API_KEY")
         self.model = model
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY no configurada")
@@ -91,8 +128,8 @@ class GeminiBase:
             text_resp = text_resp.replace('```json', '').replace('```', '').strip()
             
             try:
-                return json.loads(text_resp)
-            except json.JSONDecodeError as e:
+                return GeminiBase._tolerant_json_parse(text_resp)
+            except ValueError as e:
                 print(f"❌ Error parseando JSON de Gemini: {text_resp}")
                 raise ValueError(f"Respuesta de Gemini no es JSON válido: {e}")
         except Exception as e:
