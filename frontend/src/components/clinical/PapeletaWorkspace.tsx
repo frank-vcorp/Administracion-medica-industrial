@@ -4,6 +4,10 @@
  * cajas globales SIM/NOVA. Cada estudio tiene su propia vista de trabajo.
  * @id IMPL-20260324-06
  * @backup context/checkpoints/CHK_IMPL-20260324-06-PAPELETA-WORKSPACE.md
+ * @intervention ARCH-20260326-07
+ * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
+ * @intervention ARCH-20260326-10
+ * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  */
 "use client"
 
@@ -42,15 +46,6 @@ type MedicalExamData = {
   physicalExamData?: Record<string, unknown> | null
 } | null
 
-/** Snapshot de datos personales del trabajador para prellenar Datos Personales — IMPL-20260325-02 */
-type WorkerSnapshot = {
-  nombre: string
-  empresa: string
-  puesto: string
-  dobIso: string | null
-  phone: string | null
-}
-
 interface PapeletaWorkspaceProps {
   eventId: string
   eventTests: StudyTest[]
@@ -59,10 +54,12 @@ interface PapeletaWorkspaceProps {
   apiUrl: string
   /** Datos del MedicalExam para heredar en el estudio Examen Médico (IMPL-20260325-01) */
   examData?: MedicalExamData
-  /** Snapshot de datos personales del trabajador — IMPL-20260325-02 */
-  workerSnapshot?: WorkerSnapshot | null
   /** IMPL-20260325-08: Snapshot del portal (PrefilledInvitation.module1Data) para mostrar en Examen Médico */
   prefilledData?: Record<string, unknown> | null
+  /** ARCH-20260326-10: Resumen longitudinal maestro para fallback inline en Examen Médico */
+  longitudinalData?: Record<string, unknown> | null
+  /** ARCH-20260326-06: ID del trabajador para CTA hacia Historial Clínico desde Examen Médico */
+  workerId?: string
 }
 
 // --- Labels y estilos para estados V1 ---
@@ -145,8 +142,9 @@ export default function PapeletaWorkspace({
   readonly = false,
   apiUrl,
   examData = null,
-  workerSnapshot = null,
   prefilledData = null,
+  longitudinalData = null,
+  workerId,
 }: PapeletaWorkspaceProps) {
   const [activeTestId, setActiveTestId] = useState<string | null>(null)
   const [localTests, setLocalTests] = useState<StudyTest[]>(eventTests)
@@ -314,8 +312,9 @@ export default function PapeletaWorkspace({
               test={activeTest}
               eventId={eventId}
               examData={examData}
-              workerSnapshot={workerSnapshot}
               prefilledData={prefilledData}
+              longitudinalData={longitudinalData}
+              workerId={workerId}
               readonly={readonly}
               isPending={isPending}
               isUploading={isUploading}
@@ -405,8 +404,9 @@ function StudyPanel({
   test,
   eventId,
   examData,
-  workerSnapshot,
   prefilledData,
+  longitudinalData,
+  workerId,
   readonly,
   isPending,
   isUploading,
@@ -419,8 +419,9 @@ function StudyPanel({
   test: StudyTest
   eventId: string
   examData: MedicalExamData
-  workerSnapshot: WorkerSnapshot | null | undefined
   prefilledData: Record<string, unknown> | null | undefined
+  longitudinalData: Record<string, unknown> | null | undefined
+  workerId: string | undefined
   readonly: boolean
   isPending: boolean
   isUploading: boolean
@@ -566,8 +567,9 @@ function StudyPanel({
             eventTestId={test.id}
             examData={examData}
             prefilledData={prefilledData ?? null}
+            longitudinalData={longitudinalData ?? null}
             readonly={readonly}
-            workerSnapshot={workerSnapshot}
+            workerId={workerId}
             onStatusChange={onExamenMedicoStatusChange}
           />
         </div>

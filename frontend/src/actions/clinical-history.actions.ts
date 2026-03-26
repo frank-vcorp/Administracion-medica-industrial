@@ -73,16 +73,24 @@ export async function upsertWorkerClinicalHistory(
     // Validar data con esquema Zod
     const validatedData = ClinicalHistoryDataSchema.parse(data)
 
+    // ARCH-20260326-06: Merge defensivo — no borrar secciones longitudinales no editadas
+    const existingHistory = await prisma.clinicalHistory.findUnique({
+      where: { workerId },
+      select: { data: true },
+    })
+    const existingData = (existingHistory?.data as Record<string, unknown>) ?? {}
+    const mergedData = { ...existingData, ...validatedData }
+
     // Upsert: Crear si no existe, actualizar si existe
     const clinicalHistory = await prisma.clinicalHistory.upsert({
       where: { workerId },
       create: {
         workerId,
-        data: validatedData,
+        data: mergedData,
         lastUpdated: new Date()
       },
       update: {
-        data: validatedData,
+        data: mergedData,
         lastUpdated: new Date()
       },
       include: {

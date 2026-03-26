@@ -220,7 +220,8 @@ export async function validatePublicToken(plainToken: string) {
     },
   })
 
-  // IMPL-20260325-08: Si no hay snapshot en la invitación, usar la base longitudinal del trabajador
+  // ARCH-20260326-06: Si no hay snapshot en la invitación, leer base longitudinal maestra
+  // (campos raíz de ClinicalHistory.data). Fallback: prefill_base para registros legados.
   let existingData: Record<string, unknown> | null = (invitation.module1Data as Record<string, unknown>) ?? null
   let fromLongitudinalBase = false
   if (!existingData) {
@@ -229,9 +230,19 @@ export async function validatePublicToken(plainToken: string) {
       select: { data: true },
     })
     const histData = history?.data as Record<string, unknown> | null
-    if (histData?.prefill_base) {
-      existingData = histData.prefill_base as Record<string, unknown>
-      fromLongitudinalBase = true
+    if (histData) {
+      const longitudinalFields = ['datos_personales', 'historia_laboral', 'heredo_familiares', 'patologicos', 'no_patologicos']
+      const hasRootData = longitudinalFields.some(f => histData[f])
+      if (hasRootData) {
+        existingData = Object.fromEntries(
+          longitudinalFields.filter(f => histData[f]).map(f => [f, histData[f]])
+        )
+        fromLongitudinalBase = true
+      } else if (histData.prefill_base) {
+        // Fallback legado
+        existingData = histData.prefill_base as Record<string, unknown>
+        fromLongitudinalBase = true
+      }
     }
   }
 
@@ -334,22 +345,35 @@ export async function submitModule1(plainToken: string, rawData: unknown) {
       },
     })
 
-    // IMPL-20260325-08: Actualizar base longitudinal del trabajador en ClinicalHistory.data.prefill_base
+    // ARCH-20260326-06: Fusionar secciones longitudinales en raíz de ClinicalHistory.data
+    // Mantener prefill_base como snapshot de cita por compatibilidad legada.
     if (workerId) {
       const existingHistory = await tx.clinicalHistory.findUnique({
         where: { workerId },
         select: { data: true },
       })
       const existingData = (existingHistory?.data as Record<string, unknown>) ?? {}
+      const submitted = parsed.data.data as Record<string, unknown>
+      const { datos_personales, historia_laboral, heredo_familiares, patologicos, no_patologicos } = submitted
+
+      const updatedData: Record<string, unknown> = {
+        ...existingData,
+        prefill_base: submitted,
+        ...(datos_personales  ? { datos_personales }  : {}),
+        ...(historia_laboral  ? { historia_laboral }  : {}),
+        ...(heredo_familiares ? { heredo_familiares } : {}),
+        ...(patologicos       ? { patologicos }       : {}),
+        ...(no_patologicos    ? { no_patologicos }    : {}),
+      }
       await tx.clinicalHistory.upsert({
         where: { workerId },
         create: {
           workerId,
-          data: { ...existingData, prefill_base: parsed.data.data },
+          data: updatedData as object,
           lastUpdated: new Date(),
         },
         update: {
-          data: { ...existingData, prefill_base: parsed.data.data },
+          data: updatedData as object,
           lastUpdated: new Date(),
         },
       })

@@ -3,8 +3,13 @@
  * @id IMPL-20260324-06
  * @spec ARCH-20260325-05
  * @backup context/checkpoints/CHK_IMPL-20260324-06-PAPELETA-WORKSPACE.md
+ * @intervention ARCH-20260326-07
+ * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
+ * @intervention ARCH-20260326-10
+ * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  */
 
+import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { getEventById } from '@/actions/medical-event.actions'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -27,6 +32,7 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
         const event = await getEventById(id)
         const examRes = await getMedicalExam(id)
         const medicalExam = examRes.success ? examRes.data : null
+        const historyRes = await getWorkerClinicalHistory(event?.worker.id ?? '')
         // IMPL-20260325-08: Obtener snapshot del portal (PrefilledInvitation.module1Data)
         const prefilledRes = await getPrefilledDataForEvent(id)
         const prefilledData = prefilledRes.success && prefilledRes.data ? prefilledRes.data.module1Data : null
@@ -58,16 +64,31 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
             profile: appointmentWithProfile?.serviceProfile?.name || ''
         }
 
-        // IMPL-20260325-02: Snapshot de datos personales para sección Datos Personales del Examen Médico
-        type WorkerWithDobPhone = { dob?: Date | null; phone?: string | null }
-        const workerDobPhone = event.worker as typeof event.worker & WorkerWithDobPhone
-        const workerSnapshot = JSON.parse(JSON.stringify({
-            nombre: `${event.worker.firstName} ${event.worker.lastName}`,
-            empresa: event.worker.company?.name ?? '',
-            puesto: workerWithPos.jobPosition?.name ?? '',
-            dobIso: workerDobPhone.dob ?? null,
-            phone: workerDobPhone.phone ?? null,
-        }))
+        type PrefillSection = Record<string, string | number | boolean>
+        type PrefillBase = {
+            datos_personales?: PrefillSection
+            historia_laboral?: PrefillSection
+            heredo_familiares?: PrefillSection
+        }
+
+        const histData = historyRes.success
+            ? (historyRes.data?.data as Record<string, unknown> | undefined)
+            : undefined
+        const rootDP = histData?.datos_personales as PrefillSection | undefined
+        const rootHL = histData?.historia_laboral as PrefillSection | undefined
+        const rootHF = histData?.heredo_familiares as PrefillSection | undefined
+        const hasRootLongitudinal = !!(rootDP || rootHL || rootHF)
+        const legacyBase = !hasRootLongitudinal
+            ? (histData?.prefill_base as PrefillBase | null | undefined)
+            : null
+
+        const longitudinalData = hasRootLongitudinal
+            ? {
+                ...(rootDP ? { datos_personales: rootDP } : {}),
+                ...(rootHL ? { historia_laboral: rootHL } : {}),
+                ...(rootHF ? { heredo_familiares: rootHF } : {}),
+            }
+            : legacyBase
 
         // IMPL-20260324-06: Serializar eventTests para el workspace (incluye fileUrl y status nuevos)
         type EventTestWithExtras = typeof event.eventTests[0] & { fileUrl?: string | null, resultNotes?: string | null }
@@ -131,6 +152,18 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         </div>
 
                         <div className="flex gap-2">
+                            <Link
+                                href={`/workers/${event.worker.id}`}
+                                className="bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors border border-slate-200"
+                            >
+                                Ver ficha trabajador
+                            </Link>
+                            <Link
+                                href={`/history/${event.worker.id}`}
+                                className="bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors border border-slate-200"
+                            >
+                                Ver historial clínico
+                            </Link>
                             <div className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${event.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
                                 {statusNames[event.status] || event.status}
                             </div>
@@ -185,11 +218,12 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         eventId={serializedEventId}
                         eventTests={serializedEventTests}
                         workerInfo={workerInfo}
-                        workerSnapshot={workerSnapshot}
+                        workerId={event.worker.id}
                         readonly={currentStep > 3}
                         apiUrl={apiUrl}
                         examData={serializedExam}
                         prefilledData={prefilledData ? JSON.parse(JSON.stringify(prefilledData)) : null}
+                        longitudinalData={longitudinalData ? JSON.parse(JSON.stringify(longitudinalData)) : null}
                     />
                 )}
 

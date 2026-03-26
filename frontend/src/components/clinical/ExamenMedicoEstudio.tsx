@@ -5,6 +5,8 @@
  * @id IMPL-20260325-01
  * @spec ARCH-20260324-04, ARCH-20260324-08, ARCH-20260325-05
  * @backup context/checkpoints/CHK_IMPL-20260325-01.md
+ * @intervention ARCH-20260326-07, ARCH-20260326-10
+ * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  */
 "use client"
 
@@ -16,29 +18,23 @@ import { saveExamenMedicoPapeleta } from "@/actions/medical-exam.actions"
 type ExamData = {
   physicalExamData?: Record<string, unknown> | null
 } | null
+ * @intervention ARCH-20260326-10
+ * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
 
 type Tab = 'declarativa' | 'exploracion' | 'impresion'
-type M1Tab = 'dp' | 'hl' | 'hf' | 'nopat' | 'pat' | 'gine' | 'inmuno'
-
-/** Snapshot de datos maestros del trabajador para prellenar Datos Personales — IMPL-20260325-02 */
-type WorkerSnapshot = {
-  nombre: string
-  empresa: string
-  puesto: string
-  dobIso: string | null
-  phone: string | null
-}
+type M1Tab = 'gine' | 'inmuno'
 
 interface ExamenMedicoEstudioProps {
   eventId: string
   eventTestId: string
   examData: ExamData
   prefilledData?: Record<string, unknown> | null
+  longitudinalData?: Record<string, unknown> | null
   readonly?: boolean
   /** Callback para actualizar estado local en el workspace padre */
   onStatusChange?: (status: string) => void
-  /** Snapshot del trabajador para prellenar sección Datos Personales — IMPL-20260325-02 */
-  workerSnapshot?: WorkerSnapshot | null
+  /** ID del trabajador para CTA hacia Historial Clínico — ARCH-20260326-06 */
+  workerId?: string
 }
 
 // ─── Campos de Exploración Física (de ExploracionFisicaSchema) ───────────────
@@ -80,69 +76,11 @@ const EXPLORACION_FIELDS: { name: string; label: string }[] = [
   { name: "especificar_quiste", label: "Especificar Quiste" },
 ]
 
-// ─── Helper: Cálculo de edad desde fecha ISO — IMPL-20260325-02 ────────────
-
-function calcEdad(isoDate: string | null | undefined): string {
-  if (!isoDate) return ''
-  const birth = new Date(isoDate)
-  if (isNaN(birth.getTime())) return ''
-  const today = new Date()
-  let age = today.getFullYear() - birth.getFullYear()
-  const m = today.getMonth() - birth.getMonth()
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
-  return age >= 0 ? String(age) : ''
-}
-
 const APTITUD_OPTIONS = [
   { value: 'APTO', label: '✅ Apto', color: 'border-emerald-400 bg-emerald-50 text-emerald-800' },
   { value: 'APTO CON RESTRICCIONES', label: '⚠️ Apto con Restricciones', color: 'border-amber-400 bg-amber-50 text-amber-800' },
   { value: 'NO APTO', label: '❌ No Apto', color: 'border-red-400 bg-red-50 text-red-800' },
   { value: 'PENDIENTE DE RESULTADOS', label: '⏳ Pendiente de Resultados', color: 'border-slate-300 bg-slate-50 text-slate-700' },
-]
-
-// ─── Módulo 1: Antecedentes Patológicos (checklist) — ARCH-20260325-09 ────────────────────────
-const PAT_FIELDS: { key: string; label: string }[] = [
-  { key: 'm1_pat_diabetes', label: 'Diabetes' },
-  { key: 'm1_pat_has', label: 'HAS' },
-  { key: 'm1_pat_cancer', label: 'Cáncer' },
-  { key: 'm1_pat_cardiopatias', label: 'Cardiopatías' },
-  { key: 'm1_pat_bronquitis', label: 'Bronquitis' },
-  { key: 'm1_pat_neumonias', label: 'Neumonías' },
-  { key: 'm1_pat_tuberculosis', label: 'Tuberculosis' },
-  { key: 'm1_pat_exantematicas', label: 'Exantemáticas' },
-  { key: 'm1_pat_psiquiatricas', label: 'Psiquiátricas' },
-  { key: 'm1_pat_tifoidea', label: 'Tifoidea' },
-  { key: 'm1_pat_colitis', label: 'Colitis' },
-  { key: 'm1_pat_asma', label: 'Asma' },
-  { key: 'm1_pat_alergias', label: 'Alergias' },
-  { key: 'm1_pat_parotiditis', label: 'Parotiditis' },
-  { key: 'm1_pat_dermatitis', label: 'Dermatitis' },
-  { key: 'm1_pat_varices', label: 'Várices' },
-  { key: 'm1_pat_hepatitis', label: 'Hepatitis' },
-  { key: 'm1_pat_renales', label: 'Renales' },
-  { key: 'm1_pat_epilepsia', label: 'Epilepsia' },
-  { key: 'm1_pat_vertigo', label: 'Vértigo' },
-  { key: 'm1_pat_desmayos', label: 'Desmayos' },
-  { key: 'm1_pat_gastritis', label: 'Gastritis' },
-  { key: 'm1_pat_fracturas', label: 'Fracturas' },
-  { key: 'm1_pat_cirugias', label: 'Cirugías' },
-  { key: 'm1_pat_transfusiones', label: 'Transfusiones' },
-  { key: 'm1_pat_hernias', label: 'Hernias' },
-  { key: 'm1_pat_hemorroides', label: 'Hemorroides' },
-  { key: 'm1_pat_traumatismos', label: 'Traumatismos' },
-  { key: 'm1_pat_c_vertebral', label: 'Pat. C. Vertebral' },
-  { key: 'm1_pat_ginecologicos', label: 'Ginecológicos' },
-  { key: 'm1_pat_enf_trans_sexual', label: 'ETS' },
-  { key: 'm1_pat_endocrinopatias', label: 'Endocrinopatías' },
-  { key: 'm1_pat_migrana', label: 'Migraña' },
-]
-
-// No patológicos / toxicomanías — grupos con sub-campos
-const NOPAT_ITEMS: { key: string; lbl: string; subs: [string, string][] }[] = [
-  { key: 'm1_alcohol', lbl: 'Alcohol', subs: [['m1_alc_edad', 'Edad inicio'], ['m1_alc_freq', 'Frecuencia'], ['m1_alc_susp', 'Suspendido']] },
-  { key: 'm1_tabaco', lbl: 'Tabaco', subs: [['m1_tab_edad', 'Edad inicio'], ['m1_tab_freq', 'Frecuencia'], ['m1_tab_cig', 'Cigarros/día'], ['m1_tab_susp', 'Suspendido']] },
-  { key: 'm1_drogas', lbl: 'Drogas/Estimulantes', subs: [['m1_drog_esp', 'Especifique'], ['m1_drog_ult', 'Último consumo']] },
-  { key: 'm1_ejercicio', lbl: 'Ejercicio', subs: [['m1_ej_tipo', 'Tipo y frecuencia']] },
 ]
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -152,9 +90,10 @@ export default function ExamenMedicoEstudio({
   eventTestId,
   examData,
   prefilledData,
+  longitudinalData,
   readonly = false,
   onStatusChange,
-  workerSnapshot = null,
+  workerId,
 }: ExamenMedicoEstudioProps) {
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
 
@@ -174,29 +113,18 @@ export default function ExamenMedicoEstudio({
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState('')
 
-  // Estado Módulo 1 — ARCH-20260325-09
+  // Estado Módulo 1 — solo campos por cita que siguen viviendo en Examen Médico
   const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
     const existing = physicalExamData.modulo1
-    const base: Record<string, string> =
+    return (
       existing && typeof existing === 'object' && !Array.isArray(existing)
         ? Object.fromEntries(
             Object.entries(existing as Record<string, unknown>).map(([k, v]) => [k, String(v ?? '')])
           )
         : {}
-    // Inicializar patológicos en NEGADO si no existen
-    PAT_FIELDS.forEach(f => { if (!base[f.key]) base[f.key] = 'NEGADO' })
-    // Sembrar campos dp desde workerSnapshot si no han sido persistidos aún — IMPL-20260325-02
-    if (workerSnapshot) {
-      if (!base['m1_dp_puesto_sol'] && workerSnapshot.puesto) base['m1_dp_puesto_sol'] = workerSnapshot.puesto
-      if (!base['m1_dp_telefono'] && workerSnapshot.phone) base['m1_dp_telefono'] = workerSnapshot.phone
-      if (!base['m1_dp_fech_nac'] && workerSnapshot.dobIso) {
-        base['m1_dp_fech_nac'] = workerSnapshot.dobIso.slice(0, 10)
-        if (!base['m1_dp_edad']) base['m1_dp_edad'] = calcEdad(workerSnapshot.dobIso)
-      }
-    }
-    return base
+    )
   })
-  const [m1Tab, setM1Tab] = useState<M1Tab>('dp')
+  const [m1Tab, setM1Tab] = useState<M1Tab>('inmuno')
 
   function setM1Field(key: string, value: string) {
     setModulo1(prev => ({ ...prev, [key]: value }))
@@ -204,9 +132,12 @@ export default function ExamenMedicoEstudio({
 
   const hasPhysicalExam = Object.keys(physicalExamData).some(k => physicalExamData[k] !== null && physicalExamData[k] !== '')
   const hasAptitud = !!physicalExamData.aptitud || !!physicalExamData.impresion_diagnostica
-  const hasM1 = Object.entries(modulo1).some(
-    ([k, v]) => !k.startsWith('m1_pat_') && v && v.trim() !== '' && v !== 'NEGADO'
-  )
+  const hasM1 = Object.entries(modulo1).some(([, v]) => v && v.trim() !== '' && v !== 'NEGADO' && v !== 'NO')
+  const longitudinalReference = prefilledData ?? longitudinalData ?? null
+  const hasLongitudinalReference = !!longitudinalReference && Object.keys(longitudinalReference).length > 0
+  const longitudinalReferenceLabel = prefilledData
+    ? 'Snapshot del portal disponible abajo.'
+    : 'Resumen longitudinal maestro disponible abajo.'
 
   const tabs: { id: Tab; label: string; icon: string; done: boolean }[] = [
     { id: 'declarativa', label: 'Módulo 1', icon: '📋', done: hasM1 },
@@ -276,46 +207,6 @@ export default function ExamenMedicoEstudio({
             </p>
           </div>
 
-          {/* IMPL-20260325-08: Panel de snapshot del portal (solo lectura) */}
-          {prefilledData && (
-            <details className="bg-emerald-50 border border-emerald-200 rounded-xl overflow-hidden">
-              <summary className="px-4 py-2.5 cursor-pointer text-xs font-bold text-emerald-800 flex items-center gap-2 select-none">
-                <span>📋</span>
-                <span>Ver snapshot del portal de prellenado (datos declarados por el trabajador)</span>
-              </summary>
-              <div className="px-4 pb-4 pt-2 space-y-3 border-t border-emerald-200">
-                <p className="text-[10px] text-emerald-600 italic">
-                  Copia congelada de lo que el trabajador declaró antes de esta cita. Solo referencia.
-                </p>
-                {Object.entries(prefilledData)
-                  .filter(([, v]) => v !== null && v !== undefined && typeof v !== 'object')
-                  .map(([k, v]) => (
-                    <div key={k} className="flex gap-2">
-                      <span className="text-[10px] font-bold text-emerald-600 uppercase min-w-[120px]">{k.replace(/_/g, ' ')}:</span>
-                      <span className="text-xs text-emerald-900">{String(v)}</span>
-                    </div>
-                  ))}
-                {Object.entries(prefilledData)
-                  .filter(([, v]) => v !== null && v !== undefined && typeof v === 'object')
-                  .map(([sectionKey, sectionVal]) => (
-                    <div key={sectionKey} className="mt-2">
-                      <p className="text-[10px] font-bold text-emerald-700 uppercase mb-1">{sectionKey.replace(/_/g, ' ')}</p>
-                      <div className="grid grid-cols-2 gap-1 pl-2">
-                        {Object.entries(sectionVal as Record<string, unknown>)
-                          .filter(([, v]) => v !== undefined && v !== '' && v !== null)
-                          .map(([k, v]) => (
-                            <div key={k} className="flex gap-1">
-                              <span className="text-[10px] text-emerald-500 min-w-[80px]">{k.replace(/_/g, ' ')}:</span>
-                              <span className="text-[10px] text-emerald-800">{String(v)}</span>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </details>
-          )}
-
           {/* Sexo — necesario para condicional ginecológicos */}
           <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Sexo</span>
@@ -335,14 +226,80 @@ export default function ExamenMedicoEstudio({
             </div>
           </div>
 
-          {/* Sub-tabs de Módulo 1 */}
+          {/* ARCH-20260326-06: Referencia al snapshot longitudinal + CTA al Historial Clínico maestro */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <span className="text-blue-500 text-base mt-0.5">📋</span>
+                <div>
+                  <p className="text-xs font-bold text-blue-800">
+                    Datos longitudinales — ahora en Historial Clínico
+                  </p>
+                  <p className="text-[10px] text-blue-600 mt-0.5">
+                    Datos Personales, Historia Laboral, Heredo-Familiares, Patológicos y No Patológicos
+                    se editan desde el Historial Clínico del trabajador.
+                    {hasLongitudinalReference && <span className="font-semibold"> {longitudinalReferenceLabel}</span>}
+                  </p>
+                </div>
+              </div>
+              {workerId && (
+                <a
+                  href={`/history/${workerId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 px-3 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  Abrir Historial →
+                </a>
+              )}
+            </div>
+            {/* ARCH-20260326-10: Sin snapshot → mensaje de ausencia; con snapshot → panel único (no duplicado) */}
+            {!hasLongitudinalReference && (
+              <div className="px-4 pb-3 pt-1 border-t border-blue-100">
+                <p className="text-[10px] text-blue-500 italic">
+                  Sin referencia longitudinal embebida para esta cita. Consulta el Historial Clínico para ver los datos actualizados.
+                </p>
+              </div>
+            )}
+            {hasLongitudinalReference && (
+              <details className="border-t border-blue-200">
+                <summary className="px-4 py-2 cursor-pointer text-[10px] font-bold text-blue-700 select-none">
+                  {prefilledData
+                    ? 'Ver snapshot del portal (datos declarados por el trabajador antes de esta cita — sólo referencia)'
+                    : 'Ver resumen longitudinal maestro (datos persistentes del Historial Clínico)'}
+                </summary>
+                <div className="px-4 pb-3 pt-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {([
+                    ['datos_personales', '👤 Datos Personales'],
+                    ['historia_laboral', '🏭 Historia Laboral'],
+                    ['heredo_familiares', '🧬 Heredo-Familiares'],
+                  ] as [string, string][]).map(([sKey, sLabel]) => {
+                    const section = longitudinalReference[sKey] as Record<string, unknown> | undefined
+                    if (!section || typeof section !== 'object') return null
+                    const entries = Object.entries(section).filter(([, v]) => v !== undefined && v !== '' && v !== null)
+                    if (!entries.length) return null
+                    return (
+                      <div key={sKey} className="col-span-full">
+                        <p className="text-[9px] font-bold text-blue-500 uppercase tracking-wider mb-1">{sLabel}</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                          {entries.map(([k, v]) => (
+                            <div key={k} className="bg-white/70 rounded px-2 py-1">
+                              <p className="text-[9px] text-blue-400 uppercase">{k.replace(/_/g, ' ')}</p>
+                              <p className="text-[10px] text-blue-900 font-semibold">{String(v)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>
+            )}
+          </div>
+
+          {/* Sub-tabs de Módulo 1 — solo antecedentes clínicos de la cita */}
           <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1">
             {([
-              ['dp', '👤', 'Datos Personales'],
-              ['hl', '🏢', 'Historia Laboral'],
-              ['hf', '👨‍👩‍👧', 'Heredo-Familiares'],
-              ['nopat', '🍺', 'No Patológicos'],
-              ['pat', '🏥', 'Patológicos'],
               ...(modulo1['m1_sexo'] === 'Femenino' ? [['gine', '♀️', 'Ginecológicos']] : []),
               ['inmuno', '💉', 'Inmunizaciones'],
             ] as [string, string, string][]).map(([id, icon, lbl]) => (
@@ -358,267 +315,6 @@ export default function ExamenMedicoEstudio({
               </button>
             ))}
           </div>
-
-          {/* DP: Datos Personales — IMPL-20260325-02 */}
-          {m1Tab === 'dp' && (
-            <div className="space-y-3">
-              {/* Datos maestros readonly: nombre y empresa */}
-              {workerSnapshot && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Datos del expediente</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Nombre completo</label>
-                      <p className="mt-1 text-sm font-semibold text-slate-700 bg-white border border-slate-100 rounded-lg px-2.5 py-1.5">{workerSnapshot.nombre || '—'}</p>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Empresa</label>
-                      <p className="mt-1 text-sm font-semibold text-slate-700 bg-white border border-slate-100 rounded-lg px-2.5 py-1.5">{workerSnapshot.empresa || '—'}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Campos editables / pre-llenados */}
-              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Datos personales del examen</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Ingreso</label>
-                    <input type="date" value={modulo1['m1_dp_fecha_ingreso'] ?? ''} onChange={e => setM1Field('m1_dp_fecha_ingreso', e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Lugar de Nacimiento</label>
-                    <input type="text" value={modulo1['m1_dp_lugar_nac'] ?? ''} onChange={e => setM1Field('m1_dp_lugar_nac', e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Ciudad, Estado" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Nacimiento</label>
-                    <input type="date" value={modulo1['m1_dp_fech_nac'] ?? ''}
-                      onChange={e => { setM1Field('m1_dp_fech_nac', e.target.value); setM1Field('m1_dp_edad', calcEdad(e.target.value)) }}
-                      disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Edad (años)</label>
-                    <input type="number" value={modulo1['m1_dp_edad'] ?? ''} onChange={e => setM1Field('m1_dp_edad', e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Años" min="0" max="120" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Nacionalidad</label>
-                    <input type="text" value={modulo1['m1_dp_nacionalidad'] ?? ''} onChange={e => setM1Field('m1_dp_nacionalidad', e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Ej: Mexicana" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Estado Civil</label>
-                    <select value={modulo1['m1_dp_edo_civil'] ?? ''} onChange={e => setM1Field('m1_dp_edo_civil', e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none">
-                      <option value="">— Seleccionar —</option>
-                      {['Soltero/a', 'Casado/a', 'Unión libre', 'Divorciado/a', 'Viudo/a'].map(o => <option key={o}>{o}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Teléfono</label>
-                    <input type="tel" value={modulo1['m1_dp_telefono'] ?? ''} onChange={e => setM1Field('m1_dp_telefono', e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="10 dígitos" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Escolaridad</label>
-                    <select value={modulo1['m1_dp_escolaridad'] ?? ''} onChange={e => setM1Field('m1_dp_escolaridad', e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none">
-                      <option value="">— Seleccionar —</option>
-                      {['Primaria', 'Secundaria', 'Preparatoria / Bachillerato', 'Técnico', 'Licenciatura', 'Posgrado'].map(o => <option key={o}>{o}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Puesto Solicitado</label>
-                    <input type="text" value={modulo1['m1_dp_puesto_sol'] ?? ''} onChange={e => setM1Field('m1_dp_puesto_sol', e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Domicilio</label>
-                  <input type="text" value={modulo1['m1_dp_domicilio'] ?? ''} onChange={e => setM1Field('m1_dp_domicilio', e.target.value)} disabled={readonly}
-                    className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Calle, número, colonia, municipio" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* HL: Historia Laboral */}
-          {m1Tab === 'hl' && (
-            <div className="space-y-3">
-              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Empleos Anteriores</p>
-                {([['m1_emp1', 'Empleo 1'], ['m1_emp2', 'Empleo 2']] as [string, string][]).map(([prefix, lbl]) => (
-                  <div key={prefix} className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">{lbl} — Empresa</label>
-                      <input type="text" value={modulo1[prefix + '_empresa'] ?? ''} onChange={e => setM1Field(prefix + '_empresa', e.target.value)} disabled={readonly}
-                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Empresa" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Área / Puesto</label>
-                      <input type="text" value={modulo1[prefix + '_puesto'] ?? ''} onChange={e => setM1Field(prefix + '_puesto', e.target.value)} disabled={readonly}
-                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Puesto" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Antigüedad</label>
-                      <input type="text" value={modulo1[prefix + '_tiempo'] ?? ''} onChange={e => setM1Field(prefix + '_tiempo', e.target.value)} disabled={readonly}
-                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Ej: 2 años" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Exposición a Factores de Riesgo</p>
-                {([['m1_exp_quim', 'Químico'], ['m1_exp_fis', 'Físico'], ['m1_exp_bio', 'Biológico'], ['m1_exp_ergo', 'Ergonómico']] as [string, string][]).map(([key, lbl]) => (
-                  <div key={key} className="flex items-center gap-2">
-                    <button onClick={() => setM1Field(key, modulo1[key] === 'SI' ? 'NEGADO' : 'SI')} disabled={readonly}
-                      className={`shrink-0 px-3 py-1 text-[10px] font-bold rounded-lg border-2 transition-colors ${modulo1[key] === 'SI' ? 'bg-rose-100 border-rose-400 text-rose-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                      {lbl}
-                    </button>
-                    {modulo1[key] === 'SI' && (
-                      <input type="text" value={modulo1[key + '_desc'] ?? ''} onChange={e => setM1Field(key + '_desc', e.target.value)} disabled={readonly}
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Especifique..." />
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Accidentes / Enfermedades Profesionales</p>
-                {([['m1_accidentes', 'Accidente de Trabajo'], ['m1_enf_prof', 'Enfermedad Profesional']] as [string, string][]).map(([key, lbl]) => (
-                  <div key={key} className="flex items-center gap-2">
-                    <button onClick={() => setM1Field(key, modulo1[key] === 'SI' ? 'NEGADO' : 'SI')} disabled={readonly}
-                      className={`shrink-0 px-3 py-1 text-[10px] font-bold rounded-lg border-2 transition-colors ${modulo1[key] === 'SI' ? 'bg-amber-100 border-amber-400 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                      {lbl}
-                    </button>
-                    {modulo1[key] === 'SI' && (
-                      <input type="text" value={modulo1[key + '_desc'] ?? ''} onChange={e => setM1Field(key + '_desc', e.target.value)} disabled={readonly}
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Describa..." />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* HF: Heredo-Familiares */}
-          {m1Tab === 'hf' && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Antecedentes Heredo-Familiares — Especifique parentesco si aplica</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {([
-                  ['m1_hf_has', 'HAS'], ['m1_hf_diabetes', 'Diabetes'], ['m1_hf_asma', 'Asma'],
-                  ['m1_hf_epilepsia', 'Epilepsia'], ['m1_hf_cancer', 'Cáncer'], ['m1_hf_cardiopatia', 'Cardiopatía'],
-                  ['m1_hf_renales', 'Renales'], ['m1_hf_mentales', 'Mentales'],
-                ] as [string, string][]).map(([key, lbl]) => (
-                  <div key={key}>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">{lbl}</label>
-                    <input type="text" value={modulo1[key] ?? ''} onChange={e => setM1Field(key, e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="NEGADO o parentesco" />
-                  </div>
-                ))}
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Otras</label>
-                <textarea rows={2} value={modulo1['m1_hf_otras'] ?? ''} onChange={e => setM1Field('m1_hf_otras', e.target.value)} disabled={readonly}
-                  className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs resize-none focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Otras condiciones hereditarias..." />
-              </div>
-            </div>
-          )}
-
-          {/* NOPAT: No Patológicos y Toxicomanías */}
-          {m1Tab === 'nopat' && (
-            <div className="space-y-3">
-              {NOPAT_ITEMS.map(({ key, lbl, subs }) => (
-                <div key={key} className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setM1Field(key, modulo1[key] === 'SI' ? 'NEGADO' : 'SI')} disabled={readonly}
-                      className={`px-3 py-1 text-xs font-bold rounded-lg border-2 transition-colors ${modulo1[key] === 'SI' ? 'bg-rose-100 border-rose-400 text-rose-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                      {lbl}: {modulo1[key] === 'SI' ? 'SI' : 'NEGADO'}
-                    </button>
-                  </div>
-                  {modulo1[key] === 'SI' && (
-                    <div className="grid grid-cols-2 gap-2 pl-2">
-                      {subs.map(([sk, slbl]) => (
-                        <div key={sk}>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase">{slbl}</label>
-                          <input type="text" value={modulo1[sk] ?? ''} onChange={e => setM1Field(sk, e.target.value)} disabled={readonly}
-                            className="w-full mt-0.5 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              <div className="bg-white border border-slate-200 rounded-xl p-3 grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Alimentación</label>
-                  <select value={modulo1['m1_alimentacion'] || 'BUENA'} onChange={e => setM1Field('m1_alimentacion', e.target.value)} disabled={readonly}
-                    className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none">
-                    {['BUENA', 'REGULAR', 'MALA'].map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Grupo y RH</label>
-                  <input type="text" value={modulo1['m1_grupo_rh'] ?? ''} onChange={e => setM1Field('m1_grupo_rh', e.target.value)} disabled={readonly}
-                    className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Ej: O+" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setM1Field('m1_tatuajes', modulo1['m1_tatuajes'] === 'SI' ? 'NEGADO' : 'SI')} disabled={readonly}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg border-2 transition-colors ${modulo1['m1_tatuajes'] === 'SI' ? 'bg-rose-100 border-rose-400 text-rose-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                    Tatuajes: {modulo1['m1_tatuajes'] === 'SI' ? 'SI' : 'NEGADO'}
-                  </button>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Tx Médico Actual</label>
-                  <div className="mt-1 flex gap-1">
-                    <button onClick={() => setM1Field('m1_tx_actual', modulo1['m1_tx_actual'] === 'SI' ? 'NEGADO' : 'SI')} disabled={readonly}
-                      className={`px-2 py-1 text-[10px] font-bold rounded border-2 transition-colors ${modulo1['m1_tx_actual'] === 'SI' ? 'bg-amber-100 border-amber-400 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                      {modulo1['m1_tx_actual'] === 'SI' ? 'SI' : 'NEGADO'}
-                    </button>
-                    {modulo1['m1_tx_actual'] === 'SI' && (
-                      <input type="text" value={modulo1['m1_tx_actual_desc'] ?? ''} onChange={e => setM1Field('m1_tx_actual_desc', e.target.value)} disabled={readonly} placeholder="Especifique..."
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* PAT: Antecedentes Patológicos */}
-          {m1Tab === 'pat' && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Antecedentes Personales Patológicos — default NEGADO</p>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {PAT_FIELDS.map(({ key, label }) => (
-                  <button key={key} disabled={readonly}
-                    onClick={() => setM1Field(key, modulo1[key] === 'SI' ? 'NEGADO' : 'SI')}
-                    className={`text-[10px] font-bold px-2 py-1.5 rounded-lg border-2 transition-colors ${
-                      modulo1[key] === 'SI'
-                        ? 'bg-rose-100 border-rose-400 text-rose-800'
-                        : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
-                    }`}
-                  >{label}</button>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Otras</label>
-                  <input type="text" value={modulo1['m1_pat_otras'] ?? ''} onChange={e => setM1Field('m1_pat_otras', e.target.value)} disabled={readonly}
-                    className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Especifique</label>
-                  <input type="text" value={modulo1['m1_pat_especifique'] ?? ''} onChange={e => setM1Field('m1_pat_especifique', e.target.value)} disabled={readonly}
-                    className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* GINE: Ginecológicos (solo si m1_sexo === Femenino) */}
           {m1Tab === 'gine' && modulo1['m1_sexo'] === 'Femenino' && (

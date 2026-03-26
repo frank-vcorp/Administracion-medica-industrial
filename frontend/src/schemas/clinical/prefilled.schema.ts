@@ -8,50 +8,19 @@
  */
 
 import { z } from 'zod';
-import { HeredoFamiliaresSchema, NoPatologicosSchema, PatologicosSchema } from './history.schema';
+import {
+  DatosPersonalesModulo1Schema,
+  HistoriaLaboralSchema,
+  HeredoFamiliaresSchema,
+  NoPatologicosSchema,
+  PatologicosSchema,
+} from './history.schema';
 import { ReproductivosInmunizacionesSchema } from './exam.schema';
 
-const cleanStr = z.string().trim().max(500).optional();
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Sección 1: Datos Personales declarativos
-// Completable por el trabajador; complementa datos maestros del modelo Worker.
+// DatosPersonalesModulo1Schema y HistoriaLaboralSchema ahora viven en
+// history.schema.ts y se importan desde allá — ARCH-20260326-06.
 // ─────────────────────────────────────────────────────────────────────────────
-export const DatosPersonalesModulo1Schema = z.object({
-  puesto_actual:       cleanStr,
-  area_departamento:   cleanStr,
-  turno:               z.enum(['MATUTINO', 'VESPERTINO', 'NOCTURNO', 'MIXTO']).optional(),
-  antiguedad_anios:    z.coerce.number().nonnegative().max(60).optional(),
-  antiguedad_meses:    z.coerce.number().nonnegative().max(11).optional(),
-  estado_civil:        z.enum(['SOLTERO', 'CASADO', 'UNION_LIBRE', 'DIVORCIADO', 'VIUDO', 'OTRO']).optional(),
-  escolaridad:         cleanStr,
-  numero_hijos:        z.coerce.number().nonnegative().max(30).optional(),
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sección 2: Historia Laboral
-// Exposición a riesgos y antecedentes laborales previos.
-// ─────────────────────────────────────────────────────────────────────────────
-export const HistoriaLaboralSchema = z.object({
-  empresa_anterior_1:               cleanStr,
-  puesto_anterior_1:                cleanStr,
-  tiempo_anterior_1:                cleanStr,
-  empresa_anterior_2:               cleanStr,
-  puesto_anterior_2:                cleanStr,
-  tiempo_anterior_2:                cleanStr,
-  exposicion_quimica:               z.boolean().optional(),
-  exposicion_quimica_especifique:   cleanStr,
-  exposicion_fisica:                z.boolean().optional(),
-  exposicion_fisica_especifique:    cleanStr,
-  exposicion_biologica:             z.boolean().optional(),
-  exposicion_biologica_especifique: cleanStr,
-  exposicion_ergonomica:            z.boolean().optional(),
-  exposicion_ergonomica_especifique: cleanStr,
-  accidentes_trabajo:               z.boolean().optional(),
-  accidentes_descripcion:           cleanStr,
-  enfermedades_trabajo:             z.boolean().optional(),
-  enfermedades_descripcion:         cleanStr,
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Módulo 1 completo — esquema maestro

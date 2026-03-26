@@ -1,7 +1,51 @@
 import { z } from 'zod';
 
 const SiNegado = z.enum(['NEGADO', 'SI']).default('NEGADO');
+const cleanStr  = z.string().trim().max(500).optional();
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. DATOS PERSONALES DECLARATIVOS (Módulo 1 / Portal / Historial)
+// Movido desde prefilled.schema.ts — ARCH-20260326-06
+// ─────────────────────────────────────────────────────────────────────────────
+export const DatosPersonalesModulo1Schema = z.object({
+  puesto_actual:      cleanStr,
+  area_departamento:  cleanStr,
+  turno:              z.enum(['MATUTINO', 'VESPERTINO', 'NOCTURNO', 'MIXTO']).optional(),
+  antiguedad_anios:   z.coerce.number().nonnegative().max(60).optional(),
+  antiguedad_meses:   z.coerce.number().nonnegative().max(11).optional(),
+  estado_civil:       z.enum(['SOLTERO', 'CASADO', 'UNION_LIBRE', 'DIVORCIADO', 'VIUDO', 'OTRO']).optional(),
+  escolaridad:        cleanStr,
+  numero_hijos:       z.coerce.number().nonnegative().max(30).optional(),
+});
+
+export type DatosPersonalesModulo1 = z.infer<typeof DatosPersonalesModulo1Schema>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. HISTORIA LABORAL (Módulo 1 / Portal / Historial)
+// Movido desde prefilled.schema.ts — ARCH-20260326-06
+// ─────────────────────────────────────────────────────────────────────────────
+export const HistoriaLaboralSchema = z.object({
+  empresa_anterior_1:                cleanStr,
+  puesto_anterior_1:                 cleanStr,
+  tiempo_anterior_1:                 cleanStr,
+  empresa_anterior_2:                cleanStr,
+  puesto_anterior_2:                 cleanStr,
+  tiempo_anterior_2:                 cleanStr,
+  exposicion_quimica:                z.boolean().optional(),
+  exposicion_quimica_especifique:    cleanStr,
+  exposicion_fisica:                 z.boolean().optional(),
+  exposicion_fisica_especifique:     cleanStr,
+  exposicion_biologica:              z.boolean().optional(),
+  exposicion_biologica_especifique:  cleanStr,
+  exposicion_ergonomica:             z.boolean().optional(),
+  exposicion_ergonomica_especifique: cleanStr,
+  accidentes_trabajo:                z.boolean().optional(),
+  accidentes_descripcion:            cleanStr,
+  enfermedades_trabajo:              z.boolean().optional(),
+  enfermedades_descripcion:          cleanStr,
+});
+
+export type HistoriaLaboral = z.infer<typeof HistoriaLaboralSchema>;
 
 // ----------------------------------------------------------------------
 // 3. ANTECEDENTES HEREDO-FAMILIARES (Imagen 1)
@@ -97,12 +141,16 @@ export const PatologicosSchema = z.object({
 });
 
 // ----------------------------------------------------------------------
-// ESQUEMA MAESTRO CLINICAL HISTORY (Persistente)
+// ESQUEMA MAESTRO CLINICAL HISTORY (Persistente) — ARCH-20260326-06
+// Campos longitudinales maestros en raíz: datos_personales, historia_laboral,
+// heredo_familiares, no_patologicos, patologicos.
 // ----------------------------------------------------------------------
 export const ClinicalHistoryDataSchema = z.object({
+  datos_personales:  DatosPersonalesModulo1Schema.optional(),
+  historia_laboral:  HistoriaLaboralSchema.optional(),
   heredo_familiares: HeredoFamiliaresSchema.optional(),
-  no_patologicos: NoPatologicosSchema.optional(),
-  patologicos: PatologicosSchema.optional()
+  no_patologicos:    NoPatologicosSchema.optional(),
+  patologicos:       PatologicosSchema.optional(),
 });
 
 export type ClinicalHistoryData = z.infer<typeof ClinicalHistoryDataSchema>;
