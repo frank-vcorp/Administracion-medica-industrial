@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { triggerStructuredStudyAIPrediagnosis } from "./ai-prediagnosis.actions"
 import { 
   SomatometriaVitalesSchema, 
   AgudezaVisualSchema, 
@@ -35,9 +36,31 @@ export async function updateSomatometria(eventId: string, rawData: any) {
       where: { id: eventId },
       data: { status: 'IN_PROGRESS' }
     })
+
+    const eventTest = await prisma.eventTest.findFirst({
+      where: {
+        eventId,
+        OR: [
+          { testNameSnapshot: { contains: 'somatometr', mode: 'insensitive' } },
+          { testNameSnapshot: { contains: 'signos vitales', mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true },
+    })
+
+    let aiWarning: string | undefined
+    if (eventTest) {
+      const aiResult = await triggerStructuredStudyAIPrediagnosis({
+        eventTestId: eventTest.id,
+        eventId,
+        studyType: 'Somatometria',
+        extractedData: data as Record<string, unknown>,
+      })
+      if (!aiResult.success) aiWarning = aiResult.error
+    }
     
     revalidatePath(`/events/${eventId}`)
-    return { success: true }
+    return { success: true, aiWarning }
   } catch (error: any) {
     console.error("Error updating somatometry:", error)
     return { success: false, error: "Datos de somatometría inválidos o error de servidor" }
@@ -53,9 +76,28 @@ export async function updateAgudezaVisual(eventId: string, rawData: any) {
       update: { eyeAcuityData: data },
       create: { eventId, eyeAcuityData: data }
     })
+
+    const eventTest = await prisma.eventTest.findFirst({
+      where: {
+        eventId,
+        testNameSnapshot: { contains: 'agudeza visual', mode: 'insensitive' },
+      },
+      select: { id: true },
+    })
+
+    let aiWarning: string | undefined
+    if (eventTest) {
+      const aiResult = await triggerStructuredStudyAIPrediagnosis({
+        eventTestId: eventTest.id,
+        eventId,
+        studyType: 'AgudezaVisual',
+        extractedData: data as Record<string, unknown>,
+      })
+      if (!aiResult.success) aiWarning = aiResult.error
+    }
     
     revalidatePath(`/events/${eventId}`)
-    return { success: true }
+    return { success: true, aiWarning }
   } catch (error: any) {
     console.error("Error updating visual acuity:", error)
     return { success: false, error: "Datos de agudeza visual inválidos o error de servidor" }
@@ -114,8 +156,19 @@ export async function saveExamenMedicoPapeleta(
       data: { status: newStatus },
     })
 
+    const aiResult = await triggerStructuredStudyAIPrediagnosis({
+      eventTestId,
+      eventId,
+      studyType: 'ExamenMedico',
+      extractedData: data as Record<string, unknown>,
+    })
+
     revalidatePath(`/events/${eventId}`)
-    return { success: true, status: newStatus }
+    return {
+      success: true,
+      status: newStatus,
+      aiWarning: aiResult.success ? undefined : aiResult.error,
+    }
   } catch (error: any) {
     console.error("Error saving examen médico papeleta:", error)
     return { success: false, error: "Error al guardar Examen Médico" }

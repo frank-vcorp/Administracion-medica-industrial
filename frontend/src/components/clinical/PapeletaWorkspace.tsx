@@ -8,14 +8,20 @@
  * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  * @intervention ARCH-20260326-10
  * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
+ * @intervention ARCH-20260326-18
+ * @see context/checkpoints/CHK_IMPL-20260326-18.md
  */
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { updateEventTestStatus, uploadEventTestFile } from "@/actions/event-test.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
+import StudyAIPrediagnosisPanel from "@/components/clinical/StudyAIPrediagnosisPanel"
+// IMPL-20260326-18: Helper central de elegibilidad IA (reemplaza reglas dispersas)
+import { isAIEligibleEventTest, getAIWorkflowLabel, getCanonicalAIStudyType } from "@/lib/study-ai"
 
 // --- Tipos locales ---
 
@@ -30,6 +36,32 @@ type StudyTest = {
   test?: {
     code?: string | null
     category?: { name: string } | null
+  } | null
+  // IMPL-20260326-18: Snapshot IA vigente serializado desde page.tsx
+  aiSnapshot?: {
+    prediagnosisSnapshotId: string
+    snapshot: {
+      id: string
+      version: number
+      clinicalState: string
+      createdAt: string
+      isSuperseded: boolean
+      prediagnosisData: unknown
+      doctorReviews: Array<{
+        id: string
+        doctorStatus: string
+        doctorDiagnosis: string | null
+        doctorNotes: string | null
+        createdAt: string
+      }>
+    }
+    existingReview: {
+      id: string
+      doctorStatus: string
+      doctorDiagnosis: string | null
+      doctorNotes: string | null
+      createdAt: string
+    } | null
   } | null
 }
 
@@ -60,6 +92,8 @@ interface PapeletaWorkspaceProps {
   longitudinalData?: Record<string, unknown> | null
   /** ARCH-20260326-06: ID del trabajador para CTA hacia Historial Clínico desde Examen Médico */
   workerId?: string
+  /** IMPL-20260326-18: ID del usuario que revisa el prediagnóstico IA (médico en sesión) */
+  reviewerUserId?: string
 }
 
 // --- Labels y estilos para estados V1 ---
@@ -84,7 +118,7 @@ const STATUS_BADGE: Record<StudyStatus, string> = {
   CANCELLED: 'bg-red-100 text-red-700',
 }
 
-// --- Helpers ---
+// --- Helpers de formularios dedicados (no IA) ---
 
 function isExamenMedico(name: string) {
   const lower = name.toLowerCase().trim()
@@ -105,6 +139,7 @@ function isAgudezaVisual(name: string) {
   return lower.includes('agudeza visual')
 }
 
+// Laboratorio: tiene flujo de muestra independiente del pipeline IA
 function isLabTest(test: StudyTest) {
   const catName = test.test?.category?.name?.toLowerCase() || ''
   const testName = test.testNameSnapshot.toLowerCase()
@@ -128,6 +163,14 @@ function getStudyIcon(test: StudyTest): string {
   if (isExamenMedico(test.testNameSnapshot)) return '📋'
   if (isSomatometria(test.testNameSnapshot)) return '⚖️'
   if (isAgudezaVisual(test.testNameSnapshot)) return '👁️'
+  // IMPL-20260326-18: íconos por type canónico del helper central
+  const canonical = getCanonicalAIStudyType(test)
+  if (canonical === 'Audiometria') return '🎧'
+  if (canonical === 'Espirometria') return '💨'
+  if (canonical === 'Campimetria') return '🗺️'
+  if (canonical === 'Electrocardiograma') return '💓'
+  if (canonical === 'RiesgoCardiovascular') return '🫀'
+  if (canonical === 'Rayos_X') return '🔬'
   if (test.fileUrl) return '📄'
   if (isLabTest(test)) return '🧪'
   return '🔬'
@@ -145,7 +188,9 @@ export default function PapeletaWorkspace({
   prefilledData = null,
   longitudinalData = null,
   workerId,
+  reviewerUserId = 'system',
 }: PapeletaWorkspaceProps) {
+  const router = useRouter()
   const [activeTestId, setActiveTestId] = useState<string | null>(null)
   const [localTests, setLocalTests] = useState<StudyTest[]>(eventTests)
   const [isPending, startTransition] = useTransition()
@@ -156,6 +201,10 @@ export default function PapeletaWorkspace({
   const completedCount = localTests.filter(t =>
     t.status === 'COMPLETED' || t.status === 'RESULT_REGISTERED'
   ).length
+
+  useEffect(() => {
+    setLocalTests(eventTests)
+  }, [eventTests])
 
   // Actualizaciones optimistas del estado local
   function updateLocalStatus(id: string, status: StudyStatus) {
@@ -188,6 +237,7 @@ export default function PapeletaWorkspace({
     setIsUploading(false)
     if (res.success && res.fileUrl) {
       updateLocalFile(testId, res.fileUrl)
+      router.refresh()
     } else {
       setUploadError(res.error || 'Error al subir archivo')
     }
@@ -315,6 +365,7 @@ export default function PapeletaWorkspace({
               prefilledData={prefilledData}
               longitudinalData={longitudinalData}
               workerId={workerId}
+              reviewerUserId={reviewerUserId}
               readonly={readonly}
               isPending={isPending}
               isUploading={isUploading}
@@ -322,7 +373,10 @@ export default function PapeletaWorkspace({
               apiUrl={apiUrl}
               onStatusChange={handleStatusChange}
               onFileUpload={handleFileUpload}
-              onExamenMedicoStatusChange={(status) => updateLocalStatus(activeTest.id, status as StudyStatus)}
+              onExamenMedicoStatusChange={(status) => {
+                updateLocalStatus(activeTest.id, status as StudyStatus)
+                router.refresh()
+              }}
             />
           )}
         </div>
@@ -407,6 +461,7 @@ function StudyPanel({
   prefilledData,
   longitudinalData,
   workerId,
+  reviewerUserId,
   readonly,
   isPending,
   isUploading,
@@ -422,6 +477,7 @@ function StudyPanel({
   prefilledData: Record<string, unknown> | null | undefined
   longitudinalData: Record<string, unknown> | null | undefined
   workerId: string | undefined
+  reviewerUserId: string
   readonly: boolean
   isPending: boolean
   isUploading: boolean
@@ -435,6 +491,9 @@ function StudyPanel({
   const isSomato = isSomatometria(test.testNameSnapshot)
   const isAgudeza = isAgudezaVisual(test.testNameSnapshot)
   const isLab = isLabTest(test)
+  // IMPL-20260326-18: Elegibilidad y type canónico desde helper central
+  const aiLabel = getAIWorkflowLabel(test)
+  const isAIEligible = isAIEligibleEventTest(test)
   const sampleTracked = isLab && ['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
   const resultTracked = ['RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
 
@@ -458,9 +517,15 @@ function StudyPanel({
               isMedico ? 'bg-blue-50 text-blue-600' :
               isSomato ? 'bg-teal-50 text-teal-700' :
               isAgudeza ? 'bg-indigo-50 text-indigo-700' :
-              isLab ? 'bg-purple-50 text-purple-700' : 'bg-slate-50 text-slate-600'
+              isLab ? 'bg-purple-50 text-purple-700' :
+              isAIEligible ? 'bg-teal-50 text-teal-700' :
+              'bg-slate-50 text-slate-600'
             }`}>
-              {isMedico ? '📋 Formulario' : isSomato ? '⚖️ Somatometría' : isAgudeza ? '👁️ Agudeza Visual' : isLab ? '🧪 Con muestra y resultado' : '📄 Documental'}
+              {isMedico ? '📋 Formulario' :
+               isSomato ? '⚖️ Somatometría' :
+               isAgudeza ? '👁️ Agudeza Visual' :
+               isLab ? '🧪 Con muestra y resultado' :
+               (aiLabel ?? '📄 Documental')}
             </span>
           </div>
         </div>
@@ -636,6 +701,19 @@ function StudyPanel({
             </div>
           )}
         </div>
+      )}
+
+      {/* IMPL-20260326-18: Panel de Prediagnóstico IA — se muestra cuando existe snapshot IA vigente
+          y el estudio es elegible para IA según la matriz canónica. */}
+      {isAIEligible && test.aiSnapshot && (
+        <StudyAIPrediagnosisPanel
+          prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
+          snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
+          reviewerUserId={reviewerUserId}
+          eventId={eventId}
+          existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
+          readonly={readonly}
+        />
       )}
 
       {/* Acciones de estado */}

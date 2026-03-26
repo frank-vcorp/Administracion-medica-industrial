@@ -7,6 +7,7 @@ IMPL-20260326-16: Endpoints V2 para prediagnóstico IA separado (ARCH-20260326-1
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
 import time
@@ -33,6 +34,8 @@ app.add_middleware(
 )
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # In production this MUST be an env variable.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")

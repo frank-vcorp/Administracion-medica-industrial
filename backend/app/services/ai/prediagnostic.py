@@ -12,7 +12,7 @@ GUARDRAILS obligatorios:
 import json
 from typing import Dict, Any, Optional
 from .base import GeminiBase
-from schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation
+from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation
 
 
 # Umbrales de confianza mínima por tipo de estudio (ARCH-20260326-16 §"Umbrales V1")
@@ -21,6 +21,12 @@ CONFIDENCE_THRESHOLDS: Dict[str, float] = {
     "Laboratorio": 0.60,
     "Espirometria": 0.60,
     "Rayos_X": 0.50,
+    # IMPL-20260326-17: ECG (GEN-C85PD) con soporte de prediagnóstico básico
+    "Electrocardiograma": 0.55,
+    # IMPL-20260326-02: Formularios internos — umbral modesto; datos son estructurados
+    "Somatometria": 0.55,
+    "AgudezaVisual": 0.55,
+    "ExamenMedico": 0.50,
     "Otro": 0.40,
 }
 
@@ -30,6 +36,28 @@ REQUIRED_PARAMS: Dict[str, list] = {
     "Laboratorio": ["parametros"],
     "Espirometria": ["fev1", "fvc"],
     "Rayos_X": ["hallazgos", "localizacion"],
+    # IMPL-20260326-17: ECG requiere al menos ritmo o frecuencia para generar análisis
+    "Electrocardiograma": ["ritmo", "frecuencia_bpm"],
+    # IMPL-20260326-02: Formularios internos — mínimos para que el LLM tenga base
+    "Somatometria": ["peso_kg", "talla_m"],
+    "AgudezaVisual": ["vision_lejana_od", "vision_lejana_oi"],
+    # ExamenMedico no tiene mínimos estrictos; el prompt maneja datos parciales
+}
+
+# IMPL-20260326-17: Tipos con prediagnóstico IA explícito. Campimetria y RiesgoCardiovascular
+# quedan fuera en V1 — sus documentos ya contienen el resultado calculado o requieren
+# tablas normativas altamente especializadas que el modelo general no debe asumir.
+# IMPL-20260326-02: Añadidos formularios internos: Somatometria, AgudezaVisual, ExamenMedico.
+PREDIAGNOSIS_SUPPORTED_TYPES = {
+    "Audiometria",
+    "Laboratorio",
+    "Espirometria",
+    "Rayos_X",
+    "Electrocardiograma",
+    # Formularios internos (sin OCR — parámetros ya estructurados)
+    "Somatometria",
+    "AgudezaVisual",
+    "ExamenMedico",
 }
 
 
@@ -167,6 +195,147 @@ Responde en JSON con esta estructura exacta:
   "red_flags": [],
   "non_conclusive_reason": null
 }""",
+
+        # IMPL-20260326-17: Prediagnóstico para Electrocardiograma (GEN-C85PD)
+        "Electrocardiograma": """Eres un sistema de apoyo a la decisión clínica para cardiología.
+Recibirás parámetros ya extraídos de un trazado electrocardiográfico (ritmo, FC, intervalos, hallazgos).
+Tu tarea es generar análisis de apoyo, NO diagnóstico definitivo.
+
+REGLAS ESTRICTAS:
+1. Usa lenguaje prudente: "compatible con", "sugiere evaluación de", "requiere correlación clínica".
+2. NO declares diagnóstico de enfermedad cardiaca, urgencia ni aptitud laboral.
+3. Comenta solo los parámetros y hallazgos presentes. No inventes datos.
+4. Si faltan ritmo y frecuencia, declara AI_NON_CONCLUSIVE.
+5. Red flags: solo elevarlos si hay hallazgos que impliquen riesgo eléctrico reconocido (ej. QTc > 500ms, bloqueo AV completo, elevación ST marcada).
+6. Responde SOLO en JSON, sin markdown.
+
+Parámetros extraídos:
+{extracted_json}
+
+Responde en JSON con esta estructura exacta:
+{
+  "summary": "Texto prudente de máx. 2 oraciones",
+  "confidence": 0.65,
+  "clinical_state": "AI_PENDING_REVIEW",
+  "justification": ["FC dentro de rango normal para ritmo sinusal según AHA/ACC"],
+  "clinical_basis": [
+    {"principle": "Interpretación de intervalos ECG según AHA/ACC 2022", "applied_parameters": ["frecuencia_bpm", "intervalo_pr_ms", "qtc_ms"]}
+  ],
+  "citations": [
+    {"source_id": "AHA-ECG-2022", "title": "AHA/ACC ECG Interpretation Guidelines", "section": "Tabla de intervalos normales", "excerpt": "PR normal: 120-200 ms; QRS normal: <120 ms; QTc normal: <440ms (H), <460ms (M)", "version_or_date": "2022"}
+  ],
+  "limitations": ["Interpretación requiere correlación con contexto clínico y sintomatología del paciente"],
+  "red_flags": [],
+  "non_conclusive_reason": null
+}""",
+
+        # IMPL-20260326-02: Formularios internos — prediagnóstico sin OCR
+        "Somatometria": """Eres un sistema de apoyo a la decisión clínica para medicina del trabajo.
+Recibirás valores de somatometría y signos vitales capturados directamente por el operador
+(talla, peso, IMC, tensión arterial, frecuencia cardíaca, temperatura).
+Tu tarea es generar un análisis de apoyo, NO un diagnóstico definitivo ni aptitud laboral.
+
+REGLAS ESTRICTAS:
+1. Usa lenguaje prudente: "valores compatibles con", "sugiere evaluación de", "requiere correlación clínica".
+2. NO emitas aptitud laboral, dictamen médico final ni recomendaciones de tratamiento.
+3. Comenta solo los parámetros disponibles. No inventes ni extrapoles valores.
+4. IMC: usa clasificación OMS (Bajo peso < 18.5, Normal 18.5-24.9, Sobrepeso 25-29.9, Obesidad ≥ 30).
+5. TA: valores de referencia según JNC8/ESH 2018 (normal < 120/80, elevada 120-129/<80, HTA ≥ 130/80).
+6. Si peso_kg y talla_m están ausentes, declara AI_NON_CONCLUSIVE.
+7. Red flags: solo para hipertensión crisi (TA ≥ 180/120) o bradicardia severa (FC < 40 lpm).
+8. Responde SOLO en JSON, sin markdown.
+
+Parámetros capturados:
+{extracted_json}
+
+Responde en JSON con esta estructura exacta:
+{
+  "summary": "Texto prudente de máx. 2 oraciones con valores observados",
+  "confidence": 0.70,
+  "clinical_state": "AI_PENDING_REVIEW",
+  "justification": ["IMC de X sugiere clasificación Y según OMS 2000", "TA dentro de rango normal"],
+  "clinical_basis": [
+    {"principle": "Clasificación antropométrica OMS", "applied_parameters": ["imc", "peso_kg", "talla_m"]},
+    {"principle": "Clasificación de presión arterial JNC8/ESH 2018", "applied_parameters": ["ta_sistolica", "ta_diastolica"]}
+  ],
+  "citations": [
+    {"source_id": "OMS-IMC-2000", "title": "Obesity: preventing and managing the global epidemic", "section": "Clasificación IMC adultos", "excerpt": "IMC 25-29.9 = Sobrepeso; ≥ 30 = Obesidad", "version_or_date": "2000"},
+    {"source_id": "NOM-030-SSA2-2009", "title": "Prevención, detección, diagnóstico, tratamiento y control de la hipertensión arterial sistémica", "section": "Clasificación", "excerpt": "TA normal < 120/80 mmHg", "version_or_date": "2009"}
+  ],
+  "limitations": ["La somatometría aislada no es suficiente para determinar riesgo metabólico sin historia clínica completa"],
+  "red_flags": [],
+  "non_conclusive_reason": null
+}""",
+
+        "AgudezaVisual": """Eres un sistema de apoyo a la decisión clínica para salud visual ocupacional.
+Recibirás valores de agudeza visual capturados directamente por el operador
+(visión lejana/cercana por ojo, valores corregidos, reflejos, test de Ishihara).
+Tu tarea es generar un análisis de apoyo, NO un diagnóstico oftalmológico definitivo.
+
+REGLAS ESTRICTAS:
+1. Usa lenguaje prudente: "valores compatibles con", "sugiere evaluación oftalmológica", "requiere correlación clínica".
+2. NO emitas diagnóstico de enfermedad ocular, aptitud laboral ni recomendaciones de tratamiento.
+3. Agudeza visual normal en adultos: 20/20 o equivalente (1.0 decimal, 6/6 métrico).
+4. Considera como hallazgo relevante cualquier valor peor que 20/40 (0.5 decimal) sin corrección.
+5. Comenta Ishihara solo si está documentado. No asumas daltonismo si no hay dato.
+6. Si vision_lejana_od y vision_lejana_oi están ausentes, declara AI_NON_CONCLUSIVE.
+7. Responde SOLO en JSON, sin markdown.
+
+Parámetros capturados:
+{extracted_json}
+
+Responde en JSON con esta estructura exacta:
+{
+  "summary": "Texto prudente de máx. 2 oraciones sobre los valores de agudeza visual",
+  "confidence": 0.68,
+  "clinical_state": "AI_PENDING_REVIEW",
+  "justification": ["Agudeza visual lejana OD 20/20 compatible con visión normal", "Sin corrección, valores dentro de rango funcional"],
+  "clinical_basis": [
+    {"principle": "Estándar de agudeza visual 20/20 (Snellen)", "applied_parameters": ["vision_lejana_od", "vision_lejana_oi"]},
+    {"principle": "Evaluación de visión cromática (Ishihara)", "applied_parameters": ["test_ishihara"]}
+  ],
+  "citations": [
+    {"source_id": "NOM-009-STPS-2011", "title": "Condiciones de seguridad e higiene en los centros de trabajo donde se realicen actividades de soldadura y corte", "section": "Req. visuales", "excerpt": "Referencia a requisitos de agudeza visual en actividades de riesgo", "version_or_date": "2011"},
+    {"source_id": "CONAPO-OV-2018", "title": "Guía de práctica clínica: detección y diagnóstico de errores de refracción", "section": "Clasificación AV", "excerpt": "AV 20/20 normal; < 20/40 sugiere evaluación", "version_or_date": "2018"}
+  ],
+  "limitations": ["La agudeza visual por sí sola no descarta patología ocular estructural; se requiere valoración oftalmológica completa para diagnóstico"],
+  "red_flags": [],
+  "non_conclusive_reason": null
+}""",
+
+        "ExamenMedico": """Eres un sistema de apoyo a la decisión clínica para medicina del trabajo.
+Recibirás hallazgos de una exploración física general capturados directamente por el médico
+(hallazgos por sistema: neurológico, corazón, pulmones, abdomen, columna, extremidades, etc.).
+Tu tarea es generar un análisis de apoyo, NO un diagnóstico médico definitivo.
+
+REGLAS ESTRICTAS:
+1. Usa lenguaje prudente: "hallazgos compatibles con", "sugiere evaluación de", "requiere correlación clínica".
+2. NO emitas diagnóstico de enfermedad, aptitud laboral ni recomendaciones de tratamiento.
+3. Solo comenta los sistemas con hallazgos documentados. Ignora campos vacíos o null.
+4. Red flags: solo para hallazgos que impliquen riesgo inmediato (ej. soplo cardíaco no documentado, signos meníngeos, abdomen en tabla).
+5. Si todos los campos están vacíos o null, declara AI_NON_CONCLUSIVE.
+6. Responde SOLO en JSON, sin markdown.
+
+Parámetros capturados:
+{extracted_json}
+
+Responde en JSON con esta estructura exacta:
+{
+  "summary": "Texto prudente de máx. 2 oraciones sobre los hallazgos principales",
+  "confidence": 0.60,
+  "clinical_state": "AI_PENDING_REVIEW",
+  "justification": ["Exploración cardiovascular sin hallazgos patológicos documentados", "Sistema osteomuscular con hallazgos que sugieren evaluación complementaria"],
+  "clinical_basis": [
+    {"principle": "Exploración física sistemática por aparatos y sistemas", "applied_parameters": ["corazon", "campos_pulmonares", "ms_superiores", "ms_inferiores"]}
+  ],
+  "citations": [
+    {"source_id": "NOM-030-SSA2-2009", "title": "Prevención y control de enfermedades cardiovasculares", "section": "Exploración física", "excerpt": "Hallazgos auscultatorios como criterio de evaluación", "version_or_date": "2009"},
+    {"source_id": "IMSS-575-12", "title": "Guía de práctica clínica: examen médico ocupacional", "section": "Exploración por sistemas", "excerpt": "La exploración por sistemas es parte integral del examen médico de ingreso y periódico", "version_or_date": "2012"}
+  ],
+  "limitations": ["La exploración física aislada no reemplaza estudios de gabinete complementarios; requiere correlación con historia clínica y antecedentes"],
+  "red_flags": [],
+  "non_conclusive_reason": null
+}""",
     }
 
     def _check_minimum_params(self, study_type: str, extracted_data: Dict[str, Any]) -> Optional[str]:
@@ -199,6 +368,26 @@ Responde en JSON con esta estructura exacta:
         Returns:
             AIPrediagnosisResult — siempre retorna un resultado; usa AI_NON_CONCLUSIVE si no hay datos.
         """
+        # IMPL-20260326-17: Tipos sin soporte de prediagnóstico IA en V1
+        # Campimetria y RiesgoCardiovascular retornan AI_NON_CONCLUSIVE explícito.
+        if study_type not in PREDIAGNOSIS_SUPPORTED_TYPES:
+            print(f"ℹ️ Tipo '{study_type}' sin prediagnóstico IA en V1 — revisión médica manual requerida")
+            return AIPrediagnosisResult(
+                summary=(
+                    f"Estudio '{study_type}' registrado. "
+                    "El documento requiere revisión médica manual. "
+                    "El prediagnóstico IA no está disponible para este tipo en V1."
+                ),
+                confidence=0.0,
+                clinical_state="AI_NON_CONCLUSIVE",
+                justification=[],
+                clinical_basis=[],
+                citations=[],
+                limitations=[f"Prediagnóstico IA no soportado para '{study_type}' en V1."],
+                red_flags=[],
+                non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido en V1.",
+            )
+
         # Verificar parámetros mínimos
         non_conclusive_reason = self._check_minimum_params(study_type, extracted_data)
         if non_conclusive_reason:

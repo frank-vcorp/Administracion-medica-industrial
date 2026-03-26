@@ -9,11 +9,14 @@ IMPL-20260326-16: Separación capa extractiva / interpretativa (ARCH-20260326-16
 import time
 from typing import Dict, Any, Union
 from .base import GeminiBase
-from schemas.medical import (
+from app.schemas.medical import (
     AudiometriaData,
     LaboratorioData,
     EspirometriaData,
     RayosXData,
+    CampimetriaData,
+    ElectrocardiogramaData,
+    RiesgoCardiovascularData,
     DocumentClassification,
 )
 
@@ -111,6 +114,88 @@ class ExtractorService(GeminiBase):
   "radiologista": "Dr. López",
   "notas_calidad": null
 }""",
+
+        # IMPL-20260326-17: Prompt para Campimetría (GEN-O1WV7)
+        "Campimetria": """Eres un técnico de oftalmología. Tu tarea es EXTRAER datos del campo visual, NO interpretarlos clínicamente.
+
+**Extrae:**
+1. PACIENTE
+2. FECHA del estudio
+3. DEFECTOS OJO DERECHO (OD): lista de defectos o escotomas descritos o zonas con sensibilidad reducida
+4. DEFECTOS OJO IZQUIERDO (OI): ídem para ojo izquierdo
+5. ÍNDICES OD: MD (Mean Deviation), PSD (Pattern Std Dev), VFI si están visibles — como strings
+6. ÍNDICES OI: ídem para ojo izquierdo
+7. Profesional firmante si es visible
+8. NO incluyas diagnóstico, interpretación ni aptitud.
+9. Si el documento es ilegible o faltan datos, indícalo en notas_calidad.
+
+**Respuesta OBLIGATORIA en JSON:**
+{
+  "paciente": "Nombre",
+  "fecha_estudio": "dd/mm/yyyy",
+  "ojo_derecho_defectos": ["Escotoma paracentral superior", "Depresión nasal inferior"],
+  "ojo_izquierdo_defectos": [],
+  "indices_ojo_derecho": {"MD": "-4.2 dB", "PSD": "2.1 dB", "VFI": "94%"},
+  "indices_ojo_izquierdo": {"MD": "-1.0 dB", "PSD": "1.5 dB"},
+  "profesional": "Dr. González",
+  "notas_calidad": null
+}""",
+
+        # IMPL-20260326-17: Prompt para Electrocardiograma (GEN-C85PD)
+        "Electrocardiograma": """Eres un técnico de cardiología. Tu tarea es EXTRAER parámetros del trazado ECG, NO interpretarlos clínicamente.
+
+**Extrae:**
+1. PACIENTE
+2. FECHA
+3. RITMO: descripción del ritmo (Ej: Sinusal, Fibrilación Auricular, Taquicardia)
+4. FRECUENCIA cardíaca en lpm (número entero)
+5. INTERVALO PR en milisegundos (número entero)
+6. DURACIÓN QRS en milisegundos (número entero)
+7. QTc corregido en milisegundos (número entero)
+8. EJE ELÉCTRICO: Normal, Desviación izquierda, Desviación derecha, Indeterminado
+9. HALLAZGOS: lista de observaciones descriptivas del trazado (sin diagnóstico final). Ej: "Bloqueo de rama derecha", "Elevación de segmento ST en V2-V4"
+10. Profesional firmante si es visible
+11. NO incluyas diagnóstico definitivo, aptitud ni interpretación de urgencia.
+
+**Respuesta OBLIGATORIA en JSON:**
+{
+  "paciente": "Nombre",
+  "fecha_estudio": "dd/mm/yyyy",
+  "ritmo": "Sinusal",
+  "frecuencia_bpm": 72,
+  "intervalo_pr_ms": 160,
+  "duracion_qrs_ms": 90,
+  "qtc_ms": 410,
+  "eje_electrico": "Normal",
+  "hallazgos": ["Onda T invertida en V1-V3", "Sin otras alteraciones del trazado"],
+  "profesional": "Dr. Martínez",
+  "notas_calidad": null
+}""",
+
+        # IMPL-20260326-17: Prompt para Riesgo Cardiovascular (GEN-U5BQX)
+        "RiesgoCardiovascular": """Eres un técnico médico. Tu tarea es EXTRAER el resultado de la evaluación de riesgo cardiovascular ya calculado en el documento, NO recalcular ni reinterpretar.
+
+**Extrae:**
+1. PACIENTE
+2. FECHA de la evaluación
+3. NIVEL DE RIESGO calculado (Ej: Bajo, Moderado, Alto, Muy Alto)
+4. PORCENTAJE DE RIESGO a 10 años si está disponible (número decimal)
+5. ESCALA UTILIZADA (Framingham, OMS/ISH, ACC/AHA ASCVD, SCORE, etc.)
+6. FACTORES DE RIESGO listados en el documento (Ej: HTA, diabetes, tabaquismo, dislipidemia, obesidad)
+7. Profesional firmante si es visible
+8. NO recalcules, NO interpretes. Solo extrae lo que está escrito en el documento.
+
+**Respuesta OBLIGATORIA en JSON:**
+{
+  "paciente": "Nombre",
+  "fecha_estudio": "dd/mm/yyyy",
+  "nivel_riesgo": "Moderado",
+  "porcentaje_riesgo": 12.5,
+  "escala_utilizada": "Framingham",
+  "factores_riesgo": ["HTA", "Tabaquismo", "Dislipidemia"],
+  "profesional": "Dr. Ramírez",
+  "notas_calidad": null
+}""",
     }
 
     def extract_by_type(
@@ -168,6 +253,34 @@ class ExtractorService(GeminiBase):
                 for legacy_field in ("interpretacion",):
                     result.pop(legacy_field, None)
                 return RayosXData(**result)
+
+            # IMPL-20260326-17: Parseo para estudios GEN-O1WV7, GEN-C85PD, GEN-U5BQX
+            elif doc_type == "Campimetria":
+                for legacy_field in ("diagnostico_ia", "interpretacion"):
+                    result.pop(legacy_field, None)
+                return CampimetriaData(**result)
+
+            elif doc_type == "Electrocardiograma":
+                for legacy_field in ("diagnostico_ia", "interpretacion", "recomendaciones"):
+                    result.pop(legacy_field, None)
+                # Normalizar frecuencia_bpm a int si viene como string
+                if isinstance(result.get("frecuencia_bpm"), str):
+                    try:
+                        result["frecuencia_bpm"] = int(result["frecuencia_bpm"])
+                    except (ValueError, TypeError):
+                        result["frecuencia_bpm"] = None
+                return ElectrocardiogramaData(**result)
+
+            elif doc_type == "RiesgoCardiovascular":
+                for legacy_field in ("diagnostico_ia", "interpretacion"):
+                    result.pop(legacy_field, None)
+                # Normalizar porcentaje_riesgo a float si viene como string
+                if isinstance(result.get("porcentaje_riesgo"), str):
+                    try:
+                        result["porcentaje_riesgo"] = float(result["porcentaje_riesgo"].replace("%", ""))
+                    except (ValueError, TypeError):
+                        result["porcentaje_riesgo"] = None
+                return RiesgoCardiovascularData(**result)
 
             else:
                 return result

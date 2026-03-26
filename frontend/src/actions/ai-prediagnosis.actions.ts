@@ -16,6 +16,7 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
 const PYTHON_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -117,9 +118,15 @@ export async function triggerStudyAIAnalysis(
 
   try {
     // 1. Llamar al backend V2
+    // IMPL-20260326-18: Reenviar study_type canónico si fue determinado por el helper central
+    const studyType = (formData.get('study_type') as string) || null
+
     const uploadForm = new FormData()
     uploadForm.append('file', file)
     uploadForm.append('triggered_by_user_id', triggeredByUserId)
+    if (studyType) {
+      uploadForm.append('study_type', studyType)
+    }
 
     const response = await fetch(`${PYTHON_API}/api/v2/studies/upload-and-analyze`, {
       method: 'POST',
@@ -217,6 +224,145 @@ export async function triggerStudyAIAnalysis(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Error interno al procesar análisis IA',
+    }
+  }
+}
+
+function listMissingFields(extractedData: Record<string, unknown>): string[] {
+  return Object.entries(extractedData)
+    .filter(([, value]) => {
+      if (value === null || value === undefined) return true
+      if (typeof value === 'string') {
+        const normalized = value.trim().toUpperCase()
+        return normalized === '' || normalized === 'NO APLICA'
+      }
+      return false
+    })
+    .map(([key]) => key)
+}
+
+export async function triggerStructuredStudyAIPrediagnosis(input: {
+  eventTestId: string
+  eventId: string
+  studyType: string
+  extractedData: Record<string, unknown>
+  triggeredByUserId?: string
+  triggerReason?: string
+}): Promise<StudyAIAnalysisResult> {
+  const {
+    eventTestId,
+    eventId,
+    studyType,
+    extractedData,
+    triggeredByUserId = 'system',
+    triggerReason = 'internal_form_capture',
+  } = input
+
+  if (!eventTestId || !eventId || !studyType) {
+    return { success: false, error: 'eventTestId, eventId y studyType son obligatorios' }
+  }
+
+  try {
+    const normalizedExtractedData = JSON.parse(JSON.stringify(extractedData)) as Prisma.InputJsonValue
+
+    const response = await fetch(`${PYTHON_API}/api/v2/studies/prediagnosis-from-params`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        study_type: studyType,
+        extracted_data: extractedData,
+        triggered_by_user_id: triggeredByUserId,
+      }),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => 'Sin detalle')
+      return {
+        success: false,
+        error: `Backend V2 respondió ${response.status}: ${errText.slice(0, 200)}`,
+      }
+    }
+
+    const result = await response.json()
+    if (result.status !== 'success') {
+      return { success: false, error: result.error || 'Error desconocido en prediagnóstico estructurado' }
+    }
+
+    const extractionVersion = await prisma.studyExtractionSnapshot.count({
+      where: { eventTestId },
+    }) + 1
+
+    const extractionSnapshot = await prisma.studyExtractionSnapshot.create({
+      data: {
+        eventTestId,
+        version: extractionVersion,
+        studyType,
+        sourceFileName: null,
+        sourceFileUrl: null,
+        sourceFileHash: null,
+        structuredData: {
+          study_type: studyType,
+          source_file_name: null,
+          extracted_data: normalizedExtractedData,
+          missing_fields: listMissingFields(extractedData),
+          quality_notes: ['structured_internal_form'],
+          audit: {
+            model_name: 'internal-structured-form',
+            prompt_version: 'internal-form-v1',
+            pipeline_version: 'ai-pipeline-2026-03',
+            triggered_by_user_id: triggeredByUserId,
+            trigger_reason: 'manual_regeneration',
+            created_at: new Date().toISOString(),
+          },
+        } as Prisma.InputJsonValue,
+        clinicalState: 'DRAFT_EXTRACTED',
+        modelName: 'internal-structured-form',
+        promptVersion: 'internal-form-v1',
+        pipelineVersion: 'ai-pipeline-2026-03',
+        triggeredByUserId,
+        triggerReason,
+        isSuperseded: false,
+      },
+    })
+
+    const predxData = result.prediagnosis ?? {}
+    const clinicalState: string = predxData.clinical_state ?? result.clinical_state ?? 'AI_PENDING_REVIEW'
+
+    const prediagnosisSnapshot = await prisma.aIPrediagnosisSnapshot.create({
+      data: {
+        extractionSnapshotId: extractionSnapshot.id,
+        version: 1,
+        prediagnosisData: {
+          ...predxData,
+          audit: {
+            ...(result.audit ?? {}),
+            triggered_by_user_id: triggeredByUserId,
+          },
+        },
+        clinicalState,
+        modelName: result.audit?.model_name ?? 'gemini-2.5-flash',
+        promptVersion: result.audit?.prompt_version ?? 'predx-v1',
+        corpusVersion: result.audit?.corpus_version ?? null,
+        triggeredByUserId,
+        isSuperseded: false,
+      },
+    })
+
+    revalidatePath(`/events/${eventId}`)
+
+    return {
+      success: true,
+      extractionSnapshotId: extractionSnapshot.id,
+      prediagnosisSnapshotId: prediagnosisSnapshot.id,
+      clinicalState,
+      summary: predxData.summary ?? null,
+      confidence: predxData.confidence ?? null,
+    }
+  } catch (error) {
+    console.error('[IMPL-20260326-19] Error en triggerStructuredStudyAIPrediagnosis:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error interno al procesar prediagnóstico estructurado',
     }
   }
 }

@@ -17,6 +17,8 @@ import EventFlowController from '@/components/EventFlowController'
 import PapeletaWorkspace from '@/components/clinical/PapeletaWorkspace'
 import { getMedicalExam } from '@/actions/medical-exam.actions'
 import { getPrefilledDataForEvent } from '@/actions/prefilled-invitation.actions'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +38,9 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
         // IMPL-20260325-08: Obtener snapshot del portal (PrefilledInvitation.module1Data)
         const prefilledRes = await getPrefilledDataForEvent(id)
         const prefilledData = prefilledRes.success && prefilledRes.data ? prefilledRes.data.module1Data : null
+        // IMPL-20260326-18: Obtener el usuario actual para revisión médica de paneles IA
+        const session = await getServerSession(authOptions)
+        const reviewerUserId = session?.user?.id ?? 'system'
 
         if (!event) {
             notFound()
@@ -91,19 +96,61 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
             : legacyBase
 
         // IMPL-20260324-06: Serializar eventTests para el workspace (incluye fileUrl y status nuevos)
-        type EventTestWithExtras = typeof event.eventTests[0] & { fileUrl?: string | null, resultNotes?: string | null }
+        type EventTestWithExtras = typeof event.eventTests[0] & {
+          fileUrl?: string | null
+          resultNotes?: string | null
+          extractionSnapshots?: Array<{
+            id: string
+            aiPrediagnoses?: Array<{
+              id: string
+              version: number
+              clinicalState: string
+              createdAt: Date
+              isSuperseded: boolean
+              prediagnosisData: unknown
+              doctorReviews?: Array<{
+                id: string
+                doctorStatus: string
+                doctorDiagnosis: string | null
+                doctorNotes: string | null
+                createdAt: Date
+              }>
+            }>
+          }>
+        }
         const serializedEventTests = JSON.parse(JSON.stringify(
-            event.eventTests.map((et: EventTestWithExtras) => ({
-                id: et.id,
-                testNameSnapshot: et.testNameSnapshot,
-                status: et.status,
-                fileUrl: et.fileUrl ?? null,
-                resultNotes: et.resultNotes ?? null,
-                test: et.test ? {
-                    code: et.test.code,
-                    category: et.test.category
-                } : null
-            }))
+            event.eventTests.map((et: EventTestWithExtras) => {
+                // IMPL-20260326-18: Serializar snapshot IA vigente (no superseded)
+                const latestExtraction = et.extractionSnapshots?.[0] ?? null
+                const latestPredx = latestExtraction?.aiPrediagnoses?.[0] ?? null
+                const aiSnapshot = latestPredx
+                    ? {
+                        prediagnosisSnapshotId: latestPredx.id,
+                        snapshot: {
+                            id: latestPredx.id,
+                            version: latestPredx.version,
+                            clinicalState: latestPredx.clinicalState,
+                            createdAt: latestPredx.createdAt,
+                            isSuperseded: latestPredx.isSuperseded,
+                            prediagnosisData: latestPredx.prediagnosisData,
+                            doctorReviews: latestPredx.doctorReviews ?? [],
+                        },
+                        existingReview: latestPredx.doctorReviews?.[0] ?? null,
+                    }
+                    : null
+                return {
+                    id: et.id,
+                    testNameSnapshot: et.testNameSnapshot,
+                    status: et.status,
+                    fileUrl: et.fileUrl ?? null,
+                    resultNotes: et.resultNotes ?? null,
+                    test: et.test ? {
+                        code: et.test.code,
+                        category: et.test.category
+                    } : null,
+                    aiSnapshot,
+                }
+            })
         ))
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -219,6 +266,7 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         eventTests={serializedEventTests}
                         workerInfo={workerInfo}
                         workerId={event.worker.id}
+                        reviewerUserId={reviewerUserId}
                         readonly={currentStep > 3}
                         apiUrl={apiUrl}
                         examData={serializedExam}

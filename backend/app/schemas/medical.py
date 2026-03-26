@@ -17,7 +17,17 @@ from datetime import datetime
 
 class DocumentClassification(BaseModel):
     """Clasificación de tipo de documento médico."""
-    tipo: Literal["Audiometria", "Espirometria", "Laboratorio", "Rayos_X", "Otro"]
+    # IMPL-20260326-17: Añadidos Campimetria, Electrocardiograma, RiesgoCardiovascular (GEN-O1WV7, GEN-C85PD, GEN-U5BQX)
+    tipo: Literal[
+        "Audiometria",
+        "Espirometria",
+        "Laboratorio",
+        "Rayos_X",
+        "Campimetria",
+        "Electrocardiograma",
+        "RiesgoCardiovascular",
+        "Otro",
+    ]
     confianza: float = Field(..., ge=0.0, le=1.0)
     razon: str = Field(description="Breve explicación de por qué se clasificó así")
 
@@ -91,10 +101,171 @@ class RayosXData(BaseModel):
     notas_calidad: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# IMPL-20260326-17: Schemas para estudios GEN-O1WV7, GEN-C85PD, GEN-U5BQX
+# ---------------------------------------------------------------------------
+
+class CampimetriaData(BaseModel):
+    """
+    Datos EXTRAÍDOS de estudio de campo visual (campimetría).
+    Parámetros canónicos: puntos de déficit por ojo, índices de pérdida.
+    NOTA: prediagnóstico IA no soportado en V1 — requiere revisión médica manual.
+    """
+    paciente: str
+    fecha_estudio: str
+    ojo_derecho_defectos: Optional[List[str]] = Field(
+        default=None,
+        description="Lista de déficits/escotomas detectados en ojo derecho"
+    )
+    ojo_izquierdo_defectos: Optional[List[str]] = Field(
+        default=None,
+        description="Lista de déficits/escotomas detectados en ojo izquierdo"
+    )
+    indices_ojo_derecho: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="Índices numéricos OD: MD, PSD, VFI si están disponibles"
+    )
+    indices_ojo_izquierdo: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="Índices numéricos OI: MD, PSD, VFI si están disponibles"
+    )
+    profesional: Optional[str] = None
+    notas_calidad: Optional[str] = None
+
+
+class ElectrocardiogramaData(BaseModel):
+    """
+    Datos EXTRAÍDOS de trazado electrocardiográfico (ECG).
+    NOTA: no incluye diagnóstico — esa capa va en AIPrediagnosisSnapshot.
+    """
+    paciente: str
+    fecha_estudio: str
+    ritmo: Optional[str] = Field(default=None, description="Ej: Sinusal, Fibrilación Auricular")
+    frecuencia_bpm: Optional[int] = Field(default=None, description="Frecuencia cardíaca en lpm")
+    intervalo_pr_ms: Optional[int] = Field(default=None, description="Intervalo PR en milisegundos")
+    duracion_qrs_ms: Optional[int] = Field(default=None, description="Duración del QRS en ms")
+    qtc_ms: Optional[int] = Field(default=None, description="QTc corregido en ms")
+    eje_electrico: Optional[str] = Field(
+        default=None, description="Eje eléctrico: Normal, Desviación izquierda/derecha"
+    )
+    hallazgos: List[str] = Field(
+        default_factory=list,
+        description="Hallazgos descriptivos (no diagnóstico): ondas, bloqueos, alteraciones de segmento"
+    )
+    profesional: Optional[str] = None
+    notas_calidad: Optional[str] = None
+
+
+class RiesgoCardiovascularData(BaseModel):
+    """
+    Datos EXTRAÍDOS de evaluación de riesgo cardiovascular.
+    El documento ya contiene el riesgo calculado — la extracción lo recupera.
+    NOTA: prediagnóstico IA no soportado en V1 (el cálculo ya está en el documento).
+    """
+    paciente: str
+    fecha_estudio: str
+    nivel_riesgo: Optional[str] = Field(
+        default=None, description="Ej: Bajo, Moderado, Alto, Muy Alto"
+    )
+    porcentaje_riesgo: Optional[float] = Field(
+        default=None, description="Porcentaje de riesgo a 10 años si está disponible"
+    )
+    escala_utilizada: Optional[str] = Field(
+        default=None, description="Ej: Framingham, OMS/ISH, ACC/AHA ASCVD"
+    )
+    factores_riesgo: List[str] = Field(
+        default_factory=list,
+        description="Factores de riesgo identificados en el documento"
+    )
+    profesional: Optional[str] = None
+    notas_calidad: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# IMPL-20260326-02: Formularios internos estructurados — prediagnóstico directo
+# Somatometria, AgudezaVisual, ExamenMedico NO requieren OCR; los parámetros
+# son capturados directamente por el operador en la interfaz web.
+# ---------------------------------------------------------------------------
+
+class SomatometriaData(BaseModel):
+    """
+    Datos de somatometría y signos vitales capturados directamente en sistema.
+    NOTA: sin archivo fuente — los parámetros vienen del formulario interno.
+    """
+    peso_kg: Optional[float] = Field(default=None, description="Peso corporal en kilogramos")
+    talla_m: Optional[float] = Field(default=None, description="Talla en metros")
+    imc: Optional[float] = Field(default=None, description="Índice de Masa Corporal kg/m²")
+    complexion: Optional[str] = Field(
+        default=None,
+        description="Ej: NORMAL, SOBREPESO, OBESIDAD, OBESIDAD SEVERA, BAJO PESO"
+    )
+    ta_sistolica: Optional[float] = Field(default=None, description="TA sistólica mmHg")
+    ta_diastolica: Optional[float] = Field(default=None, description="TA diastólica mmHg")
+    fc_min: Optional[float] = Field(default=None, description="Frecuencia cardíaca (lpm)")
+    fr_min: Optional[float] = Field(default=None, description="Frecuencia respiratoria (rpm)")
+    temperatura: Optional[float] = Field(default=None, description="Temperatura corporal °C")
+    perimetro_cintura: Optional[float] = Field(default=None, description="Perímetro de cintura cm")
+    perimetro_cadera: Optional[float] = Field(default=None, description="Perímetro de cadera cm")
+    notas_calidad: Optional[str] = Field(
+        default=None,
+        description="Observaciones sobre la captura (datos parciales, dudosos, etc.)"
+    )
+
+
+class AgudezaVisualData(BaseModel):
+    """
+    Datos de agudeza visual capturados directamente en sistema.
+    NOTA: sin archivo fuente — los parámetros vienen del formulario interno.
+    """
+    vision_lejana_od: Optional[str] = Field(default=None, description="Visión lejana ojo derecho (ej: 20/20)")
+    vision_lejana_oi: Optional[str] = Field(default=None, description="Visión lejana ojo izquierdo")
+    vision_cercana_od: Optional[str] = Field(default=None, description="Visión cercana ojo derecho")
+    vision_cercana_oi: Optional[str] = Field(default=None, description="Visión cercana ojo izquierdo")
+    lejana_corregida_od: Optional[str] = Field(default=None, description="Visión lejana corregida OD")
+    lejana_corregida_oi: Optional[str] = Field(default=None, description="Visión lejana corregida OI")
+    cercana_corregida_od: Optional[str] = Field(default=None, description="Visión cercana corregida OD")
+    cercana_corregida_oi: Optional[str] = Field(default=None, description="Visión cercana corregida OI")
+    reflejos: Optional[str] = Field(default=None, description="Exploración de reflejos pupilares")
+    test_ishihara: Optional[str] = Field(default=None, description="Resultado test de Ishihara (visión cromática)")
+    campimetria: Optional[str] = Field(default=None, description="Nota de campimetría si se realizó ")
+    notas_calidad: Optional[str] = None
+
+
+class ExamenMedicoData(BaseModel):
+    """
+    Hallazgos relevantes de exploración física capturados directamente en sistema.
+    NOTA: sin archivo fuente — los datos vienen del formulario médico interno.
+    Solo se incluyen sistemas con hallazgos documentados (no vacíos).
+    """
+    neurologico: Optional[str] = None
+    cabeza: Optional[str] = None
+    ojos: Optional[str] = None
+    oidos_cad: Optional[str] = Field(default=None, description="Oído AD")
+    oidos_cai: Optional[str] = Field(default=None, description="Oído AI")
+    corazon: Optional[str] = None
+    campos_pulmonares: Optional[str] = None
+    abdomen: Optional[str] = None
+    columna_vertebral: Optional[str] = None
+    ms_superiores: Optional[str] = Field(default=None, description="Miembros superiores")
+    ms_inferiores: Optional[str] = Field(default=None, description="Miembros inferiores")
+    impresion_diagnostica: Optional[str] = None
+    antecedentes_patologicos: Optional[str] = Field(
+        default=None,
+        description="Resumen de antecedentes medicoquirúrgicos relevantes"
+    )
+    hallazgos_relevantes: List[str] = Field(
+        default_factory=list,
+        description="Lista condensada de hallazgos positivos/negativos relevantes"
+    )
+    notas_calidad: Optional[str] = None
+
+
 class ExtractedDataUnion(BaseModel):
     """Unión discriminada de tipos de datos extraídos (capa extractiva)."""
     classification: DocumentClassification
-    data: Union[AudiometriaData, LaboratorioData, EspirometriaData, RayosXData, Dict]
+    # IMPL-20260326-17: Añadidos CampimetriaData, ElectrocardiogramaData, RiesgoCardiovascularData
+    # IMPL-20260326-02: Añadidos SomatometriaData, AgudezaVisualData, ExamenMedicoData (formularios internos)
+    data: Union[AudiometriaData, LaboratorioData, EspirometriaData, RayosXData, CampimetriaData, ElectrocardiogramaData, RiesgoCardiovascularData, SomatometriaData, AgudezaVisualData, ExamenMedicoData, Dict]
     processing_time_seconds: float
     gemini_model: str = "gemini-2.5-flash"
 
@@ -177,7 +348,9 @@ class ExtractionSnapshotPayload(BaseModel):
     """
     study_type: str
     source_file_name: Optional[str] = None
-    extracted_data: Union[AudiometriaData, LaboratorioData, EspirometriaData, RayosXData, Dict]
+    # IMPL-20260326-17: Añadidos CampimetriaData, ElectrocardiogramaData, RiesgoCardiovascularData
+    # IMPL-20260326-02: Añadidos SomatometriaData, AgudezaVisualData, ExamenMedicoData (formularios internos)
+    extracted_data: Union[AudiometriaData, LaboratorioData, EspirometriaData, RayosXData, CampimetriaData, ElectrocardiogramaData, RiesgoCardiovascularData, SomatometriaData, AgudezaVisualData, ExamenMedicoData, Dict]
     missing_fields: List[str] = Field(default_factory=list)
     quality_notes: List[str] = Field(default_factory=list)
     audit: Optional[AIAuditMetadata] = None

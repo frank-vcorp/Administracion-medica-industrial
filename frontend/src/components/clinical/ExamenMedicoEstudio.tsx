@@ -110,6 +110,7 @@ export default function ExamenMedicoEstudio({
   const [isPending, startTransition] = useTransition()
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [aiWarning, setAiWarning] = useState('')
 
   // Estado Módulo 1 — solo campos por cita que siguen viviendo en Examen Médico
   const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
@@ -154,11 +155,15 @@ export default function ExamenMedicoEstudio({
   function handleSave(markComplete: boolean) {
     setSaveMsg('')
     setSaveError('')
+    setAiWarning('')
     startTransition(async () => {
       const payload = buildPayload()
       const res = await saveExamenMedicoPapeleta(eventId, eventTestId, payload, markComplete)
       if (res.success) {
         setSaveMsg(markComplete ? '🏁 Examen Médico completado.' : '✅ Borrador guardado.')
+        if (res.aiWarning) {
+          setAiWarning(`La captura clínica se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`)
+        }
         onStatusChange?.(res.status ?? (markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'))
       } else {
         setSaveError(res.error ?? 'Error al guardar')
@@ -556,6 +561,11 @@ export default function ExamenMedicoEstudio({
           {saveError && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 font-medium">
               ❌ {saveError}
+            </div>
+          )}
+          {aiWarning && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800 font-medium">
+              ⚠️ {aiWarning}
             </div>
           )}
 

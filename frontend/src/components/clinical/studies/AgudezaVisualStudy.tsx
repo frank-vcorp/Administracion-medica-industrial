@@ -51,6 +51,7 @@ export default function AgudezaVisualStudy({
   }))
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState("")
+  const [aiWarning, setAiWarning] = useState("")
 
   const handleChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }))
@@ -59,6 +60,7 @@ export default function AgudezaVisualStudy({
   const handleSave = async (markComplete: boolean) => {
     setIsSaving(true)
     setMessage("")
+    setAiWarning("")
     const res = await updateAgudezaVisual(eventId, formData)
     if (res.success) {
       const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
@@ -69,6 +71,9 @@ export default function AgudezaVisualStudy({
       )
       onStatusChange?.(newStatus)
       setMessage(markComplete ? "🏁 Agudeza Visual completada." : "✅ Datos guardados.")
+      if (res.aiWarning) {
+        setAiWarning(`La captura clínica se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`)
+      }
     } else {
       setMessage("❌ Error: " + res.error)
     }
@@ -135,7 +140,14 @@ export default function AgudezaVisualStudy({
 
       {/* Acciones */}
       <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3 flex-wrap">
-        <p className="text-sm font-medium text-slate-500">{message}</p>
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-slate-500">{message}</p>
+          {aiWarning && (
+            <p className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-xl">
+              ⚠️ {aiWarning}
+            </p>
+          )}
+        </div>
         {!readonly && (
           <div className="flex gap-2">
             <button
