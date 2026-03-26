@@ -61,6 +61,8 @@ interface PapeletaWorkspaceProps {
   examData?: MedicalExamData
   /** Snapshot de datos personales del trabajador — IMPL-20260325-02 */
   workerSnapshot?: WorkerSnapshot | null
+  /** IMPL-20260325-08: Snapshot del portal (PrefilledInvitation.module1Data) para mostrar en Examen Médico */
+  prefilledData?: Record<string, unknown> | null
 }
 
 // --- Labels y estilos para estados V1 ---
@@ -144,6 +146,7 @@ export default function PapeletaWorkspace({
   apiUrl,
   examData = null,
   workerSnapshot = null,
+  prefilledData = null,
 }: PapeletaWorkspaceProps) {
   const [activeTestId, setActiveTestId] = useState<string | null>(null)
   const [localTests, setLocalTests] = useState<StudyTest[]>(eventTests)
@@ -312,6 +315,7 @@ export default function PapeletaWorkspace({
               eventId={eventId}
               examData={examData}
               workerSnapshot={workerSnapshot}
+              prefilledData={prefilledData}
               readonly={readonly}
               isPending={isPending}
               isUploading={isUploading}
@@ -402,6 +406,7 @@ function StudyPanel({
   eventId,
   examData,
   workerSnapshot,
+  prefilledData,
   readonly,
   isPending,
   isUploading,
@@ -415,6 +420,7 @@ function StudyPanel({
   eventId: string
   examData: MedicalExamData
   workerSnapshot: WorkerSnapshot | null | undefined
+  prefilledData: Record<string, unknown> | null | undefined
   readonly: boolean
   isPending: boolean
   isUploading: boolean
@@ -559,7 +565,7 @@ function StudyPanel({
             eventId={eventId}
             eventTestId={test.id}
             examData={examData}
-            prefilledData={null}
+            prefilledData={prefilledData ?? null}
             readonly={readonly}
             workerSnapshot={workerSnapshot}
             onStatusChange={onExamenMedicoStatusChange}

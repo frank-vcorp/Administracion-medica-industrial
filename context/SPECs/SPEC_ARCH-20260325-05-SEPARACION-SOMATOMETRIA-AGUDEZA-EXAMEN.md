@@ -36,6 +36,22 @@
   - Impresión diagnóstica y aptitud
   - campos médicos propios del estudio
 
+#### 4. Prellenado
+- El prellenado NO debe guardarse como fuente de verdad directa en los datos maestros del trabajador.
+- El prellenado debe seguir asociado a la cita / invitación / estudio Examen Médico como captura declarativa del Módulo 1.
+- Examen Médico sí puede consumir prellenado, pero únicamente para su bloque declarativo propio.
+- Somatometría y Agudeza Visual no deben leer ni heredar ese prellenado, porque son estudios independientes.
+- Si en el futuro se desea promover ciertos datos estables al maestro del trabajador o a historia clínica, debe hacerse como sincronización controlada y validada, no como escritura automática desde el portal público.
+
+#### 5. Persistencia longitudinal recomendada
+- A nivel de producto, el prellenado sí debe poder persistir y actualizarse en el tiempo, porque gran parte de su contenido cambia poco entre cita y cita.
+- La arquitectura recomendada es de dos capas:
+  - **Capa longitudinal del trabajador**: guardar la base histórica/declarativa reutilizable en `ClinicalHistory` o entidad equivalente.
+  - **Capa snapshot por cita**: al generar o abrir una nueva invitación, copiar esa base al contexto de la cita/Examen Médico para que quede congelada como referencia del episodio actual.
+- El trabajador debe poder editar su base longitudinal en nuevas citas, y esos cambios deben actualizar la información reutilizable hacia adelante.
+- La cita actual no debe depender de mutaciones posteriores del trabajador; debe conservar su snapshot propio para auditoría clínica.
+- En esta iteración no es obligatorio implementar aún la sincronización entre ambas capas, pero esa es la dirección correcta del modelo.
+
 ### Criterios de Aceptación
 #### A. Flujo de expediente
 - Al entrar al Paso 2, el usuario trabaja ya sobre la Papeleta.
@@ -90,6 +106,8 @@
 - Definir si el estado `CHECKED_IN` usará la misma vista de Papeleta que hoy usa `IN_PROGRESS`, o si habrá transición automática a `IN_PROGRESS` al abrir estudios.
 - Verificar si la serialización de `examData` en `events/[id]` sigue siendo necesaria para Somatometría/Agudeza Visual una vez que salgan del Examen Médico.
 - Revisar si `updateSomatometria` y `updateAgudezaVisual` deben seguir escribiendo sobre la misma entidad o si a futuro conviene desacoplarlas del modelo del examen médico. Para esta iteración no es obligatorio cambiar persistencia si la UI y semántica quedan correctas.
+- Definir en una iteración posterior si algunos campos estables del prellenado deben promoverse a `Worker` o a `ClinicalHistory`, siempre mediante validación explícita del personal de salud.
+- Diseñar la regla exacta de sincronización entre historial longitudinal y snapshot por cita para evitar sobrescrituras no auditables.
 
 ### Veredicto
 - Sí: a grandes rasgos ese es el cambio correcto.

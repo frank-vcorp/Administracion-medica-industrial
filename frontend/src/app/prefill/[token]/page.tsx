@@ -66,7 +66,7 @@ export default async function PrefillPage({ params }: Props) {
     )
   }
 
-  const { workerName, companyName, scheduledAt, expiresAt, existingData } = result.data
+  const { workerName, companyName, scheduledAt, expiresAt, existingData, fromLongitudinalBase } = result.data
 
   return (
     <PrefillPortalClient
@@ -76,6 +76,7 @@ export default async function PrefillPage({ params }: Props) {
       scheduledAt={new Date(scheduledAt).toISOString()}
       expiresAt={new Date(expiresAt).toISOString()}
       existingData={existingData as Record<string, unknown> | null}
+      fromLongitudinalBase={fromLongitudinalBase}
     />
   )
 }

@@ -60,6 +60,7 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 
   Sistema listo para próximas iteraciones. (ARCH-20260324-26)
 - **2026-03-25 (INTEGRA):** [✓] **Limpieza Operativa del Catálogo Legacy.** Se verificaron y ajustaron los servicios relacionados en `frontend/src/app/services/page.tsx` y `frontend/src/actions/admin.actions.ts`. Cambios documentados en `context/checkpoints/CHK_ARCH-20260325-02.md`. (ARCH-20260325-02)
+- **2026-03-25 (INTEGRA):** [✓] **Separación de Somatometría y Agudeza Visual como estudios independientes.** Se implementó la especificación `SPEC_ARCH-20260325-05-SEPARACION-SOMATOMETRIA-AGUDEZA-EXAMEN.md`, separando ambos estudios en el flujo de Examen Médico. Build del frontend validado con `pnpm build`. Checkpoint generado: `CHK_ARCH-20260325-05.md`. (ARCH-20260325-05)
 
 
 

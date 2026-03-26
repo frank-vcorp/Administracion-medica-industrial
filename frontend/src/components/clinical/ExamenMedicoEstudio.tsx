@@ -268,9 +268,53 @@ export default function ExamenMedicoEstudio({
             <span className="text-teal-600 text-sm mt-0.5">📋</span>
             <p className="text-xs text-teal-800">
               <strong>Módulo 1 — Cuestionario del Paciente.</strong> Captura in-situ dentro del estudio, sin depender del portal público.
-              {prefilledData && <span className="ml-1 text-emerald-700 font-semibold">✓ Prellenado del trabajador disponible.</span>}
+              {prefilledData && (
+                <span className="ml-1 text-emerald-700 font-semibold">
+                  ✓ Snapshot del portal disponible — datos enviados por el trabajador antes de la cita.
+                </span>
+              )}
             </p>
           </div>
+
+          {/* IMPL-20260325-08: Panel de snapshot del portal (solo lectura) */}
+          {prefilledData && (
+            <details className="bg-emerald-50 border border-emerald-200 rounded-xl overflow-hidden">
+              <summary className="px-4 py-2.5 cursor-pointer text-xs font-bold text-emerald-800 flex items-center gap-2 select-none">
+                <span>📋</span>
+                <span>Ver snapshot del portal de prellenado (datos declarados por el trabajador)</span>
+              </summary>
+              <div className="px-4 pb-4 pt-2 space-y-3 border-t border-emerald-200">
+                <p className="text-[10px] text-emerald-600 italic">
+                  Copia congelada de lo que el trabajador declaró antes de esta cita. Solo referencia.
+                </p>
+                {Object.entries(prefilledData)
+                  .filter(([, v]) => v !== null && v !== undefined && typeof v !== 'object')
+                  .map(([k, v]) => (
+                    <div key={k} className="flex gap-2">
+                      <span className="text-[10px] font-bold text-emerald-600 uppercase min-w-[120px]">{k.replace(/_/g, ' ')}:</span>
+                      <span className="text-xs text-emerald-900">{String(v)}</span>
+                    </div>
+                  ))}
+                {Object.entries(prefilledData)
+                  .filter(([, v]) => v !== null && v !== undefined && typeof v === 'object')
+                  .map(([sectionKey, sectionVal]) => (
+                    <div key={sectionKey} className="mt-2">
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase mb-1">{sectionKey.replace(/_/g, ' ')}</p>
+                      <div className="grid grid-cols-2 gap-1 pl-2">
+                        {Object.entries(sectionVal as Record<string, unknown>)
+                          .filter(([, v]) => v !== undefined && v !== '' && v !== null)
+                          .map(([k, v]) => (
+                            <div key={k} className="flex gap-1">
+                              <span className="text-[10px] text-emerald-500 min-w-[80px]">{k.replace(/_/g, ' ')}:</span>
+                              <span className="text-[10px] text-emerald-800">{String(v)}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </details>
+          )}
 
           {/* Sexo — necesario para condicional ginecológicos */}
           <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4">

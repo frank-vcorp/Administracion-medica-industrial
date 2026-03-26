@@ -11,6 +11,7 @@ import Link from 'next/link'
 import EventFlowController from '@/components/EventFlowController'
 import PapeletaWorkspace from '@/components/clinical/PapeletaWorkspace'
 import { getMedicalExam } from '@/actions/medical-exam.actions'
+import { getPrefilledDataForEvent } from '@/actions/prefilled-invitation.actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,9 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
         const event = await getEventById(id)
         const examRes = await getMedicalExam(id)
         const medicalExam = examRes.success ? examRes.data : null
+        // IMPL-20260325-08: Obtener snapshot del portal (PrefilledInvitation.module1Data)
+        const prefilledRes = await getPrefilledDataForEvent(id)
+        const prefilledData = prefilledRes.success && prefilledRes.data ? prefilledRes.data.module1Data : null
 
         if (!event) {
             notFound()
@@ -185,6 +189,7 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         readonly={currentStep > 3}
                         apiUrl={apiUrl}
                         examData={serializedExam}
+                        prefilledData={prefilledData ? JSON.parse(JSON.stringify(prefilledData)) : null}
                     />
                 )}
 

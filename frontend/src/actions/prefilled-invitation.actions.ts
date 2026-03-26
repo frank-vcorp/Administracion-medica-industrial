@@ -175,6 +175,7 @@ export async function validatePublicToken(plainToken: string) {
           scheduledAt: true,
           worker: {
             select: {
+              id:        true,
               firstName: true,
               lastName:  true,
               dob:       true,
@@ -219,15 +220,31 @@ export async function validatePublicToken(plainToken: string) {
     },
   })
 
+  // IMPL-20260325-08: Si no hay snapshot en la invitación, usar la base longitudinal del trabajador
+  let existingData: Record<string, unknown> | null = (invitation.module1Data as Record<string, unknown>) ?? null
+  let fromLongitudinalBase = false
+  if (!existingData) {
+    const history = await prisma.clinicalHistory.findUnique({
+      where: { workerId: invitation.appointment.worker.id },
+      select: { data: true },
+    })
+    const histData = history?.data as Record<string, unknown> | null
+    if (histData?.prefill_base) {
+      existingData = histData.prefill_base as Record<string, unknown>
+      fromLongitudinalBase = true
+    }
+  }
+
   return {
     success: true,
     data: {
-      invitationId:  invitation.id,
-      expiresAt:     invitation.expiresAt,
-      workerName:    `${invitation.appointment.worker.firstName} ${invitation.appointment.worker.lastName}`,
-      companyName:   invitation.appointment.worker.company?.name ?? null,
-      scheduledAt:   invitation.appointment.scheduledAt,
-      existingData:  invitation.module1Data ?? null,
+      invitationId:        invitation.id,
+      expiresAt:           invitation.expiresAt,
+      workerName:          `${invitation.appointment.worker.firstName} ${invitation.appointment.worker.lastName}`,
+      companyName:         invitation.appointment.worker.company?.name ?? null,
+      scheduledAt:         invitation.appointment.scheduledAt,
+      existingData,
+      fromLongitudinalBase,
     },
   }
 }
@@ -286,7 +303,11 @@ export async function submitModule1(plainToken: string, rawData: unknown) {
   const tokenHash  = hashToken(plainToken)
   const invitation = await prisma.prefilledInvitation.findUnique({
     where: { tokenHash },
-    select: { status: true, expiresAt: true },
+    select: {
+      status:  true,
+      expiresAt: true,
+      appointment: { select: { workerId: true } },
+    },
   })
 
   if (!invitation)                           return { success: false, error: 'TOKEN_INVALID' }
@@ -301,14 +322,76 @@ export async function submitModule1(plainToken: string, rawData: unknown) {
     return { success: false, error: 'Datos inválidos', details: parsed.error.flatten() }
   }
 
-  await prisma.prefilledInvitation.update({
-    where: { tokenHash },
-    data: {
-      module1Data: parsed.data.data as object,
-      status:      'SUBMITTED',
-      submittedAt: new Date(),
-    },
+  const workerId = invitation.appointment?.workerId
+
+  await prisma.$transaction(async (tx) => {
+    await tx.prefilledInvitation.update({
+      where: { tokenHash },
+      data: {
+        module1Data: parsed.data.data as object,
+        status:      'SUBMITTED',
+        submittedAt: new Date(),
+      },
+    })
+
+    // IMPL-20260325-08: Actualizar base longitudinal del trabajador en ClinicalHistory.data.prefill_base
+    if (workerId) {
+      const existingHistory = await tx.clinicalHistory.findUnique({
+        where: { workerId },
+        select: { data: true },
+      })
+      const existingData = (existingHistory?.data as Record<string, unknown>) ?? {}
+      await tx.clinicalHistory.upsert({
+        where: { workerId },
+        create: {
+          workerId,
+          data: { ...existingData, prefill_base: parsed.data.data },
+          lastUpdated: new Date(),
+        },
+        update: {
+          data: { ...existingData, prefill_base: parsed.data.data },
+          lastUpdated: new Date(),
+        },
+      })
+    }
   })
 
   return { success: true }
+}
+
+/**
+ * IMPL-20260325-08: Obtiene el snapshot del Módulo 1 del portal para el Examen Médico.
+ * Devuelve los datos de PrefilledInvitation.module1Data de la cita asociada al evento.
+ * Uso: staff/médico para visualizar el snapshot del trabajador en la papeleta.
+ *
+ * @param eventId - UUID del MedicalEvent
+ */
+export async function getPrefilledDataForEvent(eventId: string) {
+  try {
+    if (!eventId) return { success: true, data: null }
+
+    const event = await prisma.medicalEvent.findUnique({
+      where: { id: eventId },
+      select: { appointmentId: true },
+    })
+    if (!event?.appointmentId) return { success: true, data: null }
+
+    const invitation = await prisma.prefilledInvitation.findUnique({
+      where: { appointmentId: event.appointmentId },
+      select: { module1Data: true, status: true, submittedAt: true },
+    })
+    if (!invitation?.module1Data) return { success: true, data: null }
+
+    return {
+      success: true,
+      data: {
+        module1Data: invitation.module1Data as Record<string, unknown>,
+        status:      invitation.status,
+        submittedAt: invitation.submittedAt,
+      },
+    }
+  } catch (error) {
+    console.error('Error al obtener prellenado del evento:', error)
+    return { success: false, error: 'Error al obtener datos de prellenado' }
+  }
 }

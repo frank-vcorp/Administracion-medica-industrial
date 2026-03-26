@@ -10,6 +10,15 @@ import {
     getTestCategories,
 } from "@/actions/medical-profiles"
 
+async function createMedicalTestFormAction(formData: FormData): Promise<void> {
+    'use server'
+
+    const result = await createMedicalTest(formData)
+    if (!result.success) {
+        throw new Error(result.error)
+    }
+}
+
 // searchParams es Promise en Next.js 16 (App Router)
 export default async function AdminServicesPage({
     searchParams,
@@ -73,7 +82,7 @@ export default async function AdminServicesPage({
                         <h3 className="text-lg font-bold">Registrar Prueba</h3>
                         <label htmlFor="new-service-modal" className="cursor-pointer text-slate-400 hover:text-red-500 font-bold">✕</label>
                     </div>
-                    <form action={createMedicalTest} className="space-y-4">
+                    <form action={createMedicalTestFormAction} className="space-y-4">
                         <input name="name" placeholder="Nombre (ej. Audiometría Tonal)" required className="w-full border p-2 rounded" />
                         <div className="grid grid-cols-2 gap-4">
                             <input name="code" placeholder="Código Interno (ej. AUD-01)" required className="w-full border p-2 rounded" />

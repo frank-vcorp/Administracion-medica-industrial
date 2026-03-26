@@ -67,6 +67,8 @@ interface Props {
   scheduledAt: string
   expiresAt: string
   existingData: Record<string, unknown> | null
+  /** IMPL-20260325-08: true si los datos se inicializaron desde la base longitudinal del trabajador */
+  fromLongitudinalBase?: boolean
 }
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
@@ -209,6 +211,7 @@ export default function PrefillPortalClient({
   scheduledAt,
   expiresAt,
   existingData,
+  fromLongitudinalBase = false,
 }: Props) {
   const [formData, setFormData] = useState<FormData>({
     datos_personales: (existingData?.datos_personales as DatosPersonales) ?? {},
@@ -348,6 +351,20 @@ export default function PrefillPortalClient({
 
       {/* Form Body */}
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+
+        {/* IMPL-20260325-08: Banner cuando los datos se inicializan desde la base longitudinal */}
+        {fromLongitudinalBase && (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4 flex items-start gap-3">
+            <span className="text-blue-500 text-xl mt-0.5">🔄</span>
+            <div>
+              <p className="text-sm font-bold text-blue-800">Se cargó tu información de una cita anterior</p>
+              <p className="text-xs text-blue-600 mt-1 leading-relaxed">
+                Los datos mostrados provienen de tu historial previo. Revísalos y actualiza lo que haya cambiado.
+                Al enviar, tu información se guardará actualizada y se usará en esta y futuras citas.
+              </p>
+            </div>
+          </div>
+        )}
         {/* ── Sección 1: Datos Personales ─── */}
         {activeTab === 'datos_personales' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
