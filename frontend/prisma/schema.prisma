@@ -23,6 +23,8 @@ model User {
   signatures           MedicalVerdict[]
   company              Company?              @relation(fields: [companyId], references: [id])
   generatedInvitations PrefilledInvitation[] // IMPL-20260324-07
+  // IMPL-20260326-16: Revisiones médicas de prediagnóstico IA (ARCH-20260326-16)
+  doctorStudyReviews   DoctorStudyReview[]
 
   @@map("users")
 }
@@ -210,6 +212,8 @@ model EventTest {
   event            MedicalEvent    @relation(fields: [eventId], references: [id])
   performedBy      User?           @relation(fields: [performedById], references: [id])
   test             MedicalTest?    @relation(fields: [testId], references: [id])
+  // IMPL-20260326-16: Snapshots de extracción IA por estudio (ARCH-20260326-16)
+  extractionSnapshots StudyExtractionSnapshot[]
 
   @@map("event_tests")
 }
@@ -445,3 +449,112 @@ model PrefilledInvitation {
 
   @@map("prefilled_invitations")
 }
+
+// ===========================================================================
+// IMPL-20260326-16: Prediagnóstico IA Estructurado por Estudio (ARCH-20260326-16)
+// Ref: context/SPECs/SPEC_ARCH-20260326-16-PREDIAGNOSTICO-IA-ESTRUCTURADO.md
+//
+// Política de inmutabilidad:
+//   StudyExtractionSnapshot, AIPrediagnosisSnapshot son INMUTABLES tras creación.
+//   Una nueva corrida crea nueva versión; nunca sobrescribe payload clínico previo.
+//   DoctorStudyReview es la única capa mutable (registra respuesta del médico).
+// ===========================================================================
+
+/// Snapshot inmutable de extracción estructurada por estudio.
+/// Capa extractiva: parámetros canónicos sin interpretación clínica.
+model StudyExtractionSnapshot {
+  id              String   @id @default(uuid())
+  eventTestId     String
+  version         Int      @default(1)
+  studyType       String   // Audiometria | Laboratorio | Espirometria | Rayos_X | Otro
+  sourceFileName  String?
+  sourceFileUrl   String?
+  sourceFileHash  String?  // SHA-256 del archivo fuente
+  // structuredData: ExtractionSnapshotPayload (ver medical.py)
+  // Incluye extracted_data, missing_fields, quality_notes, audit
+  structuredData  Json
+  clinicalState   String   @default("DRAFT_EXTRACTED")
+  modelName       String   @default("gemini-2.5-flash")
+  promptVersion   String   @default("extract-v2")
+  pipelineVersion String   @default("ai-pipeline-2026-03")
+  triggeredByUserId String?
+  triggerReason   String   @default("initial_upload")
+  isSuperseded    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  eventTest       EventTest                @relation(fields: [eventTestId], references: [id], onDelete: Cascade)
+  aiPrediagnoses  AIPrediagnosisSnapshot[]
+
+  @@map("study_extraction_snapshots")
+}
+
+/// Snapshot inmutable de prediagnóstico IA por estudio.
+/// Capa interpretativa: se basa exactamente en una versión de extracción.
+/// GUARDRAIL: nunca propaga a dictamen final, aptitud ni PDF firmado sin revisión médica.
+model AIPrediagnosisSnapshot {
+  id                   String   @id @default(uuid())
+  extractionSnapshotId String
+  version              Int      @default(1)
+  // prediagnosisData: AIPrediagnosisResult (ver medical.py)
+  // Incluye summary, confidence, justification, clinical_basis, citations, limitations, red_flags
+  prediagnosisData     Json
+  clinicalState        String   @default("AI_PENDING_REVIEW")
+  modelName            String   @default("gemini-2.5-flash")
+  promptVersion        String   @default("predx-v1")
+  corpusVersion        String?
+  triggeredByUserId    String?
+  isSuperseded         Boolean  @default(false)
+  createdAt            DateTime @default(now())
+
+  extractionSnapshot   StudyExtractionSnapshot @relation(fields: [extractionSnapshotId], references: [id])
+  doctorReviews        DoctorStudyReview[]
+
+  @@map("ai_prediagnosis_snapshots")
+}
+
+/// Revisión médica por estudio. Una revisión vigente activa por versión de prediagnóstico.
+/// Incluye feedback comparativo para mejora supervisada posterior.
+model DoctorStudyReview {
+  id                     String   @id @default(uuid())
+  prediagnosisSnapshotId String
+  // Estados: REVIEWED_ACCEPTED | REVIEWED_EDITED | REVIEWED_REJECTED
+  doctorStatus           String
+  doctorDiagnosis        String?
+  doctorNotes            String?
+  reviewedByUserId       String
+  // Feedback comparativo IA vs médico
+  aiAgreementScore       Int?     // 0-100: 100 = concordancia total
+  aiUsefulnessScore      Int?     // 0-100: 100 = muy útil para acelerar revisión
+  // same_conclusion | same_line_with_edits | different_conclusion | ai_non_conclusive
+  differenceType         String?
+  // none | low | medium | high
+  errorSeverity          String   @default("none")
+  // omission | wrong_interpretation | unsupported_claim | low_document_quality | insufficient_context | other
+  errorCategory          String?
+  doctorFeedbackNote     String?
+  createdAt              DateTime @default(now())
+
+  prediagnosisSnapshot   AIPrediagnosisSnapshot @relation(fields: [prediagnosisSnapshotId], references: [id])
+  reviewedBy             User                   @relation(fields: [reviewedByUserId], references: [id])
+
+  @@map("doctor_study_reviews")
+}
+
+/// Fuentes de evidencia clínica controlada y versionada para el corpus de prediagnóstico.
+/// Semilla V1 — referenciadas por las citas del AIPrediagnosisSnapshot.
+model ClinicalEvidenceSource {
+  id        String   @id @default(uuid())
+  sourceId  String   @unique // ej: "NOM-011-STPS-2001", "ATS-ERS-2022"
+  title     String
+  section   String?
+  excerpt   String?
+  version   String?
+  // audiometria | espirometria | laboratorio | rayos_x | general
+  category  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("clinical_evidence_sources")
+}
+

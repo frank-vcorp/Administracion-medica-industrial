@@ -53,6 +53,32 @@ export const getEventById = async (id: string) => {
                                 select: { name: true }
                             }
                         }
+                    },
+                    // IMPL-20260326-16: Incluir snapshot IA más reciente (no superseded) por estudio
+                    extractionSnapshots: {
+                        where: { isSuperseded: false },
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                        include: {
+                            aiPrediagnoses: {
+                                where: { isSuperseded: false },
+                                orderBy: { createdAt: 'desc' },
+                                take: 1,
+                                include: {
+                                    doctorReviews: {
+                                        orderBy: { createdAt: 'desc' },
+                                        take: 1,
+                                        select: {
+                                            id: true,
+                                            doctorStatus: true,
+                                            doctorDiagnosis: true,
+                                            doctorNotes: true,
+                                            createdAt: true,
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 },
                 orderBy: { createdAt: 'asc' }
