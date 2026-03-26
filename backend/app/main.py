@@ -2,6 +2,7 @@
 Residente Digital API - Backend con Pipeline IA Modular
 IMPL-20260225-01: Clasificação y extracción inteligentes de documentos médicos.
 IMPL-20260225-02: Firma Digital Avanzada y Motor de Reportes Masivos.
+
 IMPL-20260326-16: Endpoints V2 para prediagnóstico IA separado (ARCH-20260326-16).
 """
 
@@ -20,6 +21,19 @@ from services.ai import DocumentClassifierService, ExtractorService, Prediagnost
 from services.pdf import SignerService, ReportService
 from schemas import DocumentClassification, ExtractedDataUnion
 
+
+def _read_env_var(key: str) -> Optional[str]:
+    """ARCH-20260326-02: Normaliza variables con whitespace accidental. Respaldo: context/checkpoints/CHK_ARCH-20260326-02-GEMINI-ENV-NORMALIZATION.md."""
+    value = os.getenv(key)
+    if value:
+        return value.strip()
+
+    for env_key, env_value in os.environ.items():
+        if env_key.strip() == key and env_value:
+            return env_value.strip()
+
+    return None
+
 app = FastAPI(
     title="Residente Digital API",
     description="Pipeline IA modular para análisis de documentos médicos"
@@ -34,12 +48,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/uploads")
+UPLOAD_DIR = _read_env_var("UPLOAD_DIR") or "/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # In production this MUST be an env variable.
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_KEY = _read_env_var("GEMINI_API_KEY")
+GEMINI_MODEL = _read_env_var("GEMINI_MODEL") or "gemini-2.5-flash"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
 EXTRACTION_PROMPT_VERSION = "extract-v2"
 PREDIAGNOSIS_PROMPT_VERSION = "predx-v1"
@@ -59,6 +73,8 @@ def _sanitize_error(err: str) -> str:
 
 def _ai_unavailable_response(msg: str = "Servicios de IA no están disponibles") -> dict:
     """Respuesta estándar cuando IA no está disponible, con detalles de diagnóstico. ARCH-20260326-05."""
+    current_api_key = _read_env_var("GEMINI_API_KEY")
+    current_model = _read_env_var("GEMINI_MODEL") or GEMINI_MODEL
     return {
         "status": "error",
         "error": msg,
@@ -66,8 +82,8 @@ def _ai_unavailable_response(msg: str = "Servicios de IA no están disponibles")
             "classifier": classifier is not None,
             "extractor": extractor is not None,
             "prediagnostic": prediagnostic_svc is not None,
-            "api_key_present": bool(GEMINI_API_KEY),
-            "model": GEMINI_MODEL,
+            "api_key_present": bool(current_api_key),
+            "model": current_model,
             "last_init_error": ai_init_error,
         },
     }
@@ -134,13 +150,15 @@ def v2_ai_status():
     ARCH-20260326-05: Expone causa raíz de fallos de inicialización de forma segura.
     Nunca retorna el valor de GEMINI_API_KEY; sólo informa si está presente.
     """
+    current_api_key = _read_env_var("GEMINI_API_KEY")
+    current_model = _read_env_var("GEMINI_MODEL") or GEMINI_MODEL
     return {
         "overall_status": "ok" if all([classifier, extractor, prediagnostic_svc]) else "degraded",
         "classifier": classifier is not None,
         "extractor": extractor is not None,
         "prediagnostic": prediagnostic_svc is not None,
-        "model": GEMINI_MODEL,
-        "api_key_present": bool(GEMINI_API_KEY),
+        "model": current_model,
+        "api_key_present": bool(current_api_key),
         "last_init_error": ai_init_error,
     }
 

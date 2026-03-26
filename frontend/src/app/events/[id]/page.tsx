@@ -7,6 +7,8 @@
  * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  * @intervention ARCH-20260326-10
  * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
+ * @intervention ARCH-20260326-04
+ * @see context/checkpoints/CHK_IMPL-20260326-04.md
  */
 
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
@@ -101,6 +103,8 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
           resultNotes?: string | null
           extractionSnapshots?: Array<{
             id: string
+            version: number
+            structuredData: unknown
             aiPrediagnoses?: Array<{
               id: string
               version: number
@@ -138,6 +142,16 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         existingReview: latestPredx.doctorReviews?.[0] ?? null,
                     }
                     : null
+                // ARCH-20260326-05: Serializar capa de extracción estructurada del estudio
+                const rawStructured = latestExtraction?.structuredData as Record<string, unknown> | null | undefined
+                const extractionSnapshot = latestExtraction
+                    ? {
+                        id: latestExtraction.id,
+                        version: latestExtraction.version,
+                        extractedData: rawStructured?.extracted_data ?? null,
+                        missingFields: rawStructured?.missing_fields ?? null,
+                    }
+                    : null
                 return {
                     id: et.id,
                     testNameSnapshot: et.testNameSnapshot,
@@ -149,6 +163,7 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         category: et.test.category
                     } : null,
                     aiSnapshot,
+                    extractionSnapshot,
                 }
             })
         ))
@@ -177,7 +192,16 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
         const requestedStepIndex = steps.indexOf(requestedView)
         // Evitamos que puedan ver pasos futuros que aún no tienen data
         const activeView = requestedStepIndex < currentStep ? requestedView : event.status
-        const activeViewStep = steps.indexOf(activeView) + 1
+
+        // IMPL-20260326-04: 4 pasos visuales — CHECKED_IN e IN_PROGRESS fusionados en “Estudios”
+        const visualStepGroups = [
+            { primary: 'SCHEDULED', ids: ['SCHEDULED'] as string[], label: 'Ingreso' },
+            { primary: 'CHECKED_IN', ids: ['CHECKED_IN', 'IN_PROGRESS'] as string[], label: 'Estudios' },
+            { primary: 'VALIDATING', ids: ['VALIDATING'] as string[], label: 'Firma' },
+            { primary: 'COMPLETED', ids: ['COMPLETED'] as string[], label: 'Fin' },
+        ]
+        const currentVisualStep = Math.max(1, visualStepGroups.findIndex(g => g.ids.includes(event.status)) + 1)
+        const activeViewVisualStep = Math.max(1, visualStepGroups.findIndex(g => g.ids.includes(activeView)) + 1)
 
         return (
             <div className="space-y-8 max-w-6xl mx-auto pb-20">
@@ -220,35 +244,34 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         </div>
                     </div>
 
-                    {/* Stepper Logic (Clickable para pasos anteriores/actuales) */}
+                    {/* IMPL-20260326-04: Stepper visual de 4 pasos — CHECKED_IN e IN_PROGRESS unificados en "Estudios" */}
                     <div className="relative flex justify-between items-center max-w-2xl mx-auto px-4">
                         <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2 z-0"></div>
-                        <div className="absolute top-1/2 left-0 h-0.5 bg-teal-500 -translate-y-1/2 z-0 transition-all duration-700" style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}></div>
+                        <div className="absolute top-1/2 left-0 h-0.5 bg-teal-500 -translate-y-1/2 z-0 transition-all duration-700" style={{ width: `${((currentVisualStep - 1) / (visualStepGroups.length - 1)) * 100}%` }}></div>
 
-                        {steps.map((s, index) => {
-                            const step = index + 1
-                            const isClickable = step <= currentStep
-                            // Remarcamos visualmente si es la pestaña actualmente seleccionada por el usuario (activeViewStep)
-                            const isSelectedView = step === activeViewStep
+                        {visualStepGroups.map((group, index) => {
+                            const vStep = index + 1
+                            const isClickable = vStep <= currentVisualStep
+                            const isSelectedView = vStep === activeViewVisualStep
 
                             return (
-                                <div key={s} className="relative z-10 flex flex-col items-center">
+                                <div key={group.primary} className="relative z-10 flex flex-col items-center">
                                     {isClickable ? (
-                                        <Link href={`/events/${id}?view=${s}`}>
+                                        <Link href={`/events/${id}?view=${group.primary}`}>
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border-2 cursor-pointer hover:scale-110 ${isSelectedView
                                                 ? 'bg-teal-500 text-white border-teal-500 shadow-lg shadow-teal-200 scale-110'
                                                 : 'bg-white text-teal-600 border-teal-400'
                                                 }`}>
-                                                {step < currentStep && !isSelectedView ? '✓' : step}
+                                                {vStep < currentVisualStep && !isSelectedView ? '✓' : vStep}
                                             </div>
                                         </Link>
                                     ) : (
                                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border-2 bg-white text-slate-400 border-slate-200">
-                                            {step}
+                                            {vStep}
                                         </div>
                                     )}
-                                    <span className={`text-[10px] absolute -bottom-6 font-bold uppercase tracking-tighter whitespace-nowrap ${step <= currentStep ? 'text-teal-600' : 'text-slate-400'}`}>
-                                        {['Ingreso', 'Sala', 'Estudios', 'Firma', 'Fin'][index]}
+                                    <span className={`text-[10px] absolute -bottom-6 font-bold uppercase tracking-tighter whitespace-nowrap ${vStep <= currentVisualStep ? 'text-teal-600' : 'text-slate-400'}`}>
+                                        {group.label}
                                     </span>
                                 </div>
                             )

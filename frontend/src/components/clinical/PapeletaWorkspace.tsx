@@ -65,6 +65,13 @@ type StudyTest = {
       createdAt: string
     } | null
   } | null
+  // ARCH-20260326-05: Capa de extracción estructurada del estudio
+  extractionSnapshot?: {
+    id: string
+    version: number
+    extractedData: unknown
+    missingFields: unknown
+  } | null
 }
 
 type WorkerInfo = {
@@ -406,6 +413,100 @@ export default function PapeletaWorkspace({
   )
 }
 
+// --- ARCH-20260326-05: Helpers para renderizado legible de datos extraídos ---
+
+function formatFieldLabel(key: string): string {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function formatFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'boolean') return value ? 'Sí' : 'No'
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') return value.trim() || '—'
+  if (Array.isArray(value)) return value.map((v) => formatFieldValue(v)).join(', ')
+  return String(value)
+}
+
+function ExtractedDataRows({ data, depth = 0 }: { data: Record<string, unknown>; depth?: number }) {
+  return (
+    <>
+      {Object.entries(data).map(([key, value]) => {
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          return (
+            <div key={key} className={depth > 0 ? 'pl-3' : ''}>
+              <p className="text-[10px] font-bold text-sky-700 uppercase tracking-wider py-1.5 pt-2">
+                {formatFieldLabel(key)}
+              </p>
+              <ExtractedDataRows data={value as Record<string, unknown>} depth={depth + 1} />
+            </div>
+          )
+        }
+        return (
+          <div key={key} className="flex justify-between items-start gap-4 py-1 border-b border-sky-100 last:border-0">
+            <span className="text-xs text-slate-500 shrink-0">{formatFieldLabel(key)}</span>
+            <span className="text-xs text-slate-800 font-medium text-right break-all">
+              {formatFieldValue(value)}
+            </span>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+// --- ARCH-20260326-05: Panel de Valores Capturados (capa extractiva) ---
+
+function CapturedValuesPanel({
+  extractedData,
+  missingFields,
+  version,
+}: {
+  extractedData: Record<string, unknown> | null
+  missingFields: string[] | null
+  version: number
+}) {
+  const hasData = extractedData && Object.keys(extractedData).length > 0
+  const hasMissing = Array.isArray(missingFields) && missingFields.length > 0
+  if (!hasData && !hasMissing) return null
+
+  return (
+    <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sky-600 text-base">📊</span>
+          <p className="text-sm font-bold text-sky-800">Valores capturados</p>
+        </div>
+        <span className="text-[10px] font-mono text-sky-500 bg-sky-100 px-2 py-0.5 rounded">
+          v{version}
+        </span>
+      </div>
+
+      {hasData && (
+        <div>
+          <ExtractedDataRows data={extractedData} />
+        </div>
+      )}
+
+      {hasMissing && (
+        <div className="pt-2 border-t border-sky-200">
+          <p className="text-xs font-bold text-amber-700 mb-1.5">Campos no encontrados</p>
+          <div className="flex flex-wrap gap-1.5">
+            {missingFields!.map((field, i) => (
+              <span
+                key={i}
+                className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-200"
+              >
+                {formatFieldLabel(field)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // --- Sub-componente: Cabecera persistente del workspace ---
 
 function WorkerHeader({
@@ -563,7 +664,8 @@ function StudyPanel({
 
       <hr className="border-slate-100" />
 
-      {test.resultNotes && (
+      {/* IMPL-20260326-04: Ocultar Trazabilidad IA cuando ya existe aiSnapshot (el panel reemplaza este aviso) */}
+      {test.resultNotes && !test.aiSnapshot && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
           <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Trazabilidad IA</p>
           <p className="text-sm text-amber-900 mt-1">{test.resultNotes}</p>
@@ -769,6 +871,15 @@ function StudyPanel({
             </button>
           )}
         </div>
+      )}
+
+      {/* ARCH-20260326-05: Valores capturados del estudio (extraction snapshot — capa extractiva) */}
+      {test.extractionSnapshot && (
+        <CapturedValuesPanel
+          extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
+          missingFields={test.extractionSnapshot.missingFields as string[] | null}
+          version={test.extractionSnapshot.version}
+        />
       )}
 
       {/* IMPL-20260326-18: Panel de Prediagnóstico IA — se muestra cuando existe snapshot IA vigente

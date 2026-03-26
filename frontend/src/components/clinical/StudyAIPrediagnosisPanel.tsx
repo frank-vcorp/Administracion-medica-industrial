@@ -76,7 +76,25 @@ interface StudyAIPrediagnosisPanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers de UI
+// IMPL-20260326-04: Mapeo local explícito source_id → URL pública canónica.
+// Solo se incluyen fuentes con URL verificada y estable.
+// Si una cita no tiene entrada aquí, se muestra como texto sin romper UI.
+// ---------------------------------------------------------------------------
+const KNOWN_SOURCE_URLS: Record<string, string> = {
+  // Espirometría — ATS/ERS 2022
+  'ATS-ERS-2022': 'https://www.thoracic.org/professionals/clinical-resources/pulmonary-function-laboratories.php',
+  // Radiología — ACR BI-RADS Atlas 2013
+  'ACR-BIRADS-2013': 'https://www.acr.org/Clinical-Resources/Reporting-and-Data-Systems/Bi-Rads',
+  // Cardiología — AHA/ACC ECG Guidelines
+  'AHA-ECG-2022': 'https://professional.heart.org/en/guidelines-and-statements',
+  // Somatometría — OMS clasificación IMC
+  'OMS-IMC-2000': 'https://www.who.int/news-room/fact-sheets/detail/obesity-and-overweight',
+}
+
+function getCitationUrl(cite: ClinicalCitation): string | null {
+  return KNOWN_SOURCE_URLS[cite.source_id] ?? null
+}
+
 // ---------------------------------------------------------------------------
 
 const CLINICAL_STATE_LABELS: Record<string, { label: string; color: string }> = {
@@ -441,23 +459,37 @@ export default function StudyAIPrediagnosisPanel({
           </details>
         )}
 
-        {/* Citas clínicas */}
+        {/* Citas clínicas — IMPL-20260326-04: fuentes con URL conocida son enlaces clicables */}
         {(predxData.citations ?? []).length > 0 && (
           <details>
             <summary className="text-[11px] font-semibold text-slate-400 cursor-pointer hover:text-slate-600 select-none">
               Fuentes clínicas ({predxData.citations.length})
             </summary>
             <div className="mt-2 space-y-2">
-              {predxData.citations.map((cite, i) => (
-                <div key={i} className="text-[11px] bg-white border border-slate-100 rounded px-2 py-1.5">
-                  <span className="font-mono font-bold text-teal-700">[{cite.source_id}]</span>
-                  <span className="ml-1 text-slate-600">{cite.title}</span>
-                  {cite.section && <span className="text-slate-400"> — {cite.section}</span>}
-                  {cite.excerpt && (
-                    <p className="text-slate-400 italic mt-0.5">&ldquo;{cite.excerpt}&rdquo;</p>
-                  )}
-                </div>
-              ))}
+              {predxData.citations.map((cite, i) => {
+                const url = getCitationUrl(cite)
+                return (
+                  <div key={i} className="text-[11px] bg-white border border-slate-100 rounded px-2 py-1.5">
+                    <span className="font-mono font-bold text-teal-700">[{cite.source_id}]</span>
+                    {url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-1 text-teal-600 hover:text-teal-800 underline underline-offset-2"
+                      >
+                        {cite.title}
+                      </a>
+                    ) : (
+                      <span className="ml-1 text-slate-600">{cite.title}</span>
+                    )}
+                    {cite.section && <span className="text-slate-400"> — {cite.section}</span>}
+                    {cite.excerpt && (
+                      <p className="text-slate-400 italic mt-0.5">&ldquo;{cite.excerpt}&rdquo;</p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </details>
         )}
