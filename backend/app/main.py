@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
+import re
 import time
 import json
 import hashlib
@@ -43,13 +44,44 @@ PIPELINE_VERSION = "ai-pipeline-2026-03"
 EXTRACTION_PROMPT_VERSION = "extract-v2"
 PREDIAGNOSIS_PROMPT_VERSION = "predx-v1"
 
+# ARCH-20260326-05: Estado de inicialización IA — persiste en memoria para diagnóstico.
+_GOOGLE_API_KEY_RE = re.compile(r'AIza[A-Za-z0-9_\-]{30,}')
+ai_init_error: Optional[str] = None
+
+
+def _sanitize_error(err: str) -> str:
+    """Redacta API keys y trunca errores para exponer sólo diagnóstico seguro. ARCH-20260326-05."""
+    if not err:
+        return ""
+    clean = _GOOGLE_API_KEY_RE.sub('[API_KEY_REDACTED]', str(err))
+    return clean[:300]
+
+
+def _ai_unavailable_response(msg: str = "Servicios de IA no están disponibles") -> dict:
+    """Respuesta estándar cuando IA no está disponible, con detalles de diagnóstico. ARCH-20260326-05."""
+    return {
+        "status": "error",
+        "error": msg,
+        "details": {
+            "classifier": classifier is not None,
+            "extractor": extractor is not None,
+            "prediagnostic": prediagnostic_svc is not None,
+            "api_key_present": bool(GEMINI_API_KEY),
+            "model": GEMINI_MODEL,
+            "last_init_error": ai_init_error,
+        },
+    }
+
+
 # Inicializar servicios de IA
 try:
     classifier = DocumentClassifierService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
     extractor = ExtractorService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
     prediagnostic_svc = PrediagnosticService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
+    ai_init_error = None
 except Exception as e:
     print(f"⚠️ Error inicializando servicios de IA: {e}")
+    ai_init_error = _sanitize_error(str(e))
     classifier = None
     extractor = None
     prediagnostic_svc = None
@@ -92,6 +124,24 @@ def read_root():
         "service": "Residente Digital Backend (Pipeline IA Modular)",
         "version": "2.1",
         "pipeline": "Clasificador + Extractor Especializado"
+    }
+
+
+@app.get("/api/v2/ai/status")
+def v2_ai_status():
+    """
+    Estado de diagnóstico de servicios IA — solo lectura, sin secretos.
+    ARCH-20260326-05: Expone causa raíz de fallos de inicialización de forma segura.
+    Nunca retorna el valor de GEMINI_API_KEY; sólo informa si está presente.
+    """
+    return {
+        "overall_status": "ok" if all([classifier, extractor, prediagnostic_svc]) else "degraded",
+        "classifier": classifier is not None,
+        "extractor": extractor is not None,
+        "prediagnostic": prediagnostic_svc is not None,
+        "model": GEMINI_MODEL,
+        "api_key_present": bool(GEMINI_API_KEY),
+        "last_init_error": ai_init_error,
     }
 
 
@@ -515,7 +565,7 @@ async def v2_upload_and_analyze(
     ni firmar documentos PDF sin revisión médica explícita.
     """
     if not classifier or not extractor or not prediagnostic_svc:
-        return {"status": "error", "error": "Servicios de IA no están disponibles"}
+        return _ai_unavailable_response()
 
     filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
     local_path = os.path.join(UPLOAD_DIR, filename)
@@ -619,7 +669,7 @@ def v2_prediagnosis_from_params(
     IMPL-20260326-16: Requiere que exista un snapshot de extracción previo.
     """
     if not prediagnostic_svc:
-        return {"status": "error", "error": "Servicio de prediagnóstico no disponible"}
+        return _ai_unavailable_response("Servicio de prediagnóstico no disponible")
 
     try:
         prediagnosis = prediagnostic_svc.generate_prediagnosis(study_type, extracted_data)

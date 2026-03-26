@@ -242,12 +242,40 @@ export async function regenerateStudyAI(
 
     const aiResult = await triggerStudyAIAnalysis(formData)
 
+    // ARCH-20260326-05: Si IA no está disponible, consultar /api/v2/ai/status para causa raíz exacta.
+    let enrichedError = aiResult.error ?? null
+    if (!aiResult.success && aiResult.error?.includes('Servicios de IA no están disponibles')) {
+      try {
+        const statusResp = await fetch(`${apiBase}/api/v2/ai/status`)
+        if (statusResp.ok) {
+          const aiStatus = await statusResp.json() as {
+            api_key_present: boolean
+            last_init_error?: string | null
+            classifier: boolean
+            extractor: boolean
+            prediagnostic: boolean
+          }
+          const parts: string[] = []
+          if (!aiStatus.api_key_present) parts.push('GEMINI_API_KEY ausente')
+          if (aiStatus.last_init_error) parts.push(aiStatus.last_init_error)
+          if (!aiStatus.classifier) parts.push('classifier no inicializado')
+          else if (!aiStatus.extractor) parts.push('extractor no inicializado')
+          else if (!aiStatus.prediagnostic) parts.push('prediagnostic no inicializado')
+          if (parts.length > 0) {
+            enrichedError = `Servicios de IA no están disponibles: ${parts.join('; ')}`
+          }
+        }
+      } catch {
+        // Mantener error original si /api/v2/ai/status no está accesible
+      }
+    }
+
     // Persistir resultNotes según el resultado de la regeneración
     const resultNotes = buildAIResultNote({
       success: aiResult.success,
       summary: aiResult.summary ?? null,
       clinicalState: aiResult.clinicalState ?? null,
-      error: aiResult.error ?? null,
+      error: enrichedError,
     })
     await prisma.eventTest.update({
       where: { id: eventTestId },
@@ -255,7 +283,7 @@ export async function regenerateStudyAI(
     })
 
     revalidatePath(`/events/${eventId}`)
-    return { success: aiResult.success, error: aiResult.error }
+    return { success: aiResult.success, error: enrichedError ?? undefined }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Error interno al regenerar IA'
     console.error('[IMPL-20260326-03] Error en regenerateStudyAI:', error)
