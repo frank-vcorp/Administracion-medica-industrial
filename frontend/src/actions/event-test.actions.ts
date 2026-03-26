@@ -14,6 +14,21 @@ import { triggerStudyAIAnalysis } from "./ai-prediagnosis.actions"
 import { isAIEligibleEventTest, getCanonicalAIStudyType } from "@/lib/study-ai"
 
 /**
+ * @id ARCH-20260326-01
+ * @backup context/checkpoints/CHK_ARCH-20260326-01.md
+ */
+function buildAIResultNote(input: { success: boolean; summary?: string | null; clinicalState?: string | null; error?: string | null }) {
+  if (input.success) {
+    const summary = input.summary?.trim()
+    return summary
+      ? `IA generada (${input.clinicalState ?? 'AI_PENDING_REVIEW'}): ${summary}`
+      : `IA generada (${input.clinicalState ?? 'AI_PENDING_REVIEW'}).`
+  }
+
+  return `Archivo cargado, pero la IA no generó prediagnóstico: ${input.error ?? 'sin detalle'}`
+}
+
+/**
  * Actualiza el estado operativo de un estudio en la papeleta.
  * Soporta los estados V1: PENDING, IN_PROGRESS, SAMPLE_TAKEN, RESULT_REGISTERED, COMPLETED.
  */
@@ -86,6 +101,16 @@ export async function uploadEventTestFile(formData: FormData) {
     try {
       const v2Result = await triggerStudyAIAnalysis(formData)
       if (v2Result.success) {
+        await prisma.eventTest.update({
+          where: { id: eventTestId },
+          data: {
+            resultNotes: buildAIResultNote({
+              success: true,
+              summary: v2Result.summary ?? null,
+              clinicalState: v2Result.clinicalState ?? null,
+            }),
+          },
+        })
         return {
           success: true,
           fileUrl: `/uploads/${file.name}`,
@@ -113,7 +138,8 @@ export async function uploadEventTestFile(formData: FormData) {
       where: { id: eventTestId },
       data: {
         fileUrl,
-        status: 'RESULT_REGISTERED'
+        status: 'RESULT_REGISTERED',
+        resultNotes: buildAIResultNote({ success: false, error: 'Fallback sin análisis IA disponible' }),
       }
     })
     revalidatePath(`/events/${eventId}`)

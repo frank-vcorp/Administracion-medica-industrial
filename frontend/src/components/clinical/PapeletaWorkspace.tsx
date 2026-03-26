@@ -10,6 +10,8 @@
  * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  * @intervention ARCH-20260326-18
  * @see context/checkpoints/CHK_IMPL-20260326-18.md
+ * @intervention ARCH-20260326-01
+ * @see context/checkpoints/CHK_ARCH-20260326-01.md
  */
 "use client"
 
@@ -535,6 +537,13 @@ function StudyPanel({
       </div>
 
       <hr className="border-slate-100" />
+
+      {test.resultNotes && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Trazabilidad IA</p>
+          <p className="text-sm text-amber-900 mt-1">{test.resultNotes}</p>
+        </div>
+      )}
 
       {/* Flujo visible de laboratorio para no esconder la etapa de muestra */}
       {isLab && (

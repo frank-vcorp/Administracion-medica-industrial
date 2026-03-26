@@ -10,6 +10,21 @@ import {
   ExamenMedicoCompletoSchema,
 } from "@/schemas/clinical/exam.schema"
 
+/**
+ * @id ARCH-20260326-01
+ * @backup context/checkpoints/CHK_ARCH-20260326-01.md
+ */
+function buildStructuredAIResultNote(input: { success: boolean; studyLabel: string; summary?: string | null; clinicalState?: string | null; error?: string | null }) {
+  if (input.success) {
+    const summary = input.summary?.trim()
+    return summary
+      ? `${input.studyLabel}: IA generada (${input.clinicalState ?? 'AI_PENDING_REVIEW'}): ${summary}`
+      : `${input.studyLabel}: IA generada (${input.clinicalState ?? 'AI_PENDING_REVIEW'}).`
+  }
+
+  return `${input.studyLabel}: captura guardada, pero la IA no generó prediagnóstico: ${input.error ?? 'sin detalle'}`
+}
+
 export async function getMedicalExam(eventId: string) {
   try {
     const exam = await prisma.medicalExam.findUnique({
@@ -57,6 +72,18 @@ export async function updateSomatometria(eventId: string, rawData: any) {
         extractedData: data as Record<string, unknown>,
       })
       if (!aiResult.success) aiWarning = aiResult.error
+      await prisma.eventTest.update({
+        where: { id: eventTest.id },
+        data: {
+          resultNotes: buildStructuredAIResultNote({
+            success: aiResult.success,
+            studyLabel: 'Somatometría',
+            summary: aiResult.summary ?? null,
+            clinicalState: aiResult.clinicalState ?? null,
+            error: aiResult.error ?? null,
+          }),
+        },
+      })
     }
     
     revalidatePath(`/events/${eventId}`)
@@ -94,6 +121,18 @@ export async function updateAgudezaVisual(eventId: string, rawData: any) {
         extractedData: data as Record<string, unknown>,
       })
       if (!aiResult.success) aiWarning = aiResult.error
+      await prisma.eventTest.update({
+        where: { id: eventTest.id },
+        data: {
+          resultNotes: buildStructuredAIResultNote({
+            success: aiResult.success,
+            studyLabel: 'Agudeza Visual',
+            summary: aiResult.summary ?? null,
+            clinicalState: aiResult.clinicalState ?? null,
+            error: aiResult.error ?? null,
+          }),
+        },
+      })
     }
     
     revalidatePath(`/events/${eventId}`)
@@ -161,6 +200,19 @@ export async function saveExamenMedicoPapeleta(
       eventId,
       studyType: 'ExamenMedico',
       extractedData: data as Record<string, unknown>,
+    })
+
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        resultNotes: buildStructuredAIResultNote({
+          success: aiResult.success,
+          studyLabel: 'Examen Médico',
+          summary: aiResult.summary ?? null,
+          clinicalState: aiResult.clinicalState ?? null,
+          error: aiResult.error ?? null,
+        }),
+      },
     })
 
     revalidatePath(`/events/${eventId}`)
