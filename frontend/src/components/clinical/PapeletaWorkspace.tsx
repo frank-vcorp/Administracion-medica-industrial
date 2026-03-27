@@ -22,6 +22,8 @@
  * @see context/checkpoints/CHK_ARCH-20260327-09-METADATOS-EN-CABECERA-PRINCIPAL.md
  * @intervention ARCH-20260327-10
  * @see context/checkpoints/CHK_ARCH-20260327-10-PAPELETA-ELECTRONICA.md
+ * @intervention ARCH-20260327-11
+ * @see context/checkpoints/CHK_ARCH-20260327-11-ELIMINA-FRANJA-PAPELETA.md
  */
 "use client"
 
@@ -286,11 +288,6 @@ export default function PapeletaWorkspace({
   if (!activeTestId) {
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <WorkerHeader
-          workerInfo={workerInfo}
-          completedCount={completedCount}
-          totalCount={localTests.length}
-        />
         <div className="p-4">
           <h2 className="text-base font-bold text-slate-800 mb-0.5">Papeleta electrónica</h2>
           <p className="text-sm text-slate-500 mb-3">
@@ -344,7 +341,6 @@ export default function PapeletaWorkspace({
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Cabecera persistente con botón de regreso */}
       <WorkerHeader
-        workerInfo={workerInfo}
         completedCount={completedCount}
         totalCount={localTests.length}
         onBack={() => { setActiveTestId(null); setUploadError('') }}
@@ -524,12 +520,10 @@ function CapturedValuesPanel({
 // --- Sub-componente: Cabecera persistente del workspace ---
 
 function WorkerHeader({
-  workerInfo,
   completedCount,
   totalCount,
   onBack,
 }: {
-  workerInfo: WorkerInfo
   completedCount: number
   totalCount: number
   onBack?: () => void
@@ -537,31 +531,24 @@ function WorkerHeader({
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0
 
   return (
-    <div className="px-4 py-2.5 bg-gradient-to-r from-teal-50 to-slate-50 border-b border-slate-200">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
+    <div className="px-4 py-2 border-b border-slate-200 bg-slate-50/80">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
           {onBack && (
             <button
               onClick={onBack}
-              className="text-teal-600 hover:text-teal-800 text-sm font-semibold mr-1 shrink-0"
+              className="text-teal-600 hover:text-teal-800 text-xs font-semibold shrink-0"
             >
-              ← Resumen
+              ← Volver a estudios
             </button>
           )}
-          <div className="w-8 h-8 bg-teal-500 text-white rounded-xl flex items-center justify-center text-base shrink-0">
-            👤
-          </div>
-          <div className="min-w-0">
-            <p className="font-bold text-slate-800 text-sm truncate">Papeleta electrónica</p>
-          </div>
         </div>
 
-        {/* Progreso general */}
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-slate-500">
+          <span className="text-[11px] text-slate-500">
             {completedCount}/{totalCount} completados
           </span>
-          <div className="h-2 w-16 bg-slate-200 rounded-full overflow-hidden">
+          <div className="h-1.5 w-14 bg-slate-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-teal-500 rounded-full transition-all duration-500"
               style={{ width: `${progressPct}%` }}
