@@ -6,6 +6,8 @@
  * @backup context/checkpoints/CHK_IMPL-20260327-01-WORKSPACE-IA-DOBLE-COLUMNA.md
  * @intervention ARCH-20260327-03
  * @see context/checkpoints/CHK_ARCH-20260327-03-PDF-SIN-MINIATURA.md
+ * @intervention ARCH-20260327-04
+ * @see context/checkpoints/CHK_ARCH-20260327-04-PDF-SIN-PANEL-LATERAL.md
  */
 
 interface StudyDocumentViewerProps {
@@ -26,6 +28,9 @@ function isImage(url: string) {
 export default function StudyDocumentViewer({ fileUrl, fileName }: StudyDocumentViewerProps) {
   const isPdfFile = isPdf(fileUrl)
   const isImageFile = !isPdfFile && isImage(fileUrl)
+  const pdfViewerUrl = isPdfFile
+    ? `${fileUrl}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`
+    : fileUrl
 
   return (
     <div className="flex flex-col gap-2">
@@ -45,11 +50,15 @@ export default function StudyDocumentViewer({ fileUrl, fileName }: StudyDocument
         </a>
       </div>
 
-      {/* ARCH-20260327-03: PDFs sin miniatura embebida para ahorrar altura. */}
+      {/* ARCH-20260327-04: PDF embebido sin panel lateral para aprovechar ancho. */}
       {isPdfFile && (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
-          <p className="text-sm text-slate-600 font-medium">PDF vinculado</p>
-          <p className="text-xs text-slate-400 mt-1">Se abre en pestaña nueva para revisión completa.</p>
+        <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+          <iframe
+            src={pdfViewerUrl}
+            title={fileName}
+            className="w-full"
+            style={{ height: '560px', minHeight: '340px' }}
+          />
         </div>
       )}
 
