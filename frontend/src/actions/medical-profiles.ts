@@ -1,9 +1,11 @@
 /**
- * @file Server Actions: Perfiles Médicos (Combos B2B)
+ * @file Server Actions: Perfiles Médicos (Combos B2B) + Calibración IA por Prueba
  * @description CRUD con validación Zod server-side para MedicalProfile y catálogo MedicalTest.
  * @see context/SPECs/ARCH-20260313-01-CATALOGO-ESTUDIOS-PERFILES.md
  * @id ARCH-20260325-01
  * @backup context/checkpoints/CHK_ARCH-20260325-01.md
+ * @id ARCH-20260327-15 (extensión calibración IA)
+ * @backup context/SPECs/SPEC_ARCH-20260327-15-PLATAFORMA-CALIBRACION-IA.md
  */
 'use server'
 
@@ -251,5 +253,130 @@ export async function createMedicalTest(
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error creando prueba médica:', e)
     return { success: false, error: 'Error al crear la prueba médica' }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALIBRACIÓN IA — ARCH-20260327-15
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Recupera una prueba médica individual con su campo options (aiCalibration).
+ * @id ARCH-20260327-15
+ */
+export async function getMedicalTestById(id: string) {
+  return await prisma.medicalTest.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      options: true,
+      categoryId: true,
+      category: { select: { name: true } },
+    },
+  })
+}
+
+/**
+ * Recupera snapshots de extracción y prediagnóstico asociados a una prueba
+ * mediante la cadena MedicalTest → EventTest → StudyExtractionSnapshot → AIPrediagnosisSnapshot → DoctorStudyReview.
+ * @id ARCH-20260327-15
+ */
+export async function getCalibrationSnapshots(testId: string) {
+  return await prisma.eventTest.findMany({
+    where: { testId },
+    select: {
+      id: true,
+      status: true,
+      fileUrl: true,
+      resultNotes: true,
+      createdAt: true,
+      extractionSnapshots: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          version: true,
+          studyType: true,
+          sourceFileName: true,
+          sourceFileUrl: true,
+          structuredData: true,
+          clinicalState: true,
+          modelName: true,
+          promptVersion: true,
+          isSuperseded: true,
+          createdAt: true,
+          aiPrediagnoses: {
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              version: true,
+              prediagnosisData: true,
+              clinicalState: true,
+              modelName: true,
+              promptVersion: true,
+              isSuperseded: true,
+              createdAt: true,
+              doctorReviews: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: {
+                  id: true,
+                  doctorStatus: true,
+                  doctorDiagnosis: true,
+                  doctorNotes: true,
+                  aiAgreementScore: true,
+                  aiUsefulnessScore: true,
+                  differenceType: true,
+                  errorSeverity: true,
+                  errorCategory: true,
+                  doctorFeedbackNote: true,
+                  createdAt: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+/**
+ * Persiste la configuración aiCalibration dentro de MedicalTest.options (JSON merge).
+ * No rompe otros campos existentes en options.
+ * @id ARCH-20260327-15
+ */
+export async function saveAICalibration(
+  testId: string,
+  calibrationData: Record<string, unknown>
+): Promise<ActionResult> {
+  const test = await prisma.medicalTest.findUnique({
+    where: { id: testId },
+    select: { id: true, options: true },
+  })
+  if (!test) return { success: false, error: 'Prueba no encontrada' }
+
+  const currentOptions =
+    typeof test.options === 'object' &&
+    test.options !== null &&
+    !Array.isArray(test.options)
+      ? (test.options as Record<string, unknown>)
+      : {}
+
+  const newOptions = { ...currentOptions, aiCalibration: calibrationData }
+
+  try {
+    await prisma.medicalTest.update({
+      where: { id: testId },
+      data: { options: newOptions },
+    })
+    revalidatePath(`/admin/services/${testId}/calibration`)
+    revalidatePath('/admin/services')
+    return { success: true }
+  } catch (e: unknown) {
+    console.error('[Calibration] Error guardando calibración IA:', e)
+    return { success: false, error: 'Error al guardar la configuración de calibración' }
   }
 }

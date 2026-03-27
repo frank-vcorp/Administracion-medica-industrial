@@ -126,7 +126,14 @@ export default async function AdminServicesPage({
                                 <td className="px-6 py-4 font-mono text-slate-400 text-xs">{test.code}</td>
                                 <td className="px-6 py-4 font-medium text-slate-900">{test.name}</td>
                                 <td className="px-6 py-4 text-slate-500">{test.category.name}</td>
-                                <td className="px-6 py-4 text-right">
+                                <td className="px-6 py-4 text-right flex items-center justify-end gap-4">
+                                    {/* ARCH-20260327-15: CTA Calibrar IA */}
+                                    <Link
+                                        href={`/admin/services/${test.id}/calibration`}
+                                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors whitespace-nowrap"
+                                    >
+                                        ⚡ Calibrar IA
+                                    </Link>
                                     <button className="text-slate-400 hover:text-blue-600 font-medium text-xs">
                                         Editar
                                     </button>
