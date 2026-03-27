@@ -20,6 +20,8 @@
  * @see context/checkpoints/CHK_ARCH-20260327-06-CABECERA-UNIFICADA.md
  * @intervention ARCH-20260327-09
  * @see context/checkpoints/CHK_ARCH-20260327-09-METADATOS-EN-CABECERA-PRINCIPAL.md
+ * @intervention ARCH-20260327-10
+ * @see context/checkpoints/CHK_ARCH-20260327-10-PAPELETA-ELECTRONICA.md
  */
 "use client"
 
@@ -290,7 +292,7 @@ export default function PapeletaWorkspace({
           totalCount={localTests.length}
         />
         <div className="p-4">
-          <h2 className="text-base font-bold text-slate-800 mb-0.5">Estudios de la Papeleta</h2>
+          <h2 className="text-base font-bold text-slate-800 mb-0.5">Papeleta electrónica</h2>
           <p className="text-sm text-slate-500 mb-3">
             Selecciona un estudio para abrirlo en su vista de trabajo.
           </p>
@@ -550,8 +552,7 @@ function WorkerHeader({
             👤
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-slate-800 text-sm truncate">Workspace de estudios</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">Vista operativa de estudios</p>
+            <p className="font-bold text-slate-800 text-sm truncate">Papeleta electrónica</p>
           </div>
         </div>
 
