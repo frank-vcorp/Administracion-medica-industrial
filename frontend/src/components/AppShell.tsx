@@ -8,6 +8,8 @@
  * - Oculta sidebar/header en /login (usuario no autenticado)
  * - Filtra ítems de navegación según rol (ADMIN, COMPANY_CLIENT, staff)
  * - Expone "Vista 3 Agendas" como entrada secundaria bajo Citas
+ * @intervention ARCH-20260327-07
+ * @see context/checkpoints/CHK_ARCH-20260327-07-HEADER-MINIMO-WORKSPACE.md
  */
 
 'use client'
@@ -42,6 +44,39 @@ function NavSection({ label, collapsed }: { label: string; collapsed?: boolean }
   return (
     <div className="pt-4 pb-2">
       <p className="text-xs uppercase text-slate-500 font-semibold px-2">{label}</p>
+    </div>
+  )
+}
+
+function SidebarAccount({
+  fullName,
+  collapsed,
+}: {
+  fullName?: string | null
+  collapsed?: boolean
+}) {
+  if (collapsed) {
+    return (
+      <div className="px-2 pb-3 pt-2 border-t border-slate-800">
+        <div className="w-10 h-10 mx-auto rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
+          {(fullName || 'U').trim().charAt(0).toUpperCase()}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-4 pb-4 pt-3 border-t border-slate-800">
+      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cuenta</p>
+      <div className="mt-2 flex items-center gap-3 rounded-xl bg-slate-800 border border-slate-700 px-3 py-2">
+        <div className="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-200 shrink-0">
+          {(fullName || 'U').trim().charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-200 truncate">{fullName || 'Usuario'}</p>
+          <p className="text-xs text-slate-400">Sesión activa</p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -125,25 +160,26 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </>
           )}
         </nav>
+
+        <SidebarAccount fullName={session?.user?.fullName} collapsed={isEventWorkspace} />
       </aside>
 
       {/* Contenido principal */}
       <main className="flex-1 overflow-y-auto">
-        <header className={`bg-white border-b border-slate-200 h-16 flex items-center justify-between ${isEventWorkspace ? 'px-5' : 'px-8'} shadow-sm`}>
-          <div>
-            <h2 className="text-lg font-medium text-slate-700">
-              {isEventWorkspace ? 'Workspace de Papeleta' : 'Panel de Control'}
-            </h2>
-            {isEventWorkspace && <p className="text-xs text-slate-400">Modo enfocado por estudio</p>}
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-500">
-              {session?.user?.fullName || 'Usuario'}
-            </span>
-            <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-300"></div>
-          </div>
-        </header>
-        <div className={isEventWorkspace ? 'p-5' : 'p-8'}>
+        {!isEventWorkspace && (
+          <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shadow-sm">
+            <div>
+              <h2 className="text-lg font-medium text-slate-700">Panel de Control</h2>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-slate-500">
+                {session?.user?.fullName || 'Usuario'}
+              </span>
+              <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-300"></div>
+            </div>
+          </header>
+        )}
+        <div className={isEventWorkspace ? 'p-3 md:p-4' : 'p-8'}>
           {children}
         </div>
       </main>
