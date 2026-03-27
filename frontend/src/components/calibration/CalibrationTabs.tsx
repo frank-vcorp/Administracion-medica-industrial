@@ -4,6 +4,8 @@
  *   - Tab Diagnóstico: prediagnóstico IA y revisión médica.
  * @id ARCH-20260327-15
  * @backup context/SPECs/SPEC_ARCH-20260327-15-PLATAFORMA-CALIBRACION-IA.md
+ * @intervention ARCH-20260327-18
+ * @see context/checkpoints/CHK_ARCH-20260327-18-FIX-UNKNOWN-REACTNODE.md
  */
 "use client"
 
@@ -232,6 +234,24 @@ function ExtractionSnapshotDetail({
 function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosis }) {
   const data = prediagnosis.prediagnosisData as Record<string, unknown> | null
   const review = prediagnosis.doctorReviews[0] ?? null
+  const summaryText = typeof data?.summary === "string" ? data.summary : null
+  const clinicalStateText = typeof data?.clinical_state === "string" ? data.clinical_state : null
+  const confidenceRaw = data?.confidence
+  const confidenceValue =
+    typeof confidenceRaw === "number"
+      ? confidenceRaw
+      : typeof confidenceRaw === "string" && confidenceRaw.trim() !== ""
+        ? Number(confidenceRaw)
+        : null
+  const justificationItems = Array.isArray(data?.justification)
+    ? data.justification.filter((item): item is string => typeof item === "string")
+    : []
+  const limitationItems = Array.isArray(data?.limitations)
+    ? data.limitations.filter((item): item is string => typeof item === "string")
+    : []
+  const redFlagItems = Array.isArray(data?.red_flags)
+    ? data.red_flags.filter((item): item is string => typeof item === "string")
+    : []
 
   return (
     <div className="space-y-4">
@@ -251,35 +271,35 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
       {data ? (
         <div className="space-y-3">
           {/* Resumen IA */}
-          {data.summary && (
+          {summaryText && (
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs font-semibold text-blue-700 mb-1 uppercase tracking-wide">Resumen IA</p>
-              <p className="text-sm text-slate-800">{String(data.summary)}</p>
+              <p className="text-sm text-slate-800">{summaryText}</p>
             </div>
           )}
 
           {/* Estado clínico + confianza */}
           <div className="flex flex-wrap gap-3">
-            {data.clinical_state && (
+            {clinicalStateText && (
               <div className="flex-1 min-w-[140px] p-3 bg-white border border-slate-200 rounded-lg">
                 <p className="text-xs text-slate-500 mb-1">Estado clínico IA</p>
-                <p className="text-sm font-semibold text-slate-800">{String(data.clinical_state)}</p>
+                <p className="text-sm font-semibold text-slate-800">{clinicalStateText}</p>
               </div>
             )}
-            {data.confidence !== undefined && (
+            {confidenceValue !== null && Number.isFinite(confidenceValue) && (
               <div className="flex-1 min-w-[120px] p-3 bg-white border border-slate-200 rounded-lg">
                 <p className="text-xs text-slate-500 mb-1">Confianza</p>
-                <p className="text-sm font-semibold text-slate-800">{Number(data.confidence)}%</p>
+                <p className="text-sm font-semibold text-slate-800">{confidenceValue}%</p>
               </div>
             )}
           </div>
 
           {/* Justificación */}
-          {Array.isArray(data.justification) && data.justification.length > 0 && (
+          {justificationItems.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Justificación</p>
               <ul className="space-y-1">
-                {(data.justification as string[]).map((j, i) => (
+                {justificationItems.map((j, i) => (
                   <li key={i} className="flex gap-2 text-sm text-slate-700">
                     <span className="text-slate-400 shrink-0">•</span>
                     <span>{j}</span>
@@ -290,11 +310,11 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
           )}
 
           {/* Limitaciones */}
-          {Array.isArray(data.limitations) && data.limitations.length > 0 && (
+          {limitationItems.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Limitaciones</p>
               <ul className="space-y-1">
-                {(data.limitations as string[]).map((l, i) => (
+                {limitationItems.map((l, i) => (
                   <li key={i} className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">{l}</li>
                 ))}
               </ul>
@@ -302,11 +322,11 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
           )}
 
           {/* Red flags */}
-          {Array.isArray(data.red_flags) && data.red_flags.length > 0 && (
+          {redFlagItems.length > 0 && (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Red Flags</p>
               <ul className="space-y-1">
-                {(data.red_flags as string[]).map((f, i) => (
+                {redFlagItems.map((f, i) => (
                   <li key={i} className="text-xs text-red-800 bg-red-50 border border-red-200 rounded px-2 py-1 font-medium">{f}</li>
                 ))}
               </ul>
