@@ -11,6 +11,8 @@
  * @see context/checkpoints/CHK_IMPL-20260326-04.md
  * @intervention ARCH-20260327-02
  * @see context/checkpoints/CHK_ARCH-20260327-02-MICROAJUSTES-WORKSPACE.md
+ * @intervention ARCH-20260327-08
+ * @see context/checkpoints/CHK_ARCH-20260327-08-STEPPER-ULTRACOMPACTO.md
  */
 
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
@@ -208,18 +210,18 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
         const activeViewVisualStep = Math.max(1, visualStepGroups.findIndex(g => g.ids.includes(activeView)) + 1)
 
         return (
-            <div className="space-y-4 max-w-[1500px] mx-auto pb-12 px-4 xl:px-6">
+            <div className="space-y-3 max-w-[1500px] mx-auto pb-10 px-3 md:px-4 xl:px-5">
                 {/* 1. Header Premium with Stepper */}
-                {/* ARCH-20260327-01: Header compactado — reduce altura para dar protagonismo al estudio activo */}
-                <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
+                {/* ARCH-20260327-08: Header ultra-compacto — prioriza el viewport del estudio activo */}
+                <div className="bg-white px-4 py-2.5 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-teal-500 text-white rounded-xl flex items-center justify-center text-lg shadow shadow-teal-100 shrink-0">
+                            <div className="w-8 h-8 bg-teal-500 text-white rounded-lg flex items-center justify-center text-sm shadow shadow-teal-100 shrink-0">
                                 👤
                             </div>
                             <div>
-                                <h1 className="text-lg font-bold text-slate-800 leading-tight">{event.worker.lastName}, {event.worker.firstName}</h1>
-                                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                <h1 className="text-base font-bold text-slate-800 leading-tight">{event.worker.lastName}, {event.worker.firstName}</h1>
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                                     <span className="font-semibold text-slate-700">{event.worker.company?.name || '---'}</span>
                                     <span>•</span>
                                     <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">#{event.id.slice(0, 8)}</span>
@@ -230,54 +232,57 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         <div className="flex flex-wrap gap-1.5">
                             <Link
                                 href={`/workers/${event.worker.id}`}
-                                className="bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-slate-200"
+                                className="bg-white hover:bg-slate-50 text-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border border-slate-200"
                             >
                                 Ficha trabajador
                             </Link>
                             <Link
                                 href={`/history/${event.worker.id}`}
-                                className="bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-slate-200"
+                                className="bg-white hover:bg-slate-50 text-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border border-slate-200"
                             >
                                 Historial clínico
                             </Link>
-                            <div className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${event.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                            <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${event.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
                                 {statusNames[event.status] || event.status}
                             </div>
-                            <Link href="/reception" className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center">
+                            <Link href="/reception" className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors flex items-center">
                                 ← Volver
                             </Link>
                         </div>
                     </div>
 
-                    {/* ARCH-20260327-01: Stepper compactado — círculos y tipografía más pequeños */}
-                    <div className="relative flex justify-between items-center max-w-xl mx-auto px-2 pb-2">
-                        <div className="absolute top-3 left-0 w-full h-px bg-slate-100 z-0"></div>
-                        <div className="absolute top-3 left-0 h-px bg-teal-400 z-0 transition-all duration-700" style={{ width: `${((currentVisualStep - 1) / (visualStepGroups.length - 1)) * 100}%` }}></div>
-
+                    {/* ARCH-20260327-08: Stepper en formato pill — menos altura y lectura más rápida */}
+                    <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
                         {visualStepGroups.map((group, index) => {
                             const vStep = index + 1
                             const isClickable = vStep <= currentVisualStep
                             const isSelectedView = vStep === activeViewVisualStep
+                            const isCompleted = vStep < currentVisualStep
 
-                            return (
-                                <div key={group.primary} className="relative z-10 flex flex-col items-center gap-1">
-                                    {isClickable ? (
-                                        <Link href={`/events/${id}?view=${group.primary}`}>
-                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-500 border cursor-pointer hover:scale-110 ${isSelectedView
-                                                ? 'bg-teal-500 text-white border-teal-500 shadow shadow-teal-200 scale-110'
-                                                : 'bg-white text-teal-600 border-teal-400'
-                                                }`}>
-                                                {vStep < currentVisualStep && !isSelectedView ? '✓' : vStep}
-                                            </div>
-                                        </Link>
-                                    ) : (
-                                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border bg-white text-slate-400 border-slate-200">
-                                            {vStep}
-                                        </div>
-                                    )}
-                                    <span className={`text-[9px] font-semibold uppercase tracking-tight whitespace-nowrap ${vStep <= currentVisualStep ? 'text-teal-600' : 'text-slate-400'}`}>
-                                        {group.label}
+                            const stepClasses = isSelectedView
+                                ? 'bg-teal-500 text-white border-teal-500 shadow-sm shadow-teal-100'
+                                : isCompleted
+                                    ? 'bg-teal-50 text-teal-700 border-teal-200'
+                                    : isClickable
+                                        ? 'bg-white text-slate-700 border-slate-200 hover:border-teal-200 hover:text-teal-700'
+                                        : 'bg-slate-50 text-slate-400 border-slate-200'
+
+                            const content = (
+                                <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${stepClasses}`}>
+                                    <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${isSelectedView ? 'bg-white/20 text-white' : isCompleted ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
+                                        {isCompleted ? '✓' : vStep}
                                     </span>
+                                    <span className="leading-none">{group.label}</span>
+                                </div>
+                            )
+
+                            return isClickable ? (
+                                <Link key={group.primary} href={`/events/${id}?view=${group.primary}`} className="shrink-0">
+                                    {content}
+                                </Link>
+                            ) : (
+                                <div key={group.primary} className="shrink-0">
+                                    {content}
                                 </div>
                             )
                         })}
