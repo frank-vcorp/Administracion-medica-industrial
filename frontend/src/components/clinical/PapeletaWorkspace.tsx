@@ -12,6 +12,10 @@
  * @see context/checkpoints/CHK_IMPL-20260326-18.md
  * @intervention ARCH-20260326-01
  * @see context/checkpoints/CHK_ARCH-20260326-01.md
+ * @intervention ARCH-20260327-01
+ * @see context/checkpoints/CHK_IMPL-20260327-01-WORKSPACE-IA-DOBLE-COLUMNA.md
+ * @intervention ARCH-20260327-02
+ * @see context/checkpoints/CHK_ARCH-20260327-02-MICROAJUSTES-WORKSPACE.md
  */
 "use client"
 
@@ -22,6 +26,8 @@ import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
 import StudyAIPrediagnosisPanel from "@/components/clinical/StudyAIPrediagnosisPanel"
+import StudyDocumentViewer from "@/components/clinical/StudyDocumentViewer"
+import StudyExtractionRawPanel from "@/components/clinical/StudyExtractionRawPanel"
 // IMPL-20260326-18: Helper central de elegibilidad IA (reemplaza reglas dispersas)
 import { isAIEligibleEventTest, getAIWorkflowLabel, getCanonicalAIStudyType } from "@/lib/study-ai"
 
@@ -66,11 +72,13 @@ type StudyTest = {
     } | null
   } | null
   // ARCH-20260326-05: Capa de extracción estructurada del estudio
+  // ARCH-20260327-01: rawPayload agrega el structuredData completo para el panel raw
   extractionSnapshot?: {
     id: string
     version: number
     extractedData: unknown
     missingFields: unknown
+    rawPayload?: unknown
   } | null
 }
 
@@ -672,45 +680,6 @@ function StudyPanel({
         </div>
       )}
 
-      {/* Flujo visible de laboratorio para no esconder la etapa de muestra */}
-      {isLab && (
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <p className="text-sm font-bold text-purple-800">Flujo de laboratorio</p>
-              <p className="text-xs text-purple-600 mt-1">
-                Este estudio requiere seguimiento de muestra y resultado.
-              </p>
-            </div>
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-200 text-purple-800' : 'bg-white text-purple-700 border border-purple-200'}`}>
-              {sampleTracked ? '✓ Muestra tomada' : 'Muestra pendiente'}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-500'}`}>
-              {sampleTracked ? '✓ 1. Muestra' : '1. Muestra'}
-            </span>
-            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${resultTracked ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'}`}>
-              {resultTracked ? '✓ 2. Resultado' : '2. Resultado'}
-            </span>
-            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${test.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
-              {test.status === 'COMPLETED' ? '✓ 3. Cierre' : '3. Cierre'}
-            </span>
-          </div>
-
-          {!readonly && !sampleTracked && (test.status === 'PENDING' || test.status === 'IN_PROGRESS') && (
-            <button
-              onClick={() => onStatusChange(test.id, 'SAMPLE_TAKEN')}
-              disabled={isPending}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
-            >
-              🧪 Registrar muestra tomada
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Sección: Somatometría (IMPL-20260325-05 — ARCH-20260325-05) */}
       {isSomato && (
         <div className="space-y-3">
@@ -776,127 +745,239 @@ function StudyPanel({
         </div>
       )}
 
-      {/* Sección: Upload atómico (estudios documentales: no Examen Médico, Somatometría ni Agudeza Visual) */}
+      {/* ARCH-20260327-01: Estudios documentales — layout bifurcado de 2 columnas en desktop.
+          Izquierda: dropzone, trazabilidad, extracción legible, prediagnóstico IA, acciones.
+          Derecha: archivo vinculado, visor embebido, raw de extracción. */}
       {!isMedico && !isSomato && !isAgudeza && (
-        <div className="space-y-4">
-          {/* Visor de archivo existente */}
-          {test.fileUrl && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">📄</span>
-                <div>
-                  <p className="text-sm font-semibold text-emerald-800">Archivo vinculado</p>
-                  <p className="text-xs text-emerald-600 font-mono break-all">
-                    {test.fileUrl.split('/').pop()}
-                  </p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* ===== COLUMNA IZQUIERDA: OPERACIÓN CLÍNICA ===== */}
+          <div className="space-y-4">
+
+            {/* Flujo de laboratorio */}
+            {isLab && (
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-sm font-bold text-purple-800">Flujo de laboratorio</p>
+                    <p className="text-xs text-purple-600 mt-1">
+                      Este estudio requiere seguimiento de muestra y resultado.
+                    </p>
+                  </div>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-200 text-purple-800' : 'bg-white text-purple-700 border border-purple-200'}`}>
+                    {sampleTracked ? '✓ Muestra tomada' : 'Muestra pendiente'}
+                  </span>
                 </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-500'}`}>
+                    {sampleTracked ? '✓ 1. Muestra' : '1. Muestra'}
+                  </span>
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${resultTracked ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-500'}`}>
+                    {resultTracked ? '✓ 2. Resultado' : '2. Resultado'}
+                  </span>
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${test.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
+                    {test.status === 'COMPLETED' ? '✓ 3. Cierre' : '3. Cierre'}
+                  </span>
+                </div>
+
+                {!readonly && !sampleTracked && (test.status === 'PENDING' || test.status === 'IN_PROGRESS') && (
+                  <button
+                    onClick={() => onStatusChange(test.id, 'SAMPLE_TAKEN')}
+                    disabled={isPending}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                  >
+                    🧪 Registrar muestra tomada
+                  </button>
+                )}
               </div>
-              <a
-                href={`${apiUrl}${test.fileUrl}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shrink-0"
-              >
-                Ver archivo
-              </a>
-            </div>
-          )}
+            )}
 
-          {/* Dropzone de upload */}
-          {!readonly && (
-            <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
-              isUploading ? 'border-teal-300 bg-teal-50' : 'border-slate-200 hover:border-teal-300 hover:bg-slate-50'
-            }`}>
-              <label className="cursor-pointer block">
-                <span className="text-3xl block mb-2">
-                  {isUploading ? '⏳' : '📎'}
-                </span>
-                <span className="text-sm font-medium text-slate-600">
-                  {test.fileUrl ? 'Reemplazar archivo' : 'Subir resultado'}
-                </span>
-                <span className="block text-xs text-slate-400 mt-1">
-                  PDF, PNG o JPG — máx. 20MB
-                </span>
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  className="hidden"
-                  disabled={isUploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) onFileUpload(test.id, file)
-                  }}
-                />
-              </label>
-              {isUploading && (
-                <p className="text-xs text-teal-600 mt-2 animate-pulse">Subiendo archivo...</p>
-              )}
-              {uploadError && (
-                <p className="text-xs text-red-500 mt-2">{uploadError}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+            {/* Dropzone de upload */}
+            {!readonly && (
+              <div className={`border-2 border-dashed rounded-xl p-5 text-center transition-colors ${
+                isUploading ? 'border-teal-300 bg-teal-50' : 'border-slate-200 hover:border-teal-300 hover:bg-slate-50'
+              }`}>
+                <label className="cursor-pointer block">
+                  <span className="text-3xl block mb-2">
+                    {isUploading ? '⏳' : '📎'}
+                  </span>
+                  <span className="text-sm font-medium text-slate-600">
+                    {test.fileUrl ? 'Reemplazar archivo' : 'Subir resultado'}
+                  </span>
+                  <span className="block text-xs text-slate-400 mt-1">
+                    PDF, PNG o JPG — máx. 20MB
+                  </span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    disabled={isUploading}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) onFileUpload(test.id, file)
+                    }}
+                  />
+                </label>
+                {isUploading && (
+                  <p className="text-xs text-teal-600 mt-2 animate-pulse">Subiendo archivo...</p>
+                )}
+                {uploadError && (
+                  <p className="text-xs text-red-500 mt-2">{uploadError}</p>
+                )}
+              </div>
+            )}
 
-      {/* IMPL-20260326-03: Tarjeta de recuperación IA — archivo presente pero sin snapshots.
-          Visible cuando el estudio es elegible para IA, tiene fileUrl pero aún no hay aiSnapshot. */}
-      {isAIEligible && !test.aiSnapshot && test.fileUrl && (
-        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-3">
-          <div className="flex items-start gap-3">
-            <span className="text-amber-500 text-xl shrink-0">⚠️</span>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-amber-800">Análisis IA pendiente</p>
-              <p className="text-sm text-amber-700 mt-1">
-                El archivo fue cargado correctamente pero el análisis IA aún no se ejecutó
-                (o no se registraron snapshots). Puedes regenerarlo sin necesidad de volver a subir el archivo.
-              </p>
-              <p className="text-xs text-amber-600 font-mono mt-1 break-all">
-                {test.fileUrl.split('/').pop()}
-              </p>
-            </div>
+            {/* Tarjeta de recuperación IA — archivo sin snapshot */}
+            {isAIEligible && !test.aiSnapshot && test.fileUrl && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <span className="text-amber-500 text-xl shrink-0">⚠️</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-amber-800">Análisis IA pendiente</p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      El archivo fue cargado correctamente pero el análisis IA aún no se ejecutó
+                      (o no se registraron snapshots). Puedes regenerarlo sin necesidad de volver a subir el archivo.
+                    </p>
+                    <p className="text-xs text-amber-600 font-mono mt-1 break-all">
+                      {test.fileUrl.split('/').pop()}
+                    </p>
+                  </div>
+                </div>
+                {regenError && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    {regenError}
+                  </p>
+                )}
+                {!readonly && (
+                  <button
+                    onClick={() => onRegenerateAI(test.id)}
+                    disabled={isRegenerating}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                  >
+                    {isRegenerating ? '⏳ Generando IA...' : '🤖 Generar IA ahora'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Valores capturados (capa extractiva legible — separada del raw) */}
+            {test.extractionSnapshot && (
+              <CapturedValuesPanel
+                extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
+                missingFields={test.extractionSnapshot.missingFields as string[] | null}
+                version={test.extractionSnapshot.version}
+              />
+            )}
+
+            {/* Panel de Prediagnóstico IA — separado visualmente del raw */}
+            {isAIEligible && test.aiSnapshot && (
+              <StudyAIPrediagnosisPanel
+                prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
+                snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
+                reviewerUserId={reviewerUserId}
+                eventId={eventId}
+                existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
+                readonly={readonly}
+              />
+            )}
+
+            {/* Acciones de estado */}
+            {!readonly && (
+              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Cambiar estado
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {test.status === 'PENDING' && (
+                    <button
+                      onClick={() => onStatusChange(test.id, 'IN_PROGRESS')}
+                      disabled={isPending}
+                      className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      ▶ Iniciar proceso
+                    </button>
+                  )}
+                  {isLab && !sampleTracked && (test.status === 'PENDING' || test.status === 'IN_PROGRESS') && (
+                    <button
+                      onClick={() => onStatusChange(test.id, 'SAMPLE_TAKEN')}
+                      disabled={isPending}
+                      className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      🧪 Muestra tomada
+                    </button>
+                  )}
+                  {(test.status !== 'COMPLETED' && test.status !== 'RESULT_REGISTERED') && (
+                    <button
+                      onClick={() => onStatusChange(test.id, 'RESULT_REGISTERED')}
+                      disabled={isPending}
+                      className="bg-teal-100 hover:bg-teal-200 text-teal-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      ✅ Resultado registrado
+                    </button>
+                  )}
+                  {test.status !== 'COMPLETED' && (
+                    <button
+                      onClick={() => onStatusChange(test.id, 'COMPLETED')}
+                      disabled={isPending}
+                      className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      🏁 Completar estudio
+                    </button>
+                  )}
+                </div>
+                {isPending && (
+                  <p className="text-xs text-slate-400 animate-pulse">Guardando...</p>
+                )}
+              </div>
+            )}
+
+            {/* Badge de solo lectura */}
+            {readonly && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                <p className="text-xs text-slate-400">Vista de solo lectura — el expediente ya fue cerrado.</p>
+              </div>
+            )}
           </div>
-          {regenError && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {regenError}
-            </p>
-          )}
-          {!readonly && (
-            <button
-              onClick={() => onRegenerateAI(test.id)}
-              disabled={isRegenerating}
-              className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
-            >
-              {isRegenerating ? '⏳ Generando IA...' : '🤖 Generar IA ahora'}
-            </button>
-          )}
+
+          {/* ===== COLUMNA DERECHA: EVIDENCIA DOCUMENTAL ===== */}
+          <div className="space-y-4 lg:sticky lg:top-4 self-start">
+
+            {/* Archivo vinculado + visor embebido */}
+            {test.fileUrl ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Archivo vinculado</p>
+                <StudyDocumentViewer
+                  fileUrl={`${apiUrl}${test.fileUrl}`}
+                  fileName={test.fileUrl.split('/').pop() || 'archivo'}
+                />
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center">
+                <span className="text-3xl block mb-2">📂</span>
+                <p className="text-sm text-slate-400 font-medium">Sin archivo vinculado</p>
+                <p className="text-xs text-slate-400 mt-1">Sube el resultado para visualizarlo aquí.</p>
+              </div>
+            )}
+
+            {/* Panel raw de extracción — separado del prediagnóstico */}
+            {test.extractionSnapshot ? (
+              <StudyExtractionRawPanel
+                rawPayload={test.extractionSnapshot.rawPayload}
+                snapshotId={test.extractionSnapshot.id}
+                version={test.extractionSnapshot.version}
+              />
+            ) : (
+              <div className="bg-slate-900 rounded-xl px-4 py-3">
+                <p className="text-xs font-mono text-slate-500">🔩 Sin snapshot de extracción disponible.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* ARCH-20260326-05: Valores capturados del estudio (extraction snapshot — capa extractiva) */}
-      {test.extractionSnapshot && (
-        <CapturedValuesPanel
-          extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
-          missingFields={test.extractionSnapshot.missingFields as string[] | null}
-          version={test.extractionSnapshot.version}
-        />
-      )}
-
-      {/* IMPL-20260326-18: Panel de Prediagnóstico IA — se muestra cuando existe snapshot IA vigente
-          y el estudio es elegible para IA según la matriz canónica. */}
-      {isAIEligible && test.aiSnapshot && (
-        <StudyAIPrediagnosisPanel
-          prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
-          snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
-          reviewerUserId={reviewerUserId}
-          eventId={eventId}
-          existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
-          readonly={readonly}
-        />
-      )}
-
-      {/* Acciones de estado */}
-      {!readonly && (
+      {/* Acciones y badge para estudios de formulario (Médico, Somatometría, Agudeza Visual) */}
+      {(isMedico || isSomato || isAgudeza) && !readonly && (
         <div className="bg-slate-50 rounded-xl p-4 space-y-3">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
             Cambiar estado
@@ -909,16 +990,6 @@ function StudyPanel({
                 className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
               >
                 ▶ Iniciar proceso
-              </button>
-            )}
-            {/* Muestra tomada — útil para laboratorio y cualquier estudio que lo requiera */}
-            {isLab && !sampleTracked && (test.status === 'PENDING' || test.status === 'IN_PROGRESS') && !isMedico && (
-              <button
-                onClick={() => onStatusChange(test.id, 'SAMPLE_TAKEN')}
-                disabled={isPending}
-                className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-              >
-                🧪 Muestra tomada
               </button>
             )}
             {(test.status !== 'COMPLETED' && test.status !== 'RESULT_REGISTERED') && !isMedico && (
@@ -946,8 +1017,7 @@ function StudyPanel({
         </div>
       )}
 
-      {/* Badge de solo lectura */}
-      {readonly && (
+      {(isMedico || isSomato || isAgudeza) && readonly && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
           <p className="text-xs text-slate-400">Vista de solo lectura — el expediente ya fue cerrado.</p>
         </div>
