@@ -6,10 +6,13 @@
  * @backup context/checkpoints/CHK_ARCH-20260325-01.md
  * @id ARCH-20260327-15 (extensión calibración IA)
  * @backup context/SPECs/SPEC_ARCH-20260327-15-PLATAFORMA-CALIBRACION-IA.md
+ * @intervention ARCH-20260327-17
+ * @see context/checkpoints/CHK_ARCH-20260327-17-FIX-PRISMA-JSON-CALIBRATION.md
  */
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
 
@@ -68,6 +71,10 @@ function parseTestIds(formData: FormData): string[] {
   } catch {
     return []
   }
+}
+
+function toPrismaJsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -365,7 +372,10 @@ export async function saveAICalibration(
       ? (test.options as Record<string, unknown>)
       : {}
 
-  const newOptions = { ...currentOptions, aiCalibration: calibrationData }
+  const newOptions = toPrismaJsonValue({
+    ...currentOptions,
+    aiCalibration: calibrationData,
+  })
 
   try {
     await prisma.medicalTest.update({
