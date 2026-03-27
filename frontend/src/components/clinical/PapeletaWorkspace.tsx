@@ -16,6 +16,8 @@
  * @see context/checkpoints/CHK_IMPL-20260327-01-WORKSPACE-IA-DOBLE-COLUMNA.md
  * @intervention ARCH-20260327-02
  * @see context/checkpoints/CHK_ARCH-20260327-02-MICROAJUSTES-WORKSPACE.md
+ * @intervention ARCH-20260327-06
+ * @see context/checkpoints/CHK_ARCH-20260327-06-CABECERA-UNIFICADA.md
  */
 "use client"
 
@@ -546,7 +548,7 @@ function WorkerHeader({
             👤
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-slate-800 text-sm truncate">{workerInfo.name}</p>
+            <p className="font-bold text-slate-800 text-sm truncate">Workspace de estudios</p>
             <div className="flex gap-1.5 text-xs text-slate-500 flex-wrap mt-0.5">
               {workerInfo.position && (
                 <span className="font-medium text-slate-700">{workerInfo.position}</span>
