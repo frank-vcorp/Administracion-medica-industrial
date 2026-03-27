@@ -4,6 +4,8 @@
  * @id IMPL-20260327-01
  * @spec ARCH-20260327-01
  * @backup context/checkpoints/CHK_IMPL-20260327-01-WORKSPACE-IA-DOBLE-COLUMNA.md
+ * @intervention ARCH-20260327-03
+ * @see context/checkpoints/CHK_ARCH-20260327-03-PDF-SIN-MINIATURA.md
  */
 
 interface StudyDocumentViewerProps {
@@ -43,15 +45,11 @@ export default function StudyDocumentViewer({ fileUrl, fileName }: StudyDocument
         </a>
       </div>
 
-      {/* Visor PDF embebido */}
+      {/* ARCH-20260327-03: PDFs sin miniatura embebida para ahorrar altura. */}
       {isPdfFile && (
-        <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
-          <iframe
-            src={fileUrl}
-            title={fileName}
-            className="w-full"
-            style={{ height: '460px', minHeight: '300px' }}
-          />
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+          <p className="text-sm text-slate-600 font-medium">PDF vinculado</p>
+          <p className="text-xs text-slate-400 mt-1">Se abre en pestaña nueva para revisión completa.</p>
         </div>
       )}
 
