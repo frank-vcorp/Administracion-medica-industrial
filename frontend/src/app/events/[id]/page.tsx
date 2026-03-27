@@ -13,6 +13,8 @@
  * @see context/checkpoints/CHK_ARCH-20260327-02-MICROAJUSTES-WORKSPACE.md
  * @intervention ARCH-20260327-08
  * @see context/checkpoints/CHK_ARCH-20260327-08-STEPPER-ULTRACOMPACTO.md
+ * @intervention ARCH-20260327-09
+ * @see context/checkpoints/CHK_ARCH-20260327-09-METADATOS-EN-CABECERA-PRINCIPAL.md
  */
 
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
@@ -221,8 +223,16 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                             </div>
                             <div>
                                 <h1 className="text-base font-bold text-slate-800 leading-tight">{event.worker.lastName}, {event.worker.firstName}</h1>
-                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                                    <span className="font-semibold text-slate-700">{event.worker.company?.name || '---'}</span>
+                                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+                                    {workerInfo.position && <span className="font-semibold text-slate-700">{workerInfo.position}</span>}
+                                    {workerInfo.position && workerInfo.profile && <span>•</span>}
+                                    {workerInfo.profile && (
+                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-600">
+                                            {workerInfo.profile}
+                                        </span>
+                                    )}
+                                    {(workerInfo.position || workerInfo.profile) && workerInfo.company && <span>•</span>}
+                                    <span className="font-medium text-slate-600">{event.worker.company?.name || '---'}</span>
                                     <span>•</span>
                                     <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">#{event.id.slice(0, 8)}</span>
                                 </div>

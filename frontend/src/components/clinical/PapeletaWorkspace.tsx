@@ -18,6 +18,8 @@
  * @see context/checkpoints/CHK_ARCH-20260327-02-MICROAJUSTES-WORKSPACE.md
  * @intervention ARCH-20260327-06
  * @see context/checkpoints/CHK_ARCH-20260327-06-CABECERA-UNIFICADA.md
+ * @intervention ARCH-20260327-09
+ * @see context/checkpoints/CHK_ARCH-20260327-09-METADATOS-EN-CABECERA-PRINCIPAL.md
  */
 "use client"
 
@@ -549,21 +551,7 @@ function WorkerHeader({
           </div>
           <div className="min-w-0">
             <p className="font-bold text-slate-800 text-sm truncate">Workspace de estudios</p>
-            <div className="flex gap-1.5 text-xs text-slate-500 flex-wrap mt-0.5">
-              {workerInfo.position && (
-                <span className="font-medium text-slate-700">{workerInfo.position}</span>
-              )}
-              {workerInfo.position && workerInfo.company && <span>·</span>}
-              {workerInfo.company && <span>{workerInfo.company}</span>}
-              {workerInfo.profile && (
-                <>
-                  <span>·</span>
-                  <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-medium">
-                    {workerInfo.profile}
-                  </span>
-                </>
-              )}
-            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">Vista operativa de estudios</p>
           </div>
         </div>
 
