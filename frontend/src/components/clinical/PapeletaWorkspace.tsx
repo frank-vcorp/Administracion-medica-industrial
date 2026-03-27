@@ -285,9 +285,9 @@ export default function PapeletaWorkspace({
           completedCount={completedCount}
           totalCount={localTests.length}
         />
-        <div className="p-6">
-          <h2 className="text-lg font-bold text-slate-800 mb-1">Estudios de la Papeleta</h2>
-          <p className="text-sm text-slate-500 mb-5">
+        <div className="p-4">
+          <h2 className="text-base font-bold text-slate-800 mb-0.5">Estudios de la Papeleta</h2>
+          <p className="text-sm text-slate-500 mb-3">
             Selecciona un estudio para abrirlo en su vista de trabajo.
           </p>
 
@@ -297,12 +297,12 @@ export default function PapeletaWorkspace({
             </p>
           )}
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             {localTests.map((test) => (
               <button
                 key={test.id}
                 onClick={() => setActiveTestId(test.id)}
-                className="w-full text-left bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-xl px-5 py-4 transition-all group"
+                className="w-full text-left bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-xl px-4 py-3 transition-all group"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
@@ -366,15 +366,15 @@ export default function PapeletaWorkspace({
       <div className="flex min-h-[480px]">
 
         {/* Sidebar de navegación lateral (solo desktop) */}
-        <nav className="hidden md:flex flex-col w-56 border-r border-slate-200 bg-slate-50 pt-3 pb-4 shrink-0">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 mb-2">
+        <nav className="hidden md:flex flex-col w-44 border-r border-slate-200 bg-slate-50 pt-2 pb-3 shrink-0">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1.5">
             Estudios
           </p>
           {localTests.map((t) => (
             <button
               key={t.id}
               onClick={() => { setActiveTestId(t.id); setUploadError('') }}
-              className={`text-left px-4 py-3 border-l-2 transition-colors ${
+              className={`text-left px-3 py-2 border-l-2 transition-colors ${
                 t.id === activeTestId
                   ? 'bg-white border-teal-500 text-teal-700'
                   : 'border-transparent text-slate-600 hover:bg-white hover:text-slate-800'
@@ -389,7 +389,7 @@ export default function PapeletaWorkspace({
         </nav>
 
         {/* Panel principal del estudio activo */}
-        <div className="flex-1 p-6 min-w-0">
+        <div className="flex-1 p-4 min-w-0">
           {activeTest && (
             <StudyPanel
               test={activeTest}
@@ -531,7 +531,7 @@ function WorkerHeader({
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0
 
   return (
-    <div className="px-5 py-4 bg-gradient-to-r from-teal-50 to-slate-50 border-b border-slate-200">
+    <div className="px-4 py-2.5 bg-gradient-to-r from-teal-50 to-slate-50 border-b border-slate-200">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           {onBack && (
@@ -542,7 +542,7 @@ function WorkerHeader({
               ← Resumen
             </button>
           )}
-          <div className="w-9 h-9 bg-teal-500 text-white rounded-xl flex items-center justify-center text-base shrink-0">
+          <div className="w-8 h-8 bg-teal-500 text-white rounded-xl flex items-center justify-center text-base shrink-0">
             👤
           </div>
           <div className="min-w-0">
@@ -570,7 +570,7 @@ function WorkerHeader({
           <span className="text-xs text-slate-500">
             {completedCount}/{totalCount} completados
           </span>
-          <div className="h-2 w-20 bg-slate-200 rounded-full overflow-hidden">
+          <div className="h-2 w-16 bg-slate-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-teal-500 rounded-full transition-all duration-500"
               style={{ width: `${progressPct}%` }}
@@ -634,13 +634,13 @@ function StudyPanel({
   const resultTracked = ['RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
       {/* Encabezado del estudio */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-xl font-bold text-slate-800">{test.testNameSnapshot}</h3>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          <h3 className="text-lg font-bold text-slate-800">{test.testNameSnapshot}</h3>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             {test.test?.category?.name && (
               <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
                 {test.test.category.name}
@@ -749,10 +749,10 @@ function StudyPanel({
           Izquierda: dropzone, trazabilidad, extracción legible, prediagnóstico IA, acciones.
           Derecha: archivo vinculado, visor embebido, raw de extracción. */}
       {!isMedico && !isSomato && !isAgudeza && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
           {/* ===== COLUMNA IZQUIERDA: OPERACIÓN CLÍNICA ===== */}
-          <div className="space-y-4">
+          <div className="space-y-3">
 
             {/* Flujo de laboratorio */}
             {isLab && (
@@ -795,11 +795,11 @@ function StudyPanel({
 
             {/* Dropzone de upload */}
             {!readonly && (
-              <div className={`border-2 border-dashed rounded-xl p-5 text-center transition-colors ${
+              <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${
                 isUploading ? 'border-teal-300 bg-teal-50' : 'border-slate-200 hover:border-teal-300 hover:bg-slate-50'
               }`}>
                 <label className="cursor-pointer block">
-                  <span className="text-3xl block mb-2">
+                  <span className="text-2xl block mb-1">
                     {isUploading ? '⏳' : '📎'}
                   </span>
                   <span className="text-sm font-medium text-slate-600">
@@ -941,7 +941,7 @@ function StudyPanel({
           </div>
 
           {/* ===== COLUMNA DERECHA: EVIDENCIA DOCUMENTAL ===== */}
-          <div className="space-y-4 lg:sticky lg:top-4 self-start">
+          <div className="space-y-3 lg:sticky lg:top-4 self-start">
 
             {/* Archivo vinculado + visor embebido */}
             {test.fileUrl ? (
@@ -953,8 +953,8 @@ function StudyPanel({
                 />
               </div>
             ) : (
-              <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center">
-                <span className="text-3xl block mb-2">📂</span>
+              <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-5 text-center">
+                <span className="text-2xl block mb-1">📂</span>
                 <p className="text-sm text-slate-400 font-medium">Sin archivo vinculado</p>
                 <p className="text-xs text-slate-400 mt-1">Sube el resultado para visualizarlo aquí.</p>
               </div>

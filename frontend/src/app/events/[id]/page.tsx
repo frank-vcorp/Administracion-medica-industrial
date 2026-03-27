@@ -208,11 +208,11 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
         const activeViewVisualStep = Math.max(1, visualStepGroups.findIndex(g => g.ids.includes(activeView)) + 1)
 
         return (
-            <div className="space-y-8 max-w-[1500px] mx-auto pb-20 px-4 xl:px-6">
+            <div className="space-y-4 max-w-[1500px] mx-auto pb-12 px-4 xl:px-6">
                 {/* 1. Header Premium with Stepper */}
                 {/* ARCH-20260327-01: Header compactado — reduce altura para dar protagonismo al estudio activo */}
                 <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-teal-500 text-white rounded-xl flex items-center justify-center text-lg shadow shadow-teal-100 shrink-0">
                                 👤
@@ -250,7 +250,7 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                     </div>
 
                     {/* ARCH-20260327-01: Stepper compactado — círculos y tipografía más pequeños */}
-                    <div className="relative flex justify-between items-center max-w-xl mx-auto px-2 pb-5">
+                    <div className="relative flex justify-between items-center max-w-xl mx-auto px-2 pb-2">
                         <div className="absolute top-3 left-0 w-full h-px bg-slate-100 z-0"></div>
                         <div className="absolute top-3 left-0 h-px bg-teal-400 z-0 transition-all duration-700" style={{ width: `${((currentVisualStep - 1) / (visualStepGroups.length - 1)) * 100}%` }}></div>
 
