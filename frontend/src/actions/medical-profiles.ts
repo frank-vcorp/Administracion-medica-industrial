@@ -8,6 +8,8 @@
  * @backup context/SPECs/SPEC_ARCH-20260327-15-PLATAFORMA-CALIBRACION-IA.md
  * @intervention ARCH-20260327-17
  * @see context/checkpoints/CHK_ARCH-20260327-17-FIX-PRISMA-JSON-CALIBRATION.md
+ * @intervention IMPL-20260327-19
+ * @see context/SPECs/SPEC_ARCH-20260327-19-CALIBRACION-IA-ASISTIDA-VERSIONADO-AUTOMATICO.md
  */
 'use server'
 
@@ -388,5 +390,125 @@ export async function saveAICalibration(
   } catch (e: unknown) {
     console.error('[Calibration] Error guardando calibración IA:', e)
     return { success: false, error: 'Error al guardar la configuración de calibración' }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V2: Guardado con versionado automático — IMPL-20260327-19
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Persiste la configuración aiCalibration V2 con versionado automático.
+ * Si `fieldDefinitions` cambia respecto al contrato vigente, se genera
+ * una nueva versión de calibración sin que el usuario capture el número.
+ * Preserva compatibilidad con todos los campos V1 existentes.
+ * @id IMPL-20260327-19
+ * @backup context/SPECs/SPEC_ARCH-20260327-19-CALIBRACION-IA-ASISTIDA-VERSIONADO-AUTOMATICO.md
+ */
+export async function saveAICalibrationV2(
+  testId: string,
+  payload: {
+    fieldDefinitions: Array<{
+      key: string
+      label: string
+      type: string
+      aliases: string[]
+      required: boolean
+      unit?: string
+    }>
+    source: 'manual-review' | 'ai-assisted-review' | 'candidate-promotion'
+    summary?: string
+    /** Campos V1 a preservar (enabled, canonicalStudyType, extraction, diagnosis) */
+    legacyFields?: Record<string, unknown>
+  }
+): Promise<ActionResult> {
+  const test = await prisma.medicalTest.findUnique({
+    where: { id: testId },
+    select: { id: true, options: true },
+  })
+  if (!test) return { success: false, error: 'Prueba no encontrada' }
+
+  const currentOptions =
+    typeof test.options === 'object' &&
+    test.options !== null &&
+    !Array.isArray(test.options)
+      ? (test.options as Record<string, unknown>)
+      : {}
+
+  const existingCalib =
+    typeof currentOptions.aiCalibration === 'object' &&
+    currentOptions.aiCalibration !== null
+      ? (currentOptions.aiCalibration as Record<string, unknown>)
+      : {}
+
+  // Auto-versionado: comparar fieldDefinitions actual vs. nuevo
+  const currentVersion =
+    typeof existingCalib.currentVersion === 'number' ? existingCalib.currentVersion : 0
+  const existingFieldDefs = Array.isArray(existingCalib.fieldDefinitions)
+    ? existingCalib.fieldDefinitions
+    : []
+  const existingVersions = Array.isArray(existingCalib.versions)
+    ? existingCalib.versions
+    : []
+
+  const hasChanged =
+    JSON.stringify(existingFieldDefs) !== JSON.stringify(payload.fieldDefinitions)
+
+  const nextVersion = hasChanged || currentVersion === 0 ? currentVersion + 1 : currentVersion
+  const now = new Date().toISOString()
+
+  const newVersionEntry =
+    hasChanged || currentVersion === 0
+      ? {
+          version: nextVersion,
+          label: `calib-v${nextVersion}`,
+          createdAt: now,
+          source: payload.source,
+          summary:
+            payload.summary ??
+            `Actualización con ${payload.fieldDefinitions.length} campo(s) — ${payload.source}`,
+        }
+      : null
+
+  // Mantener historial de las últimas 20 versiones
+  const versions = newVersionEntry
+    ? [...existingVersions, newVersionEntry].slice(-20)
+    : existingVersions
+
+  const updatedCalib = {
+    // Preservar campos V1 existentes
+    ...existingCalib,
+    ...(payload.legacyFields ?? {}),
+    // Campos V2
+    currentVersion: nextVersion,
+    currentVersionLabel: `calib-v${nextVersion}`,
+    updatedAt: now,
+    versions,
+    fieldDefinitions: payload.fieldDefinitions,
+    aiAssistance: {
+      ...((typeof existingCalib.aiAssistance === 'object' && existingCalib.aiAssistance !== null
+        ? existingCalib.aiAssistance
+        : {}) as Record<string, unknown>),
+      lastSuggestedAt: now,
+      lastSuggestionSummary: payload.summary ?? '',
+    },
+  }
+
+  const newOptions = toPrismaJsonValue({
+    ...currentOptions,
+    aiCalibration: updatedCalib,
+  })
+
+  try {
+    await prisma.medicalTest.update({
+      where: { id: testId },
+      data: { options: newOptions },
+    })
+    revalidatePath(`/admin/services/${testId}/calibration`)
+    revalidatePath('/admin/services')
+    return { success: true }
+  } catch (e: unknown) {
+    console.error('[Calibration V2] Error guardando calibración IA V2:', e)
+    return { success: false, error: 'Error al guardar la configuración de calibración (V2)' }
   }
 }
