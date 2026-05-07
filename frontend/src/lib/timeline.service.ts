@@ -7,6 +7,7 @@
  */
 
 import prisma from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { TimelineEntryType } from '@prisma/client'
 
 export interface TimelineEntryInput {
@@ -18,7 +19,7 @@ export interface TimelineEntryInput {
   description?: string
   occurredAt?: Date
   createdById?: string
-  metadata?: Record<string, unknown>
+  metadata?: Prisma.InputJsonValue
 }
 
 /**
