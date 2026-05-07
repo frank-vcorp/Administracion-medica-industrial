@@ -38,6 +38,8 @@ import StudyDocumentViewer from "@/components/clinical/StudyDocumentViewer"
 import StudyExtractionRawPanel from "@/components/clinical/StudyExtractionRawPanel"
 // IMPL-20260326-18: Helper central de elegibilidad IA (reemplaza reglas dispersas)
 import { isAIEligibleEventTest, getAIWorkflowLabel, getCanonicalAIStudyType } from "@/lib/study-ai"
+// ARCH-20260507-07: Bloque de trazabilidad operativa ligera (sin cambiar flujo)
+import TraceabilidadLigera from "@/components/clinical/TraceabilidadLigera"
 
 // --- Tipos locales ---
 
@@ -355,6 +357,15 @@ export default function PapeletaWorkspace({
           <p className="text-sm text-slate-500 mb-3">
             Selecciona un estudio para abrirlo en su vista de trabajo.
           </p>
+
+          {/* ARCH-20260507-07: Trazabilidad operativa ligera derivada de estados existentes */}
+          {localTests.length > 0 && (
+            <TraceabilidadLigera
+              eventId={eventId}
+              tests={localTests}
+              readonly={readonly}
+            />
+          )}
 
           {localTests.length === 0 && (
             <p className="text-center text-slate-400 text-sm py-10">
