@@ -3,6 +3,8 @@
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { triggerStructuredStudyAIPrediagnosis } from "./ai-prediagnosis.actions"
+// IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
+import { writeTimelineEntry } from "@/lib/timeline.service"
 import { 
   SomatometriaVitalesSchema, 
   AgudezaVisualSchema, 
@@ -216,6 +218,16 @@ export async function saveExamenMedicoPapeleta(
     })
 
     revalidatePath(`/events/${eventId}`)
+
+    // IMPL-20260507-08: Entrada automática en cronograma (ARCH-20260507-08)
+    await writeTimelineEntry({
+      eventId,
+      eventTestId,
+      entryType: 'MEDICAL_EXAM_SAVED',
+      area: 'Examen Médico',
+      title: markComplete ? 'Examen médico completado' : 'Examen médico guardado',
+    })
+
     return {
       success: true,
       status: newStatus,

@@ -27,6 +27,9 @@ import { getMedicalExam } from '@/actions/medical-exam.actions'
 import { getPrefilledDataForEvent } from '@/actions/prefilled-invitation.actions'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
+// IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
+import PapeletaCronograma from '@/components/clinical/PapeletaCronograma'
+import { getEventTimeline } from '@/actions/timeline.actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +52,16 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
         // IMPL-20260326-18: Obtener el usuario actual para revisión médica de paneles IA
         const session = await getServerSession(authOptions)
         const reviewerUserId = session?.user?.id ?? 'system'
+        const userRole = session?.user?.role ?? null
+
+        // IMPL-20260507-08: Obtener cronograma si el usuario es ADMIN (ARCH-20260507-08)
+        let initialTimeline: unknown[] = []
+        if (userRole === 'ADMIN') {
+          const timelineRes = await getEventTimeline(id)
+          if (timelineRes.success && timelineRes.data) {
+            initialTimeline = timelineRes.data
+          }
+        }
 
         if (!event) {
             notFound()
@@ -317,6 +330,14 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                         examData={serializedExam}
                         prefilledData={prefilledData ? JSON.parse(JSON.stringify(prefilledData)) : null}
                         longitudinalData={longitudinalData ? JSON.parse(JSON.stringify(longitudinalData)) : null}
+                    />
+                )}
+
+                {/* IMPL-20260507-08: Cronograma operativo persistente — solo ADMIN (ARCH-20260507-08) */}
+                {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') && userRole === 'ADMIN' && (
+                    <PapeletaCronograma
+                        eventId={serializedEventId}
+                        initialEntries={initialTimeline as Parameters<typeof PapeletaCronograma>[0]['initialEntries']}
                     />
                 )}
 

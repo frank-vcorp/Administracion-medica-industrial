@@ -25,6 +25,8 @@ model User {
   generatedInvitations PrefilledInvitation[] // IMPL-20260324-07
   // IMPL-20260326-16: Revisiones médicas de prediagnóstico IA (ARCH-20260326-16)
   doctorStudyReviews   DoctorStudyReview[]
+  // IMPL-20260507-08: Entradas del cronograma operativo registradas por este usuario
+  papeletaTimeline     PapeletaTimelineEntry[] @relation("PapeletaTimelineCreator")
 
   @@map("users")
 }
@@ -237,6 +239,8 @@ model MedicalEvent {
   exam             MedicalExam?
   verdict          MedicalVerdict?
   studies          StudyRecord[]
+  // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
+  timeline         PapeletaTimelineEntry[]
 
   @@map("medical_events")
 }
@@ -538,6 +542,45 @@ model DoctorStudyReview {
   reviewedBy             User                   @relation(fields: [reviewedByUserId], references: [id])
 
   @@map("doctor_study_reviews")
+}
+
+// ===========================================================================
+// IMPL-20260507-08: Cronograma Persistente de Papeleta Admin (ARCH-20260507-08)
+// Ref: context/SPECs/SPEC_ARCH-20260507-08-CRONOGRAMA-PAPELETA-ADMIN.md
+//
+// Capa operativa paralela al flujo clínico. No reemplaza EventTest.status.
+// Visibilidad: ADMIN_ONLY — nunca exponer a roles clínicos generales.
+// ===========================================================================
+
+enum TimelineEntryType {
+  STUDY_STARTED      // Estudio iniciado (status → IN_PROGRESS)
+  SAMPLE_TAKEN       // Muestra tomada (status → SAMPLE_TAKEN)
+  RESULT_REGISTERED  // Resultado registrado (status → RESULT_REGISTERED)
+  STUDY_COMPLETED    // Estudio completado (status → COMPLETED)
+  MEDICAL_EXAM_SAVED // Examen médico guardado
+  ADMIN_INCIDENCE    // Incidencia manual registrada por administrador
+}
+
+/// Bitácora operativa persistente de papeleta. Cada entrada es inmutable.
+/// La capa clínica (EventTest.status) y esta tabla son independientes.
+model PapeletaTimelineEntry {
+  id          String            @id @default(uuid())
+  eventId     String
+  eventTestId String?
+  entryType   TimelineEntryType
+  area        String            @default("general")
+  title       String
+  description String?
+  occurredAt  DateTime          @default(now())
+  createdById String?
+  visibility  String            @default("ADMIN_ONLY")
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+
+  event     MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("PapeletaTimelineCreator", fields: [createdById], references: [id])
+
+  @@map("papeleta_timeline_entries")
 }
 
 /// Fuentes de evidencia clínica controlada y versionada para el corpus de prediagnóstico.

@@ -12,6 +12,9 @@ import { revalidatePath } from "next/cache"
 import { EventTestStatus } from "@prisma/client"
 import { triggerStudyAIAnalysis } from "./ai-prediagnosis.actions"
 import { isAIEligibleEventTest, getCanonicalAIStudyType } from "@/lib/study-ai"
+// IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
+import { writeTimelineEntry } from "@/lib/timeline.service"
+import { TimelineEntryType } from "@prisma/client"
 
 /**
  * @id ARCH-20260326-01
@@ -70,6 +73,14 @@ export async function updateEventTestStatus(
   }
 
   try {
+    // IMPL-20260507-08: Leer estado previo para evitar duplicar entradas en timeline
+    // cuando no hubo transición real de estado.
+    const prevTest = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: { status: true },
+    })
+    const oldStatus = prevTest?.status
+
     await prisma.eventTest.update({
       where: { id: eventTestId },
       data: { status }
@@ -116,6 +127,42 @@ export async function updateEventTestStatus(
           }
         }
       }
+    }
+
+    // IMPL-20260507-08: Escritura automática en cronograma operativo (ARCH-20260507-08)
+    // No bloqueante — nunca interrumpe el flujo clínico ante un error de timeline.
+    const statusToTimelineType: Partial<Record<EventTestStatus, TimelineEntryType>> = {
+      IN_PROGRESS:       'STUDY_STARTED',
+      SAMPLE_TAKEN:      'SAMPLE_TAKEN',
+      RESULT_REGISTERED: 'RESULT_REGISTERED',
+      COMPLETED:         'STUDY_COMPLETED',
+    }
+    const timelineType = statusToTimelineType[status]
+    if (timelineType && oldStatus !== status) {
+      const testInfo = await prisma.eventTest.findUnique({
+        where: { id: eventTestId },
+        select: {
+          testNameSnapshot: true,
+          test: { select: { category: { select: { name: true } } } },
+        },
+      })
+      const testName = testInfo?.testNameSnapshot ?? 'Estudio'
+      const area = testInfo?.test?.category?.name ?? 'general'
+      const titleMap: Record<TimelineEntryType, string> = {
+        STUDY_STARTED:      `Estudio iniciado: ${testName}`,
+        SAMPLE_TAKEN:       `Muestra tomada: ${testName}`,
+        RESULT_REGISTERED:  `Resultado registrado: ${testName}`,
+        STUDY_COMPLETED:    `Estudio completado: ${testName}`,
+        MEDICAL_EXAM_SAVED: `Examen médico guardado`,
+        ADMIN_INCIDENCE:    testName,
+      }
+      await writeTimelineEntry({
+        eventId,
+        eventTestId,
+        entryType: timelineType,
+        area,
+        title: titleMap[timelineType],
+      })
     }
 
     revalidatePath(`/events/${eventId}`)
