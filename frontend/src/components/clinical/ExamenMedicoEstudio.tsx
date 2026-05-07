@@ -1114,6 +1114,8 @@ export default function ExamenMedicoEstudio({
           )}
         </div>
       )}
+        </div>
+      )}
     </div>
   )
 }
