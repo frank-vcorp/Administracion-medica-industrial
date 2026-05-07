@@ -29,8 +29,36 @@ function buildAIResultNote(input: { success: boolean; summary?: string | null; c
 }
 
 /**
+ * ARCH-20260507-06: Resuelve el grupo de muestra de un EventTest.
+ * Fuente principal: test.options.sampleType (campo JSON en MedicalTest).
+ * Fallback heurístico: palabras clave en testNameSnapshot.
+ * Devuelve 'otro' cuando no hay grupo definido (no propagar entre estudios sin grupo).
+ */
+function resolveSampleGroupFromSnapshot(testNameSnapshot: string, options: unknown): string {
+  if (options && typeof options === 'object' && !Array.isArray(options)) {
+    const sampleType = (options as Record<string, unknown>).sampleType
+    if (typeof sampleType === 'string' && sampleType.trim()) {
+      return sampleType.trim().toLowerCase()
+    }
+  }
+  const name = testNameSnapshot.toLowerCase()
+  if (
+    name.includes('sangre') || name.includes('sanguín') || name.includes('sanguinea') ||
+    name.includes('biometría') || name.includes('biometria') ||
+    name.includes('química') || name.includes('quimica') ||
+    name.includes('glucosa') || name.includes('colesterol') ||
+    name.includes('hemograma')
+  ) return 'sangre'
+  if (name.includes('orina') || name.includes('ego') || name.includes('urin')) return 'orina'
+  if (name.includes('heces') || name.includes('copro')) return 'heces'
+  return 'otro'
+}
+
+/**
  * Actualiza el estado operativo de un estudio en la papeleta.
  * Soporta los estados V1: PENDING, IN_PROGRESS, SAMPLE_TAKEN, RESULT_REGISTERED, COMPLETED.
+ * ARCH-20260507-06: Si status === SAMPLE_TAKEN, propaga a todos los EventTest hermanos
+ * del mismo grupo de muestra dentro del mismo eventId.
  */
 export async function updateEventTestStatus(
   eventTestId: string,
@@ -46,6 +74,50 @@ export async function updateEventTestStatus(
       where: { id: eventTestId },
       data: { status }
     })
+
+    // ARCH-20260507-06: Propagar SAMPLE_TAKEN a hermanos del mismo grupo de muestra.
+    // No se propaga RESULT_REGISTERED ni COMPLETED.
+    if (status === 'SAMPLE_TAKEN') {
+      const currentTest = await prisma.eventTest.findUnique({
+        where: { id: eventTestId },
+        select: {
+          testNameSnapshot: true,
+          test: { select: { options: true } },
+        },
+      })
+      if (currentTest) {
+        const currentGroup = resolveSampleGroupFromSnapshot(
+          currentTest.testNameSnapshot,
+          currentTest.test?.options,
+        )
+        if (currentGroup !== 'otro') {
+          const siblings = await prisma.eventTest.findMany({
+            where: {
+              eventId,
+              id: { not: eventTestId },
+              status: { in: ['PENDING', 'IN_PROGRESS'] },
+            },
+            select: {
+              id: true,
+              testNameSnapshot: true,
+              test: { select: { options: true } },
+            },
+          })
+          const siblingIdsToUpdate = siblings
+            .filter(
+              s => resolveSampleGroupFromSnapshot(s.testNameSnapshot, s.test?.options) === currentGroup,
+            )
+            .map(s => s.id)
+          if (siblingIdsToUpdate.length > 0) {
+            await prisma.eventTest.updateMany({
+              where: { id: { in: siblingIdsToUpdate } },
+              data: { status: 'SAMPLE_TAKEN' },
+            })
+          }
+        }
+      }
+    }
+
     revalidatePath(`/events/${eventId}`)
     return { success: true }
   } catch (error) {

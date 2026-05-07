@@ -168,7 +168,9 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                     resultNotes: et.resultNotes ?? null,
                     test: et.test ? {
                         code: et.test.code,
-                        category: et.test.category
+                        category: et.test.category,
+                        // ARCH-20260507-06: options para resolver sampleGroup en PapeletaWorkspace
+                        options: et.test.options ?? null,
                     } : null,
                     aiSnapshot,
                     extractionSnapshot,

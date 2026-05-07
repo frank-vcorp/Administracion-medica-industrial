@@ -52,6 +52,8 @@ type StudyTest = {
   test?: {
     code?: string | null
     category?: { name: string } | null
+    // ARCH-20260507-06: options para resolver sampleGroup (sampleType en MedicalTest.options)
+    options?: unknown
   } | null
   // IMPL-20260326-18: Snapshot IA vigente serializado desde page.tsx
   aiSnapshot?: {
@@ -184,8 +186,34 @@ function isLabTest(test: StudyTest) {
   )
 }
 
-function getStudyIcon(test: StudyTest): string {
-  if (isExamenMedico(test.testNameSnapshot)) return '📋'
+/**
+ * ARCH-20260507-06: Resuelve el grupo de muestra de un estudio.
+ * Fuente principal: test.options.sampleType.
+ * Fallback: heurística por nombre del estudio.
+ * Devuelve 'otro' cuando no hay grupo definido (sin propagación).
+ */
+function resolveSampleGroup(test: StudyTest): string {
+  const opts = test.test?.options
+  if (opts && typeof opts === 'object' && !Array.isArray(opts)) {
+    const sampleType = (opts as Record<string, unknown>).sampleType
+    if (typeof sampleType === 'string' && sampleType.trim()) {
+      return sampleType.trim().toLowerCase()
+    }
+  }
+  const name = test.testNameSnapshot.toLowerCase()
+  if (
+    name.includes('sangre') || name.includes('sanguín') || name.includes('sanguinea') ||
+    name.includes('biometría') || name.includes('biometria') ||
+    name.includes('química') || name.includes('quimica') ||
+    name.includes('glucosa') || name.includes('colesterol') ||
+    name.includes('hemograma')
+  ) return 'sangre'
+  if (name.includes('orina') || name.includes('ego') || name.includes('urin')) return 'orina'
+  if (name.includes('heces') || name.includes('copro')) return 'heces'
+  return 'otro'
+}
+
+function getStudyIcon(test: StudyTest): string {  if (isExamenMedico(test.testNameSnapshot)) return '📋'
   if (isSomatometria(test.testNameSnapshot)) return '⚖️'
   if (isAgudezaVisual(test.testNameSnapshot)) return '👁️'
   // IMPL-20260326-18: íconos por type canónico del helper central
@@ -230,6 +258,14 @@ export default function PapeletaWorkspace({
     t.status === 'COMPLETED' || t.status === 'RESULT_REGISTERED'
   ).length
 
+  // ARCH-20260507-06: Determinar si la muestra del estudio activo ya fue tomada por grupo compartido
+  const activeTestGroup = activeTest && isLabTest(activeTest) ? resolveSampleGroup(activeTest) : 'otro'
+  const groupSampleTaken = activeTestGroup !== 'otro' && localTests.some(t =>
+    t.id !== activeTest?.id &&
+    resolveSampleGroup(t) === activeTestGroup &&
+    (['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'] as StudyStatus[]).includes(t.status)
+  )
+
   // ARCH-20260506-06: Somatometría y Agudeza Visual se ocultan del sidebar cuando
   // existe un Examen Médico (ahora viven como pestañas dentro de él).
   const hasExamenMedicoTest = localTests.some(t => isExamenMedico(t.testNameSnapshot))
@@ -258,7 +294,24 @@ export default function PapeletaWorkspace({
     startTransition(async () => {
       const res = await updateEventTestStatus(testId, status as Parameters<typeof updateEventTestStatus>[1], eventId)
       if (res.success) {
-        updateLocalStatus(testId, status)
+        // ARCH-20260507-06: Si SAMPLE_TAKEN, propagar localmente a hermanos del mismo grupo
+        if (status === 'SAMPLE_TAKEN') {
+          const triggerTest = localTests.find(t => t.id === testId)
+          const group = triggerTest ? resolveSampleGroup(triggerTest) : 'otro'
+          setLocalTests(prev => prev.map(t => {
+            if (t.id === testId) return { ...t, status }
+            if (
+              group !== 'otro' &&
+              resolveSampleGroup(t) === group &&
+              (t.status === 'PENDING' || t.status === 'IN_PROGRESS')
+            ) {
+              return { ...t, status: 'SAMPLE_TAKEN' as StudyStatus }
+            }
+            return t
+          }))
+        } else {
+          updateLocalStatus(testId, status)
+        }
       }
     })
   }
@@ -419,6 +472,7 @@ export default function PapeletaWorkspace({
               apiUrl={apiUrl}
               somatometryEventTestId={somatometriaTest?.id}
               agudezaEventTestId={agudezaTest?.id}
+              groupSampleTaken={groupSampleTaken}
               onStatusChange={handleStatusChange}
               onFileUpload={handleFileUpload}
               onRegenerateAI={handleRegenerateAI}
@@ -590,6 +644,7 @@ function StudyPanel({
   apiUrl,
   somatometryEventTestId,
   agudezaEventTestId,
+  groupSampleTaken,
   onStatusChange,
   onFileUpload,
   onRegenerateAI,
@@ -611,6 +666,8 @@ function StudyPanel({
   apiUrl: string
   somatometryEventTestId: string | undefined
   agudezaEventTestId: string | undefined
+  /** ARCH-20260507-06: Indica si un estudio hermano del mismo grupo ya tiene muestra tomada */
+  groupSampleTaken: boolean
   onStatusChange: (id: string, status: StudyStatus) => void
   onFileUpload: (id: string, file: File) => void
   onRegenerateAI: (id: string) => void
@@ -623,7 +680,10 @@ function StudyPanel({
   // IMPL-20260326-18: Elegibilidad y type canónico desde helper central
   const aiLabel = getAIWorkflowLabel(test)
   const isAIEligible = isAIEligibleEventTest(test)
-  const sampleTracked = isLab && ['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
+  // ARCH-20260507-06: sampleTracked incluye muestra tomada por grupo compartido (hermano)
+  const sampleTracked = isLab && (
+    ['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'].includes(test.status) || groupSampleTaken
+  )
   const resultTracked = ['RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
 
   return (

@@ -49,6 +49,8 @@ export const getEventById = async (id: string) => {
                         select: {
                             id: true,
                             code: true,
+                            // ARCH-20260507-06: Incluir options para resolución de grupo de muestra compartida
+                            options: true,
                             category: {
                                 select: { name: true }
                             }
