@@ -65,6 +65,30 @@ const VISUAL_FIELDS: { name: string; label: string }[] = [
 ]
 
 const NO_APLICA = 'NO APLICA'
+const SEX_OPTIONS = ['Femenino', 'Masculino'] as const
+const LONGITUDINAL_SECTIONS: [string, string][] = [
+  ['datos_personales', 'Datos Personales'],
+  ['historia_laboral', 'Historia Laboral'],
+  ['heredo_familiares', 'Heredo-Familiares'],
+]
+const GINE_FIELDS: [string, string][] = [
+  ['m1_gine_menarca', 'Menarca'], ['m1_gine_fum', 'FUM'], ['m1_gine_ivs', 'IVS'],
+  ['m1_gine_ritmo', 'Ritmo'], ['m1_gine_gesta', 'Gesta'], ['m1_gine_aborto', 'Aborto'],
+  ['m1_gine_parto', 'Parto'], ['m1_gine_cesarea', 'Cesárea'], ['m1_gine_doc', 'DOC'],
+  ['m1_gine_fup_uc', 'FUP/FUC'], ['m1_gine_exp_mamaria', 'Exp. Mamaria'], ['m1_gine_mpf', 'MPF'],
+]
+const INMUNO_FIELDS: [string, string][] = [
+  ['m1_vac_rubeola', 'Rubéola'], ['m1_vac_neumococo', 'Neumococo'],
+  ['m1_vac_sarampion', 'Sarampión'], ['m1_vac_influenza', 'Influenza'],
+  ['m1_vac_toxoide', 'Toxoide Tetánico'], ['m1_vac_hepatitisb', 'Hepatitis B'],
+  ['m1_vac_otras', 'Otras'],
+]
+const RESUMEN_CLINICO_FIELDS: [string, string][] = [
+  ['estado_nutricional', 'Estado Nutricional'],
+  ['salud_bucal', 'Salud Bucal'],
+  ['agudeza_visual_resumen', 'Agudeza Visual'],
+  ['presion_arterial_resumen', 'Presión Arterial'],
+]
 
 // ─── Campos de Exploración Física (de ExploracionFisicaSchema) ───────────────
 
@@ -334,6 +358,10 @@ export default function ExamenMedicoEstudio({
     { id: 'signos_vitales', label: 'Signos Vitales', icon: '💓', done: vitalsCompleted, locked: false },
     { id: 'agudeza_visual', label: 'Agudeza Visual', icon: '👁️', done: agudezaCompleted, locked: false },
     { id: 'examen_medico', label: 'Examen Médico', icon: '📋', done: hasAptitud, locked: !canAccessExamen },
+  ]
+  const modulo1Tabs: [M1Tab, string, string][] = [
+    ...(modulo1['m1_sexo'] === 'Femenino' ? [['gine', '♀️', 'Ginecológicos'] as [M1Tab, string, string]] : []),
+    ['inmuno', '💉', 'Inmunizaciones'],
   ]
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -719,7 +747,7 @@ export default function ExamenMedicoEstudio({
           <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Sexo</span>
             <div className="flex gap-2">
-              {(['Femenino', 'Masculino'] as const).map(opt => (
+                {SEX_OPTIONS.map(opt => (
                 <button
                   key={opt}
                   disabled={readonly}
@@ -777,11 +805,7 @@ export default function ExamenMedicoEstudio({
                     : 'Ver resumen longitudinal maestro (datos persistentes del Historial Clínico)'}
                 </summary>
                 <div className="px-4 pb-3 pt-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {([
-                    ['datos_personales', '👤 Datos Personales'],
-                    ['historia_laboral', '🏭 Historia Laboral'],
-                    ['heredo_familiares', '🧬 Heredo-Familiares'],
-                  ] as [string, string][]).map(([sKey, sLabel]) => {
+                    {LONGITUDINAL_SECTIONS.map(([sKey, sLabel]) => {
                     const section = longitudinalReference[sKey] as Record<string, unknown> | undefined
                     if (!section || typeof section !== 'object') return null
                     const entries = Object.entries(section).filter(([, v]) => v !== undefined && v !== '' && v !== null)
@@ -807,13 +831,10 @@ export default function ExamenMedicoEstudio({
 
           {/* Sub-tabs de Módulo 1 — solo antecedentes clínicos de la cita */}
           <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1">
-            {([
-              ...(modulo1['m1_sexo'] === 'Femenino' ? [['gine', '♀️', 'Ginecológicos']] : []),
-              ['inmuno', '💉', 'Inmunizaciones'],
-            ] as [string, string, string][]).map(([id, icon, lbl]) => (
+              {modulo1Tabs.map(([id, icon, lbl]) => (
               <button
                 key={id}
-                onClick={() => setM1Tab(id as M1Tab)}
+                  onClick={() => setM1Tab(id)}
                 className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors flex-1 justify-center ${
                   m1Tab === id ? 'bg-white shadow text-teal-700' : 'text-slate-500 hover:text-slate-700'
                 }`}
@@ -829,12 +850,7 @@ export default function ExamenMedicoEstudio({
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Antecedentes Ginecológicos</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {([
-                  ['m1_gine_menarca', 'Menarca'], ['m1_gine_fum', 'FUM'], ['m1_gine_ivs', 'IVS'],
-                  ['m1_gine_ritmo', 'Ritmo'], ['m1_gine_gesta', 'Gesta'], ['m1_gine_aborto', 'Aborto'],
-                  ['m1_gine_parto', 'Parto'], ['m1_gine_cesarea', 'Cesárea'], ['m1_gine_doc', 'DOC'],
-                  ['m1_gine_fup_uc', 'FUP/FUC'], ['m1_gine_exp_mamaria', 'Exp. Mamaria'], ['m1_gine_mpf', 'MPF'],
-                ] as [string, string][]).map(([key, lbl]) => (
+                {GINE_FIELDS.map(([key, lbl]) => (
                   <div key={key}>
                     <label className="text-[10px] font-bold text-slate-400 uppercase">{lbl}</label>
                     <input type="text" value={modulo1[key] ?? ''} onChange={e => setM1Field(key, e.target.value)} disabled={readonly}
@@ -857,12 +873,7 @@ export default function ExamenMedicoEstudio({
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Inmunizaciones (reportadas por el paciente)</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {([
-                  ['m1_vac_rubeola', 'Rubéola'], ['m1_vac_neumococo', 'Neumococo'],
-                  ['m1_vac_sarampion', 'Sarampión'], ['m1_vac_influenza', 'Influenza'],
-                  ['m1_vac_toxoide', 'Toxoide Tetánico'], ['m1_vac_hepatitisb', 'Hepatitis B'],
-                  ['m1_vac_otras', 'Otras'],
-                ] as [string, string][]).map(([key, lbl]) => (
+                  {INMUNO_FIELDS.map(([key, lbl]) => (
                   <div key={key}>
                     <label className="text-[10px] font-bold text-slate-400 uppercase">{lbl}</label>
                     <input type="text" value={modulo1[key] ?? ''} onChange={e => setM1Field(key, e.target.value)} disabled={readonly}
@@ -981,12 +992,7 @@ export default function ExamenMedicoEstudio({
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Resumen Clínico por Sistema</p>
             <div className="grid grid-cols-2 gap-3">
-              {([
-                ['estado_nutricional', 'Estado Nutricional'],
-                ['salud_bucal', 'Salud Bucal'],
-                ['agudeza_visual_resumen', 'Agudeza Visual'],
-                ['presion_arterial_resumen', 'Presión Arterial'],
-              ] as [string, string][]).map(([field, label]) => (
+                {RESUMEN_CLINICO_FIELDS.map(([field, label]) => (
                 <div key={field}>
                   <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
                   <input type="text" value={form[field] ?? ''} onChange={e => handleField(field, e.target.value)} disabled={readonly}
