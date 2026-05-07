@@ -230,6 +230,15 @@ export default function PapeletaWorkspace({
     t.status === 'COMPLETED' || t.status === 'RESULT_REGISTERED'
   ).length
 
+  // ARCH-20260506-06: Somatometría y Agudeza Visual se ocultan del sidebar cuando
+  // existe un Examen Médico (ahora viven como pestañas dentro de él).
+  const hasExamenMedicoTest = localTests.some(t => isExamenMedico(t.testNameSnapshot))
+  const somatometriaTest = localTests.find(t => isSomatometria(t.testNameSnapshot))
+  const agudezaTest = localTests.find(t => isAgudezaVisual(t.testNameSnapshot))
+  const visibleTests = hasExamenMedicoTest
+    ? localTests.filter(t => !isSomatometria(t.testNameSnapshot) && !isAgudezaVisual(t.testNameSnapshot))
+    : localTests
+
   useEffect(() => {
     setLocalTests(eventTests)
   }, [eventTests])
@@ -301,7 +310,7 @@ export default function PapeletaWorkspace({
           )}
 
           <div className="space-y-2">
-            {localTests.map((test) => (
+            {visibleTests.map((test) => (
               <button
                 key={test.id}
                 onClick={() => setActiveTestId(test.id)}
@@ -356,7 +365,7 @@ export default function PapeletaWorkspace({
           onChange={(e) => { setActiveTestId(e.target.value); setUploadError('') }}
           className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-teal-500 outline-none"
         >
-          {localTests.map(t => (
+          {visibleTests.map(t => (
             <option key={t.id} value={t.id}>
               {t.testNameSnapshot} — {STATUS_LABELS[t.status]}
             </option>
@@ -372,7 +381,7 @@ export default function PapeletaWorkspace({
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1.5">
             Estudios
           </p>
-          {localTests.map((t) => (
+          {visibleTests.map((t) => (
             <button
               key={t.id}
               onClick={() => { setActiveTestId(t.id); setUploadError('') }}
@@ -408,6 +417,8 @@ export default function PapeletaWorkspace({
               isRegenerating={isRegenerating}
               regenError={regenError}
               apiUrl={apiUrl}
+              somatometryEventTestId={somatometriaTest?.id}
+              agudezaEventTestId={agudezaTest?.id}
               onStatusChange={handleStatusChange}
               onFileUpload={handleFileUpload}
               onRegenerateAI={handleRegenerateAI}
@@ -577,6 +588,8 @@ function StudyPanel({
   isRegenerating,
   regenError,
   apiUrl,
+  somatometryEventTestId,
+  agudezaEventTestId,
   onStatusChange,
   onFileUpload,
   onRegenerateAI,
@@ -596,6 +609,8 @@ function StudyPanel({
   isRegenerating: boolean
   regenError: string
   apiUrl: string
+  somatometryEventTestId: string | undefined
+  agudezaEventTestId: string | undefined
   onStatusChange: (id: string, status: StudyStatus) => void
   onFileUpload: (id: string, file: File) => void
   onRegenerateAI: (id: string) => void
@@ -718,6 +733,8 @@ function StudyPanel({
             longitudinalData={longitudinalData ?? null}
             readonly={readonly}
             workerId={workerId}
+            somatometryEventTestId={somatometryEventTestId}
+            agudezaEventTestId={agudezaEventTestId}
             onStatusChange={onExamenMedicoStatusChange}
           />
         </div>
