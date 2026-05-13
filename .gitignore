@@ -1,1 +1,8 @@
 .env*
+
+# ARCH-20260513-15
+# Respaldo: PROYECTO.md
+.venv/
+backend/.venv/
+__pycache__/
+*.pyc

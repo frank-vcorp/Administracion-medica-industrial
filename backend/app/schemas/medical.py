@@ -43,14 +43,23 @@ class DocumentClassification(BaseModel):
 class AudiometriaData(BaseModel):
     """
     Datos EXTRAÍDOS de estudio audiométrico.
+    IMPL-20260513-01: Frecuencias canónicas 250-8000 Hz, señal de completitud documental.
     NOTA: no incluye diagnóstico ni interpretación — esas capas van en AIPrediagnosisSnapshot.
     """
     paciente: str
     fecha_estudio: str
     oido_derecho: Dict[str, int] = Field(
-        description="Frecuencias Hz (string) -> Decibeles. Ej: {'500': 10, '1000': 15}"
+        description="Frecuencias Hz (string) -> Decibeles. Canónicas: 250,500,1000,2000,3000,4000,6000,8000"
     )
     oido_izquierdo: Dict[str, int]
+    frecuencias_detectadas: Optional[List[str]] = Field(
+        default=None,
+        description="Lista de frecuencias realmente encontradas en el documento (trazabilidad de cobertura)"
+    )
+    completitud_documental: Optional[Literal["suficiente", "parcial", "no_concluyente"]] = Field(
+        default=None,
+        description="Calidad general del documento: suficiente=>=6 frecuencias por oído, parcial=3-5, no_concluyente=<3"
+    )
     notas_calidad: Optional[str] = Field(
         default=None,
         description="Observaciones sobre calidad del documento (ilegible, falta información, etc.)"
@@ -75,14 +84,30 @@ class LaboratorioData(BaseModel):
 class EspirometriaData(BaseModel):
     """
     Datos EXTRAÍDOS de prueba de función pulmonar.
+    IMPL-20260513-01: Añadidos campos de broncodilatador, interpretabilidad y completitud.
     NOTA: no incluye diagnóstico — esa capa va en AIPrediagnosisSnapshot.
     """
     paciente: str
     fecha_estudio: str
     fev1: Optional[float] = Field(default=None, description="FEV1 en litros")
     fvc: Optional[float] = Field(default=None, description="FVC en litros")
-    fev1_fvc_ratio: Optional[float] = None
-    fev1_percent_predicho: Optional[float] = None
+    fev1_fvc_ratio: Optional[float] = Field(default=None, description="Relación FEV1/FVC")
+    fev1_percent_predicho: Optional[float] = Field(default=None, description="FEV1 como % del predicho")
+    fvc_percent_predicho: Optional[float] = Field(default=None, description="FVC como % del predicho (si disponible)")
+    broncodilatador_post_fev1: Optional[float] = Field(
+        default=None, description="FEV1 post-broncodilatador en litros (si se realizó prueba BD)"
+    )
+    broncodilatador_post_fvc: Optional[float] = Field(
+        default=None, description="FVC post-broncodilatador en litros (si disponible)"
+    )
+    es_interpretable: Optional[bool] = Field(
+        default=None,
+        description="True si tiene fev1+fvc mínimos; False si el documento es no concluyente"
+    )
+    completitud_documental: Optional[Literal["suficiente", "parcial", "no_concluyente"]] = Field(
+        default=None,
+        description="suficiente=fev1+fvc+ratio+%predicho, parcial=solo fev1+fvc, no_concluyente=faltan mínimos"
+    )
     notas_calidad: Optional[str] = None
 
 
@@ -326,6 +351,20 @@ class AIPrediagnosisResult(BaseModel):
     non_conclusive_reason: Optional[str] = Field(
         default=None,
         description="Si clinical_state=AI_NON_CONCLUSIVE, razón explícita"
+    )
+    # IMPL-20260513-01: Trazabilidad de proveedor clínico y política de calibración
+    calibration_source: Optional[Literal["medical_calibration", "general_fallback"]] = Field(
+        default=None,
+        description="Indica si se usó calibración médica del panel o fallback general en modo sombra"
+    )
+    clinical_model_used: Optional[str] = Field(
+        default=None,
+        description="Modelo real utilizado para la capa clínica (ej: gemini-2.5-flash, google/medgemma-27b-text-it)"
+    )
+    # IMPL-20260513-03: Proveedor clínico real (gemini | featherless)
+    clinical_provider: Optional[Literal["gemini", "featherless"]] = Field(
+        default=None,
+        description="Proveedor backend de la capa clínica: 'gemini' (Gemini text-only) o 'featherless' (MedGemma vía OpenAI SDK)"
     )
 
 

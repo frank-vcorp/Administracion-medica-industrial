@@ -29,6 +29,7 @@ class ExtractorService(GeminiBase):
     """
 
     # IMPL-20260326-16: Prompts de extracción pura — sin diagnóstico_ia
+    # IMPL-20260513-01: Actualizado para frecuencias canónicas 250-8000 Hz, completitud documental
     PROMPTS = {
         "Audiometria": """Eres un técnico de audiología. Tu tarea es EXTRAER datos del documento, NO interpretarlos clínicamente.
 
@@ -36,17 +37,25 @@ class ExtractorService(GeminiBase):
 1. El PACIENTE está en la parte superior del documento.
 2. La FECHA está cerca del nombre del paciente.
 3. OÍDO DERECHO (OD) y OÍDO IZQUIERDO (OI) están marcados claramente.
-4. LAS FRECUENCIAS son: 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz.
+4. LAS FRECUENCIAS CANÓNICAS son: 250, 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz.
+   - Extrae todas las que puedas ver; si alguna no está en el documento, omítela del dict.
 5. Los DECIBELES (dB) son valores numéricos en el audiograma.
 6. NO incluyas diagnóstico, interpretación clínica ni recomendaciones de aptitud.
 7. Si el documento es ilegible o faltan datos, indícalo en notas_calidad.
+8. Llena `frecuencias_detectadas` con la lista de frecuencias que SÍ pudiste leer (ej: ["250","500","1000"]).
+9. Llena `completitud_documental` según cuántas frecuencias canónicas tienes POR OÍDO:
+   - "suficiente" si tienes 6 o más de 8 frecuencias en AMBOS oídos
+   - "parcial" si tienes entre 3 y 5 frecuencias en algún oído
+   - "no_concluyente" si tienes menos de 3 frecuencias en algún oído o el trazado es ilegible
 
 **Respuesta OBLIGATORIA en JSON (solo {}, sin ```json):**
 {
   "paciente": "Nombre Completo",
   "fecha_estudio": "dd/mm/yyyy",
-  "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
-  "oido_izquierdo": {"500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
+  "oido_derecho": {"250": 10, "500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
+  "oido_izquierdo": {"250": 10, "500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
+  "frecuencias_detectadas": ["250", "500", "1000", "2000", "3000", "4000", "6000", "8000"],
+  "completitud_documental": "suficiente",
   "notas_calidad": null
 }""",
 
@@ -80,9 +89,13 @@ class ExtractorService(GeminiBase):
 2. FECHA
 3. FEV1 (Volumen Espiratorio Forzado en 1 segundo) en LITROS — solo el número
 4. FVC (Capacidad Vital Forzada) en LITROS — solo el número
-5. Relación FEV1/FVC — solo el número
+5. Relación FEV1/FVC — solo el número (ej: 0.83 o 83 si está como porcentaje — normaliza a decimal)
 6. FEV1 % Predicho — solo el número
-7. NO incluyas diagnóstico ni interpretación clínica final.
+7. FVC % Predicho — solo el número si está disponible
+8. Si el documento incluye prueba POST-BRONCODILATADOR, extrae `broncodilatador_post_fev1` y `broncodilatador_post_fvc`.
+9. `es_interpretable`: true si tienes al menos fev1 y fvc; false si faltan ambos o el documento es ilegible.
+10. `completitud_documental`: "suficiente" si tienes fev1+fvc+ratio+%predicho, "parcial" si solo fev1+fvc, "no_concluyente" si faltan fev1 o fvc.
+11. NO incluyas diagnóstico ni interpretación clínica final.
 
 **Respuesta OBLIGATORIA en JSON:**
 {
@@ -92,6 +105,11 @@ class ExtractorService(GeminiBase):
   "fvc": 4.2,
   "fev1_fvc_ratio": 0.83,
   "fev1_percent_predicho": 92.0,
+  "fvc_percent_predicho": 95.0,
+  "broncodilatador_post_fev1": null,
+  "broncodilatador_post_fvc": null,
+  "es_interpretable": true,
+  "completitud_documental": "suficiente",
   "notas_calidad": null
 }""",
 

@@ -19,6 +19,7 @@ from app.services.ai.extractor import ExtractorService
 from app.schemas.medical import (
     DocumentClassification,
     AudiometriaData,
+    EspirometriaData,
     CampimetriaData,
     ElectrocardiogramaData,
     RiesgoCardiovascularData,
@@ -370,5 +371,345 @@ class TestPrediagnosticoNuevosTipos:
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
 
 
+# ---------------------------------------------------------------------------
+# IMPL-20260513-01: Tests de Calibración V1 — Audiometría y Espirometría
+# ARCH-20260513-01 §"Validación dirigida"
+# Cubre: caso nominal, caso incompleto, política de calibración médica
+# ---------------------------------------------------------------------------
+
+class TestCalibrationV1AudioEspiro:
+    """
+    Tests dirigidos para Calibración V1 de Audiometría y Espirometría.
+    IMPL-20260513-01: Contratos endurecidos, calibración médica, modo sombra.
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-api-key", model="gemini-2.5-pro")
+
+    @pytest.fixture
+    def prediagnostic_svc(self):
+        from app.services.ai.prediagnostic import PrediagnosticService
+        return PrediagnosticService(api_key="test-api-key", model="gemini-2.5-flash")
+
+    # --- Extracción: Audiometría ---
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_audiometria_nominal_con_frecuencias_canonicas(self, mock_gemini, extractor):
+        """
+        Caso nominal: el extractor devuelve las 8 frecuencias canónicas
+        (250, 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz) para ambos oídos
+        y la completitud es 'suficiente'.
+        """
+        mock_gemini.return_value = {
+            "paciente": "Juan Pérez",
+            "fecha_estudio": "13/05/2026",
+            "oido_derecho": {"250": 10, "500": 10, "1000": 15, "2000": 15, "3000": 20, "4000": 25, "6000": 30, "8000": 30},
+            "oido_izquierdo": {"250": 10, "500": 10, "1000": 15, "2000": 15, "3000": 20, "4000": 25, "6000": 30, "8000": 30},
+            "frecuencias_detectadas": ["250", "500", "1000", "2000", "3000", "4000", "6000", "8000"],
+            "completitud_documental": "suficiente",
+            "notas_calidad": None,
+        }
+        result = extractor.extract_by_type("/fake/audiometria_nominal.pdf", "Audiometria")
+        assert isinstance(result, AudiometriaData)
+        assert "250" in result.oido_derecho
+        assert "8000" in result.oido_derecho
+        assert len(result.oido_derecho) == 8
+        assert result.completitud_documental == "suficiente"
+        assert result.frecuencias_detectadas is not None
+        assert len(result.frecuencias_detectadas) == 8
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_audiometria_incompleta_completitud_parcial(self, mock_gemini, extractor):
+        """
+        Caso incompleto: el documento solo tiene 4 frecuencias por oído.
+        completitud_documental debe ser 'parcial', no 'suficiente'.
+        """
+        mock_gemini.return_value = {
+            "paciente": "Ana López",
+            "fecha_estudio": "13/05/2026",
+            "oido_derecho": {"500": 15, "1000": 20, "2000": 25, "4000": 40},
+            "oido_izquierdo": {"500": 10, "1000": 15, "2000": 20, "4000": 35},
+            "frecuencias_detectadas": ["500", "1000", "2000", "4000"],
+            "completitud_documental": "parcial",
+            "notas_calidad": "Audiograma con solo 4 frecuencias visibles",
+        }
+        result = extractor.extract_by_type("/fake/audiometria_incompleta.pdf", "Audiometria")
+        assert isinstance(result, AudiometriaData)
+        assert result.completitud_documental == "parcial"
+        assert len(result.oido_derecho) == 4
+        assert result.notas_calidad is not None
+
+    # --- Extracción: Espirometría ---
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_espirometria_nominal_con_parametros_minimos(self, mock_gemini, extractor):
+        """
+        Caso nominal: el extractor devuelve fev1, fvc, ratio, %predicho y es_interpretable=True.
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            "paciente": "Carlos García",
+            "fecha_estudio": "13/05/2026",
+            "fev1": 3.2,
+            "fvc": 4.0,
+            "fev1_fvc_ratio": 0.80,
+            "fev1_percent_predicho": 88.0,
+            "fvc_percent_predicho": 92.0,
+            "broncodilatador_post_fev1": None,
+            "broncodilatador_post_fvc": None,
+            "es_interpretable": True,
+            "completitud_documental": "suficiente",
+            "notas_calidad": None,
+        }
+        result = extractor.extract_by_type("/fake/espirometria_nominal.pdf", "Espirometria")
+        assert isinstance(result, EspirometriaData)
+        assert result.fev1 == 3.2
+        assert result.fvc == 4.0
+        assert result.fev1_fvc_ratio == 0.80
+        assert result.es_interpretable is True
+        assert result.completitud_documental == "suficiente"
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_espirometria_sin_fev1_es_no_concluyente(self, mock_gemini, extractor):
+        """
+        Caso incompleto: el documento no tiene FEV1 ni FVC visibles.
+        es_interpretable debe ser False y completitud 'no_concluyente'.
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            "paciente": "María Torres",
+            "fecha_estudio": "13/05/2026",
+            "fev1": None,
+            "fvc": None,
+            "fev1_fvc_ratio": None,
+            "fev1_percent_predicho": None,
+            "fvc_percent_predicho": None,
+            "broncodilatador_post_fev1": None,
+            "broncodilatador_post_fvc": None,
+            "es_interpretable": False,
+            "completitud_documental": "no_concluyente",
+            "notas_calidad": "No se encontraron valores de FEV1 ni FVC en el documento",
+        }
+        result = extractor.extract_by_type("/fake/espirometria_incompleta.pdf", "Espirometria")
+        assert isinstance(result, EspirometriaData)
+        assert result.es_interpretable is False
+        assert result.completitud_documental == "no_concluyente"
+        assert result.fev1 is None
+        assert result.notas_calidad is not None
+
+    # --- Prediagnóstico: Calibración médica ---
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    def test_prediagnostico_audiometria_usa_calibracion_medica_cuando_disponible(self, prediagnostic_svc):
+        """
+        Cuando se pasa medical_calibration, el resultado debe tener
+        calibration_source='medical_calibration' (sin llamada real a Gemini).
+        Se valida el camino de datos, no la respuesta del modelo.
+        """
+        # Prediagnóstico sin datos mínimos pero verificando el campo calibration_source
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data={"paciente": "Test"},  # Faltarán oido_derecho y oido_izquierdo
+            medical_calibration={"description": "Calibración NOM-011", "version": "v1"},
+        )
+        # Al faltar parámetros mínimos retorna AI_NON_CONCLUSIVE, pero con calibration_source correcto
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.calibration_source == "medical_calibration"
+        assert result.clinical_model_used == "gemini-2.5-flash"
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    def test_prediagnostico_audiometria_usa_fallback_general_sin_calibracion(self, prediagnostic_svc):
+        """
+        Cuando NO se pasa medical_calibration, el resultado debe tener
+        calibration_source='general_fallback'.
+        """
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data={"paciente": "Test"},  # Faltarán oido_derecho y oido_izquierdo
+            # Sin medical_calibration → fallback general
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.calibration_source == "general_fallback"
+        assert result.clinical_model_used == "gemini-2.5-flash"
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    def test_prediagnostico_espirometria_incompleta_devuelve_non_conclusive(self, prediagnostic_svc):
+        """
+        Espirometría con es_interpretable=False debe retornar AI_NON_CONCLUSIVE
+        por la verificación adicional de IMPL-20260513-01.
+        """
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Test",
+                "fev1": None,
+                "fvc": None,
+                "es_interpretable": False,
+                "completitud_documental": "no_concluyente",
+            },
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.non_conclusive_reason is not None
+        assert "interpretable" in result.non_conclusive_reason.lower() or "faltantes" in result.non_conclusive_reason.lower()
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
+    def test_prediagnostico_espirometria_nominal_con_calibracion(self, mock_call, prediagnostic_svc):
+        """
+        Espirometría nominal con calibración médica: el prediagnóstico debe completarse
+        con calibration_source='medical_calibration' y el modelo clínico trazado.
+        """
+        mock_call.return_value = {
+            "summary": "Parámetros espirométricos compatibles con función pulmonar conservada.",
+            "confidence": 0.78,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["FEV1/FVC 0.80 compatible con patrón normal según ATS/ERS 2022"],
+            "clinical_basis": [{"principle": "ATS/ERS 2022", "applied_parameters": ["fev1_fvc_ratio"]}],
+            "citations": [],
+            "limitations": ["Requiere correlación con historial clínico"],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Carlos García",
+                "fev1": 3.2,
+                "fvc": 4.0,
+                "fev1_fvc_ratio": 0.80,
+                "fev1_percent_predicho": 88.0,
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+            },
+            medical_calibration={
+                "description": "Calibración espirometría AMI — criterios NOM-022-STPS",
+                "version": "v1.0",
+                "notes": "Población trabajadora industrial, referencia NHANES III",
+            },
+        )
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.calibration_source == "medical_calibration"
+        assert result.clinical_model_used == "gemini-2.5-flash"
+        assert result.confidence >= 0.60
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ---------------------------------------------------------------------------
+# IMPL-20260513-03: Tests del proveedor MedGemma/Featherless
+# Valida selección de proveedor, trazabilidad de clinical_provider y fallback.
+# ---------------------------------------------------------------------------
+
+class TestMedGemmaFeatherlessProvider:
+    """
+    Tests para la integración MedGemma vía Featherless (OpenAI SDK).
+    IMPL-20260513-03: Selección de proveedor, trazabilidad y fallback honesto.
+    """
+
+    @pytest.fixture
+    def prediagnostic_svc(self):
+        from app.services.ai.prediagnostic import PrediagnosticService
+        return PrediagnosticService(api_key="test-api-key", model="gemini-2.5-flash")
+
+    # Datos mínimos válidos de espirometría para evitar early-return por params
+    ESPIRO_VALIDA = {
+        "paciente": "Test Provider",
+        "fev1": 3.2,
+        "fvc": 4.0,
+        "fev1_fvc_ratio": 0.80,
+        "fev1_percent_predicho": 88.0,
+        "es_interpretable": True,
+        "completitud_documental": "suficiente",
+    }
+
+    MOCK_PREDIAGNOSIS_RESPONSE = {
+        "summary": "Función pulmonar compatible con patrón normal.",
+        "confidence": 0.80,
+        "clinical_state": "AI_PENDING_REVIEW",
+        "justification": ["FEV1/FVC 0.80 dentro de rango normal ATS/ERS"],
+        "clinical_basis": [{"principle": "ATS/ERS 2022", "applied_parameters": ["fev1_fvc_ratio"]}],
+        "citations": [],
+        "limitations": ["Requiere correlación clínica"],
+        "red_flags": [],
+        "non_conclusive_reason": None,
+    }
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
+    def test_sin_medgemma_usa_gemini_y_clinical_provider_es_gemini(self, mock_gemini, prediagnostic_svc):
+        """
+        MEDGEMMA_ENABLED=false → proveedor debe ser 'gemini', no se llama Featherless.
+        """
+        mock_gemini.return_value = self.MOCK_PREDIAGNOSIS_RESPONSE.copy()
+        result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
+        assert result.clinical_provider == "gemini"
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        mock_gemini.assert_called_once()
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
+    def test_medgemma_enabled_pero_sin_key_hace_fallback_gemini(self, mock_gemini, prediagnostic_svc):
+        """
+        MEDGEMMA_ENABLED=true pero sin FEATHERLESS_API_KEY → fallback honesto a Gemini.
+        clinical_provider debe ser 'gemini', no 'featherless'.
+        """
+        mock_gemini.return_value = self.MOCK_PREDIAGNOSIS_RESPONSE.copy()
+        result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
+        assert result.clinical_provider == "gemini"
+        mock_gemini.assert_called_once()
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_MODEL', 'google/medgemma-27b-text-it')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    def test_medgemma_enabled_con_key_llama_featherless(self, mock_featherless, prediagnostic_svc):
+        """
+        MEDGEMMA_ENABLED=true + FEATHERLESS_API_KEY presente → llama a _call_featherless_text_only.
+        clinical_provider debe ser 'featherless' y clinical_model_used el modelo Featherless.
+        """
+        mock_featherless.return_value = self.MOCK_PREDIAGNOSIS_RESPONSE.copy()
+        result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
+        assert result.clinical_provider == "featherless"
+        assert result.clinical_model_used == "google/medgemma-27b-text-it"
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        mock_featherless.assert_called_once()
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    def test_featherless_error_retorna_non_conclusive_con_provider_trazado(self, mock_featherless, prediagnostic_svc):
+        """
+        Si Featherless lanza excepción, retorna AI_NON_CONCLUSIVE con clinical_provider='featherless'
+        para mantener trazabilidad del proveedor que falló.
+        """
+        mock_featherless.side_effect = RuntimeError("Featherless timeout")
+        result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.clinical_provider == "featherless"
+        assert result.non_conclusive_reason is not None
+        assert "featherless" in result.non_conclusive_reason.lower()
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    def test_non_conclusive_por_params_expone_clinical_provider(self, mock_featherless, prediagnostic_svc):
+        """
+        Incluso en early-return por params mínimos, clinical_provider queda trazado.
+        """
+        result = prediagnostic_svc.generate_prediagnosis(
+            "Espirometria",
+            {"paciente": "Test", "fev1": None, "fvc": None, "es_interpretable": False}
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.clinical_provider == "featherless"
+        # No debe haber llamado al proveedor real
+        mock_featherless.assert_not_called()

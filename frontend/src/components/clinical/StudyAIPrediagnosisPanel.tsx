@@ -40,6 +40,9 @@ interface AIPrediagnosisData {
   limitations: string[]
   red_flags: string[]
   non_conclusive_reason?: string | null
+  calibration_source?: 'medical_calibration' | 'general_fallback' | null
+  clinical_model_used?: string | null
+  clinical_provider?: 'gemini' | 'featherless' | null
 }
 
 interface DoctorReviewSummary {
@@ -380,9 +383,21 @@ export default function StudyAIPrediagnosisPanel({
   const hasRedFlags = (predxData.red_flags ?? []).length > 0
   const isNonConclusive = snapshot.clinicalState === 'AI_NON_CONCLUSIVE'
   const isReviewed = reviewed || ['REVIEWED_ACCEPTED', 'REVIEWED_EDITED', 'REVIEWED_REJECTED'].includes(snapshot.clinicalState)
+  const clinicalProvider = predxData.clinical_provider
+  const clinicalModel = predxData.clinical_model_used
+  const medgemmaFailure = isNonConclusive && (
+    clinicalProvider === 'featherless' ||
+    /featherless|medgemma/i.test(predxData.non_conclusive_reason ?? '')
+  )
 
   return (
-    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+    <div
+      className="mt-4 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden"
+      data-clinical-provider={clinicalProvider ?? undefined}
+      data-clinical-model={clinicalModel ?? undefined}
+      data-calibration-source={predxData.calibration_source ?? undefined}
+      data-medgemma-failure={medgemmaFailure ? 'true' : undefined}
+    >
       {/* Cabecera */}
       <div className="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">

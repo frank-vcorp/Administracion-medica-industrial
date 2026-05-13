@@ -1,18 +1,47 @@
 """
 Servicio de Prediagnóstico IA por Estudio — Capa separada de interpretación clínica.
 IMPL-20260326-16: ARCH-20260326-16 §"Separación de capas" §"Prediagnóstico IA"
+IMPL-20260513-01: Política de calibración médica; soporte MedGemma (pending_integration).
 
 GUARDRAILS obligatorios:
   - Esta capa recibe parámetros ya extraídos y validados (ExtractionSnapshotPayload).
   - NO puede autopoblar aptitud laboral, dictamen final, firma digital ni documentos oficiales.
   - El lenguaje deve ser prudente: "compatible con", "sugiere", "requiere correlación clínica".
   - Si faltan parámetros mínimos o calidad es baja → estado: AI_NON_CONCLUSIVE.
+
+POLÍTICA DE CALIBRACIÓN MÉDICA (IMPL-20260513-01):
+  - Si se pasa `medical_calibration` (dict del panel aiCalibration), se inyecta en el prompt
+    como marco preferente de interpretación. Se registra calibration_source="medical_calibration".
+  - Si no se pasa calibración, el modelo opera con conocimiento general en modo sombra.
+    Se registra calibration_source="general_fallback".
+  - En ambos casos queda trazado en AIPrediagnosisResult.calibration_source.
+
+MEDGEMMA (IMPL-20260513-01 / IMPL-20260513-03):
+  - MedGemma es el proveedor médico objetivo para esta capa.
+  - Estado: integrado vía Featherless usando OpenAI SDK (endpoint compatible).
+  - Cuando MEDGEMMA_ENABLED=true y FEATHERLESS_API_KEY está configurada,
+    PrediagnosticService enruta la llamada a _call_featherless_text_only().
+  - Fallback honesto a Gemini text-only si la clave no está disponible.
+  - NUNCA se envía PDF/imagen a Featherless — solo prompt textual/JSON estructurado.
 """
 
 import json
+import os
 from typing import Dict, Any, Optional
 from .base import GeminiBase
 from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation
+
+
+# IMPL-20260513-01: Estado de MedGemma — leer del entorno para que sea honesto
+MEDGEMMA_ENABLED = (os.environ.get("MEDGEMMA_ENABLED", "false").strip().lower() == "true")
+
+# IMPL-20260513-03: Configuración Featherless/MedGemma vía OpenAI SDK
+# FEATHERLESS_API_KEY    → token de autenticación Featherless
+# FEATHERLESS_BASE_URL   → endpoint compatible OpenAI (default: https://api.featherless.ai/v1)
+# FEATHERLESS_MODEL      → modelo a invocar (default: google/medgemma-27b-text-it)
+FEATHERLESS_API_KEY  = os.environ.get("FEATHERLESS_API_KEY", "").strip()
+FEATHERLESS_BASE_URL = os.environ.get("FEATHERLESS_BASE_URL", "https://api.featherless.ai/v1").strip()
+FEATHERLESS_MODEL    = os.environ.get("FEATHERLESS_MODEL", "google/medgemma-27b-text-it").strip()
 
 
 # Umbrales de confianza mínima por tipo de estudio (ARCH-20260326-16 §"Umbrales V1")
@@ -71,6 +100,7 @@ class PrediagnosticService(GeminiBase):
     """
 
     # IMPL-20260326-16: Prompts de interpretación — separados de los de extracción
+    # IMPL-20260513-01: Prompts de Audiometría y Espirometría mejorados con reglas clínicas V1
     PREDIAGNOSTIC_PROMPTS: Dict[str, str] = {
         "Audiometria": """Eres un sistema de apoyo a la decisión clínica para audiología ocupacional.
 Recibirás parámetros extraídos de una audiometría (valores numéricos por frecuencia en Hz y oído).
@@ -82,6 +112,19 @@ REGLAS ESTRICTAS:
 3. Si faltan datos críticos, declara non_conclusive_reason y pon confidence < 0.5.
 4. Las citas deben ser reales y trazables (NOM-011-STPS-2001, ISO 1999:2013, etc.).
 5. Responde SOLO en JSON, sin markdown.
+6. UMBRALES DE REFERENCIA AUDIOMÉTRICA (ISO 1999 / NOM-011-STPS):
+   - Audición normal: umbrales ≤ 25 dB en todas las frecuencias.
+   - Hipoacusia leve: 26-40 dB.
+   - Hipoacusia moderada: 41-60 dB.
+   - Hipoacusia severa: 61-80 dB.
+   - Hipoacusia profunda: > 80 dB.
+   - Escotoma a 4000 Hz sugiere exposición a ruido (NIPTS) — red flag si bilateral.
+   - Patrón conductivo: peor en graves (250-500 Hz), mejor en agudos.
+   - Patrón neurosensorial: peor en agudos (4000-8000 Hz), mejor en graves.
+   - Patrón mixto: elevación en todas las frecuencias con distintas magnitudes.
+7. Si `completitud_documental` es "no_concluyente" o faltan frecuencias clave, degradar a AI_NON_CONCLUSIVE.
+
+{calibration_context}
 
 Parámetros extraídos:
 {extracted_json}
@@ -91,14 +134,15 @@ Responde en JSON con esta estructura exacta:
   "summary": "Texto prudente de máx. 2 oraciones con lenguaje no diagnóstico",
   "confidence": 0.75,
   "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["Razón 1 basada en parámetro concreto", "Razón 2..."],
+  "justification": ["Razón 1 basada en parámetro concreto con frecuencia y valor", "Razón 2..."],
   "clinical_basis": [
-    {"principle": "Elevación de umbrales audiométricos", "applied_parameters": ["oido_derecho.4000", "oido_izquierdo.4000"]}
+    {"principle": "Clasificación audiométrica ISO 1999:2013", "applied_parameters": ["oido_derecho.4000", "oido_izquierdo.4000"]}
   ],
   "citations": [
-    {"source_id": "NOM-011-STPS-2001", "title": "Condiciones de seguridad e higiene en los centros de trabajo donde se genere ruido", "section": "Apéndice A", "excerpt": "Referencia a límites de exposición", "version_or_date": "2001"}
+    {"source_id": "NOM-011-STPS-2001", "title": "Condiciones de seguridad e higiene en los centros de trabajo donde se genere ruido", "section": "Apéndice A", "excerpt": "Criterios de evaluación audiométrica ocupacional", "version_or_date": "2001"},
+    {"source_id": "ISO-1999-2013", "title": "Acoustics - Estimation of noise-induced hearing loss", "section": "Tabla 1", "excerpt": "Umbrales de referencia audiométrica por grupo de edad y sexo", "version_or_date": "2013"}
   ],
-  "limitations": ["Interpretación condicionada a calidad del trazado audiométrico"],
+  "limitations": ["Interpretación condicionada a calidad del trazado audiométrico y datos del paciente"],
   "red_flags": [],
   "non_conclusive_reason": null
 }""",
@@ -135,15 +179,27 @@ Responde en JSON con esta estructura exacta:
 }""",
 
         "Espirometria": """Eres un sistema de apoyo a la decisión clínica para neumología ocupacional.
-Recibirás mediciones espirométricas ya extraídas (FEV1, FVC, ratio, % predicho).
+Recibirás mediciones espirométricas ya extraídas (FEV1, FVC, ratio, % predicho, broncodilatador si aplica).
 Tu tarea es generar análisis de apoyo, NO diagnóstico definitivo.
 
 REGLAS ESTRICTAS:
 1. Usa lenguaje prudente: "patrón compatible con", "sugiere evaluación", "requiere correlación clínica".
 2. NO declares diagnóstico de enfermedad pulmonar ni aptitud laboral.
-3. Interpreta la relación FEV1/FVC y los porcentajes de predicho usando ATS/ERS.
-4. Si faltan FEV1 o FVC, declara AI_NON_CONCLUSIVE.
+3. Interpreta la relación FEV1/FVC y los porcentajes de predicho usando ATS/ERS 2022.
+4. Si faltan FEV1 o FVC, o `es_interpretable` es false, declara AI_NON_CONCLUSIVE.
 5. Responde SOLO en JSON, sin markdown.
+6. CLASIFICACIÓN ESPIROMÉTRICA ATS/ERS 2022:
+   - Patrón OBSTRUCTIVO: FEV1/FVC < 0.70 (o < LLN). Severidad por FEV1%predicho:
+     * Leve: FEV1% ≥ 70%; Moderado: 60-69%; Moderadamente severo: 50-59%;
+       Severo: 35-49%; Muy severo: < 35%.
+   - Patrón RESTRICTIVO sugestivo: FVC% predicho < 80% con FEV1/FVC normal (≥ 0.70).
+     NOTA: diagnóstico definitivo requiere VR/TLC.
+   - Patrón MIXTO: FEV1/FVC < 0.70 Y FVC% predicho < 80%.
+   - Patrón NORMAL: FEV1/FVC ≥ 0.70 y FEV1% predicho ≥ 80% y FVC% predicho ≥ 80%.
+   - Broncodilatador: si hay datos post-BD, comenta reversibilidad (aumento FEV1 ≥ 12% y 200mL).
+7. Si `completitud_documental` es "no_concluyente", degradar a AI_NON_CONCLUSIVE.
+
+{calibration_context}
 
 Parámetros extraídos:
 {extracted_json}
@@ -153,14 +209,15 @@ Responde en JSON con esta estructura exacta:
   "summary": "Texto prudente de máx. 2 oraciones",
   "confidence": 0.72,
   "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["FEV1/FVC < 0.70 sugiere patrón obstructivo según criterios ATS/ERS"],
+  "justification": ["FEV1/FVC de X.XX sugiere patrón X según criterios ATS/ERS 2022", "FEV1% predicho de X% indica severidad..."],
   "clinical_basis": [
-    {"principle": "Clasificación espirométrica ATS/ERS 2022", "applied_parameters": ["fev1_fvc_ratio", "fev1_percent_predicho"]}
+    {"principle": "Clasificación espirométrica ATS/ERS 2022", "applied_parameters": ["fev1_fvc_ratio", "fev1_percent_predicho", "fvc_percent_predicho"]}
   ],
   "citations": [
-    {"source_id": "ATS-ERS-2022", "title": "ATS/ERS Technical Standard: interpretive strategies for routine lung function tests", "section": "Tabla 1", "excerpt": "FEV1/FVC < LLN define obstrucción al flujo aéreo", "version_or_date": "2022"}
+    {"source_id": "ATS-ERS-2022", "title": "ATS/ERS Technical Standard: interpretive strategies for routine lung function tests", "section": "Tabla 1", "excerpt": "FEV1/FVC < LLN define obstrucción al flujo aéreo; FVC%<80 con ratio normal sugiere restricción", "version_or_date": "2022"},
+    {"source_id": "NOM-022-STPS-2015", "title": "Condiciones de seguridad e higiene en los centros de trabajo donde se genere o manejen agentes químicos contaminantes del ambiente laboral", "section": "Vigilancia médica", "excerpt": "Espirometría como herramienta de vigilancia de la función pulmonar en trabajadores expuestos", "version_or_date": "2015"}
   ],
-  "limitations": ["Interpretación requiere comparación con valores espirométricos previos del paciente"],
+  "limitations": ["Interpretación requiere valores predichos según edad, talla y sexo del paciente; confirmar con espirometría previa si disponible"],
   "red_flags": [],
   "non_conclusive_reason": null
 }""",
@@ -351,23 +408,92 @@ Responde en JSON con esta estructura exacta:
                 missing.append(param)
         if missing:
             return f"Parámetros mínimos faltantes: {', '.join(missing)}"
+        # IMPL-20260513-01: verificación de interpretabilidad explícita en Espirometría
+        if study_type == "Espirometria" and extracted_data.get("es_interpretable") is False:
+            return "El documento fue marcado como no interpretable por el extractor (es_interpretable=false)"
+        # IMPL-20260513-01: verificación de completitud para Audiometría
+        if study_type == "Audiometria" and extracted_data.get("completitud_documental") == "no_concluyente":
+            return "Completitud documental insuficiente para audiometría: menos de 3 frecuencias por oído"
         return None
+
+    @staticmethod
+    def _build_calibration_context(medical_calibration: Optional[Dict[str, Any]]) -> str:
+        """
+        IMPL-20260513-01: Construye el bloque de contexto de calibración médica para el prompt.
+        Si existe calibración capturada en el panel aiCalibration, la inyecta como marco preferente.
+        Si no, retorna cadena vacía (el prompt opera con conocimiento general).
+        """
+        if not medical_calibration:
+            return ""  # Sin calibración → el prompt usa conocimiento general
+
+        lines = [
+            "MARCO DE CALIBRACIÓN MÉDICA (prioridad sobre conocimiento general):",
+            "Se ha capturado calibración médica específica en el panel de administración.",
+            "Úsala como marco preferente de interpretación sobre el conocimiento general.",
+            "",
+        ]
+        # Extraer campos relevantes de aiCalibration si existen
+        description = medical_calibration.get("description") or medical_calibration.get("descripcion")
+        if description:
+            lines.append(f"- Descripción: {description}")
+
+        criteria = medical_calibration.get("criteria") or medical_calibration.get("criterios")
+        if criteria:
+            if isinstance(criteria, list):
+                for c in criteria:
+                    lines.append(f"- Criterio: {c}")
+            else:
+                lines.append(f"- Criterios: {criteria}")
+
+        thresholds = medical_calibration.get("thresholds") or medical_calibration.get("umbrales")
+        if thresholds:
+            lines.append(f"- Umbrales específicos: {json.dumps(thresholds, ensure_ascii=False)}")
+
+        notes = medical_calibration.get("notes") or medical_calibration.get("notas")
+        if notes:
+            lines.append(f"- Notas del calibrador: {notes}")
+
+        version = medical_calibration.get("version") or medical_calibration.get("calibration_version")
+        if version:
+            lines.append(f"- Versión de calibración: {version}")
+
+        lines.append("")
+        return "\n".join(lines)
 
     def generate_prediagnosis(
         self,
         study_type: str,
         extracted_data: Dict[str, Any],
+        medical_calibration: Optional[Dict[str, Any]] = None,
     ) -> AIPrediagnosisResult:
         """
         Genera prediagnóstico IA basado en parámetros ya extraídos.
+        IMPL-20260513-01: Acepta calibración médica del panel aiCalibration.
 
         Args:
             study_type: Tipo de estudio (Audiometria, Laboratorio, etc.)
             extracted_data: Dict con parámetros canónicos extraídos
+            medical_calibration: Dict con aiCalibration del panel admin (opcional).
+                Si se pasa, se usa como marco preferente de interpretación.
+                Si no se pasa, el modelo opera con conocimiento general (modo sombra).
 
         Returns:
             AIPrediagnosisResult — siempre retorna un resultado; usa AI_NON_CONCLUSIVE si no hay datos.
+            Los campos calibration_source y clinical_model_used quedan trazados.
         """
+        # IMPL-20260513-01: determinar camino de calibración para trazabilidad
+        calibration_source = "medical_calibration" if medical_calibration else "general_fallback"
+
+        # IMPL-20260513-03: determinar proveedor clínico real
+        # Si MEDGEMMA_ENABLED=true Y FEATHERLESS_API_KEY está configurada → Featherless/MedGemma
+        # En cualquier otro caso → Gemini text-only (fallback honesto)
+        if MEDGEMMA_ENABLED and FEATHERLESS_API_KEY:
+            clinical_provider = "featherless"
+            clinical_model_used = FEATHERLESS_MODEL
+        else:
+            clinical_provider = "gemini"
+            clinical_model_used = self.model  # modelo Gemini configurado
+
         # IMPL-20260326-17: Tipos sin soporte de prediagnóstico IA en V1
         # Campimetria y RiesgoCardiovascular retornan AI_NON_CONCLUSIVE explícito.
         if study_type not in PREDIAGNOSIS_SUPPORTED_TYPES:
@@ -386,6 +512,9 @@ Responde en JSON con esta estructura exacta:
                 limitations=[f"Prediagnóstico IA no soportado para '{study_type}' en V1."],
                 red_flags=[],
                 non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido en V1.",
+                calibration_source=calibration_source,
+                clinical_model_used=clinical_model_used,
+                clinical_provider=clinical_provider,
             )
 
         # Verificar parámetros mínimos
@@ -402,6 +531,9 @@ Responde en JSON con esta estructura exacta:
                 limitations=["Parámetros insuficientes extraídos del documento."],
                 red_flags=[],
                 non_conclusive_reason=non_conclusive_reason,
+                calibration_source=calibration_source,
+                clinical_model_used=clinical_model_used,
+                clinical_provider=clinical_provider,
             )
 
         prompt_template = self.PREDIAGNOSTIC_PROMPTS.get(
@@ -415,19 +547,36 @@ Responde en JSON con esta estructura exacta:
                 clinical_state="AI_NON_CONCLUSIVE",
                 limitations=["Tipo de estudio no soportado por prediagnóstico V1."],
                 non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido.",
+                calibration_source=calibration_source,
+                clinical_model_used=clinical_model_used,
+                clinical_provider=clinical_provider,
             )
 
+        # IMPL-20260513-01: inyectar contexto de calibración médica en el prompt
+        calibration_context_block = self._build_calibration_context(medical_calibration)
+        if calibration_source == "medical_calibration":
+            print(f"✅ Usando calibración médica del panel para {study_type}")
+        else:
+            print(f"ℹ️ Sin calibración médica — operando con conocimiento general para {study_type}")
+
         prompt = prompt_template.replace(
+            "{calibration_context}",
+            calibration_context_block,
+        ).replace(
             "{extracted_json}",
             json.dumps(extracted_data, ensure_ascii=False, indent=2),
         )
 
-        print(f"🧠 Generando prediagnóstico IA para: {study_type}")
+        print(f"🧠 Generando prediagnóstico IA para: {study_type} | proveedor: {clinical_provider} | modelo: {clinical_model_used} | calibración: {calibration_source}")
+        # IMPL-20260513-03: enrutar al proveedor correcto según configuración
         # IMPL-20260326-03: degradar a AI_NON_CONCLUSIVE en lugar de propagar excepción
         try:
-            raw_result = self._call_gemini_text_only(prompt)
+            if clinical_provider == "featherless":
+                raw_result = self._call_featherless_text_only(prompt)
+            else:
+                raw_result = self._call_gemini_text_only(prompt)
         except Exception as e:
-            print(f"⚠️ Fallo al llamar/parsear Gemini (text-only) para {study_type}: {e}")
+            print(f"⚠️ Fallo al llamar/parsear proveedor '{clinical_provider}' para {study_type}: {e}")
             return AIPrediagnosisResult(
                 summary="No fue posible obtener análisis IA para este estudio debido a un error en la respuesta del modelo.",
                 confidence=0.0,
@@ -437,11 +586,19 @@ Responde en JSON con esta estructura exacta:
                 citations=[],
                 limitations=["Error al parsear respuesta del modelo IA. La extracción de parámetros puede estar disponible."],
                 red_flags=[],
-                non_conclusive_reason=f"GeminiParseError: {str(e)[:300]}",
+                non_conclusive_reason=f"{clinical_provider.capitalize()}ParseError: {str(e)[:300]}",
+                calibration_source=calibration_source,
+                clinical_model_used=clinical_model_used,
+                clinical_provider=clinical_provider,
             )
 
         try:
             result = AIPrediagnosisResult(**raw_result)
+            # IMPL-20260513-01: añadir trazabilidad de calibración y modelo al resultado
+            # IMPL-20260513-03: añadir proveedor clínico real
+            result.calibration_source = calibration_source
+            result.clinical_model_used = clinical_model_used
+            result.clinical_provider = clinical_provider
             # Aplicar umbral de confianza — si baja del umbral, marcar non-conclusive
             threshold = CONFIDENCE_THRESHOLDS.get(study_type, 0.5)
             if result.confidence < threshold and result.clinical_state == "AI_PENDING_REVIEW":
@@ -459,7 +616,60 @@ Responde en JSON con esta estructura exacta:
                 clinical_state="AI_NON_CONCLUSIVE",
                 limitations=["Error interno al procesar respuesta del modelo IA."],
                 non_conclusive_reason=f"ParseError: {str(e)[:200]}",
+                calibration_source=calibration_source,
+                clinical_model_used=clinical_model_used,
+                clinical_provider=clinical_provider,
             )
+
+    def _call_featherless_text_only(self, prompt: str) -> Dict[str, Any]:
+        """
+        Llama a MedGemma vía Featherless usando OpenAI SDK (endpoint compatible OpenAI).
+        IMPL-20260513-03: Integración real MedGemma/Featherless.
+
+        Contrato estricto:
+          - NO envía PDF ni imagen. Solo prompt textual/JSON estructurado.
+          - La extracción multimodal SIEMPRE sigue en Gemini (capa separada, sin tocar).
+          - Lanza excepción si hay error → generate_prediagnosis degrada a AI_NON_CONCLUSIVE.
+
+        Variables de entorno requeridas:
+          FEATHERLESS_API_KEY   — token de autenticación Featherless
+          FEATHERLESS_BASE_URL  — endpoint base (default: https://api.featherless.ai/v1)
+          FEATHERLESS_MODEL     — modelo (default: google/medgemma-27b-text-it)
+        """
+        # Importación lazy — no rompe el módulo si openai no está instalado en dev local
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "openai SDK no instalado. Ejecuta: pip install openai>=1.0"
+            ) from exc
+
+        client = OpenAI(
+            api_key=FEATHERLESS_API_KEY,
+            base_url=FEATHERLESS_BASE_URL,
+        )
+
+        response = client.chat.completions.create(
+            model=FEATHERLESS_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Eres un sistema de apoyo clínico de medicina del trabajo. "
+                        "Responde SIEMPRE en JSON válido, sin markdown ni bloques de código."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            max_tokens=2048,
+        )
+
+        raw_text = response.choices[0].message.content or ""
+        # Stripping robusto de markdown (por si el modelo ignora la instrucción de sistema)
+        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+
+        return GeminiBase._tolerant_json_parse(raw_text)
 
     def _call_gemini_text_only(self, prompt: str) -> Dict[str, Any]:
         """

@@ -53,10 +53,23 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # In production this MUST be an env variable.
 GEMINI_API_KEY = _read_env_var("GEMINI_API_KEY")
-GEMINI_MODEL = _read_env_var("GEMINI_MODEL") or "gemini-2.5-flash"
+# IMPL-20260513-01: Separación de modelos por capa
+# GEMINI_MODEL_EXTRACTION: modelo para extracción documental (OCR + structuring) → objetivo: gemini-2.5-pro
+# GEMINI_MODEL_CLINICAL:   modelo para interpretación clínica → objetivo: medgemma-27b-text-it (fallback: flash)
+# GEMINI_MODEL queda como retrocompat para código que aún no fue migrado.
+GEMINI_MODEL_EXTRACTION = _read_env_var("GEMINI_MODEL_EXTRACTION") or _read_env_var("GEMINI_MODEL") or "gemini-2.5-pro"
+GEMINI_MODEL_CLINICAL   = _read_env_var("GEMINI_MODEL_CLINICAL") or _read_env_var("GEMINI_MODEL") or "gemini-2.5-flash"
+GEMINI_MODEL = GEMINI_MODEL_EXTRACTION  # retrocompat
+# IMPL-20260513-01: Bandera MedGemma — False hasta que la integración esté habilitada en runtime
+# IMPL-20260513-03: MEDGEMMA_STATUS es dinámico: 'available' si MEDGEMMA_ENABLED=true y key presente
+MEDGEMMA_ENABLED = (_read_env_var("MEDGEMMA_ENABLED") or "false").lower() == "true"
+FEATHERLESS_API_KEY  = _read_env_var("FEATHERLESS_API_KEY") or ""
+FEATHERLESS_BASE_URL = _read_env_var("FEATHERLESS_BASE_URL") or "https://api.featherless.ai/v1"
+FEATHERLESS_MODEL    = _read_env_var("FEATHERLESS_MODEL") or "google/medgemma-27b-text-it"
+MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and FEATHERLESS_API_KEY) else "pending_integration"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
-EXTRACTION_PROMPT_VERSION = "extract-v2"
-PREDIAGNOSIS_PROMPT_VERSION = "predx-v1"
+EXTRACTION_PROMPT_VERSION = "extract-v3"   # IMPL-20260513-01: actualizado
+PREDIAGNOSIS_PROMPT_VERSION = "predx-v2"   # IMPL-20260513-01: soporte calibración médica
 
 # ARCH-20260326-05: Estado de inicialización IA — persiste en memoria para diagnóstico.
 _GOOGLE_API_KEY_RE = re.compile(r'AIza[A-Za-z0-9_\-]{30,}')
@@ -90,10 +103,11 @@ def _ai_unavailable_response(msg: str = "Servicios de IA no están disponibles")
 
 
 # Inicializar servicios de IA
+# IMPL-20260513-01: Extractor usa GEMINI_MODEL_EXTRACTION (Pro); PrediagnosticService usa GEMINI_MODEL_CLINICAL
 try:
-    classifier = DocumentClassifierService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
-    extractor = ExtractorService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
-    prediagnostic_svc = PrediagnosticService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL)
+    classifier = DocumentClassifierService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL_EXTRACTION)
+    extractor = ExtractorService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL_EXTRACTION)
+    prediagnostic_svc = PrediagnosticService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL_CLINICAL)
     ai_init_error = None
 except Exception as e:
     print(f"⚠️ Error inicializando servicios de IA: {e}")
@@ -148,17 +162,34 @@ def v2_ai_status():
     """
     Estado de diagnóstico de servicios IA — solo lectura, sin secretos.
     ARCH-20260326-05: Expone causa raíz de fallos de inicialización de forma segura.
+    IMPL-20260513-01: Expone modelos separados por capa y estado real de MedGemma.
     Nunca retorna el valor de GEMINI_API_KEY; sólo informa si está presente.
     """
     current_api_key = _read_env_var("GEMINI_API_KEY")
-    current_model = _read_env_var("GEMINI_MODEL") or GEMINI_MODEL
+    current_extraction_model = _read_env_var("GEMINI_MODEL_EXTRACTION") or GEMINI_MODEL_EXTRACTION
+    current_clinical_model   = _read_env_var("GEMINI_MODEL_CLINICAL") or GEMINI_MODEL_CLINICAL
+    # IMPL-20260513-03: estado dinámico del proveedor clínico
+    featherless_key_present = bool(_read_env_var("FEATHERLESS_API_KEY"))
+    active_clinical_provider = "featherless" if (MEDGEMMA_ENABLED and featherless_key_present) else "gemini"
     return {
         "overall_status": "ok" if all([classifier, extractor, prediagnostic_svc]) else "degraded",
         "classifier": classifier is not None,
         "extractor": extractor is not None,
         "prediagnostic": prediagnostic_svc is not None,
-        "model": current_model,
+        # IMPL-20260513-01: separación por capa
+        "model_extraction": current_extraction_model,
+        "model_clinical": current_clinical_model,
+        "medgemma_enabled": MEDGEMMA_ENABLED,
+        "medgemma_status": MEDGEMMA_STATUS,
+        # IMPL-20260513-03: trazabilidad del proveedor activo
+        "clinical_provider_active": active_clinical_provider,
+        "featherless_key_present": featherless_key_present,
+        "featherless_base_url": FEATHERLESS_BASE_URL,
+        "featherless_model": FEATHERLESS_MODEL,
         "api_key_present": bool(current_api_key),
+        "pipeline_version": PIPELINE_VERSION,
+        "extraction_prompt_version": EXTRACTION_PROMPT_VERSION,
+        "prediagnosis_prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
         "last_init_error": ai_init_error,
     }
 
@@ -653,8 +684,14 @@ async def v2_upload_and_analyze(
                 "limitations": prediagnosis.limitations,
                 "red_flags": prediagnosis.red_flags,
                 "non_conclusive_reason": prediagnosis.non_conclusive_reason,
+                # IMPL-20260513-08: trazabilidad real de proveedor/modelo clínico (ARCH-20260513-08)
+                "clinical_provider": prediagnosis.clinical_provider,
+                "clinical_model_used": prediagnosis.clinical_model_used,
+                "calibration_source": prediagnosis.calibration_source,
                 "audit": {
-                    "model_name": GEMINI_MODEL,
+                    # IMPL-20260513-08: model_name refleja modelo clínico real, no el de extracción
+                    "model_name": prediagnosis.clinical_model_used or GEMINI_MODEL,
+                    "clinical_provider": prediagnosis.clinical_provider or "gemini",
                     "prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
                     "pipeline_version": PIPELINE_VERSION,
                     "triggered_by_user_id": triggered_by_user_id,
@@ -680,23 +717,33 @@ def v2_prediagnosis_from_params(
     study_type: str,
     extracted_data: Dict[str, Any],
     triggered_by_user_id: Optional[str] = None,
+    medical_calibration: Optional[Dict[str, Any]] = None,
 ):
     """
     Genera prediagnóstico IA a partir de parámetros ya extraídos.
     Útil para regenerar el prediagnóstico sin re-procesar el archivo original.
     IMPL-20260326-16: Requiere que exista un snapshot de extracción previo.
+    IMPL-20260513-01: Acepta medical_calibration del panel aiCalibration.
     """
     if not prediagnostic_svc:
         return _ai_unavailable_response("Servicio de prediagnóstico no disponible")
 
     try:
-        prediagnosis = prediagnostic_svc.generate_prediagnosis(study_type, extracted_data)
+        prediagnosis = prediagnostic_svc.generate_prediagnosis(
+            study_type,
+            extracted_data,
+            medical_calibration=medical_calibration,
+        )
         return {
             "status": "success",
             "clinical_state": prediagnosis.clinical_state,
             "prediagnosis": prediagnosis.model_dump(),
             "audit": {
-                "model_name": GEMINI_MODEL,
+                # IMPL-20260513-08: modelo clínico real (featherless o gemini) — ARCH-20260513-08
+                "model_extraction": GEMINI_MODEL_EXTRACTION,
+                "model_clinical": prediagnosis.clinical_model_used or GEMINI_MODEL_CLINICAL,
+                "clinical_provider": prediagnosis.clinical_provider or "gemini",
+                "calibration_source": prediagnosis.calibration_source,
                 "prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
                 "pipeline_version": PIPELINE_VERSION,
                 "triggered_by_user_id": triggered_by_user_id,

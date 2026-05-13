@@ -9,7 +9,10 @@ Pillow
 requests
 pydantic>=2.0
 google-generativeai
+# IMPL-20260513-03: OpenAI SDK para MedGemma vía Featherless (endpoint compatible OpenAI)
+openai>=1.0
 pyhanko
 openpyxl
 pandas
 cryptography
+pytest
