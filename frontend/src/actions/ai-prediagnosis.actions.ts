@@ -33,6 +33,8 @@ export interface StudyAIAnalysisResult {
   clinicalState?: string
   summary?: string
   confidence?: number
+  /** IMPL-20260513-S3: ruta estable del archivo (/api/files/<key> o /uploads/<name>) */
+  fileUrl?: string
 }
 
 export interface DoctorStudyReviewInput {
@@ -163,7 +165,7 @@ export async function triggerStudyAIAnalysis(
         version: extractionVersion,
         studyType: result.extraction_snapshot?.study_type ?? result.classification?.detected_type ?? 'Otro',
         sourceFileName: result.file,
-        sourceFileUrl: `/uploads/${result.file}`,
+        sourceFileUrl: result.file_url ?? `/uploads/${result.file}`,
         sourceFileHash: result.extraction_snapshot?.audit?.source_file_hash ?? null,
         structuredData: result.extraction_snapshot ?? {},
         clinicalState: 'DRAFT_EXTRACTED',
@@ -204,7 +206,7 @@ export async function triggerStudyAIAnalysis(
     await prisma.eventTest.update({
       where: { id: eventTestId },
       data: {
-        fileUrl: `/uploads/${result.file}`,
+        fileUrl: result.file_url ?? `/uploads/${result.file}`,
         status: 'RESULT_REGISTERED',
       },
     })
@@ -218,6 +220,8 @@ export async function triggerStudyAIAnalysis(
       clinicalState,
       summary: predxData.summary ?? null,
       confidence: predxData.confidence ?? null,
+      // IMPL-20260513-S3: propagar ruta estable para que uploadEventTestFile actualice estado local
+      fileUrl: result.file_url ?? `/uploads/${result.file}`,
     }
   } catch (error) {
     console.error('[IMPL-20260326-16] Error en triggerStudyAIAnalysis:', error)

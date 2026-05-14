@@ -1,6 +1,8 @@
 fastapi
 uvicorn
 python-multipart
+# IMPL-20260513-S3: cliente S3-compatible para Railway Storage Bucket
+boto3
 sqlalchemy
 psycopg2-binary
 pytesseract

@@ -232,7 +232,8 @@ export async function uploadEventTestFile(formData: FormData) {
         })
         return {
           success: true,
-          fileUrl: `/uploads/${file.name}`,
+          // IMPL-20260513-S3: usar ruta estable del backend (S3 o local) cuando disponible
+          fileUrl: v2Result.fileUrl ?? `/uploads/${file.name}`,
           aiAnalysis: {
             extractionSnapshotId: v2Result.extractionSnapshotId,
             prediagnosisSnapshotId: v2Result.prediagnosisSnapshotId,

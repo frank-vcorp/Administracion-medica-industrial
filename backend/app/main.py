@@ -9,6 +9,7 @@ IMPL-20260326-16: Endpoints V2 para prediagnóstico IA separado (ARCH-20260326-1
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 import os
 import re
@@ -51,6 +52,34 @@ app.add_middleware(
 UPLOAD_DIR = _read_env_var("UPLOAD_DIR") or "/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+# IMPL-20260513-S3: Storage S3-compatible (Railway Bucket).
+# Secretos vienen exclusivamente por env vars — nunca hardcodeados ni logueados.
+STORAGE_S3_ENDPOINT   = _read_env_var("STORAGE_S3_ENDPOINT")
+STORAGE_S3_REGION     = _read_env_var("STORAGE_S3_REGION") or "auto"
+STORAGE_S3_BUCKET     = _read_env_var("STORAGE_S3_BUCKET")
+STORAGE_S3_ACCESS_KEY = _read_env_var("STORAGE_S3_ACCESS_KEY")
+STORAGE_S3_SECRET_KEY = _read_env_var("STORAGE_S3_SECRET_KEY")
+
+_s3_client = None
+_s3_enabled = False
+if all([STORAGE_S3_ENDPOINT, STORAGE_S3_BUCKET, STORAGE_S3_ACCESS_KEY, STORAGE_S3_SECRET_KEY]):
+    try:
+        import boto3
+        from botocore.config import Config as _BotocoreConfig
+        _s3_client = boto3.client(
+            "s3",
+            endpoint_url=STORAGE_S3_ENDPOINT,
+            region_name=STORAGE_S3_REGION,
+            aws_access_key_id=STORAGE_S3_ACCESS_KEY,
+            aws_secret_access_key=STORAGE_S3_SECRET_KEY,
+            config=_BotocoreConfig(signature_version="s3v4"),
+        )
+        _s3_enabled = True
+        print("✅ S3 Storage inicializado (bucket configurado)")
+    except Exception as _s3_init_err:
+        print(f"⚠️ S3 Storage no disponible: {str(_s3_init_err)[:200]}")
+
 # In production this MUST be an env variable.
 GEMINI_API_KEY = _read_env_var("GEMINI_API_KEY")
 # IMPL-20260513-01: Separación de modelos por capa
@@ -82,6 +111,19 @@ def _sanitize_error(err: str) -> str:
         return ""
     clean = _GOOGLE_API_KEY_RE.sub('[API_KEY_REDACTED]', str(err))
     return clean[:300]
+
+
+def _upload_file_to_s3(contents: bytes, key: str) -> bool:
+    """IMPL-20260513-S3: Sube bytes al bucket S3-compatible. Retorna True si exitoso. No loguea secretos."""
+    import io
+    if not _s3_enabled or not _s3_client:
+        return False
+    try:
+        _s3_client.upload_fileobj(io.BytesIO(contents), STORAGE_S3_BUCKET, key)
+        return True
+    except Exception as e:
+        print(f"⚠️ S3 upload error key={key}: {_sanitize_error(str(e))}")
+        return False
 
 
 def _ai_unavailable_response(msg: str = "Servicios de IA no están disponibles") -> dict:
@@ -202,12 +244,21 @@ async def upload_only(file: UploadFile = File(...)):
     Garantiza que fileUrl en DB apunte a un archivo que realmente existe.
     """
     filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
-    local_path = os.path.join(UPLOAD_DIR, filename)
     try:
         contents = await file.read()
+        # IMPL-20260513-S3: priorizar bucket cuando está configurado
+        if _s3_enabled and _upload_file_to_s3(contents, filename):
+            print(f"📁 Upload-only (S3): {filename} ({len(contents)} bytes)")
+            return {
+                "status": "success",
+                "file": filename,
+                "file_url": f"/api/files/{filename}",
+            }
+        # Fallback: filesystem local
+        local_path = os.path.join(UPLOAD_DIR, filename)
         with open(local_path, "wb") as f:
             f.write(contents)
-        print(f"📁 Upload-only: {filename} ({len(contents)} bytes)")
+        print(f"📁 Upload-only (local): {filename} ({len(contents)} bytes)")
         return {
             "status": "success",
             "file": filename,
@@ -625,7 +676,13 @@ async def v2_upload_and_analyze(
             f.write(contents)
 
         file_hash = f"sha256:{hashlib.sha256(contents).hexdigest()}"
-        print(f"\n🚀 V2 Upload+Analyze: {filename} ({len(contents)} bytes)")
+        # IMPL-20260513-S3: subir al bucket para persistencia durable (pipeline lee desde local_path)
+        _v2_file_url = (
+            f"/api/files/{filename}"
+            if (_s3_enabled and _upload_file_to_s3(contents, filename))
+            else f"/uploads/{filename}"
+        )
+        print(f"\n🚀 V2 Upload+Analyze: {filename} ({len(contents)} bytes) → {_v2_file_url}")
         pipeline_start = time.time()
 
         # PASO 1: CLASIFICACIÓN (si no se provee study_type)
@@ -661,6 +718,7 @@ async def v2_upload_and_analyze(
             "status": "success",
             "pipeline_version": PIPELINE_VERSION,
             "file": filename,
+            "file_url": _v2_file_url,
             "classification": classification_dict,
             "extraction_snapshot": {
                 "study_type": detected_type,
@@ -754,5 +812,32 @@ def v2_prediagnosis_from_params(
     except Exception as e:
         print(f"❌ Error en prediagnosis-from-params: {e}")
         return {"status": "error", "error": str(e)}
+
+
+# ========================================
+# ENDPOINT DE RESOLUCIÓN DE ARCHIVOS S3 (IMPL-20260513-S3)
+# ========================================
+
+@app.get("/api/files/{key:path}")
+def resolve_file(key: str):
+    """
+    IMPL-20260513-S3: Resuelve una key de archivo en el bucket S3-compatible y
+    redirige (HTTP 302) a una URL presignada de corta duración (5 min).
+    Permite al frontend y a regenerateStudyAI descargar archivos sin exponer
+    credenciales ni almacenar URLs efímeras en la base de datos.
+    NUNCA loguea la presigned URL generada.
+    """
+    if not _s3_enabled or not _s3_client:
+        raise HTTPException(status_code=503, detail="Storage S3 no configurado en este entorno")
+    try:
+        presigned_url = _s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": STORAGE_S3_BUCKET, "Key": key},
+            ExpiresIn=300,  # 5 minutos — suficiente para visor y descarga
+        )
+        return RedirectResponse(url=presigned_url, status_code=302)
+    except Exception as e:
+        print(f"⚠️ Error generando presigned URL para key={key}: {_sanitize_error(str(e))}")
+        raise HTTPException(status_code=500, detail="No se pudo generar acceso al archivo")
 
 

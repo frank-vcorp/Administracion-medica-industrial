@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { generateUniversalId } from "@/lib/id.utils"
+import { logAudit } from "@/actions/audit.actions"
 
 // Get all workers with their company name and jobPosition (includes defaultProfileId for auto-selection)
 // @id IMPL-20260313-07
@@ -182,5 +183,51 @@ export async function updateWorkerContactData(
     } catch (e: unknown) {
         const error = e as Error
         return { success: false, error: error.message || 'Error al actualizar datos de contacto' }
+    }
+}
+
+/**
+ * Corrige el nombre completo del trabajador durante la corroboración previa al check-in.
+ * Solo actualiza firstName y lastName. Registra trazabilidad en AuditLog.
+ * No toca CURP, NSS, empresa, puesto ni datos clínicos.
+ * @id IMPL-20260514-01
+ * @spec context/SPECs/SPEC_ARCH-20260514-01-ALINEACION-CORROBORACION-NOMBRE-INE.md
+ */
+export async function updateWorkerCorroboratedName(
+    workerId: string,
+    updates: { firstName: string; lastName: string }
+) {
+    try {
+        const previous = await prisma.worker.findUnique({
+            where: { id: workerId },
+            select: { firstName: true, lastName: true },
+        })
+        if (!previous) return { success: false, error: 'Trabajador no encontrado' }
+
+        const newFirstName = updates.firstName.trim()
+        const newLastName = updates.lastName.trim()
+
+        if (!newFirstName || !newLastName) {
+            return { success: false, error: 'El nombre y los apellidos son obligatorios' }
+        }
+
+        await prisma.worker.update({
+            where: { id: workerId },
+            data: { firstName: newFirstName, lastName: newLastName },
+        })
+
+        // Trazabilidad: registrar corrección en AuditLog con nombre previo y nuevo
+        await logAudit('IDENTITY_CORRECTION', 'Worker', workerId, {
+            previousName: `${previous.firstName} ${previous.lastName}`,
+            newName: `${newFirstName} ${newLastName}`,
+            correctionSource: 'INE_CORROBORATION',
+        })
+
+        revalidatePath('/workers')
+        revalidatePath('/appointments')
+        return { success: true }
+    } catch (e: unknown) {
+        const error = e as Error
+        return { success: false, error: error.message || 'Error al corregir nombre del trabajador' }
     }
 }
