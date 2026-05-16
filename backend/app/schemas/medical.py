@@ -7,7 +7,7 @@ IMPL-20260326-16: Separación capa extractiva / capa interpretativa IA (ARCH-202
 """
 
 from pydantic import BaseModel, Field
-from typing import Literal, Union, Dict, List, Optional
+from typing import Any, Literal, Union, Dict, List, Optional
 from datetime import datetime
 
 
