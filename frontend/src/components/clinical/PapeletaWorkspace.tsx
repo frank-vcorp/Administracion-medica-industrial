@@ -147,6 +147,20 @@ const STATUS_BADGE: Record<StudyStatus, string> = {
   CANCELLED: 'bg-red-100 text-red-700',
 }
 
+// --- IMPL-20260516-04: Etapas del pipeline IA para progreso visual por hitos ---
+// @id IMPL-20260516-04
+// @backup context/checkpoints/CHK_IMPL-20260516-04.md
+
+type UploadStageId = 'uploading' | 'classifying' | 'extracting' | 'prediagnosing' | 'saving'
+
+const AI_PIPELINE_STAGES: { id: UploadStageId; label: string; pct: number }[] = [
+  { id: 'uploading',     label: 'Subiendo archivo',                      pct: 10  },
+  { id: 'classifying',   label: 'Clasificando estudio',                  pct: 25  },
+  { id: 'extracting',    label: 'Extrayendo datos con Gemini',           pct: 50  },
+  { id: 'prediagnosing', label: 'Generando prediagnóstico con MedGemma', pct: 80  },
+  { id: 'saving',        label: 'Guardando resultado',                   pct: 100 },
+]
+
 // --- Helpers de formularios dedicados (no IA) ---
 
 function isExamenMedico(name: string) {
@@ -254,6 +268,9 @@ export default function PapeletaWorkspace({
   // IMPL-20260326-03: Estado para regeneración IA desde archivo existente
   const [isRegenerating, setIsRegenerating] = useState(false)
   const [regenError, setRegenError] = useState('')
+  // IMPL-20260516-04: Etapa activa del pipeline IA para UX de progreso visual
+  const [uploadStage, setUploadStage] = useState<UploadStageId | null>(null)
+  const [regenStage, setRegenStage] = useState<UploadStageId | null>(null)
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
   const completedCount = localTests.filter(t =>
@@ -318,32 +335,54 @@ export default function PapeletaWorkspace({
     })
   }
 
+  // IMPL-20260516-04: Avance progresivo de etapas mientras corre el pipeline IA
   const handleFileUpload = async (testId: string, file: File) => {
     setIsUploading(true)
     setUploadError('')
+    setUploadStage('uploading')
+    const t1 = setTimeout(() => setUploadStage('classifying'),   3000)
+    const t2 = setTimeout(() => setUploadStage('extracting'),    7000)
+    const t3 = setTimeout(() => setUploadStage('prediagnosing'), 15000)
+    const t4 = setTimeout(() => setUploadStage('saving'),        28000)
     const formData = new FormData()
     formData.append('eventTestId', testId)
     formData.append('eventId', eventId)
     formData.append('file', file)
     const res = await uploadEventTestFile(formData)
-    setIsUploading(false)
+    clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
     if (res.success && res.fileUrl) {
+      setUploadStage('saving')
+      await new Promise<void>(r => setTimeout(r, 700))
+      setUploadStage(null)
+      setIsUploading(false)
       updateLocalFile(testId, res.fileUrl)
       router.refresh()
     } else {
+      setUploadStage(null)
+      setIsUploading(false)
       setUploadError(res.error || 'Error al subir archivo')
     }
   }
 
-  // IMPL-20260326-03: Regenerar análisis IA desde archivo existente en fileUrl
+  // IMPL-20260326-03 / IMPL-20260516-04: Regenerar análisis IA con progreso visual por etapas
   const handleRegenerateAI = async (testId: string) => {
     setIsRegenerating(true)
     setRegenError('')
+    setRegenStage('classifying')
+    const t1 = setTimeout(() => setRegenStage('extracting'),    4000)
+    const t2 = setTimeout(() => setRegenStage('prediagnosing'), 10000)
+    const t3 = setTimeout(() => setRegenStage('saving'),        22000)
     const res = await regenerateStudyAI(testId, eventId, reviewerUserId)
-    setIsRegenerating(false)
+    clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
     if (res.success) {
+      setRegenStage('saving')
+      await new Promise<void>(r => setTimeout(r, 700))
+      setRegenStage(null)
+      setIsRegenerating(false)
       router.refresh()
     } else {
+      setRegenStage(null)
+      setIsRegenerating(false)
       setRegenError(res.error || 'Error al regenerar análisis IA')
     }
   }
@@ -478,8 +517,10 @@ export default function PapeletaWorkspace({
               isPending={isPending}
               isUploading={isUploading}
               uploadError={uploadError}
+              uploadStage={uploadStage}
               isRegenerating={isRegenerating}
               regenError={regenError}
+              regenStage={regenStage}
               apiUrl={apiUrl}
               somatometryEventTestId={somatometriaTest?.id}
               agudezaEventTestId={agudezaTest?.id}
@@ -593,6 +634,88 @@ function CapturedValuesPanel({
   )
 }
 
+// --- IMPL-20260516-04: Panel de progreso por etapas del pipeline IA ---
+// @id IMPL-20260516-04
+// @backup context/checkpoints/CHK_IMPL-20260516-04.md
+
+function UploadProgressPanel({
+  stage,
+  isRegen = false,
+}: {
+  stage: UploadStageId
+  isRegen?: boolean
+}) {
+  const stages = isRegen
+    ? AI_PIPELINE_STAGES.filter(s => s.id !== 'uploading')
+    : AI_PIPELINE_STAGES
+  const visibleIdx = stages.findIndex(s => s.id === stage)
+  const current = stages[visibleIdx]
+  const pct = current?.pct ?? (isRegen ? 25 : 10)
+
+  return (
+    <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 space-y-3">
+      {/* Cabecera */}
+      <div className="flex items-center gap-2">
+        <span className="text-base">⚙️</span>
+        <div>
+          <p className="text-sm font-bold text-teal-800">
+            {isRegen ? 'Regenerando análisis IA' : 'Procesando estudio con IA'}
+          </p>
+          <p className="text-xs text-teal-600">
+            {isRegen
+              ? 'Reanalizando el archivo ya cargado — sin necesidad de volver a subir'
+              : 'Upload y pipeline IA en curso — esto puede tomar entre 15 y 45 s'}
+          </p>
+        </div>
+      </div>
+
+      {/* Barra de progreso */}
+      <div className="space-y-1">
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-teal-700 font-semibold truncate pr-2">
+            {current?.label ?? 'Iniciando...'}
+          </span>
+          <span className="text-xs font-bold text-teal-700 tabular-nums shrink-0">{pct}%</span>
+        </div>
+        <div className="h-2 bg-teal-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-teal-500 rounded-full transition-all duration-700 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Stepper de etapas */}
+      <div className="space-y-1.5 pt-0.5">
+        {stages.map((s, idx) => {
+          const isDone = idx < visibleIdx
+          const isActive = s.id === stage
+          return (
+            <div
+              key={s.id}
+              className={`flex items-center gap-2 text-xs transition-colors ${
+                isActive ? 'text-teal-800 font-semibold' :
+                isDone   ? 'text-teal-500'               :
+                           'text-slate-400'
+              }`}
+            >
+              <span className="shrink-0 w-4 text-center">
+                {isDone ? '✓' : isActive ? '▶' : '·'}
+              </span>
+              <span>{s.label}</span>
+              {isActive && <span className="animate-pulse text-teal-500 ml-1">●●●</span>}
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="text-[10px] text-teal-500 italic border-t border-teal-100 pt-2">
+        El progreso mostrado es orientativo, no telemetría exacta del backend.
+      </p>
+    </div>
+  )
+}
+
 // --- Sub-componente: Cabecera persistente del workspace ---
 
 function WorkerHeader({
@@ -650,8 +773,10 @@ function StudyPanel({
   isPending,
   isUploading,
   uploadError,
+  uploadStage,
   isRegenerating,
   regenError,
+  regenStage,
   apiUrl,
   somatometryEventTestId,
   agudezaEventTestId,
@@ -672,8 +797,10 @@ function StudyPanel({
   isPending: boolean
   isUploading: boolean
   uploadError: string
+  uploadStage: UploadStageId | null
   isRegenerating: boolean
   regenError: string
+  regenStage: UploadStageId | null
   apiUrl: string
   somatometryEventTestId: string | undefined
   agudezaEventTestId: string | undefined
@@ -859,39 +986,36 @@ function StudyPanel({
               </div>
             )}
 
-            {/* Dropzone de upload */}
+            {/* Dropzone de upload / Panel de progreso IA — IMPL-20260516-04 */}
             {!readonly && (
-              <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${
-                isUploading ? 'border-teal-300 bg-teal-50' : 'border-slate-200 hover:border-teal-300 hover:bg-slate-50'
-              }`}>
-                <label className="cursor-pointer block">
-                  <span className="text-2xl block mb-1">
-                    {isUploading ? '⏳' : '📎'}
-                  </span>
-                  <span className="text-sm font-medium text-slate-600">
-                    {test.fileUrl ? 'Reemplazar archivo' : 'Subir resultado'}
-                  </span>
-                  <span className="block text-xs text-slate-400 mt-1">
-                    PDF, PNG o JPG — máx. 20MB
-                  </span>
-                  <input
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    className="hidden"
-                    disabled={isUploading}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) onFileUpload(test.id, file)
-                    }}
-                  />
-                </label>
-                {isUploading && (
-                  <p className="text-xs text-teal-600 mt-2 animate-pulse">Subiendo archivo...</p>
-                )}
-                {uploadError && (
-                  <p className="text-xs text-red-500 mt-2">{uploadError}</p>
-                )}
-              </div>
+              isUploading && uploadStage ? (
+                <UploadProgressPanel stage={uploadStage} />
+              ) : (
+                <div className="border-2 border-dashed rounded-xl p-4 text-center transition-colors border-slate-200 hover:border-teal-300 hover:bg-slate-50">
+                  <label className="cursor-pointer block">
+                    <span className="text-2xl block mb-1">📎</span>
+                    <span className="text-sm font-medium text-slate-600">
+                      {test.fileUrl ? 'Reemplazar archivo' : 'Subir resultado'}
+                    </span>
+                    <span className="block text-xs text-slate-400 mt-1">
+                      PDF, PNG o JPG — máx. 20MB
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      className="hidden"
+                      disabled={isUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) onFileUpload(test.id, file)
+                      }}
+                    />
+                  </label>
+                  {uploadError && (
+                    <p className="text-xs text-red-500 mt-2">{uploadError}</p>
+                  )}
+                </div>
+              )
             )}
 
             {/* Tarjeta de recuperación IA — archivo sin snapshot */}
@@ -916,13 +1040,17 @@ function StudyPanel({
                   </p>
                 )}
                 {!readonly && (
-                  <button
-                    onClick={() => onRegenerateAI(test.id)}
-                    disabled={isRegenerating}
-                    className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
-                  >
-                    {isRegenerating ? '⏳ Generando IA...' : '🤖 Generar IA ahora'}
-                  </button>
+                  isRegenerating && regenStage ? (
+                    <UploadProgressPanel stage={regenStage} isRegen />
+                  ) : (
+                    <button
+                      onClick={() => onRegenerateAI(test.id)}
+                      disabled={isRegenerating}
+                      className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                    >
+                      {isRegenerating ? '⏳ Generando IA...' : '🤖 Generar IA ahora'}
+                    </button>
+                  )
                 )}
               </div>
             )}
