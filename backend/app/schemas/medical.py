@@ -348,6 +348,17 @@ class AIPrediagnosisResult(BaseModel):
         default_factory=list,
         description="Alertas clínicas que requieren atención médica prioritaria"
     )
+    # IMPL-20260516-06: Recomendación clínica prudente (ARCH-20260516-06)
+    # Solo seguimiento, correlación o vigilancia preventiva.
+    # PROHIBIDO: aptitud laboral, dictamen final, incapacidad, alta/baja, tratamiento prescriptivo.
+    recommendation: Optional[str] = Field(
+        default=None,
+        description=(
+            "Recomendación clínica breve (1-2 oraciones) de seguimiento, correlación o vigilancia. "
+            "Nunca expresa aptitud laboral, dictamen final ni tratamiento prescriptivo. "
+            "None si el estudio es no concluyente o el campo no aplica."
+        )
+    )
     non_conclusive_reason: Optional[str] = Field(
         default=None,
         description="Si clinical_state=AI_NON_CONCLUSIVE, razón explícita"

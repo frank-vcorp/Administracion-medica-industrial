@@ -102,17 +102,20 @@ class PrediagnosticService(GeminiBase):
     # IMPL-20260326-16: Prompts de interpretación — separados de los de extracción
     # IMPL-20260513-01: Prompts de Audiometría y Espirometría mejorados con reglas clínicas V1
     PREDIAGNOSTIC_PROMPTS: Dict[str, str] = {
+        # IMPL-20260516-06: Prompt actualizado — agrega campo "recommendation" con guardrails precisos.
+        # Elimina restricción genérica de "recomendaciones"; la restringe solo a aptitud/dictamen/tratamiento.
         "Audiometria": """Eres un sistema de apoyo a la decisión clínica para audiología ocupacional.
 Recibirás parámetros extraídos de una audiometría (valores numéricos por frecuencia en Hz y oído).
 Tu tarea es generar un análisis de apoyo, NO un diagnóstico definitivo.
 
 REGLAS ESTRICTAS:
 1. USA lenguaje prudente: "compatible con", "sugiere", "requiere correlación clínica".
-2. NO emitas aptitud laboral, dictamen médico final ni recomendaciones de alta o baja.
-3. Si faltan datos críticos, declara non_conclusive_reason y pon confidence < 0.5.
-4. Las citas deben ser reales y trazables (NOM-011-STPS-2001, ISO 1999:2013, etc.).
-5. Responde SOLO en JSON, sin markdown.
-6. UMBRALES DE REFERENCIA AUDIOMÉTRICA (ISO 1999 / NOM-011-STPS):
+2. NO emitas aptitud laboral, dictamen médico final, incapacidad, alta laboral ni tratamiento farmacológico prescriptivo.
+3. SÍ puedes emitir una recomendación de seguimiento, vigilancia o correlación clínica prudente (ver regla 8).
+4. Si faltan datos críticos, declara non_conclusive_reason y pon confidence < 0.5.
+5. Las citas deben ser reales y trazables (NOM-011-STPS-2001, ISO 1999:2013, etc.).
+6. Responde SOLO en JSON, sin markdown.
+7. UMBRALES DE REFERENCIA AUDIOMÉTRICA (ISO 1999 / NOM-011-STPS):
    - Audición normal: umbrales ≤ 25 dB en todas las frecuencias.
    - Hipoacusia leve: 26-40 dB.
    - Hipoacusia moderada: 41-60 dB.
@@ -122,7 +125,15 @@ REGLAS ESTRICTAS:
    - Patrón conductivo: peor en graves (250-500 Hz), mejor en agudos.
    - Patrón neurosensorial: peor en agudos (4000-8000 Hz), mejor en graves.
    - Patrón mixto: elevación en todas las frecuencias con distintas magnitudes.
-7. Si `completitud_documental` es "no_concluyente" o faltan frecuencias clave, degradar a AI_NON_CONCLUSIVE.
+8. Si `completitud_documental` es "no_concluyente" o faltan frecuencias clave, degradar a AI_NON_CONCLUSIVE.
+9. CAMPO "recommendation" — obligatorio, 1 a 2 oraciones, lenguaje prudente:
+   - Si audición dentro de límites normales: sugerir correlación clínica, vigilancia periódica según programa de salud
+     ocupacional, y refuerzo de protección auditiva si hay exposición a ruido.
+   - Si hay hallazgos sugestivos de hipoacusia o escotoma: recomendar valoración médica complementaria,
+     comparación con audiometrías previas y seguimiento audiométrico.
+   - Si es no concluyente (AI_NON_CONCLUSIVE): recomendar repetir estudio, validar calidad documental
+     o completar información faltante.
+   - PROHIBIDO en recommendation: declarar aptitud laboral, dictamen, incapacidad o prescribir tratamiento.
 
 {calibration_context}
 
@@ -144,6 +155,7 @@ Responde en JSON con esta estructura exacta:
   ],
   "limitations": ["Interpretación condicionada a calidad del trazado audiométrico y datos del paciente"],
   "red_flags": [],
+  "recommendation": "Sugerir vigilancia audiométrica periódica y reforzar uso consistente de protección auditiva según exposición ocupacional y criterio médico.",
   "non_conclusive_reason": null
 }""",
 
@@ -175,6 +187,7 @@ Responde en JSON con esta estructura exacta:
   ],
   "limitations": ["Los valores de referencia pueden variar según laboratorio y método analítico"],
   "red_flags": [],
+  "recommendation": null,
   "non_conclusive_reason": null
 }""",
 
@@ -219,6 +232,7 @@ Responde en JSON con esta estructura exacta:
   ],
   "limitations": ["Interpretación requiere valores predichos según edad, talla y sexo del paciente; confirmar con espirometría previa si disponible"],
   "red_flags": [],
+  "recommendation": null,
   "non_conclusive_reason": null
 }""",
 
@@ -250,6 +264,7 @@ Responde en JSON con esta estructura exacta:
   ],
   "limitations": ["La interpretación requiere correlación con radiografías previas y contexto clínico"],
   "red_flags": [],
+  "recommendation": null,
   "non_conclusive_reason": null
 }""",
 
@@ -283,6 +298,7 @@ Responde en JSON con esta estructura exacta:
   ],
   "limitations": ["Interpretación requiere correlación con contexto clínico y sintomatología del paciente"],
   "red_flags": [],
+  "recommendation": null,
   "non_conclusive_reason": null
 }""",
 
@@ -321,6 +337,7 @@ Responde en JSON con esta estructura exacta:
   ],
   "limitations": ["La somatometría aislada no es suficiente para determinar riesgo metabólico sin historia clínica completa"],
   "red_flags": [],
+  "recommendation": null,
   "non_conclusive_reason": null
 }""",
 
@@ -357,6 +374,7 @@ Responde en JSON con esta estructura exacta:
   ],
   "limitations": ["La agudeza visual por sí sola no descarta patología ocular estructural; se requiere valoración oftalmológica completa para diagnóstico"],
   "red_flags": [],
+  "recommendation": null,
   "non_conclusive_reason": null
 }""",
 
@@ -391,6 +409,7 @@ Responde en JSON con esta estructura exacta:
   ],
   "limitations": ["La exploración física aislada no reemplaza estudios de gabinete complementarios; requiere correlación con historia clínica y antecedentes"],
   "red_flags": [],
+  "recommendation": null,
   "non_conclusive_reason": null
 }""",
     }

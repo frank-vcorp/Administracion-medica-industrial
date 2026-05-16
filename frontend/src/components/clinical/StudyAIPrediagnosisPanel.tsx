@@ -39,6 +39,9 @@ interface AIPrediagnosisData {
   citations: ClinicalCitation[]
   limitations: string[]
   red_flags: string[]
+  // IMPL-20260516-06: Recomendación clínica prudente (ARCH-20260516-06)
+  // Solo seguimiento/vigilancia/correlación. Optional para compatibilidad con snapshots viejos.
+  recommendation?: string | null
   non_conclusive_reason?: string | null
   calibration_source?: 'medical_calibration' | 'general_fallback' | null
   clinical_model_used?: string | null
@@ -445,6 +448,14 @@ export default function StudyAIPrediagnosisPanel({
           <p className="text-[11px] font-semibold text-slate-400 mb-1">Confianza del modelo</p>
           <ConfidenceBar confidence={predxData.confidence} />
         </div>
+
+        {/* IMPL-20260516-06: Recomendación clínica prudente */}
+        {predxData.recommendation && (
+          <div className="bg-teal-50 border border-teal-200 rounded-lg px-3 py-2.5">
+            <p className="text-[11px] font-bold text-teal-700 mb-1">Seguimiento sugerido</p>
+            <p className="text-xs text-teal-800 leading-relaxed">{predxData.recommendation}</p>
+          </div>
+        )}
 
         {/* Justificación */}
         {(predxData.justification ?? []).length > 0 && (
