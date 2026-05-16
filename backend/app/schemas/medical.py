@@ -338,6 +338,26 @@ class ClinicalCitation(BaseModel):
     version_or_date: Optional[str] = None
 
 
+class PrediagnosisInputDebug(BaseModel):
+    """
+    IMPL-20260516-08: Payload de entrada clínica enviado al modelo de prediagnóstico.
+    Persiste lo que llegó a la capa MedGemma/Gemini para trazabilidad y calibración.
+    GUARDRAIL: NO contiene API keys, tokens ni secretos del proveedor. ARCH-20260516-08.
+    """
+    study_type: str
+    extracted_data: Dict[str, Any] = Field(default_factory=dict)
+    medical_calibration: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Calibración médica aplicada (dict clínico sin credenciales)"
+    )
+    clinical_provider: Optional[str] = None
+    clinical_model_used: Optional[str] = None
+    rendered_prompt: Optional[str] = Field(
+        default=None,
+        description="Prompt textual renderizado y enviado al modelo clínico"
+    )
+
+
 class AIPrediagnosisResult(BaseModel):
     """
     Resultado de prediagnóstico IA por estudio.
@@ -399,6 +419,11 @@ class AIPrediagnosisResult(BaseModel):
     clinical_provider: Optional[Literal["gemini", "featherless"]] = Field(
         default=None,
         description="Proveedor backend de la capa clínica: 'gemini' (Gemini text-only) o 'featherless' (MedGemma vía OpenAI SDK)"
+    )
+    # IMPL-20260516-08: RAW de entrada clínica — payload enviado al modelo (ARCH-20260516-08)
+    input_debug: Optional["PrediagnosisInputDebug"] = Field(
+        default=None,
+        description="Payload estructurado de entrada enviado a la capa clínica (para trazabilidad sin secretos)"
     )
 
 

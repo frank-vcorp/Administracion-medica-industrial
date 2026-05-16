@@ -12,6 +12,8 @@
 
 import { useState, useTransition } from "react"
 import { submitDoctorStudyReview } from "@/actions/ai-prediagnosis.actions"
+import StudyPrediagnosisRawPanel from "@/components/clinical/StudyPrediagnosisRawPanel"
+import type { PrediagnosisInputDebug } from "@/components/clinical/StudyPrediagnosisRawPanel"
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -46,6 +48,8 @@ interface AIPrediagnosisData {
   calibration_source?: 'medical_calibration' | 'general_fallback' | null
   clinical_model_used?: string | null
   clinical_provider?: 'gemini' | 'featherless' | null
+  // IMPL-20260516-08: RAW de entrada clínica (ARCH-20260516-08). Optional para compat. con snapshots viejos.
+  input_debug?: PrediagnosisInputDebug | null
 }
 
 interface DoctorReviewSummary {
@@ -519,6 +523,9 @@ export default function StudyAIPrediagnosisPanel({
             </div>
           </details>
         )}
+
+        {/* IMPL-20260516-08: Panel RAW de entrada clínica (ARCH-20260516-08) */}
+        <StudyPrediagnosisRawPanel inputDebug={predxData.input_debug} />
 
         {/* Revisión existente */}
         {isReviewed && existingReview && (

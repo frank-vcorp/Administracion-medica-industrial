@@ -787,6 +787,8 @@ async def v2_upload_and_analyze(
                 },
                 # GUARDRAIL explícito en respuesta API
                 "_guardrail": "Este prediagnóstico NO autoriza firma digital, dictamen final ni aptitud laboral sin revisión médica explícita.",
+                # IMPL-20260516-08: RAW de entrada clínica para trazabilidad (ARCH-20260516-08)
+                "input_debug": prediagnosis.input_debug.model_dump() if prediagnosis.input_debug else None,
             },
             "timings": {
                 "extraction_seconds": extraction_seconds,
@@ -837,6 +839,8 @@ def v2_prediagnosis_from_params(
                 "triggered_by_user_id": triggered_by_user_id,
                 "trigger_reason": "manual_regeneration",
             },
+            # IMPL-20260516-08: RAW de entrada clínica para trazabilidad (ARCH-20260516-08)
+            "input_debug": prediagnosis.input_debug.model_dump() if prediagnosis.input_debug else None,
             "_guardrail": "Este prediagnóstico NO autoriza firma digital, dictamen final ni aptitud laboral sin revisión médica.",
         }
     except Exception as e:

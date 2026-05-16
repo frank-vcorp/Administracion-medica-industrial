@@ -29,7 +29,7 @@ import json
 import os
 from typing import Dict, Any, Optional
 from .base import GeminiBase
-from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation
+from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation, PrediagnosisInputDebug
 
 
 # IMPL-20260513-01: Estado de MedGemma — leer del entorno para que sea honesto
@@ -586,6 +586,9 @@ Responde en JSON con esta estructura exacta:
             json.dumps(extracted_data, ensure_ascii=False, indent=2),
         )
 
+        # IMPL-20260516-08: capturar el prompt renderizado antes de la llamada al modelo (ARCH-20260516-08)
+        _rendered_prompt = prompt
+
         print(f"🧠 Generando prediagnóstico IA para: {study_type} | proveedor: {clinical_provider} | modelo: {clinical_model_used} | calibración: {calibration_source}")
         # IMPL-20260513-03: enrutar al proveedor correcto según configuración
         # IMPL-20260326-03: degradar a AI_NON_CONCLUSIVE en lugar de propagar excepción
@@ -674,6 +677,17 @@ Responde en JSON con esta estructura exacta:
             # IMPL-20260516-01: inyectar nota de fallback si Featherless fue rechazado por gated
             if _featherless_gated_note:
                 result.limitations.append(_featherless_gated_note)
+            # IMPL-20260516-08: poblar input_debug con payload de entrada (ARCH-20260516-08)
+            # Solo datos clínicos: study_type, extracted_data, calibración y prompt renderizado.
+            # GUARDRAIL: no se incluyen API keys ni secrets — la calibración es metadata clínica.
+            result.input_debug = PrediagnosisInputDebug(
+                study_type=study_type,
+                extracted_data=extracted_data,
+                medical_calibration=medical_calibration,
+                clinical_provider=result.clinical_provider,
+                clinical_model_used=result.clinical_model_used,
+                rendered_prompt=_rendered_prompt,
+            )
             # Aplicar umbral de confianza — si baja del umbral, marcar non-conclusive
             threshold = CONFIDENCE_THRESHOLDS.get(study_type, 0.5)
             if result.confidence < threshold and result.clinical_state == "AI_PENDING_REVIEW":
