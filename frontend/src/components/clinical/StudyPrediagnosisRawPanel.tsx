@@ -2,9 +2,9 @@
  * @fileoverview Panel técnico de RAW de entrada clínica a MedGemma/Gemini.
  * Paridad visual con StudyExtractionRawPanel: bloque oscuro, monoespaciado,
  * affordance de copia y expansión equivalente.
- * @id IMPL-20260516-09
- * @spec ARCH-20260516-09
- * @backup context/checkpoints/CHK_IMPL-20260516-09.md
+ * @id IMPL-20260516-11
+ * @spec ARCH-20260516-11
+ * @backup context/checkpoints/CHK_IMPL-20260516-11.md
  *
  * Muestra exactamente qué payload clínico llegó al modelo de prediagnóstico:
  *   - study_type, clinical_provider, clinical_model_used
@@ -45,8 +45,37 @@ export default function StudyPrediagnosisRawPanel({ inputDebug }: StudyPrediagno
   const [copiedExtracted, setCopiedExtracted] = useState(false)
   const [copiedCalibration, setCopiedCalibration] = useState(false)
 
-  // Compatibilidad con snapshots viejos sin input_debug
-  if (!inputDebug) return null
+  // ── Estado vacío: snapshot sin input_debug (siempre visible) ──────────────
+  if (!inputDebug) {
+    return (
+      <details className="group bg-slate-900 rounded-xl overflow-hidden mt-2" open>
+        <summary className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer select-none text-slate-200 hover:bg-slate-800 transition-colors list-none">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-sm">🔬</span>
+            <span className="text-xs font-bold font-mono uppercase tracking-wider">
+              Raw de entrada clínica
+            </span>
+            <span className="text-[10px] font-mono text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">
+              sin snapshot
+            </span>
+          </div>
+          <span className="text-slate-500 text-xs transition-transform group-open:rotate-90 inline-block">▶</span>
+        </summary>
+        <div className="px-4 pb-4 pt-3 space-y-3">
+          <p className="text-xs font-mono text-slate-400 leading-relaxed">
+            Este snapshot no contiene RAW clínico persistido.
+          </p>
+          <p className="text-xs font-mono text-slate-500 leading-relaxed">
+            Puede tratarse de un prediagnóstico generado antes del corte de observabilidad clínica.
+            Para ver el payload de entrada, regenera el prediagnóstico con el pipeline actual.
+          </p>
+          <p className="text-[10px] font-mono text-slate-600 border-t border-slate-800 pt-2">
+            ⚠ Solo datos clínicos estructurados. Sin API keys ni secretos. ARCH-20260516-08.
+          </p>
+        </div>
+      </details>
+    )
+  }
 
   const promptLen = inputDebug.rendered_prompt?.length ?? 0
 
