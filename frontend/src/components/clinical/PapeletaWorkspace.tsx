@@ -336,54 +336,93 @@ export default function PapeletaWorkspace({
   }
 
   // IMPL-20260516-04: Avance progresivo de etapas mientras corre el pipeline IA
+  // FIX-20260516-01: try/catch/finally robusto — sin promesas sin capturar ante ERR_NETWORK_CHANGED
   const handleFileUpload = async (testId: string, file: File) => {
+    let currentStage: UploadStageId | null = 'uploading'
     setIsUploading(true)
     setUploadError('')
     setUploadStage('uploading')
-    const t1 = setTimeout(() => setUploadStage('classifying'),   3000)
-    const t2 = setTimeout(() => setUploadStage('extracting'),    7000)
-    const t3 = setTimeout(() => setUploadStage('prediagnosing'), 15000)
-    const t4 = setTimeout(() => setUploadStage('saving'),        28000)
+    const t1 = setTimeout(() => { currentStage = 'classifying';   setUploadStage('classifying') },   3000)
+    const t2 = setTimeout(() => { currentStage = 'extracting';    setUploadStage('extracting') },    7000)
+    const t3 = setTimeout(() => { currentStage = 'prediagnosing'; setUploadStage('prediagnosing') }, 15000)
+    const t4 = setTimeout(() => { currentStage = 'saving';        setUploadStage('saving') },        28000)
     const formData = new FormData()
     formData.append('eventTestId', testId)
     formData.append('eventId', eventId)
     formData.append('file', file)
-    const res = await uploadEventTestFile(formData)
-    clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
-    if (res.success && res.fileUrl) {
-      setUploadStage('saving')
-      await new Promise<void>(r => setTimeout(r, 700))
+    try {
+      const res = await uploadEventTestFile(formData)
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
+      if (res.success && res.fileUrl) {
+        setUploadStage('saving')
+        await new Promise<void>(r => setTimeout(r, 700))
+        updateLocalFile(testId, res.fileUrl)
+        router.refresh()
+      } else {
+        setUploadError(res.error || 'Error al subir archivo')
+      }
+    } catch (err) {
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
+      const isNetworkError = err instanceof TypeError &&
+        (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed'))
+      console.error('[FIX-20260516-01][upload] Fallo en upload IA', {
+        operacion: 'upload',
+        eventId,
+        eventTestId: testId,
+        archivo: file.name,
+        etapaVisible: currentStage,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      setUploadError(
+        isNetworkError
+          ? 'La carga o el procesamiento IA se interrumpieron por un cambio de red. Intenta nuevamente.'
+          : 'Error al subir archivo. Intenta nuevamente.'
+      )
+    } finally {
       setUploadStage(null)
       setIsUploading(false)
-      updateLocalFile(testId, res.fileUrl)
-      router.refresh()
-    } else {
-      setUploadStage(null)
-      setIsUploading(false)
-      setUploadError(res.error || 'Error al subir archivo')
     }
   }
 
   // IMPL-20260326-03 / IMPL-20260516-04: Regenerar análisis IA con progreso visual por etapas
+  // FIX-20260516-01: try/catch/finally robusto — sin promesas sin capturar ante ERR_NETWORK_CHANGED
   const handleRegenerateAI = async (testId: string) => {
+    let currentStage: UploadStageId | null = 'classifying'
     setIsRegenerating(true)
     setRegenError('')
     setRegenStage('classifying')
-    const t1 = setTimeout(() => setRegenStage('extracting'),    4000)
-    const t2 = setTimeout(() => setRegenStage('prediagnosing'), 10000)
-    const t3 = setTimeout(() => setRegenStage('saving'),        22000)
-    const res = await regenerateStudyAI(testId, eventId, reviewerUserId)
-    clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
-    if (res.success) {
-      setRegenStage('saving')
-      await new Promise<void>(r => setTimeout(r, 700))
+    const t1 = setTimeout(() => { currentStage = 'extracting';    setRegenStage('extracting') },    4000)
+    const t2 = setTimeout(() => { currentStage = 'prediagnosing'; setRegenStage('prediagnosing') }, 10000)
+    const t3 = setTimeout(() => { currentStage = 'saving';        setRegenStage('saving') },        22000)
+    try {
+      const res = await regenerateStudyAI(testId, eventId, reviewerUserId)
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+      if (res.success) {
+        setRegenStage('saving')
+        await new Promise<void>(r => setTimeout(r, 700))
+        router.refresh()
+      } else {
+        setRegenError(res.error || 'Error al regenerar análisis IA')
+      }
+    } catch (err) {
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+      const isNetworkError = err instanceof TypeError &&
+        (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed'))
+      console.error('[FIX-20260516-01][regenerate] Fallo en regeneración IA', {
+        operacion: 'regenerate',
+        eventId,
+        eventTestId: testId,
+        etapaVisible: currentStage,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      setRegenError(
+        isNetworkError
+          ? 'La carga o el procesamiento IA se interrumpieron por un cambio de red. Intenta nuevamente.'
+          : 'Error al regenerar análisis IA. Intenta nuevamente.'
+      )
+    } finally {
       setRegenStage(null)
       setIsRegenerating(false)
-      router.refresh()
-    } else {
-      setRegenStage(null)
-      setIsRegenerating(false)
-      setRegenError(res.error || 'Error al regenerar análisis IA')
     }
   }
 
