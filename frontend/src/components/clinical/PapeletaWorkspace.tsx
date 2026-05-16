@@ -581,7 +581,17 @@ export default function PapeletaWorkspace({
 
 // --- ARCH-20260326-05: Helpers para renderizado legible de datos extraídos ---
 
+// IMPL-20260516-07: Labels explícitos para siglas clínicas (ARCH-20260516-07)
+const FIELD_LABEL_OVERRIDES: Record<string, string> = {
+  cad: 'CAD (Cond. Auditivo Der.)',
+  cai: 'CAI (Cond. Auditivo Izq.)',
+  mtd: 'MTD (Membrana Timpánica Der.)',
+  mti: 'MTI (Membrana Timpánica Izq.)',
+  faringe: 'Faringe',
+}
+
 function formatFieldLabel(key: string): string {
+  if (key in FIELD_LABEL_OVERRIDES) return FIELD_LABEL_OVERRIDES[key]
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 

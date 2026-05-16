@@ -97,7 +97,7 @@ FEATHERLESS_BASE_URL = _read_env_var("FEATHERLESS_BASE_URL") or "https://api.fea
 FEATHERLESS_MODEL    = _read_env_var("FEATHERLESS_MODEL") or "google/medgemma-27b-text-it"
 MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and FEATHERLESS_API_KEY) else "pending_integration"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
-EXTRACTION_PROMPT_VERSION = "extract-v3"   # IMPL-20260513-01: actualizado
+EXTRACTION_PROMPT_VERSION = "extract-v4"   # IMPL-20260516-07: campos fuente audiometría (faringe, CAD, CAI, MTD, MTI)
 PREDIAGNOSIS_PROMPT_VERSION = "predx-v2"   # IMPL-20260513-01: soporte calibración médica
 
 # ARCH-20260326-05: Estado de inicialización IA — persiste en memoria para diagnóstico.

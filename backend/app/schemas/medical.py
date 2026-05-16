@@ -44,6 +44,7 @@ class AudiometriaData(BaseModel):
     """
     Datos EXTRAÍDOS de estudio audiométrico.
     IMPL-20260513-01: Frecuencias canónicas 250-8000 Hz, señal de completitud documental.
+    IMPL-20260516-07: Campos fuente del formato diagnóstico (faringe, CAD, CAI, MTD, MTI). ARCH-20260516-07.
     NOTA: no incluye diagnóstico ni interpretación — esas capas van en AIPrediagnosisSnapshot.
     """
     paciente: str
@@ -63,6 +64,28 @@ class AudiometriaData(BaseModel):
     notas_calidad: Optional[str] = Field(
         default=None,
         description="Observaciones sobre calidad del documento (ilegible, falta información, etc.)"
+    )
+    # IMPL-20260516-07: Campos fuente del formato diagnóstico — opcionales, solo cuando visibles en el documento.
+    # La sección de descripción audiométrica narrativa NO debe extraerse (criterio clínico ARCH-20260516-07).
+    faringe: Optional[str] = Field(
+        default=None,
+        description="Estado de la faringe si visible en el formato clínico (campo fuente)"
+    )
+    cad: Optional[str] = Field(
+        default=None,
+        description="Conducto auditivo externo derecho (CAD) — hallazgo del formato fuente"
+    )
+    cai: Optional[str] = Field(
+        default=None,
+        description="Conducto auditivo externo izquierdo (CAI) — hallazgo del formato fuente"
+    )
+    mtd: Optional[str] = Field(
+        default=None,
+        description="Membrana timpánica derecha (MTD) — hallazgo del formato fuente"
+    )
+    mti: Optional[str] = Field(
+        default=None,
+        description="Membrana timpánica izquierda (MTI) — hallazgo del formato fuente"
     )
 
 

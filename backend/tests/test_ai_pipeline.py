@@ -440,6 +440,64 @@ class TestCalibrationV1AudioEspiro:
         assert len(result.oido_derecho) == 4
         assert result.notas_calidad is not None
 
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_audiometria_con_campos_fuente_formato_diagnostico(self, mock_gemini, extractor):
+        """
+        IMPL-20260516-07 (ARCH-20260516-07): Cuando el formato diagnóstico incluye
+        faringe, CAD, CAI, MTD, MTI, el extractor los captura como campos fuente opcionales.
+        Compatibilidad: snapshots viejos sin estos campos no deben fallar.
+        """
+        mock_gemini.return_value = {
+            "paciente": "María Torres",
+            "fecha_estudio": "16/05/2026",
+            "oido_derecho": {"250": 10, "500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "oido_izquierdo": {"250": 10, "500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "frecuencias_detectadas": ["250", "500", "1000", "2000", "3000", "4000", "6000", "8000"],
+            "completitud_documental": "suficiente",
+            "notas_calidad": None,
+            "faringe": "Sin datos patológicos",
+            "cad": "Permeable",
+            "cai": "Permeable",
+            "mtd": "Íntegra, aspecto normal",
+            "mti": "Íntegra, aspecto normal",
+        }
+        result = extractor.extract_by_type("/fake/audiometria_formato_diagnostico.pdf", "Audiometria")
+        assert isinstance(result, AudiometriaData)
+        # Campos fuente nuevos capturados correctamente
+        assert result.faringe == "Sin datos patológicos"
+        assert result.cad == "Permeable"
+        assert result.cai == "Permeable"
+        assert result.mtd == "Íntegra, aspecto normal"
+        assert result.mti == "Íntegra, aspecto normal"
+        # Campos núcleo intactos
+        assert result.completitud_documental == "suficiente"
+        assert len(result.oido_derecho) == 8
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_audiometria_sin_campos_fuente_compatibilidad_snapshots_viejos(self, mock_gemini, extractor):
+        """
+        IMPL-20260516-07: Snapshot sin campos fuente (faringe/CAD/CAI/MTD/MTI) debe
+        deserializar correctamente — todos quedan None, sin romper contrato.
+        """
+        mock_gemini.return_value = {
+            "paciente": "Pedro Sánchez",
+            "fecha_estudio": "01/01/2026",
+            "oido_derecho": {"500": 15, "1000": 20, "2000": 25, "4000": 30},
+            "oido_izquierdo": {"500": 10, "1000": 15, "2000": 20, "4000": 25},
+            "frecuencias_detectadas": ["500", "1000", "2000", "4000"],
+            "completitud_documental": "parcial",
+            "notas_calidad": None,
+            # SIN faringe, cad, cai, mtd, mti
+        }
+        result = extractor.extract_by_type("/fake/audiometria_viejo.pdf", "Audiometria")
+        assert isinstance(result, AudiometriaData)
+        assert result.faringe is None
+        assert result.cad is None
+        assert result.cai is None
+        assert result.mtd is None
+        assert result.mti is None
+        assert result.completitud_documental == "parcial"
+
     # --- Extracción: Espirometría ---
 
     @patch('app.services.ai.base.GeminiBase.call_gemini')

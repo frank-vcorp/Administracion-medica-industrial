@@ -31,6 +31,7 @@ class ExtractorService(GeminiBase):
     # IMPL-20260326-16: Prompts de extracción pura — sin diagnóstico_ia
     # IMPL-20260513-01: Actualizado para frecuencias canónicas 250-8000 Hz, completitud documental
     PROMPTS = {
+        # IMPL-20260516-07: Prompt actualizado — campos fuente del formato diagnóstico (ARCH-20260516-07)
         "Audiometria": """Eres un técnico de audiología. Tu tarea es EXTRAER datos del documento, NO interpretarlos clínicamente.
 
 **REGLAS CRÍTICAS:**
@@ -47,6 +48,14 @@ class ExtractorService(GeminiBase):
    - "suficiente" si tienes 6 o más de 8 frecuencias en AMBOS oídos
    - "parcial" si tienes entre 3 y 5 frecuencias en algún oído
    - "no_concluyente" si tienes menos de 3 frecuencias en algún oído o el trazado es ilegible
+10. CAMPOS FUENTE DEL FORMATO (solo si están visibles en el documento):
+    - `faringe`: texto del hallazgo de faringe si aparece en el formato (ej: "Normal", "Sin datos patológicos").
+    - `cad`: texto del hallazgo de Conducto Auditivo externo Derecho si aparece (ej: "Permeable").
+    - `cai`: texto del hallazgo de Conducto Auditivo externo Izquierdo si aparece.
+    - `mtd`: texto del hallazgo de Membrana Timpánica Derecha si aparece (ej: "Íntegra").
+    - `mti`: texto del hallazgo de Membrana Timpánica Izquierda si aparece.
+    Si alguno de estos campos NO aparece en el documento, omítelo (o pon null).
+11. PROHIBIDO: NO extraigas ni incluyas la sección de descripción audiométrica narrativa/redactada que pueda aparecer al final del formato. Esa sección no forma parte del contrato de extracción.
 
 **Respuesta OBLIGATORIA en JSON (solo {}, sin ```json):**
 {
@@ -56,7 +65,12 @@ class ExtractorService(GeminiBase):
   "oido_izquierdo": {"250": 10, "500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
   "frecuencias_detectadas": ["250", "500", "1000", "2000", "3000", "4000", "6000", "8000"],
   "completitud_documental": "suficiente",
-  "notas_calidad": null
+  "notas_calidad": null,
+  "faringe": null,
+  "cad": null,
+  "cai": null,
+  "mtd": null,
+  "mti": null
 }""",
 
         "Laboratorio": """Eres un técnico de patología clínica. Tu tarea es EXTRAER parámetros del documento, NO interpretarlos.
