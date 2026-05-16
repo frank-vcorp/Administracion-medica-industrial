@@ -1,7 +1,10 @@
 /**
- * @fileoverview Panel colapsable de RAW de entrada clínica a MedGemma/Gemini
- * @id IMPL-20260516-08
- * @backup context/checkpoints/CHK_IMPL-20260516-08.md
+ * @fileoverview Panel técnico de RAW de entrada clínica a MedGemma/Gemini.
+ * Paridad visual con StudyExtractionRawPanel: bloque oscuro, monoespaciado,
+ * affordance de copia y expansión equivalente.
+ * @id IMPL-20260516-09
+ * @spec ARCH-20260516-09
+ * @backup context/checkpoints/CHK_IMPL-20260516-09.md
  *
  * Muestra exactamente qué payload clínico llegó al modelo de prediagnóstico:
  *   - study_type, clinical_provider, clinical_model_used
@@ -14,7 +17,7 @@
  */
 "use client"
 
-import { useState } from "react"
+import { type MouseEvent, useState } from "react"
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -39,87 +42,118 @@ interface StudyPrediagnosisRawPanelProps {
 
 export default function StudyPrediagnosisRawPanel({ inputDebug }: StudyPrediagnosisRawPanelProps) {
   const [showPrompt, setShowPrompt] = useState(false)
+  const [copiedExtracted, setCopiedExtracted] = useState(false)
+  const [copiedCalibration, setCopiedCalibration] = useState(false)
 
   // Compatibilidad con snapshots viejos sin input_debug
   if (!inputDebug) return null
 
   const promptLen = inputDebug.rendered_prompt?.length ?? 0
 
+  const handleCopy = (
+    e: MouseEvent<HTMLButtonElement>,
+    text: string,
+    setCopied: (v: boolean) => void,
+  ) => {
+    e.preventDefault()
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const extractedJson = JSON.stringify(inputDebug.extracted_data, null, 2)
+  const calibrationJson = inputDebug.medical_calibration
+    ? JSON.stringify(inputDebug.medical_calibration, null, 2)
+    : null
+
   return (
-    <details className="mt-2">
-      <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-700 select-none flex items-center gap-1.5 py-1">
-        <span>🔬</span>
-        <span>RAW de entrada clínica</span>
-        {inputDebug.clinical_provider && (
-          <span className="font-mono text-[10px] text-slate-400 ml-1">
-            {inputDebug.clinical_provider} / {inputDebug.clinical_model_used ?? '—'}
+    <details className="group bg-slate-900 rounded-xl overflow-hidden mt-2" open>
+      {/* ── Header del panel ── */}
+      <summary className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer select-none text-slate-200 hover:bg-slate-800 transition-colors list-none">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 text-sm">🔬</span>
+          <span className="text-xs font-bold font-mono uppercase tracking-wider">
+            Raw de entrada clínica
           </span>
-        )}
-      </summary>
-
-      <div className="mt-2 rounded-lg border border-slate-200 bg-white overflow-hidden text-xs">
-
-        {/* Badges de proveedor / modelo / tipo de estudio */}
-        <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-1.5">
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-mono text-[10px]">
-            proveedor: {inputDebug.clinical_provider ?? 'desconocido'}
-          </span>
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 font-mono text-[10px]">
-            modelo: {inputDebug.clinical_model_used ?? 'desconocido'}
-          </span>
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-teal-50 border border-teal-200 text-teal-700 font-mono text-[10px]">
-            estudio: {inputDebug.study_type}
+          {inputDebug.clinical_provider && (
+            <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
+              {inputDebug.clinical_provider} / {inputDebug.clinical_model_used ?? '—'}
+            </span>
+          )}
+          <span className="text-[10px] font-mono text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">
+            {inputDebug.study_type}
           </span>
         </div>
+        <span className="text-slate-500 text-xs transition-transform group-open:rotate-90 inline-block">▶</span>
+      </summary>
 
-        {/* extracted_data */}
-        <div className="px-3 py-2.5 border-b border-slate-100">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-            extracted_data
-          </p>
-          <pre className="text-[11px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed max-h-48 overflow-y-auto bg-slate-50 rounded px-2 py-1.5">
-            {JSON.stringify(inputDebug.extracted_data, null, 2)}
+      <div className="px-4 pb-4 pt-1 space-y-3">
+
+        {/* ── extracted_data ── */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-wider">
+              extracted_data
+            </p>
+            <button
+              onClick={(e) => handleCopy(e, extractedJson, setCopiedExtracted)}
+              className="text-[10px] font-bold text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded transition-colors"
+            >
+              {copiedExtracted ? '✓ Copiado' : 'Copiar'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-emerald-300 bg-slate-950 rounded-lg p-3 overflow-auto max-h-48 leading-relaxed whitespace-pre-wrap break-all">
+            {extractedJson}
           </pre>
         </div>
 
-        {/* medical_calibration (solo si existe) */}
-        {inputDebug.medical_calibration && (
-          <div className="px-3 py-2.5 border-b border-slate-100">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              medical_calibration aplicada
-            </p>
-            <pre className="text-[11px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed max-h-32 overflow-y-auto bg-slate-50 rounded px-2 py-1.5">
-              {JSON.stringify(inputDebug.medical_calibration, null, 2)}
+        {/* ── medical_calibration (solo si existe) ── */}
+        {calibrationJson && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-wider">
+                medical_calibration
+              </p>
+              <button
+                onClick={(e) => handleCopy(e, calibrationJson, setCopiedCalibration)}
+                className="text-[10px] font-bold text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded transition-colors"
+              >
+                {copiedCalibration ? '✓ Copiado' : 'Copiar'}
+              </button>
+            </div>
+            <pre className="text-xs font-mono text-sky-300 bg-slate-950 rounded-lg p-3 overflow-auto max-h-32 leading-relaxed whitespace-pre-wrap break-all">
+              {calibrationJson}
             </pre>
           </div>
         )}
 
-        {/* rendered_prompt (toggle explícito para no sobrecargar la UI) */}
+        {/* ── rendered_prompt (toggle explícito — puede ser largo) ── */}
         {inputDebug.rendered_prompt && (
-          <div className="px-3 py-2.5 border-b border-slate-100">
+          <div>
             <button
               type="button"
               onClick={() => setShowPrompt((v) => !v)}
-              className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors flex items-center gap-1"
+              className="flex items-center gap-1.5 text-[10px] font-bold font-mono text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors mb-1"
             >
-              <span>{showPrompt ? '▲' : '▶'}</span>
+              <span className={`inline-block transition-transform ${showPrompt ? 'rotate-90' : ''}`}>▶</span>
               <span>rendered_prompt</span>
-              <span className="font-normal text-slate-300">({promptLen.toLocaleString()} chars)</span>
+              <span className="font-normal text-slate-600 normal-case">
+                ({promptLen.toLocaleString()} chars)
+              </span>
             </button>
             {showPrompt && (
-              <pre className="mt-1.5 text-[11px] text-slate-600 whitespace-pre-wrap break-words leading-relaxed max-h-64 overflow-y-auto bg-slate-50 rounded px-2 py-1.5">
+              <pre className="text-xs font-mono text-amber-200 bg-slate-950 rounded-lg p-3 overflow-auto max-h-64 leading-relaxed whitespace-pre-wrap break-all">
                 {inputDebug.rendered_prompt}
               </pre>
             )}
           </div>
         )}
 
-        {/* Guardrail de seguridad visible */}
-        <div className="px-3 py-1.5 bg-amber-50 border-t border-amber-100">
-          <p className="text-[10px] text-amber-600">
-            Solo datos clínicos estructurados. No contiene API keys ni secretos del proveedor. ARCH-20260516-08.
-          </p>
-        </div>
+        {/* ── Guardrail de seguridad ── */}
+        <p className="text-[10px] font-mono text-slate-600 border-t border-slate-800 pt-2">
+          ⚠ Solo datos clínicos estructurados. Sin API keys ni secretos. ARCH-20260516-08.
+        </p>
 
       </div>
     </details>
