@@ -2,7 +2,7 @@
 
 **Estado:** [/] Operación estabilizada con backlog activo de IA clínica, integraciones MedGemma y hardening de storage en Railway
 **Fase:** Fase operativa continua: estabilización productiva | IA clínica | persistencia de uploads | integraciones comerciales MEDGEMMA APIS
-**ID Actual:** DOC-20260514-01 (Sincronización de estado por alineación de corroboración de identidad)
+**ID Actual:** DOC-20260516-01 (Incidentes operativos: visor inline de bucket y acceso MedGemma)
 **Último Sprint Completado:** DOC-20260507-01 (Cierre operativo del cronograma admin persistente y backlog futuro de recepción)
 
 ## 📋 Descripción
@@ -14,6 +14,7 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - **@DEBY**: QA e Infraestructura
 
 ## 📅 Diario de Cambios
+- **2026-05-16 (INTEGRA):** [~] **Se formaliza corrección ejecutiva para visor inline de documentos en bucket y remediación de acceso clínico MedGemma.** Tras validar en producción que el PDF de estudio dispara descarga en vez de embebido y que el prediagnóstico falla con `403 model_gated_needs_oauth`, se documenta la SPEC `context/SPECs/SPEC_ARCH-20260516-01-VISOR-INLINE-BUCKET-Y-ACCESO-MEDGEMMA.md` y se deja handoff puntual a SOFIA en `context/interconsultas/HANDOFF_ARCH-20260516-01_SOFIA_VISOR-INLINE-Y-MEDGEMMA.md`. El frente queda dividido en: (1) corrección técnica del upload/resolución S3 para preservar `Content-Type` y `inline`, y (2) checklist de remediación para acceso real al modelo clínico en Featherless con fallback honesto mientras se habilita el modelo gated. (ARCH-20260516-01)
 - **2026-05-14 (INTEGRA):** [~] **Desviación detectada y corregida en fuente de verdad para corroboración de identidad.** Se verificó que la SPEC histórica `context/SPECs/SPEC_ARCH-20260507-12-CORROBORACION-IDENTIDAD-CHECK-IN.md` ya exigía corrección de nombre completo contra la INE, pero la implementación actual del modal de corroboración quedó limitada a teléfono y correo. Se formaliza el ajuste ejecutivo en `context/SPECs/SPEC_ARCH-20260514-01-ALINEACION-CORROBORACION-NOMBRE-INE.md` y se deja handoff puntual a SOFIA en `context/interconsultas/HANDOFF_ARCH-20260514-01_SOFIA_ALINEACION-CORROBORACION-NOMBRE-INE.md`. (ARCH-20260514-01)
 - **2026-05-13 (INTEGRA):** [~] **Ruta activa de persistencia migrada a Railway Storage Bucket ya provisionado.** Tras confirmarse que el usuario ya creo un bucket S3-compatible en Railway, se formalizo la especificacion `context/SPECs/SPEC_ARCH-20260513-15-STORAGE-BUCKET-RAILWAY.md` como camino activo para persistencia de archivos clinicos privados, sustituyendo el enfoque de volume como opcion principal. Se deja handoff de implementacion para SOFIA en `context/interconsultas/HANDOFF_ARCH-20260513-15_SOFIA_STORAGE-BUCKET-RAILWAY.md`. (ARCH-20260513-15)
 - **2026-05-13 (CRONISTA):** [/] **Sincronización de estado: uploads persistentes en Railway quedan formalmente en planificación ejecutable.** Se valida que `ARCH-20260513-14` permanezca en estado `[~]` porque existe SPEC y handoff listos para implementación, pero todavía no hay checkpoint técnico ni evidencia de despliegue/restart exitoso con Railway Volume. Se corrige además el encabezado maestro de este documento para alinearlo con los cortes vigentes de mayo. (DOC-20260513-01)

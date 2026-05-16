@@ -570,27 +570,80 @@ Responde en JSON con esta estructura exacta:
         print(f"🧠 Generando prediagnóstico IA para: {study_type} | proveedor: {clinical_provider} | modelo: {clinical_model_used} | calibración: {calibration_source}")
         # IMPL-20260513-03: enrutar al proveedor correcto según configuración
         # IMPL-20260326-03: degradar a AI_NON_CONCLUSIVE en lugar de propagar excepción
+        # IMPL-20260516-01: si Featherless rechaza por model_gated (403), intentar fallback honesto
+        #   a Gemini text-only y trazar la causa real en limitations. ARCH-20260516-01.
+        _featherless_gated_note: Optional[str] = None
         try:
             if clinical_provider == "featherless":
                 raw_result = self._call_featherless_text_only(prompt)
             else:
                 raw_result = self._call_gemini_text_only(prompt)
         except Exception as e:
-            print(f"⚠️ Fallo al llamar/parsear proveedor '{clinical_provider}' para {study_type}: {e}")
-            return AIPrediagnosisResult(
-                summary="No fue posible obtener análisis IA para este estudio debido a un error en la respuesta del modelo.",
-                confidence=0.0,
-                clinical_state="AI_NON_CONCLUSIVE",
-                justification=[],
-                clinical_basis=[],
-                citations=[],
-                limitations=["Error al parsear respuesta del modelo IA. La extracción de parámetros puede estar disponible."],
-                red_flags=[],
-                non_conclusive_reason=f"{clinical_provider.capitalize()}ParseError: {str(e)[:300]}",
-                calibration_source=calibration_source,
-                clinical_model_used=clinical_model_used,
-                clinical_provider=clinical_provider,
-            )
+            err_str = str(e)
+            # — Caso: Featherless rechaza el modelo por permisos OAuth (model_gated_needs_oauth)
+            if "FEATHERLESS_GATED:" in err_str:
+                gated_reason = (
+                    f"Featherless rechazó el modelo {FEATHERLESS_MODEL} con error model_gated_needs_oauth (HTTP 403). "
+                    "El modelo requiere autorización OAuth explícita en la cuenta del proveedor. "
+                    "Esto no es un fallo de código; requiere acción en el panel de Featherless."
+                )
+                print(f"⚠️ {gated_reason}")
+                if self.api_key:
+                    print(f"🔄 Intentando fallback a Gemini text-only ({self.model})...")
+                    try:
+                        raw_result = self._call_gemini_text_only(prompt)
+                        clinical_provider = "gemini_fallback"
+                        clinical_model_used = self.model
+                        _featherless_gated_note = gated_reason
+                        print(f"✅ Fallback a Gemini exitoso ({self.model}) — prediagnóstico continúa con trazabilidad de causa")
+                    except Exception as fallback_err:
+                        print(f"❌ Fallback a Gemini también falló: {fallback_err}")
+                        return AIPrediagnosisResult(
+                            summary="Proveedor MedGemma no disponible (modelo gated) y el fallback a Gemini también falló.",
+                            confidence=0.0,
+                            clinical_state="AI_NON_CONCLUSIVE",
+                            justification=[],
+                            clinical_basis=[],
+                            citations=[],
+                            limitations=[gated_reason, f"Gemini fallback error: {str(fallback_err)[:200]}"],
+                            red_flags=[],
+                            non_conclusive_reason=gated_reason,
+                            calibration_source=calibration_source,
+                            clinical_model_used=self.model,
+                            clinical_provider="gemini_fallback",
+                        )
+                else:
+                    # Sin Gemini API key → AI_NON_CONCLUSIVE honesto
+                    return AIPrediagnosisResult(
+                        summary="El proveedor clínico MedGemma no está disponible. El modelo requiere autorización del proveedor y no hay API key Gemini configurada para fallback.",
+                        confidence=0.0,
+                        clinical_state="AI_NON_CONCLUSIVE",
+                        justification=[],
+                        clinical_basis=[],
+                        citations=[],
+                        limitations=[gated_reason],
+                        red_flags=[],
+                        non_conclusive_reason=gated_reason,
+                        calibration_source=calibration_source,
+                        clinical_model_used=FEATHERLESS_MODEL,
+                        clinical_provider="featherless",
+                    )
+            else:
+                print(f"⚠️ Fallo al llamar/parsear proveedor '{clinical_provider}' para {study_type}: {e}")
+                return AIPrediagnosisResult(
+                    summary="No fue posible obtener análisis IA para este estudio debido a un error en la respuesta del modelo.",
+                    confidence=0.0,
+                    clinical_state="AI_NON_CONCLUSIVE",
+                    justification=[],
+                    clinical_basis=[],
+                    citations=[],
+                    limitations=["Error al parsear respuesta del modelo IA. La extracción de parámetros puede estar disponible."],
+                    red_flags=[],
+                    non_conclusive_reason=f"{clinical_provider.capitalize()}ParseError: {str(e)[:300]}",
+                    calibration_source=calibration_source,
+                    clinical_model_used=clinical_model_used,
+                    clinical_provider=clinical_provider,
+                )
 
         try:
             result = AIPrediagnosisResult(**raw_result)
@@ -599,6 +652,9 @@ Responde en JSON con esta estructura exacta:
             result.calibration_source = calibration_source
             result.clinical_model_used = clinical_model_used
             result.clinical_provider = clinical_provider
+            # IMPL-20260516-01: inyectar nota de fallback si Featherless fue rechazado por gated
+            if _featherless_gated_note:
+                result.limitations.append(_featherless_gated_note)
             # Aplicar umbral de confianza — si baja del umbral, marcar non-conclusive
             threshold = CONFIDENCE_THRESHOLDS.get(study_type, 0.5)
             if result.confidence < threshold and result.clinical_state == "AI_PENDING_REVIEW":
@@ -649,31 +705,43 @@ Responde en JSON con esta estructura exacta:
             base_url=FEATHERLESS_BASE_URL,
         )
 
-        response = client.chat.completions.create(
-            model=FEATHERLESS_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                "Eres un sistema de apoyo clínico para medicina del trabajo. "
-                "Recibes exclusivamente datos clínicos estructurados ya extraídos de documentos médicos; "
-                "no analizas imágenes ni PDFs y no debes inferir datos ausentes. "
-                "Tu función es generar un prediagnóstico prudente y revisable por un médico, nunca un "
-                "diagnóstico definitivo, dictamen médico, aptitud laboral, alta, baja ni tratamiento. "
-                "Usa lenguaje prudente como 'compatible con', 'sugiere' y 'requiere correlación clínica'. "
-                "Si faltan parámetros mínimos, la calidad documental es insuficiente o la evidencia es débil, "
-                "debes devolver un resultado no concluyente con confidence baja y non_conclusive_reason explícita. "
-                "Si existe un bloque de calibración médica, úsalo como criterio prioritario sobre conocimiento general; "
-                "si no existe, opera con conocimiento clínico general conservador y trazable. "
-                "No inventes hallazgos, citas ni parámetros no sustentados por la información recibida. "
-                "Responde SIEMPRE en JSON válido, sin markdown ni bloques de código."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.2,
-            max_tokens=2048,
-        )
+        try:
+            response = client.chat.completions.create(
+                model=FEATHERLESS_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                    "Eres un sistema de apoyo clínico para medicina del trabajo. "
+                    "Recibes exclusivamente datos clínicos estructurados ya extraídos de documentos médicos; "
+                    "no analizas imágenes ni PDFs y no debes inferir datos ausentes. "
+                    "Tu función es generar un prediagnóstico prudente y revisable por un médico, nunca un "
+                    "diagnóstico definitivo, dictamen médico, aptitud laboral, alta, baja ni tratamiento. "
+                    "Usa lenguaje prudente como 'compatible con', 'sugiere' y 'requiere correlación clínica'. "
+                    "Si faltan parámetros mínimos, la calidad documental es insuficiente o la evidencia es débil, "
+                    "debes devolver un resultado no concluyente con confidence baja y non_conclusive_reason explícita. "
+                    "Si existe un bloque de calibración médica, úsalo como criterio prioritario sobre conocimiento general; "
+                    "si no existe, opera con conocimiento clínico general conservador y trazable. "
+                    "No inventes hallazgos, citas ni parámetros no sustentados por la información recibida. "
+                    "Responde SIEMPRE en JSON válido, sin markdown ni bloques de código."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+                max_tokens=2048,
+            )
+        except Exception as _featherless_err:
+            _err_str = str(_featherless_err)
+            # IMPL-20260516-01: Marca explícita de rechazo por modelo gated (403 model_gated_needs_oauth).
+            # El marcador FEATHERLESS_GATED: permite que generate_prediagnosis intente fallback a Gemini
+            # y trace la causa real sin ocultar el rechazo del proveedor. ARCH-20260516-01.
+            _status_code = getattr(_featherless_err, "status_code", None)
+            if _status_code == 403 or "model_gated" in _err_str or "403" in _err_str:
+                raise RuntimeError(
+                    f"FEATHERLESS_GATED:{FEATHERLESS_MODEL}:{_err_str[:250]}"
+                ) from _featherless_err
+            raise
 
         raw_text = response.choices[0].message.content or ""
         # Stripping robusto de markdown (por si el modelo ignora la instrucción de sistema)

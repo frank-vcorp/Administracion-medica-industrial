@@ -113,13 +113,43 @@ def _sanitize_error(err: str) -> str:
     return clean[:300]
 
 
+def _detect_content_type(key: str) -> tuple:
+    """
+    Deriva ContentType y si el archivo debe presentarse inline (PDF/imagen) desde la extensión.
+    Retorna (content_type: str, is_embeddable: bool).
+    IMPL-20260516-01: Slice A — visor inline bucket. ARCH-20260516-01.
+    """
+    ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
+    type_map = {
+        "pdf":  ("application/pdf",  True),
+        "png":  ("image/png",        True),
+        "jpg":  ("image/jpeg",       True),
+        "jpeg": ("image/jpeg",       True),
+        "gif":  ("image/gif",        True),
+        "webp": ("image/webp",       True),
+        "tiff": ("image/tiff",       True),
+        "tif":  ("image/tiff",       True),
+    }
+    return type_map.get(ext, ("application/octet-stream", False))
+
+
 def _upload_file_to_s3(contents: bytes, key: str) -> bool:
-    """IMPL-20260513-S3: Sube bytes al bucket S3-compatible. Retorna True si exitoso. No loguea secretos."""
+    """
+    IMPL-20260513-S3: Sube bytes al bucket S3-compatible. Retorna True si exitoso. No loguea secretos.
+    IMPL-20260516-01: Preserva ContentType correcto y ContentDisposition=inline para PDF/imágenes
+    para que el visor embebido del panel lateral no dispare descarga automática. ARCH-20260516-01.
+    """
     import io
     if not _s3_enabled or not _s3_client:
         return False
     try:
-        _s3_client.upload_fileobj(io.BytesIO(contents), STORAGE_S3_BUCKET, key)
+        content_type, is_embeddable = _detect_content_type(key)
+        extra_args: dict = {"ContentType": content_type}
+        if is_embeddable:
+            extra_args["ContentDisposition"] = "inline"
+        _s3_client.upload_fileobj(
+            io.BytesIO(contents), STORAGE_S3_BUCKET, key, ExtraArgs=extra_args
+        )
         return True
     except Exception as e:
         print(f"⚠️ S3 upload error key={key}: {_sanitize_error(str(e))}")
@@ -825,14 +855,21 @@ def resolve_file(key: str):
     redirige (HTTP 302) a una URL presignada de corta duración (5 min).
     Permite al frontend y a regenerateStudyAI descargar archivos sin exponer
     credenciales ni almacenar URLs efímeras en la base de datos.
+    IMPL-20260516-01: Para PDF/imágenes se fuerzan ResponseContentType e inline en la URL
+    presignada como capa de defensa adicional sobre los metadatos del objeto. ARCH-20260516-01.
     NUNCA loguea la presigned URL generada.
     """
     if not _s3_enabled or not _s3_client:
         raise HTTPException(status_code=503, detail="Storage S3 no configurado en este entorno")
     try:
+        content_type, is_embeddable = _detect_content_type(key)
+        params: dict = {"Bucket": STORAGE_S3_BUCKET, "Key": key}
+        if is_embeddable:
+            params["ResponseContentDisposition"] = "inline"
+            params["ResponseContentType"] = content_type
         presigned_url = _s3_client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": STORAGE_S3_BUCKET, "Key": key},
+            Params=params,
             ExpiresIn=300,  # 5 minutos — suficiente para visor y descarga
         )
         return RedirectResponse(url=presigned_url, status_code=302)
