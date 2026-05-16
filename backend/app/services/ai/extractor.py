@@ -96,24 +96,25 @@ class ExtractorService(GeminiBase):
   "notas_calidad": null
 }""",
 
-        "Espirometria": """Eres un técnico de neumología. Tu tarea es EXTRAER mediciones de la prueba, NO interpretarlas clínicamente.
+        # IMPL-20260516-12: Prompt exhaustivo de Espirometría (ARCH-20260516-12)
+        # Extrae los 6 bloques del layout real AMI + legacy flat fields para backward compat.
+        "Espirometria": """Eres un técnico de neumología. Tu tarea es EXTRAER TODOS los datos visibles del documento espirométrico, NO interpretarlos clínicamente.
 
-**Extrae:**
-1. PACIENTE
-2. FECHA
-3. FEV1 (Volumen Espiratorio Forzado en 1 segundo) en LITROS — solo el número
-4. FVC (Capacidad Vital Forzada) en LITROS — solo el número
-5. Relación FEV1/FVC — solo el número (ej: 0.83 o 83 si está como porcentaje — normaliza a decimal)
-6. FEV1 % Predicho — solo el número
-7. FVC % Predicho — solo el número si está disponible
-8. Si el documento incluye prueba POST-BRONCODILATADOR, extrae `broncodilatador_post_fev1` y `broncodilatador_post_fvc`.
-9. `es_interpretable`: true si tienes al menos fev1 y fvc; false si faltan ambos o el documento es ilegible.
-10. `completitud_documental`: "suficiente" si tienes fev1+fvc+ratio+%predicho, "parcial" si solo fev1+fvc, "no_concluyente" si faltan fev1 o fvc.
-11. NO incluyas diagnóstico ni interpretación clínica final.
+**REGLAS CRÍTICAS:**
+1. La tabla numérica tiene PRECEDENCIA ABSOLUTA sobre la gráfica o cualquier texto narrativo.
+2. Extrae TODOS los datos fuente visibles: identificación, condiciones, tabla de parámetros, repetibilidad y gráficas.
+3. Para cada fila de la tabla de parámetros, captura el label literal, una key canónica (si la puedes mapear), unidad, valores M1/M2/M3, %REF de cada maniobra, REF y LLN.
+4. NO incluyas diagnóstico, interpretación clínica ni recomendaciones de aptitud. Solo extracción documental.
+5. Mapeo canónico de filas: "FVC"→fvc_l, "FEV1"→fev1_l, "FEV1/FVC"→fev1_fvc_pct, "FEV1/VC"→fev1_vc_pct, "PEF"→pef_l_s, "FEF25-75"→fef25_75_l_s, "FET100"→fet100_s, "Vext."→vext_l, "Mejor FVC"→mejor_fvc_l, "Mejor FEV1"→mejor_fev1_l, "Mejor FEV1/FVC"→mejor_fev1_fvc_pct. Si no reconoces el label, usa null en key.
+6. Si una fila de la tabla no se puede leer, no la omitas: ponla con el label visible y null en los campos no legibles.
+7. Para los campos legacy (fev1, fvc, fev1_fvc_ratio, fev1_percent_predicho, fvc_percent_predicho): extrae el mejor valor disponible de la tabla (M1 de la fila correspondiente o el valor "Mejor" si existe).
+8. `es_interpretable` (legacy y calidad.es_interpretable): true si tienes al menos fev1 y fvc; false si faltan ambos o el documento es ilegible.
+9. `completitud_documental` (legacy y calidad.completitud_documental): "suficiente" si hay fev1+fvc+ratio+%predicho, "parcial" si solo fev1+fvc, "no_concluyente" si faltan fev1 o fvc.
+10. Si no hay datos de un bloque (ej. no hay bloque de condiciones), pon el campo en null.
 
-**Respuesta OBLIGATORIA en JSON:**
+**Respuesta OBLIGATORIA en JSON (solo {}, sin ```json):**
 {
-  "paciente": "Nombre",
+  "paciente": "Nombre Completo",
   "fecha_estudio": "dd/mm/yyyy",
   "fev1": 3.5,
   "fvc": 4.2,
@@ -124,7 +125,54 @@ class ExtractorService(GeminiBase):
   "broncodilatador_post_fvc": null,
   "es_interpretable": true,
   "completitud_documental": "suficiente",
-  "notas_calidad": null
+  "notas_calidad": null,
+  "paciente_detalle": {
+    "nombre_completo": "Nombre Completo",
+    "sexo": "Masculino",
+    "edad_anios": 35.0,
+    "talla_cm": 170.0,
+    "peso_kg": 75.0,
+    "imc": 26.0,
+    "fuma": "No",
+    "motivo": "Examen periódico",
+    "procedencia": null
+  },
+  "estudio": {
+    "referencia": "ESP-2026-001",
+    "fecha_estudio": "dd/mm/yyyy",
+    "hora_estudio": "09:00",
+    "tipo_reporte": "Espirometría simple",
+    "equipo_modelo": "Equipo/Modelo",
+    "version_software": "v1.0"
+  },
+  "condiciones": {
+    "temperatura_c": 22.0,
+    "presion_mmhg": 760.0,
+    "humedad_pct": 50.0,
+    "tecnico": "TEC-001",
+    "transductor": null,
+    "referencia_ecuacion": "NHANES III",
+    "factor_etnico": null,
+    "factor_btps": null
+  },
+  "parametros": [
+    {"label": "FVC", "key": "fvc_l", "unidad": "L", "m1": 4.2, "m1_pct_ref": 95.0, "m2": null, "m2_pct_ref": null, "m3": null, "m3_pct_ref": null, "ref": 4.4, "lln": 3.6},
+    {"label": "FEV1", "key": "fev1_l", "unidad": "L", "m1": 3.5, "m1_pct_ref": 92.0, "m2": null, "m2_pct_ref": null, "m3": null, "m3_pct_ref": null, "ref": 3.8, "lln": 3.0},
+    {"label": "FEV1/FVC", "key": "fev1_fvc_pct", "unidad": "%", "m1": 83.0, "m1_pct_ref": null, "m2": null, "m2_pct_ref": null, "m3": null, "m3_pct_ref": null, "ref": 78.0, "lln": 70.0}
+  ],
+  "calidad": {
+    "repetibilidad_ats_ers_fvc": "Aceptable",
+    "repetibilidad_ats_ers_fev1": "Aceptable",
+    "es_interpretable": true,
+    "completitud_documental": "suficiente",
+    "notas_calidad": null
+  },
+  "graficas": {
+    "curva_flujo_volumen_presente": true,
+    "curva_volumen_tiempo_presente": true,
+    "maniobras_graficadas": 3,
+    "observaciones_grafica": null
+  }
 }""",
 
         "Rayos_X": """Eres un técnico radiólogo. Tu tarea es EXTRAER hallazgos descriptivos del estudio, NO emitir diagnóstico final.

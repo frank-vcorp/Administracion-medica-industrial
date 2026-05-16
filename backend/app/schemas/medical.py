@@ -104,16 +104,109 @@ class LaboratorioData(BaseModel):
     notas_calidad: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# IMPL-20260516-12: Espirometría — Sub-modelos de extracción exhaustiva (ARCH-20260516-12)
+# Bloques del layout real AMI: paciente_detalle, estudio, condiciones, parametros, calidad, graficas.
+# ---------------------------------------------------------------------------
+
+class EspirometriaParamRow(BaseModel):
+    """
+    Fila tabular del cuadro de parámetros espirométricos.
+    IMPL-20260516-12: Mapeo canónico label→key con valores M1/M2/M3, REF y LLN.
+    """
+    label: str = Field(description="Etiqueta literal de la fila como aparece en el documento")
+    key: Optional[str] = Field(
+        default=None,
+        description="Clave canónica normalizada (ej: fev1_l, fvc_l, fef25_75_l_s). None si no se puede mapear."
+    )
+    unidad: Optional[str] = Field(default=None, description="Unidad de medida (ej: L, L/s, %)")
+    m1: Optional[float] = Field(default=None, description="Valor maniobra 1")
+    m1_pct_ref: Optional[float] = Field(default=None, description="% del referencial para M1")
+    m2: Optional[float] = Field(default=None, description="Valor maniobra 2")
+    m2_pct_ref: Optional[float] = Field(default=None, description="% del referencial para M2")
+    m3: Optional[float] = Field(default=None, description="Valor maniobra 3")
+    m3_pct_ref: Optional[float] = Field(default=None, description="% del referencial para M3")
+    ref: Optional[float] = Field(default=None, description="Valor referencial del predicho")
+    lln: Optional[float] = Field(default=None, description="Límite inferior de la normalidad (LLN)")
+
+
+class EspirometriaPacienteDetalle(BaseModel):
+    """Metadatos demográficos del paciente extraídos del layout espirométrico. IMPL-20260516-12."""
+    nombre_completo: Optional[str] = None
+    sexo: Optional[str] = None
+    edad_anios: Optional[float] = None
+    talla_cm: Optional[float] = None
+    peso_kg: Optional[float] = None
+    imc: Optional[float] = None
+    fuma: Optional[str] = None
+    motivo: Optional[str] = None
+    procedencia: Optional[str] = None
+
+
+class EspirometriaEstudio(BaseModel):
+    """Metadatos del estudio espirométrico (referencia, equipo, versión). IMPL-20260516-12."""
+    referencia: Optional[str] = None
+    fecha_estudio: Optional[str] = None
+    hora_estudio: Optional[str] = None
+    tipo_reporte: Optional[str] = None
+    equipo_modelo: Optional[str] = None
+    version_software: Optional[str] = None
+
+
+class EspirometriaCondiciones(BaseModel):
+    """Condiciones ambientales y técnicas de adquisición. IMPL-20260516-12."""
+    temperatura_c: Optional[float] = None
+    presion_mmhg: Optional[float] = None
+    humedad_pct: Optional[float] = None
+    tecnico: Optional[str] = None
+    transductor: Optional[str] = None
+    referencia_ecuacion: Optional[str] = None
+    factor_etnico: Optional[str] = None
+    factor_btps: Optional[str] = Field(default=None, description="Factor de corrección BTPS")
+
+
+class EspirometriaCalidad(BaseModel):
+    """Calidad técnica y repetibilidad ATS/ERS del estudio. IMPL-20260516-12."""
+    repetibilidad_ats_ers_fvc: Optional[str] = Field(
+        default=None,
+        description="Resultado de repetibilidad ATS/ERS para FVC (ej: Aceptable, No aceptable)"
+    )
+    repetibilidad_ats_ers_fev1: Optional[str] = Field(
+        default=None,
+        description="Resultado de repetibilidad ATS/ERS para FEV1"
+    )
+    es_interpretable: Optional[bool] = Field(
+        default=None,
+        description="True si el estudio tiene mínimos para interpretación clínica"
+    )
+    completitud_documental: Optional[Literal["suficiente", "parcial", "no_concluyente"]] = None
+    notas_calidad: Optional[str] = None
+
+
+class EspirometriaGraficas(BaseModel):
+    """Presencia y observaciones de curvas gráficas del estudio. IMPL-20260516-12."""
+    curva_flujo_volumen_presente: Optional[bool] = None
+    curva_volumen_tiempo_presente: Optional[bool] = None
+    maniobras_graficadas: Optional[int] = None
+    observaciones_grafica: Optional[str] = None
+
+
 class EspirometriaData(BaseModel):
     """
     Datos EXTRAÍDOS de prueba de función pulmonar.
     IMPL-20260513-01: Añadidos campos de broncodilatador, interpretabilidad y completitud.
+    IMPL-20260516-12: Extracción exhaustiva con bloques paciente_detalle/estudio/condiciones/
+                     parametros/calidad/graficas (ARCH-20260516-12).
+                     Los campos legacy (fev1, fvc, etc.) se conservan para compatibilidad hacia atrás;
+                     la extracción nueva los sigue populando desde la tabla fuente.
     NOTA: no incluye diagnóstico — esa capa va en AIPrediagnosisSnapshot.
     """
+    # --- Campos raíz (backward compat y acceso rápido al pipeline) ---
     paciente: str
     fecha_estudio: str
-    fev1: Optional[float] = Field(default=None, description="FEV1 en litros")
-    fvc: Optional[float] = Field(default=None, description="FVC en litros")
+    # --- Legacy flat fields: siguen populándose en la extracción nueva para no romper pipeline ---
+    fev1: Optional[float] = Field(default=None, description="FEV1 en litros (mejor valor disponible)")
+    fvc: Optional[float] = Field(default=None, description="FVC en litros (mejor valor disponible)")
     fev1_fvc_ratio: Optional[float] = Field(default=None, description="Relación FEV1/FVC")
     fev1_percent_predicho: Optional[float] = Field(default=None, description="FEV1 como % del predicho")
     fvc_percent_predicho: Optional[float] = Field(default=None, description="FVC como % del predicho (si disponible)")
@@ -125,13 +218,41 @@ class EspirometriaData(BaseModel):
     )
     es_interpretable: Optional[bool] = Field(
         default=None,
-        description="True si tiene fev1+fvc mínimos; False si el documento es no concluyente"
+        description="True si tiene fev1+fvc mínimos (legacy; usar calidad.es_interpretable si disponible)"
     )
     completitud_documental: Optional[Literal["suficiente", "parcial", "no_concluyente"]] = Field(
         default=None,
-        description="suficiente=fev1+fvc+ratio+%predicho, parcial=solo fev1+fvc, no_concluyente=faltan mínimos"
+        description="Completitud documental (legacy; usar calidad.completitud_documental si disponible)"
     )
-    notas_calidad: Optional[str] = None
+    notas_calidad: Optional[str] = Field(
+        default=None,
+        description="Notas de calidad (legacy; usar calidad.notas_calidad si disponible)"
+    )
+    # --- Bloques exhaustivos nuevos (ARCH-20260516-12) ---
+    paciente_detalle: Optional[EspirometriaPacienteDetalle] = Field(
+        default=None,
+        description="Metadatos demográficos del paciente extraídos del layout"
+    )
+    estudio: Optional[EspirometriaEstudio] = Field(
+        default=None,
+        description="Metadatos del estudio (referencia, equipo, versión)"
+    )
+    condiciones: Optional[EspirometriaCondiciones] = Field(
+        default=None,
+        description="Condiciones de adquisición (temperatura, presión, humedad)"
+    )
+    parametros: Optional[List[EspirometriaParamRow]] = Field(
+        default=None,
+        description="Tabla exhaustiva de parámetros espirométricos con M1/M2/M3, REF y LLN"
+    )
+    calidad: Optional[EspirometriaCalidad] = Field(
+        default=None,
+        description="Calidad técnica y repetibilidad ATS/ERS del estudio"
+    )
+    graficas: Optional[EspirometriaGraficas] = Field(
+        default=None,
+        description="Presencia y observaciones de curvas gráficas"
+    )
 
 
 class RayosXData(BaseModel):

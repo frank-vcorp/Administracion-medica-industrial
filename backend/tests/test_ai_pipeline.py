@@ -771,3 +771,323 @@ class TestMedGemmaFeatherlessProvider:
         assert result.clinical_provider == "featherless"
         # No debe haber llamado al proveedor real
         mock_featherless.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# IMPL-20260516-12/13: Tests Espirometría Exhaustiva + Prediagnóstico Endurecido
+# ARCH-20260516-12 (extracción) + ARCH-20260516-13 (prediagnóstico)
+# Cubre: extracción de 6 bloques, compatibilidad snapshots viejos, caso clínico
+# conflictivo FVC-reducida/ratio-conservado, recommendation obligatorio, y
+# degradación a AI_NON_CONCLUSIVE desde bloque calidad.
+# ---------------------------------------------------------------------------
+
+class TestEspirometriaExhaustiva_20260516_12_13:
+    """
+    Tests dirigidos al contrato exhaustivo de Espirometría.
+    IMPL-20260516-12: extracción con bloques nuevos.
+    IMPL-20260516-13: prediagnóstico endurecido, reglas de síntesis, recommendation.
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-api-key", model="gemini-2.5-pro")
+
+    @pytest.fixture
+    def prediagnostic_svc(self):
+        from app.services.ai.prediagnostic import PrediagnosticService
+        return PrediagnosticService(api_key="test-api-key", model="gemini-2.5-flash")
+
+    # --- Extracción: bloques exhaustivos ---
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_extraccion_espirometria_exhaustiva_6_bloques(self, mock_gemini, extractor):
+        """
+        ARCH-20260516-12: El extractor parsea correctamente los 6 bloques del layout real AMI
+        y conserva los campos legacy al mismo tiempo.
+        """
+        from app.schemas.medical import (
+            EspirometriaData, EspirometriaParamRow, EspirometriaCalidad, EspirometriaGraficas
+        )
+        mock_gemini.return_value = {
+            "paciente": "Trabajador A",
+            "fecha_estudio": "16/05/2026",
+            "fev1": 2.8,
+            "fvc": 3.1,
+            "fev1_fvc_ratio": 0.90,
+            "fev1_percent_predicho": 85.0,
+            "fvc_percent_predicho": 72.0,
+            "broncodilatador_post_fev1": None,
+            "broncodilatador_post_fvc": None,
+            "es_interpretable": True,
+            "completitud_documental": "suficiente",
+            "notas_calidad": None,
+            "paciente_detalle": {
+                "nombre_completo": "Trabajador A",
+                "sexo": "Masculino",
+                "edad_anios": 38.0,
+                "talla_cm": 170.0,
+                "peso_kg": 75.0,
+                "imc": 26.0,
+                "fuma": "No",
+            },
+            "estudio": {
+                "referencia": "ESP-2026-001",
+                "fecha_estudio": "16/05/2026",
+                "hora_estudio": "09:15",
+                "equipo_modelo": "SpirvTEK V3",
+                "version_software": "v2.1",
+            },
+            "condiciones": {
+                "temperatura_c": 22.0,
+                "presion_mmhg": 760.0,
+                "humedad_pct": 50.0,
+                "tecnico": "TEC-001",
+                "referencia_ecuacion": "NHANES III",
+            },
+            "parametros": [
+                {"label": "FVC", "key": "fvc_l", "unidad": "L", "m1": 3.1, "m1_pct_ref": 72.0, "ref": 4.3, "lln": 3.5},
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L", "m1": 2.8, "m1_pct_ref": 85.0, "ref": 3.3, "lln": 2.7},
+                {"label": "FEV1/FVC", "key": "fev1_fvc_pct", "unidad": "%", "m1": 90.0, "ref": 78.0, "lln": 70.0},
+                {"label": "FEF25-75", "key": "fef25_75_l_s", "unidad": "L/s", "m1": 2.5, "m1_pct_ref": 80.0, "ref": 3.1, "lln": 1.9},
+            ],
+            "calidad": {
+                "repetibilidad_ats_ers_fvc": "Aceptable",
+                "repetibilidad_ats_ers_fev1": "Aceptable",
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+                "notas_calidad": None,
+            },
+            "graficas": {
+                "curva_flujo_volumen_presente": True,
+                "curva_volumen_tiempo_presente": True,
+                "maniobras_graficadas": 3,
+                "observaciones_grafica": None,
+            },
+        }
+        result = extractor.extract_by_type("/fake/espirometria_exhaustiva.pdf", "Espirometria")
+        assert isinstance(result, EspirometriaData)
+        # Campos legacy intactos
+        assert result.fev1 == 2.8
+        assert result.fvc == 3.1
+        assert result.fev1_fvc_ratio == 0.90
+        assert result.fvc_percent_predicho == 72.0
+        assert result.es_interpretable is True
+        # Bloque paciente_detalle
+        assert result.paciente_detalle is not None
+        assert result.paciente_detalle.edad_anios == 38.0
+        assert result.paciente_detalle.fuma == "No"
+        # Bloque estudio
+        assert result.estudio is not None
+        assert result.estudio.equipo_modelo == "SpirvTEK V3"
+        # Bloque condiciones
+        assert result.condiciones is not None
+        assert result.condiciones.referencia_ecuacion == "NHANES III"
+        assert result.condiciones.temperatura_c == 22.0
+        # Bloque parametros
+        assert result.parametros is not None
+        assert len(result.parametros) == 4
+        fvc_row = result.parametros[0]
+        assert isinstance(fvc_row, EspirometriaParamRow)
+        assert fvc_row.label == "FVC"
+        assert fvc_row.key == "fvc_l"
+        assert fvc_row.lln == 3.5
+        assert fvc_row.m1_pct_ref == 72.0
+        # Bloque calidad
+        assert result.calidad is not None
+        assert isinstance(result.calidad, EspirometriaCalidad)
+        assert result.calidad.repetibilidad_ats_ers_fvc == "Aceptable"
+        assert result.calidad.es_interpretable is True
+        # Bloque graficas
+        assert result.graficas is not None
+        assert isinstance(result.graficas, EspirometriaGraficas)
+        assert result.graficas.maniobras_graficadas == 3
+        assert result.graficas.curva_flujo_volumen_presente is True
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_extraccion_espirometria_snapshot_viejo_compatibilidad(self, mock_gemini, extractor):
+        """
+        ARCH-20260516-12: Snapshot viejo con solo campos legacy debe deserializar correctamente
+        sin bloques nuevos — ninguno de ellos queda en None sin errores.
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            "paciente": "Trabajador Histórico",
+            "fecha_estudio": "01/01/2026",
+            "fev1": 3.2,
+            "fvc": 4.0,
+            "fev1_fvc_ratio": 0.80,
+            "fev1_percent_predicho": 88.0,
+            "fvc_percent_predicho": 92.0,
+            "es_interpretable": True,
+            "completitud_documental": "suficiente",
+            "notas_calidad": None,
+            # SIN paciente_detalle, estudio, condiciones, parametros, calidad, graficas
+        }
+        result = extractor.extract_by_type("/fake/espirometria_vieja.pdf", "Espirometria")
+        assert isinstance(result, EspirometriaData)
+        # Bloques nuevos son None sin error
+        assert result.paciente_detalle is None
+        assert result.estudio is None
+        assert result.condiciones is None
+        assert result.parametros is None
+        assert result.calidad is None
+        assert result.graficas is None
+        # Legacy sigue funcionando
+        assert result.fev1 == 3.2
+        assert result.fvc == 4.0
+        assert result.es_interpretable is True
+        assert result.completitud_documental == "suficiente"
+
+    # --- Prediagnóstico: caso conflictivo FVC reducida + ratio conservado ---
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
+    def test_prediagnostico_ratio_conservado_fvc_reducida_no_cierra_obstructivo(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        ARCH-20260516-13 §Regla A: FEV1/FVC conservado (0.90) + FVC reducida (72% predicho).
+        El prediagnóstico no debe emitir patrón obstructivo; debe ser sugestivo de restricción
+        o no concluyente. Caso clínico conflictivo representativo del layout AMI real.
+        """
+        mock_call.return_value = {
+            "summary": "Patrón sugestivo de restricción pulmonar. FVC reducida con ratio conservado.",
+            "confidence": 0.65,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": [
+                "FEV1/FVC 0.90 (LLN tabla: 0.70) — ratio conservado, descarta patrón obstructivo primario según Regla A ATS/ERS 2022",
+                "FVC 3.1 L (72% predicho, LLN tabla: 3.5 L) — por debajo del LLN: sugestivo de restricción; requiere pletismografía para confirmación",
+                "Repetibilidad ATS/ERS FVC y FEV1 aceptables: técnica válida",
+            ],
+            "clinical_basis": [
+                {"principle": "Clasificación espirométrica ATS/ERS 2022", "applied_parameters": ["fev1_fvc_ratio", "fvc_percent_predicho", "lln"]}
+            ],
+            "citations": [
+                {"source_id": "ATS-ERS-2022", "title": "ATS/ERS Technical Standard", "section": "Tabla 1", "excerpt": "FVC < LLN con ratio conservado sugiere restricción", "version_or_date": "2022"}
+            ],
+            "limitations": ["El diagnóstico definitivo de restricción requiere TLC o pletismografía"],
+            "red_flags": [],
+            "recommendation": "Correlacionar con espirometría previa y considerar pletismografía para confirmar patrón restrictivo. Requiere valoración médica.",
+            "non_conclusive_reason": None,
+        }
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Trabajador A",
+                "fev1": 2.8,
+                "fvc": 3.1,
+                "fev1_fvc_ratio": 0.90,
+                "fev1_percent_predicho": 85.0,
+                "fvc_percent_predicho": 72.0,
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+                "parametros": [
+                    {"label": "FVC", "key": "fvc_l", "m1": 3.1, "m1_pct_ref": 72.0, "ref": 4.3, "lln": 3.5},
+                    {"label": "FEV1", "key": "fev1_l", "m1": 2.8, "m1_pct_ref": 85.0, "ref": 3.3, "lln": 2.7},
+                    {"label": "FEV1/FVC", "key": "fev1_fvc_pct", "m1": 90.0, "ref": 78.0, "lln": 70.0},
+                ],
+                "calidad": {
+                    "repetibilidad_ats_ers_fvc": "Aceptable",
+                    "repetibilidad_ats_ers_fev1": "Aceptable",
+                    "es_interpretable": True,
+                    "completitud_documental": "suficiente",
+                },
+            },
+        )
+        assert result.clinical_state in ("AI_PENDING_REVIEW", "AI_NON_CONCLUSIVE")
+        # La justificación NO debe declarar patrón obstructivo cuando ratio es conservado
+        summary_lower = (result.summary or "").lower()
+        assert "obstructiv" not in summary_lower or "no obstructiv" in summary_lower or "descarta obstructiv" in summary_lower
+        # recommendation debe estar presente
+        assert result.recommendation is not None
+        assert len(result.recommendation) > 0
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
+    def test_prediagnostico_espirometria_incluye_recommendation_cuando_normal(
+        self, mock_call, prediagnostic_svc
+    ):
+        """ARCH-20260516-13 §C: recommendation debe ser no nulo cuando hay información suficiente."""
+        mock_call.return_value = {
+            "summary": "Función pulmonar dentro de límites normales.",
+            "confidence": 0.80,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["FEV1/FVC 0.82 y FVC 92% predicho dentro de límites normales ATS/ERS 2022"],
+            "clinical_basis": [{"principle": "ATS/ERS 2022", "applied_parameters": ["fev1_fvc_ratio"]}],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "recommendation": "Mantener vigilancia espirométrica periódica según programa de salud ocupacional.",
+            "non_conclusive_reason": None,
+        }
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Trabajador Normal",
+                "fev1": 3.4,
+                "fvc": 4.1,
+                "fev1_fvc_ratio": 0.82,
+                "fev1_percent_predicho": 92.0,
+                "fvc_percent_predicho": 92.0,
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+            },
+        )
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.recommendation is not None
+        assert len(result.recommendation) > 5
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    def test_prediagnostico_espirometria_calidad_insuficiente_desde_bloque_calidad(
+        self, prediagnostic_svc
+    ):
+        """
+        ARCH-20260516-13: calidad.es_interpretable=False debe disparar AI_NON_CONCLUSIVE
+        incluso cuando los campos legacy fev1/fvc tienen valores numéricos válidos.
+        """
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Trabajador C",
+                "fev1": 2.5,
+                "fvc": 3.0,
+                "fev1_fvc_ratio": 0.83,
+                "es_interpretable": None,       # legacy vacío
+                "completitud_documental": None,  # legacy vacío
+                "calidad": {
+                    "es_interpretable": False,          # bloque nuevo: no interpretable
+                    "completitud_documental": "no_concluyente",
+                    "notas_calidad": "Maniobra técnicamente deficiente",
+                },
+            },
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.non_conclusive_reason is not None
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    def test_prediagnostico_espirometria_completitud_no_concluyente_desde_bloque_calidad(
+        self, prediagnostic_svc
+    ):
+        """
+        ARCH-20260516-13: calidad.completitud_documental='no_concluyente' debe disparar
+        AI_NON_CONCLUSIVE aunque el legacy completitud_documental esté en None.
+        """
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Trabajador D",
+                "fev1": 2.9,
+                "fvc": 3.5,
+                "es_interpretable": None,
+                "completitud_documental": None,
+                "calidad": {
+                    "completitud_documental": "no_concluyente",
+                    "es_interpretable": None,
+                },
+            },
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
