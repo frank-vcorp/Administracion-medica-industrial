@@ -1,9 +1,9 @@
 /**
  * @fileoverview Editor de configuración aiCalibration por prueba médica.
- *   Formulario cliente para editar y persistir aiCalibration en MedicalTest.options.
+ *   Muestra solo dos prompts/versiones por prueba: extracción (Gemini) y diagnóstico (MedGemma).
  *   Maneja el caso inicial (sin configuración) y el caso de edición (ya configurado).
- * @id ARCH-20260327-16
- * @backup context/SPECs/SPEC_ARCH-20260327-15-PLATAFORMA-CALIBRACION-IA.md
+ * @id ARCH-20260516-03
+ * @backup context/SPECs/SPEC_ARCH-20260516-03-CALIBRACION-CONFIG-SOLO-DOS-PROMPTS.md
  */
 "use client"
 
@@ -54,19 +54,10 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
   const [enabled, setEnabled] = useState(getBool(initial, "enabled"))
   const [canonicalStudyType, setCanonicalStudyType] = useState(getStr(initial, "canonicalStudyType"))
 
-  const [extractionEnabled, setExtractionEnabled] = useState(getBool(extraction, "enabled"))
-  const [schemaVersion, setSchemaVersion] = useState(getStr(extraction, "schemaVersion"))
-  const [targetFields, setTargetFields] = useState(
-    Array.isArray(extraction?.targetFields)
-      ? (extraction.targetFields as string[]).join(", ")
-      : ""
-  )
-
-  const [diagnosisEnabled, setDiagnosisEnabled] = useState(getBool(diagnosis, "enabled"))
-  const [promptVersion, setPromptVersion] = useState(getStr(diagnosis, "promptVersion"))
-  const [requiresDoctorCalibration, setRequiresDoctorCalibration] = useState(
-    getBool(diagnosis, "requiresDoctorCalibration")
-  )
+  // Extracción: se lee schemaVersion por compatibilidad con configs previas
+  const [extractPromptVersion, setExtractPromptVersion] = useState(getStr(extraction, "schemaVersion"))
+  // Diagnóstico clínico
+  const [diagPromptVersion, setDiagPromptVersion] = useState(getStr(diagnosis, "promptVersion"))
 
   // ── Estado de la acción ────────────────────────────────────────────────────
   const [isPending, startTransition] = useTransition()
@@ -77,21 +68,18 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
     e.preventDefault()
     setMessage(null)
 
+    // Merge sobre initial para preservar campos V2 (fieldDefinitions, versions, aiAssistance, etc.)
     const data: Record<string, unknown> = {
+      ...(initial ?? {}),
       enabled,
       canonicalStudyType: canonicalStudyType.trim() || null,
       extraction: {
-        enabled: extractionEnabled,
-        schemaVersion: schemaVersion.trim() || null,
-        targetFields: targetFields
-          .split(",")
-          .map((f) => f.trim())
-          .filter(Boolean),
+        ...(extraction ?? {}),
+        schemaVersion: extractPromptVersion.trim() || null,
       },
       diagnosis: {
-        enabled: diagnosisEnabled,
-        promptVersion: promptVersion.trim() || null,
-        requiresDoctorCalibration,
+        ...(diagnosis ?? {}),
+        promptVersion: diagPromptVersion.trim() || null,
       },
     }
 
@@ -166,95 +154,49 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
         </div>
       </div>
 
-      {/* ── Extracción ──────────────────────────────────────────────────────── */}
-      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Extracción</p>
-
-        <div className="flex items-center gap-3">
-          <input
-            id="extraction-enabled"
-            type="checkbox"
-            checked={extractionEnabled}
-            onChange={(e) => setExtractionEnabled(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-400"
-          />
-          <label htmlFor="extraction-enabled" className="text-sm text-slate-700 select-none">
-            Extracción habilitada
-          </label>
+      {/* ── Extracción documental — Gemini ────────────────────────────────── */}
+      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Extracción documental</p>
+          <span className="text-xs font-medium px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200">Gemini</span>
         </div>
+        <p className="text-xs text-blue-600">Versión del prompt que Gemini usa para extraer datos del documento.</p>
 
         <div>
-          <label className="block text-xs text-slate-600 mb-1" htmlFor="schema-version">
-            Versión de schema
+          <label className="block text-xs text-slate-600 mb-1" htmlFor="extract-prompt-version">
+            Versión de prompt de extracción
           </label>
           <input
-            id="schema-version"
+            id="extract-prompt-version"
             type="text"
-            value={schemaVersion}
-            onChange={(e) => setSchemaVersion(e.target.value)}
-            placeholder="ej. v1"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs text-slate-600 mb-1" htmlFor="target-fields">
-            Campos objetivo{" "}
-            <span className="font-normal text-slate-400">(separados por coma)</span>
-          </label>
-          <textarea
-            id="target-fields"
-            value={targetFields}
-            onChange={(e) => setTargetFields(e.target.value)}
-            rows={2}
-            placeholder="ej. hemoglobina, hematocrito, leucocitos"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"
+            value={extractPromptVersion}
+            onChange={(e) => setExtractPromptVersion(e.target.value)}
+            placeholder="ej. extract-audio-gemini-v2"
+            className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
       </div>
 
-      {/* ── Diagnóstico ─────────────────────────────────────────────────────── */}
-      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Diagnóstico</p>
-
-        <div className="flex items-center gap-3">
-          <input
-            id="diagnosis-enabled"
-            type="checkbox"
-            checked={diagnosisEnabled}
-            onChange={(e) => setDiagnosisEnabled(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-400"
-          />
-          <label htmlFor="diagnosis-enabled" className="text-sm text-slate-700 select-none">
-            Diagnóstico IA habilitado
-          </label>
+      {/* ── Diagnóstico clínico — MedGemma ──────────────────────────────────── */}
+      <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Diagnóstico clínico</p>
+          <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MedGemma</span>
         </div>
+        <p className="text-xs text-violet-600">Versión del prompt que MedGemma usa para interpretar los datos y generar el prediagnóstico.</p>
 
         <div>
-          <label className="block text-xs text-slate-600 mb-1" htmlFor="prompt-version">
-            Versión de prompt
+          <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt-version">
+            Versión de prompt de diagnóstico
           </label>
           <input
-            id="prompt-version"
+            id="diag-prompt-version"
             type="text"
-            value={promptVersion}
-            onChange={(e) => setPromptVersion(e.target.value)}
-            placeholder="ej. v2.1"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+            value={diagPromptVersion}
+            onChange={(e) => setDiagPromptVersion(e.target.value)}
+            placeholder="ej. predx-audio-medgemma-v2"
+            className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
           />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <input
-            id="requires-doctor"
-            type="checkbox"
-            checked={requiresDoctorCalibration}
-            onChange={(e) => setRequiresDoctorCalibration(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-400"
-          />
-          <label htmlFor="requires-doctor" className="text-sm text-slate-700 select-none">
-            Requiere calibración médica
-          </label>
         </div>
       </div>
 
