@@ -6,7 +6,7 @@ IMPL-20260225-02: Firma Digital Avanzada y Motor de Reportes Masivos.
 IMPL-20260326-16: Endpoints V2 para prediagnóstico IA separado (ARCH-20260326-16).
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -83,10 +83,10 @@ if all([STORAGE_S3_ENDPOINT, STORAGE_S3_BUCKET, STORAGE_S3_ACCESS_KEY, STORAGE_S
 # In production this MUST be an env variable.
 GEMINI_API_KEY = _read_env_var("GEMINI_API_KEY")
 # IMPL-20260513-01: Separación de modelos por capa
-# GEMINI_MODEL_EXTRACTION: modelo para extracción documental (OCR + structuring) → objetivo: gemini-2.5-pro
+# GEMINI_MODEL_EXTRACTION: modelo para extracción documental (OCR + structuring) → operativo: gemini-2.5-flash
 # GEMINI_MODEL_CLINICAL:   modelo para interpretación clínica → objetivo: medgemma-27b-text-it (fallback: flash)
 # GEMINI_MODEL queda como retrocompat para código que aún no fue migrado.
-GEMINI_MODEL_EXTRACTION = _read_env_var("GEMINI_MODEL_EXTRACTION") or _read_env_var("GEMINI_MODEL") or "gemini-2.5-pro"
+GEMINI_MODEL_EXTRACTION = _read_env_var("GEMINI_MODEL_EXTRACTION") or _read_env_var("GEMINI_MODEL") or "gemini-2.5-flash"
 GEMINI_MODEL_CLINICAL   = _read_env_var("GEMINI_MODEL_CLINICAL") or _read_env_var("GEMINI_MODEL") or "gemini-2.5-flash"
 GEMINI_MODEL = GEMINI_MODEL_EXTRACTION  # retrocompat
 # IMPL-20260513-01: Bandera MedGemma — False hasta que la integración esté habilitada en runtime
@@ -98,6 +98,7 @@ FEATHERLESS_MODEL    = _read_env_var("FEATHERLESS_MODEL") or "google/medgemma-27
 MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and FEATHERLESS_API_KEY) else "pending_integration"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
 EXTRACTION_PROMPT_VERSION = "extract-v4"   # IMPL-20260516-07: campos fuente audiometría (faringe, CAD, CAI, MTD, MTI)
+# ARCH-20260518-03: la versión real puede ser 'calibration_custom' cuando viene de aiCalibration
 PREDIAGNOSIS_PROMPT_VERSION = "predx-v2"   # IMPL-20260513-01: soporte calibración médica
 
 # ARCH-20260326-05: Estado de inicialización IA — persiste en memoria para diagnóstico.
@@ -680,10 +681,13 @@ async def v2_upload_and_analyze(
     file: UploadFile = File(...),
     study_type: Optional[str] = None,
     triggered_by_user_id: Optional[str] = None,
+    ai_calibration_json: Optional[str] = Form(default=None),
 ):
     """
     V2 Pipeline completo — upload, extracción pura y prediagnóstico en capas separadas.
     IMPL-20260326-16: ARCH-20260326-16.
+    IMPL-20260518-03: Requiere ai_calibration_json con extraction.prompt configurado.
+        La extracción falla explícitamente si falta el prompt de extracción (ARCH-20260518-03).
 
     Retorna:
       - classification: tipo y confianza de clasificación
@@ -696,6 +700,18 @@ async def v2_upload_and_analyze(
     """
     if not classifier or not extractor or not prediagnostic_svc:
         return _ai_unavailable_response()
+
+    # ARCH-20260518-03: parsear aiCalibration del form JSON
+    ai_calibration: Optional[Dict[str, Any]] = None
+    if ai_calibration_json:
+        try:
+            ai_calibration = json.loads(ai_calibration_json)
+        except (json.JSONDecodeError, ValueError) as parse_err:
+            return {
+                "status": "error",
+                "error": f"ai_calibration_json inválido: {parse_err}",
+                "error_code": "AI_CALIBRATION_JSON_INVALID",
+            }
 
     filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
     local_path = os.path.join(UPLOAD_DIR, filename)
@@ -730,17 +746,38 @@ async def v2_upload_and_analyze(
         print(f"   ✓ Tipo: {detected_type}")
 
         # PASO 2: EXTRACCIÓN PURA (sin interpretación clínica)
+        # ARCH-20260518-03: prompt de extracción resuelto únicamente desde aiCalibration;
+        # si falta, falla explícitamente (sin fallback backend).
         extraction_start = time.time()
-        extracted_raw = extractor.extract_by_type(local_path, detected_type)
+        try:
+            extracted_raw = extractor.extract_by_type(local_path, detected_type, ai_calibration=ai_calibration)
+        except ValueError as ve:
+            err_msg = str(ve)
+            if "EXTRACTION_PROMPT_NOT_CONFIGURED" in err_msg:
+                print(f"❌ [ARCH-20260518-03] {err_msg}")
+                return {
+                    "status": "error",
+                    "error": err_msg,
+                    "error_code": "EXTRACTION_PROMPT_NOT_CONFIGURED",
+                    "file": filename,
+                }
+            raise
         extraction_dict = extracted_raw if isinstance(extracted_raw, dict) else extracted_raw.model_dump()
         extraction_seconds = round(time.time() - extraction_start, 2)
-        print(f"   ✓ Extracción en {extraction_seconds}s")
+        # ARCH-20260518-03: extracción solo llega aquí si aiCalibration.extraction.prompt fue válido
+        _extraction_prompt_source = "ai_calibration"
+        _extraction_prompt_version = (ai_calibration or {}).get("extraction", {}).get("version", "calibration_custom")
+        print(f"   ✓ Extracción en {extraction_seconds}s | prompt_source={_extraction_prompt_source}")
 
         # PASO 3: PREDIAGNÓSTICO IA (capa separada)
         predx_start = time.time()
-        prediagnosis = prediagnostic_svc.generate_prediagnosis(detected_type, extraction_dict)
+        prediagnosis = prediagnostic_svc.generate_prediagnosis(
+            detected_type,
+            extraction_dict,
+            ai_calibration=ai_calibration,
+        )
         predx_seconds = round(time.time() - predx_start, 2)
-        print(f"   ✓ Prediagnóstico ({prediagnosis.clinical_state}) en {predx_seconds}s")
+        print(f"   ✓ Prediagnóstico ({prediagnosis.clinical_state}) en {predx_seconds}s | prompt_source={prediagnosis.prompt_source}")
 
         total_seconds = round(time.time() - pipeline_start, 2)
 
@@ -755,7 +792,8 @@ async def v2_upload_and_analyze(
                 "extracted_data": extraction_dict,
                 "audit": {
                     "model_name": GEMINI_MODEL,
-                    "prompt_version": EXTRACTION_PROMPT_VERSION,
+                    "prompt_version": _extraction_prompt_version,
+                    "prompt_source": _extraction_prompt_source,
                     "pipeline_version": PIPELINE_VERSION,
                     "source_file_hash": file_hash,
                     "triggered_by_user_id": triggered_by_user_id,
@@ -776,11 +814,14 @@ async def v2_upload_and_analyze(
                 "clinical_provider": prediagnosis.clinical_provider,
                 "clinical_model_used": prediagnosis.clinical_model_used,
                 "calibration_source": prediagnosis.calibration_source,
+                # IMPL-20260518-03: fuente real del prompt clínico (ARCH-20260518-03)
+                "prompt_source": prediagnosis.prompt_source,
                 "audit": {
                     # IMPL-20260513-08: model_name refleja modelo clínico real, no el de extracción
                     "model_name": prediagnosis.clinical_model_used or GEMINI_MODEL,
                     "clinical_provider": prediagnosis.clinical_provider or "gemini",
-                    "prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
+                    "prompt_version": prediagnosis.prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
+                    "prompt_source": prediagnosis.prompt_source,
                     "pipeline_version": PIPELINE_VERSION,
                     "triggered_by_user_id": triggered_by_user_id,
                     "trigger_reason": "initial_upload",
@@ -808,12 +849,15 @@ def v2_prediagnosis_from_params(
     extracted_data: Dict[str, Any],
     triggered_by_user_id: Optional[str] = None,
     medical_calibration: Optional[Dict[str, Any]] = None,
+    ai_calibration: Optional[Dict[str, Any]] = None,
 ):
     """
     Genera prediagnóstico IA a partir de parámetros ya extraídos.
     Útil para regenerar el prediagnóstico sin re-procesar el archivo original.
     IMPL-20260326-16: Requiere que exista un snapshot de extracción previo.
     IMPL-20260513-01: Acepta medical_calibration del panel aiCalibration.
+    IMPL-20260518-03: Acepta ai_calibration para resolver prompt clínico desde
+        aiCalibration.diagnosis.prompt con fallback general backend (ARCH-20260518-03).
     """
     if not prediagnostic_svc:
         return _ai_unavailable_response("Servicio de prediagnóstico no disponible")
@@ -823,6 +867,7 @@ def v2_prediagnosis_from_params(
             study_type,
             extracted_data,
             medical_calibration=medical_calibration,
+            ai_calibration=ai_calibration,
         )
         return {
             "status": "success",
@@ -834,7 +879,9 @@ def v2_prediagnosis_from_params(
                 "model_clinical": prediagnosis.clinical_model_used or GEMINI_MODEL_CLINICAL,
                 "clinical_provider": prediagnosis.clinical_provider or "gemini",
                 "calibration_source": prediagnosis.calibration_source,
-                "prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
+                # IMPL-20260518-03: fuente real del prompt clínico (ARCH-20260518-03)
+                "prompt_source": prediagnosis.prompt_source,
+                "prompt_version": prediagnosis.prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
                 "pipeline_version": PIPELINE_VERSION,
                 "triggered_by_user_id": triggered_by_user_id,
                 "trigger_reason": "manual_regeneration",
