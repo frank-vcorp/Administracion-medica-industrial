@@ -29,7 +29,7 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI } from "@/actions/event-test.actions"
+import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
@@ -271,6 +271,9 @@ export default function PapeletaWorkspace({
   // IMPL-20260516-04: Etapa activa del pipeline IA para UX de progreso visual
   const [uploadStage, setUploadStage] = useState<UploadStageId | null>(null)
   const [regenStage, setRegenStage] = useState<UploadStageId | null>(null)
+  // ARCH-20260518-04: Estado para limpieza de archivo y análisis
+  const [isClearingStudy, setIsClearingStudy] = useState(false)
+  const [clearStudyError, setClearStudyError] = useState('')
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
   const completedCount = localTests.filter(t =>
@@ -303,9 +306,20 @@ export default function PapeletaWorkspace({
     setLocalTests(prev => prev.map(t => t.id === id ? { ...t, status } : t))
   }
 
-  function updateLocalFile(id: string, fileUrl: string) {
+  // ARCH-20260518-04: actualización optimista con snapshot vigente (evita depender solo de router.refresh)
+  function updateLocalFile(
+    id: string,
+    fileUrl: string,
+    extractionSnapshot: StudyTest['extractionSnapshot'] | null = null
+  ) {
     setLocalTests(prev =>
-      prev.map(t => t.id === id ? { ...t, fileUrl, status: 'RESULT_REGISTERED' as StudyStatus } : t)
+      prev.map(t => t.id === id ? {
+        ...t,
+        fileUrl,
+        status: 'RESULT_REGISTERED' as StudyStatus,
+        extractionSnapshot,
+        aiSnapshot: null,
+      } : t)
     )
   }
 
@@ -356,7 +370,12 @@ export default function PapeletaWorkspace({
       if (res.success && res.fileUrl) {
         setUploadStage('saving')
         await new Promise<void>(r => setTimeout(r, 700))
-        updateLocalFile(testId, res.fileUrl)
+        // ARCH-20260518-04: actualización optimista con snapshot si el action lo devuelve
+        type UploadResWithSnapshot = typeof res & {
+          extractionSnapshotData?: StudyTest['extractionSnapshot']
+        }
+        const resTyped = res as UploadResWithSnapshot
+        updateLocalFile(testId, res.fileUrl, resTyped.extractionSnapshotData ?? null)
         router.refresh()
       } else {
         setUploadError(res.error || 'Error al subir archivo')
@@ -423,6 +442,32 @@ export default function PapeletaWorkspace({
     } finally {
       setRegenStage(null)
       setIsRegenerating(false)
+    }
+  }
+
+  // ARCH-20260518-04: Limpiar archivo activo y análisis vigentes (acción destructiva controlada)
+  const handleClearStudy = async (testId: string) => {
+    setIsClearingStudy(true)
+    setClearStudyError('')
+    try {
+      const res = await clearEventTestFile(testId, eventId)
+      if (res.success) {
+        // Actualización optimista: quitar fileUrl, snapshots vigentes, status PENDING
+        setLocalTests(prev => prev.map(t => t.id === testId ? {
+          ...t,
+          fileUrl: null,
+          status: 'PENDING' as StudyStatus,
+          extractionSnapshot: null,
+          aiSnapshot: null,
+        } : t))
+        router.refresh()
+      } else {
+        setClearStudyError(res.error || 'Error al limpiar el estudio')
+      }
+    } catch (err) {
+      setClearStudyError(err instanceof Error ? err.message : 'Error al limpiar el estudio')
+    } finally {
+      setIsClearingStudy(false)
     }
   }
 
@@ -567,6 +612,9 @@ export default function PapeletaWorkspace({
               onStatusChange={handleStatusChange}
               onFileUpload={handleFileUpload}
               onRegenerateAI={handleRegenerateAI}
+              isClearingStudy={isClearingStudy}
+              clearStudyError={clearStudyError}
+              onClearStudy={handleClearStudy}
               onExamenMedicoStatusChange={(status) => {
                 updateLocalStatus(activeTest.id, status as StudyStatus)
                 router.refresh()
@@ -601,6 +649,8 @@ function formatFieldValue(value: unknown): string {
   if (typeof value === 'number') return String(value)
   if (typeof value === 'string') return value.trim() || '—'
   if (Array.isArray(value)) return value.map((v) => formatFieldValue(v)).join(', ')
+  // ARCH-20260518-04: evitar '[object Object]' para objetos planos como fallback de cadena
+  if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
 }
 
@@ -608,6 +658,7 @@ function ExtractedDataRows({ data, depth = 0 }: { data: Record<string, unknown>;
   return (
     <>
       {Object.entries(data).map(([key, value]) => {
+        // Objetos planos (no-array): renderizar como sección anidada
         if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
           return (
             <div key={key} className={depth > 0 ? 'pl-3' : ''}>
@@ -618,6 +669,32 @@ function ExtractedDataRows({ data, depth = 0 }: { data: Record<string, unknown>;
             </div>
           )
         }
+        // ARCH-20260518-04: arreglos de objetos (parametros, graficas, calidad…)
+        // Se renderizan como sub-secciones indexadas en lugar de colapsar a '[object Object]'
+        if (
+          Array.isArray(value) &&
+          value.some((v) => v !== null && typeof v === 'object' && !Array.isArray(v))
+        ) {
+          return (
+            <div key={key} className={depth > 0 ? 'pl-3' : ''}>
+              <p className="text-[10px] font-bold text-sky-700 uppercase tracking-wider py-1.5 pt-2">
+                {formatFieldLabel(key)}
+              </p>
+              {value.map((item, idx) => (
+                <div key={idx} className="pl-3 border-l-2 border-sky-100 mb-1.5">
+                  {item !== null && typeof item === 'object' && !Array.isArray(item) ? (
+                    <ExtractedDataRows data={item as Record<string, unknown>} depth={depth + 1} />
+                  ) : (
+                    <div className="flex justify-between items-start gap-4 py-1">
+                      <span className="text-xs text-slate-800 font-medium">{formatFieldValue(item)}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        }
+        // Valor primitivo o arreglo simple
         return (
           <div key={key} className="flex justify-between items-start gap-4 py-1 border-b border-sky-100 last:border-0">
             <span className="text-xs text-slate-500 shrink-0">{formatFieldLabel(key)}</span>
@@ -858,8 +935,15 @@ function StudyPanel({
   onStatusChange: (id: string, status: StudyStatus) => void
   onFileUpload: (id: string, file: File) => void
   onRegenerateAI: (id: string) => void
+  /** ARCH-20260518-04: limpieza de archivo y análisis vigentes */
+  isClearingStudy: boolean
+  clearStudyError: string
+  onClearStudy: (id: string) => void
   onExamenMedicoStatusChange: (status: string) => void
 }) {
+  // ARCH-20260518-04: confirmación local antes de ejecutar la limpieza destructiva
+  const [isClearConfirming, setIsClearConfirming] = useState(false)
+
   const isMedico = isExamenMedico(test.testNameSnapshot)
   const isSomato = isSomatometria(test.testNameSnapshot)
   const isAgudeza = isAgudezaVisual(test.testNameSnapshot)
@@ -1062,6 +1146,47 @@ function StudyPanel({
                   </label>
                   {uploadError && (
                     <p className="text-xs text-red-500 mt-2">{uploadError}</p>
+                  )}
+                  {(test.fileUrl || test.extractionSnapshot || test.aiSnapshot) && (
+                    <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
+                      {!isClearConfirming ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsClearConfirming(true)}
+                          disabled={isClearingStudy || isUploading}
+                          className="text-xs font-semibold text-red-700 hover:text-red-800 disabled:opacity-50"
+                        >
+                          Eliminar archivo y limpiar análisis
+                        </button>
+                      ) : (
+                        <>
+                          <p className="text-xs text-red-700">
+                            Esta acción deja el estudio limpio para recaptura. El historial técnico previo se conserva para auditoría.
+                          </p>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onClearStudy(test.id)}
+                              disabled={isClearingStudy}
+                              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold disabled:opacity-50"
+                            >
+                              {isClearingStudy ? 'Limpiando...' : 'Confirmar limpieza'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsClearConfirming(false)}
+                              disabled={isClearingStudy}
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-50"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </>
+                      )}
+                      {clearStudyError && (
+                        <p className="text-xs text-red-500">{clearStudyError}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               )

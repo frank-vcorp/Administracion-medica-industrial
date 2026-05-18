@@ -35,6 +35,11 @@ export interface StudyAIAnalysisResult {
   confidence?: number
   /** IMPL-20260513-S3: ruta estable del archivo (/api/files/<key> o /uploads/<name>) */
   fileUrl?: string
+  /** ARCH-20260518-04: datos extractivos para actualización optimista sin depender de router.refresh() */
+  extractionSnapshotVersion?: number
+  extractedData?: unknown
+  missingFields?: unknown
+  rawPayload?: unknown
 }
 
 export interface DoctorStudyReviewInput {
@@ -158,57 +163,78 @@ export async function triggerStudyAIAnalysis(
     })
     const extractionVersion = existingExtractions + 1
 
-    // 3. Persistir ExtractionSnapshot (inmutable)
-    const extractionSnapshot = await prisma.studyExtractionSnapshot.create({
-      data: {
-        eventTestId,
-        version: extractionVersion,
-        studyType: result.extraction_snapshot?.study_type ?? result.classification?.detected_type ?? 'Otro',
-        sourceFileName: result.file,
-        sourceFileUrl: result.file_url ?? `/uploads/${result.file}`,
-        sourceFileHash: result.extraction_snapshot?.audit?.source_file_hash ?? null,
-        structuredData: result.extraction_snapshot ?? {},
-        clinicalState: 'DRAFT_EXTRACTED',
-        modelName: result.extraction_snapshot?.audit?.model_name ?? 'gemini-2.5-flash',
-        promptVersion: result.extraction_snapshot?.audit?.prompt_version ?? 'extract-v2',
-        pipelineVersion: result.extraction_snapshot?.audit?.pipeline_version ?? 'ai-pipeline-2026-03',
-        triggeredByUserId,
-        triggerReason: 'initial_upload',
-        isSuperseded: false,
-      },
-    })
-
-    // 4. Calcular versión de prediagnóstico
-    const existingPredx = await prisma.aIPrediagnosisSnapshot.count({
-      where: { extractionSnapshotId: extractionSnapshot.id },
-    })
-    const predxVersion = existingPredx + 1
+    const activeExtractionIds = (
+      await prisma.studyExtractionSnapshot.findMany({
+        where: { eventTestId, isSuperseded: false },
+        select: { id: true },
+      })
+    ).map(snapshot => snapshot.id)
 
     const predxData = result.prediagnosis_snapshot ?? {}
     const clinicalState: string = predxData.clinical_state ?? 'AI_PENDING_REVIEW'
 
-    // 5. Persistir AIPrediagnosisSnapshot (inmutable)
-    const prediagnosisSnapshot = await prisma.aIPrediagnosisSnapshot.create({
-      data: {
-        extractionSnapshotId: extractionSnapshot.id,
-        version: predxVersion,
-        prediagnosisData: predxData,
-        clinicalState,
-        modelName: predxData.audit?.model_name ?? 'gemini-2.5-flash',
-        promptVersion: predxData.audit?.prompt_version ?? 'predx-v1',
-        corpusVersion: predxData.audit?.corpus_version ?? null,
-        triggeredByUserId,
-        isSuperseded: false,
-      },
-    })
+    // 3-6. Mantener histórico y desplazar la vigencia a la nueva corrida.
+    const { extractionSnapshot, prediagnosisSnapshot } = await prisma.$transaction(async (tx) => {
+      if (activeExtractionIds.length > 0) {
+        await tx.aIPrediagnosisSnapshot.updateMany({
+          where: {
+            extractionSnapshotId: { in: activeExtractionIds },
+            isSuperseded: false,
+          },
+          data: { isSuperseded: true },
+        })
 
-    // 6. Actualizar estado del EventTest (el archivo ya fue subido al backend)
-    await prisma.eventTest.update({
-      where: { id: eventTestId },
-      data: {
-        fileUrl: result.file_url ?? `/uploads/${result.file}`,
-        status: 'RESULT_REGISTERED',
-      },
+        await tx.studyExtractionSnapshot.updateMany({
+          where: { eventTestId, isSuperseded: false },
+          data: { isSuperseded: true },
+        })
+      }
+
+      const nextExtractionSnapshot = await tx.studyExtractionSnapshot.create({
+        data: {
+          eventTestId,
+          version: extractionVersion,
+          studyType: result.extraction_snapshot?.study_type ?? result.classification?.detected_type ?? 'Otro',
+          sourceFileName: result.file,
+          sourceFileUrl: result.file_url ?? `/uploads/${result.file}`,
+          sourceFileHash: result.extraction_snapshot?.audit?.source_file_hash ?? null,
+          structuredData: result.extraction_snapshot ?? {},
+          clinicalState: 'DRAFT_EXTRACTED',
+          modelName: result.extraction_snapshot?.audit?.model_name ?? 'gemini-2.5-flash',
+          promptVersion: result.extraction_snapshot?.audit?.prompt_version ?? 'extract-v2',
+          pipelineVersion: result.extraction_snapshot?.audit?.pipeline_version ?? 'ai-pipeline-2026-03',
+          triggeredByUserId,
+          triggerReason: 'initial_upload',
+          isSuperseded: false,
+        },
+      })
+
+      const nextPrediagnosisSnapshot = await tx.aIPrediagnosisSnapshot.create({
+        data: {
+          extractionSnapshotId: nextExtractionSnapshot.id,
+          version: 1,
+          prediagnosisData: predxData,
+          clinicalState,
+          modelName: predxData.audit?.model_name ?? 'gemini-2.5-flash',
+          promptVersion: predxData.audit?.prompt_version ?? 'predx-v1',
+          corpusVersion: predxData.audit?.corpus_version ?? null,
+          triggeredByUserId,
+          isSuperseded: false,
+        },
+      })
+
+      await tx.eventTest.update({
+        where: { id: eventTestId },
+        data: {
+          fileUrl: result.file_url ?? `/uploads/${result.file}`,
+          status: 'RESULT_REGISTERED',
+        },
+      })
+
+      return {
+        extractionSnapshot: nextExtractionSnapshot,
+        prediagnosisSnapshot: nextPrediagnosisSnapshot,
+      }
     })
 
     revalidatePath(`/events/${eventId}`)
@@ -222,6 +248,11 @@ export async function triggerStudyAIAnalysis(
       confidence: predxData.confidence ?? null,
       // IMPL-20260513-S3: propagar ruta estable para que uploadEventTestFile actualice estado local
       fileUrl: result.file_url ?? `/uploads/${result.file}`,
+      // ARCH-20260518-04: datos extractivos para actualización optimista del cliente
+      extractionSnapshotVersion: extractionVersion,
+      extractedData: (result.extraction_snapshot?.extracted_data ?? null) as unknown,
+      missingFields: (result.extraction_snapshot?.missing_fields ?? null) as unknown,
+      rawPayload: (result.extraction_snapshot ?? null) as unknown,
     }
   } catch (error) {
     console.error('[IMPL-20260326-16] Error en triggerStudyAIAnalysis:', error)

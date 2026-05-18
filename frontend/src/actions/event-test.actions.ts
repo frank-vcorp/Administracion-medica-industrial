@@ -230,10 +230,22 @@ export async function uploadEventTestFile(formData: FormData) {
             }),
           },
         })
+        // ARCH-20260518-04: empaquetar datos del snapshot para actualización optimista del cliente
+        const extractionSnapshotData = v2Result.extractionSnapshotId
+          ? {
+              id: v2Result.extractionSnapshotId,
+              version: v2Result.extractionSnapshotVersion ?? 1,
+              extractedData: v2Result.extractedData ?? null,
+              missingFields: v2Result.missingFields ?? null,
+              rawPayload: v2Result.rawPayload ?? null,
+            }
+          : null
         return {
           success: true,
           // IMPL-20260513-S3: usar ruta estable del backend (S3 o local) cuando disponible
           fileUrl: v2Result.fileUrl ?? `/uploads/${file.name}`,
+          // ARCH-20260518-04: snapshot completo para actualización optimista (sin depender solo de router.refresh)
+          extractionSnapshotData,
           aiAnalysis: {
             extractionSnapshotId: v2Result.extractionSnapshotId,
             prediagnosisSnapshotId: v2Result.prediagnosisSnapshotId,
@@ -292,6 +304,57 @@ export async function uploadEventTestFile(formData: FormData) {
   } catch (error) {
     console.error('[FIX ARCH-20260326-04] Error en fallback V1:', error)
     return { success: false, error: 'Error al intentar guardar el archivo. Intente nuevamente.' }
+  }
+}
+
+/**
+ * ARCH-20260518-04: Limpia el archivo activo y deja sin vigencia los snapshots actuales.
+ * Preserva el histórico con marcado lógico; no hace hard delete por defecto.
+ */
+export async function clearEventTestFile(eventTestId: string, eventId: string) {
+  if (!eventTestId || !eventId) {
+    return { success: false, error: 'Parámetros incompletos' }
+  }
+
+  try {
+    const activeExtractionIds = (
+      await prisma.studyExtractionSnapshot.findMany({
+        where: { eventTestId, isSuperseded: false },
+        select: { id: true },
+      })
+    ).map(snapshot => snapshot.id)
+
+    await prisma.$transaction(async (tx) => {
+      if (activeExtractionIds.length > 0) {
+        await tx.aIPrediagnosisSnapshot.updateMany({
+          where: {
+            extractionSnapshotId: { in: activeExtractionIds },
+            isSuperseded: false,
+          },
+          data: { isSuperseded: true },
+        })
+
+        await tx.studyExtractionSnapshot.updateMany({
+          where: { eventTestId, isSuperseded: false },
+          data: { isSuperseded: true },
+        })
+      }
+
+      await tx.eventTest.update({
+        where: { id: eventTestId },
+        data: {
+          fileUrl: null,
+          resultNotes: null,
+          status: 'PENDING',
+        },
+      })
+    })
+
+    revalidatePath(`/events/${eventId}`)
+    return { success: true }
+  } catch (error) {
+    console.error('[ARCH-20260518-04] Error al limpiar archivo y análisis vigentes:', error)
+    return { success: false, error: 'No se pudo limpiar el archivo y el análisis vigente del estudio' }
   }
 }
 
@@ -417,5 +480,71 @@ export async function regenerateStudyAI(
       // No interrumpir si falla la persistencia del error
     }
     return { success: false, error: msg }
+  }
+}
+
+/**
+ * ARCH-20260518-04: Limpia el archivo activo y los snapshots vigentes de un estudio,
+ * dejándolo en estado PENDING listo para nueva captura.
+ *
+ * Política de auditoría:
+ *   - Los StudyExtractionSnapshot y AIPrediagnosisSnapshot previos se marcan isSuperseded=true.
+ *   - NO se hace hard delete. El historial queda trazable internamente.
+ *   - El EventTest queda con fileUrl=null, status=PENDING y resultNotes de auditoría.
+ *
+ * @id ARCH-20260518-04
+ * @backup context/checkpoints/CHK_IMPL-20260518-04-DOBLE-FLUJO-ARCHIVO-IA.md
+ */
+export async function clearEventTestFile(
+  eventTestId: string,
+  eventId: string,
+  clearedByUserId: string = 'system'
+): Promise<{ success: boolean; error?: string }> {
+  if (!eventTestId || !eventId) {
+    return { success: false, error: 'Parámetros incompletos' }
+  }
+
+  try {
+    // 1. Buscar snapshots activos (no superseded) para marcarlos históricos
+    const activeExtractions = await prisma.studyExtractionSnapshot.findMany({
+      where: { eventTestId, isSuperseded: false },
+      select: { id: true },
+    })
+
+    if (activeExtractions.length > 0) {
+      const extractionIds = activeExtractions.map((s) => s.id)
+
+      // Marcar extracciones como superseded (semántica de "vigente eliminado")
+      await prisma.studyExtractionSnapshot.updateMany({
+        where: { id: { in: extractionIds } },
+        data: { isSuperseded: true },
+      })
+
+      // Marcar prediagnósticos asociados como superseded
+      await prisma.aIPrediagnosisSnapshot.updateMany({
+        where: { extractionSnapshotId: { in: extractionIds } },
+        data: { isSuperseded: true },
+      })
+    }
+
+    // 2. Limpiar el EventTest operativo
+    const auditNote = `[ARCH-20260518-04] Estudio limpiado para nueva captura por ${clearedByUserId} el ${new Date().toISOString()}. Historial previo conservado con isSuperseded=true (${activeExtractions.length} snapshots).`
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        fileUrl: null,
+        status: 'PENDING',
+        resultNotes: auditNote,
+      },
+    })
+
+    revalidatePath(`/events/${eventId}`)
+    return { success: true }
+  } catch (error) {
+    console.error('[ARCH-20260518-04] Error en clearEventTestFile:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error interno al limpiar el estudio',
+    }
   }
 }
