@@ -910,6 +910,9 @@ function StudyPanel({
   onStatusChange,
   onFileUpload,
   onRegenerateAI,
+  isClearingStudy,
+  clearStudyError,
+  onClearStudy,
   onExamenMedicoStatusChange,
 }: {
   test: StudyTest
