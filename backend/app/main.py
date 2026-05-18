@@ -777,7 +777,13 @@ async def v2_upload_and_analyze(
             ai_calibration=ai_calibration,
         )
         predx_seconds = round(time.time() - predx_start, 2)
-        print(f"   ✓ Prediagnóstico ({prediagnosis.clinical_state}) en {predx_seconds}s | prompt_source={prediagnosis.prompt_source}")
+        predx_prompt_source = getattr(prediagnosis, "prompt_source", None)
+        predx_provider = getattr(prediagnosis, "clinical_provider", None)
+        predx_model_used = getattr(prediagnosis, "clinical_model_used", None)
+        predx_calibration_source = getattr(prediagnosis, "calibration_source", None)
+        predx_prompt_version = getattr(prediagnosis, "prompt_version", None)
+        predx_input_debug = getattr(prediagnosis, "input_debug", None)
+        print(f"   ✓ Prediagnóstico ({prediagnosis.clinical_state}) en {predx_seconds}s | prompt_source={predx_prompt_source}")
 
         total_seconds = round(time.time() - pipeline_start, 2)
 
@@ -811,17 +817,17 @@ async def v2_upload_and_analyze(
                 "red_flags": prediagnosis.red_flags,
                 "non_conclusive_reason": prediagnosis.non_conclusive_reason,
                 # IMPL-20260513-08: trazabilidad real de proveedor/modelo clínico (ARCH-20260513-08)
-                "clinical_provider": prediagnosis.clinical_provider,
-                "clinical_model_used": prediagnosis.clinical_model_used,
-                "calibration_source": prediagnosis.calibration_source,
+                "clinical_provider": predx_provider,
+                "clinical_model_used": predx_model_used,
+                "calibration_source": predx_calibration_source,
                 # IMPL-20260518-03: fuente real del prompt clínico (ARCH-20260518-03)
-                "prompt_source": prediagnosis.prompt_source,
+                "prompt_source": predx_prompt_source,
                 "audit": {
                     # IMPL-20260513-08: model_name refleja modelo clínico real, no el de extracción
-                    "model_name": prediagnosis.clinical_model_used or GEMINI_MODEL,
-                    "clinical_provider": prediagnosis.clinical_provider or "gemini",
-                    "prompt_version": prediagnosis.prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
-                    "prompt_source": prediagnosis.prompt_source,
+                    "model_name": predx_model_used or GEMINI_MODEL,
+                    "clinical_provider": predx_provider or "gemini",
+                    "prompt_version": predx_prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
+                    "prompt_source": predx_prompt_source,
                     "pipeline_version": PIPELINE_VERSION,
                     "triggered_by_user_id": triggered_by_user_id,
                     "trigger_reason": "initial_upload",
@@ -829,7 +835,7 @@ async def v2_upload_and_analyze(
                 # GUARDRAIL explícito en respuesta API
                 "_guardrail": "Este prediagnóstico NO autoriza firma digital, dictamen final ni aptitud laboral sin revisión médica explícita.",
                 # IMPL-20260516-08: RAW de entrada clínica para trazabilidad (ARCH-20260516-08)
-                "input_debug": prediagnosis.input_debug.model_dump() if prediagnosis.input_debug else None,
+                "input_debug": predx_input_debug.model_dump() if predx_input_debug else None,
             },
             "timings": {
                 "extraction_seconds": extraction_seconds,
@@ -869,18 +875,18 @@ def v2_prediagnosis_from_params(
             medical_calibration=medical_calibration,
             ai_calibration=ai_calibration,
         )
-        return {
-            "status": "success",
-            "clinical_state": prediagnosis.clinical_state,
+                "model_clinical": getattr(prediagnosis, "clinical_model_used", None) or GEMINI_MODEL_CLINICAL,
+                "clinical_provider": getattr(prediagnosis, "clinical_provider", None) or "gemini",
+                "calibration_source": getattr(prediagnosis, "calibration_source", None),
             "prediagnosis": prediagnosis.model_dump(),
-            "audit": {
-                # IMPL-20260513-08: modelo clínico real (featherless o gemini) — ARCH-20260513-08
+                "prompt_source": getattr(prediagnosis, "prompt_source", None),
+                "prompt_version": getattr(prediagnosis, "prompt_version", None) or PREDIAGNOSIS_PROMPT_VERSION,
                 "model_extraction": GEMINI_MODEL_EXTRACTION,
                 "model_clinical": prediagnosis.clinical_model_used or GEMINI_MODEL_CLINICAL,
                 "clinical_provider": prediagnosis.clinical_provider or "gemini",
                 "calibration_source": prediagnosis.calibration_source,
                 # IMPL-20260518-03: fuente real del prompt clínico (ARCH-20260518-03)
-                "prompt_source": prediagnosis.prompt_source,
+            "input_debug": getattr(prediagnosis, "input_debug", None).model_dump() if getattr(prediagnosis, "input_debug", None) else None,
                 "prompt_version": prediagnosis.prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
                 "pipeline_version": PIPELINE_VERSION,
                 "triggered_by_user_id": triggered_by_user_id,
