@@ -756,13 +756,19 @@ Responde en JSON con esta estructura exacta:
 
         try:
             result = AIPrediagnosisResult(**raw_result)
+            result_fields = getattr(type(result), "model_fields", {})
             # IMPL-20260513-03: añadir proveedor clínico real
             # IMPL-20260518-03: añadir fuente real del prompt clínico (ARCH-20260518-03)
-            result.calibration_source = calibration_source
-            result.clinical_model_used = clinical_model_used
-            result.clinical_provider = clinical_provider
-            result.prompt_source = prompt_source
-            result.prompt_version = _clinical_prompt_version
+            if "calibration_source" in result_fields:
+                result.calibration_source = calibration_source
+            if "clinical_model_used" in result_fields:
+                result.clinical_model_used = clinical_model_used
+            if "clinical_provider" in result_fields:
+                result.clinical_provider = clinical_provider
+            if "prompt_source" in result_fields:
+                result.prompt_source = prompt_source
+            if "prompt_version" in result_fields:
+                result.prompt_version = _clinical_prompt_version
             # IMPL-20260518-03: si se usó fallback clínico backend, registrar en limitations
             if prompt_source == "backend_fallback":
                 result.limitations.append(
@@ -771,14 +777,15 @@ Responde en JSON con esta estructura exacta:
             # IMPL-20260516-08: poblar input_debug con payload de entrada (ARCH-20260516-08)
             # Solo datos clínicos: study_type, extracted_data, calibración y prompt renderizado.
             # GUARDRAIL: no se incluyen API keys ni secrets — la calibración es metadata clínica.
-            result.input_debug = PrediagnosisInputDebug(
-                study_type=study_type,
-                extracted_data=extracted_data,
-                medical_calibration=medical_calibration,
-                clinical_provider=result.clinical_provider,
-                clinical_model_used=result.clinical_model_used,
-                rendered_prompt=_rendered_prompt,
-            )
+            if "input_debug" in result_fields:
+                result.input_debug = PrediagnosisInputDebug(
+                    study_type=study_type,
+                    extracted_data=extracted_data,
+                    medical_calibration=medical_calibration,
+                    clinical_provider=getattr(result, "clinical_provider", clinical_provider),
+                    clinical_model_used=getattr(result, "clinical_model_used", clinical_model_used),
+                    rendered_prompt=_rendered_prompt,
+                )
             # Aplicar umbral de confianza — si baja del umbral, marcar non-conclusive
             threshold = CONFIDENCE_THRESHOLDS.get(study_type, 0.5)
             if result.confidence < threshold and result.clinical_state == "AI_PENDING_REVIEW":
