@@ -70,6 +70,8 @@ const TYPE_BADGE: Record<TimelineEntryType, string> = {
   ADMIN_INCIDENCE:    'bg-amber-100 text-amber-700',
 }
 
+const CLINICAL_TIMEZONE = 'America/Mexico_City'
+
 // --- Opciones del formulario de incidencias ---
 
 const INCIDENCE_PRESETS = [
@@ -87,6 +89,7 @@ function formatTime(isoStr: string): string {
     return new Date(isoStr).toLocaleTimeString('es-MX', {
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: CLINICAL_TIMEZONE,
     })
   } catch {
     return '—'
@@ -100,6 +103,7 @@ function formatDatetime(isoStr: string): string {
       month: 'short',
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: CLINICAL_TIMEZONE,
     })
   } catch {
     return '—'
