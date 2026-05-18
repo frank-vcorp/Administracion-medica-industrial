@@ -86,6 +86,12 @@ function getNested(obj: Record<string, unknown> | null, key: string): Record<str
     : null
 }
 
+function looksLikePromptContent(value: string): boolean {
+  const normalized = value.trim()
+  if (!normalized) return false
+  return normalized.length > 120 || normalized.includes("\n") || normalized.includes("OBJETIVO")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,21 +99,26 @@ function getNested(obj: Record<string, unknown> | null, key: string): Record<str
 export default function AICalibrationEditor({ testId, initial }: AICalibrationEditorProps) {
   const extraction = getNested(initial, "extraction")
   const diagnosis = getNested(initial, "diagnosis")
+  const rawExtractVersion = getStr(extraction, "version") || getStr(extraction, "schemaVersion")
+  const rawExtractPrompt = getStr(extraction, "prompt")
+  const rawDiagVersion = getStr(diagnosis, "version") || getStr(diagnosis, "promptVersion")
+  const rawDiagPrompt = getStr(diagnosis, "prompt")
+
+  const initialExtractPrompt = rawExtractPrompt || (looksLikePromptContent(rawExtractVersion) ? rawExtractVersion : "")
+  const initialExtractVersion = looksLikePromptContent(rawExtractVersion) ? "" : rawExtractVersion
+  const initialDiagPrompt = rawDiagPrompt || (looksLikePromptContent(rawDiagVersion) ? rawDiagVersion : "")
+  const initialDiagVersion = looksLikePromptContent(rawDiagVersion) ? "" : rawDiagVersion
 
   // ── Estado del formulario ──────────────────────────────────────────────────
   const [enabled, setEnabled] = useState(getBool(initial, "enabled"))
   const [canonicalStudyType, setCanonicalStudyType] = useState(getStr(initial, "canonicalStudyType"))
 
   // Extracción: se lee schemaVersion por compatibilidad con configs previas
-  const [extractPromptVersion, setExtractPromptVersion] = useState(
-    getStr(extraction, "version") || getStr(extraction, "schemaVersion")
-  )
-  const [extractPrompt, setExtractPrompt] = useState(getStr(extraction, "prompt"))
+  const [extractPromptVersion, setExtractPromptVersion] = useState(initialExtractVersion)
+  const [extractPrompt, setExtractPrompt] = useState(initialExtractPrompt)
   // Diagnóstico clínico
-  const [diagPromptVersion, setDiagPromptVersion] = useState(
-    getStr(diagnosis, "version") || getStr(diagnosis, "promptVersion")
-  )
-  const [diagPrompt, setDiagPrompt] = useState(getStr(diagnosis, "prompt"))
+  const [diagPromptVersion, setDiagPromptVersion] = useState(initialDiagVersion)
+  const [diagPrompt, setDiagPrompt] = useState(initialDiagPrompt)
 
   // ── Estado de la acción ────────────────────────────────────────────────────
   const [isPending, startTransition] = useTransition()
@@ -118,6 +129,11 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
     e.preventDefault()
     setMessage(null)
 
+    const normalizedExtractPrompt = extractPrompt.trim() || (looksLikePromptContent(extractPromptVersion) ? extractPromptVersion.trim() : "")
+    const normalizedExtractVersion = looksLikePromptContent(extractPromptVersion) ? "" : extractPromptVersion.trim()
+    const normalizedDiagPrompt = diagPrompt.trim() || (looksLikePromptContent(diagPromptVersion) ? diagPromptVersion.trim() : "")
+    const normalizedDiagVersion = looksLikePromptContent(diagPromptVersion) ? "" : diagPromptVersion.trim()
+
     // Merge sobre initial para preservar campos V2 (fieldDefinitions, versions, aiAssistance, etc.)
     const data: Record<string, unknown> = {
       ...(initial ?? {}),
@@ -125,15 +141,15 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
       canonicalStudyType: canonicalStudyType.trim() || null,
       extraction: {
         ...(extraction ?? {}),
-        prompt: extractPrompt.trim() || null,
-        version: extractPromptVersion.trim() || null,
-        schemaVersion: extractPromptVersion.trim() || null,
+        prompt: normalizedExtractPrompt || null,
+        version: normalizedExtractVersion || null,
+        schemaVersion: normalizedExtractVersion || null,
       },
       diagnosis: {
         ...(diagnosis ?? {}),
-        prompt: diagPrompt.trim() || null,
-        version: diagPromptVersion.trim() || null,
-        promptVersion: diagPromptVersion.trim() || null,
+        prompt: normalizedDiagPrompt || null,
+        version: normalizedDiagVersion || null,
+        promptVersion: normalizedDiagVersion || null,
       },
     }
 
@@ -173,6 +189,12 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
         >
           {message.type === "success" ? "✓ " : "✗ "}
           {message.text}
+        </div>
+      )}
+
+      {looksLikePromptContent(rawExtractVersion) && !rawExtractPrompt && (
+        <div className="px-4 py-2 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
+          ⚠ Se detectó un prompt legacy guardado en la versión de extracción. El editor ya lo movió al bloque específico; al guardar, la migración quedará persistida.
         </div>
       )}
 
