@@ -127,12 +127,37 @@ export async function triggerStudyAIAnalysis(
     // 1. Llamar al backend V2
     // IMPL-20260326-18: Reenviar study_type canónico si fue determinado por el helper central
     const studyType = (formData.get('study_type') as string) || null
+    const eventTest = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: {
+        test: {
+          select: {
+            options: true,
+          },
+        },
+      },
+    })
+
+    const testOptions = eventTest?.test?.options
+    const aiCalibration =
+      testOptions &&
+      typeof testOptions === 'object' &&
+      !Array.isArray(testOptions) &&
+      'aiCalibration' in testOptions &&
+      testOptions.aiCalibration &&
+      typeof testOptions.aiCalibration === 'object' &&
+      !Array.isArray(testOptions.aiCalibration)
+        ? (testOptions.aiCalibration as Prisma.JsonObject)
+        : null
 
     const uploadForm = new FormData()
     uploadForm.append('file', file)
     uploadForm.append('triggered_by_user_id', triggeredByUserId)
     if (studyType) {
       uploadForm.append('study_type', studyType)
+    }
+    if (aiCalibration) {
+      uploadForm.append('ai_calibration_json', JSON.stringify(aiCalibration))
     }
 
     const response = await fetch(`${PYTHON_API}/api/v2/studies/upload-and-analyze`, {

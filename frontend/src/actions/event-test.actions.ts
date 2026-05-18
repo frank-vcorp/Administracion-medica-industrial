@@ -255,10 +255,17 @@ export async function uploadEventTestFile(formData: FormData) {
           },
         }
       }
-      // Si V2 falla, loggear y caer al fallback V1
-      console.warn('[IMPL-20260326-16] V2 no disponible, usando fallback V1:', v2Result.error)
+      console.warn('[IMPL-20260326-16] V2 falló para estudio IA elegible; se cancela fallback V1:', v2Result.error)
+      return {
+        success: false,
+        error: v2Result.error || 'La IA no pudo procesar el estudio en el pipeline V2.',
+      }
     } catch (v2Error) {
-      console.warn('[IMPL-20260326-16] Error en V2, usando fallback V1:', v2Error)
+      console.warn('[IMPL-20260326-16] Error en V2 para estudio IA elegible; se cancela fallback V1:', v2Error)
+      return {
+        success: false,
+        error: v2Error instanceof Error ? v2Error.message : 'Error al procesar el estudio con IA.',
+      }
     }
   }
 
