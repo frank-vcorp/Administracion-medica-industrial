@@ -875,25 +875,29 @@ def v2_prediagnosis_from_params(
             medical_calibration=medical_calibration,
             ai_calibration=ai_calibration,
         )
-                "model_clinical": getattr(prediagnosis, "clinical_model_used", None) or GEMINI_MODEL_CLINICAL,
-                "clinical_provider": getattr(prediagnosis, "clinical_provider", None) or "gemini",
-                "calibration_source": getattr(prediagnosis, "calibration_source", None),
+        predx_model_used = getattr(prediagnosis, "clinical_model_used", None)
+        predx_provider = getattr(prediagnosis, "clinical_provider", None)
+        predx_calibration_source = getattr(prediagnosis, "calibration_source", None)
+        predx_prompt_source = getattr(prediagnosis, "prompt_source", None)
+        predx_prompt_version = getattr(prediagnosis, "prompt_version", None)
+        predx_input_debug = getattr(prediagnosis, "input_debug", None)
+
+        return {
+            "status": "success",
+            "clinical_state": prediagnosis.clinical_state,
             "prediagnosis": prediagnosis.model_dump(),
-                "prompt_source": getattr(prediagnosis, "prompt_source", None),
-                "prompt_version": getattr(prediagnosis, "prompt_version", None) or PREDIAGNOSIS_PROMPT_VERSION,
+            "audit": {
                 "model_extraction": GEMINI_MODEL_EXTRACTION,
-                "model_clinical": prediagnosis.clinical_model_used or GEMINI_MODEL_CLINICAL,
-                "clinical_provider": prediagnosis.clinical_provider or "gemini",
-                "calibration_source": prediagnosis.calibration_source,
-                # IMPL-20260518-03: fuente real del prompt clínico (ARCH-20260518-03)
-            "input_debug": getattr(prediagnosis, "input_debug", None).model_dump() if getattr(prediagnosis, "input_debug", None) else None,
-                "prompt_version": prediagnosis.prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
+                "model_clinical": predx_model_used or GEMINI_MODEL_CLINICAL,
+                "clinical_provider": predx_provider or "gemini",
+                "calibration_source": predx_calibration_source,
+                "prompt_source": predx_prompt_source,
+                "prompt_version": predx_prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
                 "pipeline_version": PIPELINE_VERSION,
                 "triggered_by_user_id": triggered_by_user_id,
                 "trigger_reason": "manual_regeneration",
             },
-            # IMPL-20260516-08: RAW de entrada clínica para trazabilidad (ARCH-20260516-08)
-            "input_debug": prediagnosis.input_debug.model_dump() if prediagnosis.input_debug else None,
+            "input_debug": predx_input_debug.model_dump() if predx_input_debug else None,
             "_guardrail": "Este prediagnóstico NO autoriza firma digital, dictamen final ni aptitud laboral sin revisión médica.",
         }
     except Exception as e:
