@@ -4,10 +4,14 @@ IMPL-20260225-01: Extractores por tipo de documento.
 IMPL-20260326-16: Separación capa extractiva / interpretativa (ARCH-20260326-16).
                Los prompts ahora extraen SOLO parámetros canónicos + calidad documental.
                La interpretación clínica vive en PrediagnosticService (prediagnostic.py).
+
+ARCH-20260518-06:
+    - La extracción se compone con una base universal fija en backend
+        más un bloque específico editable desde aiCalibration.extraction.prompt.
 """
 
 import time
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Optional
 from .base import GeminiBase
 from app.schemas.medical import (
     AudiometriaData,
@@ -28,273 +32,97 @@ class ExtractorService(GeminiBase):
     ni recomendaciones de aptitud. Esas capas pertenecen a PrediagnosticService.
     """
 
-    # IMPL-20260326-16: Prompts de extracción pura — sin diagnóstico_ia
-    # IMPL-20260513-01: Actualizado para frecuencias canónicas 250-8000 Hz, completitud documental
-    PROMPTS = {
-        # IMPL-20260516-07: Prompt actualizado — campos fuente del formato diagnóstico (ARCH-20260516-07)
-        "Audiometria": """Eres un técnico de audiología. Tu tarea es EXTRAER datos del documento, NO interpretarlos clínicamente.
+    # ARCH-20260518-03: Prompts de extracción ELIMINADOS del backend.
+    # El prompt de extracción se resuelve ÚNICAMENTE desde aiCalibration.extraction.prompt.
+    # No existe fallback de extracción en el backend — ver extract_by_type().
 
-**REGLAS CRÍTICAS:**
-1. El PACIENTE está en la parte superior del documento.
-2. La FECHA está cerca del nombre del paciente.
-3. OÍDO DERECHO (OD) y OÍDO IZQUIERDO (OI) están marcados claramente.
-4. LAS FRECUENCIAS CANÓNICAS son: 250, 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz.
-   - Extrae todas las que puedas ver; si alguna no está en el documento, omítela del dict.
-5. Los DECIBELES (dB) son valores numéricos en el audiograma.
-6. NO incluyas diagnóstico, interpretación clínica ni recomendaciones de aptitud.
-7. Si el documento es ilegible o faltan datos, indícalo en notas_calidad.
-8. Llena `frecuencias_detectadas` con la lista de frecuencias que SÍ pudiste leer (ej: ["250","500","1000"]).
-9. Llena `completitud_documental` según cuántas frecuencias canónicas tienes POR OÍDO:
-   - "suficiente" si tienes 6 o más de 8 frecuencias en AMBOS oídos
-   - "parcial" si tienes entre 3 y 5 frecuencias en algún oído
-   - "no_concluyente" si tienes menos de 3 frecuencias en algún oído o el trazado es ilegible
-10. CAMPOS FUENTE DEL FORMATO (solo si están visibles en el documento):
-    - `faringe`: texto del hallazgo de faringe si aparece en el formato (ej: "Normal", "Sin datos patológicos").
-    - `cad`: texto del hallazgo de Conducto Auditivo externo Derecho si aparece (ej: "Permeable").
-    - `cai`: texto del hallazgo de Conducto Auditivo externo Izquierdo si aparece.
-    - `mtd`: texto del hallazgo de Membrana Timpánica Derecha si aparece (ej: "Íntegra").
-    - `mti`: texto del hallazgo de Membrana Timpánica Izquierda si aparece.
-    Si alguno de estos campos NO aparece en el documento, omítelo (o pon null).
-11. PROHIBIDO: NO extraigas ni incluyas la sección de descripción audiométrica narrativa/redactada que pueda aparecer al final del formato. Esa sección no forma parte del contrato de extracción.
+    # LEGACY NOTE (ARCH-20260518-03): El dict PROMPTS fue eliminado. Cualquier referencia a
+    # self.PROMPTS en código externo debe actualizarse para pasar ai_calibration correctamente.
 
-**Respuesta OBLIGATORIA en JSON (solo {}, sin ```json):**
-{
-  "paciente": "Nombre Completo",
-  "fecha_estudio": "dd/mm/yyyy",
-  "oido_derecho": {"250": 10, "500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
-  "oido_izquierdo": {"250": 10, "500": 10, "1000": 15, "2000": 20, "3000": 20, "4000": 25, "6000": 30, "8000": 35},
-  "frecuencias_detectadas": ["250", "500", "1000", "2000", "3000", "4000", "6000", "8000"],
-  "completitud_documental": "suficiente",
-  "notas_calidad": null,
-  "faringe": null,
-  "cad": null,
-  "cai": null,
-  "mtd": null,
-  "mti": null
-}""",
+    # Prompt de referencia solo para documentación: ver context/SPECs/SPEC_ARCH-20260518-03*.md
 
-        "Laboratorio": """Eres un técnico de patología clínica. Tu tarea es EXTRAER parámetros del documento, NO interpretarlos.
+    # ARCH-20260518-06 | respaldo: context/SPECs/SPEC_ARCH-20260518-06-BASE-EXTRACCION-Y-PLANTILLA-CALIBRACION.md
+    BASE_EXTRACTION_PROMPT = """
+Eres un extractor de datos médicos estructurados.
 
-**Extrae:**
-1. PACIENTE
-2. FECHA del análisis
-3. TIPO de estudio (Biometría, Química Sanguínea, etc.)
-4. TODOS LOS PARÁMETROS con valor, unidad, referencia y estado (normal/high/low/unknown)
-5. Profesional firmante si es visible
-6. NO incluyas interpretación clínica ni diagnóstico.
+Tu tarea es leer un documento médico y extraer TODOS los datos visibles con máxima precisión y exhaustividad,
+devolviendo exclusivamente JSON válido según el esquema esperado.
 
-**Respuesta OBLIGATORIA en JSON:**
-{
-  "paciente": "Nombre",
-  "fecha": "dd/mm/yyyy",
-  "estudio_tipo": "Biometría Hemática",
-  "parametros": [
-    {"parametro": "Glucosa", "valor": "110", "unidad": "mg/dL", "referencia": "70-100", "estado": "high"},
-    {"parametro": "Hemoglobina", "valor": "14.2", "unidad": "g/dL", "referencia": "14.0-16.0", "estado": "normal"}
-  ],
-  "profesional": "Dr. García",
-  "notas_calidad": null
-}""",
+REGLAS GENERALES
+1. Extrae únicamente datos visibles en el documento.
+2. No inventes, no deduzcas y no completes valores ausentes.
+3. No hagas interpretación clínica, no emitas diagnósticos, no clasifiques normalidad o anormalidad.
+4. Si un dato está visible en cualquier parte del documento, no lo dejes fuera.
+5. Conserva números, unidades, porcentajes, fechas, horas, nombres y etiquetas con la mayor fidelidad posible.
+6. Si un campo del esquema no aparece visible, usa null.
+7. Si hay tablas, extrae todas las filas y columnas relevantes; no reduzcas el documento a pocos valores principales.
+8. Si una etiqueta no coincide exactamente con el esquema pero es claramente equivalente, mapea al campo canónico correcto.
+9. Si una etiqueta visible no tiene mapeo claro, conserva el label y sus valores en el bloque estructurado más cercano posible.
+10. Devuelve SOLO JSON válido. Sin markdown, sin comentarios, sin explicación adicional.
 
-        # IMPL-20260516-12: Prompt exhaustivo de Espirometría (ARCH-20260516-12)
-        # Extrae los 6 bloques del layout real AMI + legacy flat fields para backward compat.
-        "Espirometria": """Eres un técnico de neumología. Tu tarea es EXTRAER TODOS los datos visibles del documento espirométrico, NO interpretarlos clínicamente.
+CONTEXTO
+Este documento contiene datos médicos ocupacionales reales. Puedes encontrar identificación del paciente,
+metadatos del estudio, condiciones de medición, tablas de parámetros, referencias, LLN, porcentajes del predicho,
+notas de calidad y gráficas.
+""".strip()
 
-**REGLAS CRÍTICAS:**
-1. La tabla numérica tiene PRECEDENCIA ABSOLUTA sobre la gráfica o cualquier texto narrativo.
-2. Extrae TODOS los datos fuente visibles: identificación, condiciones, tabla de parámetros, repetibilidad y gráficas.
-3. Para cada fila de la tabla de parámetros, captura el label literal, una key canónica (si la puedes mapear), unidad, valores M1/M2/M3, %REF de cada maniobra, REF y LLN.
-4. NO incluyas diagnóstico, interpretación clínica ni recomendaciones de aptitud. Solo extracción documental.
-5. Mapeo canónico de filas: "FVC"→fvc_l, "FEV1"→fev1_l, "FEV1/FVC"→fev1_fvc_pct, "FEV1/VC"→fev1_vc_pct, "PEF"→pef_l_s, "FEF25-75"→fef25_75_l_s, "FET100"→fet100_s, "Vext."→vext_l, "Mejor FVC"→mejor_fvc_l, "Mejor FEV1"→mejor_fev1_l, "Mejor FEV1/FVC"→mejor_fev1_fvc_pct. Si no reconoces el label, usa null en key.
-6. Si una fila de la tabla no se puede leer, no la omitas: ponla con el label visible y null en los campos no legibles.
-7. Para los campos legacy (fev1, fvc, fev1_fvc_ratio, fev1_percent_predicho, fvc_percent_predicho): extrae el mejor valor disponible de la tabla (M1 de la fila correspondiente o el valor "Mejor" si existe).
-8. `es_interpretable` (legacy y calidad.es_interpretable): true si tienes al menos fev1 y fvc; false si faltan ambos o el documento es ilegible.
-9. `completitud_documental` (legacy y calidad.completitud_documental): "suficiente" si hay fev1+fvc+ratio+%predicho, "parcial" si solo fev1+fvc, "no_concluyente" si faltan fev1 o fvc.
-10. Si no hay datos de un bloque (ej. no hay bloque de condiciones), pon el campo en null.
+    def _build_extraction_prompt(self, study_specific_prompt: str) -> str:
+        """Compone la base universal con el bloque específico editable por calibración."""
+        return (
+            f"{self.BASE_EXTRACTION_PROMPT}\n\n"
+            "BLOQUE ESPECIFICO DEL ESTUDIO\n"
+            "El siguiente bloque complementa la base universal con reglas particulares del estudio actual.\n\n"
+            f"{study_specific_prompt.strip()}"
+        )
 
-**Respuesta OBLIGATORIA en JSON (solo {}, sin ```json):**
-{
-  "paciente": "Nombre Completo",
-  "fecha_estudio": "dd/mm/yyyy",
-  "fev1": 3.5,
-  "fvc": 4.2,
-  "fev1_fvc_ratio": 0.83,
-  "fev1_percent_predicho": 92.0,
-  "fvc_percent_predicho": 95.0,
-  "broncodilatador_post_fev1": null,
-  "broncodilatador_post_fvc": null,
-  "es_interpretable": true,
-  "completitud_documental": "suficiente",
-  "notas_calidad": null,
-  "paciente_detalle": {
-    "nombre_completo": "Nombre Completo",
-    "sexo": "Masculino",
-    "edad_anios": 35.0,
-    "talla_cm": 170.0,
-    "peso_kg": 75.0,
-    "imc": 26.0,
-    "fuma": "No",
-    "motivo": "Examen periódico",
-    "procedencia": null
-  },
-  "estudio": {
-    "referencia": "ESP-2026-001",
-    "fecha_estudio": "dd/mm/yyyy",
-    "hora_estudio": "09:00",
-    "tipo_reporte": "Espirometría simple",
-    "equipo_modelo": "Equipo/Modelo",
-    "version_software": "v1.0"
-  },
-  "condiciones": {
-    "temperatura_c": 22.0,
-    "presion_mmhg": 760.0,
-    "humedad_pct": 50.0,
-    "tecnico": "TEC-001",
-    "transductor": null,
-    "referencia_ecuacion": "NHANES III",
-    "factor_etnico": null,
-    "factor_btps": null
-  },
-  "parametros": [
-    {"label": "FVC", "key": "fvc_l", "unidad": "L", "m1": 4.2, "m1_pct_ref": 95.0, "m2": null, "m2_pct_ref": null, "m3": null, "m3_pct_ref": null, "ref": 4.4, "lln": 3.6},
-    {"label": "FEV1", "key": "fev1_l", "unidad": "L", "m1": 3.5, "m1_pct_ref": 92.0, "m2": null, "m2_pct_ref": null, "m3": null, "m3_pct_ref": null, "ref": 3.8, "lln": 3.0},
-    {"label": "FEV1/FVC", "key": "fev1_fvc_pct", "unidad": "%", "m1": 83.0, "m1_pct_ref": null, "m2": null, "m2_pct_ref": null, "m3": null, "m3_pct_ref": null, "ref": 78.0, "lln": 70.0}
-  ],
-  "calidad": {
-    "repetibilidad_ats_ers_fvc": "Aceptable",
-    "repetibilidad_ats_ers_fev1": "Aceptable",
-    "es_interpretable": true,
-    "completitud_documental": "suficiente",
-    "notas_calidad": null
-  },
-  "graficas": {
-    "curva_flujo_volumen_presente": true,
-    "curva_volumen_tiempo_presente": true,
-    "maniobras_graficadas": 3,
-    "observaciones_grafica": null
-  }
-}""",
 
-        "Rayos_X": """Eres un técnico radiólogo. Tu tarea es EXTRAER hallazgos descriptivos del estudio, NO emitir diagnóstico final.
-
-**Extrae:**
-1. PACIENTE
-2. FECHA
-3. LOCALIZACIÓN anatómica (Tórax, Columna Lumbar, Extremidad, etc.)
-4. HALLAZGOS: lista de observaciones descriptivas objetivas (lo que se ve, no el diagnóstico).
-5. Radiólogo firmante si es visible.
-6. Los hallazgos deben ser observaciones factuales. Evita frases como "compatible con X".
-
-**Respuesta OBLIGATORIA en JSON:**
-{
-  "paciente": "Nombre",
-  "fecha_estudio": "dd/mm/yyyy",
-  "localizacion": "Tórax",
-  "hallazgos": ["Índice cardiotorácico aumentado", "Área de opacidad en base pulmonar izquierda"],
-  "radiologista": "Dr. López",
-  "notas_calidad": null
-}""",
-
-        # IMPL-20260326-17: Prompt para Campimetría (GEN-O1WV7)
-        "Campimetria": """Eres un técnico de oftalmología. Tu tarea es EXTRAER datos del campo visual, NO interpretarlos clínicamente.
-
-**Extrae:**
-1. PACIENTE
-2. FECHA del estudio
-3. DEFECTOS OJO DERECHO (OD): lista de defectos o escotomas descritos o zonas con sensibilidad reducida
-4. DEFECTOS OJO IZQUIERDO (OI): ídem para ojo izquierdo
-5. ÍNDICES OD: MD (Mean Deviation), PSD (Pattern Std Dev), VFI si están visibles — como strings
-6. ÍNDICES OI: ídem para ojo izquierdo
-7. Profesional firmante si es visible
-8. NO incluyas diagnóstico, interpretación ni aptitud.
-9. Si el documento es ilegible o faltan datos, indícalo en notas_calidad.
-
-**Respuesta OBLIGATORIA en JSON:**
-{
-  "paciente": "Nombre",
-  "fecha_estudio": "dd/mm/yyyy",
-  "ojo_derecho_defectos": ["Escotoma paracentral superior", "Depresión nasal inferior"],
-  "ojo_izquierdo_defectos": [],
-  "indices_ojo_derecho": {"MD": "-4.2 dB", "PSD": "2.1 dB", "VFI": "94%"},
-  "indices_ojo_izquierdo": {"MD": "-1.0 dB", "PSD": "1.5 dB"},
-  "profesional": "Dr. González",
-  "notas_calidad": null
-}""",
-
-        # IMPL-20260326-17: Prompt para Electrocardiograma (GEN-C85PD)
-        "Electrocardiograma": """Eres un técnico de cardiología. Tu tarea es EXTRAER parámetros del trazado ECG, NO interpretarlos clínicamente.
-
-**Extrae:**
-1. PACIENTE
-2. FECHA
-3. RITMO: descripción del ritmo (Ej: Sinusal, Fibrilación Auricular, Taquicardia)
-4. FRECUENCIA cardíaca en lpm (número entero)
-5. INTERVALO PR en milisegundos (número entero)
-6. DURACIÓN QRS en milisegundos (número entero)
-7. QTc corregido en milisegundos (número entero)
-8. EJE ELÉCTRICO: Normal, Desviación izquierda, Desviación derecha, Indeterminado
-9. HALLAZGOS: lista de observaciones descriptivas del trazado (sin diagnóstico final). Ej: "Bloqueo de rama derecha", "Elevación de segmento ST en V2-V4"
-10. Profesional firmante si es visible
-11. NO incluyas diagnóstico definitivo, aptitud ni interpretación de urgencia.
-
-**Respuesta OBLIGATORIA en JSON:**
-{
-  "paciente": "Nombre",
-  "fecha_estudio": "dd/mm/yyyy",
-  "ritmo": "Sinusal",
-  "frecuencia_bpm": 72,
-  "intervalo_pr_ms": 160,
-  "duracion_qrs_ms": 90,
-  "qtc_ms": 410,
-  "eje_electrico": "Normal",
-  "hallazgos": ["Onda T invertida en V1-V3", "Sin otras alteraciones del trazado"],
-  "profesional": "Dr. Martínez",
-  "notas_calidad": null
-}""",
-
-        # IMPL-20260326-17: Prompt para Riesgo Cardiovascular (GEN-U5BQX)
-        "RiesgoCardiovascular": """Eres un técnico médico. Tu tarea es EXTRAER el resultado de la evaluación de riesgo cardiovascular ya calculado en el documento, NO recalcular ni reinterpretar.
-
-**Extrae:**
-1. PACIENTE
-2. FECHA de la evaluación
-3. NIVEL DE RIESGO calculado (Ej: Bajo, Moderado, Alto, Muy Alto)
-4. PORCENTAJE DE RIESGO a 10 años si está disponible (número decimal)
-5. ESCALA UTILIZADA (Framingham, OMS/ISH, ACC/AHA ASCVD, SCORE, etc.)
-6. FACTORES DE RIESGO listados en el documento (Ej: HTA, diabetes, tabaquismo, dislipidemia, obesidad)
-7. Profesional firmante si es visible
-8. NO recalcules, NO interpretes. Solo extrae lo que está escrito en el documento.
-
-**Respuesta OBLIGATORIA en JSON:**
-{
-  "paciente": "Nombre",
-  "fecha_estudio": "dd/mm/yyyy",
-  "nivel_riesgo": "Moderado",
-  "porcentaje_riesgo": 12.5,
-  "escala_utilizada": "Framingham",
-  "factores_riesgo": ["HTA", "Tabaquismo", "Dislipidemia"],
-  "profesional": "Dr. Ramírez",
-  "notas_calidad": null
-}""",
-    }
 
     def extract_by_type(
         self,
         file_path: str,
-        doc_type: str
+        doc_type: str,
+        ai_calibration: Optional[Dict[str, Any]] = None,
     ) -> Union[AudiometriaData, LaboratorioData, EspirometriaData, RayosXData, Dict]:
         """
         Extrae datos estructurados según el tipo de documento.
-        
+
+        ARCH-20260518-03: El prompt de extracción se resuelve ÚNICAMENTE desde aiCalibration.
+        Si no está configurado, la corrida falla explícitamente con EXTRACTION_PROMPT_NOT_CONFIGURED.
+        No existe fallback de extracción en el backend.
+
         Args:
-            file_path: Ruta del archivo
-            doc_type: Tipo de documento (Audiometria, Laboratorio, etc.)
-        
+            file_path:      Ruta del archivo
+            doc_type:       Tipo de documento (Audiometria, Laboratorio, etc.)
+            ai_calibration: Dict con aiCalibration de la prueba. Debe contener
+                            ai_calibration["extraction"]["prompt"] para que la
+                            extracción proceda.
+
         Returns:
             Objeto Pydantic del tipo correspondiente o Dict genérico.
+
+        Raises:
+            ValueError: EXTRACTION_PROMPT_NOT_CONFIGURED si falta prompt de extracción
+                        en aiCalibration.
         """
-        prompt = self.PROMPTS.get(doc_type, "Extrae todos los datos relevantes de este documento médico.")
-        
+        # ARCH-20260518-03: resolver prompt únicamente desde aiCalibration
+        extraction_cfg = (ai_calibration or {}).get("extraction") or {}
+        prompt = extraction_cfg.get("prompt")
+
+        if not prompt:
+            # Sin fallback — error explícito y trazable de configuración
+            raise ValueError(
+                f"EXTRACTION_PROMPT_NOT_CONFIGURED: La prueba '{doc_type}' no tiene "
+                "prompt de extracción configurado en aiCalibration. "
+                "Configure el prompt de extracción en el panel de calibración antes de procesar."
+            )
+
+        prompt = self._build_extraction_prompt(prompt)
+
+        _extraction_prompt_version = extraction_cfg.get("version", "calibration_custom")
+        print(
+            f"✅ [ARCH-20260518-03] Prompt de extracción resuelto desde aiCalibration "
+            f"(v={_extraction_prompt_version}) para {doc_type}"
+        )
         print(f"🧠 Extrayendo datos para tipo: {doc_type}")
         
         start_time = time.time()

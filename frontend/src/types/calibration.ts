@@ -71,11 +71,15 @@ export interface AICalibrationV2 {
   canonicalStudyType?: string
   extraction?: {
     enabled: boolean
+    prompt?: string
+    version?: string
     schemaVersion?: string
     targetFields?: string[]
   }
   diagnosis?: {
     enabled: boolean
+    prompt?: string
+    version?: string
     promptVersion?: string
     requiresDoctorCalibration?: boolean
   }

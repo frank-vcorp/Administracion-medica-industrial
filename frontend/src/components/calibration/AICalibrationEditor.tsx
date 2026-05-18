@@ -4,6 +4,8 @@
  *   Maneja el caso inicial (sin configuración) y el caso de edición (ya configurado).
  * @id ARCH-20260516-03
  * @backup context/SPECs/SPEC_ARCH-20260516-03-CALIBRACION-CONFIG-SOLO-DOS-PROMPTS.md
+ * @intervention ARCH-20260518-06
+ * @see context/SPECs/SPEC_ARCH-20260518-06-BASE-EXTRACCION-Y-PLANTILLA-CALIBRACION.md
  */
 "use client"
 
@@ -18,6 +20,48 @@ interface AICalibrationEditorProps {
   testId: string
   initial: Record<string, unknown> | null
 }
+
+const EXTRACTION_PROMPT_TEMPLATE = `REGLAS ESPECIFICAS DEL ESTUDIO: {{nombre_del_estudio}}
+
+OBJETIVO ESPECIFICO
+Extraer todos los datos visibles de este estudio con precision literal y exhaustividad, sin interpretacion clinica.
+
+CAMPOS CRITICOS
+- identificacion del paciente
+- fecha y hora del estudio
+- equipo, software y condiciones tecnicas
+- tabla principal de parametros
+- referencias, LLN y porcentajes del predicho
+- notas de calidad tecnica
+
+SINONIMOS Y LABELS EQUIVALENTES
+- lista aqui labels reales y sus equivalencias canonicas
+
+REGLAS ESPECIFICAS DE TABLAS
+- indica filas, columnas y variantes que nunca deben omitirse
+
+REGLAS ESPECIFICAS DE CALIDAD
+- indica como capturar repetibilidad, interpretabilidad o completitud documental
+
+CAMPOS QUE NUNCA DEBEN OMITIRSE SI ESTAN VISIBLES
+- agrega aqui los campos que suelen perderse
+
+CAMPOS FRECUENTEMENTE OLVIDADOS
+- agrega aqui secundarios importantes del estudio`
+
+const CALIBRATION_REQUEST_TEMPLATE = `Genera un bloque especifico de extraccion para {{nombre_del_estudio}}.
+
+Necesito que complemente una base universal ya existente en backend.
+No repitas reglas generales de no invencion o salida JSON.
+Enfocate solo en:
+- campos criticos
+- labels y sinonimos reales
+- reglas de tablas
+- reglas de calidad
+- campos que nunca deben omitirse
+- datos medicos tecnicos visibles que suelen perderse
+
+No hagas interpretacion clinica. Solo extraccion precisa y exhaustiva.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers de acceso seguro a datos anidados del JSON
@@ -55,9 +99,15 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
   const [canonicalStudyType, setCanonicalStudyType] = useState(getStr(initial, "canonicalStudyType"))
 
   // Extracción: se lee schemaVersion por compatibilidad con configs previas
-  const [extractPromptVersion, setExtractPromptVersion] = useState(getStr(extraction, "schemaVersion"))
+  const [extractPromptVersion, setExtractPromptVersion] = useState(
+    getStr(extraction, "version") || getStr(extraction, "schemaVersion")
+  )
+  const [extractPrompt, setExtractPrompt] = useState(getStr(extraction, "prompt"))
   // Diagnóstico clínico
-  const [diagPromptVersion, setDiagPromptVersion] = useState(getStr(diagnosis, "promptVersion"))
+  const [diagPromptVersion, setDiagPromptVersion] = useState(
+    getStr(diagnosis, "version") || getStr(diagnosis, "promptVersion")
+  )
+  const [diagPrompt, setDiagPrompt] = useState(getStr(diagnosis, "prompt"))
 
   // ── Estado de la acción ────────────────────────────────────────────────────
   const [isPending, startTransition] = useTransition()
@@ -75,10 +125,14 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
       canonicalStudyType: canonicalStudyType.trim() || null,
       extraction: {
         ...(extraction ?? {}),
+        prompt: extractPrompt.trim() || null,
+        version: extractPromptVersion.trim() || null,
         schemaVersion: extractPromptVersion.trim() || null,
       },
       diagnosis: {
         ...(diagnosis ?? {}),
+        prompt: diagPrompt.trim() || null,
+        version: diagPromptVersion.trim() || null,
         promptVersion: diagPromptVersion.trim() || null,
       },
     }
@@ -160,7 +214,9 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
           <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Extracción documental</p>
           <span className="text-xs font-medium px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200">Gemini</span>
         </div>
-        <p className="text-xs text-blue-600">Versión del prompt que Gemini usa para extraer datos del documento.</p>
+        <p className="text-xs text-blue-600">
+          El backend ya aporta una base universal fija de extracción médica. Aquí captura solo el bloque específico del estudio.
+        </p>
 
         <div>
           <label className="block text-xs text-slate-600 mb-1" htmlFor="extract-prompt-version">
@@ -175,6 +231,40 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
             className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs text-slate-600" htmlFor="extract-prompt">
+              Bloque específico de extracción
+            </label>
+            <button
+              type="button"
+              onClick={() => setExtractPrompt(EXTRACTION_PROMPT_TEMPLATE)}
+              className="text-xs font-medium text-blue-700 hover:text-blue-800"
+            >
+              Cargar plantilla
+            </button>
+          </div>
+          <textarea
+            id="extract-prompt"
+            value={extractPrompt}
+            onChange={(e) => setExtractPrompt(e.target.value)}
+            rows={12}
+            placeholder="Pega aqui solo las reglas particulares del estudio. La base universal ya vive en backend."
+            className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-blue-200 bg-white p-3">
+            <p className="mb-2 text-xs font-semibold text-blue-700 uppercase tracking-wide">Plantilla sugerida</p>
+            <pre className="whitespace-pre-wrap text-[11px] leading-5 text-slate-600 font-mono">{EXTRACTION_PROMPT_TEMPLATE}</pre>
+          </div>
+          <div className="rounded-lg border border-blue-200 bg-white p-3">
+            <p className="mb-2 text-xs font-semibold text-blue-700 uppercase tracking-wide">Qué pedirle a Copilot</p>
+            <pre className="whitespace-pre-wrap text-[11px] leading-5 text-slate-600 font-mono">{CALIBRATION_REQUEST_TEMPLATE}</pre>
+          </div>
+        </div>
       </div>
 
       {/* ── Diagnóstico clínico — MedGemma ──────────────────────────────────── */}
@@ -183,7 +273,7 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
           <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Diagnóstico clínico</p>
           <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MedGemma</span>
         </div>
-        <p className="text-xs text-violet-600">Versión del prompt que MedGemma usa para interpretar los datos y generar el prediagnóstico.</p>
+        <p className="text-xs text-violet-600">Prompt y versión que MedGemma usa para interpretar los datos y generar el prediagnóstico.</p>
 
         <div>
           <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt-version">
@@ -195,6 +285,20 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
             value={diagPromptVersion}
             onChange={(e) => setDiagPromptVersion(e.target.value)}
             placeholder="ej. predx-audio-medgemma-v2"
+            className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt">
+            Prompt clínico específico
+          </label>
+          <textarea
+            id="diag-prompt"
+            value={diagPrompt}
+            onChange={(e) => setDiagPrompt(e.target.value)}
+            rows={8}
+            placeholder="Pega aqui el prompt clínico específico del estudio para MedGemma."
             className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
           />
         </div>
