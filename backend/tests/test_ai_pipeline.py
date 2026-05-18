@@ -2,6 +2,7 @@
 Tests para el Pipeline IA Modular.
 IMPL-20260225-01: Clasificación y extracción de documentos médicos.
 IMPL-20260326-17: Tests para Campimetria (GEN-O1WV7), Electrocardiograma (GEN-C85PD), RiesgoCardiovascular (GEN-U5BQX).
+IMPL-20260518-03: TestPromptResolutionARCH20260518_03 — extracción sin fallback, clínica con fallback general.
 """
 
 import pytest
@@ -24,6 +25,12 @@ from app.schemas.medical import (
     ElectrocardiogramaData,
     RiesgoCardiovascularData,
 )
+
+# IMPL-20260518-03: ai_calibration mínima válida para tests que no prueban la resolución
+# de prompts. Proporciona un prompt de extracción para evitar EXTRACTION_PROMPT_NOT_CONFIGURED.
+_TEST_AI_CALIBRATION_EXTRACTION = {
+    "extraction": {"prompt": "Extrae todos los datos relevantes del documento médico.", "version": "test_v1"},
+}
 
 
 class TestDocumentClassifierService:
@@ -113,7 +120,7 @@ class TestExtractorService:
             "interpretacion": "Normal para la edad"
         }
         
-        result = extractor.extract_by_type("/fake/path/audio.pdf", "Audiometria")
+        result = extractor.extract_by_type("/fake/path/audio.pdf", "Audiometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         
         assert isinstance(result, AudiometriaData)
         assert result.paciente == "Juan Pérez"
@@ -133,7 +140,7 @@ class TestExtractorService:
             "interpretacion": "Prediabetes detectada"
         }
         
-        result = extractor.extract_by_type("/fake/path/lab.pdf", "Laboratorio")
+        result = extractor.extract_by_type("/fake/path/lab.pdf", "Laboratorio", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         
         assert result.paciente == "María García"
         assert len(result.parametros) == 1
@@ -144,7 +151,7 @@ class TestExtractorService:
         """Test que retorna dict para tipos desconocidos."""
         mock_gemini.return_value = {"datos": "genéricos"}
         
-        result = extractor.extract_by_type("/fake/path/doc.pdf", "TipoDesconocido")
+        result = extractor.extract_by_type("/fake/path/doc.pdf", "TipoDesconocido", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         
         assert isinstance(result, dict)
         assert result["datos"] == "genéricos"
@@ -216,7 +223,7 @@ class TestNuevosTiposEstudio:
             "notas_calidad": None,
             "diagnostico_ia": "Defecto glaucomatoso"  # campo legacy que debe eliminarse
         }
-        result = extractor.extract_by_type("/fake/campimetria.pdf", "Campimetria")
+        result = extractor.extract_by_type("/fake/campimetria.pdf", "Campimetria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert type(result).__name__ == "CampimetriaData"
         assert result.paciente == "Ana López"
         assert result.ojo_derecho_defectos == ["Escotoma paracentral superior"]
@@ -231,7 +238,7 @@ class TestNuevosTiposEstudio:
             "paciente": "Carlos Ruiz",
             "fecha_estudio": "26/03/2026",
         }
-        result = extractor.extract_by_type("/fake/campimetria2.pdf", "Campimetria")
+        result = extractor.extract_by_type("/fake/campimetria2.pdf", "Campimetria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert type(result).__name__ == "CampimetriaData"
         assert result.ojo_derecho_defectos is None
         assert result.indices_ojo_derecho is None
@@ -254,7 +261,7 @@ class TestNuevosTiposEstudio:
             "profesional": "Dr. Martínez",
             "notas_calidad": None
         }
-        result = extractor.extract_by_type("/fake/ecg.pdf", "Electrocardiograma")
+        result = extractor.extract_by_type("/fake/ecg.pdf", "Electrocardiograma", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert type(result).__name__ == "ElectrocardiogramaData"
         assert result.paciente == "Roberto Díaz"
         assert result.ritmo == "Sinusal"
@@ -271,7 +278,7 @@ class TestNuevosTiposEstudio:
             "ritmo": "Sinusal",
             "frecuencia_bpm": "85",  # el LLM puede devolver string
         }
-        result = extractor.extract_by_type("/fake/ecg2.pdf", "Electrocardiograma")
+        result = extractor.extract_by_type("/fake/ecg2.pdf", "Electrocardiograma", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert type(result).__name__ == "ElectrocardiogramaData"
         assert result.frecuencia_bpm == 85  # normalizado a int
 
@@ -290,7 +297,7 @@ class TestNuevosTiposEstudio:
             "profesional": "Dr. Ramírez",
             "notas_calidad": None
         }
-        result = extractor.extract_by_type("/fake/riesgo_cv.pdf", "RiesgoCardiovascular")
+        result = extractor.extract_by_type("/fake/riesgo_cv.pdf", "RiesgoCardiovascular", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert type(result).__name__ == "RiesgoCardiovascularData"
         assert result.nivel_riesgo == "Moderado"
         assert result.porcentaje_riesgo == 12.5
@@ -307,7 +314,7 @@ class TestNuevosTiposEstudio:
             "porcentaje_riesgo": "20%",  # el LLM puede devolver string con %
             "escala_utilizada": "ACC/AHA ASCVD",
         }
-        result = extractor.extract_by_type("/fake/riesgo_cv2.pdf", "RiesgoCardiovascular")
+        result = extractor.extract_by_type("/fake/riesgo_cv2.pdf", "RiesgoCardiovascular", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert type(result).__name__ == "RiesgoCardiovascularData"
         assert result.porcentaje_riesgo == 20.0  # normalizado a float
 
@@ -341,10 +348,12 @@ class TestPrediagnosticoNuevosTipos:
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
         assert result.confidence == 0.0
 
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
-    def test_ecg_con_params_minimos_genera_prediagnostico(self, mock_gemini_text, prediagnostic_svc):
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    def test_ecg_con_params_minimos_genera_prediagnostico(self, mock_featherless_text, prediagnostic_svc):
         """ECG con ritmo y frecuencia genera un prediagnóstico IA válido."""
-        mock_gemini_text.return_value = {
+        mock_featherless_text.return_value = {
             "summary": "Trazado compatible con ritmo sinusal normal.",
             "confidence": 0.75,
             "clinical_state": "AI_PENDING_REVIEW",
@@ -361,6 +370,7 @@ class TestPrediagnosticoNuevosTipos:
         )
         assert result.clinical_state == "AI_PENDING_REVIEW"
         assert result.confidence == 0.75
+        assert result.clinical_provider == "featherless"
 
     def test_ecg_sin_params_minimos_retorna_non_conclusive(self, prediagnostic_svc):
         """ECG sin ritmo ni frecuencia debe retornar AI_NON_CONCLUSIVE."""
@@ -410,7 +420,7 @@ class TestCalibrationV1AudioEspiro:
             "completitud_documental": "suficiente",
             "notas_calidad": None,
         }
-        result = extractor.extract_by_type("/fake/audiometria_nominal.pdf", "Audiometria")
+        result = extractor.extract_by_type("/fake/audiometria_nominal.pdf", "Audiometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert isinstance(result, AudiometriaData)
         assert "250" in result.oido_derecho
         assert "8000" in result.oido_derecho
@@ -434,7 +444,7 @@ class TestCalibrationV1AudioEspiro:
             "completitud_documental": "parcial",
             "notas_calidad": "Audiograma con solo 4 frecuencias visibles",
         }
-        result = extractor.extract_by_type("/fake/audiometria_incompleta.pdf", "Audiometria")
+        result = extractor.extract_by_type("/fake/audiometria_incompleta.pdf", "Audiometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert isinstance(result, AudiometriaData)
         assert result.completitud_documental == "parcial"
         assert len(result.oido_derecho) == 4
@@ -461,7 +471,7 @@ class TestCalibrationV1AudioEspiro:
             "mtd": "Íntegra, aspecto normal",
             "mti": "Íntegra, aspecto normal",
         }
-        result = extractor.extract_by_type("/fake/audiometria_formato_diagnostico.pdf", "Audiometria")
+        result = extractor.extract_by_type("/fake/audiometria_formato_diagnostico.pdf", "Audiometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert isinstance(result, AudiometriaData)
         # Campos fuente nuevos capturados correctamente
         assert result.faringe == "Sin datos patológicos"
@@ -489,7 +499,7 @@ class TestCalibrationV1AudioEspiro:
             "notas_calidad": None,
             # SIN faringe, cad, cai, mtd, mti
         }
-        result = extractor.extract_by_type("/fake/audiometria_viejo.pdf", "Audiometria")
+        result = extractor.extract_by_type("/fake/audiometria_viejo.pdf", "Audiometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert isinstance(result, AudiometriaData)
         assert result.faringe is None
         assert result.cad is None
@@ -520,7 +530,7 @@ class TestCalibrationV1AudioEspiro:
             "completitud_documental": "suficiente",
             "notas_calidad": None,
         }
-        result = extractor.extract_by_type("/fake/espirometria_nominal.pdf", "Espirometria")
+        result = extractor.extract_by_type("/fake/espirometria_nominal.pdf", "Espirometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert isinstance(result, EspirometriaData)
         assert result.fev1 == 3.2
         assert result.fvc == 4.0
@@ -549,7 +559,7 @@ class TestCalibrationV1AudioEspiro:
             "completitud_documental": "no_concluyente",
             "notas_calidad": "No se encontraron valores de FEV1 ni FVC en el documento",
         }
-        result = extractor.extract_by_type("/fake/espirometria_incompleta.pdf", "Espirometria")
+        result = extractor.extract_by_type("/fake/espirometria_incompleta.pdf", "Espirometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert isinstance(result, EspirometriaData)
         assert result.es_interpretable is False
         assert result.completitud_documental == "no_concluyente"
@@ -575,7 +585,7 @@ class TestCalibrationV1AudioEspiro:
         # Al faltar parámetros mínimos retorna AI_NON_CONCLUSIVE, pero con calibration_source correcto
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
         assert result.calibration_source == "medical_calibration"
-        assert result.clinical_model_used == "gemini-2.5-flash"
+        assert result.clinical_model_used == "google/medgemma-27b-text-it"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
@@ -591,7 +601,7 @@ class TestCalibrationV1AudioEspiro:
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
         assert result.calibration_source == "general_fallback"
-        assert result.clinical_model_used == "gemini-2.5-flash"
+        assert result.clinical_model_used == "google/medgemma-27b-text-it"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
@@ -614,9 +624,9 @@ class TestCalibrationV1AudioEspiro:
         assert result.non_conclusive_reason is not None
         assert "interpretable" in result.non_conclusive_reason.lower() or "faltantes" in result.non_conclusive_reason.lower()
 
-    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
     def test_prediagnostico_espirometria_nominal_con_calibracion(self, mock_call, prediagnostic_svc):
         """
         Espirometría nominal con calibración médica: el prediagnóstico debe completarse
@@ -652,7 +662,7 @@ class TestCalibrationV1AudioEspiro:
         )
         assert result.clinical_state == "AI_PENDING_REVIEW"
         assert result.calibration_source == "medical_calibration"
-        assert result.clinical_model_used == "gemini-2.5-flash"
+        assert result.clinical_model_used == "google/medgemma-27b-text-it"
         assert result.confidence >= 0.60
 
 
@@ -668,7 +678,7 @@ if __name__ == "__main__":
 class TestMedGemmaFeatherlessProvider:
     """
     Tests para la integración MedGemma vía Featherless (OpenAI SDK).
-    IMPL-20260513-03: Selección de proveedor, trazabilidad y fallback honesto.
+    IMPL-20260513-03: Selección de proveedor, trazabilidad y degradación honesta.
     """
 
     @pytest.fixture
@@ -701,29 +711,25 @@ class TestMedGemmaFeatherlessProvider:
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
-    def test_sin_medgemma_usa_gemini_y_clinical_provider_es_gemini(self, mock_gemini, prediagnostic_svc):
+    def test_sin_medgemma_retorna_non_conclusive_y_no_usa_gemini(self, prediagnostic_svc):
         """
-        MEDGEMMA_ENABLED=false → proveedor debe ser 'gemini', no se llama Featherless.
+        FIX-20260518-02: sin MedGemma disponible no se debe rescatar con Gemini.
         """
-        mock_gemini.return_value = self.MOCK_PREDIAGNOSIS_RESPONSE.copy()
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
-        assert result.clinical_provider == "gemini"
-        assert result.clinical_state == "AI_PENDING_REVIEW"
-        mock_gemini.assert_called_once()
+        assert result.clinical_provider == "featherless"
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert "Gemini se usa solo para extracción" in (result.non_conclusive_reason or "")
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
     @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
-    def test_medgemma_enabled_pero_sin_key_hace_fallback_gemini(self, mock_gemini, prediagnostic_svc):
+    def test_medgemma_enabled_pero_sin_key_retorna_non_conclusive(self, prediagnostic_svc):
         """
-        MEDGEMMA_ENABLED=true pero sin FEATHERLESS_API_KEY → fallback honesto a Gemini.
-        clinical_provider debe ser 'gemini', no 'featherless'.
+        FIX-20260518-02: si falta FEATHERLESS_API_KEY no existe fallback clínico a Gemini.
         """
-        mock_gemini.return_value = self.MOCK_PREDIAGNOSIS_RESPONSE.copy()
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
-        assert result.clinical_provider == "gemini"
-        mock_gemini.assert_called_once()
+        assert result.clinical_provider == "featherless"
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert "falta FEATHERLESS_API_KEY" in (result.non_conclusive_reason or "")
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
     @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
@@ -755,6 +761,28 @@ class TestMedGemmaFeatherlessProvider:
         assert result.clinical_provider == "featherless"
         assert result.non_conclusive_reason is not None
         assert "featherless" in result.non_conclusive_reason.lower()
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    def test_featherless_gated_retorna_non_conclusive_sin_fallback_a_gemini(
+        self,
+        mock_featherless,
+        prediagnostic_svc,
+    ):
+        """
+        FIX-20260518-02: si Featherless cae por modelo gated, el resultado debe ser
+        no concluyente; Gemini no participa en la capa clínica.
+        """
+        mock_featherless.side_effect = RuntimeError("FEATHERLESS_GATED: model_gated_needs_oauth")
+
+        result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
+
+        assert result.clinical_provider == "featherless"
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.clinical_model_used == "google/medgemma-27b-text-it"
+        assert any("model_gated_needs_oauth" in limitation for limitation in result.limitations)
+        mock_featherless.assert_called_once()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
     @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
@@ -864,7 +892,7 @@ class TestEspirometriaExhaustiva_20260516_12_13:
                 "observaciones_grafica": None,
             },
         }
-        result = extractor.extract_by_type("/fake/espirometria_exhaustiva.pdf", "Espirometria")
+        result = extractor.extract_by_type("/fake/espirometria_exhaustiva.pdf", "Espirometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert isinstance(result, EspirometriaData)
         # Campos legacy intactos
         assert result.fev1 == 2.8
@@ -923,7 +951,7 @@ class TestEspirometriaExhaustiva_20260516_12_13:
             "notas_calidad": None,
             # SIN paciente_detalle, estudio, condiciones, parametros, calidad, graficas
         }
-        result = extractor.extract_by_type("/fake/espirometria_vieja.pdf", "Espirometria")
+        result = extractor.extract_by_type("/fake/espirometria_vieja.pdf", "Espirometria", ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION)
         assert isinstance(result, EspirometriaData)
         # Bloques nuevos son None sin error
         assert result.paciente_detalle is None
@@ -940,9 +968,9 @@ class TestEspirometriaExhaustiva_20260516_12_13:
 
     # --- Prediagnóstico: caso conflictivo FVC reducida + ratio conservado ---
 
-    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
     def test_prediagnostico_ratio_conservado_fvc_reducida_no_cierra_obstructivo(
         self, mock_call, prediagnostic_svc
     ):
@@ -1003,9 +1031,9 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert result.recommendation is not None
         assert len(result.recommendation) > 0
 
-    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_gemini_text_only')
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
     def test_prediagnostico_espirometria_incluye_recommendation_cuando_normal(
         self, mock_call, prediagnostic_svc
     ):
@@ -1091,3 +1119,168 @@ class TestEspirometriaExhaustiva_20260516_12_13:
             },
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
+
+
+# ---------------------------------------------------------------------------
+# IMPL-20260518-03: Tests de Resolución de Prompts — ARCH-20260518-03
+# Contrato: extracción sin fallback, clínica con fallback general.
+# ---------------------------------------------------------------------------
+
+class TestPromptResolutionARCH20260518_03:
+    """
+    IMPL-20260518-03: Fija en runtime el contrato ARCH-20260518-03:
+    - Extracción: sin fallback; ValueError si falta aiCalibration.extraction.prompt.
+    - Clínica: usa aiCalibration.diagnosis.prompt si existe;
+      si no, usa PREDIAGNOSTIC_PROMPTS como fallback general (backend_fallback).
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-api-key", model="gemini-2.5-flash")
+
+    @pytest.fixture
+    def prediagnostic_svc(self):
+        from app.services.ai.prediagnostic import PrediagnosticService
+        return PrediagnosticService(api_key="test-api-key", model="gemini-2.5-flash")
+
+    # Datos mínimos de audiometría válidos para pasar _check_minimum_params
+    _AUDIO_VALIDA = {
+        "paciente": "Test Prompt Resolution",
+        "oido_derecho": {"500": 15, "1000": 20, "2000": 25, "4000": 30},
+        "oido_izquierdo": {"500": 10, "1000": 15, "2000": 20, "4000": 25},
+        "completitud_documental": "suficiente",
+    }
+
+    # --- Test 1: Extracción sin prompt → ValueError ---
+
+    def test_EXTRACTION_PROMPT_NOT_CONFIGURED_cuando_falta_extraction_prompt(self, extractor):
+        """
+        ARCH-20260518-03: Si aiCalibration.extraction.prompt no está configurado,
+        extract_by_type debe lanzar ValueError con EXTRACTION_PROMPT_NOT_CONFIGURED.
+        No existe fallback de extracción en el backend.
+        """
+        # Caso: ai_calibration=None
+        with pytest.raises(ValueError, match="EXTRACTION_PROMPT_NOT_CONFIGURED"):
+            extractor.extract_by_type("/fake/test.pdf", "Audiometria", ai_calibration=None)
+
+        # Caso: ai_calibration presente pero sin extraction.prompt
+        with pytest.raises(ValueError, match="EXTRACTION_PROMPT_NOT_CONFIGURED"):
+            extractor.extract_by_type(
+                "/fake/test.pdf", "Audiometria",
+                ai_calibration={"extraction": {}},
+            )
+
+    # --- Test 2: Clínica usa aiCalibration.diagnosis.prompt si existe ---
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    def test_prompt_resolution_usa_ai_calibration_cuando_diagnosis_prompt_existe(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        ARCH-20260518-03: Si ai_calibration.diagnosis.prompt existe:
+        - prompt_source='ai_calibration'
+        - prompt_version toma la versión configurada (o 'calibration_custom' si falta)
+        - NO cae a 'backend_fallback'
+        - Conserva recommendation/justification/citations/limitations del mock
+        """
+        mock_call.return_value = {
+            "summary": "Compatible con audición conservada.",
+            "confidence": 0.78,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["Umbrales dentro de límites normales en todas las frecuencias evaluadas"],
+            "clinical_basis": [
+                {"principle": "ISO 1999:2013", "applied_parameters": ["oido_derecho", "oido_izquierdo"]}
+            ],
+            "citations": [
+                {
+                    "source_id": "ISO-1999-2013",
+                    "title": "Acoustics — Estimation of noise-induced hearing loss",
+                    "section": "Tabla 1",
+                    "excerpt": "Umbrales audiométricos de referencia",
+                    "version_or_date": "2013",
+                }
+            ],
+            "limitations": ["Requiere correlación con historia de exposición a ruido"],
+            "red_flags": [],
+            "recommendation": "Mantener vigilancia audiométrica periódica.",
+            "non_conclusive_reason": None,
+        }
+
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data=self._AUDIO_VALIDA,
+            ai_calibration={
+                "diagnosis": {
+                    "prompt": "Analiza parámetros audiométricos: {extracted_json}\n{calibration_context}",
+                    "version": "custom_v1",
+                }
+            },
+        )
+
+        assert result.prompt_source == "ai_calibration", (
+            f"Esperado 'ai_calibration', obtenido '{result.prompt_source}'"
+        )
+        assert result.prompt_version == "custom_v1"
+        assert result.prompt_source != "backend_fallback"
+
+        # Conserva justification del mock
+        assert result.justification == [
+            "Umbrales dentro de límites normales en todas las frecuencias evaluadas"
+        ]
+        # Conserva citations del mock
+        assert len(result.citations) == 1
+        assert result.citations[0].source_id == "ISO-1999-2013"
+        # Conserva recommendation del mock
+        assert result.recommendation == "Mantener vigilancia audiométrica periódica."
+        # NO agrega nota de fallback
+        fallback_note = "Prompt clínico resuelto desde fallback general backend"
+        assert not any(fallback_note in lim for lim in result.limitations), (
+            "No debe agregar nota de fallback cuando se usó aiCalibration.diagnosis.prompt"
+        )
+        mock_call.assert_called_once()
+
+    # --- Test 3: Clínica usa backend_fallback cuando no existe diagnosis.prompt ---
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    def test_prompt_resolution_usa_backend_fallback_cuando_sin_diagnosis_prompt(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        ARCH-20260518-03: Si ai_calibration.diagnosis.prompt NO existe:
+        - prompt_source='backend_fallback'
+        - prompt_version='backend_v2'
+        - Agrega la limitación explícita del fallback en limitations (si el código lo hace).
+        """
+        mock_call.return_value = {
+            "summary": "Compatible con audición dentro de límites.",
+            "confidence": 0.72,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["Frecuencias evaluadas dentro de límites normales"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "recommendation": "Vigilancia periódica recomendada.",
+            "non_conclusive_reason": None,
+        }
+
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data=self._AUDIO_VALIDA,
+            ai_calibration=None,  # Sin prompt personalizado → fallback general
+        )
+
+        assert result.prompt_source == "backend_fallback", (
+            f"Esperado 'backend_fallback', obtenido '{result.prompt_source}'"
+        )
+        assert result.prompt_version == "backend_v2"
+        # El código añade nota de fallback en limitations (ARCH-20260518-03)
+        fallback_note = "Prompt clínico resuelto desde fallback general backend"
+        assert any(fallback_note in lim for lim in result.limitations), (
+            "Debe agregar nota de fallback cuando se usa PREDIAGNOSTIC_PROMPTS como fallback"
+        )
+        mock_call.assert_called_once()

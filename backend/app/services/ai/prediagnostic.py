@@ -21,7 +21,8 @@ MEDGEMMA (IMPL-20260513-01 / IMPL-20260513-03):
   - Estado: integrado vía Featherless usando OpenAI SDK (endpoint compatible).
   - Cuando MEDGEMMA_ENABLED=true y FEATHERLESS_API_KEY está configurada,
     PrediagnosticService enruta la llamada a _call_featherless_text_only().
-  - Fallback honesto a Gemini text-only si la clave no está disponible.
+    - Si Featherless no está disponible, la capa clínica degrada a AI_NON_CONCLUSIVE.
+    - Gemini se reserva para la extracción, no para el prediagnóstico clínico.
   - NUNCA se envía PDF/imagen a Featherless — solo prompt textual/JSON estructurado.
 """
 
@@ -529,34 +530,55 @@ Responde en JSON con esta estructura exacta:
         study_type: str,
         extracted_data: Dict[str, Any],
         medical_calibration: Optional[Dict[str, Any]] = None,
+        ai_calibration: Optional[Dict[str, Any]] = None,
     ) -> AIPrediagnosisResult:
         """
         Genera prediagnóstico IA basado en parámetros ya extraídos.
         IMPL-20260513-01: Acepta calibración médica del panel aiCalibration.
+        IMPL-20260518-03: Resuelve prompt clínico desde aiCalibration.diagnosis.prompt;
+            si falta, usa fallback clínico general backend (ARCH-20260518-03).
 
         Args:
-            study_type: Tipo de estudio (Audiometria, Laboratorio, etc.)
-            extracted_data: Dict con parámetros canónicos extraídos
-            medical_calibration: Dict con aiCalibration del panel admin (opcional).
-                Si se pasa, se usa como marco preferente de interpretación.
-                Si no se pasa, el modelo opera con conocimiento general (modo sombra).
+            study_type:        Tipo de estudio (Audiometria, Laboratorio, etc.)
+            extracted_data:    Dict con parámetros canónicos extraídos
+            medical_calibration: Dict con aiCalibration del panel admin para contexto de
+                calibración (umbrales, criterios). Si se pasa → calibration_source='medical_calibration'.
+            ai_calibration:    Dict completo de aiCalibration. Si contiene
+                ai_calibration['diagnosis']['prompt'], se usa como template clínico
+                (prompt_source='ai_calibration'). Si no, se usa PREDIAGNOSTIC_PROMPTS
+                como fallback general (prompt_source='backend_fallback').
 
         Returns:
             AIPrediagnosisResult — siempre retorna un resultado; usa AI_NON_CONCLUSIVE si no hay datos.
-            Los campos calibration_source y clinical_model_used quedan trazados.
+            Los campos calibration_source, clinical_model_used y prompt_source quedan trazados.
         """
         # IMPL-20260513-01: determinar camino de calibración para trazabilidad
         calibration_source = "medical_calibration" if medical_calibration else "general_fallback"
 
-        # IMPL-20260513-03: determinar proveedor clínico real
-        # Si MEDGEMMA_ENABLED=true Y FEATHERLESS_API_KEY está configurada → Featherless/MedGemma
-        # En cualquier otro caso → Gemini text-only (fallback honesto)
-        if MEDGEMMA_ENABLED and FEATHERLESS_API_KEY:
-            clinical_provider = "featherless"
-            clinical_model_used = FEATHERLESS_MODEL
+        # FIX-20260518-02 | respaldo: context/interconsultas/DICTAMEN_FIX-20260518-01.md
+        # La capa clínica usa exclusivamente MedGemma vía Featherless.
+        # Gemini queda reservado a la extracción multimodal, nunca al prediagnóstico.
+        clinical_provider = "featherless"
+        clinical_model_used = FEATHERLESS_MODEL
+        clinical_provider_available = bool(MEDGEMMA_ENABLED and FEATHERLESS_API_KEY)
+
+        # IMPL-20260518-03: resolver prompt clínico desde aiCalibration o fallback general backend
+        _diagnosis_cfg = (ai_calibration or {}).get("diagnosis") or {}
+        _custom_clinical_prompt = _diagnosis_cfg.get("prompt")
+        if _custom_clinical_prompt:
+            prompt_source = "ai_calibration"
+            _clinical_prompt_version = _diagnosis_cfg.get("version", "calibration_custom")
+            print(
+                f"✅ [ARCH-20260518-03] Prompt clínico resuelto desde aiCalibration "
+                f"(v={_clinical_prompt_version}) para {study_type}"
+            )
         else:
-            clinical_provider = "gemini"
-            clinical_model_used = self.model  # modelo Gemini configurado
+            prompt_source = "backend_fallback"
+            _clinical_prompt_version = "backend_v2"
+            print(
+                f"ℹ️ [ARCH-20260518-03] Sin prompt clínico en aiCalibration — "
+                f"usando fallback general backend para {study_type}"
+            )
 
         # IMPL-20260326-17: Tipos sin soporte de prediagnóstico IA en V1
         # Campimetria y RiesgoCardiovascular retornan AI_NON_CONCLUSIVE explícito.
@@ -579,6 +601,8 @@ Responde en JSON con esta estructura exacta:
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
                 clinical_provider=clinical_provider,
+                prompt_source=prompt_source,
+                prompt_version=_clinical_prompt_version,
             )
 
         # Verificar parámetros mínimos
@@ -598,12 +622,17 @@ Responde en JSON con esta estructura exacta:
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
                 clinical_provider=clinical_provider,
+                prompt_source=prompt_source,
+                prompt_version=_clinical_prompt_version,
             )
 
-        prompt_template = self.PREDIAGNOSTIC_PROMPTS.get(
-            study_type,
-            self.PREDIAGNOSTIC_PROMPTS.get("Laboratorio", ""),  # fallback
-        )
+        # ARCH-20260518-03: prompt template = aiCalibration.diagnosis.prompt si existe,
+        #                    sino PREDIAGNOSTIC_PROMPTS[study_type] como fallback general backend.
+        if _custom_clinical_prompt:
+            prompt_template = _custom_clinical_prompt
+        else:
+            prompt_template = self.PREDIAGNOSTIC_PROMPTS.get(study_type, "")
+
         if not prompt_template:
             return AIPrediagnosisResult(
                 summary="Tipo de estudio sin soporte de prediagnóstico en V1.",
@@ -614,6 +643,8 @@ Responde en JSON con esta estructura exacta:
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
                 clinical_provider=clinical_provider,
+                prompt_source=prompt_source,
+                prompt_version=_clinical_prompt_version,
             )
 
         # IMPL-20260513-01: inyectar contexto de calibración médica en el prompt
@@ -634,17 +665,50 @@ Responde en JSON con esta estructura exacta:
         # IMPL-20260516-08: capturar el prompt renderizado antes de la llamada al modelo (ARCH-20260516-08)
         _rendered_prompt = prompt
 
+        if not clinical_provider_available:
+            if not MEDGEMMA_ENABLED:
+                unavailable_reason = (
+                    "Prediagnóstico clínico no disponible: MEDGEMMA_ENABLED=false. "
+                    "Gemini se usa solo para extracción."
+                )
+            else:
+                unavailable_reason = (
+                    "Prediagnóstico clínico no disponible: falta FEATHERLESS_API_KEY para MedGemma. "
+                    "Gemini se usa solo para extracción."
+                )
+
+            return AIPrediagnosisResult(
+                summary="No fue posible generar el prediagnóstico clínico porque MedGemma no está disponible.",
+                confidence=0.0,
+                clinical_state="AI_NON_CONCLUSIVE",
+                justification=[],
+                clinical_basis=[],
+                citations=[],
+                limitations=[unavailable_reason],
+                red_flags=[],
+                non_conclusive_reason=unavailable_reason,
+                calibration_source=calibration_source,
+                clinical_model_used=clinical_model_used,
+                clinical_provider=clinical_provider,
+                prompt_source=prompt_source,
+                prompt_version=_clinical_prompt_version,
+                input_debug=PrediagnosisInputDebug(
+                    study_type=study_type,
+                    extracted_data=extracted_data,
+                    medical_calibration=medical_calibration,
+                    clinical_provider=clinical_provider,
+                    clinical_model_used=clinical_model_used,
+                    rendered_prompt=_rendered_prompt,
+                ),
+            )
+
         print(f"🧠 Generando prediagnóstico IA para: {study_type} | proveedor: {clinical_provider} | modelo: {clinical_model_used} | calibración: {calibration_source}")
         # IMPL-20260513-03: enrutar al proveedor correcto según configuración
         # IMPL-20260326-03: degradar a AI_NON_CONCLUSIVE en lugar de propagar excepción
-        # IMPL-20260516-01: si Featherless rechaza por model_gated (403), intentar fallback honesto
-        #   a Gemini text-only y trazar la causa real en limitations. ARCH-20260516-01.
-        _featherless_gated_note: Optional[str] = None
+        # FIX-20260518-02: si Featherless falla o está gated, la capa clínica degrada a
+        # AI_NON_CONCLUSIVE. No existe fallback clínico a Gemini.
         try:
-            if clinical_provider == "featherless":
-                raw_result = self._call_featherless_text_only(prompt)
-            else:
-                raw_result = self._call_gemini_text_only(prompt)
+            raw_result = self._call_featherless_text_only(prompt)
         except Exception as e:
             err_str = str(e)
             # — Caso: Featherless rechaza el modelo por permisos OAuth (model_gated_needs_oauth)
@@ -655,46 +719,22 @@ Responde en JSON con esta estructura exacta:
                     "Esto no es un fallo de código; requiere acción en el panel de Featherless."
                 )
                 print(f"⚠️ {gated_reason}")
-                if self.api_key:
-                    print(f"🔄 Intentando fallback a Gemini text-only ({self.model})...")
-                    try:
-                        raw_result = self._call_gemini_text_only(prompt)
-                        clinical_provider = "gemini_fallback"
-                        clinical_model_used = self.model
-                        _featherless_gated_note = gated_reason
-                        print(f"✅ Fallback a Gemini exitoso ({self.model}) — prediagnóstico continúa con trazabilidad de causa")
-                    except Exception as fallback_err:
-                        print(f"❌ Fallback a Gemini también falló: {fallback_err}")
-                        return AIPrediagnosisResult(
-                            summary="Proveedor MedGemma no disponible (modelo gated) y el fallback a Gemini también falló.",
-                            confidence=0.0,
-                            clinical_state="AI_NON_CONCLUSIVE",
-                            justification=[],
-                            clinical_basis=[],
-                            citations=[],
-                            limitations=[gated_reason, f"Gemini fallback error: {str(fallback_err)[:200]}"],
-                            red_flags=[],
-                            non_conclusive_reason=gated_reason,
-                            calibration_source=calibration_source,
-                            clinical_model_used=self.model,
-                            clinical_provider="gemini_fallback",
-                        )
-                else:
-                    # Sin Gemini API key → AI_NON_CONCLUSIVE honesto
-                    return AIPrediagnosisResult(
-                        summary="El proveedor clínico MedGemma no está disponible. El modelo requiere autorización del proveedor y no hay API key Gemini configurada para fallback.",
-                        confidence=0.0,
-                        clinical_state="AI_NON_CONCLUSIVE",
-                        justification=[],
-                        clinical_basis=[],
-                        citations=[],
-                        limitations=[gated_reason],
-                        red_flags=[],
-                        non_conclusive_reason=gated_reason,
-                        calibration_source=calibration_source,
-                        clinical_model_used=FEATHERLESS_MODEL,
-                        clinical_provider="featherless",
-                    )
+                return AIPrediagnosisResult(
+                    summary="El proveedor clínico MedGemma no está disponible porque el modelo está gated.",
+                    confidence=0.0,
+                    clinical_state="AI_NON_CONCLUSIVE",
+                    justification=[],
+                    clinical_basis=[],
+                    citations=[],
+                    limitations=[gated_reason],
+                    red_flags=[],
+                    non_conclusive_reason=gated_reason,
+                    calibration_source=calibration_source,
+                    clinical_model_used=FEATHERLESS_MODEL,
+                    clinical_provider="featherless",
+                    prompt_source=prompt_source,
+                    prompt_version=_clinical_prompt_version,
+                )
             else:
                 print(f"⚠️ Fallo al llamar/parsear proveedor '{clinical_provider}' para {study_type}: {e}")
                 return AIPrediagnosisResult(
@@ -710,18 +750,24 @@ Responde en JSON con esta estructura exacta:
                     calibration_source=calibration_source,
                     clinical_model_used=clinical_model_used,
                     clinical_provider=clinical_provider,
+                    prompt_source=prompt_source,
+                    prompt_version=_clinical_prompt_version,
                 )
 
         try:
             result = AIPrediagnosisResult(**raw_result)
-            # IMPL-20260513-01: añadir trazabilidad de calibración y modelo al resultado
             # IMPL-20260513-03: añadir proveedor clínico real
+            # IMPL-20260518-03: añadir fuente real del prompt clínico (ARCH-20260518-03)
             result.calibration_source = calibration_source
             result.clinical_model_used = clinical_model_used
             result.clinical_provider = clinical_provider
-            # IMPL-20260516-01: inyectar nota de fallback si Featherless fue rechazado por gated
-            if _featherless_gated_note:
-                result.limitations.append(_featherless_gated_note)
+            result.prompt_source = prompt_source
+            result.prompt_version = _clinical_prompt_version
+            # IMPL-20260518-03: si se usó fallback clínico backend, registrar en limitations
+            if prompt_source == "backend_fallback":
+                result.limitations.append(
+                    "Prompt clínico resuelto desde fallback general backend (aiCalibration.diagnosis.prompt no configurado)."
+                )
             # IMPL-20260516-08: poblar input_debug con payload de entrada (ARCH-20260516-08)
             # Solo datos clínicos: study_type, extracted_data, calibración y prompt renderizado.
             # GUARDRAIL: no se incluyen API keys ni secrets — la calibración es metadata clínica.
@@ -753,6 +799,8 @@ Responde en JSON con esta estructura exacta:
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
                 clinical_provider=clinical_provider,
+                prompt_source=prompt_source,
+                prompt_version=_clinical_prompt_version,
             )
 
     def _call_featherless_text_only(self, prompt: str) -> Dict[str, Any]:
@@ -812,8 +860,8 @@ Responde en JSON con esta estructura exacta:
         except Exception as _featherless_err:
             _err_str = str(_featherless_err)
             # IMPL-20260516-01: Marca explícita de rechazo por modelo gated (403 model_gated_needs_oauth).
-            # El marcador FEATHERLESS_GATED: permite que generate_prediagnosis intente fallback a Gemini
-            # y trace la causa real sin ocultar el rechazo del proveedor. ARCH-20260516-01.
+            # El marcador FEATHERLESS_GATED permite degradar honestamente a AI_NON_CONCLUSIVE
+            # sin introducir un fallback clínico a Gemini. ARCH-20260516-01 / FIX-20260518-02.
             _status_code = getattr(_featherless_err, "status_code", None)
             if _status_code == 403 or "model_gated" in _err_str or "403" in _err_str:
                 raise RuntimeError(
