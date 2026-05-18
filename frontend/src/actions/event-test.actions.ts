@@ -214,60 +214,9 @@ export async function uploadEventTestFile(formData: FormData) {
     console.warn('[IMPL-20260326-18] No se pudo verificar elegibilidad IA, fallback V1:', eligibilityErr)
   }
 
-  // Intentar flujo V2 con prediagnóstico IA estructurado (IMPL-20260326-16/18)
-  // Solo si el estudio es elegible según la matriz canónica.
-  if (isAIEligible) {
-    try {
-      const v2Result = await triggerStudyAIAnalysis(formData)
-      if (v2Result.success) {
-        await prisma.eventTest.update({
-          where: { id: eventTestId },
-          data: {
-            resultNotes: buildAIResultNote({
-              success: true,
-              summary: v2Result.summary ?? null,
-              clinicalState: v2Result.clinicalState ?? null,
-            }),
-          },
-        })
-        // ARCH-20260518-04: empaquetar datos del snapshot para actualización optimista del cliente
-        const extractionSnapshotData = v2Result.extractionSnapshotId
-          ? {
-              id: v2Result.extractionSnapshotId,
-              version: v2Result.extractionSnapshotVersion ?? 1,
-              extractedData: v2Result.extractedData ?? null,
-              missingFields: v2Result.missingFields ?? null,
-              rawPayload: v2Result.rawPayload ?? null,
-            }
-          : null
-        return {
-          success: true,
-          // IMPL-20260513-S3: usar ruta estable del backend (S3 o local) cuando disponible
-          fileUrl: v2Result.fileUrl ?? `/uploads/${file.name}`,
-          // ARCH-20260518-04: snapshot completo para actualización optimista (sin depender solo de router.refresh)
-          extractionSnapshotData,
-          aiAnalysis: {
-            extractionSnapshotId: v2Result.extractionSnapshotId,
-            prediagnosisSnapshotId: v2Result.prediagnosisSnapshotId,
-            clinicalState: v2Result.clinicalState,
-            summary: v2Result.summary,
-            confidence: v2Result.confidence,
-          },
-        }
-      }
-      console.warn('[IMPL-20260326-16] V2 falló para estudio IA elegible; se cancela fallback V1:', v2Result.error)
-      return {
-        success: false,
-        error: v2Result.error || 'La IA no pudo procesar el estudio en el pipeline V2.',
-      }
-    } catch (v2Error) {
-      console.warn('[IMPL-20260326-16] Error en V2 para estudio IA elegible; se cancela fallback V1:', v2Error)
-      return {
-        success: false,
-        error: v2Error instanceof Error ? v2Error.message : 'Error al procesar el estudio con IA.',
-      }
-    }
-  }
+  // ARCH-20260518-10: Para estudios IA elegibles se desactiva temporalmente el análisis
+  // automático al subir archivo. El upload inicial solo persiste el archivo y el análisis
+  // debe ejecutarse manualmente desde "Generar IA ahora" para evitar consumo inmediato.
 
   // FALLBACK V1 — FIX ARCH-20260326-04: subir físicamente al backend antes de guardar fileUrl.
   // No se genera una ruta inventada; si el upload falla, fileUrl queda null y se informa al usuario.
@@ -293,7 +242,12 @@ export async function uploadEventTestFile(formData: FormData) {
     }
 
     const resultNotes = fileUrl
-      ? buildAIResultNote({ success: false, error: 'Archivo guardado. Prediagnóstico IA no disponible; se requiere análisis manual.' })
+      ? buildAIResultNote({
+          success: false,
+          error: isAIEligible
+            ? 'Archivo guardado. El análisis IA automático fue desactivado temporalmente; ejecútelo manualmente con Generar IA ahora.'
+            : 'Archivo guardado. Prediagnóstico IA no disponible; se requiere análisis manual.',
+        })
       : buildAIResultNote({ success: false, error: 'Pipeline IA y almacenamiento no disponibles. Suba el archivo nuevamente para regenerar el análisis.' })
 
     await prisma.eventTest.update({
