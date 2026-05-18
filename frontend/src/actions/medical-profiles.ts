@@ -83,8 +83,19 @@ function toPrismaJsonValue(value: unknown): Prisma.InputJsonValue {
 // QUERIES
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Códigos de pruebas legacy excluidas del catálogo seleccionable.
+ * No se borran de la DB — solo se ocultan de la UI.
+ * @see SPEC_ARCH-20260518-16-DEPURACION-CATALOGO-PRUEBAS-LEGACY
+ * @id IMPL-20260518-16
+ */
+const CATALOG_LEGACY_HIDDEN = ['GEN-01', 'GEN-02'] as const
+
 export async function getMedicalTests() {
   return await prisma.medicalTest.findMany({
+    where: {
+      code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
+    },
     select: {
       id: true,
       name: true,
