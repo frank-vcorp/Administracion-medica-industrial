@@ -14,7 +14,7 @@ export type KeyValueSection = {
   title: string
   /** Claves a leer del objeto raíz o del subobjeto indicado por sourceKey */
   fields: string[]
-  /** Si se especifica, se busca primero en extractedData[sourceKey] */
+  /** Si se especifica, se busca primero en extractedData[sourceKey]. Soporta rutas tipo a.b.c */
   sourceKey?: string
 }
 
@@ -49,9 +49,9 @@ export type NoteSection = {
 export type BilateralFrequencyTableSection = {
   kind: "bilateralFrequency"
   title: string
-  /** Clave en extractedData para el mapa oído derecho (freq → valor) */
+  /** Clave/ruta en extractedData para el mapa oído derecho (freq → valor) */
   rightKey: string
-  /** Clave en extractedData para el mapa oído izquierdo (freq → valor) */
+  /** Clave/ruta en extractedData para el mapa oído izquierdo (freq → valor) */
   leftKey: string
   /** Orden preferido de frecuencias (Hz). Las adicionales se añaden al final. */
   preferredOrder?: number[]
@@ -153,19 +153,76 @@ const audiometriaSchema: StudyPresentationSchema = {
   sections: [
     {
       kind: "keyValue",
-      title: "Resumen del estudio",
-      fields: ["paciente", "fecha_estudio", "completitud_documental", "notas_calidad"],
+      title: "Paciente",
+      sourceKey: "paciente",
+      fields: [
+        "nombre_completo",
+        "identificacion",
+        "sexo",
+        "edad_anios",
+        "fecha_nacimiento",
+        "notas",
+        "empresa",
+        "puesto",
+      ],
+    },
+    {
+      kind: "keyValue",
+      title: "Estudio",
+      sourceKey: "estudio",
+      fields: [
+        "fecha_estudio",
+        "hora_estudio",
+        "tipo_reporte",
+        "equipo_modelo",
+        "transductor",
+        "ultima_calibracion",
+        "equipo_numero_serie",
+        "numero_serie_sistema",
+      ],
+    },
+    {
+      kind: "keyValue",
+      title: "Resumen técnico",
+      fields: ["completitud_documental", "notas_calidad"],
+    },
+    {
+      kind: "keyValue",
+      title: "Indicadores por oído",
+      sourceKey: "resumen_oidos",
+      fields: ["pta_d", "pta_i"],
+    },
+    {
+      kind: "keyValue",
+      title: "Condiciones",
+      sourceKey: "condiciones",
+      fields: ["cabina", "equipo", "tecnico", "observaciones"],
     },
     {
       kind: "bilateralFrequency",
-      title: "Umbrales audiométricos por frecuencia",
-      rightKey: "oido_derecho",
-      leftKey: "oido_izquierdo",
+      title: "Vía aérea por frecuencia",
+      rightKey: "oido_derecho.via_aerea",
+      leftKey: "oido_izquierdo.via_aerea",
+      preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
+    },
+    {
+      kind: "bilateralFrequency",
+      title: "Vía ósea por frecuencia",
+      rightKey: "oido_derecho.via_osea",
+      leftKey: "oido_izquierdo.via_osea",
+      preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
+    },
+    {
+      kind: "bilateralFrequency",
+      title: "Separación por frecuencia",
+      rightKey: "oido_derecho.separacion",
+      leftKey: "oido_izquierdo.separacion",
       preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
     },
     {
       kind: "keyValue",
       title: "Campos fuente del formato",
+      sourceKey: "campos_fuente",
       fields: ["faringe", "cad", "cai", "mtd", "mti"],
     },
   ],

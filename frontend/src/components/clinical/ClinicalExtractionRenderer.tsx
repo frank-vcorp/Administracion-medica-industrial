@@ -35,6 +35,15 @@ function fmtLabel(key: string): string {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+function getValueAtPath(data: Record<string, unknown>, path?: string): unknown {
+  if (!path) return data
+
+  return path.split(".").reduce<unknown>((current, segment) => {
+    if (!current || typeof current !== "object" || Array.isArray(current)) return undefined
+    return (current as Record<string, unknown>)[segment]
+  }, data)
+}
+
 // --- Resolución de fuente de datos ---
 
 function resolveSource(
@@ -42,12 +51,26 @@ function resolveSource(
   sourceKey?: string
 ): Record<string, unknown> {
   if (!sourceKey) return data
-  const sub = data[sourceKey]
+  const sub = getValueAtPath(data, sourceKey)
   if (sub && typeof sub === "object" && !Array.isArray(sub)) {
     return sub as Record<string, unknown>
   }
-  // Fallback: buscar en raíz si el sourceKey no existe como sub-objeto
+  // Fallback: buscar en raíz si la ruta no existe como sub-objeto
   return data
+}
+
+function hasRenderableValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== ""
+}
+
+function buildAudiometriaSummary(data: Record<string, unknown>): Record<string, unknown> {
+  const right = resolveSource(data, "oido_derecho")
+  const left = resolveSource(data, "oido_izquierdo")
+
+  return {
+    pta_d: right.pta_d,
+    pta_i: left.pta_i,
+  }
 }
 
 // --- Bloque keyValue ---
@@ -62,7 +85,7 @@ function KeyValueBlock({
   const source = resolveSource(data, section.sourceKey)
   const entries = section.fields
     .map((f) => ({ key: f, value: source[f] }))
-    .filter((e) => e.value !== undefined && e.value !== null && e.value !== "")
+    .filter((e) => hasRenderableValue(e.value))
 
   if (entries.length === 0) return null
 
@@ -94,7 +117,7 @@ function TableBlock({
   section: TableSection
   data: Record<string, unknown>
 }) {
-  const rows = data[section.source]
+  const rows = getValueAtPath(data, section.source)
   if (!Array.isArray(rows) || rows.length === 0) return null
 
   // Solo mostrar columnas que tienen al menos un valor no vacío en alguna fila
@@ -102,7 +125,7 @@ function TableBlock({
     rows.some((row) => {
       if (row && typeof row === "object") {
         const val = (row as Record<string, unknown>)[col.key]
-        return val !== undefined && val !== null && val !== ""
+        return hasRenderableValue(val)
       }
       return false
     })
@@ -171,7 +194,7 @@ function BadgesBlock({
   const source = resolveSource(data, section.sourceKey)
   const entries = section.fields
     .map((f) => ({ key: f, value: source[f] }))
-    .filter((e) => e.value !== undefined && e.value !== null && e.value !== "")
+    .filter((e) => hasRenderableValue(e.value))
 
   if (entries.length === 0) return null
 
@@ -206,7 +229,7 @@ function NoteBlock({
   section: NoteSection
   data: Record<string, unknown>
 }) {
-  const value = data[section.source]
+  const value = getValueAtPath(data, section.source)
   if (!value) return null
 
   return (
@@ -233,8 +256,8 @@ function BilateralFrequencyTableBlock({
   section: BilateralFrequencyTableSection
   data: Record<string, unknown>
 }) {
-  const rightRaw = data[section.rightKey]
-  const leftRaw = data[section.leftKey]
+  const rightRaw = getValueAtPath(data, section.rightKey)
+  const leftRaw = getValueAtPath(data, section.leftKey)
 
   const right: Record<string, unknown> =
     rightRaw && typeof rightRaw === "object" && !Array.isArray(rightRaw)
@@ -245,8 +268,7 @@ function BilateralFrequencyTableBlock({
       ? (leftRaw as Record<string, unknown>)
       : {}
 
-  // Reunir todas las frecuencias presentes como números
-  const allFreqNums = new Set<number>([
+  const allPossibleFreqs = new Set<number>([
     ...Object.keys(right)
       .map(Number)
       .filter((n) => !isNaN(n)),
@@ -254,6 +276,14 @@ function BilateralFrequencyTableBlock({
       .map(Number)
       .filter((n) => !isNaN(n)),
   ])
+
+  const allFreqNums = new Set<number>(
+    [...allPossibleFreqs].filter((freq) => {
+      const rightValue = right[String(freq)]
+      const leftValue = left[String(freq)]
+      return hasRenderableValue(rightValue) || hasRenderableValue(leftValue)
+    })
+  )
 
   if (allFreqNums.size === 0) return null
 
@@ -313,7 +343,11 @@ function SectionBlock({
   section: ClinicalPresentationSection
   data: Record<string, unknown>
 }) {
-  if (section.kind === "keyValue") return <KeyValueBlock section={section} data={data} />
+  if (section.kind === "keyValue") {
+    const effectiveData =
+      section.sourceKey === "resumen_oidos" ? buildAudiometriaSummary(data) : data
+    return <KeyValueBlock section={section} data={effectiveData} />
+  }
   if (section.kind === "table") return <TableBlock section={section} data={data} />
   if (section.kind === "badges") return <BadgesBlock section={section} data={data} />
   if (section.kind === "note") return <NoteBlock section={section} data={data} />
