@@ -1,0 +1,376 @@
+/**
+ * @fileoverview Renderer clínico general configurable por tipo de estudio.
+ * Reemplaza la lista azul vertical genérica (ExtractedDataRows) por secciones
+ * estructuradas y tabla real de parámetros, legibles para médico.
+ * @id IMPL-20260518-13
+ * @backup context/checkpoints/CHK_IMPL-20260518-13-RENDERER-CLINICO.md
+ */
+"use client"
+
+import {
+  getStudySchema,
+  type KeyValueSection,
+  type TableSection,
+  type BadgesSection,
+  type NoteSection,
+  type ClinicalPresentationSection,
+} from "./extraction-presentation-schemas"
+
+// --- Helpers de formato ---
+
+function fmtValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—"
+  if (typeof value === "boolean") return value ? "Sí" : "No"
+  if (typeof value === "number") return String(value)
+  if (typeof value === "string") return value.trim() || "—"
+  if (Array.isArray(value)) return value.map(fmtValue).join(", ")
+  if (typeof value === "object") return JSON.stringify(value)
+  return String(value)
+}
+
+function fmtLabel(key: string): string {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// --- Resolución de fuente de datos ---
+
+function resolveSource(
+  data: Record<string, unknown>,
+  sourceKey?: string
+): Record<string, unknown> {
+  if (!sourceKey) return data
+  const sub = data[sourceKey]
+  if (sub && typeof sub === "object" && !Array.isArray(sub)) {
+    return sub as Record<string, unknown>
+  }
+  // Fallback: buscar en raíz si el sourceKey no existe como sub-objeto
+  return data
+}
+
+// --- Bloque keyValue ---
+
+function KeyValueBlock({
+  section,
+  data,
+}: {
+  section: KeyValueSection
+  data: Record<string, unknown>
+}) {
+  const source = resolveSource(data, section.sourceKey)
+  const entries = section.fields
+    .map((f) => ({ key: f, value: source[f] }))
+    .filter((e) => e.value !== undefined && e.value !== null && e.value !== "")
+
+  if (entries.length === 0) return null
+
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+        {section.title}
+      </h4>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+        {entries.map(({ key, value }) => (
+          <div key={key} className="contents">
+            <dt className="text-xs text-slate-500 truncate">{fmtLabel(key)}</dt>
+            <dd className="text-xs font-medium text-slate-800 text-right break-words">
+              {fmtValue(value)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
+// --- Bloque tabla ---
+
+function TableBlock({
+  section,
+  data,
+}: {
+  section: TableSection
+  data: Record<string, unknown>
+}) {
+  const rows = data[section.source]
+  if (!Array.isArray(rows) || rows.length === 0) return null
+
+  // Solo mostrar columnas que tienen al menos un valor no vacío en alguna fila
+  const activeColumns = section.columns.filter((col) =>
+    rows.some((row) => {
+      if (row && typeof row === "object") {
+        const val = (row as Record<string, unknown>)[col.key]
+        return val !== undefined && val !== null && val !== ""
+      }
+      return false
+    })
+  )
+
+  if (activeColumns.length === 0) return null
+
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+        {section.title}
+      </h4>
+      {/* overflow-x-auto para scroll horizontal controlado en móvil */}
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full text-xs">
+          <thead className="bg-slate-50">
+            <tr>
+              {activeColumns.map((col) => (
+                <th
+                  key={col.key}
+                  className="px-3 py-2 text-left font-semibold text-slate-600 whitespace-nowrap border-b border-slate-200"
+                >
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((row, idx) => (
+              <tr
+                key={idx}
+                className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}
+              >
+                {activeColumns.map((col) => {
+                  const val =
+                    row && typeof row === "object"
+                      ? (row as Record<string, unknown>)[col.key]
+                      : undefined
+                  return (
+                    <td
+                      key={col.key}
+                      className="px-3 py-1.5 text-slate-700 whitespace-nowrap"
+                    >
+                      {fmtValue(val)}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// --- Bloque badges ---
+
+function BadgesBlock({
+  section,
+  data,
+}: {
+  section: BadgesSection
+  data: Record<string, unknown>
+}) {
+  const source = resolveSource(data, section.sourceKey)
+  const entries = section.fields
+    .map((f) => ({ key: f, value: source[f] }))
+    .filter((e) => e.value !== undefined && e.value !== null && e.value !== "")
+
+  if (entries.length === 0) return null
+
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+        {section.title}
+      </h4>
+      <div className="flex flex-wrap gap-2">
+        {entries.map(({ key, value }) => (
+          <span
+            key={key}
+            className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full border border-slate-200"
+          >
+            <span className="text-slate-500">{fmtLabel(key)}: </span>
+            <span className="font-medium">{fmtValue(value)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// --- Bloque note ---
+
+function NoteBlock({
+  section,
+  data,
+}: {
+  section: NoteSection
+  data: Record<string, unknown>
+}) {
+  const value = data[section.source]
+  if (!value) return null
+
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+        {section.title}
+      </h4>
+      <p className="text-xs text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+        {fmtValue(value)}
+      </p>
+    </div>
+  )
+}
+
+function SectionBlock({
+  section,
+  data,
+}: {
+  section: ClinicalPresentationSection
+  data: Record<string, unknown>
+}) {
+  if (section.kind === "keyValue") return <KeyValueBlock section={section} data={data} />
+  if (section.kind === "table") return <TableBlock section={section} data={data} />
+  if (section.kind === "badges") return <BadgesBlock section={section} data={data} />
+  if (section.kind === "note") return <NoteBlock section={section} data={data} />
+  return null
+}
+
+// --- Panel de campos faltantes ---
+
+function MissingFieldsPanel({ missingFields }: { missingFields: string[] }) {
+  if (missingFields.length === 0) return null
+  return (
+    <div className="pt-3 border-t border-slate-200">
+      <p className="text-xs font-bold text-amber-700 mb-1.5">Campos no encontrados</p>
+      <div className="flex flex-wrap gap-1.5">
+        {missingFields.map((field, i) => (
+          <span
+            key={i}
+            className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200"
+          >
+            {fmtLabel(field)}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// --- Renderer fallback genérico (estudios sin schema configurado) ---
+// Conserva la apariencia actual de lista azul para no romper otros estudios.
+
+function GenericFallbackRenderer({
+  extractedData,
+  missingFields,
+  version,
+}: {
+  extractedData: Record<string, unknown>
+  missingFields: string[] | null
+  version: number
+}) {
+  const hasData = Object.keys(extractedData).length > 0
+  const hasMissing = Array.isArray(missingFields) && missingFields.length > 0
+  if (!hasData && !hasMissing) return null
+
+  return (
+    <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sky-600 text-base">📊</span>
+          <p className="text-sm font-bold text-sky-800">Valores capturados</p>
+        </div>
+        <span className="text-[10px] font-mono text-sky-500 bg-sky-100 px-2 py-0.5 rounded">
+          v{version}
+        </span>
+      </div>
+
+      {hasData && (
+        <div>
+          {Object.entries(extractedData).map(([key, value]) => (
+            <div
+              key={key}
+              className="flex justify-between items-start gap-4 py-1 border-b border-sky-100 last:border-0"
+            >
+              <span className="text-xs text-slate-500 shrink-0">{fmtLabel(key)}</span>
+              <span className="text-xs text-slate-800 font-medium text-right break-all">
+                {fmtValue(value)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasMissing && (
+        <MissingFieldsPanel missingFields={missingFields!} />
+      )}
+    </div>
+  )
+}
+
+// --- Componente principal exportado ---
+
+interface ClinicalExtractionRendererProps {
+  extractedData: Record<string, unknown> | null
+  missingFields: string[] | null
+  version: number
+  /** Tipo canónico del estudio — determina qué schema de presentación usar */
+  studyType: string | null | undefined
+}
+
+export default function ClinicalExtractionRenderer({
+  extractedData,
+  missingFields,
+  version,
+  studyType,
+}: ClinicalExtractionRendererProps) {
+  // Sin datos y sin campos faltantes: nada que renderizar
+  if (
+    (!extractedData || Object.keys(extractedData).length === 0) &&
+    (!missingFields || missingFields.length === 0)
+  ) {
+    return null
+  }
+
+  const schema = getStudySchema(studyType)
+
+  // Sin schema configurado para este studyType: usar renderer genérico de fallback
+  if (!schema || !extractedData) {
+    return (
+      <GenericFallbackRenderer
+        extractedData={extractedData ?? {}}
+        missingFields={missingFields}
+        version={version}
+      />
+    )
+  }
+
+  // Verificar si al menos una sección renderiza contenido útil
+  // (se hace en el render mismo — SectionBlock retorna null si no hay datos)
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+      {/* Cabecera */}
+      <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🩺</span>
+          <p className="text-sm font-bold text-slate-800">Extracción clínica</p>
+          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+            {studyType}
+          </span>
+        </div>
+        <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+          v{version}
+        </span>
+      </div>
+
+      {/* Secciones */}
+      <div className="space-y-4 divide-y divide-slate-100">
+        {schema.sections.map((section, idx) => (
+          <div key={idx} className={idx > 0 ? "pt-4" : ""}>
+            <SectionBlock section={section} data={extractedData} />
+          </div>
+        ))}
+      </div>
+
+      {/* Campos no encontrados */}
+      {Array.isArray(missingFields) && missingFields.length > 0 && (
+        <MissingFieldsPanel missingFields={missingFields} />
+      )}
+    </div>
+  )
+}

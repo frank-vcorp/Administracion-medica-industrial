@@ -36,6 +36,8 @@ import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy
 import StudyAIPrediagnosisPanel from "@/components/clinical/StudyAIPrediagnosisPanel"
 import StudyDocumentViewer from "@/components/clinical/StudyDocumentViewer"
 import StudyExtractionRawPanel from "@/components/clinical/StudyExtractionRawPanel"
+// IMPL-20260518-13: Renderer clínico general configurable por studyType
+import ClinicalExtractionRenderer from "@/components/clinical/ClinicalExtractionRenderer"
 // IMPL-20260326-18: Helper central de elegibilidad IA (reemplaza reglas dispersas)
 import { isAIEligibleEventTest, getAIWorkflowLabel, getCanonicalAIStudyType } from "@/lib/study-ai"
 // ARCH-20260507-07: Bloque de trazabilidad operativa ligera (sin cambiar flujo)
@@ -1232,12 +1234,13 @@ function StudyPanel({
               </div>
             )}
 
-            {/* Valores capturados (capa extractiva legible — separada del raw) */}
+            {/* IMPL-20260518-13: Renderer clínico estructurado — reemplaza panel azul genérico */}
             {test.extractionSnapshot && (
-              <CapturedValuesPanel
+              <ClinicalExtractionRenderer
                 extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
                 missingFields={test.extractionSnapshot.missingFields as string[] | null}
                 version={test.extractionSnapshot.version}
+                studyType={getCanonicalAIStudyType(test)}
               />
             )}
 
