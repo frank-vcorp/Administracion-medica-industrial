@@ -206,7 +206,7 @@ REGLAS ESTRICTAS — OBSERVACIÓN OBLIGATORIA:
 4. Si hay `lln` en alguna fila de `parametros`, úsala como umbral preferente sobre 0.70 genérico.
 5. Si no hay `lln`, usa umbrales ATS/ERS 2022 y decláralo explícitamente como limitación.
 6. Si faltan FEV1, FVC o la relación, declara AI_NON_CONCLUSIVE.
-7. Si `calidad.completitud_documental` o el campo legacy `completitud_documental` es "no_concluyente", declara AI_NON_CONCLUSIVE.
+7. Si `calidad.completitud_documental` o el campo legacy `completitud_documental` indica limitaciones, consérvalo como limitación técnica; NO bloquees automáticamente la interpretación si los parámetros clave y la tabla están presentes.
 8. Responde SOLO en JSON, sin markdown.
 
 JERAQUÍA DE EVIDENCIA (en orden de prioridad):
@@ -231,7 +231,7 @@ REGLAS DE SÍNTESIS CRÍTICAS — PROHIBICIONES ABSOLUTAS:
 ⚠️ REGLA B: Si FEV1/FVC está disminuido y FVC también está reducida, NO simplifiques automáticamente
    a obstructivo. Considera patrón mixto o calidad insuficiente; explicita la ambigüedad.
 ⚠️ REGLA C: Si `calidad.repetibilidad_ats_ers_fvc` o `calidad.repetibilidad_ats_ers_fev1` son negativas,
-   baja la confianza y declara explícitamente la limitación técnica en `limitations`.
+   baja la confianza y declara explícitamente la limitación técnica en `limitations`, pero no anules automáticamente la sugerencia clínica si los parámetros esenciales son legibles y consistentes.
 ⚠️ REGLA D: Si tu justificación numérica indica un patrón X pero tu summary propone patrón Y,
    prevalece la degradación a AI_NON_CONCLUSIVE.
 
@@ -459,23 +459,9 @@ Responde en JSON con esta estructura exacta:
                 missing.append(param)
         if missing:
             return f"Parámetros mínimos faltantes: {', '.join(missing)}"
-        # IMPL-20260513-01: verificación de interpretabilidad explícita en Espirometría
-        # IMPL-20260516-13: también buscar en bloque calidad.es_interpretable (ARCH-20260516-13)
-        if study_type == "Espirometria":
-            is_interpretable = extracted_data.get("es_interpretable")
-            if is_interpretable is None:
-                calidad_block = extracted_data.get("calidad")
-                if isinstance(calidad_block, dict):
-                    is_interpretable = calidad_block.get("es_interpretable")
-            if is_interpretable is False:
-                return "El documento fue marcado como no interpretable por el extractor (es_interpretable=false)"
-            completitud = extracted_data.get("completitud_documental")
-            if completitud is None:
-                calidad_block = extracted_data.get("calidad")
-                if isinstance(calidad_block, dict):
-                    completitud = calidad_block.get("completitud_documental")
-            if completitud == "no_concluyente":
-                return "Completitud documental espirométrica insuficiente para interpretación"
+        # ARCH-20260518-11: En espirometría, la calidad técnica del estudio no debe bloquear
+        # automáticamente el prediagnóstico si los parámetros esenciales están presentes.
+        # Esos indicadores se conservan para modular confianza y limitations en la capa clínica.
         # IMPL-20260513-01: verificación de completitud para Audiometría
         if study_type == "Audiometria" and extracted_data.get("completitud_documental") == "no_concluyente":
             return "Completitud documental insuficiente para audiometría: menos de 3 frecuencias por oído"
