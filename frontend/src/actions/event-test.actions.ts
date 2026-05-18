@@ -307,56 +307,6 @@ export async function uploadEventTestFile(formData: FormData) {
   }
 }
 
-/**
- * ARCH-20260518-04: Limpia el archivo activo y deja sin vigencia los snapshots actuales.
- * Preserva el histórico con marcado lógico; no hace hard delete por defecto.
- */
-export async function clearEventTestFile(eventTestId: string, eventId: string) {
-  if (!eventTestId || !eventId) {
-    return { success: false, error: 'Parámetros incompletos' }
-  }
-
-  try {
-    const activeExtractionIds = (
-      await prisma.studyExtractionSnapshot.findMany({
-        where: { eventTestId, isSuperseded: false },
-        select: { id: true },
-      })
-    ).map(snapshot => snapshot.id)
-
-    await prisma.$transaction(async (tx) => {
-      if (activeExtractionIds.length > 0) {
-        await tx.aIPrediagnosisSnapshot.updateMany({
-          where: {
-            extractionSnapshotId: { in: activeExtractionIds },
-            isSuperseded: false,
-          },
-          data: { isSuperseded: true },
-        })
-
-        await tx.studyExtractionSnapshot.updateMany({
-          where: { eventTestId, isSuperseded: false },
-          data: { isSuperseded: true },
-        })
-      }
-
-      await tx.eventTest.update({
-        where: { id: eventTestId },
-        data: {
-          fileUrl: null,
-          resultNotes: null,
-          status: 'PENDING',
-        },
-      })
-    })
-
-    revalidatePath(`/events/${eventId}`)
-    return { success: true }
-  } catch (error) {
-    console.error('[ARCH-20260518-04] Error al limpiar archivo y análisis vigentes:', error)
-    return { success: false, error: 'No se pudo limpiar el archivo y el análisis vigente del estudio' }
-  }
-}
 
 /**
  * Regenera el análisis IA de un estudio que ya tiene fileUrl pero carece de snapshots.
