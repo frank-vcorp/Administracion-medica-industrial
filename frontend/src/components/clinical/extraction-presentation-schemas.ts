@@ -3,6 +3,8 @@
  * Configura cómo se mapea extractedData hacia secciones legibles para médico.
  * @id IMPL-20260518-13
  * @backup context/checkpoints/CHK_IMPL-20260518-13-RENDERER-CLINICO.md
+ * @extends IMPL-20260518-14 — Audiometría (tabla bilateral por frecuencia)
+ * @backup context/checkpoints/CHK_IMPL-20260518-14-RENDERER-CLINICO-AUDIOMETRIA.md
  */
 
 // --- Tipos de secciones ---
@@ -39,11 +41,28 @@ export type NoteSection = {
   source: string
 }
 
+/**
+ * Tabla comparativa bilateral por frecuencia (p.ej. Audiometría).
+ * Fusiona dos mapas oído_derecho / oído_izquierdo por clave de frecuencia.
+ * @id IMPL-20260518-14
+ */
+export type BilateralFrequencyTableSection = {
+  kind: "bilateralFrequency"
+  title: string
+  /** Clave en extractedData para el mapa oído derecho (freq → valor) */
+  rightKey: string
+  /** Clave en extractedData para el mapa oído izquierdo (freq → valor) */
+  leftKey: string
+  /** Orden preferido de frecuencias (Hz). Las adicionales se añaden al final. */
+  preferredOrder?: number[]
+}
+
 export type ClinicalPresentationSection =
   | KeyValueSection
   | TableSection
   | BadgesSection
   | NoteSection
+  | BilateralFrequencyTableSection
 
 export type StudyPresentationSchema = {
   studyType: string
@@ -126,10 +145,37 @@ const espirometriaSchema: StudyPresentationSchema = {
   ],
 }
 
+// --- Configuración: Audiometría ---
+// @id IMPL-20260518-14
+
+const audiometriaSchema: StudyPresentationSchema = {
+  studyType: "Audiometria",
+  sections: [
+    {
+      kind: "keyValue",
+      title: "Resumen del estudio",
+      fields: ["paciente", "fecha_estudio", "completitud_documental", "notas_calidad"],
+    },
+    {
+      kind: "bilateralFrequency",
+      title: "Umbrales audiométricos por frecuencia",
+      rightKey: "oido_derecho",
+      leftKey: "oido_izquierdo",
+      preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
+    },
+    {
+      kind: "keyValue",
+      title: "Campos fuente del formato",
+      fields: ["faringe", "cad", "cai", "mtd", "mti"],
+    },
+  ],
+}
+
 // --- Registro central ---
 
 export const STUDY_PRESENTATION_SCHEMAS: Record<string, StudyPresentationSchema> = {
   Espirometria: espirometriaSchema,
+  Audiometria: audiometriaSchema,
 }
 
 export function getStudySchema(studyType: string | null | undefined): StudyPresentationSchema | null {

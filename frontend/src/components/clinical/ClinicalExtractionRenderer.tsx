@@ -4,6 +4,8 @@
  * estructuradas y tabla real de parámetros, legibles para médico.
  * @id IMPL-20260518-13
  * @backup context/checkpoints/CHK_IMPL-20260518-13-RENDERER-CLINICO.md
+ * @extends IMPL-20260518-14 — Audiometría (BilateralFrequencyTableBlock)
+ * @backup context/checkpoints/CHK_IMPL-20260518-14-RENDERER-CLINICO-AUDIOMETRIA.md
  */
 "use client"
 
@@ -13,6 +15,7 @@ import {
   type TableSection,
   type BadgesSection,
   type NoteSection,
+  type BilateralFrequencyTableSection,
   type ClinicalPresentationSection,
 } from "./extraction-presentation-schemas"
 
@@ -194,6 +197,8 @@ function BadgesBlock({
 
 // --- Bloque note ---
 
+// --- Bloque nota ---
+
 function NoteBlock({
   section,
   data,
@@ -216,6 +221,91 @@ function NoteBlock({
   )
 }
 
+/**
+ * Bloque tabla comparativa bilateral por frecuencia.
+ * Fusiona oido_derecho y oido_izquierdo en una sola tabla.
+ * @id IMPL-20260518-14
+ */
+function BilateralFrequencyTableBlock({
+  section,
+  data,
+}: {
+  section: BilateralFrequencyTableSection
+  data: Record<string, unknown>
+}) {
+  const rightRaw = data[section.rightKey]
+  const leftRaw = data[section.leftKey]
+
+  const right: Record<string, unknown> =
+    rightRaw && typeof rightRaw === "object" && !Array.isArray(rightRaw)
+      ? (rightRaw as Record<string, unknown>)
+      : {}
+  const left: Record<string, unknown> =
+    leftRaw && typeof leftRaw === "object" && !Array.isArray(leftRaw)
+      ? (leftRaw as Record<string, unknown>)
+      : {}
+
+  // Reunir todas las frecuencias presentes como números
+  const allFreqNums = new Set<number>([
+    ...Object.keys(right)
+      .map(Number)
+      .filter((n) => !isNaN(n)),
+    ...Object.keys(left)
+      .map(Number)
+      .filter((n) => !isNaN(n)),
+  ])
+
+  if (allFreqNums.size === 0) return null
+
+  const preferred = section.preferredOrder ?? []
+  const preferredSet = new Set(preferred)
+  const extras = [...allFreqNums]
+    .filter((f) => !preferredSet.has(f))
+    .sort((a, b) => a - b)
+  const orderedFreqs = [...preferred.filter((f) => allFreqNums.has(f)), ...extras]
+
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+        {section.title}
+      </h4>
+      {/* overflow-x-auto para scroll horizontal controlado en móvil */}
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full text-xs">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-3 py-2 text-left font-semibold text-slate-600 whitespace-nowrap border-b border-slate-200">
+                Frecuencia (Hz)
+              </th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-600 whitespace-nowrap border-b border-slate-200">
+                Oído derecho
+              </th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-600 whitespace-nowrap border-b border-slate-200">
+                Oído izquierdo
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {orderedFreqs.map((freq, idx) => (
+              <tr key={freq} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                <td className="px-3 py-1.5 font-medium text-slate-700 whitespace-nowrap">
+                  {freq}
+                </td>
+                <td className="px-3 py-1.5 text-slate-700 whitespace-nowrap">
+                  {fmtValue(right[String(freq)])}
+                </td>
+                <td className="px-3 py-1.5 text-slate-700 whitespace-nowrap">
+                  {fmtValue(left[String(freq)])}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function SectionBlock({
   section,
   data,
@@ -227,6 +317,7 @@ function SectionBlock({
   if (section.kind === "table") return <TableBlock section={section} data={data} />
   if (section.kind === "badges") return <BadgesBlock section={section} data={data} />
   if (section.kind === "note") return <NoteBlock section={section} data={data} />
+  if (section.kind === "bilateralFrequency") return <BilateralFrequencyTableBlock section={section} data={data} />
   return null
 }
 
