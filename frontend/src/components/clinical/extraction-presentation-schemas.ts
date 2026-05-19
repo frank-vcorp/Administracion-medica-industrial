@@ -147,6 +147,8 @@ const espirometriaSchema: StudyPresentationSchema = {
 
 // --- Configuración: Audiometría ---
 // @id IMPL-20260518-14
+// @realigned IMPL-20260519-02 — payload real: va/vo/pta_visible/paciente_detalle
+// @backup context/SPECs/SPEC_ARCH-20260519-02-REALINEACION-RENDERER-AUDIOMETRIA-PAYLOAD-REAL.md
 
 const audiometriaSchema: StudyPresentationSchema = {
   studyType: "Audiometria",
@@ -154,7 +156,7 @@ const audiometriaSchema: StudyPresentationSchema = {
     {
       kind: "keyValue",
       title: "Paciente",
-      sourceKey: "paciente",
+      sourceKey: "paciente_detalle",
       fields: [
         "nombre_completo",
         "identificacion",
@@ -184,13 +186,24 @@ const audiometriaSchema: StudyPresentationSchema = {
     {
       kind: "keyValue",
       title: "Resumen técnico",
-      fields: ["completitud_documental", "notas_calidad"],
+      fields: ["completitud_documental"],
+    },
+    {
+      kind: "note",
+      title: "Notas de calidad",
+      source: "notas_calidad.descripcion",
     },
     {
       kind: "keyValue",
-      title: "Indicadores por oído",
-      sourceKey: "resumen_oidos",
-      fields: ["pta_d", "pta_i"],
+      title: "PTA Oído Derecho",
+      sourceKey: "oido_derecho",
+      fields: ["pta_visible"],
+    },
+    {
+      kind: "keyValue",
+      title: "PTA Oído Izquierdo",
+      sourceKey: "oido_izquierdo",
+      fields: ["pta_visible"],
     },
     {
       kind: "keyValue",
@@ -201,15 +214,15 @@ const audiometriaSchema: StudyPresentationSchema = {
     {
       kind: "bilateralFrequency",
       title: "Vía aérea por frecuencia",
-      rightKey: "oido_derecho.via_aerea",
-      leftKey: "oido_izquierdo.via_aerea",
+      rightKey: "oido_derecho.va",
+      leftKey: "oido_izquierdo.va",
       preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
     },
     {
       kind: "bilateralFrequency",
       title: "Vía ósea por frecuencia",
-      rightKey: "oido_derecho.via_osea",
-      leftKey: "oido_izquierdo.via_osea",
+      rightKey: "oido_derecho.vo",
+      leftKey: "oido_izquierdo.vo",
       preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
     },
     {
