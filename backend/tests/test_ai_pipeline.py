@@ -508,6 +508,98 @@ class TestCalibrationV1AudioEspiro:
         assert result.mti is None
         assert result.completitud_documental == "parcial"
 
+    # --- ARCH-20260518-17: Guardrails backend de Audiometría ---
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_audiometria_derivacion_completitud_cuando_null(self, mock_gemini, extractor):
+        """
+        ARCH-20260518-17: Si el LLM devuelve completitud_documental=null (o lo omite),
+        el backend lo deriva del conteo de frecuencias por oído: ≥6→suficiente, 3-5→parcial, <3→no_concluyente.
+        """
+        mock_gemini.return_value = {
+            "paciente": "Test Derivación",
+            "fecha_estudio": "18/05/2026",
+            "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "oido_izquierdo": {"500": 10, "1000": 15, "2000": 20, "4000": 25},
+            # completitud_documental ausente — el backend debe derivarlo
+        }
+        result = extractor.extract_by_type(
+            "/fake/audio_derivacion.pdf", "Audiometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION
+        )
+        assert isinstance(result, AudiometriaData)
+        # oido_derecho tiene 6 frecuencias → suficiente
+        assert result.completitud_documental == "suficiente"
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_audiometria_derivacion_frecuencias_detectadas_cuando_null(self, mock_gemini, extractor):
+        """
+        ARCH-20260518-17: Si frecuencias_detectadas llega null o ausente, el backend
+        las deriva como unión ordenada de claves de oido_derecho y oido_izquierdo.
+        """
+        mock_gemini.return_value = {
+            "paciente": "Test FrecDeriv",
+            "fecha_estudio": "18/05/2026",
+            "oido_derecho": {"500": 10, "1000": 15, "2000": 20},
+            "oido_izquierdo": {"500": 12, "1000": 18, "2000": 22, "4000": 30},
+            # frecuencias_detectadas ausente — el backend debe derivarlo
+        }
+        result = extractor.extract_by_type(
+            "/fake/audio_frec_deriv.pdf", "Audiometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION
+        )
+        assert isinstance(result, AudiometriaData)
+        assert result.frecuencias_detectadas is not None
+        # Unión ordenada de claves de ambos oídos
+        assert result.frecuencias_detectadas == ["500", "1000", "2000", "4000"]
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_audiometria_sospecha_corrimiento_125hz(self, mock_gemini, extractor):
+        """
+        ARCH-20260518-17: Cuando el LLM devuelve 125 Hz como clave (frecuencia no canónica),
+        el backend anota SOSPECHA_CORRIMIENTO en notas_calidad para trazabilidad.
+        """
+        mock_gemini.return_value = {
+            "paciente": "Test Corrimiento",
+            "fecha_estudio": "18/05/2026",
+            "oido_derecho": {"125": 10, "250": 15, "500": 20, "1000": 25},
+            "oido_izquierdo": {"125": 12, "250": 18, "500": 22, "1000": 28},
+            "completitud_documental": "parcial",
+        }
+        result = extractor.extract_by_type(
+            "/fake/audio_corrimiento.pdf", "Audiometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION
+        )
+        assert isinstance(result, AudiometriaData)
+        assert result.notas_calidad is not None
+        assert "SOSPECHA_CORRIMIENTO" in result.notas_calidad
+        assert "125" in result.notas_calidad
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_audiometria_null_values_omitidos_en_normalizacion(self, mock_gemini, extractor):
+        """
+        ARCH-20260518-17: Si el LLM devuelve null para alguna frecuencia (celda vacía),
+        esa clave se omite en el dict normalizado para evitar errores de tipo y corrimientos.
+        """
+        mock_gemini.return_value = {
+            "paciente": "Test Null Freqs",
+            "fecha_estudio": "18/05/2026",
+            "oido_derecho": {"500": 10, "1000": None, "2000": 20, "4000": 30},
+            "oido_izquierdo": {"500": 12, "1000": 15, "2000": None, "4000": 35},
+            "completitud_documental": "parcial",
+        }
+        result = extractor.extract_by_type(
+            "/fake/audio_null_freqs.pdf", "Audiometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION
+        )
+        assert isinstance(result, AudiometriaData)
+        # Celdas null omitidas — no deben aparecer como claves
+        assert "1000" not in result.oido_derecho
+        assert "2000" not in result.oido_izquierdo
+        # Celdas con valor sí deben estar
+        assert result.oido_derecho["500"] == 10
+        assert result.oido_izquierdo["4000"] == 35
+
     # --- Extracción: Espirometría ---
 
     @patch('app.services.ai.base.GeminiBase.call_gemini')
