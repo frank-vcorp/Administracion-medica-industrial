@@ -72,10 +72,10 @@ Ambas fases se complementan: el alta masiva requiere un `projectId` existente pa
 
 | Capa | Estado |
 |------|--------|
-| `project.actions.ts` + `worker.actions.ts` (con hotfix) | ✅ Committed — `b8bdea9` (main) |
-| `schema.prisma`, migraciones, UI components, páginas, templates | ⚠️ Uncommitted — working tree |
+| Hotfix de autorización | ✅ Committed — `b8bdea9` (main) |
+| Cierre principal Project + Alta Masiva | ✅ Committed — `dce0166` (main) |
 
-> Los archivos UI/schema están en working tree. Pendiente commit de cierre antes de solicitar QA a GEMINI.
+> El corte ARCH-20260519-14 ya cuenta con commit final de cierre en `main`.
 
 ---
 
@@ -113,9 +113,6 @@ Ambas fases se complementan: el alta masiva requiere un `projectId` existente pa
 
 ## Siguiente Paso
 
-1. Commit de cierre de archivos UI/schema:
-   ```
-   feat(projects): agregar entidad Project y flujo Alta Masiva (ARCH-20260519-14)
-   ```
-2. `prisma migrate deploy` en Railway (coordinado con GEMINI/infra).
-3. Solicitar QA a GEMINI con PR abierto.
+1. Ejecutar `prisma migrate deploy` en Railway (coordinado con GEMINI/infra).
+2. Solicitar QA a GEMINI sobre el corte ya comprometido.
+3. Validar flujo manual en un entorno con Prisma runtime operativo y OpenSSL compatible.

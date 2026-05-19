@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<!--
+  ARCH-20260513-05 | Micrositio Comercial — Copiloto Clínico Ocupacional
+  Respaldo: context/SPECs/SPEC_ARCH-20260513-05-MICROSITIO-ESTATICO-MEDGEMMA-APIS.md
+  IMPL-20260513-01 | SOFIA - Builder
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Copiloto Clínico Ocupacional para lectura de estudios y prediagnóstico asistido. Diseñado para clínicas ocupacionales, laboratorios y campañas médicas industriales." />
+  <meta property="og:title" content="Copiloto Clínico Ocupacional" />
+  <meta property="og:description" content="Sube estudios médicos, obtén extracción estructurada, prediagnóstico por estudio y consolidado clínico de apoyo para revisión médica." />
+  <meta property="og:type" content="website" />
+  <title>Copiloto Clínico Ocupacional — Lectura de Estudios y Prediagnóstico Asistido</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- ======================================================
+       NAVBAR
+  ====================================================== -->
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="#" class="brand">
+        <span class="brand-icon">⬡</span>
+        <span class="brand-name">Copiloto Clínico</span>
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="#como-funciona">Cómo funciona</a></li>
+        <li><a href="#casos">Casos de uso</a></li>
+        <li><a href="#pricing">Precios</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li>
+          <a href="#" class="btn btn-nav" id="nav-cta">Solicitar demo</a>
+        </li>
+      </ul>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú">&#9776;</button>
+    </div>
+  </nav>
+
+  <!-- ======================================================
+       HERO
+  ====================================================== -->
+  <section class="hero" id="hero">
+    <div class="hero-bg"></div>
+    <div class="container hero-inner">
+      <div class="hero-tag">Para clínicas ocupacionales · laboratorios · campañas médicas</div>
+      <h1 class="hero-title">
+        Copiloto clínico para leer estudios<br class="br-desktop" />
+        y generar prediagnóstico asistido
+      </h1>
+      <p class="hero-subtitle">
+        Sube uno o varios estudios médicos y obtén extracción estructurada,
+        prediagnóstico por estudio y un consolidado clínico de apoyo para revisión médica.
+      </p>
+
+      <ul class="hero-bullets">
+        <li><span class="bullet-icon">✓</span> Lectura de PDFs e imágenes</li>
+        <li><span class="bullet-icon">✓</span> Prediagnóstico por estudio</li>
+        <li><span class="bullet-icon">✓</span> Consolidado multiestudio por caso</li>
+        <li><span class="bullet-icon">✓</span> Apoyo al médico, no reemplazo</li>
+      </ul>
+
+      <div class="hero-ctas">
+        <a href="#" class="btn btn-primary" id="hero-cta-primary">Solicitar demo por WhatsApp</a>
+        <a href="#casos" class="btn btn-ghost">Ver casos de uso ↓</a>
+      </div>
+
+      <p class="hero-microcopy">
+        Agenda una demo rápida · Sin montar infraestructura propia · Implementación por etapas
+      </p>
+
+      <div class="social-proof">
+        <p class="sp-label">Evaluado por clínicas ocupacionales, laboratorios y equipos médicos</p>
+        <div class="sp-logos">
+          <span class="sp-placeholder">Clínica Ocupacional</span>
+          <span class="sp-placeholder">Laboratorio Clínico</span>
+          <span class="sp-placeholder">Salud Industrial</span>
+          <span class="sp-placeholder">Medicina del Trabajo</span>
+        </div>
+        <p class="sp-note">Logos de referencias reales próximamente</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       SECCIÓN DOLOR
+  ====================================================== -->
+  <section class="section section-pain" id="dolor">
+    <div class="container">
+      <h2 class="section-title centered">
+        Las clínicas no necesitan otra IA genérica.<br />
+        Necesitan flujo clínico ocupacional.
+      </h2>
+      <p class="section-lead centered">
+        Hoy muchos equipos leen estudios uno por uno, capturan datos a mano y consolidan
+        hallazgos de forma dispersa. Este servicio acelera lectura documental,
+        estructura parámetros clínicos y entrega una vista conjunta de apoyo al médico.
+      </p>
+      <div class="pain-cards">
+        <div class="pain-card">
+          <div class="pain-icon">⏱</div>
+          <h3>Tiempo perdido</h3>
+          <p>Cada estudio se lee de forma repetitiva y manual, sin extracción estructurada automática.</p>
+        </div>
+        <div class="pain-card">
+          <div class="pain-icon">🗂</div>
+          <h3>Dispersión entre estudios</h3>
+          <p>Hallazgos de audiometría, espirometría y laboratorio viven en archivos separados sin criterio unificado.</p>
+        </div>
+        <div class="pain-card">
+          <div class="pain-icon">📉</div>
+          <h3>Sin criterio preliminar estandarizado</h3>
+          <p>La interpretación preliminar varía según el lector y no queda documentada ni trazable.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       SECCIÓN TRANSFORMACIÓN
+  ====================================================== -->
+  <section class="section section-transform" id="transformacion">
+    <div class="container">
+      <h2 class="section-title centered">
+        De archivos sueltos a criterio clínico de apoyo en una sola vista.
+      </h2>
+      <div class="transform-table">
+        <div class="transform-col transform-before">
+          <div class="transform-col-head">Sin Copiloto</div>
+          <ul>
+            <li>Lectura manual de cada PDF</li>
+            <li>Extracción de datos a mano</li>
+            <li>Hallazgos dispersos en archivos separados</li>
+            <li>Criterio preliminar no documentado</li>
+            <li>Sin consolidado entre estudios del mismo caso</li>
+            <li>Proceso difícil de escalar en campañas</li>
+          </ul>
+        </div>
+        <div class="transform-arrow">→</div>
+        <div class="transform-col transform-after">
+          <div class="transform-col-head">Con Copiloto Clínico</div>
+          <ul>
+            <li>Extracción estructurada automática</li>
+            <li>Parámetros clínicos presentados en tarjeta</li>
+            <li>Consolidado multiestudio por caso</li>
+            <li>Prediagnóstico trazable y revisable</li>
+            <li>Vista única de apoyo para el médico</li>
+            <li>Escalable a campañas y múltiples sucursales</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       CÓMO FUNCIONA
+  ====================================================== -->
+  <section class="section section-how" id="como-funciona">
+    <div class="container">
+      <h2 class="section-title centered">Cómo funciona</h2>
+      <p class="section-lead centered">
+        Puedes empezar con un demo simple y crecer luego a operación multisucursal o API B2B.
+      </p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3>Sube los estudios</h3>
+          <p>PDFs o imágenes de examen médico, audiometría, espirometría, laboratorio y más.</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3>Extracción clínica</h3>
+          <p>El sistema extrae parámetros clínicos estructurados e identifica el tipo de estudio.</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3>Prediagnóstico por estudio</h3>
+          <p>Cada documento recibe un prediagnóstico asistido con evidencia y limitaciones.</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <h3>Consolidado del caso</h3>
+          <p>Todos los estudios válidos se cruzan en una sola vista de apoyo clínico.</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step">
+          <div class="step-number">5</div>
+          <h3>El médico decide</h3>
+          <p>La autoridad clínica final siempre es del médico. El sistema es apoyo, no reemplazo.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       DEMO
+  ====================================================== -->
+  <section class="section section-demo" id="demo">
+    <div class="container">
+      <div class="demo-inner">
+        <div class="demo-text">
+          <h2 class="section-title">Un demo simple.<br />Un valor inmediato.</h2>
+          <p>
+            Con solo subir un Examen Médico y una Audiometría, el sistema no solo interpreta
+            cada estudio por separado: también cruza ambos y entrega un prediagnóstico
+            final de apoyo clínico.
+          </p>
+          <ul class="demo-steps">
+            <li>
+              <span class="demo-step-num">①</span>
+              Subiendo archivos
+            </li>
+            <li>
+              <span class="demo-step-num">②</span>
+              Tarjetas de resultados por estudio
+            </li>
+            <li>
+              <span class="demo-step-num">③</span>
+              Tarjeta final de consolidado
+            </li>
+          </ul>
+          <a href="#" class="btn btn-primary" id="demo-cta">Quiero ver este flujo en mi clínica</a>
+        </div>
+        <div class="demo-mockup">
+          <div class="mockup-panel mockup-left">
+            <div class="mockup-header">Estudios cargados</div>
+            <div class="mockup-file">
+              <span class="file-icon">📄</span>
+              <div class="file-info">
+                <div class="file-name">examen-medico.pdf</div>
+                <div class="file-status file-ok">Extraído ✓</div>
+              </div>
+            </div>
+            <div class="mockup-file">
+              <span class="file-icon">📄</span>
+              <div class="file-info">
+                <div class="file-name">audiometria.pdf</div>
+                <div class="file-status file-ok">Extraído ✓</div>
+              </div>
+            </div>
+            <div class="mockup-file">
+              <span class="file-icon">📄</span>
+              <div class="file-info">
+                <div class="file-name">espirometria.pdf</div>
+                <div class="file-status file-pending">Procesando…</div>
+              </div>
+            </div>
+          </div>
+          <div class="mockup-panel mockup-right">
+            <div class="mockup-header">Consolidado del caso</div>
+            <div class="mockup-tag tag-normal">Audiometría: Normal bilateral</div>
+            <div class="mockup-tag tag-atencion">Examen Médico: Hallazgo a revisar</div>
+            <div class="mockup-divider"></div>
+            <div class="mockup-label">Prediagnóstico de apoyo</div>
+            <div class="mockup-prediag">
+              Sin contraindicación aparente con base en estudios disponibles.
+              Se recomienda correlación clínica con hallazgos de examen médico.
+            </div>
+            <div class="mockup-disclaimer">⚠ Decisión final: médico responsable</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       CASOS DE USO
+  ====================================================== -->
+  <section class="section section-cases" id="casos">
+    <div class="container">
+      <h2 class="section-title centered">Casos de uso</h2>
+      <p class="section-lead centered">
+        Distintos perfiles encuentran valor real en el producto.
+      </p>
+      <div class="cases-grid">
+        <div class="case-card">
+          <div class="case-icon">🏥</div>
+          <h3>Examen Médico + Audiometría</h3>
+          <p class="case-problem">Lectura separada sin criterio unificado</p>
+          <p class="case-benefit">Consolidado auditivo y clínico en una sola vista</p>
+        </div>
+        <div class="case-card">
+          <div class="case-icon">🫁</div>
+          <h3>Examen Médico + Espirometría</h3>
+          <p class="case-problem">Parámetros espirométricos sin contexto clínico</p>
+          <p class="case-benefit">Correlación entre función pulmonar y estado de salud</p>
+        </div>
+        <div class="case-card">
+          <div class="case-icon">🧪</div>
+          <h3>Laboratorio + Examen Médico</h3>
+          <p class="case-problem">Resultados de laboratorio leídos de forma aislada</p>
+          <p class="case-benefit">Hallazgos integrados al cuadro clínico general</p>
+        </div>
+        <div class="case-card">
+          <div class="case-icon">👷</div>
+          <h3>Evaluación ocupacional integral</h3>
+          <p class="case-problem">Proceso de ingreso con múltiples estudios desconectados</p>
+          <p class="case-benefit">Criterio preliminar completo por trabajador en una sola sesión</p>
+        </div>
+        <div class="case-card">
+          <div class="case-icon">🏭</div>
+          <h3>Campañas médicas industriales</h3>
+          <p class="case-problem">Lotes masivos de estudios sin forma de procesar rápido</p>
+          <p class="case-benefit">Throughput operativo con trazabilidad por caso</p>
+        </div>
+        <div class="case-card">
+          <div class="case-icon">🔗</div>
+          <h3>API B2B para integradores</h3>
+          <p class="case-problem">Plataformas médicas sin capa de interpretación clínica</p>
+          <p class="case-benefit">Backend especializado como servicio, con ingresos recurrentes</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       DIFERENCIADORES
+  ====================================================== -->
+  <section class="section section-diff" id="diferenciadores">
+    <div class="container">
+      <h2 class="section-title centered">No es IA genérica. Es flujo clínico ocupacional.</h2>
+      <div class="diff-compare">
+        <div class="diff-col diff-generic">
+          <div class="diff-col-head">IA genérica</div>
+          <ul>
+            <li>Resume documentos</li>
+            <li>Responde preguntas abiertas</li>
+            <li>Sin flujo clínico</li>
+            <li>Sin trazabilidad por caso</li>
+          </ul>
+        </div>
+        <div class="diff-vs">VS</div>
+        <div class="diff-col diff-ours">
+          <div class="diff-col-head">Copiloto Clínico Ocupacional</div>
+          <ul>
+            <li>Extrae, interpreta y consolida casos clínicos</li>
+            <li>Flujo específico de salud ocupacional</li>
+            <li>Consolidado multiestudio por trabajador</li>
+            <li>Documentación trazable y revisable</li>
+          </ul>
+        </div>
+      </div>
+      <div class="diff-pillars">
+        <div class="diff-pillar">
+          <div class="pillar-icon">🎯</div>
+          <h4>Especializado en medicina ocupacional</h4>
+        </div>
+        <div class="diff-pillar">
+          <div class="pillar-icon">🔄</div>
+          <h4>Consolidado multiestudio</h4>
+        </div>
+        <div class="diff-pillar">
+          <div class="pillar-icon">🩺</div>
+          <h4>Modo sombra clínica</h4>
+        </div>
+        <div class="diff-pillar">
+          <div class="pillar-icon">📋</div>
+          <h4>Documentación trazable</h4>
+        </div>
+        <div class="diff-pillar">
+          <div class="pillar-icon">🏗</div>
+          <h4>Implementación flexible</h4>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       CONFIANZA / RIESGO INVERSO
+  ====================================================== -->
+  <section class="section section-trust" id="confianza">
+    <div class="container">
+      <div class="trust-inner">
+        <h2 class="section-title">Sin riesgo para empezar.</h2>
+        <div class="trust-cards">
+          <div class="trust-card">
+            <div class="trust-icon">🩺</div>
+            <h4>Apoyo clínico, no sustitución médica</h4>
+            <p>El sistema nunca emite aptitud final ni firma documentos. El médico siempre tiene la última palabra.</p>
+          </div>
+          <div class="trust-card">
+            <div class="trust-icon">🪜</div>
+            <h4>Implementación por etapas</h4>
+            <p>Puedes arrancar con 2 tipos de estudio y crecer progresivamente sin comprometerte de entrada.</p>
+          </div>
+          <div class="trust-card">
+            <div class="trust-icon">🚀</div>
+            <h4>Sin infraestructura propia</h4>
+            <p>No necesitas servidores ni integración compleja para comenzar. El piloto es inmediato.</p>
+          </div>
+          <div class="trust-card">
+            <div class="trust-icon">🤝</div>
+            <h4>Acompañamiento comercial y técnico</h4>
+            <p>Desde la demo hasta la operación. El soporte está incluido en los planes base.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       PRICING
+  ====================================================== -->
+  <section class="section section-pricing" id="pricing">
+    <div class="container">
+      <div class="pricing-banner">
+        <span>✦ Activación rápida · Calibración inicial · Demo con casos reales · Acompañamiento comercial y técnico</span>
+      </div>
+      <h2 class="section-title centered">Planes</h2>
+      <p class="section-lead centered">
+        El precio se basa en valor operativo y clínico, no en costo del modelo.
+      </p>
+      <div class="pricing-grid">
+
+        <!-- PILOTO -->
+        <div class="pricing-card">
+          <div class="plan-name">Piloto Demo</div>
+          <div class="plan-ideal">Ideal para validar antes de comprometerse</div>
+          <div class="plan-price">
+            <span class="price-setup">$6,900 MXN setup</span>
+            <span class="price-monthly">+ $3,900 MXN/mes</span>
+          </div>
+          <ul class="plan-features">
+            <li>1 clínica o unidad</li>
+            <li>2 tipos de estudio</li>
+            <li>Demo funcional</li>
+            <li>Carga multiarchivo básica</li>
+            <li>Consolidado multiestudio</li>
+            <li>Soporte de arranque</li>
+          </ul>
+          <a href="#" class="btn btn-outline plan-cta" data-plan="Piloto Demo">Quiero el Piloto</a>
+        </div>
+
+        <!-- STARTER — destacado -->
+        <div class="pricing-card pricing-card--featured">
+          <div class="plan-badge">Recomendado</div>
+          <div class="plan-name">Starter Clínica</div>
+          <div class="plan-ideal">Ideal para clínicas pequeñas y medianas en operación</div>
+          <div class="plan-price">
+            <span class="price-setup">$14,900 MXN setup</span>
+            <span class="price-monthly">+ $8,900 MXN/mes</span>
+          </div>
+          <ul class="plan-features">
+            <li>1 sucursal</li>
+            <li>Hasta 4 tipos de estudio</li>
+            <li>Branding ligero</li>
+            <li>Consolidado multiestudio</li>
+            <li>Panel básico de casos</li>
+            <li>Soporte WhatsApp y correo</li>
+          </ul>
+          <a href="#" class="btn btn-primary plan-cta" data-plan="Starter Clínica">Quiero el Starter</a>
+        </div>
+
+        <!-- PRO -->
+        <div class="pricing-card">
+          <div class="plan-name">Pro Multisucursal</div>
+          <div class="plan-ideal">Ideal para clínicas con volumen y múltiples unidades</div>
+          <div class="plan-price">
+            <span class="price-setup">$29,900 MXN setup</span>
+            <span class="price-monthly">+ $18,900 MXN/mes</span>
+          </div>
+          <ul class="plan-features">
+            <li>Hasta 3 sucursales</li>
+            <li>Hasta 6 tipos de estudio</li>
+            <li>Consolidado multiestudio avanzado</li>
+            <li>Más usuarios internos</li>
+            <li>Soporte prioritario</li>
+            <li>Reportes operativos básicos</li>
+          </ul>
+          <a href="#" class="btn btn-outline plan-cta" data-plan="Pro Multisucursal">Quiero el Pro</a>
+        </div>
+
+      </div>
+
+      <div class="enterprise-strip">
+        <div>
+          <strong>Enterprise / White-Label</strong>
+          <span>desde $79,900 MXN setup · $39,900 MXN/mes</span>
+          <span class="enterprise-desc">Multi-sucursal · Integración con sistemas terceros · Dominio dedicado</span>
+        </div>
+        <a href="#" class="btn btn-ghost enterprise-cta" data-plan="Enterprise">Quiero cotización personalizada</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       FAQ
+  ====================================================== -->
+  <section class="section section-faq" id="faq">
+    <div class="container">
+      <h2 class="section-title centered">Preguntas frecuentes</h2>
+      <div class="faq-list">
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            ¿Esto reemplaza al médico?
+            <span class="faq-chevron">▾</span>
+          </button>
+          <div class="faq-answer" hidden>
+            No. El sistema entrega apoyo a la decisión clínica, prediagnóstico por estudio
+            y consolidado multiestudio, pero la decisión final siempre la toma el médico.
+            No emite aptitud laboral final ni firma documentos.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            ¿Puede leer varios estudios del mismo trabajador?
+            <span class="faq-chevron">▾</span>
+          </button>
+          <div class="faq-answer" hidden>
+            Sí. Esa es una de las ventajas principales. Genera lectura individual por estudio
+            y luego un consolidado final de apoyo con todos los archivos válidos del mismo caso.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            ¿Qué tipos de estudios soporta?
+            <span class="faq-chevron">▾</span>
+          </button>
+          <div class="faq-answer" hidden>
+            Los más comunes en medicina ocupacional: Examen Médico, Audiometría, Espirometría
+            y Laboratorio clínico. Son los más frecuentes en flujos ocupacionales y permiten
+            demostrar el consolidado multiestudio desde el primer piloto.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            ¿Cuál es la diferencia frente a una IA general?
+            <span class="faq-chevron">▾</span>
+          </button>
+          <div class="faq-answer" hidden>
+            Aquí no solo hay chat ni resumen. Hay flujo clínico ocupacional, extracción estructurada,
+            trazabilidad y consolidado entre estudios del mismo trabajador. Está hecho para
+            salud ocupacional real, no para conversaciones genéricas.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            ¿Puede crecer a white-label o API B2B?
+            <span class="faq-chevron">▾</span>
+          </button>
+          <div class="faq-answer" hidden>
+            Sí. El servicio puede ofrecerse como módulo white-label con tu marca, como API B2B
+            para integradores de software médico, o como servicio administrado para grupos clínicos.
+            El plan Enterprise cubre estos casos.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            ¿Qué se necesita para arrancar?
+            <span class="faq-chevron">▾</span>
+          </button>
+          <div class="faq-answer" hidden>
+            Solo una conversación por WhatsApp para definir los tipos de estudio y el alcance
+            inicial. No necesitas infraestructura propia. El piloto puede activarse rápidamente
+            con calibración y onboarding incluidos en el setup.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            ¿Cuánto tarda un piloto?
+            <span class="faq-chevron">▾</span>
+          </button>
+          <div class="faq-answer" hidden>
+            El Piloto Demo puede activarse en días, no semanas. Requiere definir los estudios
+            a cubrir, una calibración inicial y un breve onboarding. El plan se convierte
+            a Starter o Pro cuando el cliente valida el valor operativo.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            ¿Se puede usar con mi clínica o laboratorio específico?
+            <span class="faq-chevron">▾</span>
+          </button>
+          <div class="faq-answer" hidden>
+            Sí. El servicio se calibra por tipo de estudio y contexto operativo de tu organización.
+            Está diseñado para adaptarse a clínicas ocupacionales, laboratorios y campañas
+            médicas industriales de distinto tamaño.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       CIERRE / CTA FINAL
+  ====================================================== -->
+  <section class="section section-close" id="cierre">
+    <div class="container close-inner">
+      <h2 class="close-title">
+        Si ya generas estudios,<br />ya puedes vender velocidad clínica.
+      </h2>
+      <p class="close-sub">
+        Cada clínica que procesa estudios manuales está dejando tiempo y dinero sobre la mesa.
+        La barrera de entrada es un piloto, no una transformación digital completa.
+      </p>
+      <a href="#" class="btn btn-primary btn-lg" id="close-cta">Solicitar demo por WhatsApp</a>
+      <p class="close-micro">
+        Conversación directa · Sin intermediarios · Sin compromiso inicial
+      </p>
+    </div>
+  </section>
+
+  <!-- ======================================================
+       FOOTER
+  ====================================================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <span class="brand-icon">⬡</span>
+        <span class="brand-name">Copiloto Clínico Ocupacional</span>
+      </div>
+      <p class="footer-disclaimer">
+        Este servicio es un apoyo clínico para revisión médica. No sustituye al médico ni emite
+        dictámenes o aptitudes laborales finales. La decisión clínica siempre recae en el profesional
+        de salud responsable.
+      </p>
+      <p class="footer-copy">© 2026 · Diseñado para salud ocupacional real</p>
+    </div>
+  </footer>
+
+  <!-- ======================================================
+       CTA STICKY MOBILE
+  ====================================================== -->
+  <div class="sticky-cta" id="sticky-cta">
+    <a href="#" class="btn btn-primary btn-sticky" id="sticky-cta-btn">Solicitar demo por WhatsApp</a>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

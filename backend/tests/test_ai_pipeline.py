@@ -44,7 +44,7 @@ class TestDocumentClassifierService:
             model="gemini-2.5-flash"
         )
     
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_classify_audiometria(self, mock_gemini, classifier):
         """Test que clasifica correctamente una audiometría."""
         mock_gemini.return_value = {
@@ -59,7 +59,7 @@ class TestDocumentClassifierService:
         assert result.confianza == 0.95
         assert "frecuencias" in result.razon.lower()
     
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_classify_laboratorio(self, mock_gemini, classifier):
         """Test que clasifica correctamente un laboratorio."""
         mock_gemini.return_value = {
@@ -73,7 +73,7 @@ class TestDocumentClassifierService:
         assert result.tipo == "Laboratorio"
         assert result.confianza == 0.92
     
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_classify_unknown(self, mock_gemini, classifier):
         """Test que clasifica como Otro cuando es desconocido."""
         mock_gemini.return_value = {
@@ -87,7 +87,7 @@ class TestDocumentClassifierService:
         assert result.tipo == "Otro"
         assert result.confianza == 0.5
     
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_classify_invalid_response(self, mock_gemini, classifier):
         """Test que maneja respuestas inválidas de Gemini."""
         mock_gemini.return_value = {}  # Respuesta vacía
@@ -107,7 +107,7 @@ class TestExtractorService:
             model="gemini-2.5-flash"
         )
     
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_audiometria(self, mock_gemini, extractor):
         """Test que extrae datos de audiometría correctamente."""
         mock_gemini.return_value = {
@@ -127,7 +127,7 @@ class TestExtractorService:
         assert result.fecha_estudio == "25/02/2026"
         assert result.oido_derecho["500"] == 10  # Frecuencia normalizada a clave string
     
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_laboratorio(self, mock_gemini, extractor):
         """Test que extrae datos de laboratorio correctamente."""
         mock_gemini.return_value = {
@@ -146,7 +146,7 @@ class TestExtractorService:
         assert len(result.parametros) == 1
         assert result.parametros[0]["parametro"] == "Glucosa"
     
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_tipo_desconocido(self, mock_gemini, extractor):
         """Test que retorna dict para tipos desconocidos."""
         mock_gemini.return_value = {"datos": "genéricos"}
@@ -172,7 +172,7 @@ class TestNuevosTiposEstudio:
 
     # --- Clasificador ---
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_classify_campimetria(self, mock_gemini, classifier):
         """El clasificador reconoce documentos de campo visual como Campimetria."""
         mock_gemini.return_value = {
@@ -184,7 +184,7 @@ class TestNuevosTiposEstudio:
         assert result.tipo == "Campimetria"
         assert result.confianza == 0.90
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_classify_electrocardiograma(self, mock_gemini, classifier):
         """El clasificador reconoce trazados ECG como Electrocardiograma."""
         mock_gemini.return_value = {
@@ -196,7 +196,7 @@ class TestNuevosTiposEstudio:
         assert result.tipo == "Electrocardiograma"
         assert result.confianza == 0.95
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_classify_riesgo_cardiovascular(self, mock_gemini, classifier):
         """El clasificador reconoce evaluaciones de riesgo cardiovascular."""
         mock_gemini.return_value = {
@@ -209,7 +209,7 @@ class TestNuevosTiposEstudio:
 
     # --- Extractor: Campimetria ---
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_campimetria_completa(self, mock_gemini, extractor):
         """El extractor parsea correctamente los datos de campimetría."""
         mock_gemini.return_value = {
@@ -231,7 +231,7 @@ class TestNuevosTiposEstudio:
         assert result.indices_ojo_derecho == {"MD": "-4.2 dB", "PSD": "2.1 dB"}
         assert not hasattr(result, "diagnostico_ia")
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_campimetria_sin_defectos(self, mock_gemini, extractor):
         """El extractor acepta campimetría sin defectos detectados (campos opcionales None)."""
         mock_gemini.return_value = {
@@ -245,7 +245,7 @@ class TestNuevosTiposEstudio:
 
     # --- Extractor: Electrocardiograma ---
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_ecg_completo(self, mock_gemini, extractor):
         """El extractor parsea correctamente un ECG con todos los intervalos."""
         mock_gemini.return_value = {
@@ -269,7 +269,7 @@ class TestNuevosTiposEstudio:
         assert result.qtc_ms == 415
         assert "Onda T invertida en V1-V3" in result.hallazgos
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_ecg_frecuencia_como_string(self, mock_gemini, extractor):
         """El extractor normaliza frecuencia_bpm si el modelo devuelve string en lugar de int."""
         mock_gemini.return_value = {
@@ -284,7 +284,7 @@ class TestNuevosTiposEstudio:
 
     # --- Extractor: Riesgo Cardiovascular ---
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_riesgo_cardiovascular_completo(self, mock_gemini, extractor):
         """El extractor parsea correctamente una evaluación de riesgo cardiovascular."""
         mock_gemini.return_value = {
@@ -304,7 +304,7 @@ class TestNuevosTiposEstudio:
         assert result.escala_utilizada == "Framingham"
         assert "HTA" in result.factores_riesgo
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extract_riesgo_cv_porcentaje_como_string(self, mock_gemini, extractor):
         """El extractor normaliza porcentaje_riesgo si el modelo devuelve string con %."""
         mock_gemini.return_value = {
@@ -404,7 +404,7 @@ class TestCalibrationV1AudioEspiro:
 
     # --- Extracción: Audiometría ---
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_audiometria_nominal_con_frecuencias_canonicas(self, mock_gemini, extractor):
         """
         Caso nominal: el extractor devuelve las 8 frecuencias canónicas
@@ -429,7 +429,7 @@ class TestCalibrationV1AudioEspiro:
         assert result.frecuencias_detectadas is not None
         assert len(result.frecuencias_detectadas) == 8
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_audiometria_incompleta_completitud_parcial(self, mock_gemini, extractor):
         """
         Caso incompleto: el documento solo tiene 4 frecuencias por oído.
@@ -450,7 +450,7 @@ class TestCalibrationV1AudioEspiro:
         assert len(result.oido_derecho) == 4
         assert result.notas_calidad is not None
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_audiometria_con_campos_fuente_formato_diagnostico(self, mock_gemini, extractor):
         """
         IMPL-20260516-07 (ARCH-20260516-07): Cuando el formato diagnóstico incluye
@@ -483,7 +483,7 @@ class TestCalibrationV1AudioEspiro:
         assert result.completitud_documental == "suficiente"
         assert len(result.oido_derecho) == 8
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_audiometria_sin_campos_fuente_compatibilidad_snapshots_viejos(self, mock_gemini, extractor):
         """
         IMPL-20260516-07: Snapshot sin campos fuente (faringe/CAD/CAI/MTD/MTI) debe
@@ -510,7 +510,7 @@ class TestCalibrationV1AudioEspiro:
 
     # --- ARCH-20260518-17: Guardrails backend de Audiometría ---
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_audiometria_derivacion_completitud_cuando_null(self, mock_gemini, extractor):
         """
         ARCH-20260518-17: Si el LLM devuelve completitud_documental=null (o lo omite),
@@ -531,7 +531,7 @@ class TestCalibrationV1AudioEspiro:
         # oido_derecho tiene 6 frecuencias → suficiente
         assert result.completitud_documental == "suficiente"
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_audiometria_derivacion_frecuencias_detectadas_cuando_null(self, mock_gemini, extractor):
         """
         ARCH-20260518-17: Si frecuencias_detectadas llega null o ausente, el backend
@@ -553,7 +553,7 @@ class TestCalibrationV1AudioEspiro:
         # Unión ordenada de claves de ambos oídos
         assert result.frecuencias_detectadas == ["500", "1000", "2000", "4000"]
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_audiometria_sospecha_corrimiento_125hz(self, mock_gemini, extractor):
         """
         ARCH-20260518-17: Cuando el LLM devuelve 125 Hz como clave (frecuencia no canónica),
@@ -575,7 +575,7 @@ class TestCalibrationV1AudioEspiro:
         assert "SOSPECHA_CORRIMIENTO" in result.notas_calidad
         assert "125" in result.notas_calidad
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_audiometria_null_values_omitidos_en_normalizacion(self, mock_gemini, extractor):
         """
         ARCH-20260518-17: Si el LLM devuelve null para alguna frecuencia (celda vacía),
@@ -602,7 +602,7 @@ class TestCalibrationV1AudioEspiro:
 
     # --- Extracción: Espirometría ---
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_espirometria_nominal_con_parametros_minimos(self, mock_gemini, extractor):
         """
         Caso nominal: el extractor devuelve fev1, fvc, ratio, %predicho y es_interpretable=True.
@@ -630,7 +630,7 @@ class TestCalibrationV1AudioEspiro:
         assert result.es_interpretable is True
         assert result.completitud_documental == "suficiente"
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_espirometria_sin_fev1_es_no_concluyente(self, mock_gemini, extractor):
         """
         Caso incompleto: el documento no tiene FEV1 ni FVC visibles.
@@ -919,7 +919,7 @@ class TestEspirometriaExhaustiva_20260516_12_13:
 
     # --- Extracción: bloques exhaustivos ---
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extraccion_espirometria_exhaustiva_6_bloques(self, mock_gemini, extractor):
         """
         ARCH-20260516-12: El extractor parsea correctamente los 6 bloques del layout real AMI
@@ -1023,7 +1023,7 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert result.graficas.maniobras_graficadas == 3
         assert result.graficas.curva_flujo_volumen_presente is True
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_extraccion_espirometria_snapshot_viejo_compatibilidad(self, mock_gemini, extractor):
         """
         ARCH-20260516-12: Snapshot viejo con solo campos legacy debe deserializar correctamente
@@ -1379,205 +1379,89 @@ class TestPromptResolutionARCH20260518_03:
 
 
 # ---------------------------------------------------------------------------
-# ARCH-20260519-13: Tests del frente extractivo Featherless + Qwen-VL
-# Valida: clasificación vía Featherless, extracción vía Featherless,
-#         Gemini excluido del runtime extractivo, trazabilidad de proveedor.
+# ARCH-20260519-15: Tests de validación del Rollback — Gemini como proveedor extractivo
+# Valida que el frente extractivo (clasificador + extractor) usa GeminiBase
+# y que Featherless/Qwen-VL ya no es el proveedor activo del runtime extractivo.
 # ---------------------------------------------------------------------------
 
-class TestFeatherlessExtractionARCH20260519_13:
+class TestRollbackGeminiARCH20260519_15:
     """
-    ARCH-20260519-13: Featherless + Qwen-VL como único proveedor extractivo.
-
-    Cubre:
-    1. Clasificación usa FeatherlessVisionBase.call_featherless_vision (no call_gemini).
-    2. Extracción usa FeatherlessVisionBase.call_featherless_vision (no call_gemini).
-    3. Gemini no figura como proveedor extractivo activo.
-    4. FEATHERLESS_EXTRACTION_MODEL es independiente de FEATHERLESS_MODEL clínico.
-    5. La política sin fallback de prompt (ARCH-20260518-03) permanece intacta.
+    ARCH-20260519-15: Valida el rollback del frente extractivo a Gemini.
+    Restricciones:
+    - No toca la capa clínica.
+    - No fallback dual Gemini/Featherless.
+    - Extracción sin fallback de prompt sigue activa.
+    - Trazabilidad honesta: proveedor activo = gemini.
     """
 
-    @pytest.fixture
-    def classifier(self):
-        """Clasificador con credenciales Featherless de test."""
-        return DocumentClassifierService(
-            api_key="test-featherless-key",
-            base_url="https://api.featherless.ai/v1",
-            model="Qwen/Qwen3-VL-30B-A3B-Instruct",
+    def test_classifier_hereda_de_gemini_base(self):
+        """DocumentClassifierService debe heredar de GeminiBase, no de FeatherlessVisionBase."""
+        from app.services.ai.base import GeminiBase, FeatherlessVisionBase
+        assert issubclass(DocumentClassifierService, GeminiBase), (
+            "DocumentClassifierService debe usar GeminiBase (rollback ARCH-20260519-15)"
+        )
+        assert not issubclass(DocumentClassifierService, FeatherlessVisionBase), (
+            "DocumentClassifierService NO debe heredar de FeatherlessVisionBase tras el rollback"
         )
 
-    @pytest.fixture
-    def extractor(self):
-        """Extractor con credenciales Featherless de test."""
-        return ExtractorService(
-            api_key="test-featherless-key",
-            base_url="https://api.featherless.ai/v1",
-            model="Qwen/Qwen3-VL-30B-A3B-Instruct",
+    def test_extractor_hereda_de_gemini_base(self):
+        """ExtractorService debe heredar de GeminiBase, no de FeatherlessVisionBase."""
+        from app.services.ai.base import GeminiBase, FeatherlessVisionBase
+        assert issubclass(ExtractorService, GeminiBase), (
+            "ExtractorService debe usar GeminiBase (rollback ARCH-20260519-15)"
+        )
+        assert not issubclass(ExtractorService, FeatherlessVisionBase), (
+            "ExtractorService NO debe heredar de FeatherlessVisionBase tras el rollback"
         )
 
-    # --- 1. Clasificación vía Featherless ---
+    def test_classifier_instancia_con_gemini_api_key(self):
+        """El clasificador se inicializa con api_key de Gemini sin errores."""
+        svc = DocumentClassifierService(api_key="test-key", model="gemini-2.5-flash")
+        assert svc.api_key == "test-key"
+        assert svc.model == "gemini-2.5-flash"
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
-    def test_clasificacion_usa_featherless_vision(self, mock_vision, classifier):
-        """
-        ARCH-20260519-13 §Capa 1: DocumentClassifierService llama call_featherless_vision,
-        no call_gemini. El clasificador devuelve un DocumentClassification correcto.
-        """
-        mock_vision.return_value = {
+    def test_extractor_instancia_con_gemini_api_key(self):
+        """El extractor se inicializa con api_key de Gemini sin errores."""
+        svc = ExtractorService(api_key="test-key", model="gemini-2.5-flash")
+        assert svc.api_key == "test-key"
+        assert svc.model == "gemini-2.5-flash"
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_clasificacion_llama_gemini_no_featherless(self, mock_gemini):
+        """La clasificación invoca GeminiBase.call_gemini, no ningún método Featherless."""
+        mock_gemini.return_value = {
             "tipo": "Audiometria",
-            "confianza": 0.93,
-            "razon": "Gráfico audiométrico con curvas de decibeles en frecuencias 250-8000 Hz",
+            "confianza": 0.95,
+            "razon": "Gráfico audiométrico con frecuencias y decibeles",
         }
-
-        result = classifier.classify("/fake/audio.pdf")
-
-        mock_vision.assert_called_once_with("/fake/audio.pdf", classifier.CLASSIFICATION_PROMPT)
+        svc = DocumentClassifierService(api_key="test-key", model="gemini-2.5-flash")
+        result = svc.classify("/fake/audio.pdf")
         assert result.tipo == "Audiometria"
-        assert result.confianza == 0.93
-        assert "featherless" in classifier.__class__.__bases__[0].__name__.lower()
+        mock_gemini.assert_called_once()
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
-    def test_clasificacion_featherless_todos_los_tipos(self, mock_vision, classifier):
-        """Featherless clasifica todos los tipos documentales soportados."""
-        tipos = [
-            "Audiometria", "Espirometria", "Laboratorio", "Rayos_X",
-            "Campimetria", "Electrocardiograma", "RiesgoCardiovascular", "Otro",
-        ]
-        for tipo in tipos:
-            mock_vision.return_value = {"tipo": tipo, "confianza": 0.90, "razon": f"Tipo: {tipo}"}
-            result = classifier.classify("/fake/doc.pdf")
-            assert result.tipo == tipo, f"Falló para tipo: {tipo}"
-
-    # --- 2. Extracción vía Featherless ---
-
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
-    def test_extraccion_usa_featherless_vision(self, mock_vision, extractor):
-        """
-        ARCH-20260519-13 §Capa 2: ExtractorService llama call_featherless_vision,
-        no call_gemini. El extractor retorna AudiometriaData correctamente.
-        """
-        mock_vision.return_value = {
-            "paciente": "Test Featherless",
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_extraccion_llama_gemini_no_featherless(self, mock_gemini):
+        """La extracción invoca GeminiBase.call_gemini, no ningún método Featherless."""
+        mock_gemini.return_value = {
+            "paciente": "Test Rollback",
             "fecha_estudio": "19/05/2026",
-            "oido_derecho": {"500": 15, "1000": 20, "2000": 25, "4000": 30,
-                             "250": 10, "3000": 25, "6000": 35, "8000": 40},
-            "oido_izquierdo": {"500": 10, "1000": 15, "2000": 20, "4000": 25,
-                               "250": 10, "3000": 20, "6000": 30, "8000": 35},
+            "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "oido_izquierdo": {"500": 12, "1000": 18, "2000": 22, "4000": 28, "6000": 32, "8000": 38},
             "completitud_documental": "suficiente",
         }
-
-        result = extractor.extract_by_type(
+        svc = ExtractorService(api_key="test-key", model="gemini-2.5-flash")
+        result = svc.extract_by_type(
             "/fake/audio.pdf", "Audiometria",
             ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
         )
-
-        mock_vision.assert_called_once()
         assert isinstance(result, AudiometriaData)
-        assert result.paciente == "Test Featherless"
-        assert result.completitud_documental == "suficiente"
+        mock_gemini.assert_called_once()
 
-    @patch('app.services.ai.base.FeatherlessVisionBase.call_featherless_vision')
-    def test_extraccion_featherless_espirometria(self, mock_vision, extractor):
-        """Featherless extrae Espirometria correctamente."""
-        mock_vision.return_value = {
-            "paciente": "Trabajador Featherless",
-            "fecha_estudio": "19/05/2026",
-            "fev1": 3.1,
-            "fvc": 3.9,
-            "fev1_fvc_ratio": 0.79,
-            "fev1_percent_predicho": 90.0,
-            "es_interpretable": True,
-            "completitud_documental": "suficiente",
-        }
-
-        from app.schemas.medical import EspirometriaData
-        result = extractor.extract_by_type(
-            "/fake/espiro.pdf", "Espirometria",
-            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
-        )
-
-        assert isinstance(result, EspirometriaData)
-        assert result.fev1 == 3.1
-        assert result.es_interpretable is True
-
-    # --- 3. Gemini no figura como proveedor extractivo activo ---
-
-    def test_classifier_no_hereda_gemini_base(self, classifier):
+    def test_extraccion_sin_prompt_falla_explicitamente(self):
         """
-        ARCH-20260519-13: DocumentClassifierService hereda de FeatherlessVisionBase,
-        NO de GeminiBase. Garantiza que Gemini no participa en el runtime extractivo.
+        ARCH-20260519-15 + ARCH-20260518-03: La regla de extracción sin fallback de prompt
+        se preserva tras el rollback. Sin ai_calibration.extraction.prompt → ValueError.
         """
-        from app.services.ai.base import FeatherlessVisionBase, GeminiBase
-        assert isinstance(classifier, FeatherlessVisionBase), (
-            "DocumentClassifierService debe heredar de FeatherlessVisionBase"
-        )
-        assert not isinstance(classifier, GeminiBase), (
-            "DocumentClassifierService NO debe heredar de GeminiBase (Gemini excluido del frente extractivo)"
-        )
-
-    def test_extractor_no_hereda_gemini_base(self, extractor):
-        """
-        ARCH-20260519-13: ExtractorService hereda de FeatherlessVisionBase,
-        NO de GeminiBase. Garantiza que Gemini no participa en el runtime extractivo.
-        """
-        from app.services.ai.base import FeatherlessVisionBase, GeminiBase
-        assert isinstance(extractor, FeatherlessVisionBase), (
-            "ExtractorService debe heredar de FeatherlessVisionBase"
-        )
-        assert not isinstance(extractor, GeminiBase), (
-            "ExtractorService NO debe heredar de GeminiBase (Gemini excluido del frente extractivo)"
-        )
-
-    def test_classifier_no_tiene_metodo_call_gemini(self, classifier):
-        """
-        ARCH-20260519-13: El clasificador no debe exponer call_gemini como método accesible.
-        """
-        assert not hasattr(classifier, "call_gemini"), (
-            "call_gemini no debe estar disponible en DocumentClassifierService"
-        )
-
-    def test_extractor_no_tiene_metodo_call_gemini(self, extractor):
-        """
-        ARCH-20260519-13: El extractor no debe exponer call_gemini como método accesible.
-        """
-        assert not hasattr(extractor, "call_gemini"), (
-            "call_gemini no debe estar disponible en ExtractorService"
-        )
-
-    # --- 4. FEATHERLESS_EXTRACTION_MODEL separado de FEATHERLESS_MODEL clínico ---
-
-    def test_extraction_model_leido_de_env_correcto(self):
-        """
-        ARCH-20260519-13: Al instanciar sin modelo explícito, ExtractorService
-        debe leer FEATHERLESS_EXTRACTION_MODEL del entorno, no FEATHERLESS_MODEL.
-        """
-        import os
-        os.environ["FEATHERLESS_EXTRACTION_MODEL"] = "Qwen/Qwen3-VL-30B-A3B-Instruct"
-        os.environ["FEATHERLESS_MODEL"] = "google/medgemma-27b-text-it"
-
-        svc = ExtractorService()
-        assert svc.model == "Qwen/Qwen3-VL-30B-A3B-Instruct", (
-            "ExtractorService debe leer FEATHERLESS_EXTRACTION_MODEL, no FEATHERLESS_MODEL"
-        )
-        assert svc.model != "google/medgemma-27b-text-it", (
-            "FEATHERLESS_MODEL clínico no debe contaminarse en la capa extractiva"
-        )
-
-        del os.environ["FEATHERLESS_EXTRACTION_MODEL"]
-        del os.environ["FEATHERLESS_MODEL"]
-
-    # --- 5. Política sin fallback de prompt permanece intacta ---
-
-    def test_extraction_sin_prompt_sigue_fallando_con_featherless(self, extractor):
-        """
-        ARCH-20260519-13 + ARCH-20260518-03: El cambio de proveedor NO altera
-        la política de extracción sin fallback. Si falta aiCalibration.extraction.prompt,
-        debe lanzar ValueError con EXTRACTION_PROMPT_NOT_CONFIGURED incluso con Featherless.
-        """
+        svc = ExtractorService(api_key="test-key", model="gemini-2.5-flash")
         with pytest.raises(ValueError, match="EXTRACTION_PROMPT_NOT_CONFIGURED"):
-            extractor.extract_by_type("/fake/doc.pdf", "Audiometria", ai_calibration=None)
-
-        with pytest.raises(ValueError, match="EXTRACTION_PROMPT_NOT_CONFIGURED"):
-            extractor.extract_by_type(
-                "/fake/doc.pdf", "Audiometria",
-                ai_calibration={"extraction": {}},
-            )
+            svc.extract_by_type("/fake/audio.pdf", "Audiometria", ai_calibration=None)
