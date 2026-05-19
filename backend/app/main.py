@@ -814,7 +814,8 @@ async def v2_upload_and_analyze(
                 "study_type": detected_type,
                 "extracted_data": extraction_dict,
                 "audit": {
-                    "model_name": GEMINI_MODEL,
+                    # FIX-20260519-07: extracción migrada a Featherless/Qwen — GEMINI_MODEL eliminado
+                    "model_name": FEATHERLESS_EXTRACTION_MODEL,
                     "prompt_version": _extraction_prompt_version,
                     "prompt_source": _extraction_prompt_source,
                     "pipeline_version": PIPELINE_VERSION,
@@ -841,7 +842,8 @@ async def v2_upload_and_analyze(
                 "prompt_source": predx_prompt_source,
                 "audit": {
                     # IMPL-20260513-08: model_name refleja modelo clínico real, no el de extracción
-                    "model_name": predx_model_used or GEMINI_MODEL,
+                    # FIX-20260519-07: fallback a GEMINI_MODEL_CLINICAL (GEMINI_MODEL eliminado)
+                    "model_name": predx_model_used or GEMINI_MODEL_CLINICAL,
                     "clinical_provider": predx_provider or "gemini",
                     "prompt_version": predx_prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
                     "prompt_source": predx_prompt_source,
@@ -904,7 +906,8 @@ def v2_prediagnosis_from_params(
             "clinical_state": prediagnosis.clinical_state,
             "prediagnosis": prediagnosis.model_dump(),
             "audit": {
-                "model_extraction": GEMINI_MODEL_EXTRACTION,
+                # FIX-20260519-07: GEMINI_MODEL_EXTRACTION eliminado — usar constante Featherless vigente
+                "model_extraction": FEATHERLESS_EXTRACTION_MODEL,
                 "model_clinical": predx_model_used or GEMINI_MODEL_CLINICAL,
                 "clinical_provider": predx_provider or "gemini",
                 "calibration_source": predx_calibration_source,
