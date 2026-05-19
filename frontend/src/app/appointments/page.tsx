@@ -25,6 +25,7 @@ interface AppointmentWithWorker {
     status: string;
     expedientId: string | null;
     qrCode: string | null;
+    qrOperativo: string | null; // IMPL-20260519-10: QR operativo mínimo
     worker: {
         firstName: string;
         lastName: string;
@@ -421,7 +422,7 @@ export default function AppointmentsPage() {
                                 <p className="text-2xl font-black text-slate-800 tracking-tight">{selectedApt.expedientId}</p>
                             </div>
 
-                            {/* QR CODE */}
+                            {/* QR CODE — check-in */}
                             <div className="flex justify-center py-4">
                                 <div className="p-4 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 group relative">
                                     <img
@@ -434,6 +435,25 @@ export default function AppointmentsPage() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* QR OPERATIVO MÍNIMO — IMPL-20260519-10 */}
+                            {selectedApt.qrOperativo && (
+                                <div className="border-t border-dashed border-slate-100 pt-4">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-2">QR Operativo · Recaptura en Estaciones</p>
+                                    <div className="flex justify-center">
+                                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                                            <img
+                                                src={selectedApt.qrOperativo}
+                                                alt="QR Operativo"
+                                                className="w-28 h-28"
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-[8px] text-slate-400 text-center mt-1">
+                                        {selectedApt.worker.firstName} {selectedApt.worker.lastName}
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">

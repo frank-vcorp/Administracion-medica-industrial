@@ -70,6 +70,22 @@ export async function createAppointment(data: {
       }
     });
 
+    // IMPL-20260519-10: QR operativo mínimo — payload AMI|NOMBRE=...|FN=YYYY-MM-DD
+    // Independiente del QR de check-in; orientado a recaptura en estaciones
+    const workerForQr = await prisma.worker.findUnique({
+      where: { id: data.workerId },
+      select: { firstName: true, lastName: true, dob: true }
+    })
+    const qrOperativoPayload = workerForQr
+      ? `AMI|NOMBRE=${(workerForQr.firstName + ' ' + workerForQr.lastName).toUpperCase()}|FN=${workerForQr.dob ? workerForQr.dob.toISOString().slice(0, 10) : ''}`
+      : `AMI|NOMBRE=SIN_NOMBRE|FN=`
+    const qrOperativo = await QRCode.toDataURL(qrOperativoPayload, {
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      scale: 6,
+      color: { dark: '#1e293b', light: '#ffffff' }
+    })
+
     const appointment = await prisma.appointment.create({
       data: {
         workerId: data.workerId,
@@ -81,6 +97,7 @@ export async function createAppointment(data: {
         status: 'SCHEDULED',
         expedientId,
         qrCode,
+        qrOperativo,  // IMPL-20260519-10
         serviceProfileId: data.serviceProfileId || null,
       },
       include: {
@@ -524,7 +541,9 @@ export async function processQRCheckIn(qrContent: string) {
 /**
  * Obtiene los datos necesarios para el paso de corroboración previo al check-in.
  * Devuelve datos del trabajador y la cita sin alterar ningún estado.
+ * Incluye última identidad válida del trabajador para reutilización.
  * @id IMPL-20260318-08
+ * @updated IMPL-20260519-10 — campos de identidad del trabajador
  */
 export async function getAppointmentForCorroboration(appointmentId: string) {
   try {
@@ -553,6 +572,11 @@ export async function getAppointmentForCorroboration(appointmentId: string) {
             jobPositionId: true,
             company: { select: { id: true, name: true } },
             jobPosition: { select: { id: true, name: true } },
+            // IMPL-20260519-10: Última identificación válida para reutilización
+            lastIdentityDocumentType: true,
+            lastIdentityFrontFileUrl: true,
+            lastIdentityBackFileUrl: true,
+            lastIdentityVerifiedAt: true,
           }
         },
         company: { select: { id: true, name: true } },
@@ -602,6 +626,259 @@ export async function getAppointmentsForOverview(date: string) {
     return { success: true, appointments }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Error' }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPL-20260519-10 — Cierre orquestado de recepción (ARCH-20260519-10)
+// Integra: evidencia de identidad + corrección de nombre + auditoría + check-in
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Catálogos controlados para recepción operativa.
+ * @id IMPL-20260519-10
+ */
+export const IDENTITY_DOCUMENT_TYPES = [
+  'INE',
+  'PASAPORTE',
+  'LICENCIA',
+  'OTRA_IDENTIFICACION_OFICIAL',
+] as const
+
+export const IDENTITY_EXCEPTION_REASONS = [
+  'SIN_DOCUMENTO_PRESENTE',
+  'FALLA_CAMARA_O_DISPOSITIVO',
+  'EVIDENCIA_NO_LEGIBLE',
+  'DISCREPANCIA_DE_IDENTIDAD',
+  'OTRO',
+] as const
+
+export const IDENTITY_EVIDENCE_MODES = [
+  'NEW_CAPTURE',
+  'REUSED_PREVIOUS',
+  // Nombre técnico interno mantenido para compatibilidad de contrato con el schema.
+  // La regla operativa visible al usuario es "comentario operativo obligatorio" (nunca bloquea check-in).
+  'EXCEPTION_WITHOUT_CAPTURE',
+] as const
+
+export const CORROBORATION_RESULTS = [
+  'VERIFIED_WITHOUT_CHANGES',
+  'VERIFIED_WITH_NAME_CORRECTION',
+  'VERIFIED_WITH_REUSED_EVIDENCE',
+  'VERIFIED_WITH_COMMENT',   // antes: VERIFIED_WITH_EXCEPTION — renombrado IMPL-20260519-12
+] as const
+
+export type IdentityDocumentType = (typeof IDENTITY_DOCUMENT_TYPES)[number]
+export type IdentityExceptionReason = (typeof IDENTITY_EXCEPTION_REASONS)[number]
+export type IdentityEvidenceMode = (typeof IDENTITY_EVIDENCE_MODES)[number]
+export type CorroborationResult = (typeof CORROBORATION_RESULTS)[number]
+
+export interface CloseReceptionInput {
+  appointmentId: string
+  workerId: string
+  // Corrección de nombre (opcional)
+  correctedFirstName?: string
+  correctedLastName?: string
+  // Evidencia de identidad
+  evidenceMode: IdentityEvidenceMode
+  documentType?: IdentityDocumentType
+  frontFileDataUrl?: string   // base64 dataURL de captura nueva
+  backFileDataUrl?: string    // base64 dataURL de reverso (opcional)
+  // Reutilización de evidencia previa
+  reuseLastEvidence?: boolean
+  // Excepción / comentario operativo (obligatorio cuando no hay captura normal)
+  exceptionReason?: IdentityExceptionReason
+  exceptionComment?: string
+}
+
+/**
+ * Orquestador de cierre de recepción.
+ * En un solo flujo transaccional:
+ * 1. Valida el input
+ * 2. Corrige nombre si aplica
+ * 3. Persiste evidencia en la cita
+ * 4. Actualiza referencia de última identidad válida en trabajador
+ * 5. Registra auditoría estructurada
+ * 6. Cierra el check-in (crea MedicalEvent)
+ * @id IMPL-20260519-10
+ * @spec context/SPECs/SPEC_ARCH-20260519-10-SPRINT1-RECEPCION-OPERATIVA.md
+ */
+export async function closeReceptionCorroboration(input: CloseReceptionInput) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return { success: false, error: 'No autenticado' }
+    }
+
+    const {
+      appointmentId,
+      workerId,
+      correctedFirstName,
+      correctedLastName,
+      evidenceMode,
+      documentType,
+      frontFileDataUrl,
+      backFileDataUrl,
+      reuseLastEvidence,
+      exceptionReason,
+      exceptionComment,
+    } = input
+
+    // ── Validaciones de frontera ─────────────────────────────────────────────
+    if (evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE') {
+      if (!exceptionReason) {
+        return { success: false, error: 'El motivo de excepción es obligatorio cuando no hay captura normal.' }
+      }
+      if (!exceptionComment || exceptionComment.trim().length < 5) {
+        return { success: false, error: 'El comentario operativo es obligatorio y debe tener al menos 5 caracteres.' }
+      }
+    }
+
+    if (evidenceMode === 'NEW_CAPTURE' && !frontFileDataUrl) {
+      return { success: false, error: 'Se requiere la evidencia frontal del documento para captura nueva.' }
+    }
+
+    if (evidenceMode === 'REUSED_PREVIOUS' && !reuseLastEvidence) {
+      return { success: false, error: 'Debes confirmar la reutilización de la última evidencia válida.' }
+    }
+
+    // ── Cargar snapshot del trabajador (última identidad) ─────────────────────
+    const worker = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: {
+        firstName: true,
+        lastName: true,
+        lastIdentityDocumentType: true,
+        lastIdentityFrontFileUrl: true,
+        lastIdentityBackFileUrl: true,
+      }
+    })
+    if (!worker) {
+      return { success: false, error: 'Trabajador no encontrado.' }
+    }
+
+    // ── Determinar resultado de corroboración ────────────────────────────────
+    const nameWillChange =
+      (correctedFirstName && correctedFirstName.trim() !== worker.firstName) ||
+      (correctedLastName && correctedLastName.trim() !== worker.lastName)
+
+    let corroborationResult: CorroborationResult
+    if (evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE') {
+      corroborationResult = 'VERIFIED_WITH_COMMENT'
+    } else if (evidenceMode === 'REUSED_PREVIOUS') {
+      corroborationResult = nameWillChange ? 'VERIFIED_WITH_NAME_CORRECTION' : 'VERIFIED_WITH_REUSED_EVIDENCE'
+    } else {
+      corroborationResult = nameWillChange ? 'VERIFIED_WITH_NAME_CORRECTION' : 'VERIFIED_WITHOUT_CHANGES'
+    }
+
+    // ── Resolver campos de evidencia a persistir en la cita ──────────────────
+    const resolvedFront = evidenceMode === 'REUSED_PREVIOUS'
+      ? (worker.lastIdentityFrontFileUrl ?? null)
+      : (frontFileDataUrl ?? null)
+
+    const resolvedBack = evidenceMode === 'REUSED_PREVIOUS'
+      ? (worker.lastIdentityBackFileUrl ?? null)
+      : (backFileDataUrl ?? null)
+
+    const resolvedDocType = evidenceMode === 'REUSED_PREVIOUS'
+      ? (worker.lastIdentityDocumentType ?? documentType ?? null)
+      : (documentType ?? null)
+
+    const previousName = `${worker.firstName} ${worker.lastName}`
+    const newFirstName = correctedFirstName?.trim() || worker.firstName
+    const newLastName = correctedLastName?.trim() || worker.lastName
+
+    // ── Transacción principal ────────────────────────────────────────────────
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Corregir nombre si aplica
+      if (nameWillChange) {
+        await tx.worker.update({
+          where: { id: workerId },
+          data: { firstName: newFirstName, lastName: newLastName },
+        })
+      }
+
+      // 2. Actualizar referencia de última identidad válida en trabajador
+      //    Solo si hay captura nueva o reutilización (no en excepción sin captura)
+      if (evidenceMode !== 'EXCEPTION_WITHOUT_CAPTURE') {
+        await tx.worker.update({
+          where: { id: workerId },
+          data: {
+            lastIdentityDocumentType: resolvedDocType,
+            lastIdentityFrontFileUrl: resolvedFront,
+            lastIdentityBackFileUrl: resolvedBack,
+            lastIdentityVerifiedAt: new Date(),
+          }
+        })
+      }
+
+      // 3. Persistir evidencia en la cita
+      await tx.appointment.update({
+        where: { id: appointmentId },
+        data: {
+          identityDocumentType:     resolvedDocType,
+          identityFrontFileUrl:     resolvedFront,
+          identityBackFileUrl:      resolvedBack,
+          identityVerifiedAt:       new Date(),
+          identityVerifiedByUserId: session.user.id,
+          identityExceptionReason:  exceptionReason ?? null,
+          identityExceptionComment: exceptionComment ?? null,
+          identityEvidenceMode:     evidenceMode,
+          corroborationResult:      corroborationResult,
+        }
+      })
+
+      // 4. Auditoría estructurada del cierre de recepción
+      await tx.auditLog.create({
+        data: {
+          action: 'RECEPTION_CORROBORATION_CLOSED',
+          entity: 'Appointment',
+          entityId: appointmentId,
+          userId: session.user.id,
+          details: {
+            workerId,
+            evidenceMode,
+            documentType: resolvedDocType,
+            corroborationResult,
+            hasFront: !!resolvedFront,
+            hasBack: !!resolvedBack,
+            nameChanged: !!nameWillChange,
+            previousName: nameWillChange ? previousName : undefined,
+            newName: nameWillChange ? `${newFirstName} ${newLastName}` : undefined,
+            hasException: evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE',
+            exceptionReason: exceptionReason ?? null,
+            timestamp: new Date().toISOString(),
+          }
+        }
+      })
+
+      return { ok: true }
+    }, { maxWait: 10000, timeout: 15000 })
+
+    if (!result.ok) {
+      return { success: false, error: 'Error en la transacción de corroboración.' }
+    }
+
+    // 5. Ejecutar check-in (crea MedicalEvent) — fuera de la transacción de identidad
+    const checkInResult = await checkInAppointment(appointmentId)
+    if (!checkInResult.success) {
+      return { success: false, error: checkInResult.error || 'Corroboración guardada, pero el check-in falló.' }
+    }
+
+    revalidatePath('/appointments')
+    revalidatePath('/dashboard')
+
+    return {
+      success: true,
+      medicalEvent: checkInResult.medicalEvent,
+      corroborationResult,
+    }
+  } catch (error) {
+    console.error('[CLOSE_RECEPTION_CORROBORATION ERROR]:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al cerrar la recepción.',
+    }
   }
 }
 

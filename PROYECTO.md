@@ -2,7 +2,7 @@
 
 **Estado:** [/] Operación estabilizada con backlog activo de IA clínica, integraciones MedGemma y hardening de storage en Railway
 **Fase:** Fase operativa continua: estabilización productiva | IA clínica | persistencia de uploads | integraciones comerciales MEDGEMMA APIS
-**ID Actual:** ARCH-20260519-04 (Estabilización final de Audiometría: compatibilidad visual y corrimiento extractivo residual)
+**ID Actual:** ARCH-20260519-13 (SPEC formal para reemplazar Gemini por Qwen-VL en extracción)
 **Último Sprint Completado:** DOC-20260507-01 (Cierre operativo del cronograma admin persistente y backlog futuro de recepción)
 
 ## 📋 Descripción
@@ -13,7 +13,64 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - **@SOFIA**: Desarrollo Frontend/Backend
 - **@DEBY**: QA e Infraestructura
 
+## 🧭 Backlog por Sprints Propuestos
+
+### Sprint 1 - Recepción Operativa
+- [ ] Cerrar QR operativo mínimo para recaptura en estaciones y equipos
+- [ ] Completar corroboración de identidad con identificación oficial válida, privilegiando INE cuando aplique
+- [ ] Soportar comentario operativo obligatorio y nunca bloquear check-in por falta de evidencia normal
+- [ ] Validar trazabilidad completa de recepción con auditoría suficiente
+
+### Sprint 2 - Flujo Visible del Paciente
+- [ ] Implementar explicación inicial del proceso al paciente
+- [ ] Mostrar visibilidad clara de pruebas pendientes y siguiente estación
+- [ ] Incorporar guías logísticas para pasos sensibles como muestra de orina
+- [ ] Alinear la experiencia visible con el flujo real observado en sitio
+
+### Sprint 3 - Observabilidad Operativa
+- [ ] Medir tiempos muertos y tiempos efectivos por estación
+- [ ] Definir hitos mínimos y reglas de cálculo sobre el cronograma existente
+- [ ] Exponer una lectura operativa útil para coordinación interna
+
+### Sprint 4 - Agenda AMI Real
+- [ ] Aterrizar reglas reales de capacidad por sede
+- [ ] Definir sobrecupo tolerable por clínica o contexto operativo
+- [ ] Formalizar criterio funcional para atención sin cita
+- [ ] Preparar base de operación para atención masiva
+- [ ] **[SPEC lista]** Alta masiva de trabajadores por empresa — pre-registro via Excel (`SPEC_ARCH-20260519-11`)
+
+### Sprint 5 - Equipos y Mantenimiento
+- [ ] Modelar inventario operativo de equipos por sede o unidad móvil
+- [ ] Registrar vigencias de calibración y mantenimiento
+- [ ] Incorporar checklists previos de disponibilidad operativa
+- [ ] Habilitar semaforización visible de riesgo operativo
+
+### Sprint 7 - Portal B2B / Dashboard de Empresa
+> **Prerequisito para Fase 2 de Alta Masiva (ARCH-20260519-11)**
+- [ ] Documentar qué ve una empresa en su dashboard (métricas, trabajadores, citas)
+- [ ] Definir acciones permitidas desde el portal (crear trabajador, subir masiva, ver estudios)
+- [ ] Formalizar el modelo de permisos del rol `COMPANY_USER`
+- [ ] Diseñar la navegación y secciones del portal B2B
+- [ ] Habilitar carga masiva de trabajadores desde portal (`/portal/workers`) como Fase 2 de `ARCH-20260519-11`
+
+### Sprint 6 - Cierre Clínico MedGemma
+- [ ] Estabilizar acceso real al proveedor clínico configurado
+- [ ] Endurecer calibración clínica por estudio prioritario
+- [ ] Validar utilidad clínica con material real de AMI
+- [ ] Cerrar observabilidad de entrada y salida clínica para revisión médica
+- [/] **[SPEC lista]** Reemplazar Gemini por Qwen-VL en clasificación y extracción sin tocar clínica (`SPEC_ARCH-20260519-13`)
+
+### Notas de priorización
+- [ ] Discutir y cerrar la SPEC de cada sprint antes de iniciar implementación
+- [ ] Ejecutar cada sprint como corte acotado con criterios de aceptación medibles
+- [ ] Evitar mezclar en un mismo sprint recepción, agenda, equipos e IA clínica
+
 ## 📅 Diario de Cambios
+- **2026-05-19 (INTEGRA):** [/] **Se redefine el corte extractivo: Qwen reemplaza a Gemini en esa capa.** Tras la aclaración explícita del usuario de no continuar con Gemini Flash para extracción por costo y preferencia técnica, el alcance de `ARCH-20260519-13` se endurece: `Qwen/Qwen3-VL-30B-A3B-Instruct` en Featherless deja de ser alternativa y pasa a ser el proveedor objetivo de clasificación documental y extracción estructurada. La capa clínica sigue separada y sin cambios en este corte. Fuente de verdad actualizada en `context/SPECs/SPEC_ARCH-20260519-13-EXTRACCION-MULTIMODAL-FEATHERLESS-QWEN-VL.md` y `context/interconsultas/HANDOFF_ARCH-20260519-13_SOFIA_EXTRACCION-FEATHERLESS-QWEN-VL.md`. (ARCH-20260519-13)
+- **2026-05-19 (INTEGRA):** [/] **Se emite handoff formal a SOFIA para implementar el Sprint 1 de recepcion operativa.** Se entrega `context/interconsultas/HANDOFF_ARCH-20260519-10_SOFIA_SPRINT1-RECEPCION-OPERATIVA.md` como instruccion de construccion sobre la SPEC vigente. El corte mantiene anclas existentes (`Appointment`, `Worker`, `AuditLog`, flujo actual de agenda/corroboracion), separa QR operativo del QR de check-in y fija comentario operativo obligatorio cuando no exista captura normal o haya discrepancia material. (ARCH-20260519-10)
+- **2026-05-19 (INTEGRA):** [/] **Se formaliza SPEC de Alta Masiva de Trabajadores por Empresa.** A partir del caso operativo de unidades móviles y visitas corporativas masivas, se diseña el mecanismo de pre-registro via plantilla Excel. La decisión de arquitectura central es: parseo 100% client-side con `xlsx` (SheetJS), solo viajan los datos JSON al servidor; se reutiliza la detección de duplicados existente; el scope es el canal interno (vendedor/admin) como Fase 1 y el portal B2B como Fase 2 pendiente de documentar. Documentado en `context/SPECs/SPEC_ARCH-20260519-11-ALTA-MASIVA-TRABAJADORES.md`. 5 archivos afectados, dentro del límite de escalamiento. (ARCH-20260519-11)
+- **2026-05-19 (INTEGRA):** [/] **Se formaliza la SPEC del Sprint 1 de recepcion operativa usando anclas existentes.** Se documenta `context/SPECs/SPEC_ARCH-20260519-10-SPRINT1-RECEPCION-OPERATIVA.md` como corte integrador de QR operativo minimo y corroboracion obligatoria de identidad. La decision arquitectonica explicitada es no abrir una entidad nueva de corroboracion: la evidencia del ingreso debe persistirse en la cita actual, el trabajador debe conservar referencia a la ultima INE valida disponible y la trazabilidad debe reutilizar `AuditLog` y el flujo actual de agenda/corroboracion. El sprint queda listo para revision funcional previa a handoff de implementacion. (ARCH-20260519-10)
+- **2026-05-19 (INTEGRA):** [/] **Se consolida backlog por sprints para pendientes operativos derivados de juntas, correo y visita AMI.** A partir de la verificación cruzada entre documentación ejecutiva y código real, se organizan los faltantes en seis bloques ejecutables: recepción operativa, flujo visible del paciente, observabilidad operativa, agenda AMI real, equipos/mantenimiento y cierre clínico MedGemma. El objetivo es discutir primero la SPEC de cada bloque y después ejecutar cada corte como sprint separado, evitando mezclar backlog documental con funcionalidades ya implementadas. Se sincroniza además la lista accionable en `task.md`. (ARCH-20260519-07)
 - **2026-05-19 (INTEGRA):** [/] **Se estabiliza parcialmente el frente de Audiometría separando presentación y extracción residual.** El Slice A de frontend ya quedó publicado en `e71d2f2` para compatibilizar `pta`/`pta_visible`, normalizar `notas_calidad` y respetar el orden clínico completo de frecuencias (`125, 250, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 8000`). En paralelo, DEBY dejó el dictamen `context/interconsultas/DICTAMEN_FIX-20260519-02.md`, que confirma que el defecto restante ya no es visual sino extractivo: persiste un corrimiento tabular residual en el oído izquierdo (`125=10`, `500=null` frente al formato fuente con `125` vacío y `500=10`). El corte queda estabilizado en presentación y abierto en backend para remediación posterior del extractor. (ARCH-20260519-04)
 - **2026-05-19 (INTEGRA):** [~] **Se detecta desalineamiento entre la SPEC visual de Audiometría y el payload real que hoy entrega extracción.** La validación del estudio real confirma que la extracción ya resolvió el problema crítico de leer la tabla en vez de la gráfica, pero la UI sigue incumpliendo la SPEC `context/SPECs/SPEC_ARCH-20260518-14-RENDERER-CLINICO-AUDIOMETRIA.md` porque el schema visual todavía busca rutas legacy como `oido_derecho.via_aerea` y `oido_izquierdo.via_osea`, mientras el payload vigente ya usa `oido_derecho.va`, `oido_derecho.vo`, `pta_visible`, `paciente_detalle` y `notas_calidad` estructurada. El resultado es que no se renderizan las tablas comparativas acordadas y el bloque técnico aparece degradado o serializado. Se documenta la SPEC `context/SPECs/SPEC_ARCH-20260519-02-REALINEACION-RENDERER-AUDIOMETRIA-PAYLOAD-REAL.md` y se deja handoff a SOFIA en `context/interconsultas/HANDOFF_ARCH-20260519-02_SOFIA_REALINEACION-RENDERER-AUDIOMETRIA.md`. (ARCH-20260519-02)
 - **2026-05-18 (INTEGRA):** [/] **Se sincroniza la ejecución del corte ARCH-20260518-16 con implementación mínima no destructiva ya aplicada por SOFIA.** El catálogo visible quedó filtrado en la consulta de `MedicalTest` para ocultar `GEN-01` (Somatometría / Peso, Talla, Signos Vitales) y `GEN-02` (Agudeza Visual), preservando intactos los registros históricos, `EventTest` previos y relaciones existentes. La validación técnica disponible reporta sin errores el slice tocado, pero el checkpoint `context/checkpoints/CHK_IMPL-20260518-16-DEPURACION-CATALOGO.md` mantiene Gate 2 de testing como pendiente por ausencia de prueba dedicada; por eso este corte se registra como avance implementado y no como cierre total. (ARCH-20260518-16)

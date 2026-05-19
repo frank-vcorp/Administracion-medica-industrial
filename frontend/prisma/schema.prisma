@@ -27,6 +27,8 @@ model User {
   doctorStudyReviews   DoctorStudyReview[]
   // IMPL-20260507-08: Entradas del cronograma operativo registradas por este usuario
   papeletaTimeline     PapeletaTimelineEntry[] @relation("PapeletaTimelineCreator")
+  // IMPL-20260519-10: Citas donde este usuario realizó la corroboración de identidad
+  verifiedAppointments Appointment[]           @relation("AppointmentIdentityVerifier")
 
   @@map("users")
 }
@@ -107,6 +109,11 @@ model Worker {
   branch          Branch?          @relation(fields: [branchId], references: [id])
   company         Company?         @relation(fields: [companyId], references: [id])
   jobPosition     JobPosition?     @relation(fields: [jobPositionId], references: [id])
+  // IMPL-20260519-10: Referencia a última identificación válida reutilizable (ARCH-20260519-10)
+  lastIdentityDocumentType  String?   // IdentityDocumentType catalog
+  lastIdentityFrontFileUrl  String?
+  lastIdentityBackFileUrl   String?
+  lastIdentityVerifiedAt    DateTime?
 
   @@map("workers")
 }
@@ -326,10 +333,22 @@ model Appointment {
   qrCode              String?
   source              String               @default("SUCURSAL")
   serviceProfileId    String?
+  // IMPL-20260519-10: Evidencia de corroboración de identidad en recepción (ARCH-20260519-10)
+  identityDocumentType        String?   // IdentityDocumentType catalog
+  identityFrontFileUrl        String?
+  identityBackFileUrl         String?
+  identityVerifiedAt          DateTime?
+  identityVerifiedByUserId    String?
+  identityExceptionReason     String?   // IdentityExceptionReason catalog
+  identityExceptionComment    String?
+  identityEvidenceMode        String?   // IdentityEvidenceMode: NEW_CAPTURE | REUSED_PREVIOUS | EXCEPTION_WITHOUT_CAPTURE
+  corroborationResult         String?   // CorroborationResult catalog
+  qrOperativo                 String?   // QR operativo mínimo AMI|NOMBRE=...|FN=...
   branch              Branch               @relation(fields: [branchId], references: [id])
   company             Company              @relation(fields: [companyId], references: [id])
   serviceProfile      MedicalProfile?      @relation(fields: [serviceProfileId], references: [id])
   worker              Worker               @relation(fields: [workerId], references: [id])
+  identityVerifiedBy  User?                @relation("AppointmentIdentityVerifier", fields: [identityVerifiedByUserId], references: [id])
   medicalEvents       MedicalEvent?
   prefilledInvitation PrefilledInvitation? // IMPL-20260324-07
 

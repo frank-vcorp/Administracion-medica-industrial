@@ -1,5 +1,24 @@
 # Tareas - Residente Digital
 
+## Uso del archivo
+
+- `task.md` se usa solo para el sprint activo o el corte inmediato en ejecución.
+- El backlog macro por sprints vive en [PROYECTO.md](./PROYECTO.md).
+- Los bloques históricos completados se conservan abajo como archivo de referencia, no como cola activa.
+
+## Sprint Activo
+
+- [/] Sprint 1 - Recepción Operativa (AMI)
+    - [x] Discutir y cerrar la SPEC del sprint antes de implementar
+    - [x] Redactar SPEC formal: `context/SPECs/SPEC_ARCH-20260519-10-SPRINT1-RECEPCION-OPERATIVA.md`
+    - [x] Generar handoff formal: `context/interconsultas/HANDOFF_ARCH-20260519-10_SOFIA_SPRINT1-RECEPCION-OPERATIVA.md`
+    - [x] Definir alcance exacto del QR operativo mínimo
+    - [x] Definir alcance exacto de corroboración de identidad en check-in
+    - [x] Acordar trazabilidad mínima requerida para recepción
+    - [x] Confirmar reglas del sprint: identificación oficial válida, comentario operativo obligatorio, reutilización de evidencia y nunca bloquear por falta de captura normal
+
+## Archivo Histórico
+
 - [/] Inicialización del Proyecto (INTEGRA)
     - [x] Crear estructura de directorios (.gemini context)
     - [x] Crear PROYECTO.md
@@ -218,6 +237,8 @@ const result = await prisma.$transaction(async (tx) => {
 - [ ] Heredar URL de Google Maps en el Pase de Confirmación (AppointmentFormModal)
 
 **Validación Médica & Dictamen Avanzado** (Pendiente)
+
+- [ ] Referencia: backlog macro AMI por sprints en [PROYECTO.md](./PROYECTO.md)
 - [ ] Implementar validación manual de dictámenes por médico
 - [ ] Sistema de "Puntos de Control" en flujo médico
 - [ ] Plantillas de dictamen por tipo de estudio
