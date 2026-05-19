@@ -6,6 +6,7 @@
  * obligatorio en excepción o discrepancia, cierre orquestado en una sola acción.
  * @id IMPL-20260519-10
  * @spec context/SPECs/SPEC_ARCH-20260519-10-SPRINT1-RECEPCION-OPERATIVA.md
+ * @patch IMPL-20260519-15 — captura cámara trasera en móvil (capture=environment + microcopy)
  */
 
 import { useState, useTransition, useRef } from 'react'
@@ -327,9 +328,9 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                   </div>
                 ) : (
                   <label className="flex flex-col items-center justify-center h-24 rounded-xl border-2 border-dashed border-slate-300 hover:border-amber-400 cursor-pointer bg-slate-50 transition-colors">
-                    <span className="text-2xl">📁</span>
-                    <span className="text-xs text-slate-500 mt-1">Seleccionar imagen del frente</span>
-                    <input ref={frontInputRef} type="file" accept="image/*" className="hidden" onChange={handleFrontFileChange} />
+                    <span className="text-2xl">�</span>
+                    <span className="text-xs text-slate-500 mt-1">Tomar foto o seleccionar imagen</span>
+                    <input ref={frontInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFrontFileChange} />
                   </label>
                 )}
               </div>
@@ -350,9 +351,9 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                   </div>
                 ) : (
                   <label className="flex flex-col items-center justify-center h-16 rounded-xl border-2 border-dashed border-slate-200 hover:border-slate-300 cursor-pointer bg-slate-50 transition-colors">
-                    <span className="text-xl">🔄</span>
-                    <span className="text-xs text-slate-400 mt-0.5">Agregar reverso (opcional)</span>
-                    <input ref={backInputRef} type="file" accept="image/*" className="hidden" onChange={handleBackFileChange} />
+                    <span className="text-xl">�</span>
+                    <span className="text-xs text-slate-400 mt-0.5">Foto o imagen del reverso (opcional)</span>
+                    <input ref={backInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBackFileChange} />
                   </label>
                 )}
               </div>
