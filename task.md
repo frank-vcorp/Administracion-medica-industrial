@@ -12,10 +12,16 @@
     - [x] Discutir y cerrar la SPEC del sprint antes de implementar
     - [x] Redactar SPEC formal: `context/SPECs/SPEC_ARCH-20260519-10-SPRINT1-RECEPCION-OPERATIVA.md`
     - [x] Generar handoff formal: `context/interconsultas/HANDOFF_ARCH-20260519-10_SOFIA_SPRINT1-RECEPCION-OPERATIVA.md`
+    - [x] Implementar sprint y documentar checkpoint: `context/checkpoints/CHK_IMPL-20260519-10.md`
+    - [x] Emitir dictamen QA: `context/interconsultas/DICTAMEN_INFRA-20260519-02-QA-SPRINT1-RECEPCION-OPERATIVA.md`
+    - [x] Preparar checklist QA manual: `context/interconsultas/CHECKLIST_QA-ARCH-20260519-10-SPRINT1-RECEPCION-OPERATIVA.md`
+    - [x] Aplicar schema remoto del sprint en Railway
+    - [x] Publicar corte en `main`
     - [x] Definir alcance exacto del QR operativo mínimo
     - [x] Definir alcance exacto de corroboración de identidad en check-in
     - [x] Acordar trazabilidad mínima requerida para recepción
     - [x] Confirmar reglas del sprint: identificación oficial válida, comentario operativo obligatorio, reutilización de evidencia y nunca bloquear por falta de captura normal
+    - [ ] Ejecutar QA manual final y registrar cierre formal
 
 ## Archivo Histórico
 
