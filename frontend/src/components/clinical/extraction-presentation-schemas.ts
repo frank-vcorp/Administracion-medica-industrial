@@ -216,21 +216,22 @@ const audiometriaSchema: StudyPresentationSchema = {
       title: "Vía aérea por frecuencia",
       rightKey: "oido_derecho.va",
       leftKey: "oido_izquierdo.va",
-      preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
+      // IMPL-20260519-04 — orden clínico completo del formato real
+      preferredOrder: [125, 250, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 8000],
     },
     {
       kind: "bilateralFrequency",
       title: "Vía ósea por frecuencia",
       rightKey: "oido_derecho.vo",
       leftKey: "oido_izquierdo.vo",
-      preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
+      preferredOrder: [125, 250, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 8000],
     },
     {
       kind: "bilateralFrequency",
       title: "Separación por frecuencia",
       rightKey: "oido_derecho.separacion",
       leftKey: "oido_izquierdo.separacion",
-      preferredOrder: [250, 500, 1000, 2000, 3000, 4000, 6000, 8000],
+      preferredOrder: [125, 250, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 8000],
     },
     {
       kind: "keyValue",

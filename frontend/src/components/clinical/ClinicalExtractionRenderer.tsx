@@ -82,12 +82,16 @@ function normalizeAudiometriaData(data: Record<string, unknown>): Record<string,
       const earNorm: Record<string, unknown> = { ...earObj }
       if (!("va" in earNorm) && "via_aerea" in earNorm) earNorm.va = earNorm.via_aerea
       if (!("vo" in earNorm) && "via_osea" in earNorm) earNorm.vo = earNorm.via_osea
+      // IMPL-20260519-04 — normalizar pta → pta_visible
+      if (!("pta_visible" in earNorm) && "pta" in earNorm) earNorm.pta_visible = earNorm.pta
       normalized[earKey] = earNorm
     }
   }
 
-  // Normalizar notas_calidad: string[] → { descripcion: "..." }
-  if (Array.isArray(normalized.notas_calidad)) {
+  // IMPL-20260519-04 — normalizar notas_calidad: string plano, string[] o estructura ya correcta
+  if (typeof normalized.notas_calidad === "string") {
+    normalized.notas_calidad = { descripcion: normalized.notas_calidad }
+  } else if (Array.isArray(normalized.notas_calidad)) {
     normalized.notas_calidad = {
       descripcion: (normalized.notas_calidad as unknown[]).map(String).join("; "),
     }
