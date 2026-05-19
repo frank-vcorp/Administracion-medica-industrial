@@ -10,12 +10,14 @@
 
 import { useState, useTransition, useRef } from 'react'
 import {
-  closeReceptionCorroboration,
   IDENTITY_DOCUMENT_TYPES,
   IDENTITY_EXCEPTION_REASONS,
   type IdentityDocumentType,
   type IdentityEvidenceMode,
   type IdentityExceptionReason,
+} from '@/lib/reception-corroboration'
+import {
+  closeReceptionCorroboration,
 } from '@/actions/appointment.actions'
 import { useRouter } from 'next/navigation'
 

@@ -21,6 +21,12 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { logAudit } from '@/actions/audit.actions'
 import { generateExpedientId } from '@/lib/id.utils'
+import {
+  type CorroborationResult,
+  type IdentityDocumentType,
+  type IdentityEvidenceMode,
+  type IdentityExceptionReason,
+} from '@/lib/reception-corroboration'
 import QRCode from 'qrcode'
 
 /**
@@ -633,45 +639,6 @@ export async function getAppointmentsForOverview(date: string) {
 // IMPL-20260519-10 — Cierre orquestado de recepción (ARCH-20260519-10)
 // Integra: evidencia de identidad + corrección de nombre + auditoría + check-in
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Catálogos controlados para recepción operativa.
- * @id IMPL-20260519-10
- */
-export const IDENTITY_DOCUMENT_TYPES = [
-  'INE',
-  'PASAPORTE',
-  'LICENCIA',
-  'OTRA_IDENTIFICACION_OFICIAL',
-] as const
-
-export const IDENTITY_EXCEPTION_REASONS = [
-  'SIN_DOCUMENTO_PRESENTE',
-  'FALLA_CAMARA_O_DISPOSITIVO',
-  'EVIDENCIA_NO_LEGIBLE',
-  'DISCREPANCIA_DE_IDENTIDAD',
-  'OTRO',
-] as const
-
-export const IDENTITY_EVIDENCE_MODES = [
-  'NEW_CAPTURE',
-  'REUSED_PREVIOUS',
-  // Nombre técnico interno mantenido para compatibilidad de contrato con el schema.
-  // La regla operativa visible al usuario es "comentario operativo obligatorio" (nunca bloquea check-in).
-  'EXCEPTION_WITHOUT_CAPTURE',
-] as const
-
-export const CORROBORATION_RESULTS = [
-  'VERIFIED_WITHOUT_CHANGES',
-  'VERIFIED_WITH_NAME_CORRECTION',
-  'VERIFIED_WITH_REUSED_EVIDENCE',
-  'VERIFIED_WITH_COMMENT',   // antes: VERIFIED_WITH_EXCEPTION — renombrado IMPL-20260519-12
-] as const
-
-export type IdentityDocumentType = (typeof IDENTITY_DOCUMENT_TYPES)[number]
-export type IdentityExceptionReason = (typeof IDENTITY_EXCEPTION_REASONS)[number]
-export type IdentityEvidenceMode = (typeof IDENTITY_EVIDENCE_MODES)[number]
-export type CorroborationResult = (typeof CORROBORATION_RESULTS)[number]
 
 export interface CloseReceptionInput {
   appointmentId: string
