@@ -209,7 +209,7 @@ const audiometriaSchema: StudyPresentationSchema = {
       kind: "keyValue",
       title: "Condiciones",
       sourceKey: "condiciones",
-      fields: ["cabina", "equipo", "tecnico", "observaciones"],
+      fields: ["cabina", "equipo", "tecnico", "observaciones", "PTA_general"],
     },
     {
       kind: "bilateralFrequency",

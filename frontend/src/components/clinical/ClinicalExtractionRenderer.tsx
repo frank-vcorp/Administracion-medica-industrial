@@ -63,6 +63,39 @@ function hasRenderableValue(value: unknown): boolean {
   return value !== undefined && value !== null && value !== ""
 }
 
+/**
+ * Normaliza el payload de Audiometría soportando dos formas históricas:
+ * - v2 (nueva): oido_X.via_aerea, oido_X.via_osea, notas_calidad como string[]
+ * - v1 (antigua): oido_X.va, oido_X.vo, notas_calidad.descripcion
+ * Produce siempre la forma v1 (canónica) que el schema de presentación conoce.
+ * Sin efecto sobre claves ya presentes: snapshots v1 pasan intactos.
+ * @id IMPL-20260519-03
+ */
+function normalizeAudiometriaData(data: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = { ...data }
+
+  // Normalizar oídos: via_aerea → va, via_osea → vo (solo si la alias destino no existe)
+  for (const earKey of ["oido_derecho", "oido_izquierdo"]) {
+    const ear = normalized[earKey]
+    if (ear && typeof ear === "object" && !Array.isArray(ear)) {
+      const earObj = ear as Record<string, unknown>
+      const earNorm: Record<string, unknown> = { ...earObj }
+      if (!("va" in earNorm) && "via_aerea" in earNorm) earNorm.va = earNorm.via_aerea
+      if (!("vo" in earNorm) && "via_osea" in earNorm) earNorm.vo = earNorm.via_osea
+      normalized[earKey] = earNorm
+    }
+  }
+
+  // Normalizar notas_calidad: string[] → { descripcion: "..." }
+  if (Array.isArray(normalized.notas_calidad)) {
+    normalized.notas_calidad = {
+      descripcion: (normalized.notas_calidad as unknown[]).map(String).join("; "),
+    }
+  }
+
+  return normalized
+}
+
 function buildAudiometriaSummary(data: Record<string, unknown>): Record<string, unknown> {
   const right = resolveSource(data, "oido_derecho")
   const left = resolveSource(data, "oido_izquierdo")
@@ -464,6 +497,12 @@ export default function ClinicalExtractionRenderer({
     )
   }
 
+  // Normalizar payload antes de renderizar para soportar variantes históricas
+  const renderData =
+    studyType === "Audiometria"
+      ? normalizeAudiometriaData(extractedData)
+      : extractedData
+
   // Verificar si al menos una sección renderiza contenido útil
   // (se hace en el render mismo — SectionBlock retorna null si no hay datos)
 
@@ -487,7 +526,7 @@ export default function ClinicalExtractionRenderer({
       <div className="space-y-4 divide-y divide-slate-100">
         {schema.sections.map((section, idx) => (
           <div key={idx} className={idx > 0 ? "pt-4" : ""}>
-            <SectionBlock section={section} data={extractedData} />
+            <SectionBlock section={section} data={renderData} />
           </div>
         ))}
       </div>
