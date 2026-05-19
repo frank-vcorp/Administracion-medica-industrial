@@ -1,18 +1,20 @@
 """
 Servicio de Clasificación de Documentos Médicos.
-IMPL-20260225-01: Clasificador inteligente usando Gemini Vision.
+IMPL-20260225-01: Clasificador inteligente.
+ARCH-20260519-13: Migrado de GeminiBase a FeatherlessVisionBase (Qwen-VL).
+                  Gemini eliminado del runtime extractivo. Respaldo: SPEC_ARCH-20260519-13.
 """
 
 import time
 from typing import Dict, Any
-from .base import GeminiBase
+from .base import FeatherlessVisionBase
 from app.schemas.medical import DocumentClassification
 
 
-class DocumentClassifierService(GeminiBase):
+class DocumentClassifierService(FeatherlessVisionBase):
     """
     Servicio que clasifica documentos médicos sin depender del nombre del archivo.
-    Usa Gemini Vision para analizar la imagen/PDF y determinar el tipo.
+    ARCH-20260519-13: Usa Featherless + Qwen-VL para analizar la imagen/PDF.
     """
     
     # IMPL-20260326-17: Prompt actualizado — GEN-O1WV7 (Campimetria), GEN-C85PD (Electrocardiograma), GEN-U5BQX (RiesgoCardiovascular)
@@ -43,23 +45,24 @@ class DocumentClassifierService(GeminiBase):
     
     def classify(self, file_path: str) -> DocumentClassification:
         """
-        Clasifica un documento médico usando Gemini Vision.
-        
+        Clasifica un documento médico usando Featherless + Qwen-VL.
+        ARCH-20260519-13: proveedor = featherless, modelo = FEATHERLESS_EXTRACTION_MODEL.
+
         Args:
             file_path: Ruta local del archivo (imagen o PDF)
-        
+
         Returns:
             DocumentClassification con tipo, confianza y razón.
-        
+
         Raises:
-            ValueError: Si la respuesta de Gemini es inválida.
+            ValueError: Si la respuesta de Featherless es inválida.
         """
-        print(f"🔍 Clasificando documento: {file_path}")
-        
+        print(f"🔍 Clasificando documento (Featherless/{self.model}): {file_path}")
+
         start_time = time.time()
-        result = self.call_gemini(file_path, self.CLASSIFICATION_PROMPT)
+        result = self.call_featherless_vision(file_path, self.CLASSIFICATION_PROMPT)
         duration = time.time() - start_time
-        
+
         print(f"✅ Clasificación completada en {duration:.2f}s")
         
         # Validar estructura de respuesta

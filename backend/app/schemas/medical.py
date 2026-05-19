@@ -541,6 +541,23 @@ class AIPrediagnosisResult(BaseModel):
         default=None,
         description="Proveedor backend de la capa clínica: 'gemini' (Gemini text-only) o 'featherless' (MedGemma vía OpenAI SDK)"
     )
+    # IMPL-20260518-03: Fuente real del prompt clínico (ARCH-20260518-03)
+    prompt_source: Optional[Literal["ai_calibration", "backend_fallback"]] = Field(
+        default=None,
+        description=(
+            "Fuente real del prompt clínico usado: "
+            "'ai_calibration' si vino de aiCalibration.diagnosis.prompt, "
+            "'backend_fallback' si se usó el prompt backend hardcodeado"
+        )
+    )
+    # IMPL-20260518-03: Versión real del prompt clínico usado (ARCH-20260518-03)
+    prompt_version: Optional[str] = Field(
+        default=None,
+        description=(
+            "Versión real del prompt clínico usado: versión de calibración si viene de aiCalibration, "
+            "'backend_v2' si se usó fallback general backend."
+        )
+    )
     # IMPL-20260516-08: RAW de entrada clínica — payload enviado al modelo (ARCH-20260516-08)
     input_debug: Optional["PrediagnosisInputDebug"] = Field(
         default=None,

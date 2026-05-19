@@ -1,6 +1,7 @@
 """
 Utilidades base para servicios de IA.
 IMPL-20260225-01: Pipeline IA modular.
+ARCH-20260519-13: FeatherlessVisionBase — base del frente extractivo Featherless + Qwen-VL.
 """
 
 import os
@@ -135,3 +136,153 @@ class GeminiBase:
         except Exception as e:
             print(f"❌ Gemini Error: {e}")
             raise
+
+
+# ---------------------------------------------------------------------------
+# ARCH-20260519-13: FeatherlessVisionBase — frente extractivo Featherless + Qwen-VL
+#
+# Clasificador (DocumentClassifierService) y extractor (ExtractorService) heredan
+# de esta clase. La capa clínica (PrediagnosticService) sigue en GeminiBase / Featherless
+# a través de _call_featherless_text_only — separada de FEATHERLESS_EXTRACTION_MODEL.
+#
+# Respaldo: context/SPECs/SPEC_ARCH-20260519-13-EXTRACCION-MULTIMODAL-FEATHERLESS-QWEN-VL.md
+# ---------------------------------------------------------------------------
+
+class FeatherlessVisionBase:
+    """
+    Base para el frente extractivo visual de Featherless.
+    ARCH-20260519-13: Gemini no participa en clasificación ni extracción documental.
+
+    Variables de entorno consumidas (NO mezclar con la capa clínica):
+      FEATHERLESS_API_KEY             — token compartido del tenant Featherless
+      FEATHERLESS_BASE_URL            — endpoint compatible OpenAI (default: https://api.featherless.ai/v1)
+      FEATHERLESS_EXTRACTION_MODEL    — modelo visual inicial: Qwen/Qwen3-VL-30B-A3B-Instruct
+    """
+
+    @staticmethod
+    def _tolerant_json_parse(text: str) -> Dict[str, Any]:
+        """Parseo tolerante de JSON. Estrategia idéntica a GeminiBase."""
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError:
+                pass
+
+        raise ValueError(
+            f"Respuesta de Featherless no es JSON parseable: {text[:300]!r}"
+        )
+
+    def __init__(
+        self,
+        api_key: str = None,
+        base_url: str = None,
+        model: str = None,
+    ):
+        """
+        Args:
+            api_key:  FEATHERLESS_API_KEY. Si None, lee de env. Sin validación estricta
+                      para permitir instancias de test con mocks.
+            base_url: Base URL API Featherless (compatible OpenAI).
+            model:    Modelo visual a invocar.
+        """
+        self.api_key = api_key or _read_env_var("FEATHERLESS_API_KEY") or ""
+        self.base_url = (
+            base_url
+            or _read_env_var("FEATHERLESS_BASE_URL")
+            or "https://api.featherless.ai/v1"
+        )
+        self.model = (
+            model
+            or _read_env_var("FEATHERLESS_EXTRACTION_MODEL")
+            or "Qwen/Qwen3-VL-30B-A3B-Instruct"
+        )
+
+    def get_b64_jpeg(self, file_path: str) -> str:
+        """
+        Convierte un archivo (imagen o PDF) a base64 JPEG.
+        Los PDFs se convierten a JPEG de primera página antes de codificar.
+        """
+        mime_type, _ = mimetypes.guess_type(file_path)
+
+        if mime_type == "application/pdf" or file_path.lower().endswith(".pdf"):
+            try:
+                print(f"📄 Convirtiendo PDF a imagen: {file_path}")
+                pages = convert_from_path(file_path, first_page=1, last_page=1)
+                if pages:
+                    img_byte_arr = io.BytesIO()
+                    pages[0].save(img_byte_arr, format="JPEG")
+                    return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+            except Exception as e:
+                print(f"⚠️ PDF conversion error: {e}")
+                raise
+
+        with open(file_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode("utf-8")
+
+    def call_featherless_vision(self, file_path: str, prompt: str) -> Dict[str, Any]:
+        """
+        Llama a Featherless con imagen + prompt y retorna JSON parseado.
+        ARCH-20260519-13: único punto de entrada al proveedor extractivo visual.
+
+        Protocolo:
+          - Convierte el archivo a base64 JPEG.
+          - Llama al modelo con content multimodal (texto + image_url base64).
+          - Parsea la respuesta como JSON con tolerancia a texto extra.
+
+        Raises:
+            RuntimeError: Si openai SDK no está instalado.
+            Exception:    Si Featherless devuelve error HTTP o la respuesta no es JSON.
+        """
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "openai SDK no instalado. Ejecuta: pip install openai>=1.0"
+            ) from exc
+
+        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        b64_data = self.get_b64_jpeg(file_path)
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{b64_data}"
+                                },
+                            },
+                        ],
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=4096,
+            )
+        except Exception as e:
+            print(f"❌ Featherless Vision Error: {e}")
+            raise
+
+        raw_text = (
+            response.choices[0].message.content
+            if response.choices
+            else ""
+        )
+        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+
+        try:
+            return FeatherlessVisionBase._tolerant_json_parse(raw_text)
+        except ValueError as e:
+            print(f"❌ Error parseando JSON de Featherless: {raw_text[:300]!r}")
+            raise ValueError(f"Respuesta de Featherless no es JSON válido: {e}") from e

@@ -80,21 +80,25 @@ if all([STORAGE_S3_ENDPOINT, STORAGE_S3_BUCKET, STORAGE_S3_ACCESS_KEY, STORAGE_S
     except Exception as _s3_init_err:
         print(f"⚠️ S3 Storage no disponible: {str(_s3_init_err)[:200]}")
 
-# In production this MUST be an env variable.
-GEMINI_API_KEY = _read_env_var("GEMINI_API_KEY")
+# Clave Featherless — usada tanto por el frente extractivo como (opcionalmente) por la capa clínica.
+GEMINI_API_KEY = _read_env_var("GEMINI_API_KEY")  # solo capa clínica GeminiBase legacy
 # IMPL-20260513-01: Separación de modelos por capa
-# GEMINI_MODEL_EXTRACTION: modelo para extracción documental (OCR + structuring) → operativo: gemini-2.5-flash
-# GEMINI_MODEL_CLINICAL:   modelo para interpretación clínica → objetivo: medgemma-27b-text-it (fallback: flash)
-# GEMINI_MODEL queda como retrocompat para código que aún no fue migrado.
-GEMINI_MODEL_EXTRACTION = _read_env_var("GEMINI_MODEL_EXTRACTION") or _read_env_var("GEMINI_MODEL") or "gemini-2.5-flash"
+# GEMINI_MODEL_CLINICAL: modelo para interpretación clínica (fallback interno a Gemini si no usa Featherless)
 GEMINI_MODEL_CLINICAL   = _read_env_var("GEMINI_MODEL_CLINICAL") or _read_env_var("GEMINI_MODEL") or "gemini-2.5-flash"
-GEMINI_MODEL = GEMINI_MODEL_EXTRACTION  # retrocompat
+# ARCH-20260519-13: Extracción documental pasa a Featherless + Qwen-VL.
+# GEMINI_MODEL_EXTRACTION queda deprecado para el frente extractivo (Gemini eliminado).
+# FEATHERLESS_EXTRACTION_MODEL es la variable operativa del clasificador y extractor.
+FEATHERLESS_API_KEY          = _read_env_var("FEATHERLESS_API_KEY") or ""
+FEATHERLESS_BASE_URL         = _read_env_var("FEATHERLESS_BASE_URL") or "https://api.featherless.ai/v1"
+FEATHERLESS_EXTRACTION_MODEL = (
+    _read_env_var("FEATHERLESS_EXTRACTION_MODEL")
+    or "Qwen/Qwen3-VL-30B-A3B-Instruct"
+)
+# FEATHERLESS_MODEL: modelo clínico (MedGemma). Separado de FEATHERLESS_EXTRACTION_MODEL.
+FEATHERLESS_MODEL    = _read_env_var("FEATHERLESS_MODEL") or "google/medgemma-27b-text-it"
 # IMPL-20260513-01: Bandera MedGemma — False hasta que la integración esté habilitada en runtime
 # IMPL-20260513-03: MEDGEMMA_STATUS es dinámico: 'available' si MEDGEMMA_ENABLED=true y key presente
 MEDGEMMA_ENABLED = (_read_env_var("MEDGEMMA_ENABLED") or "false").lower() == "true"
-FEATHERLESS_API_KEY  = _read_env_var("FEATHERLESS_API_KEY") or ""
-FEATHERLESS_BASE_URL = _read_env_var("FEATHERLESS_BASE_URL") or "https://api.featherless.ai/v1"
-FEATHERLESS_MODEL    = _read_env_var("FEATHERLESS_MODEL") or "google/medgemma-27b-text-it"
 MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and FEATHERLESS_API_KEY) else "pending_integration"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
 EXTRACTION_PROMPT_VERSION = "extract-v4"   # IMPL-20260516-07: campos fuente audiometría (faringe, CAD, CAI, MTD, MTI)
@@ -159,8 +163,8 @@ def _upload_file_to_s3(contents: bytes, key: str) -> bool:
 
 def _ai_unavailable_response(msg: str = "Servicios de IA no están disponibles") -> dict:
     """Respuesta estándar cuando IA no está disponible, con detalles de diagnóstico. ARCH-20260326-05."""
-    current_api_key = _read_env_var("GEMINI_API_KEY")
-    current_model = _read_env_var("GEMINI_MODEL") or GEMINI_MODEL
+    featherless_key = _read_env_var("FEATHERLESS_API_KEY")
+    extraction_model = _read_env_var("FEATHERLESS_EXTRACTION_MODEL") or FEATHERLESS_EXTRACTION_MODEL
     return {
         "status": "error",
         "error": msg,
@@ -168,18 +172,28 @@ def _ai_unavailable_response(msg: str = "Servicios de IA no están disponibles")
             "classifier": classifier is not None,
             "extractor": extractor is not None,
             "prediagnostic": prediagnostic_svc is not None,
-            "api_key_present": bool(current_api_key),
-            "model": current_model,
+            "extraction_api_key_present": bool(featherless_key),
+            "extraction_model": extraction_model,
             "last_init_error": ai_init_error,
         },
     }
 
 
 # Inicializar servicios de IA
-# IMPL-20260513-01: Extractor usa GEMINI_MODEL_EXTRACTION (Pro); PrediagnosticService usa GEMINI_MODEL_CLINICAL
+# ARCH-20260519-13: Clasificador y extractor usan Featherless + Qwen-VL (frente extractivo).
+#                   PrediagnosticService sigue usando GeminiBase/Featherless clínico separado.
+# IMPL-20260513-01: PrediagnosticService usa GEMINI_MODEL_CLINICAL como parámetro de GeminiBase.
 try:
-    classifier = DocumentClassifierService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL_EXTRACTION)
-    extractor = ExtractorService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL_EXTRACTION)
+    classifier = DocumentClassifierService(
+        api_key=FEATHERLESS_API_KEY,
+        base_url=FEATHERLESS_BASE_URL,
+        model=FEATHERLESS_EXTRACTION_MODEL,
+    )
+    extractor = ExtractorService(
+        api_key=FEATHERLESS_API_KEY,
+        base_url=FEATHERLESS_BASE_URL,
+        model=FEATHERLESS_EXTRACTION_MODEL,
+    )
     prediagnostic_svc = PrediagnosticService(api_key=GEMINI_API_KEY, model=GEMINI_MODEL_CLINICAL)
     ai_init_error = None
 except Exception as e:
@@ -236,30 +250,33 @@ def v2_ai_status():
     Estado de diagnóstico de servicios IA — solo lectura, sin secretos.
     ARCH-20260326-05: Expone causa raíz de fallos de inicialización de forma segura.
     IMPL-20260513-01: Expone modelos separados por capa y estado real de MedGemma.
-    Nunca retorna el valor de GEMINI_API_KEY; sólo informa si está presente.
+    ARCH-20260519-13: Agrega extraction_provider_active y extraction_model_active.
+    Nunca retorna valores de API keys; solo informa si están presentes.
     """
-    current_api_key = _read_env_var("GEMINI_API_KEY")
-    current_extraction_model = _read_env_var("GEMINI_MODEL_EXTRACTION") or GEMINI_MODEL_EXTRACTION
-    current_clinical_model   = _read_env_var("GEMINI_MODEL_CLINICAL") or GEMINI_MODEL_CLINICAL
-    # IMPL-20260513-03: estado dinámico del proveedor clínico
     featherless_key_present = bool(_read_env_var("FEATHERLESS_API_KEY"))
+    current_extraction_model = (
+        _read_env_var("FEATHERLESS_EXTRACTION_MODEL") or FEATHERLESS_EXTRACTION_MODEL
+    )
+    current_clinical_model   = _read_env_var("GEMINI_MODEL_CLINICAL") or GEMINI_MODEL_CLINICAL
+    # IMPL-20260513-03: estado dinámico del proveedor clínico (sin cambios en esta iteración)
     active_clinical_provider = "featherless" if (MEDGEMMA_ENABLED and featherless_key_present) else "gemini"
     return {
         "overall_status": "ok" if all([classifier, extractor, prediagnostic_svc]) else "degraded",
         "classifier": classifier is not None,
         "extractor": extractor is not None,
         "prediagnostic": prediagnostic_svc is not None,
-        # IMPL-20260513-01: separación por capa
-        "model_extraction": current_extraction_model,
+        # ARCH-20260519-13: frente extractivo ahora es siempre Featherless
+        "extraction_provider_active": "featherless",
+        "extraction_model_active": current_extraction_model,
+        "extraction_api_key_present": featherless_key_present,
+        # IMPL-20260513-01: modelo clínico separado
         "model_clinical": current_clinical_model,
         "medgemma_enabled": MEDGEMMA_ENABLED,
         "medgemma_status": MEDGEMMA_STATUS,
-        # IMPL-20260513-03: trazabilidad del proveedor activo
+        # IMPL-20260513-03: trazabilidad del proveedor clínico activo
         "clinical_provider_active": active_clinical_provider,
-        "featherless_key_present": featherless_key_present,
         "featherless_base_url": FEATHERLESS_BASE_URL,
         "featherless_model": FEATHERLESS_MODEL,
-        "api_key_present": bool(current_api_key),
         "pipeline_version": PIPELINE_VERSION,
         "extraction_prompt_version": EXTRACTION_PROMPT_VERSION,
         "prediagnosis_prompt_version": PREDIAGNOSIS_PROMPT_VERSION,

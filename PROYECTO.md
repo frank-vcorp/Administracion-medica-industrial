@@ -2,7 +2,7 @@
 
 **Estado:** [/] Operación estabilizada con backlog activo de IA clínica, integraciones MedGemma y hardening de storage en Railway
 **Fase:** Fase operativa continua: estabilización productiva | IA clínica | persistencia de uploads | integraciones comerciales MEDGEMMA APIS
-**ID Actual:** ARCH-20260519-13 (SPEC formal para reemplazar Gemini por Qwen-VL en extracción)
+**ID Actual:** ARCH-20260519-14 (handoff secuencial a SOFIA para Project y Alta Masiva)
 **Último Sprint Completado:** DOC-20260507-01 (Cierre operativo del cronograma admin persistente y backlog futuro de recepción)
 
 ## 📋 Descripción
@@ -37,7 +37,8 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - [ ] Definir sobrecupo tolerable por clínica o contexto operativo
 - [ ] Formalizar criterio funcional para atención sin cita
 - [ ] Preparar base de operación para atención masiva
-- [ ] **[SPEC lista]** Alta masiva de trabajadores por empresa — pre-registro via Excel (`SPEC_ARCH-20260519-11`)
+- [/] **[SPEC lista]** Entidad `Project` para campañas/visitas médicas (`SPEC_ARCH-20260519-12`) — prerequisito de alta masiva
+- [/] **[SPEC lista]** Alta masiva de trabajadores por empresa — pre-registro via Excel (`SPEC_ARCH-20260519-11`)
 
 ### Sprint 5 - Equipos y Mantenimiento
 - [ ] Modelar inventario operativo de equipos por sede o unidad móvil
@@ -66,6 +67,7 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - [ ] Evitar mezclar en un mismo sprint recepción, agenda, equipos e IA clínica
 
 ## 📅 Diario de Cambios
+- **2026-05-19 (INTEGRA):** [/] **Se emite handoff secuencial a SOFIA para `Project` y `Alta Masiva`.** Se entrega `context/interconsultas/HANDOFF_ARCH-20260519-14_SOFIA_PROJECT-Y-ALTA-MASIVA.md` con orden obligatorio de implementación `ARCH-20260519-12` → `ARCH-20260519-11`, incorporando los ajustes del dictamen `FIX-20260519-06`. El corte deja explícito que `Project` es prerequisito funcional y técnico de la importación masiva, que el límite inicial es de 200 filas por carga y que no debe mezclarse con el Sprint 1 de Recepción Operativa mientras existan migraciones o cambios simultáneos sobre `schema.prisma`. (ARCH-20260519-14)
 - **2026-05-19 (INTEGRA):** [/] **Se redefine el corte extractivo: Qwen reemplaza a Gemini en esa capa.** Tras la aclaración explícita del usuario de no continuar con Gemini Flash para extracción por costo y preferencia técnica, el alcance de `ARCH-20260519-13` se endurece: `Qwen/Qwen3-VL-30B-A3B-Instruct` en Featherless deja de ser alternativa y pasa a ser el proveedor objetivo de clasificación documental y extracción estructurada. La capa clínica sigue separada y sin cambios en este corte. Fuente de verdad actualizada en `context/SPECs/SPEC_ARCH-20260519-13-EXTRACCION-MULTIMODAL-FEATHERLESS-QWEN-VL.md` y `context/interconsultas/HANDOFF_ARCH-20260519-13_SOFIA_EXTRACCION-FEATHERLESS-QWEN-VL.md`. (ARCH-20260519-13)
 - **2026-05-19 (INTEGRA):** [/] **Se emite handoff formal a SOFIA para implementar el Sprint 1 de recepcion operativa.** Se entrega `context/interconsultas/HANDOFF_ARCH-20260519-10_SOFIA_SPRINT1-RECEPCION-OPERATIVA.md` como instruccion de construccion sobre la SPEC vigente. El corte mantiene anclas existentes (`Appointment`, `Worker`, `AuditLog`, flujo actual de agenda/corroboracion), separa QR operativo del QR de check-in y fija comentario operativo obligatorio cuando no exista captura normal o haya discrepancia material. (ARCH-20260519-10)
 - **2026-05-19 (INTEGRA):** [/] **Se formaliza SPEC de Alta Masiva de Trabajadores por Empresa.** A partir del caso operativo de unidades móviles y visitas corporativas masivas, se diseña el mecanismo de pre-registro via plantilla Excel. La decisión de arquitectura central es: parseo 100% client-side con `xlsx` (SheetJS), solo viajan los datos JSON al servidor; se reutiliza la detección de duplicados existente; el scope es el canal interno (vendedor/admin) como Fase 1 y el portal B2B como Fase 2 pendiente de documentar. Documentado en `context/SPECs/SPEC_ARCH-20260519-11-ALTA-MASIVA-TRABAJADORES.md`. 5 archivos afectados, dentro del límite de escalamiento. (ARCH-20260519-11)

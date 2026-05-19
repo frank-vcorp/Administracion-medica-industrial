@@ -8,11 +8,15 @@ IMPL-20260326-16: Separación capa extractiva / interpretativa (ARCH-20260326-16
 ARCH-20260518-06:
     - La extracción se compone con una base universal fija en backend
         más un bloque específico editable desde aiCalibration.extraction.prompt.
+
+ARCH-20260519-13:
+    - Gemini reemplazado por Featherless + Qwen-VL como motor extractivo único.
+    - Respaldo: context/SPECs/SPEC_ARCH-20260519-13-EXTRACCION-MULTIMODAL-FEATHERLESS-QWEN-VL.md
 """
 
 import time
 from typing import Dict, Any, Union, Optional
-from .base import GeminiBase
+from .base import FeatherlessVisionBase
 from app.schemas.medical import (
     AudiometriaData,
     LaboratorioData,
@@ -50,9 +54,10 @@ GUARDRAILS ESPECÍFICOS PARA AUDIOMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBRA
 """.strip()
 
 
-class ExtractorService(GeminiBase):
+class ExtractorService(FeatherlessVisionBase):
     """
     Servicio que extrae parámetros canónicos según el tipo de documento.
+    ARCH-20260519-13: usa Featherless + Qwen-VL como motor visual.
     GUARDRAIL: Los prompts NO deben pedir diagnóstico, interpretación clínica final
     ni recomendaciones de aptitud. Esas capas pertenecen a PrediagnosticService.
     """
@@ -227,12 +232,12 @@ notas de calidad y gráficas.
             f"✅ [ARCH-20260518-03] Prompt de extracción resuelto desde aiCalibration "
             f"(v={_extraction_prompt_version}) para {doc_type}"
         )
-        print(f"🧠 Extrayendo datos para tipo: {doc_type}")
-        
+
+        print(f"🧩 Extrayendo (Featherless/{self.model}) tipo: {doc_type}")
         start_time = time.time()
-        result = self.call_gemini(file_path, prompt)
+        result = self.call_featherless_vision(file_path, prompt)
         duration = time.time() - start_time
-        
+
         print(f"✅ Extracción completada en {duration:.2f}s")
         
         # Parsear según el tipo
