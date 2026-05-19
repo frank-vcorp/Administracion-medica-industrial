@@ -1,21 +1,27 @@
 export const dynamic = 'force-dynamic'
 
 import { getWorkers } from "@/actions/worker.actions"
-import { getCompanies, getJobPositions } from "@/actions/admin.actions"
+import { getCompanies, getJobPositions, getBranches } from "@/actions/admin.actions"
 import WorkerFormModal from "@/components/WorkerFormModal"
 import WorkersTable from "@/components/WorkersTable"
+import BulkWorkerImportModal from "@/components/BulkWorkerImportModal"
 
 /**
  * @id ARCH-20260318-09
  * @see context/handoffs/HANDOFF-ARCH-20260318-08-CORRECTIVO-SOFIA.md
+ * @id IMPL-20260519-14: Botón Carga Masiva integrado (ARCH-20260519-11)
  */
 export default async function WorkersPage(props: { searchParams: Promise<{ edit?: string }> }) {
     const searchParams = await props.searchParams
-    const [workers, companies, jobPositions] = await Promise.all([
+    const [workers, companies, jobPositions, branches] = await Promise.all([
         getWorkers(),
         getCompanies(),
         getJobPositions(),
+        getBranches(),
     ])
+
+    const companyOptions = companies.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))
+    const branchOptions = branches.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name }))
 
     return (
         <div className="space-y-8 pb-12">
@@ -25,7 +31,10 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
                     <p className="text-sm text-slate-500 font-medium">Gestión integral de empleados y afiliaciones.</p>
                 </div>
 
-                <WorkerFormModal companies={companies} jobPositions={jobPositions} />
+                <div className="flex items-center gap-3">
+                    <BulkWorkerImportModal companies={companyOptions} branches={branchOptions} />
+                    <WorkerFormModal companies={companies} jobPositions={jobPositions} />
+                </div>
             </div>
 
             <WorkersTable
