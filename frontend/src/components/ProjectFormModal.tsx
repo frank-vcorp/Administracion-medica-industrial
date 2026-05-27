@@ -4,6 +4,9 @@
  * Modal de creación y edición de proyectos de visita médica.
  * @id IMPL-20260519-14
  * @spec context/SPECs/SPEC_ARCH-20260519-12-ENTIDAD-PROJECT-VISITA-MEDICA.md
+ * @id IMPL-20260527-03
+ * @spec context/SPECs/SPEC_ARCH-20260527-03-ALTA-MASIVA-DESDE-PROYECTO.md
+ * @backup context/checkpoints/CHK_IMPL-20260527-03-ALTA-MASIVA-DESDE-PROYECTO.md
  */
 
 import { useState, useTransition, useEffect, useRef } from 'react'
@@ -40,7 +43,7 @@ interface ProjectFormModalProps {
   /** Callback de cierre (modo controlado) */
   onClose?: () => void
   /** Callback tras crear/actualizar exitosamente */
-  onSuccess?: (projectId: string, projectName: string) => void
+  onSuccess?: (projectId: string, projectName: string, companyId?: string) => void
   /** Texto del botón trigger (solo en modo no controlado) */
   triggerLabel?: string
 }
@@ -159,9 +162,9 @@ export default function ProjectFormModal({
 
       closeModal()
       if (!isEditMode && result.project) {
-        onSuccess?.(result.project.id, result.project.name)
+        onSuccess?.(result.project.id, result.project.name, payload.companyId)
       } else if (isEditMode && projectToEdit) {
-        onSuccess?.(projectToEdit.id, projectToEdit.name)
+        onSuccess?.(projectToEdit.id, projectToEdit.name, projectToEdit.companyId)
       }
     })
   }

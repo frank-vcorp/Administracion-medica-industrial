@@ -5,10 +5,14 @@
  * @id IMPL-20260527-01
  * @spec context/SPECs/SPEC_ARCH-20260519-16-CALENDARIO-PROYECTOS-VISITAS.md
  * @backup context/checkpoints/CHK_IMPL-20260527-01-CALENDARIO-PROYECTOS.md
+ * @id IMPL-20260527-03
+ * @spec context/SPECs/SPEC_ARCH-20260527-03-ALTA-MASIVA-DESDE-PROYECTO.md
+ * @backup context/checkpoints/CHK_IMPL-20260527-03-ALTA-MASIVA-DESDE-PROYECTO.md
  */
 
 import { useMemo, useState } from 'react'
 import { ProjectStatus } from '@prisma/client'
+import BulkWorkerImportModal from '@/components/BulkWorkerImportModal'
 import ProjectFormModal, { ProjectForEdit } from '@/components/ProjectFormModal'
 import ProjectsTable from '@/components/ProjectsTable'
 
@@ -41,6 +45,12 @@ interface ProjectsCalendarProps {
   projects: ProjectItem[]
   companies: CompanyOption[]
   branches: BranchOption[]
+}
+
+interface BulkImportContext {
+  projectId: string
+  projectName: string
+  companyId: string
 }
 
 type ViewMode = 'calendar' | 'table'
@@ -150,6 +160,9 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [editProject, setEditProject] = useState<ProjectForEdit | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [bulkImportContext, setBulkImportContext] = useState<BulkImportContext | null>(null)
+  const [showBulkImportBanner, setShowBulkImportBanner] = useState(false)
+  const [bulkImportOpen, setBulkImportOpen] = useState(false)
 
   const filteredProjects = useMemo(() => {
     return [...projects]
@@ -178,6 +191,17 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
   function openEdit(project: ProjectItem) {
     setEditProject(toProjectForEdit(project))
     setEditOpen(true)
+  }
+
+  function handleProjectCreated(projectId: string, projectName: string, companyId?: string) {
+    if (!companyId) return
+    setBulkImportContext({ projectId, projectName, companyId })
+    setShowBulkImportBanner(true)
+  }
+
+  function handleStartBulkImport() {
+    setShowBulkImportBanner(false)
+    setBulkImportOpen(true)
   }
 
   return (
@@ -211,9 +235,43 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <ProjectFormModal companies={companies} branches={branches} />
+            <ProjectFormModal
+              companies={companies}
+              branches={branches}
+              onSuccess={handleProjectCreated}
+            />
           </div>
         </div>
+
+        {bulkImportContext && showBulkImportBanner && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-bold text-emerald-800">Proyecto creado: {bulkImportContext.projectName}</p>
+                <p className="text-xs font-medium text-emerald-700">Puedes iniciar la alta masiva inmediata con empresa y proyecto preseleccionados.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBulkImportBanner(false)
+                    setBulkImportContext(null)
+                  }}
+                  className="rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                >
+                  Omitir
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartBulkImport}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
+                >
+                  Iniciar alta masiva
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -370,6 +428,17 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
         projectToEdit={editProject}
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
+      />
+
+      <BulkWorkerImportModal
+        companies={companies}
+        branches={branches}
+        isOpen={bulkImportOpen}
+        onOpenChange={setBulkImportOpen}
+        initialCompanyId={bulkImportContext?.companyId}
+        initialProjectId={bulkImportContext?.projectId}
+        lockProjectContext={Boolean(bulkImportContext)}
+        hideTrigger
       />
     </>
   )

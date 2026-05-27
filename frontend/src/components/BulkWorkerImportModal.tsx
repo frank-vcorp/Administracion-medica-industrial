@@ -5,9 +5,12 @@
  * Flujo multi-paso: Seleccionar Proyecto → Upload → Vista Previa → Resultado.
  * @id IMPL-20260519-14
  * @spec context/SPECs/SPEC_ARCH-20260519-11-ALTA-MASIVA-TRABAJADORES.md
+ * @id IMPL-20260527-03
+ * @spec context/SPECs/SPEC_ARCH-20260527-03-ALTA-MASIVA-DESDE-PROYECTO.md
+ * @backup context/checkpoints/CHK_IMPL-20260527-03-ALTA-MASIVA-DESDE-PROYECTO.md
  */
 
-import { useState, useTransition, useRef, useCallback } from 'react'
+import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   bulkImportWorkers,
@@ -97,10 +100,27 @@ function parseRow(raw: Record<string, unknown>, rowIndex: number): PreviewRow {
 interface BulkWorkerImportModalProps {
   companies: CompanyOption[]
   branches: BranchOption[]
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+  initialCompanyId?: string
+  initialProjectId?: string
+  lockProjectContext?: boolean
+  hideTrigger?: boolean
 }
 
-export default function BulkWorkerImportModal({ companies, branches }: BulkWorkerImportModalProps) {
-  const [open, setOpen] = useState(false)
+export default function BulkWorkerImportModal({
+  companies,
+  branches,
+  isOpen: isOpenProp,
+  onOpenChange,
+  initialCompanyId,
+  initialProjectId,
+  lockProjectContext = false,
+  hideTrigger = false,
+}: BulkWorkerImportModalProps) {
+  const isControlled = isOpenProp !== undefined
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = isControlled ? isOpenProp : internalOpen
   const [step, setStep] = useState<'project' | 'upload' | 'preview' | 'result'>('project')
 
   // Paso 1 — Proyecto
@@ -109,6 +129,7 @@ export default function BulkWorkerImportModal({ companies, branches }: BulkWorke
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [newProjectOpen, setNewProjectOpen] = useState(false)
+  const [projectContextError, setProjectContextError] = useState<string | null>(null)
 
   // Paso 2 — Upload
   const [parseError, setParseError] = useState<string | null>(null)
@@ -123,20 +144,63 @@ export default function BulkWorkerImportModal({ companies, branches }: BulkWorke
 
   // ─── Funciones ──────────────────────────────────────────────────────────────
 
-  function openModal() {
+  const initializeModalState = useCallback(async () => {
     setStep('project')
     setSelectedCompanyId('')
     setSelectedProjectId('')
     setProjects([])
+    setProjectContextError(null)
     setPreviewRows([])
     setImportResult(null)
     setParseError(null)
-    setOpen(true)
+    if (initialCompanyId) {
+      setSelectedCompanyId(initialCompanyId)
+      setLoadingProjects(true)
+      const list = await getProjectsByCompany(initialCompanyId)
+      const normalized = list as unknown as ProjectOption[]
+      setProjects(normalized)
+      setLoadingProjects(false)
+
+      if (initialProjectId) {
+        const exists = normalized.some((project) => project.id === initialProjectId)
+        if (exists) {
+          setSelectedProjectId(initialProjectId)
+          setStep('upload')
+        } else {
+          setProjectContextError('No se pudo preseleccionar el proyecto. Selecciona uno manualmente para continuar.')
+        }
+      }
+    }
+  }, [initialCompanyId, initialProjectId])
+
+  async function openModal() {
+    await initializeModalState()
+    if (isControlled) {
+      onOpenChange?.(true)
+    } else {
+      setInternalOpen(true)
+    }
   }
 
   function closeModal() {
-    setOpen(false)
+    if (isControlled) {
+      onOpenChange?.(false)
+    } else {
+      setInternalOpen(false)
+    }
   }
+
+  useEffect(() => {
+    if (!open) return
+
+    const timer = window.setTimeout(() => {
+      void initializeModalState()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [initializeModalState, open])
 
   async function handleCompanyChange(companyId: string) {
     setSelectedCompanyId(companyId)
@@ -231,15 +295,17 @@ export default function BulkWorkerImportModal({ companies, branches }: BulkWorke
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-      <button
-        onClick={openModal}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-        </svg>
-        Carga Masiva
-      </button>
+      {!hideTrigger && (
+        <button
+          onClick={openModal}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          Carga Masiva
+        </button>
+      )}
 
       {open && (
         <div
@@ -278,6 +344,7 @@ export default function BulkWorkerImportModal({ companies, branches }: BulkWorke
                     <select
                       value={selectedCompanyId}
                       onChange={(e) => handleCompanyChange(e.target.value)}
+                      disabled={lockProjectContext && !!initialCompanyId}
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">Seleccionar empresa...</option>
@@ -285,6 +352,9 @@ export default function BulkWorkerImportModal({ companies, branches }: BulkWorke
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
+                    {lockProjectContext && !!initialCompanyId && (
+                      <p className="mt-1 text-xs text-slate-500">Empresa bloqueada por flujo contextual desde proyecto.</p>
+                    )}
                   </div>
 
                   {selectedCompanyId && (
@@ -296,6 +366,7 @@ export default function BulkWorkerImportModal({ companies, branches }: BulkWorke
                         <button
                           type="button"
                           onClick={() => setNewProjectOpen(true)}
+                          disabled={lockProjectContext}
                           className="text-xs text-emerald-600 hover:text-emerald-800 font-medium hover:underline"
                         >
                           + Nuevo Proyecto
@@ -319,6 +390,7 @@ export default function BulkWorkerImportModal({ companies, branches }: BulkWorke
                         <select
                           value={selectedProjectId}
                           onChange={(e) => setSelectedProjectId(e.target.value)}
+                          disabled={lockProjectContext && !!initialProjectId}
                           className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         >
                           <option value="">Seleccionar proyecto...</option>
@@ -329,6 +401,15 @@ export default function BulkWorkerImportModal({ companies, branches }: BulkWorke
                           ))}
                         </select>
                       )}
+                      {lockProjectContext && !!initialProjectId && (
+                        <p className="mt-1 text-xs text-slate-500">Proyecto bloqueado por flujo contextual desde proyecto.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {projectContextError && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                      {projectContextError}
                     </div>
                   )}
                 </div>
