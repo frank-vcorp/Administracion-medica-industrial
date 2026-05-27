@@ -2,6 +2,8 @@
  * Server Actions para la entidad Project (Proyectos de Visita Médica)
  * @id IMPL-20260519-14
  * @spec context/SPECs/SPEC_ARCH-20260519-12-ENTIDAD-PROJECT-VISITA-MEDICA.md
+ * @id IMPL-20260527-01
+ * @backup context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
  */
 'use server'
 
@@ -11,6 +13,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { ProjectStatus } from '@prisma/client'
+import { createProjectReceptionEvent } from '@/actions/event.actions'
 
 // ─── Schemas de validación ────────────────────────────────────────────────────
 
@@ -76,9 +79,122 @@ export async function getProjects() {
       company: { select: { id: true, name: true } },
       branch: { select: { id: true, name: true } },
       _count: { select: { workers: true } },
+      workers: {
+        select: {
+          workerId: true,
+          receptionStatus: true,
+          arrivedAt: true,
+          eventId: true,
+          worker: {
+            select: {
+              id: true,
+              universalId: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      },
     },
     orderBy: { startDate: 'desc' },
   })
+}
+
+export async function markProjectWorkerArrived(projectId: string, workerId: string) {
+  const session = await requireAdminOrReceptionist()
+  if (!session) return { success: false, error: 'No autorizado' }
+
+  try {
+    const current = await prisma.projectWorker.findUnique({
+      where: { projectId_workerId: { projectId, workerId } },
+      select: { receptionStatus: true, arrivedAt: true, eventId: true },
+    })
+
+    if (!current) {
+      return { success: false, error: 'El trabajador no está vinculado al proyecto.' }
+    }
+
+    if (current.eventId) {
+      return { success: true, eventId: current.eventId }
+    }
+
+    await prisma.projectWorker.update({
+      where: { projectId_workerId: { projectId, workerId } },
+      data: {
+        receptionStatus: 'ARRIVED',
+        arrivedAt: current.arrivedAt ?? new Date(),
+      },
+    })
+
+    revalidatePath('/projects')
+    return { success: true }
+  } catch (error) {
+    console.error('[markProjectWorkerArrived]', error)
+    return { success: false, error: 'No se pudo marcar llegada.' }
+  }
+}
+
+export async function checkInProjectWorkerToClinical(projectId: string, workerId: string) {
+  const session = await requireAdminOrReceptionist()
+  if (!session) return { success: false, error: 'No autorizado' }
+
+  try {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        branchId: true,
+        companyId: true,
+      },
+    })
+
+    if (!project) {
+      return { success: false, error: 'Proyecto no encontrado.' }
+    }
+
+    if (!project.branchId) {
+      return { success: false, error: 'El proyecto no tiene sucursal operativa asignada.' }
+    }
+
+    const projectWorker = await prisma.projectWorker.findUnique({
+      where: { projectId_workerId: { projectId, workerId } },
+      select: {
+        eventId: true,
+        arrivedAt: true,
+      },
+    })
+
+    if (!projectWorker) {
+      return { success: false, error: 'El trabajador no está vinculado al proyecto.' }
+    }
+
+    if (projectWorker.eventId) {
+      return { success: true, eventId: projectWorker.eventId }
+    }
+
+    const eventId = await createProjectReceptionEvent({
+      workerId,
+      branchId: project.branchId,
+      projectId: project.id,
+      billingCompanyId: project.companyId,
+      intakeCreatedByUserId: session.user.id,
+    })
+
+    await prisma.projectWorker.update({
+      where: { projectId_workerId: { projectId, workerId } },
+      data: {
+        receptionStatus: 'CHECKED_IN',
+        arrivedAt: projectWorker.arrivedAt ?? new Date(),
+        eventId,
+      },
+    })
+
+    revalidatePath('/projects')
+    return { success: true, eventId }
+  } catch (error) {
+    console.error('[checkInProjectWorkerToClinical]', error)
+    return { success: false, error: 'No se pudo ingresar a clínica desde proyecto.' }
+  }
 }
 
 /**

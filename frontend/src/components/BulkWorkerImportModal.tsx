@@ -16,6 +16,8 @@ import {
   bulkImportWorkers,
   BulkWorkerRow,
   BulkImportResult,
+  quickRegisterWorkersSameDay,
+  QuickWorkerRow,
 } from '@/actions/worker.actions'
 import { getProjectsByCompany } from '@/actions/project.actions'
 import ProjectFormModal from '@/components/ProjectFormModal'
@@ -41,9 +43,28 @@ interface PreviewRow extends BulkWorkerRow {
   _statusReason?: string
 }
 
+interface QuickCaptureRow extends QuickWorkerRow {
+  _status: RowStatus
+  _statusReason?: string
+}
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const MAX_ROWS = 200
+const MAX_QUICK_ROWS = 20
+
+function createEmptyQuickRow(index: number): QuickCaptureRow {
+  return {
+    firstName: '',
+    lastName: '',
+    nationalId: undefined,
+    dob: undefined,
+    phone: undefined,
+    jobPositionName: undefined,
+    _rowIndex: index,
+    _status: 'valid',
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -106,6 +127,7 @@ interface BulkWorkerImportModalProps {
   initialProjectId?: string
   lockProjectContext?: boolean
   hideTrigger?: boolean
+  initialMode?: 'excel' | 'quick'
 }
 
 export default function BulkWorkerImportModal({
@@ -117,11 +139,13 @@ export default function BulkWorkerImportModal({
   initialProjectId,
   lockProjectContext = false,
   hideTrigger = false,
+  initialMode = 'excel',
 }: BulkWorkerImportModalProps) {
   const isControlled = isOpenProp !== undefined
   const [internalOpen, setInternalOpen] = useState(false)
   const open = isControlled ? isOpenProp : internalOpen
   const [step, setStep] = useState<'project' | 'upload' | 'preview' | 'result'>('project')
+  const [captureMode, setCaptureMode] = useState<'excel' | 'quick'>(initialMode)
 
   // Paso 1 — Proyecto
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
@@ -137,6 +161,7 @@ export default function BulkWorkerImportModal({
 
   // Paso 3 — Vista Previa
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([])
+  const [quickRows, setQuickRows] = useState<QuickCaptureRow[]>(() => [createEmptyQuickRow(1), createEmptyQuickRow(2), createEmptyQuickRow(3)])
 
   // Paso 4 — Resultado
   const [importResult, setImportResult] = useState<BulkImportResult | null>(null)
@@ -146,11 +171,13 @@ export default function BulkWorkerImportModal({
 
   const initializeModalState = useCallback(async () => {
     setStep('project')
+    setCaptureMode(initialMode)
     setSelectedCompanyId('')
     setSelectedProjectId('')
     setProjects([])
     setProjectContextError(null)
     setPreviewRows([])
+    setQuickRows([createEmptyQuickRow(1), createEmptyQuickRow(2), createEmptyQuickRow(3)])
     setImportResult(null)
     setParseError(null)
     if (initialCompanyId) {
@@ -171,7 +198,7 @@ export default function BulkWorkerImportModal({
         }
       }
     }
-  }, [initialCompanyId, initialProjectId])
+  }, [initialCompanyId, initialMode, initialProjectId])
 
   async function openModal() {
     await initializeModalState()
@@ -272,15 +299,58 @@ export default function BulkWorkerImportModal({
   }
 
   function handleImport() {
-    const validRows = previewRows
-      .filter((r) => r._status === 'valid')
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      .map(({ _status, _statusReason, ...row }) => row)
+    if (captureMode === 'excel') {
+      const validRows = previewRows
+        .filter((r) => r._status === 'valid')
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        .map(({ _status, _statusReason, ...row }) => row)
+
+      if (validRows.length === 0) return
+
+      startTransition(async () => {
+        const result = await bulkImportWorkers(validRows as BulkWorkerRow[], selectedProjectId)
+        setImportResult(result)
+        setStep('result')
+      })
+      return
+    }
+
+    const validated = quickRows.map((row) => {
+      const firstName = (row.firstName || '').trim()
+      const lastName = (row.lastName || '').trim()
+      const errors: string[] = []
+      if (!firstName) errors.push('Falta nombre(s)')
+      if (!lastName) errors.push('Falta apellido(s)')
+      if ((row.nationalId ?? '').length > 18) errors.push('CURP demasiado larga (>18)')
+      if ((row.phone ?? '').length > 15) errors.push('Teléfono demasiado largo (>15)')
+      const status: RowStatus = errors.length > 0 ? 'error' : 'valid'
+      return {
+        ...row,
+        firstName,
+        lastName,
+        _status: status,
+        _statusReason: errors.join(' · '),
+      }
+    })
+
+    setQuickRows(validated)
+
+    const validRows = validated
+      .filter((row) => row._status === 'valid')
+      .map((row) => ({
+        firstName: row.firstName,
+        lastName: row.lastName,
+        nationalId: row.nationalId,
+        dob: row.dob,
+        phone: row.phone,
+        jobPositionName: row.jobPositionName,
+        _rowIndex: row._rowIndex,
+      }))
 
     if (validRows.length === 0) return
 
     startTransition(async () => {
-      const result = await bulkImportWorkers(validRows as BulkWorkerRow[], selectedProjectId)
+      const result = await quickRegisterWorkersSameDay(validRows, selectedProjectId)
       setImportResult(result)
       setStep('result')
     })
@@ -289,8 +359,41 @@ export default function BulkWorkerImportModal({
   // ─── Conteos de preview ─────────────────────────────────────────────────────
   const validCount = previewRows.filter((r) => r._status === 'valid').length
   const errorCount = previewRows.filter((r) => r._status === 'error').length
+  const quickValidCount = quickRows.filter((r) => r._status !== 'error' && r.firstName.trim() && r.lastName.trim()).length
+  const quickErrorCount = quickRows.filter((r) => r._status === 'error').length
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
+
+  function updateQuickRow(
+    index: number,
+    field: 'firstName' | 'lastName' | 'dob' | 'nationalId' | 'phone' | 'jobPositionName',
+    value: string
+  ) {
+    setQuickRows((current) => current.map((row) => {
+      if (row._rowIndex !== index) return row
+      return {
+        ...row,
+        [field]: value,
+        _status: 'valid',
+        _statusReason: undefined,
+      }
+    }))
+  }
+
+  function addQuickRow() {
+    setQuickRows((current) => {
+      if (current.length >= MAX_QUICK_ROWS) return current
+      const nextIndex = current.length === 0 ? 1 : Math.max(...current.map((row) => row._rowIndex)) + 1
+      return [...current, createEmptyQuickRow(nextIndex)]
+    })
+  }
+
+  function removeQuickRow(index: number) {
+    setQuickRows((current) => {
+      if (current.length <= 1) return current
+      return current.filter((row) => row._rowIndex !== index)
+    })
+  }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -303,7 +406,7 @@ export default function BulkWorkerImportModal({
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
           </svg>
-          Carga Masiva
+          {initialMode === 'quick' ? 'Alta Rapida Hoy' : 'Carga Masiva'}
         </button>
       )}
 
@@ -319,9 +422,9 @@ export default function BulkWorkerImportModal({
                 <h2 className="text-lg font-bold text-white">Carga Masiva de Trabajadores</h2>
                 <p className="text-emerald-100 text-xs">
                   {step === 'project' && 'Paso 1 de 3 — Seleccionar Proyecto'}
-                  {step === 'upload' && 'Paso 2 de 3 — Subir Archivo Excel'}
+                  {step === 'upload' && (captureMode === 'excel' ? 'Paso 2 de 3 — Subir Archivo Excel' : 'Paso 2 de 3 — Captura Rápida')}
                   {step === 'preview' && 'Paso 3 de 3 — Vista Previa'}
-                  {step === 'result' && 'Resultado de la Importación'}
+                  {step === 'result' && (captureMode === 'excel' ? 'Resultado de la Importación' : 'Resultado de Alta Rápida')}
                 </p>
               </div>
               <button onClick={closeModal} className="text-white/70 hover:text-white">
@@ -337,6 +440,28 @@ export default function BulkWorkerImportModal({
               {/* ── PASO 1: Seleccionar Proyecto ── */}
               {step === 'project' && (
                 <div className="space-y-4">
+                  {!lockProjectContext && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Modo de captura</p>
+                      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+                        <button
+                          type="button"
+                          onClick={() => setCaptureMode('excel')}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${captureMode === 'excel' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                        >
+                          Carga masiva Excel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCaptureMode('quick')}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${captureMode === 'quick' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                        >
+                          Alta rápida hoy
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
                       Empresa <span className="text-red-500">*</span>
@@ -422,32 +547,87 @@ export default function BulkWorkerImportModal({
                     Proyecto: <strong>{selectedProject?.name}</strong> — {selectedProject?.company.name}
                   </div>
 
-                  <a
-                    href="/templates/plantilla-trabajadores.xlsx"
-                    download
-                    className="inline-flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-800 font-semibold hover:underline"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Descargar Plantilla Excel
-                  </a>
+                  {captureMode === 'excel' ? (
+                    <>
+                      <a
+                        href="/templates/plantilla-trabajadores.xlsx"
+                        download
+                        className="inline-flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-800 font-semibold hover:underline"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Descargar Plantilla Excel
+                      </a>
 
-                  <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-emerald-400 transition-colors">
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="bulk-file-input"
-                    />
-                    <label htmlFor="bulk-file-input" className="cursor-pointer">
-                      <div className="text-4xl mb-2">📊</div>
-                      <p className="text-slate-600 font-semibold">Seleccionar archivo .xlsx o .csv</p>
-                      <p className="text-slate-400 text-xs mt-1">Máximo {MAX_ROWS} trabajadores por carga</p>
-                    </label>
-                  </div>
+                      <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-emerald-400 transition-colors">
+                        <input
+                          ref={fileRef}
+                          type="file"
+                          accept=".xlsx,.xls,.csv"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          id="bulk-file-input"
+                        />
+                        <label htmlFor="bulk-file-input" className="cursor-pointer">
+                          <div className="text-4xl mb-2">📊</div>
+                          <p className="text-slate-600 font-semibold">Seleccionar archivo .xlsx o .csv</p>
+                          <p className="text-slate-400 text-xs mt-1">Máximo {MAX_ROWS} trabajadores por carga</p>
+                        </label>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lote rápido (máximo {MAX_QUICK_ROWS})</p>
+                        <button
+                          type="button"
+                          onClick={addQuickRow}
+                          disabled={quickRows.length >= MAX_QUICK_ROWS}
+                          className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          + Agregar fila
+                        </button>
+                      </div>
+
+                      <div className="max-h-72 overflow-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-slate-50">
+                            <tr className="text-left text-slate-500">
+                              <th className="px-2 py-2">#</th>
+                              <th className="px-2 py-2">Nombre(s)</th>
+                              <th className="px-2 py-2">Apellido(s)</th>
+                              <th className="px-2 py-2">DOB</th>
+                              <th className="px-2 py-2">CURP/ID</th>
+                              <th className="px-2 py-2">Teléfono</th>
+                              <th className="px-2 py-2">Puesto</th>
+                              <th className="px-2 py-2">Acción</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {quickRows.map((row) => (
+                              <tr key={row._rowIndex} className={row._status === 'error' ? 'bg-red-50' : ''}>
+                                <td className="px-2 py-2 text-slate-400">{row._rowIndex}</td>
+                                <td className="px-2 py-2"><input value={row.firstName} onChange={(event) => updateQuickRow(row._rowIndex, 'firstName', event.target.value)} className="w-28 rounded border border-slate-200 px-2 py-1" /></td>
+                                <td className="px-2 py-2"><input value={row.lastName} onChange={(event) => updateQuickRow(row._rowIndex, 'lastName', event.target.value)} className="w-28 rounded border border-slate-200 px-2 py-1" /></td>
+                                <td className="px-2 py-2"><input type="date" value={row.dob ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'dob', event.target.value)} className="w-32 rounded border border-slate-200 px-2 py-1" /></td>
+                                <td className="px-2 py-2"><input value={row.nationalId ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'nationalId', event.target.value)} className="w-28 rounded border border-slate-200 px-2 py-1" /></td>
+                                <td className="px-2 py-2"><input value={row.phone ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'phone', event.target.value)} className="w-24 rounded border border-slate-200 px-2 py-1" /></td>
+                                <td className="px-2 py-2"><input value={row.jobPositionName ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'jobPositionName', event.target.value)} className="w-24 rounded border border-slate-200 px-2 py-1" /></td>
+                                <td className="px-2 py-2">
+                                  <button type="button" onClick={() => removeQuickRow(row._rowIndex)} className="text-red-600 hover:text-red-700">Quitar</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {quickErrorCount > 0 && (
+                        <p className="text-xs text-red-600">Hay {quickErrorCount} fila(s) con errores. Corrige y vuelve a confirmar.</p>
+                      )}
+                    </div>
+                  )}
 
                   {parseError && (
                     <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
@@ -608,6 +788,17 @@ export default function BulkWorkerImportModal({
                     className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-semibold rounded-lg transition-colors"
                   >
                     {isPending ? 'Importando...' : `Importar ${validCount} trabajador(es)`}
+                  </button>
+                )}
+
+                {step === 'upload' && captureMode === 'quick' && (
+                  <button
+                    type="button"
+                    disabled={quickValidCount === 0 || isPending}
+                    onClick={handleImport}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    {isPending ? 'Registrando...' : `Registrar ${quickValidCount} trabajador(es)`}
                   </button>
                 )}
               </div>

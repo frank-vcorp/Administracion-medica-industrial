@@ -29,6 +29,8 @@ model User {
   papeletaTimeline     PapeletaTimelineEntry[] @relation("PapeletaTimelineCreator")
   // IMPL-20260519-10: Citas donde este usuario realizó la corroboración de identidad
   verifiedAppointments Appointment[]           @relation("AppointmentIdentityVerifier")
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+  intakeCreatedEvents  MedicalEvent[]          @relation("MedicalEventIntakeCreator")
 
   @@map("users")
 }
@@ -243,17 +245,25 @@ model MedicalEvent {
   updatedAt        DateTime        @updatedAt
   appointmentId    String?         @unique
   billingCompanyId String?
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+  intakeSource     IntakeSource?
+  projectId        String?
+  intakeCreatedByUserId String?
   eventTests       EventTest[]
   labs             LabRecord[]
   appointment      Appointment?    @relation(fields: [appointmentId], references: [id])
   billingCompany   Company?        @relation("BillingCompany", fields: [billingCompanyId], references: [id])
   branch           Branch          @relation(fields: [branchId], references: [id])
+  project          Project?        @relation(fields: [projectId], references: [id])
+  intakeCreatedByUser User?        @relation("MedicalEventIntakeCreator", fields: [intakeCreatedByUserId], references: [id])
   worker           Worker          @relation(fields: [workerId], references: [id])
   exam             MedicalExam?
   verdict          MedicalVerdict?
   studies          StudyRecord[]
   // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
   timeline         PapeletaTimelineEntry[]
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
+  projectWorker    ProjectWorker?
 
   @@map("medical_events")
 }
@@ -439,6 +449,15 @@ enum EventStatus {
   CANCELED
 }
 
+/// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+enum IntakeSource {
+  APPOINTMENT
+  PROJECT_PRE_REGISTERED
+  PROJECT_SAME_DAY
+  EXTERNAL_WALK_IN
+  DIRECT_RECEPTION
+}
+
 enum AppointmentStatus {
   SCHEDULED
   CONFIRMED
@@ -621,6 +640,13 @@ enum ProjectStatus {
   CANCELLED    // Cancelado
 }
 
+/// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
+enum ProjectWorkerReceptionStatus {
+  PENDING
+  ARRIVED
+  CHECKED_IN
+}
+
 model Project {
   id        String        @id @default(uuid())
   name      String
@@ -636,6 +662,8 @@ model Project {
 
   company  Company         @relation(fields: [companyId], references: [id])
   branch   Branch?         @relation(fields: [branchId], references: [id])
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+  events   MedicalEvent[]
   workers  ProjectWorker[]
 
   @@map("projects")
@@ -646,9 +674,14 @@ model ProjectWorker {
   workerId  String
   addedAt   DateTime @default(now())
   addedBy   String?  // userId del admin que hizo la importación (trazabilidad)
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
+  receptionStatus ProjectWorkerReceptionStatus @default(PENDING)
+  arrivedAt       DateTime?
+  eventId         String? @unique
 
   project Project @relation(fields: [projectId], references: [id])
   worker  Worker  @relation(fields: [workerId], references: [id])
+  event   MedicalEvent? @relation(fields: [eventId], references: [id])
 
   @@id([projectId, workerId])
   @@map("project_workers")

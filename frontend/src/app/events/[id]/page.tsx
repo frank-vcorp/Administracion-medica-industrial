@@ -15,10 +15,13 @@
  * @see context/checkpoints/CHK_ARCH-20260327-08-STEPPER-ULTRACOMPACTO.md
  * @intervention ARCH-20260327-09
  * @see context/checkpoints/CHK_ARCH-20260327-09-METADATOS-EN-CABECERA-PRINCIPAL.md
+ * @intervention IMPL-20260527-01
+ * @see context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
  */
 
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { getEventById } from '@/actions/medical-event.actions'
+import prisma from '@/lib/prisma'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import EventFlowController from '@/components/EventFlowController'
@@ -32,6 +35,25 @@ import PapeletaCronograma from '@/components/clinical/PapeletaCronograma'
 import { getEventTimeline } from '@/actions/timeline.actions'
 
 export const dynamic = 'force-dynamic'
+
+function getIntakeSourceLabel(intakeSource?: string | null, appointmentId?: string | null) {
+    const source = intakeSource ?? (appointmentId ? 'APPOINTMENT' : null)
+
+    switch (source) {
+        case 'APPOINTMENT':
+            return 'Programado'
+        case 'PROJECT_PRE_REGISTERED':
+            return 'Proyecto'
+        case 'PROJECT_SAME_DAY':
+            return 'Proyecto hoy'
+        case 'EXTERNAL_WALK_IN':
+            return 'Externo'
+        case 'DIRECT_RECEPTION':
+            return 'Recepción'
+        default:
+            return 'Ingreso legado'
+    }
+}
 
 /**
  * @intervention FIX-20260306-01
@@ -67,6 +89,29 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
             notFound()
         }
 
+        const eventWithIntake = event as typeof event & {
+            intakeSource?: string | null
+            projectId?: string | null
+            intakeCreatedByUserId?: string | null
+            appointmentId?: string | null
+        }
+
+        const [projectRef, intakeCreator] = await Promise.all([
+            eventWithIntake.projectId
+                ? prisma.project.findUnique({
+                    where: { id: eventWithIntake.projectId },
+                    select: { id: true, name: true }
+                })
+                : Promise.resolve(null),
+            eventWithIntake.intakeCreatedByUserId
+                ? prisma.user.findUnique({
+                    where: { id: eventWithIntake.intakeCreatedByUserId },
+                    select: { id: true, fullName: true }
+                })
+                : Promise.resolve(null)
+        ])
+        const intakeSourceLabel = getIntakeSourceLabel(eventWithIntake.intakeSource, eventWithIntake.appointmentId)
+
         // Serialización defensiva para evitar problemas con objetos Date en componentes cliente
         const serializedExam = JSON.parse(JSON.stringify(medicalExam || {}))
         const serializedEventId = event.id
@@ -86,7 +131,7 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
         const workerInfo = {
             name: `${event.worker.firstName} ${event.worker.lastName}`,
             position: workerWithPos.jobPosition?.name || '',
-            company: event.worker.company?.name || '—',
+            company: event.worker.company?.name || (eventWithIntake.intakeSource === 'EXTERNAL_WALK_IN' ? 'Externo sin empresa' : '—'),
             profile: appointmentWithProfile?.serviceProfile?.name || ''
         }
 
@@ -273,6 +318,24 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                             <Link href="/reception" className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors flex items-center">
                                 ← Volver
                             </Link>
+                        </div>
+                    </div>
+
+                    <div className="mb-3 grid gap-2 md:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Origen de ingreso</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">{intakeSourceLabel}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Proyecto</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">{projectRef ? `${projectRef.name} · ${projectRef.id.slice(0, 8)}` : 'Sin proyecto'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Cita asociada</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">{eventWithIntake.appointmentId ? eventWithIntake.appointmentId.slice(0, 8) : 'Sin cita'}</p>
+                            {intakeCreator && (
+                                <p className="mt-1 text-[11px] text-slate-500">Admisión por {intakeCreator.fullName}</p>
+                            )}
                         </div>
                     </div>
 

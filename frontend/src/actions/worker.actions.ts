@@ -1,5 +1,10 @@
 'use server'
 
+/**
+ * @intervention IMPL-20260527-01
+ * @see context/interconsultas/HANDOFF_ARCH-20260527-13_SOFIA_SLICE-C-ALTA-RAPIDA-MISMO-DIA.md
+ */
+
 import { z } from 'zod'
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
@@ -266,6 +271,18 @@ export interface BulkImportResult {
     error?: string
 }
 
+const QuickWorkerRowSchema = z.object({
+    firstName: z.string().min(1).max(100),
+    lastName: z.string().min(1).max(100),
+    nationalId: z.string().max(18).optional(),
+    dob: z.string().optional(),
+    phone: z.string().max(15).optional(),
+    jobPositionName: z.string().optional(),
+    _rowIndex: z.number(),
+})
+
+export type QuickWorkerRow = z.infer<typeof QuickWorkerRowSchema>
+
 /** Parsea una fecha que puede venir en formato DD/MM/AAAA o ISO */
 function parseDob(raw: string | undefined): Date | null {
     if (!raw?.trim()) return null
@@ -491,4 +508,163 @@ export async function bulkImportWorkers(
 
     revalidatePath('/workers')
     return result
+}
+
+/**
+ * Alta rápida empresarial del mismo día (hasta 20 filas), sin Excel.
+ * Reutiliza la matriz de deduplicación y persistencia ya validada en bulkImportWorkers.
+ * @id IMPL-20260527-01
+ */
+export async function quickRegisterWorkersSameDay(
+    rows: QuickWorkerRow[],
+    projectId: string
+): Promise<BulkImportResult> {
+    const base: BulkImportResult = { created: 0, duplicates: [], warnings: [], errors: [] }
+
+    if (rows.length === 0) {
+        return { ...base, error: 'Debes capturar al menos una fila válida.' }
+    }
+
+    if (rows.length > 20) {
+        return { ...base, error: 'El límite de alta rápida es 20 trabajadores por operación.' }
+    }
+
+    const validRows: BulkWorkerRow[] = []
+    const preValidationErrors: BulkImportResult['errors'] = []
+
+    for (const row of rows) {
+        const parsed = QuickWorkerRowSchema.safeParse(row)
+        if (!parsed.success) {
+            preValidationErrors.push({
+                rowIndex: row._rowIndex,
+                firstName: row.firstName,
+                lastName: row.lastName,
+                reason: parsed.error.issues[0]?.message ?? 'Datos inválidos en la fila',
+            })
+            continue
+        }
+
+        validRows.push({
+            firstName: parsed.data.firstName,
+            lastName: parsed.data.lastName,
+            nationalId: parsed.data.nationalId,
+            dob: parsed.data.dob,
+            phone: parsed.data.phone,
+            jobPositionName: parsed.data.jobPositionName,
+            _rowIndex: parsed.data._rowIndex,
+        })
+    }
+
+    if (validRows.length === 0) {
+        return {
+            ...base,
+            errors: preValidationErrors,
+            error: 'Ninguna fila válida para procesar.',
+        }
+    }
+
+    const imported = await bulkImportWorkers(validRows, projectId)
+
+    return {
+        ...imported,
+        errors: [...preValidationErrors, ...imported.errors],
+    }
+}
+
+/**
+ * Alta mínima de persona externa sin empresa para admisión de mostrador.
+ * @id IMPL-20260527-01
+ * @backup context/interconsultas/HANDOFF_ARCH-20260527-14_SOFIA_SLICE-D-ADMISION-EXTERNA.md
+ */
+export async function createExternalWorkerIntake(input: {
+    firstName: string
+    lastName: string
+    dob?: string
+    nationalId?: string
+    phone?: string
+    email?: string
+    forceCreate?: boolean
+}) {
+    const session = await getServerSession(authOptions)
+    if (!session) return { success: false, error: 'No autorizado' }
+    if (!['ADMIN', 'RECEPTIONIST'].includes(session.user.role)) {
+        return { success: false, error: 'No autorizado' }
+    }
+
+    const firstName = input.firstName.trim()
+    const lastName = input.lastName.trim()
+    const dobDate = parseDob(input.dob)
+
+    if (!firstName || !lastName) {
+        return { success: false, error: 'Nombre y apellidos son obligatorios.' }
+    }
+
+    const candidates = await prisma.worker.findMany({
+        where: {
+            firstName: { equals: firstName, mode: 'insensitive' },
+            lastName: { equals: lastName, mode: 'insensitive' },
+        },
+        select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            dob: true,
+            companyId: true,
+        },
+        take: 5,
+    })
+
+    if (dobDate) {
+        const strongMatch = candidates.find((candidate) => {
+            if (!candidate.dob) return false
+            return (
+                candidate.dob.getFullYear() === dobDate.getFullYear() &&
+                candidate.dob.getMonth() === dobDate.getMonth() &&
+                candidate.dob.getDate() === dobDate.getDate()
+            )
+        })
+
+        if (strongMatch) {
+            return {
+                success: true,
+                status: 'reused',
+                workerId: strongMatch.id,
+            }
+        }
+    } else if (candidates.length > 0 && !input.forceCreate) {
+        return {
+            success: false,
+            status: 'ambiguous_match',
+            error: 'Existe coincidencia por nombre y apellido. Agrega fecha de nacimiento o confirma creación manual.',
+        }
+    }
+
+    try {
+        const universalId = generateUniversalId({
+            firstName,
+            lastName,
+            dob: dobDate,
+        })
+
+        const created = await prisma.worker.create({
+            data: {
+                firstName,
+                lastName,
+                universalId,
+                dob: dobDate,
+                nationalId: input.nationalId?.trim() || null,
+                phone: input.phone?.trim() || null,
+                email: input.email?.trim() || null,
+                companyId: null,
+                jobPositionId: null,
+            },
+            select: { id: true },
+        })
+
+        revalidatePath('/workers')
+        return { success: true, status: 'created', workerId: created.id }
+    } catch (error) {
+        console.error('[createExternalWorkerIntake]', error)
+        return { success: false, error: 'No se pudo crear la persona externa.' }
+    }
 }

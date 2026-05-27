@@ -1,15 +1,50 @@
+/**
+ * @intervention IMPL-20260527-01
+ * @see context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+ */
 import { getEventsKanban } from "@/actions/event.actions"
 import { getWorkers } from "@/actions/worker.actions"
 import CheckInModal from "@/components/CheckInModal"
 import QRScannerModal from "@/components/QRScannerModal"
 import StatusUpdateButton from "@/components/StatusUpdateButton"
+import prisma from "@/lib/prisma"
 import Link from "next/link"
 
 export const dynamic = 'force-dynamic'
 
+type IntakeSourceBadge = {
+    label: string
+    tone: string
+}
+
+function getIntakeSourceBadge(event: { intakeSource?: string | null, appointmentId?: string | null }): IntakeSourceBadge {
+    const source = event.intakeSource ?? (event.appointmentId ? 'APPOINTMENT' : null)
+
+    switch (source) {
+        case 'APPOINTMENT':
+            return { label: 'Programado', tone: 'bg-sky-50 text-sky-700 border-sky-200' }
+        case 'PROJECT_PRE_REGISTERED':
+            return { label: 'Proyecto', tone: 'bg-violet-50 text-violet-700 border-violet-200' }
+        case 'PROJECT_SAME_DAY':
+            return { label: 'Proyecto hoy', tone: 'bg-amber-50 text-amber-700 border-amber-200' }
+        case 'EXTERNAL_WALK_IN':
+            return { label: 'Externo', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+        case 'DIRECT_RECEPTION':
+            return { label: 'Recepción', tone: 'bg-slate-100 text-slate-700 border-slate-200' }
+        default:
+            return { label: 'Legado', tone: 'bg-white text-slate-500 border-slate-200' }
+    }
+}
+
 export default async function ReceptionPage() {
     const { scheduled, inProgress, completed } = await getEventsKanban()
-    const allWorkers = await getWorkers() // For the dropdown in modal
+    const [allWorkers, branches] = await Promise.all([
+        getWorkers(),
+        prisma.branch.findMany({
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' }
+        })
+    ])
 
     return (
         <div className="space-y-8 h-[calc(100vh-100px)] flex flex-col pb-6">
@@ -21,7 +56,7 @@ export default async function ReceptionPage() {
 
                 <div className="flex gap-3">
                     <QRScannerModal />
-                    <CheckInModal workers={allWorkers} />
+                    <CheckInModal workers={allWorkers} branches={branches} />
                 </div>
             </div>
 
@@ -60,6 +95,8 @@ function Lane({ title, count, children, color, borderColor, icon }: { title: str
 function PatientCard({ event, status, nextStatus }: {
     event: {
         id: string,
+        intakeSource?: string | null,
+        appointmentId?: string | null,
         worker: { firstName: string, lastName: string, company: { name: string } | null }
     },
     status: 'waiting' | 'progress' | 'done',
@@ -67,6 +104,7 @@ function PatientCard({ event, status, nextStatus }: {
 }) {
     const workerName = event.worker ? `${event.worker.firstName} ${event.worker.lastName}` : "Desconocido"
     const companyName = event.worker?.company?.name || 'Empresa Vinculada'
+    const intakeBadge = getIntakeSourceBadge(event)
     // Mock company name visual as it's not eager loaded deep in this quick implementation, or we can assume worker has it.
     // For MVP we just show the name.
 
@@ -79,6 +117,11 @@ function PatientCard({ event, status, nextStatus }: {
                 <span className="text-[10px] font-black text-slate-300 font-mono">#{event.id.slice(0, 4)}</span>
             </div>
             <p className="text-[11px] font-bold text-slate-400 mb-4">{companyName}</p>
+            <div className="mb-4">
+                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${intakeBadge.tone}`}>
+                    {intakeBadge.label}
+                </span>
+            </div>
 
             <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-50">
                 <div className="flex gap-1.5">

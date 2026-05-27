@@ -1,12 +1,23 @@
 'use server'
 
+/**
+ * @intervention IMPL-20260527-01
+ * @see context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+ * @backup context/interconsultas/HANDOFF_ARCH-20260527-14_SOFIA_SLICE-D-ADMISION-EXTERNA.md
+ */
 import prisma from "@/lib/prisma"
+import { authOptions } from "@/auth"
+import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
 
 export async function getEventsKanban() {
     try {
         const events = await prisma.medicalEvent.findMany({
-            include: {
+            select: {
+                id: true,
+                status: true,
+                intakeSource: true,
+                appointmentId: true,
                 worker: {
                     include: { company: true }
                 },
@@ -32,26 +43,99 @@ export async function getEventsKanban() {
 export async function createEvent(formData: FormData) {
     try {
         const workerId = formData.get('workerId') as string
+        const branchIdFromForm = formData.get('branchId') as string | null
+        const session = await getServerSession(authOptions)
+        const intakeCreatedByUserId = session?.user?.id ?? null
 
         // For MVP, we auto-assign to the first branch if not specified (or hardcode for now)
         // Ideally we pick proper branch from session or input
-        const branch = await prisma.branch.findFirst()
+        const branch = branchIdFromForm
+            ? await prisma.branch.findUnique({ where: { id: branchIdFromForm } })
+            : await prisma.branch.findFirst()
         if (!branch) throw new Error("No branches defined")
 
-        await prisma.medicalEvent.create({
+        const created = await prisma.medicalEvent.create({
             data: {
                 workerId,
                 branchId: branch.id,
                 status: 'CHECKED_IN', // Auto check-in for this MVP flow
-                checkInDate: new Date() 
-            }
+                checkInDate: new Date(),
+                intakeSource: 'DIRECT_RECEPTION',
+                intakeCreatedByUserId
+            },
+            select: { id: true }
         })
         revalidatePath('/reception')
-        return { success: true }
+        return { success: true, eventId: created.id }
     } catch (error) {
         console.error("Error creating event:", error)
         return { success: false, error: 'Hubo un error al crear el expediente.' }
     }
+}
+
+/**
+ * @intervention IMPL-20260527-01
+ * @see context/interconsultas/HANDOFF_ARCH-20260527-14_SOFIA_SLICE-D-ADMISION-EXTERNA.md
+ */
+export async function createExternalWalkInEvent(input: { workerId: string, branchId: string }) {
+    try {
+        const session = await getServerSession(authOptions)
+        const intakeCreatedByUserId = session?.user?.id ?? null
+
+        const branch = await prisma.branch.findUnique({ where: { id: input.branchId } })
+        if (!branch) {
+            return { success: false, error: 'Sucursal no encontrada.' }
+        }
+
+        const created = await prisma.medicalEvent.create({
+            data: {
+                workerId: input.workerId,
+                branchId: input.branchId,
+                status: 'CHECKED_IN',
+                checkInDate: new Date(),
+                intakeSource: 'EXTERNAL_WALK_IN',
+                appointmentId: null,
+                billingCompanyId: null,
+                intakeCreatedByUserId,
+            },
+            select: { id: true }
+        })
+
+        revalidatePath('/reception')
+        return { success: true, eventId: created.id }
+    } catch (error) {
+        console.error('Error creating external walk-in event:', error)
+        return { success: false, error: 'No se pudo registrar el ingreso externo.' }
+    }
+}
+
+/**
+ * @intervention IMPL-20260527-01
+ * @see context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
+ */
+export async function createProjectReceptionEvent(input: {
+    workerId: string
+    branchId: string
+    projectId: string
+    billingCompanyId: string
+    intakeCreatedByUserId?: string | null
+}) {
+    const created = await prisma.medicalEvent.create({
+        data: {
+            workerId: input.workerId,
+            branchId: input.branchId,
+            status: 'CHECKED_IN',
+            checkInDate: new Date(),
+            intakeSource: 'PROJECT_PRE_REGISTERED',
+            projectId: input.projectId,
+            billingCompanyId: input.billingCompanyId,
+            intakeCreatedByUserId: input.intakeCreatedByUserId ?? null
+        },
+        select: { id: true }
+    })
+
+    revalidatePath('/reception')
+    return created.id
 }
 
 export async function updateEventStatus(eventId: string, status: 'IN_PROGRESS' | 'VALIDATING') {
