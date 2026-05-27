@@ -2,7 +2,7 @@
 
 **Estado:** [/] Operación estabilizada con backlog activo de IA clínica, integraciones MedGemma y hardening de storage en Railway
 **Fase:** Fase operativa continua: estabilización productiva | IA clínica | persistencia de uploads | integraciones comerciales MEDGEMMA APIS
-**ID Actual:** ARCH-20260527-10 (marco de admisión con tres flujos y convergencia clínica a Event)
+**ID Actual:** ARCH-20260527-24 (búsqueda externa server-side y reutilización consistente)
 **Último Sprint Completado:** DOC-20260527-01 (Cierre operativo de proyectos: calendario + alta masiva contextual)
 
 ## 📋 Descripción
@@ -14,6 +14,7 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - **@DEBY**: QA e Infraestructura
 
 ## 📅 Diario de Cambios
+- **2026-05-27 (INTEGRA):** [~] **Se congela micro-slice para alinear búsqueda externa con la fuente real de identidad.** Se verifica que `createExternalWorkerIntake()` ya resuelve duplicados por nombre/apellido y reutilización fuerte por DOB, pero la UI de `Ingreso externo` sigue filtrando localmente solo `workers` sin empresa. Para eliminar esa inconsistencia se documenta `context/SPECs/SPEC_ARCH-20260527-24-BUSQUEDA-EXTERNA-SERVER-SIDE-Y-REUTILIZACION.md` y se deja handoff puntual a SOFIA en `context/interconsultas/HANDOFF_ARCH-20260527-24_SOFIA_BUSQUEDA-EXTERNA-SERVER-SIDE.md`, acotando el ajuste a 2 archivos: `CheckInModal` y `worker.actions`. (ARCH-20260527-24)
 - **2026-05-27 (INTEGRA):** [~] **Se consolida roadmap secuencial para SOFIA sobre admisión en tres flujos.** Se documenta la tabla ejecutiva `context/interconsultas/RESUMEN_ARCH-20260527-15-ROADMAP-SOFIA-ADMISION.md` y se generan los handoffs faltantes para los slices B, C y D: `HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md`, `HANDOFF_ARCH-20260527-13_SOFIA_SLICE-C-ALTA-RAPIDA-MISMO-DIA.md` y `HANDOFF_ARCH-20260527-14_SOFIA_SLICE-D-ADMISION-EXTERNA.md`. El orden recomendado queda congelado como A → B → C → D para preservar dependencia y evitar que SOFIA abra varios frentes sin trazabilidad de origen en `MedicalEvent`. (ARCH-20260527-15)
 - **2026-05-27 (INTEGRA):** [~] **Se autoriza el Slice D para admisión externa sin empresa con convergencia directa a `MedicalEvent`.** Tras confirmar que `Worker` ya soporta `companyId = null` pero la operación todavía obliga contexto empresarial, se documenta `context/SPECs/SPEC_ARCH-20260527-14-SLICE-D-ADMISION-EXTERNA-SIN-EMPRESA.md`. El corte separa explícitamente el carril externo del flujo empresarial: no usa `Project`, no fuerza `Appointment` y resuelve el ingreso clínico directo desde recepción. (ARCH-20260527-14)
 - **2026-05-27 (INTEGRA):** [~] **Se autoriza el Slice C para alta rápida empresarial del mismo día sobre `Project`.** Tras separar el caso pre-registrado del caso ad hoc, se documenta `context/SPECs/SPEC_ARCH-20260527-13-SLICE-C-ALTA-RAPIDA-EMPRESARIAL-MISMO-DIA.md` para resolver el escenario de mostrador donde llegan varios trabajadores sin Excel previo. El corte reutiliza `Project`, `BulkWorkerImportModal` y la lógica de alta masiva existente, pero limita la operación a un lote corto manual sin crear citas ni eventos clínicos todavía. (ARCH-20260527-13)

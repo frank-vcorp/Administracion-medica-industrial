@@ -2,13 +2,13 @@
 
 /**
  * @intervention IMPL-20260527-01
- * @see context/interconsultas/HANDOFF_ARCH-20260527-14_SOFIA_SLICE-D-ADMISION-EXTERNA.md
+ * @see context/SPECs/SPEC_ARCH-20260527-24-BUSQUEDA-EXTERNA-SERVER-SIDE-Y-REUTILIZACION.md
  */
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createEvent, createExternalWalkInEvent } from '@/actions/event.actions'
-import { createExternalWorkerIntake } from '@/actions/worker.actions'
+import { createExternalWorkerIntake, searchExternalIntakeCandidates } from '@/actions/worker.actions'
 
 interface Worker {
     id: string
@@ -22,6 +22,27 @@ interface Branch {
     name: string
 }
 
+interface ExternalSearchCandidate {
+    id: string
+    firstName: string
+    lastName: string
+    dob: string | null
+    company: { name: string } | null
+}
+
+function formatExternalDobLabel(dob: string | null) {
+    if (!dob) return null
+
+    const parsed = new Date(dob)
+    if (Number.isNaN(parsed.getTime())) return null
+
+    return parsed.toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    })
+}
+
 export default function CheckInModal({ workers, branches }: { workers: Worker[], branches: Branch[] }) {
     const router = useRouter()
     const [open, setOpen] = useState(false)
@@ -31,6 +52,70 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
     const [externalQuery, setExternalQuery] = useState('')
     const [selectedExternalWorkerId, setSelectedExternalWorkerId] = useState('')
     const [requireForceExternalCreate, setRequireForceExternalCreate] = useState(false)
+    const [externalCandidates, setExternalCandidates] = useState<ExternalSearchCandidate[]>([])
+    const [isSearchingExternal, setIsSearchingExternal] = useState(false)
+    const [hasExternalSearch, setHasExternalSearch] = useState(false)
+    const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const lastSearchRequestRef = useRef(0)
+
+    const resetExternalState = () => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current)
+            searchTimeoutRef.current = null
+        }
+
+        lastSearchRequestRef.current += 1
+        setExternalQuery('')
+        setSelectedExternalWorkerId('')
+        setRequireForceExternalCreate(false)
+        setExternalCandidates([])
+        setIsSearchingExternal(false)
+        setHasExternalSearch(false)
+    }
+
+    const handleExternalQueryChange = (value: string) => {
+        const normalizedQuery = value.replace(/\s+/g, ' ').trim()
+        const requestId = lastSearchRequestRef.current + 1
+
+        lastSearchRequestRef.current = requestId
+        setExternalQuery(value)
+        setSelectedExternalWorkerId('')
+        setRequireForceExternalCreate(false)
+        setError(null)
+
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current)
+            searchTimeoutRef.current = null
+        }
+
+        if (normalizedQuery.length < 2) {
+            setExternalCandidates([])
+            setIsSearchingExternal(false)
+            setHasExternalSearch(false)
+            return
+        }
+
+        setIsSearchingExternal(true)
+        searchTimeoutRef.current = setTimeout(async () => {
+            const result = await searchExternalIntakeCandidates(normalizedQuery)
+
+            if (requestId !== lastSearchRequestRef.current) {
+                return
+            }
+
+            if (result.success) {
+                setExternalCandidates(result.candidates)
+                setHasExternalSearch(true)
+                setIsSearchingExternal(false)
+                return
+            }
+
+            setExternalCandidates([])
+            setHasExternalSearch(true)
+            setIsSearchingExternal(false)
+            setError(result.error || 'No se pudo buscar en la base de personas existentes.')
+        }, 250)
+    }
 
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
@@ -123,9 +208,7 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                 onClick={() => {
                     setMode('existing')
                     setError(null)
-                    setExternalQuery('')
-                    setSelectedExternalWorkerId('')
-                    setRequireForceExternalCreate(false)
+                    resetExternalState()
                     setOpen(true)
                 }}
                 className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow flex items-center gap-2"
@@ -155,7 +238,11 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setMode('external')}
+                                onClick={() => {
+                                    setMode('external')
+                                    setError(null)
+                                    resetExternalState()
+                                }}
                                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${mode === 'external' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
                             >
                                 Ingreso externo
@@ -214,22 +301,60 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                                     <label className="text-xs font-bold text-blue-700 block">Buscar externo existente</label>
                                     <input
                                         value={externalQuery}
-                                        onChange={(event) => setExternalQuery(event.target.value)}
+                                        onChange={(event) => handleExternalQueryChange(event.target.value)}
                                         placeholder="Nombre o apellido"
                                         className="w-full rounded border border-blue-200 px-3 py-2 text-sm"
                                     />
                                     <div className="max-h-28 space-y-1 overflow-auto">
-                                        {externalCandidates.map((candidate) => (
-                                            <button
-                                                key={candidate.id}
-                                                type="button"
-                                                onClick={() => setSelectedExternalWorkerId(candidate.id)}
-                                                className={`w-full rounded border px-2 py-1 text-left text-xs ${selectedExternalWorkerId === candidate.id ? 'border-blue-300 bg-white text-blue-700' : 'border-blue-100 bg-white/70 text-slate-700'}`}
-                                            >
-                                                {candidate.firstName} {candidate.lastName}
-                                            </button>
-                                        ))}
+                                        {isSearchingExternal && (
+                                            <div className="rounded border border-blue-100 bg-white/70 px-2 py-2 text-xs text-blue-700">
+                                                Buscando coincidencias reales...
+                                            </div>
+                                        )}
+                                        {!isSearchingExternal && externalCandidates.map((candidate) => {
+                                            const dobLabel = formatExternalDobLabel(candidate.dob)
+
+                                            return (
+                                                <button
+                                                    key={candidate.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedExternalWorkerId(candidate.id)
+                                                        setRequireForceExternalCreate(false)
+                                                        setError(null)
+                                                    }}
+                                                    className={`w-full rounded border px-2 py-1 text-left text-xs ${selectedExternalWorkerId === candidate.id ? 'border-blue-300 bg-white text-blue-700' : 'border-blue-100 bg-white/70 text-slate-700'}`}
+                                                >
+                                                    <div className="font-semibold">
+                                                        {candidate.firstName} {candidate.lastName}
+                                                    </div>
+                                                    <div className="text-[11px] text-slate-500">
+                                                        {candidate.company?.name || 'Sin empresa'}
+                                                        {dobLabel ? ` · Nac. ${dobLabel}` : ''}
+                                                    </div>
+                                                </button>
+                                            )
+                                        })}
+                                        {!isSearchingExternal && hasExternalSearch && externalCandidates.length === 0 && (
+                                            <div className="rounded border border-dashed border-blue-200 bg-white/70 px-2 py-2 text-xs text-slate-600">
+                                                No hubo coincidencias en base de datos. Puedes continuar con el alta mínima.
+                                            </div>
+                                        )}
+                                        {!isSearchingExternal && !hasExternalSearch && externalQuery.trim().length > 0 && externalQuery.trim().length < 2 && (
+                                            <div className="rounded border border-dashed border-blue-200 bg-white/70 px-2 py-2 text-xs text-slate-600">
+                                                Escribe al menos 2 caracteres para consultar la base de personas existentes.
+                                            </div>
+                                        )}
                                     </div>
+                                    {selectedExternalWorkerId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedExternalWorkerId('')}
+                                            className="text-xs font-medium text-blue-700 underline-offset-2 hover:underline"
+                                        >
+                                            Quitar selección y capturar alta mínima
+                                        </button>
+                                    )}
                                 </div>
 
                                 {!selectedExternalWorkerId && (

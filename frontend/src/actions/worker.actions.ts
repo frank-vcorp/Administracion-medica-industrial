@@ -572,6 +572,72 @@ export async function quickRegisterWorkersSameDay(
 }
 
 /**
+ * Búsqueda previa server-side para ingreso externo, alineada con el universo real de identidad.
+ * @id IMPL-20260527-01
+ * @backup context/SPECs/SPEC_ARCH-20260527-24-BUSQUEDA-EXTERNA-SERVER-SIDE-Y-REUTILIZACION.md
+ */
+export async function searchExternalIntakeCandidates(query: string) {
+    const session = await getServerSession(authOptions)
+    if (!session) return { success: false, error: 'No autorizado', candidates: [] }
+    if (!['ADMIN', 'RECEPTIONIST'].includes(session.user.role)) {
+        return { success: false, error: 'No autorizado', candidates: [] }
+    }
+
+    const normalizedQuery = query.trim().replace(/\s+/g, ' ')
+    if (normalizedQuery.length < 2) {
+        return { success: true, candidates: [] }
+    }
+
+    const terms = normalizedQuery
+        .split(' ')
+        .map((term) => term.trim())
+        .filter(Boolean)
+
+    try {
+        const candidates = await prisma.worker.findMany({
+            where: {
+                AND: terms.map((term) => ({
+                    OR: [
+                        { firstName: { contains: term, mode: 'insensitive' } },
+                        { lastName: { contains: term, mode: 'insensitive' } },
+                    ],
+                })),
+            },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                dob: true,
+                company: { select: { name: true } },
+            },
+            orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+            take: 8,
+        })
+
+        return {
+            success: true,
+            candidates: candidates.map((candidate) => ({
+                id: candidate.id,
+                firstName: candidate.firstName,
+                lastName: candidate.lastName,
+                dob: candidate.dob ? candidate.dob.toISOString() : null,
+                company: candidate.company ? { name: candidate.company.name } : null,
+            })),
+        }
+    } catch (error) {
+        console.error(
+            '[searchExternalIntakeCandidates]',
+            error instanceof Error ? error.message : 'Unknown error'
+        )
+        return {
+            success: false,
+            error: 'No se pudo consultar la base de personas existentes.',
+            candidates: [],
+        }
+    }
+}
+
+/**
  * Alta mínima de persona externa sin empresa para admisión de mostrador.
  * @id IMPL-20260527-01
  * @backup context/interconsultas/HANDOFF_ARCH-20260527-14_SOFIA_SLICE-D-ADMISION-EXTERNA.md
