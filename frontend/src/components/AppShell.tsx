@@ -10,12 +10,15 @@
  * - Expone "Vista 3 Agendas" como entrada secundaria bajo Citas
  * @intervention ARCH-20260327-07
  * @see context/checkpoints/CHK_ARCH-20260327-07-HEADER-MINIMO-WORKSPACE.md
+ * @id IMPL-20260527-01
+ * @spec context/SPECs/SPEC_ARCH-20260519-16-CALENDARIO-PROYECTOS-VISITAS.md
+ * @backup context/checkpoints/CHK_IMPL-20260527-01-CALENDARIO-PROYECTOS.md
  */
 
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { ReactNode } from 'react'
 
@@ -137,6 +140,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
               <NavSection label="Empresas" collapsed={isEventWorkspace} />
               <NavItem href="/companies" icon="🏢" label="Empresas Cliente" collapsed={isEventWorkspace} />
+              <NavItem href="/projects" icon="🗂️" label="Proyectos" collapsed={isEventWorkspace} />
             </>
           )}
 
