@@ -3,8 +3,9 @@
  * @file Componente cliente: Puestos de Trabajo por Empresa
  * @description CRUD de JobPosition vinculados a una empresa. Incluye lista, modal de creación
  *              y edición, con select de perfil médico (empresa + globales).
- * @id IMPL-20260313-06
- * @see context/SPECs/ARCH-20260225-06-FASE2-MODULOS.md
+ * @id IMPL-20260527-01
+ * @backup context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
+ * @see context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
  */
 
 import { useState, useTransition } from 'react'
@@ -79,11 +80,9 @@ export default function JobPositionsPanel({ companyId, jobPositions, profiles }:
 
       {profiles.length === 0 && (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg text-sm">
-          ⚠️ No hay perfiles médicos disponibles. Ve a{' '}
-          <a href="/admin/profiles" className="font-semibold underline">
-            Perfiles Médicos
-          </a>{' '}
-          para crear uno antes de asociarlo a un puesto.
+          ⚠️ Aún no hay perfiles médicos disponibles para esta empresa. Crea uno en el bloque de{' '}
+          <span className="font-semibold">Perfiles Médicos</span> de esta misma ficha y luego
+          regresa aquí para asociarlo al puesto.
         </div>
       )}
 
@@ -176,7 +175,7 @@ function JobPositionsList({
         <div className="text-center py-12 text-slate-400">
           <p className="text-4xl mb-3">💼</p>
           <p className="font-medium">No hay puestos de trabajo registrados</p>
-          <p className="text-sm mt-1">Haz clic en "Crear Puesto" para comenzar.</p>
+          <p className="text-sm mt-1">Haz clic en &quot;Crear Puesto&quot; para comenzar.</p>
         </div>
       ) : (
         <table className="w-full text-left text-sm text-slate-600">

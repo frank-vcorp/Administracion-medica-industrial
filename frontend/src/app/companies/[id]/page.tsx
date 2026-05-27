@@ -1,17 +1,19 @@
 /**
  * @file Detalle de Empresa — Puestos de Trabajo
- * @description Página de detalle de empresa con gestión de puestos de trabajo B2B.
- * @id IMPL-20260313-06
- * @see context/SPECs/ARCH-20260225-06-FASE2-MODULOS.md
+ * @description Página de detalle de empresa con gestión de puestos, perfiles médicos y sucursales B2B.
+ * @id IMPL-20260527-01
+ * @backup context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
+ * @see context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
  */
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getCompanyById } from '@/actions/company.actions'
 import { getJobPositionsByCompany } from '@/actions/job-positions.actions'
-import { getMedicalProfilesForCompany } from '@/actions/medical-profiles'
+import { getMedicalProfilesForCompany, getMedicalTests } from '@/actions/medical-profiles'
 import { getBranches } from '@/actions/admin.actions'
 import JobPositionsPanel from './JobPositionsPanel'
 import AllowedBranchesPanel from './AllowedBranchesPanel'
+import CompanyMedicalProfilesPanel from './CompanyMedicalProfilesPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,14 +24,17 @@ interface PageProps {
 export default async function CompanyDetailPage({ params }: PageProps) {
   const { id } = await params
 
-  const [company, jobPositions, profiles, branches] = await Promise.all([
+  const [company, jobPositions, profiles, branches, availableTests] = await Promise.all([
     getCompanyById(id),
     getJobPositionsByCompany(id),
     getMedicalProfilesForCompany(id),
     getBranches(),
+    getMedicalTests(),
   ])
 
   if (!company) notFound()
+
+  const companyProfiles = profiles.filter((profile) => profile.companyId === id)
 
   return (
     <div className="space-y-6">
@@ -70,6 +75,13 @@ export default async function CompanyDetailPage({ params }: PageProps) {
         companyId={id}
         allBranches={branches.map(b => ({ id: b.id, name: b.name }))}
         initialAllowedIds={(company.allowedBranches ?? []).map((b: { id: string }) => b.id)}
+      />
+
+      <CompanyMedicalProfilesPanel
+        companyId={id}
+        companyName={company.name}
+        companyProfiles={companyProfiles}
+        availableTests={availableTests}
       />
 
       {/* Panel Puestos de Trabajo */}

@@ -10,6 +10,9 @@
  * @see context/checkpoints/CHK_ARCH-20260327-17-FIX-PRISMA-JSON-CALIBRATION.md
  * @intervention IMPL-20260327-19
  * @see context/SPECs/SPEC_ARCH-20260327-19-CALIBRACION-IA-ASISTIDA-VERSIONADO-AUTOMATICO.md
+ * @intervention IMPL-20260527-01
+ * @backup context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
+ * @see context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
  */
 'use server'
 
@@ -79,6 +82,14 @@ function toPrismaJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
+function revalidateCompanyProfilePath(companyId: string | null | undefined) {
+  if (!companyId) {
+    return
+  }
+
+  revalidatePath(`/companies/${companyId}`)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // QUERIES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,7 +139,23 @@ export async function getMedicalProfilesForCompany(companyId: string) {
         { companyId: null },
       ],
     },
-    select: { id: true, name: true, companyId: true },
+    select: {
+      id: true,
+      name: true,
+      companyId: true,
+      tests: {
+        select: {
+          test: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              category: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
     orderBy: { name: 'asc' },
   })
 }
@@ -186,6 +213,7 @@ export async function createMedicalProfile(
       },
     })
     revalidatePath('/admin/profiles')
+    revalidateCompanyProfilePath(parsed.data.companyId)
     return { success: true }
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error creando perfil:', e)
@@ -199,6 +227,10 @@ export async function updateMedicalProfile(
 ): Promise<ActionResult> {
   const testIds = parseTestIds(formData)
   const rawCompanyId = formData.get('companyId')
+  const previousProfile = await prisma.medicalProfile.findUnique({
+    where: { id },
+    select: { companyId: true },
+  })
 
   const parsed = MedicalProfileSchema.safeParse({
     name: formData.get('name'),
@@ -224,6 +256,8 @@ export async function updateMedicalProfile(
       },
     })
     revalidatePath('/admin/profiles')
+    revalidateCompanyProfilePath(previousProfile?.companyId)
+    revalidateCompanyProfilePath(parsed.data.companyId)
     return { success: true }
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error actualizando perfil:', e)
@@ -233,12 +267,18 @@ export async function updateMedicalProfile(
 
 export async function deleteMedicalProfile(id: string): Promise<ActionResult> {
   try {
+    const profile = await prisma.medicalProfile.findUnique({
+      where: { id },
+      select: { companyId: true },
+    })
+
     // Elimina pivot rows primero (sin cascade en schema)
     await prisma.$transaction([
       prisma.profileTest.deleteMany({ where: { profileId: id } }),
       prisma.medicalProfile.delete({ where: { id } }),
     ])
     revalidatePath('/admin/profiles')
+    revalidateCompanyProfilePath(profile?.companyId)
     return { success: true }
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error eliminando perfil:', e)
