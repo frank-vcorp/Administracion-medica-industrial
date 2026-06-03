@@ -1,6 +1,8 @@
 'use client'
 
 /**
+ * @intervention IMPL-20260603-01
+ * @see context/SPECs/SPEC_FIX-20260603-03-CHECKINMODAL-DUPLICATE-SYMBOL.md
  * @intervention IMPL-20260527-01
  * @see context/SPECs/SPEC_ARCH-20260527-24-BUSQUEDA-EXTERNA-SERVER-SIDE-Y-REUTILIZACION.md
  */
@@ -191,16 +193,6 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
             router.refresh()
         })
     }
-
-    const externalCandidates = workers
-        .filter((worker) => !worker.company)
-        .filter((worker) => {
-            const q = externalQuery.trim().toLowerCase()
-            if (!q) return true
-            const name = `${worker.firstName} ${worker.lastName}`.toLowerCase()
-            return name.includes(q)
-        })
-        .slice(0, 8)
 
     return (
         <>
