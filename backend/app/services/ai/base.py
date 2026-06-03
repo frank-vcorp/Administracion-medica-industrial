@@ -9,6 +9,7 @@ import base64
 import io
 import mimetypes
 import json
+import re
 from typing import Dict, Any
 from pdf2image import convert_from_path
 
@@ -28,6 +29,60 @@ def _read_env_var(key: str) -> str | None:
 
 class GeminiBase:
     """Base class para interacción con Gemini API."""
+
+    @staticmethod
+    def _extract_openai_choice_text(choice: Any) -> str:
+        """
+        IMPL-20260603-01. Respaldo: context/SPECs/SPEC_FIX-20260603-04-FEATHERLESS-CONTENT-NORMALIZATION.md.
+        Normaliza contenido OpenAI-compatible para soportar texto plano, bloques segmentados y objetos equivalentes.
+        """
+        if choice is None:
+            return ""
+
+        message = getattr(choice, "message", None)
+        content = getattr(message, "content", None)
+        fragments: list[str] = []
+
+        def _collect_text(node: Any) -> None:
+            if node is None:
+                return
+
+            if isinstance(node, str):
+                stripped = node.strip()
+                if stripped:
+                    fragments.append(stripped)
+                return
+
+            if isinstance(node, list):
+                for item in node:
+                    _collect_text(item)
+                return
+
+            if isinstance(node, dict):
+                for key in ("text", "content", "value", "parts"):
+                    if key in node:
+                        _collect_text(node.get(key))
+                return
+
+            for attr in ("text", "content", "value", "parts"):
+                if hasattr(node, attr):
+                    _collect_text(getattr(node, attr))
+
+        _collect_text(content)
+        return "\n".join(fragments).strip()
+
+    @staticmethod
+    def _sanitize_model_json_text(text: str) -> str:
+        """
+        IMPL-20260603-01. Respaldo: context/SPECs/SPEC_FIX-20260603-04-FEATHERLESS-CONTENT-NORMALIZATION.md.
+        Remueve fences Markdown y tokens de relleno antes del parseo tolerante.
+        """
+        cleaned_text = text or ""
+        cleaned_text = re.sub(r"^\s*(?:<pad>\s*)+", "", cleaned_text, flags=re.IGNORECASE)
+        cleaned_text = cleaned_text.replace("```json", "").replace("```JSON", "")
+        cleaned_text = cleaned_text.replace("```", "")
+        cleaned_text = re.sub(r"(?:\s*<pad>\s*)+", " ", cleaned_text, flags=re.IGNORECASE)
+        return cleaned_text.strip()
 
     @staticmethod
     def _tolerant_json_parse(text: str) -> Dict[str, Any]:
@@ -274,12 +329,14 @@ class FeatherlessVisionBase:
             print(f"❌ Featherless Vision Error: {e}")
             raise
 
-        raw_text = (
-            response.choices[0].message.content
-            if response.choices
-            else ""
+        # IMPL-20260603-01. Respaldo: context/SPECs/SPEC_FIX-20260603-04-FEATHERLESS-CONTENT-NORMALIZATION.md.
+        raw_text = GeminiBase._sanitize_model_json_text(
+            GeminiBase._extract_openai_choice_text(
+                response.choices[0] if response.choices else None
+            )
         )
-        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+        if not raw_text:
+            raise ValueError("Respuesta Featherless vacia o sin bloques de texto recuperables")
 
         try:
             return FeatherlessVisionBase._tolerant_json_parse(raw_text)

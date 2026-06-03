@@ -90,12 +90,13 @@ GEMINI_MODEL_EXTRACTION = _read_env_var("GEMINI_MODEL_EXTRACTION") or _read_env_
 GEMINI_MODEL_CLINICAL   = _read_env_var("GEMINI_MODEL_CLINICAL") or _read_env_var("GEMINI_MODEL") or "gemini-2.5-flash"
 GEMINI_MODEL = GEMINI_MODEL_EXTRACTION  # retrocompat
 # IMPL-20260513-01: Bandera MedGemma — False hasta que la integración esté habilitada en runtime
-# IMPL-20260513-03: MEDGEMMA_STATUS es dinámico: 'available' si MEDGEMMA_ENABLED=true y key presente
+# IMPL-20260603-01: proveedor clínico migrado a DR7.ai.
+# Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md
 MEDGEMMA_ENABLED = (_read_env_var("MEDGEMMA_ENABLED") or "false").lower() == "true"
-FEATHERLESS_API_KEY  = _read_env_var("FEATHERLESS_API_KEY") or ""
-FEATHERLESS_BASE_URL = _read_env_var("FEATHERLESS_BASE_URL") or "https://api.featherless.ai/v1"
-FEATHERLESS_MODEL    = _read_env_var("FEATHERLESS_MODEL") or "google/medgemma-27b-text-it"
-MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and FEATHERLESS_API_KEY) else "pending_integration"
+DR7_API_KEY  = _read_env_var("DR7_API_KEY") or ""
+DR7_BASE_URL = _read_env_var("DR7_BASE_URL") or "https://dr7.ai/api/v1/medical/chat/completions"
+DR7_MODEL    = _read_env_var("DR7_MODEL") or "medgemma-4b-it"
+MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and DR7_API_KEY) else "pending_integration"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
 EXTRACTION_PROMPT_VERSION = "extract-v4"   # IMPL-20260516-07: campos fuente audiometría (faringe, CAD, CAI, MTD, MTI)
 # ARCH-20260518-03: la versión real puede ser 'calibration_custom' cuando viene de aiCalibration
@@ -241,9 +242,9 @@ def v2_ai_status():
     current_api_key = _read_env_var("GEMINI_API_KEY")
     current_extraction_model = _read_env_var("GEMINI_MODEL_EXTRACTION") or GEMINI_MODEL_EXTRACTION
     current_clinical_model   = _read_env_var("GEMINI_MODEL_CLINICAL") or GEMINI_MODEL_CLINICAL
-    # IMPL-20260513-03: estado dinámico del proveedor clínico
-    featherless_key_present = bool(_read_env_var("FEATHERLESS_API_KEY"))
-    active_clinical_provider = "featherless" if (MEDGEMMA_ENABLED and featherless_key_present) else "gemini"
+    # IMPL-20260603-01: estado dinámico del proveedor clínico en DR7
+    dr7_key_present = bool(_read_env_var("DR7_API_KEY"))
+    active_clinical_provider = "dr7" if (MEDGEMMA_ENABLED and dr7_key_present) else "gemini"
     # ARCH-20260519-15: rollback extractivo — Gemini es siempre el proveedor activo
     # de clasificación documental y extracción estructurada en este corte.
     # Featherless/Qwen-VL desactivado del runtime extractivo hasta nueva decisión arquitectónica.
@@ -260,11 +261,11 @@ def v2_ai_status():
         # ARCH-20260519-15: trazabilidad del proveedor extractivo activo
         "extraction_provider_active": "gemini",
         "extraction_model_active": current_extraction_model,
-        # IMPL-20260513-03: trazabilidad del proveedor clínico activo
+        # IMPL-20260603-01: trazabilidad del proveedor clínico activo (DR7)
         "clinical_provider_active": active_clinical_provider,
-        "featherless_key_present": featherless_key_present,
-        "featherless_base_url": FEATHERLESS_BASE_URL,
-        "featherless_model": FEATHERLESS_MODEL,
+        "dr7_key_present": dr7_key_present,
+        "dr7_base_url": DR7_BASE_URL,
+        "dr7_model": DR7_MODEL,
         "api_key_present": bool(current_api_key),
         "pipeline_version": PIPELINE_VERSION,
         "extraction_prompt_version": EXTRACTION_PROMPT_VERSION,

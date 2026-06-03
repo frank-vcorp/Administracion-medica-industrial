@@ -350,8 +350,8 @@ class TestPrediagnosticoNuevosTipos:
         assert result.confidence == 0.0
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
     def test_ecg_con_params_minimos_genera_prediagnostico(self, mock_featherless_text, prediagnostic_svc):
         """ECG con ritmo y frecuencia genera un prediagnóstico IA válido."""
         mock_featherless_text.return_value = {
@@ -371,7 +371,7 @@ class TestPrediagnosticoNuevosTipos:
         )
         assert result.clinical_state == "AI_PENDING_REVIEW"
         assert result.confidence == 0.75
-        assert result.clinical_provider == "featherless"
+        assert result.clinical_provider == "dr7"
 
     def test_ecg_sin_params_minimos_retorna_non_conclusive(self, prediagnostic_svc):
         """ECG sin ritmo ni frecuencia debe retornar AI_NON_CONCLUSIVE."""
@@ -381,15 +381,12 @@ class TestPrediagnosticoNuevosTipos:
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
 
-    @patch.dict(sys.modules, {'openai': types.SimpleNamespace(OpenAI=Mock())})
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    def test_audiometria_featherless_json_puro_parsea_ok(self, prediagnostic_svc):
-        """Audiometría debe aceptar JSON puro devuelto por Featherless."""
-        # IMPL-20260603-01. Respaldo: context/SPECs/SPEC_FIX-20260603-01-AUDIOMETRIA-FEATHERLESS-PAD-JSON.md.
-        from openai import OpenAI
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content=json.dumps({
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_audiometria_dr7_json_puro_parsea_ok(self, mock_dr7_call, prediagnostic_svc):
+        """IMPL-20260603-01. Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md."""
+        mock_dr7_call.return_value = {
             "summary": "Hallazgos compatibles con hipoacusia leve bilateral.",
             "confidence": 0.82,
             "clinical_state": "AI_PENDING_REVIEW",
@@ -398,11 +395,8 @@ class TestPrediagnosticoNuevosTipos:
             "citations": [],
             "limitations": [],
             "red_flags": [],
-            "non_conclusive_reason": None
-        })))]
-        mock_client = Mock()
-        mock_client.chat.completions.create.return_value = mock_response
-        OpenAI.return_value = mock_client
+            "non_conclusive_reason": None,
+        }
 
         result = prediagnostic_svc.generate_prediagnosis(
             "Audiometria",
@@ -415,21 +409,25 @@ class TestPrediagnosticoNuevosTipos:
         )
 
         assert result.clinical_state == "AI_PENDING_REVIEW"
-        assert result.clinical_provider == "featherless"
+        assert result.clinical_provider == "dr7"
         assert result.summary.startswith("Hallazgos compatibles")
 
-    @patch.dict(sys.modules, {'openai': types.SimpleNamespace(OpenAI=Mock())})
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    def test_audiometria_featherless_json_con_pad_parsea_ok(self, prediagnostic_svc):
-        """Audiometría debe rescatar JSON útil aunque Featherless agregue prefijos <pad>."""
-        from openai import OpenAI
-        padded_payload = "<pad><pad>```json\n{\"summary\": \"Compatible con hipoacusia neurosensorial leve.\", \"confidence\": 0.78, \"clinical_state\": \"AI_PENDING_REVIEW\", \"justification\": [\"Descenso bilateral en altas frecuencias\"], \"clinical_basis\": [], \"citations\": [], \"limitations\": [], \"red_flags\": [], \"non_conclusive_reason\": null}\n```"
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content=padded_payload))]
-        mock_client = Mock()
-        mock_client.chat.completions.create.return_value = mock_response
-        OpenAI.return_value = mock_client
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_audiometria_dr7_json_con_pad_parsea_ok(self, mock_dr7_call, prediagnostic_svc):
+        """La capa clínica debe aceptar payload normalizado por parser tolerante en DR7."""
+        mock_dr7_call.return_value = {
+            "summary": "Compatible con hipoacusia neurosensorial leve.",
+            "confidence": 0.78,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["Descenso bilateral en altas frecuencias"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
 
         result = prediagnostic_svc.generate_prediagnosis(
             "Audiometria",
@@ -445,17 +443,44 @@ class TestPrediagnosticoNuevosTipos:
         assert result.summary.startswith("Compatible con hipoacusia")
         assert result.non_conclusive_reason is None
 
-    @patch.dict(sys.modules, {'openai': types.SimpleNamespace(OpenAI=Mock())})
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    def test_audiometria_featherless_no_json_degrada_non_conclusive(self, prediagnostic_svc):
-        """Audiometría debe degradar a AI_NON_CONCLUSIVE si Featherless no devuelve JSON usable."""
-        from openai import OpenAI
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content="<pad>resultado no estructurado sin llaves ni JSON"))]
-        mock_client = Mock()
-        mock_client.chat.completions.create.return_value = mock_response
-        OpenAI.return_value = mock_client
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_audiometria_dr7_content_segmentado_parsea_ok(self, mock_dr7_call, prediagnostic_svc):
+        """DR7 debe devolver un objeto clínico válido para Audiometría."""
+        mock_dr7_call.return_value = {
+            "summary": "Hallazgos compatibles con hipoacusia leve bilateral.",
+            "confidence": 0.79,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["Elevacion leve bilateral en frecuencias conversacionales"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
+
+        result = prediagnostic_svc.generate_prediagnosis(
+            "Audiometria",
+            {
+                "paciente": "Test Audio",
+                "fecha_estudio": "03/06/2026",
+                "oido_derecho": {"500": 35, "1000": 40, "2000": 45},
+                "oido_izquierdo": {"500": 30, "1000": 35, "2000": 40},
+            },
+        )
+
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.clinical_provider == "dr7"
+        assert result.summary.startswith("Hallazgos compatibles")
+        assert result.non_conclusive_reason is None
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_audiometria_dr7_content_vacio_degrada_non_conclusive(self, mock_dr7_call, prediagnostic_svc):
+        """Si DR7 falla en parseo, debe degradar a AI_NON_CONCLUSIVE sin fallback."""
+        mock_dr7_call.side_effect = ValueError("Respuesta DR7 vacia o sin contenido util")
 
         result = prediagnostic_svc.generate_prediagnosis(
             "Audiometria",
@@ -468,9 +493,29 @@ class TestPrediagnosticoNuevosTipos:
         )
 
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_provider == "featherless"
-        assert "FeatherlessParseError" in (result.non_conclusive_reason or "")
+        assert result.clinical_provider == "dr7"
+        assert "DR7ParseError" in (result.non_conclusive_reason or "")
+        assert "vacia o sin contenido util" in (result.non_conclusive_reason or "")
         assert "Gemini" not in (result.non_conclusive_reason or "")
+
+
+class TestFeatherlessContentNormalization:
+    """IMPL-20260603-01. Respaldo: context/SPECs/SPEC_FIX-20260603-04-FEATHERLESS-CONTENT-NORMALIZATION.md."""
+
+    def test_extract_openai_choice_text_concatena_bloques_de_texto(self):
+        from app.services.ai.base import GeminiBase
+
+        choice = Mock(
+            message=Mock(
+                content=[
+                    {"type": "text", "text": "{"},
+                    types.SimpleNamespace(text='"summary":"ok"'),
+                    {"type": "text", "text": "}"},
+                ]
+            )
+        )
+
+        assert GeminiBase._extract_openai_choice_text(choice) == '{\n"summary":"ok"\n}'
 
 
 # ---------------------------------------------------------------------------
@@ -753,7 +798,7 @@ class TestCalibrationV1AudioEspiro:
     # --- Prediagnóstico: Calibración médica ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
     def test_prediagnostico_audiometria_usa_calibracion_medica_cuando_disponible(self, prediagnostic_svc):
         """
         Cuando se pasa medical_calibration, el resultado debe tener
@@ -769,10 +814,10 @@ class TestCalibrationV1AudioEspiro:
         # Al faltar parámetros mínimos retorna AI_NON_CONCLUSIVE, pero con calibration_source correcto
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
         assert result.calibration_source == "medical_calibration"
-        assert result.clinical_model_used == "google/medgemma-27b-text-it"
+        assert result.clinical_model_used == "medgemma-4b-it"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
     def test_prediagnostico_audiometria_usa_fallback_general_sin_calibracion(self, prediagnostic_svc):
         """
         Cuando NO se pasa medical_calibration, el resultado debe tener
@@ -785,10 +830,10 @@ class TestCalibrationV1AudioEspiro:
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
         assert result.calibration_source == "general_fallback"
-        assert result.clinical_model_used == "google/medgemma-27b-text-it"
+        assert result.clinical_model_used == "medgemma-4b-it"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
     def test_prediagnostico_espirometria_incompleta_devuelve_non_conclusive(self, prediagnostic_svc):
         """
         Espirometría con es_interpretable=False debe retornar AI_NON_CONCLUSIVE
@@ -809,8 +854,8 @@ class TestCalibrationV1AudioEspiro:
         assert "interpretable" in result.non_conclusive_reason.lower() or "faltantes" in result.non_conclusive_reason.lower()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
     def test_prediagnostico_espirometria_nominal_con_calibracion(self, mock_call, prediagnostic_svc):
         """
         Espirometría nominal con calibración médica: el prediagnóstico debe completarse
@@ -846,7 +891,7 @@ class TestCalibrationV1AudioEspiro:
         )
         assert result.clinical_state == "AI_PENDING_REVIEW"
         assert result.calibration_source == "medical_calibration"
-        assert result.clinical_model_used == "google/medgemma-27b-text-it"
+        assert result.clinical_model_used == "medgemma-4b-it"
         assert result.confidence >= 0.60
 
 
@@ -855,14 +900,14 @@ if __name__ == "__main__":
 
 
 # ---------------------------------------------------------------------------
-# IMPL-20260513-03: Tests del proveedor MedGemma/Featherless
+# IMPL-20260603-01: Tests del proveedor MedGemma/DR7
 # Valida selección de proveedor, trazabilidad de clinical_provider y fallback.
 # ---------------------------------------------------------------------------
 
-class TestMedGemmaFeatherlessProvider:
+class TestMedGemmaDR7Provider:
     """
-    Tests para la integración MedGemma vía Featherless (OpenAI SDK).
-    IMPL-20260513-03: Selección de proveedor, trazabilidad y degradación honesta.
+    Tests para la integración MedGemma vía DR7 (HTTP médico).
+    IMPL-20260603-01: Selección de proveedor, trazabilidad y degradación honesta.
     """
 
     @pytest.fixture
@@ -894,83 +939,83 @@ class TestMedGemmaFeatherlessProvider:
     }
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
     def test_sin_medgemma_retorna_non_conclusive_y_no_usa_gemini(self, prediagnostic_svc):
         """
         FIX-20260518-02: sin MedGemma disponible no se debe rescatar con Gemini.
         """
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
-        assert result.clinical_provider == "featherless"
+        assert result.clinical_provider == "dr7"
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
         assert "Gemini se usa solo para extracción" in (result.non_conclusive_reason or "")
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
     def test_medgemma_enabled_pero_sin_key_retorna_non_conclusive(self, prediagnostic_svc):
         """
-        FIX-20260518-02: si falta FEATHERLESS_API_KEY no existe fallback clínico a Gemini.
+        FIX-20260518-02: si falta DR7_API_KEY no existe fallback clínico a Gemini.
         """
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
-        assert result.clinical_provider == "featherless"
+        assert result.clinical_provider == "dr7"
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert "falta FEATHERLESS_API_KEY" in (result.non_conclusive_reason or "")
+        assert "falta DR7_API_KEY" in (result.non_conclusive_reason or "")
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_MODEL', 'google/medgemma-27b-text-it')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
-    def test_medgemma_enabled_con_key_llama_featherless(self, mock_featherless, prediagnostic_svc):
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.DR7_MODEL', 'medgemma-4b-it')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_medgemma_enabled_con_key_llama_dr7(self, mock_featherless, prediagnostic_svc):
         """
-        MEDGEMMA_ENABLED=true + FEATHERLESS_API_KEY presente → llama a _call_featherless_text_only.
-        clinical_provider debe ser 'featherless' y clinical_model_used el modelo Featherless.
+        MEDGEMMA_ENABLED=true + DR7_API_KEY presente → llama a _call_dr7_medical_chat.
+        clinical_provider debe ser 'dr7' y clinical_model_used el modelo DR7.
         """
         mock_featherless.return_value = self.MOCK_PREDIAGNOSIS_RESPONSE.copy()
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
-        assert result.clinical_provider == "featherless"
-        assert result.clinical_model_used == "google/medgemma-27b-text-it"
+        assert result.clinical_provider == "dr7"
+        assert result.clinical_model_used == "medgemma-4b-it"
         assert result.clinical_state == "AI_PENDING_REVIEW"
         mock_featherless.assert_called_once()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
-    def test_featherless_error_retorna_non_conclusive_con_provider_trazado(self, mock_featherless, prediagnostic_svc):
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_dr7_error_retorna_non_conclusive_con_provider_trazado(self, mock_featherless, prediagnostic_svc):
         """
-        Si Featherless lanza excepción, retorna AI_NON_CONCLUSIVE con clinical_provider='featherless'
+        Si DR7 lanza excepción, retorna AI_NON_CONCLUSIVE con clinical_provider='dr7'
         para mantener trazabilidad del proveedor que falló.
         """
-        mock_featherless.side_effect = RuntimeError("Featherless timeout")
+        mock_featherless.side_effect = RuntimeError("DR7 timeout")
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_provider == "featherless"
+        assert result.clinical_provider == "dr7"
         assert result.non_conclusive_reason is not None
-        assert "featherless" in result.non_conclusive_reason.lower()
+        assert "dr7" in result.non_conclusive_reason.lower()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
-    def test_featherless_gated_retorna_non_conclusive_sin_fallback_a_gemini(
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_dr7_http_429_retorna_non_conclusive_sin_fallback_a_gemini(
         self,
         mock_featherless,
         prediagnostic_svc,
     ):
         """
-        FIX-20260518-02: si Featherless cae por modelo gated, el resultado debe ser
-        no concluyente; Gemini no participa en la capa clínica.
+        IMPL-20260603-01: DR7 HTTP 429 debe degradar a no concluyente;
+        Gemini no participa en la capa clínica.
         """
-        mock_featherless.side_effect = RuntimeError("FEATHERLESS_GATED: model_gated_needs_oauth")
+        mock_featherless.side_effect = RuntimeError("DR7_HTTP:429:rate limit")
 
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
 
-        assert result.clinical_provider == "featherless"
+        assert result.clinical_provider == "dr7"
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_model_used == "google/medgemma-27b-text-it"
-        assert any("model_gated_needs_oauth" in limitation for limitation in result.limitations)
+        assert result.clinical_model_used == "medgemma-4b-it"
+        assert any("HTTP 429" in limitation for limitation in result.limitations)
         mock_featherless.assert_called_once()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
     def test_non_conclusive_por_params_expone_clinical_provider(self, mock_featherless, prediagnostic_svc):
         """
         Incluso en early-return por params mínimos, clinical_provider queda trazado.
@@ -980,7 +1025,7 @@ class TestMedGemmaFeatherlessProvider:
             {"paciente": "Test", "fev1": None, "fvc": None, "es_interpretable": False}
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_provider == "featherless"
+        assert result.clinical_provider == "dr7"
         # No debe haber llamado al proveedor real
         mock_featherless.assert_not_called()
 
@@ -1153,8 +1198,8 @@ class TestEspirometriaExhaustiva_20260516_12_13:
     # --- Prediagnóstico: caso conflictivo FVC reducida + ratio conservado ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
     def test_prediagnostico_ratio_conservado_fvc_reducida_no_cierra_obstructivo(
         self, mock_call, prediagnostic_svc
     ):
@@ -1216,8 +1261,8 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert len(result.recommendation) > 0
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
     def test_prediagnostico_espirometria_incluye_recommendation_cuando_normal(
         self, mock_call, prediagnostic_svc
     ):
@@ -1252,7 +1297,7 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert len(result.recommendation) > 5
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
     def test_prediagnostico_espirometria_calidad_insuficiente_desde_bloque_calidad(
         self, prediagnostic_svc
     ):
@@ -1280,7 +1325,7 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert result.non_conclusive_reason is not None
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
     def test_prediagnostico_espirometria_completitud_no_concluyente_desde_bloque_calidad(
         self, prediagnostic_svc
     ):
@@ -1357,8 +1402,8 @@ class TestPromptResolutionARCH20260518_03:
     # --- Test 2: Clínica usa aiCalibration.diagnosis.prompt si existe ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
     def test_prompt_resolution_usa_ai_calibration_cuando_diagnosis_prompt_existe(
         self, mock_call, prediagnostic_svc
     ):
@@ -1428,8 +1473,8 @@ class TestPromptResolutionARCH20260518_03:
     # --- Test 3: Clínica usa backend_fallback cuando no existe diagnosis.prompt ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_featherless_text_only')
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
     def test_prompt_resolution_usa_backend_fallback_cuando_sin_diagnosis_prompt(
         self, mock_call, prediagnostic_svc
     ):

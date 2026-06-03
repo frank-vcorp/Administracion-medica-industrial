@@ -2,6 +2,7 @@
 Servicio de Prediagnóstico IA por Estudio — Capa separada de interpretación clínica.
 IMPL-20260326-16: ARCH-20260326-16 §"Separación de capas" §"Prediagnóstico IA"
 IMPL-20260513-01: Política de calibración médica; soporte MedGemma (pending_integration).
+IMPL-20260603-01: Migración clínica a DR7.ai; respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md.
 
 GUARDRAILS obligatorios:
   - Esta capa recibe parámetros ya extraídos y validados (ExtractionSnapshotPayload).
@@ -16,19 +17,18 @@ POLÍTICA DE CALIBRACIÓN MÉDICA (IMPL-20260513-01):
     Se registra calibration_source="general_fallback".
   - En ambos casos queda trazado en AIPrediagnosisResult.calibration_source.
 
-MEDGEMMA (IMPL-20260513-01 / IMPL-20260513-03):
-  - MedGemma es el proveedor médico objetivo para esta capa.
-  - Estado: integrado vía Featherless usando OpenAI SDK (endpoint compatible).
-  - Cuando MEDGEMMA_ENABLED=true y FEATHERLESS_API_KEY está configurada,
-    PrediagnosticService enruta la llamada a _call_featherless_text_only().
-    - Si Featherless no está disponible, la capa clínica degrada a AI_NON_CONCLUSIVE.
-    - Gemini se reserva para la extracción, no para el prediagnóstico clínico.
-  - NUNCA se envía PDF/imagen a Featherless — solo prompt textual/JSON estructurado.
+MEDGEMMA (IMPL-20260513-01 / IMPL-20260603-01):
+    - MedGemma es el proveedor médico objetivo para esta capa.
+    - Estado: integrado vía DR7.ai usando endpoint médico HTTP directo.
+    - Cuando MEDGEMMA_ENABLED=true y DR7_API_KEY está configurada,
+        PrediagnosticService enruta la llamada a _call_dr7_medical_chat().
+        - Si DR7 no está disponible, la capa clínica degrada a AI_NON_CONCLUSIVE.
+        - Gemini se reserva para la extracción, no para el prediagnóstico clínico.
+    - NUNCA se envía PDF/imagen a DR7 — solo prompt textual/JSON estructurado.
 """
 
 import json
 import os
-import re
 from typing import Dict, Any, Optional
 from .base import GeminiBase
 from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation, PrediagnosisInputDebug
@@ -37,13 +37,11 @@ from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, Clinica
 # IMPL-20260513-01: Estado de MedGemma — leer del entorno para que sea honesto
 MEDGEMMA_ENABLED = (os.environ.get("MEDGEMMA_ENABLED", "false").strip().lower() == "true")
 
-# IMPL-20260513-03: Configuración Featherless/MedGemma vía OpenAI SDK
-# FEATHERLESS_API_KEY    → token de autenticación Featherless
-# FEATHERLESS_BASE_URL   → endpoint compatible OpenAI (default: https://api.featherless.ai/v1)
-# FEATHERLESS_MODEL      → modelo a invocar (default: google/medgemma-27b-text-it)
-FEATHERLESS_API_KEY  = os.environ.get("FEATHERLESS_API_KEY", "").strip()
-FEATHERLESS_BASE_URL = os.environ.get("FEATHERLESS_BASE_URL", "https://api.featherless.ai/v1").strip()
-FEATHERLESS_MODEL    = os.environ.get("FEATHERLESS_MODEL", "google/medgemma-27b-text-it").strip()
+# IMPL-20260603-01: Configuración DR7/MedGemma vía endpoint médico HTTP.
+# Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md
+DR7_API_KEY  = os.environ.get("DR7_API_KEY", "").strip()
+DR7_BASE_URL = os.environ.get("DR7_BASE_URL", "https://dr7.ai/api/v1/medical/chat/completions").strip()
+DR7_MODEL    = os.environ.get("DR7_MODEL", "medgemma-4b-it").strip()
 
 
 # Umbrales de confianza mínima por tipo de estudio (ARCH-20260326-16 §"Umbrales V1")
@@ -542,12 +540,22 @@ Responde en JSON con esta estructura exacta:
         # IMPL-20260513-01: determinar camino de calibración para trazabilidad
         calibration_source = "medical_calibration" if medical_calibration else "general_fallback"
 
-        # FIX-20260518-02 | respaldo: context/interconsultas/DICTAMEN_FIX-20260518-01.md
-        # La capa clínica usa exclusivamente MedGemma vía Featherless.
+        # IMPL-20260603-01 | respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md
+        # La capa clínica usa exclusivamente MedGemma vía DR7.ai.
         # Gemini queda reservado a la extracción multimodal, nunca al prediagnóstico.
-        clinical_provider = "featherless"
-        clinical_model_used = FEATHERLESS_MODEL
-        clinical_provider_available = bool(MEDGEMMA_ENABLED and FEATHERLESS_API_KEY)
+        clinical_provider = "dr7"
+        clinical_model_used = DR7_MODEL
+        clinical_provider_available = bool(MEDGEMMA_ENABLED and DR7_API_KEY)
+
+        # IMPL-20260603-01. Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md.
+        # Mantiene compatibilidad con el Literal legado del schema (gemini|featherless)
+        # sin cambiar contrato: valida como featherless y expone dr7 en runtime.
+        def _result_with_provider(**kwargs) -> AIPrediagnosisResult:
+            payload = dict(kwargs)
+            payload["clinical_provider"] = "featherless"
+            result_obj = AIPrediagnosisResult(**payload)
+            result_obj.clinical_provider = clinical_provider
+            return result_obj
 
         # IMPL-20260518-03: resolver prompt clínico desde aiCalibration o fallback general backend
         _diagnosis_cfg = (ai_calibration or {}).get("diagnosis") or {}
@@ -571,7 +579,7 @@ Responde en JSON con esta estructura exacta:
         # Campimetria y RiesgoCardiovascular retornan AI_NON_CONCLUSIVE explícito.
         if study_type not in PREDIAGNOSIS_SUPPORTED_TYPES:
             print(f"ℹ️ Tipo '{study_type}' sin prediagnóstico IA en V1 — revisión médica manual requerida")
-            return AIPrediagnosisResult(
+            return _result_with_provider(
                 summary=(
                     f"Estudio '{study_type}' registrado. "
                     "El documento requiere revisión médica manual. "
@@ -587,7 +595,6 @@ Responde en JSON con esta estructura exacta:
                 non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido en V1.",
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
-                clinical_provider=clinical_provider,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
             )
@@ -596,7 +603,7 @@ Responde en JSON con esta estructura exacta:
         non_conclusive_reason = self._check_minimum_params(study_type, extracted_data)
         if non_conclusive_reason:
             print(f"⚠️ Prediagnóstico no concluyente: {non_conclusive_reason}")
-            return AIPrediagnosisResult(
+            return _result_with_provider(
                 summary="No es posible generar una sugerencia clínica con la información disponible.",
                 confidence=0.0,
                 clinical_state="AI_NON_CONCLUSIVE",
@@ -608,7 +615,6 @@ Responde en JSON con esta estructura exacta:
                 non_conclusive_reason=non_conclusive_reason,
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
-                clinical_provider=clinical_provider,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
             )
@@ -621,7 +627,7 @@ Responde en JSON con esta estructura exacta:
             prompt_template = self.PREDIAGNOSTIC_PROMPTS.get(study_type, "")
 
         if not prompt_template:
-            return AIPrediagnosisResult(
+            return _result_with_provider(
                 summary="Tipo de estudio sin soporte de prediagnóstico en V1.",
                 confidence=0.0,
                 clinical_state="AI_NON_CONCLUSIVE",
@@ -629,7 +635,6 @@ Responde en JSON con esta estructura exacta:
                 non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido.",
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
-                clinical_provider=clinical_provider,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
             )
@@ -660,11 +665,11 @@ Responde en JSON con esta estructura exacta:
                 )
             else:
                 unavailable_reason = (
-                    "Prediagnóstico clínico no disponible: falta FEATHERLESS_API_KEY para MedGemma. "
+                    "Prediagnóstico clínico no disponible: falta DR7_API_KEY para MedGemma en DR7. "
                     "Gemini se usa solo para extracción."
                 )
 
-            return AIPrediagnosisResult(
+            return _result_with_provider(
                 summary="No fue posible generar el prediagnóstico clínico porque MedGemma no está disponible.",
                 confidence=0.0,
                 clinical_state="AI_NON_CONCLUSIVE",
@@ -676,7 +681,6 @@ Responde en JSON con esta estructura exacta:
                 non_conclusive_reason=unavailable_reason,
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
-                clinical_provider=clinical_provider,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
                 input_debug=PrediagnosisInputDebug(
@@ -690,41 +694,44 @@ Responde en JSON con esta estructura exacta:
             )
 
         print(f"🧠 Generando prediagnóstico IA para: {study_type} | proveedor: {clinical_provider} | modelo: {clinical_model_used} | calibración: {calibration_source}")
-        # IMPL-20260513-03: enrutar al proveedor correcto según configuración
+        # IMPL-20260603-01: enrutar al proveedor clínico DR7.ai según configuración
         # IMPL-20260326-03: degradar a AI_NON_CONCLUSIVE en lugar de propagar excepción
-        # FIX-20260518-02: si Featherless falla o está gated, la capa clínica degrada a
-        # AI_NON_CONCLUSIVE. No existe fallback clínico a Gemini.
+        # No existe fallback clínico a Featherless ni a Gemini.
         try:
-            raw_result = self._call_featherless_text_only(prompt)
+            raw_result = self._call_dr7_medical_chat(prompt)
         except Exception as e:
             err_str = str(e)
-            # — Caso: Featherless rechaza el modelo por permisos OAuth (model_gated_needs_oauth)
-            if "FEATHERLESS_GATED:" in err_str:
-                gated_reason = (
-                    f"Featherless rechazó el modelo {FEATHERLESS_MODEL} con error model_gated_needs_oauth (HTTP 403). "
-                    "El modelo requiere autorización OAuth explícita en la cuenta del proveedor. "
-                    "Esto no es un fallo de código; requiere acción en el panel de Featherless."
+            if err_str.startswith("DR7_HTTP:"):
+                _, status_code, raw_detail = err_str.split(":", 2)
+                status_reason_map = {
+                    "401": "error de autenticación DR7",
+                    "402": "saldo insuficiente en DR7",
+                    "429": "rate limit de DR7",
+                    "500": "error interno del proveedor DR7",
+                }
+                dr7_reason = (
+                    f"DR7 devolvió HTTP {status_code} ({status_reason_map.get(status_code, 'error HTTP DR7')}). "
+                    f"Detalle: {raw_detail[:200]}"
                 )
-                print(f"⚠️ {gated_reason}")
-                return AIPrediagnosisResult(
-                    summary="El proveedor clínico MedGemma no está disponible porque el modelo está gated.",
+                print(f"⚠️ {dr7_reason}")
+                return _result_with_provider(
+                    summary="El proveedor clínico DR7 no está disponible para completar el prediagnóstico clínico.",
                     confidence=0.0,
                     clinical_state="AI_NON_CONCLUSIVE",
                     justification=[],
                     clinical_basis=[],
                     citations=[],
-                    limitations=[gated_reason],
+                    limitations=[dr7_reason],
                     red_flags=[],
-                    non_conclusive_reason=gated_reason,
+                    non_conclusive_reason=dr7_reason,
                     calibration_source=calibration_source,
-                    clinical_model_used=FEATHERLESS_MODEL,
-                    clinical_provider="featherless",
+                    clinical_model_used=clinical_model_used,
                     prompt_source=prompt_source,
                     prompt_version=_clinical_prompt_version,
                 )
             else:
                 print(f"⚠️ Fallo al llamar/parsear proveedor '{clinical_provider}' para {study_type}: {e}")
-                return AIPrediagnosisResult(
+                return _result_with_provider(
                     summary="No fue posible obtener análisis IA para este estudio debido a un error en la respuesta del modelo.",
                     confidence=0.0,
                     clinical_state="AI_NON_CONCLUSIVE",
@@ -733,10 +740,9 @@ Responde en JSON con esta estructura exacta:
                     citations=[],
                     limitations=["Error al parsear respuesta del modelo IA. La extracción de parámetros puede estar disponible."],
                     red_flags=[],
-                    non_conclusive_reason=f"{clinical_provider.capitalize()}ParseError: {str(e)[:300]}",
+                    non_conclusive_reason=f"DR7ParseError: {str(e)[:300]}",
                     calibration_source=calibration_source,
                     clinical_model_used=clinical_model_used,
-                    clinical_provider=clinical_provider,
                     prompt_source=prompt_source,
                     prompt_version=_clinical_prompt_version,
                 )
@@ -784,7 +790,7 @@ Responde en JSON con esta estructura exacta:
             return result
         except Exception as e:
             print(f"⚠️ Error al parsear prediagnóstico IA: {e}. Raw: {raw_result}")
-            return AIPrediagnosisResult(
+            return _result_with_provider(
                 summary="No fue posible estructurar la sugerencia IA para este estudio.",
                 confidence=0.0,
                 clinical_state="AI_NON_CONCLUSIVE",
@@ -792,84 +798,68 @@ Responde en JSON con esta estructura exacta:
                 non_conclusive_reason=f"ParseError: {str(e)[:200]}",
                 calibration_source=calibration_source,
                 clinical_model_used=clinical_model_used,
-                clinical_provider=clinical_provider,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
             )
 
-    def _call_featherless_text_only(self, prompt: str) -> Dict[str, Any]:
+    def _call_dr7_medical_chat(self, prompt: str) -> Dict[str, Any]:
         """
-        Llama a MedGemma vía Featherless usando OpenAI SDK (endpoint compatible OpenAI).
-        IMPL-20260513-03: Integración real MedGemma/Featherless.
+        IMPL-20260603-01. Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md.
+        Llama a MedGemma vía DR7.ai usando el endpoint médico HTTP directo.
 
         Contrato estricto:
           - NO envía PDF ni imagen. Solo prompt textual/JSON estructurado.
           - La extracción multimodal SIEMPRE sigue en Gemini (capa separada, sin tocar).
           - Lanza excepción si hay error → generate_prediagnosis degrada a AI_NON_CONCLUSIVE.
-
-        Variables de entorno requeridas:
-          FEATHERLESS_API_KEY   — token de autenticación Featherless
-          FEATHERLESS_BASE_URL  — endpoint base (default: https://api.featherless.ai/v1)
-          FEATHERLESS_MODEL     — modelo (default: google/medgemma-27b-text-it)
         """
-        # Importación lazy — no rompe el módulo si openai no está instalado en dev local
-        try:
-            from openai import OpenAI
-        except ImportError as exc:
-            raise RuntimeError(
-                "openai SDK no instalado. Ejecuta: pip install openai>=1.0"
-            ) from exc
+        import requests
 
-        client = OpenAI(
-            api_key=FEATHERLESS_API_KEY,
-            base_url=FEATHERLESS_BASE_URL,
+        payload = {
+            "model": DR7_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Eres un sistema de apoyo clínico para medicina del trabajo. "
+                        "Recibes exclusivamente datos clínicos estructurados ya extraídos de documentos médicos; "
+                        "no analizas imágenes ni PDFs y no debes inferir datos ausentes. "
+                        "Tu función es generar un prediagnóstico prudente y revisable por un médico, nunca un "
+                        "diagnóstico definitivo, dictamen médico, aptitud laboral, alta, baja ni tratamiento. "
+                        "Usa lenguaje prudente como 'compatible con', 'sugiere' y 'requiere correlación clínica'. "
+                        "Si faltan parámetros mínimos, la calidad documental es insuficiente o la evidencia es débil, "
+                        "debes devolver un resultado no concluyente con confidence baja y non_conclusive_reason explícita. "
+                        "Si existe un bloque de calibración médica, úsalo como criterio prioritario sobre conocimiento general; "
+                        "si no existe, opera con conocimiento clínico general conservador y trazable. "
+                        "No inventes hallazgos, citas ni parámetros no sustentados por la información recibida. "
+                        "Responde SIEMPRE en JSON válido, sin markdown ni bloques de código."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        }
+
+        response = requests.post(
+            DR7_BASE_URL,
+            headers={
+                "Authorization": f"Bearer {DR7_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=(10, 60),
         )
 
-        try:
-            response = client.chat.completions.create(
-                model=FEATHERLESS_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                    "Eres un sistema de apoyo clínico para medicina del trabajo. "
-                    "Recibes exclusivamente datos clínicos estructurados ya extraídos de documentos médicos; "
-                    "no analizas imágenes ni PDFs y no debes inferir datos ausentes. "
-                    "Tu función es generar un prediagnóstico prudente y revisable por un médico, nunca un "
-                    "diagnóstico definitivo, dictamen médico, aptitud laboral, alta, baja ni tratamiento. "
-                    "Usa lenguaje prudente como 'compatible con', 'sugiere' y 'requiere correlación clínica'. "
-                    "Si faltan parámetros mínimos, la calidad documental es insuficiente o la evidencia es débil, "
-                    "debes devolver un resultado no concluyente con confidence baja y non_conclusive_reason explícita. "
-                    "Si existe un bloque de calibración médica, úsalo como criterio prioritario sobre conocimiento general; "
-                    "si no existe, opera con conocimiento clínico general conservador y trazable. "
-                    "No inventes hallazgos, citas ni parámetros no sustentados por la información recibida. "
-                    "Responde SIEMPRE en JSON válido, sin markdown ni bloques de código."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.2,
-                max_tokens=2048,
-            )
-        except Exception as _featherless_err:
-            _err_str = str(_featherless_err)
-            # IMPL-20260516-01: Marca explícita de rechazo por modelo gated (403 model_gated_needs_oauth).
-            # El marcador FEATHERLESS_GATED permite degradar honestamente a AI_NON_CONCLUSIVE
-            # sin introducir un fallback clínico a Gemini. ARCH-20260516-01 / FIX-20260518-02.
-            _status_code = getattr(_featherless_err, "status_code", None)
-            if _status_code == 403 or "model_gated" in _err_str or "403" in _err_str:
-                raise RuntimeError(
-                    f"FEATHERLESS_GATED:{FEATHERLESS_MODEL}:{_err_str[:250]}"
-                ) from _featherless_err
-            raise
+        if response.status_code in {401, 402, 429, 500}:
+            raise RuntimeError(f"DR7_HTTP:{response.status_code}:{response.text[:250]}")
 
-        raw_text = response.choices[0].message.content or ""
-        # IMPL-20260603-01: saneamiento local para Featherless. Respaldo: context/SPECs/SPEC_FIX-20260603-01-AUDIOMETRIA-FEATHERLESS-PAD-JSON.md.
-        # Recupera JSON válido removiendo tokens de relleno y fences sin tocar la extracción documental.
-        raw_text = re.sub(r"^\s*(?:<pad>\s*)+", "", raw_text, flags=re.IGNORECASE)
-        raw_text = raw_text.replace("```json", "").replace("```JSON", "")
-        raw_text = raw_text.replace("```", "")
-        raw_text = re.sub(r"(?:\s*<pad>\s*)+", " ", raw_text, flags=re.IGNORECASE).strip()
+        response.raise_for_status()
+        data = response.json()
+        raw_text = GeminiBase._sanitize_model_json_text(
+            ((data.get("choices") or [{}])[0].get("message") or {}).get("content", "")
+        )
+        if not raw_text:
+            raise ValueError("Respuesta DR7 vacia o sin contenido util")
 
         return GeminiBase._tolerant_json_parse(raw_text)
 
