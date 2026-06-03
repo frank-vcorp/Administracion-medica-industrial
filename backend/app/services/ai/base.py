@@ -32,7 +32,7 @@ class GeminiBase:
     @staticmethod
     def _tolerant_json_parse(text: str) -> Dict[str, Any]:
         """
-        Parseo tolerante de JSON: intenta recuperar respuestas de Gemini con texto extra
+        Parseo tolerante de JSON: intenta recuperar respuestas de modelo con texto extra
         o cierres faltantes. Si falla, lanza ValueError informativo.
         IMPL-20260326-03 — sin dependencias externas.
         """
@@ -51,7 +51,7 @@ class GeminiBase:
             except json.JSONDecodeError:
                 pass
 
-        raise ValueError(f"Respuesta de Gemini no es JSON parseable: {text[:300]!r}")
+        raise ValueError(f"Respuesta del modelo no es JSON parseable: {text[:300]!r}")
     
     def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash"):
         self.api_key = api_key or _read_env_var("GEMINI_API_KEY")

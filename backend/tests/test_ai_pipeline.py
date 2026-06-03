@@ -9,6 +9,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import json
 import os
+import types
 from pathlib import Path
 
 # Asumimos que los módulos están en PYTHONPATH
@@ -379,6 +380,97 @@ class TestPrediagnosticoNuevosTipos:
             {"paciente": "Test", "hallazgos": []}
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
+
+    @patch.dict(sys.modules, {'openai': types.SimpleNamespace(OpenAI=Mock())})
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    def test_audiometria_featherless_json_puro_parsea_ok(self, prediagnostic_svc):
+        """Audiometría debe aceptar JSON puro devuelto por Featherless."""
+        # IMPL-20260603-01. Respaldo: context/SPECs/SPEC_FIX-20260603-01-AUDIOMETRIA-FEATHERLESS-PAD-JSON.md.
+        from openai import OpenAI
+        mock_response = Mock()
+        mock_response.choices = [Mock(message=Mock(content=json.dumps({
+            "summary": "Hallazgos compatibles con hipoacusia leve bilateral.",
+            "confidence": 0.82,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["Curva audiométrica con elevación leve bilateral"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None
+        })))]
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = mock_response
+        OpenAI.return_value = mock_client
+
+        result = prediagnostic_svc.generate_prediagnosis(
+            "Audiometria",
+            {
+                "paciente": "Test Audio",
+                "fecha_estudio": "03/06/2026",
+                "oido_derecho": {"500": 15, "1000": 20, "2000": 25},
+                "oido_izquierdo": {"500": 20, "1000": 25, "2000": 30},
+            },
+        )
+
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.clinical_provider == "featherless"
+        assert result.summary.startswith("Hallazgos compatibles")
+
+    @patch.dict(sys.modules, {'openai': types.SimpleNamespace(OpenAI=Mock())})
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    def test_audiometria_featherless_json_con_pad_parsea_ok(self, prediagnostic_svc):
+        """Audiometría debe rescatar JSON útil aunque Featherless agregue prefijos <pad>."""
+        from openai import OpenAI
+        padded_payload = "<pad><pad>```json\n{\"summary\": \"Compatible con hipoacusia neurosensorial leve.\", \"confidence\": 0.78, \"clinical_state\": \"AI_PENDING_REVIEW\", \"justification\": [\"Descenso bilateral en altas frecuencias\"], \"clinical_basis\": [], \"citations\": [], \"limitations\": [], \"red_flags\": [], \"non_conclusive_reason\": null}\n```"
+        mock_response = Mock()
+        mock_response.choices = [Mock(message=Mock(content=padded_payload))]
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = mock_response
+        OpenAI.return_value = mock_client
+
+        result = prediagnostic_svc.generate_prediagnosis(
+            "Audiometria",
+            {
+                "paciente": "Test Audio",
+                "fecha_estudio": "03/06/2026",
+                "oido_derecho": {"500": 25, "1000": 30, "2000": 35},
+                "oido_izquierdo": {"500": 20, "1000": 25, "2000": 30},
+            },
+        )
+
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.summary.startswith("Compatible con hipoacusia")
+        assert result.non_conclusive_reason is None
+
+    @patch.dict(sys.modules, {'openai': types.SimpleNamespace(OpenAI=Mock())})
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.FEATHERLESS_API_KEY', 'fake-featherless-key')
+    def test_audiometria_featherless_no_json_degrada_non_conclusive(self, prediagnostic_svc):
+        """Audiometría debe degradar a AI_NON_CONCLUSIVE si Featherless no devuelve JSON usable."""
+        from openai import OpenAI
+        mock_response = Mock()
+        mock_response.choices = [Mock(message=Mock(content="<pad>resultado no estructurado sin llaves ni JSON"))]
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = mock_response
+        OpenAI.return_value = mock_client
+
+        result = prediagnostic_svc.generate_prediagnosis(
+            "Audiometria",
+            {
+                "paciente": "Test Audio",
+                "fecha_estudio": "03/06/2026",
+                "oido_derecho": {"500": 35, "1000": 40, "2000": 45},
+                "oido_izquierdo": {"500": 30, "1000": 35, "2000": 40},
+            },
+        )
+
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.clinical_provider == "featherless"
+        assert "FeatherlessParseError" in (result.non_conclusive_reason or "")
+        assert "Gemini" not in (result.non_conclusive_reason or "")
 
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ MEDGEMMA (IMPL-20260513-01 / IMPL-20260513-03):
 
 import json
 import os
+import re
 from typing import Dict, Any, Optional
 from .base import GeminiBase
 from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation, PrediagnosisInputDebug
@@ -863,8 +864,12 @@ Responde en JSON con esta estructura exacta:
             raise
 
         raw_text = response.choices[0].message.content or ""
-        # Stripping robusto de markdown (por si el modelo ignora la instrucción de sistema)
-        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+        # IMPL-20260603-01: saneamiento local para Featherless. Respaldo: context/SPECs/SPEC_FIX-20260603-01-AUDIOMETRIA-FEATHERLESS-PAD-JSON.md.
+        # Recupera JSON válido removiendo tokens de relleno y fences sin tocar la extracción documental.
+        raw_text = re.sub(r"^\s*(?:<pad>\s*)+", "", raw_text, flags=re.IGNORECASE)
+        raw_text = raw_text.replace("```json", "").replace("```JSON", "")
+        raw_text = raw_text.replace("```", "")
+        raw_text = re.sub(r"(?:\s*<pad>\s*)+", " ", raw_text, flags=re.IGNORECASE).strip()
 
         return GeminiBase._tolerant_json_parse(raw_text)
 
