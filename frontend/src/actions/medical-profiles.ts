@@ -13,6 +13,8 @@
  * @intervention IMPL-20260527-01
  * @backup context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
  * @see context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
+ * @intervention IMPL-20260604-01
+ * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
  */
 'use server'
 
@@ -469,6 +471,13 @@ export async function saveAICalibrationV2(
     }>
     source: 'manual-review' | 'ai-assisted-review' | 'candidate-promotion'
     summary?: string
+    presentation?: {
+      enabled: boolean
+      schema: unknown | null
+      lastSuggestedAt?: string
+      lastSuggestionModel?: string
+      lastSuggestionSummary?: string
+    }
     /** Campos V1 a preservar (enabled, canonicalStudyType, extraction, diagnosis) */
     legacyFields?: Record<string, unknown>
   }
@@ -498,12 +507,26 @@ export async function saveAICalibrationV2(
   const existingFieldDefs = Array.isArray(existingCalib.fieldDefinitions)
     ? existingCalib.fieldDefinitions
     : []
+  const existingPresentation =
+    typeof existingCalib.presentation === 'object' && existingCalib.presentation !== null
+      ? (existingCalib.presentation as Record<string, unknown>)
+      : null
+  const existingPresentationSchema =
+    existingPresentation &&
+    typeof existingPresentation.schema === 'object' &&
+    existingPresentation.schema !== null
+      ? existingPresentation.schema
+      : null
   const existingVersions = Array.isArray(existingCalib.versions)
     ? existingCalib.versions
     : []
 
-  const hasChanged =
+  const hasFieldDefinitionsChanged =
     JSON.stringify(existingFieldDefs) !== JSON.stringify(payload.fieldDefinitions)
+  const hasPresentationSchemaChanged =
+    Object.prototype.hasOwnProperty.call(payload, 'presentation') &&
+    JSON.stringify(existingPresentationSchema) !== JSON.stringify(payload.presentation?.schema ?? null)
+  const hasChanged = hasFieldDefinitionsChanged || hasPresentationSchemaChanged
 
   const nextVersion = hasChanged || currentVersion === 0 ? currentVersion + 1 : currentVersion
   const now = new Date().toISOString()
@@ -536,6 +559,7 @@ export async function saveAICalibrationV2(
     updatedAt: now,
     versions,
     fieldDefinitions: payload.fieldDefinitions,
+    presentation: payload.presentation ?? existingPresentation,
     aiAssistance: {
       ...((typeof existingCalib.aiAssistance === 'object' && existingCalib.aiAssistance !== null
         ? existingCalib.aiAssistance

@@ -3,6 +3,8 @@
  *   con Versionado Automático (ARCH-20260327-19).
  * @id IMPL-20260327-19
  * @backup context/SPECs/SPEC_ARCH-20260327-19-CALIBRACION-IA-ASISTIDA-VERSIONADO-AUTOMATICO.md
+ * @intervention IMPL-20260604-01
+ * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +56,63 @@ export interface FieldDefinition {
   unit?: string
 }
 
+export type PresentationSectionKind =
+  | "keyValue"
+  | "table"
+  | "note"
+  | "badges"
+  | "bilateralFrequency"
+
+export interface PresentationColumn {
+  key: string
+  label: string
+}
+
+export type PresentationSection =
+  | {
+      kind: "keyValue"
+      title: string
+      sourceKey?: string
+      fields: string[]
+    }
+  | {
+      kind: "table"
+      title: string
+      source: string
+      columns: PresentationColumn[]
+    }
+  | {
+      kind: "note"
+      title: string
+      source: string
+    }
+  | {
+      kind: "badges"
+      title: string
+      sourceKey?: string
+      fields: string[]
+    }
+  | {
+      kind: "bilateralFrequency"
+      title: string
+      rightKey: string
+      leftKey: string
+      preferredOrder?: number[]
+    }
+
+export interface StudyPresentationSchema {
+  studyType: string
+  sections: PresentationSection[]
+}
+
+export interface PresentationCalibration {
+  enabled: boolean
+  schema: StudyPresentationSchema | null
+  lastSuggestedAt?: string
+  lastSuggestionModel?: string
+  lastSuggestionSummary?: string
+}
+
 export interface AICalibrationV2 {
   /** Versión actual del contrato efectivo */
   currentVersion: number
@@ -83,6 +142,7 @@ export interface AICalibrationV2 {
     promptVersion?: string
     requiresDoctorCalibration?: boolean
   }
+  presentation?: PresentationCalibration
   aiAssistance?: {
     lastSuggestedAt: string
     lastSuggestionSummary: string

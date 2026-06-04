@@ -24,11 +24,14 @@
  * @see context/checkpoints/CHK_ARCH-20260327-10-PAPELETA-ELECTRONICA.md
  * @intervention ARCH-20260327-11
  * @see context/checkpoints/CHK_ARCH-20260327-11-ELIMINA-FRANJA-PAPELETA.md
+ * @intervention IMPL-20260604-01
+ * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
  */
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import type { StudyPresentationSchema } from "@/types/calibration"
 import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
@@ -177,6 +180,41 @@ function isSomatometria(name: string) {
     lower.includes('somatometria') ||
     lower.includes('signos vitales')
   )
+}
+
+/**
+ * Extrae el schema persistido desde aiCalibration.presentation cuando existe.
+ * @id IMPL-20260604-01
+ * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
+ */
+function getPersistedPresentationSchema(test: StudyTest): StudyPresentationSchema | null {
+  const options = test.test?.options
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return null
+
+  const aiCalibration =
+    'aiCalibration' in options &&
+    options.aiCalibration &&
+    typeof options.aiCalibration === 'object' &&
+    !Array.isArray(options.aiCalibration)
+      ? (options.aiCalibration as Record<string, unknown>)
+      : null
+
+  const presentation =
+    aiCalibration &&
+    'presentation' in aiCalibration &&
+    aiCalibration.presentation &&
+    typeof aiCalibration.presentation === 'object' &&
+    !Array.isArray(aiCalibration.presentation)
+      ? (aiCalibration.presentation as Record<string, unknown>)
+      : null
+
+  if (!presentation || presentation.enabled === false) return null
+
+  const schema = presentation.schema
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return null
+  if (!Array.isArray((schema as Record<string, unknown>).sections)) return null
+
+  return schema as StudyPresentationSchema
 }
 
 function isAgudezaVisual(name: string) {
@@ -1241,6 +1279,7 @@ function StudyPanel({
                 missingFields={test.extractionSnapshot.missingFields as string[] | null}
                 version={test.extractionSnapshot.version}
                 studyType={getCanonicalAIStudyType(test)}
+                presentationSchema={getPersistedPresentationSchema(test)}
               />
             )}
 

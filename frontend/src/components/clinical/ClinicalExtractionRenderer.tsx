@@ -6,9 +6,12 @@
  * @backup context/checkpoints/CHK_IMPL-20260518-13-RENDERER-CLINICO.md
  * @extends IMPL-20260518-14 — Audiometría (BilateralFrequencyTableBlock)
  * @backup context/checkpoints/CHK_IMPL-20260518-14-RENDERER-CLINICO-AUDIOMETRIA.md
+ * @intervention IMPL-20260604-01
+ * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
  */
 "use client"
 
+import type { StudyPresentationSchema as PersistedStudyPresentationSchema } from "@/types/calibration"
 import {
   getStudySchema,
   type KeyValueSection,
@@ -472,6 +475,22 @@ interface ClinicalExtractionRendererProps {
   version: number
   /** Tipo canónico del estudio — determina qué schema de presentación usar */
   studyType: string | null | undefined
+  presentationSchema?: PersistedStudyPresentationSchema | null
+}
+
+/**
+ * Prioriza el schema persistido de calibración y conserva el fallback legacy.
+ * @id IMPL-20260604-01
+ * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
+ */
+function resolvePresentationSchema(
+  studyType: string | null | undefined,
+  presentationSchema?: PersistedStudyPresentationSchema | null
+) {
+  if (presentationSchema && Array.isArray(presentationSchema.sections)) {
+    return presentationSchema
+  }
+  return getStudySchema(studyType)
 }
 
 export default function ClinicalExtractionRenderer({
@@ -479,6 +498,7 @@ export default function ClinicalExtractionRenderer({
   missingFields,
   version,
   studyType,
+  presentationSchema,
 }: ClinicalExtractionRendererProps) {
   // Sin datos y sin campos faltantes: nada que renderizar
   if (
@@ -488,7 +508,7 @@ export default function ClinicalExtractionRenderer({
     return null
   }
 
-  const schema = getStudySchema(studyType)
+  const schema = resolvePresentationSchema(studyType, presentationSchema)
 
   // Sin schema configurado para este studyType: usar renderer genérico de fallback
   if (!schema || !extractedData) {

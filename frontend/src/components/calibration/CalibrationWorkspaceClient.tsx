@@ -5,6 +5,8 @@
  *   Gestiona el snapshot seleccionado como estado compartido entre ambos paneles.
  * @id IMPL-20260327-19
  * @backup context/SPECs/SPEC_ARCH-20260327-19-CALIBRACION-IA-ASISTIDA-VERSIONADO-AUTOMATICO.md
+ * @intervention IMPL-20260604-01
+ * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
  */
 "use client"
 
@@ -17,6 +19,7 @@ import CalibrationDocumentViewer, {
   type DocumentEntry,
 } from "@/components/calibration/CalibrationDocumentViewer"
 import AICalibrationEditor from "@/components/calibration/AICalibrationEditor"
+import PresentationSchemaPanel from "@/components/calibration/PresentationSchemaPanel"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos derivados de los datos Prisma (serializables — dates como string)
@@ -62,10 +65,11 @@ interface CalibrationWorkspaceClientProps {
 // Tipos de tab del panel izquierdo
 // ─────────────────────────────────────────────────────────────────────────────
 
-type LeftTab = "propuesta" | "configuracion" | "historial" | "snapshots"
+type LeftTab = "propuesta" | "presentacion" | "configuracion" | "historial" | "snapshots"
 
 const TAB_LABELS: Record<LeftTab, string> = {
   propuesta: "🤖 Propuesta IA",
+  presentacion: "🧩 Presentación",
   configuracion: "⚙ Configuración",
   historial: "🕐 Historial",
   snapshots: "📋 Snapshots",
@@ -289,6 +293,21 @@ export default function CalibrationWorkspaceClient({
   )
   const [selectedDocumentUrl, setSelectedDocumentUrl] = useState<string | null>(firstSnapshotUrl)
 
+  const selectedSnapshotEntry =
+    allSnapshots.find(({ snap }) => snap.id === selectedSnapshotId) ?? allSnapshots[0] ?? null
+  const selectedStructuredData =
+    selectedSnapshotEntry?.snap.structuredData &&
+    typeof selectedSnapshotEntry.snap.structuredData === "object" &&
+    !Array.isArray(selectedSnapshotEntry.snap.structuredData)
+      ? (selectedSnapshotEntry.snap.structuredData as Record<string, unknown>)
+      : null
+  const selectedExtractedData =
+    selectedStructuredData?.extracted_data &&
+    typeof selectedStructuredData.extracted_data === "object" &&
+    !Array.isArray(selectedStructuredData.extracted_data)
+      ? (selectedStructuredData.extracted_data as Record<string, unknown>)
+      : null
+
   // Construir lista de documentos para el visor
   const documents: DocumentEntry[] = []
   for (const { snap, et } of allSnapshots) {
@@ -335,7 +354,7 @@ export default function CalibrationWorkspaceClient({
       <div className="w-[42%] shrink-0 flex flex-col min-h-0 border-r border-slate-200">
         {/* Tabs header */}
         <div className="flex border-b border-slate-200 overflow-x-auto bg-slate-50">
-          {(["propuesta", "configuracion", "historial", "snapshots"] as LeftTab[]).map((tab) => (
+          {(["propuesta", "presentacion", "configuracion", "historial", "snapshots"] as LeftTab[]).map((tab) => (
             <button key={tab} className={tabCls(tab)} onClick={() => setActiveTab(tab)}>
               {TAB_LABELS[tab]}
               {tab === "propuesta" && candidateFields.length > 0 && (
@@ -368,6 +387,23 @@ export default function CalibrationWorkspaceClient({
                 />
               </div>
             </div>
+          )}
+
+          {/* ── Tab: Presentación ── */}
+          {activeTab === "presentacion" && (
+            <PresentationSchemaPanel
+              testId={testId}
+              aiCalibration={aiCalibration}
+              selectedSnapshot={
+                selectedSnapshotEntry
+                  ? {
+                      id: selectedSnapshotEntry.snap.id,
+                      studyType: selectedSnapshotEntry.snap.studyType,
+                      extractedData: selectedExtractedData,
+                    }
+                  : null
+              }
+            />
           )}
 
           {/* ── Tab: Configuración (V1 legacy) ── */}

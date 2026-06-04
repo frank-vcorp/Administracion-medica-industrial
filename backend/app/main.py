@@ -4,6 +4,7 @@ IMPL-20260225-01: Clasificação y extracción inteligentes de documentos médic
 IMPL-20260225-02: Firma Digital Avanzada y Motor de Reportes Masivos.
 
 IMPL-20260326-16: Endpoints V2 para prediagnóstico IA separado (ARCH-20260326-16).
+IMPL-20260604-01: Propuesta asistida de schema de presentación persistida (SPEC_ARCH-20260604-01).
 """
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -19,6 +20,7 @@ import hashlib
 from typing import List, Dict, Any, Optional
 
 from services.ai import DocumentClassifierService, ExtractorService, PrediagnosticService
+from services.ai.base import GeminiBase
 from services.pdf import SignerService, ReportService
 from schemas import DocumentClassification, ExtractedDataUnion
 
@@ -220,6 +222,291 @@ class GenerateReportRequest(BaseModel):
     title: Optional[str] = "Reporte de Consolidación"
 
 
+class PresentationSchemaRequest(BaseModel):
+    """
+    IMPL-20260604-01. Respaldo: context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md.
+    Entrada del asistente de presentación persistida; nunca se usa en runtime clínico.
+    """
+    study_type: str
+    extracted_data: Dict[str, Any]
+    ai_calibration: Optional[Dict[str, Any]] = None
+
+
+def _presentation_title(raw_key: str) -> str:
+    return raw_key.replace("_", " ").strip().title() or "Seccion"
+
+
+def _is_scalar_value(value: Any) -> bool:
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _get_value_at_path(data: Dict[str, Any], path: Optional[str]) -> Any:
+    if not path:
+        return data
+
+    current: Any = data
+    for segment in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(segment)
+    return current
+
+
+def _resolve_source_map(data: Dict[str, Any], source_key: Optional[str]) -> Dict[str, Any]:
+    if not source_key:
+        return data
+    resolved = _get_value_at_path(data, source_key)
+    return resolved if isinstance(resolved, dict) else data
+
+
+def _sanitize_presentation_schema(candidate: Any, study_type: str, extracted_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    IMPL-20260604-01. Respaldo: context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md.
+    Normaliza la salida del modelo para conservar solo rutas y claves presentes en extracted_data.
+    """
+    if not isinstance(candidate, dict):
+        candidate = {}
+
+    sections: List[Dict[str, Any]] = []
+    for raw_section in candidate.get("sections", []):
+        if not isinstance(raw_section, dict):
+            continue
+
+        kind = str(raw_section.get("kind") or "").strip()
+        title = str(raw_section.get("title") or _presentation_title(kind)).strip() or "Seccion"
+
+        if kind in {"keyValue", "badges"}:
+            source_key = str(raw_section.get("sourceKey") or "").strip() or None
+            source = _resolve_source_map(extracted_data, source_key)
+            fields = []
+            for field in raw_section.get("fields", []):
+                field_key = str(field).strip()
+                if field_key and field_key in source:
+                    fields.append(field_key)
+            if fields:
+                payload = {"kind": kind, "title": title, "fields": fields}
+                if source_key:
+                    payload["sourceKey"] = source_key
+                sections.append(payload)
+            continue
+
+        if kind == "table":
+            source = str(raw_section.get("source") or "").strip()
+            rows = _get_value_at_path(extracted_data, source)
+            if not source or not isinstance(rows, list) or not rows:
+                continue
+            object_rows = [row for row in rows if isinstance(row, dict)]
+            if not object_rows:
+                continue
+            valid_keys = set().union(*(row.keys() for row in object_rows))
+            columns = []
+            for col in raw_section.get("columns", []):
+                if not isinstance(col, dict):
+                    continue
+                col_key = str(col.get("key") or "").strip()
+                if col_key and col_key in valid_keys:
+                    columns.append({
+                        "key": col_key,
+                        "label": str(col.get("label") or _presentation_title(col_key)).strip() or col_key,
+                    })
+            if columns:
+                sections.append({"kind": kind, "title": title, "source": source, "columns": columns})
+            continue
+
+        if kind == "note":
+            source = str(raw_section.get("source") or "").strip()
+            if source and _get_value_at_path(extracted_data, source) is not None:
+                sections.append({"kind": kind, "title": title, "source": source})
+            continue
+
+        if kind == "bilateralFrequency":
+            right_key = str(raw_section.get("rightKey") or "").strip()
+            left_key = str(raw_section.get("leftKey") or "").strip()
+            right_value = _get_value_at_path(extracted_data, right_key)
+            left_value = _get_value_at_path(extracted_data, left_key)
+            if isinstance(right_value, dict) and isinstance(left_value, dict):
+                section_payload = {
+                    "kind": kind,
+                    "title": title,
+                    "rightKey": right_key,
+                    "leftKey": left_key,
+                }
+                preferred_order = raw_section.get("preferredOrder")
+                if isinstance(preferred_order, list):
+                    section_payload["preferredOrder"] = [
+                        int(freq) for freq in preferred_order if isinstance(freq, (int, float))
+                    ]
+                sections.append(section_payload)
+
+    return {
+        "studyType": str(candidate.get("studyType") or study_type).strip() or study_type,
+        "sections": sections,
+    }
+
+
+def _build_heuristic_presentation_schema(study_type: str, extracted_data: Dict[str, Any]) -> Dict[str, Any]:
+    sections: List[Dict[str, Any]] = []
+
+    root_scalars = [
+        key for key, value in extracted_data.items()
+        if _is_scalar_value(value) and value not in (None, "")
+    ]
+    if root_scalars:
+        sections.append({
+            "kind": "keyValue",
+            "title": "Resumen principal",
+            "fields": root_scalars[:8],
+        })
+
+    for key, value in extracted_data.items():
+        if isinstance(value, dict):
+            scalar_children = [
+                child_key for child_key, child_value in value.items()
+                if _is_scalar_value(child_value) and child_value not in (None, "")
+            ]
+            if scalar_children:
+                sections.append({
+                    "kind": "keyValue",
+                    "title": _presentation_title(key),
+                    "sourceKey": key,
+                    "fields": scalar_children[:10],
+                })
+
+        if isinstance(value, list) and value:
+            if all(isinstance(item, dict) for item in value):
+                valid_keys: List[str] = []
+                for row in value:
+                    for row_key in row.keys():
+                        if row_key not in valid_keys:
+                            valid_keys.append(row_key)
+                sections.append({
+                    "kind": "table",
+                    "title": _presentation_title(key),
+                    "source": key,
+                    "columns": [
+                        {"key": column_key, "label": _presentation_title(column_key)}
+                        for column_key in valid_keys[:8]
+                    ],
+                })
+            elif all(_is_scalar_value(item) for item in value):
+                sections.append({
+                    "kind": "note",
+                    "title": _presentation_title(key),
+                    "source": key,
+                })
+
+    right_ear = extracted_data.get("oido_derecho")
+    left_ear = extracted_data.get("oido_izquierdo")
+    if isinstance(right_ear, dict) and isinstance(left_ear, dict):
+        for nested_key in sorted(set(right_ear.keys()).intersection(left_ear.keys())):
+            right_nested = right_ear.get(nested_key)
+            left_nested = left_ear.get(nested_key)
+            if isinstance(right_nested, dict) and isinstance(left_nested, dict):
+                sections.append({
+                    "kind": "bilateralFrequency",
+                    "title": _presentation_title(nested_key),
+                    "rightKey": f"oido_derecho.{nested_key}",
+                    "leftKey": f"oido_izquierdo.{nested_key}",
+                })
+
+    return _sanitize_presentation_schema({"studyType": study_type, "sections": sections}, study_type, extracted_data)
+
+
+def _build_presentation_summary(schema: Dict[str, Any]) -> str:
+    sections = schema.get("sections", []) if isinstance(schema, dict) else []
+    if not sections:
+        return "Propuse un schema base sin secciones válidas; requiere ajuste manual."
+
+    section_titles = [str(section.get("title") or section.get("kind") or "seccion") for section in sections[:4]]
+    return f"Agrupé {', '.join(section_titles)} y dejé {len(sections)} sección(es) listas para ajuste manual."
+
+
+def _build_presentation_prompt(request: PresentationSchemaRequest) -> str:
+    canonical_type = None
+    if isinstance(request.ai_calibration, dict):
+        canonical_type = request.ai_calibration.get("canonicalStudyType")
+
+    return (
+        "Eres un asistente de calibración de presentación clínica para medicina ocupacional. "
+        "Debes devolver SOLO JSON válido con las claves schema y summary. "
+        "schema debe contener studyType y sections. "
+        "Usa exclusivamente estos tipos de sección: keyValue, table, note, badges, bilateralFrequency. "
+        "No generes HTML, JSX, markdown ni texto clínico interpretativo. "
+        "No inventes rutas ni campos ausentes. "
+        "Si encuentras arrays homogéneos de objetos, prioriza table. "
+        "Si encuentras objetos con escalares, agrúpalos como keyValue o badges según tenga sentido. "
+        "Usa títulos médicos legibles. "
+        "Preferir rutas explícitas del JSON real. "
+        f"Study type solicitado: {request.study_type}. "
+        f"Study type canónico: {canonical_type or request.study_type}. "
+        "Responde en este formato JSON: "
+        '{"schema":{"studyType":"...","sections":[...]},"summary":"..."}. '
+        f"JSON real de extracted_data: {json.dumps(request.extracted_data, ensure_ascii=False)}"
+    )
+
+
+def _call_presentation_gemini(prompt: str) -> Dict[str, Any]:
+    import requests
+
+    if not GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY no configurada para propuesta asistida")
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL_EXTRACTION}:generateContent?key={GEMINI_API_KEY}"
+    )
+    response = requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048},
+        },
+        timeout=(10, 60),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    candidates = payload.get("candidates", [])
+    if not candidates:
+        raise ValueError("Gemini no devolvió candidatos para presentation schema")
+    text = GeminiBase._sanitize_model_json_text(
+        (((candidates[0] or {}).get("content") or {}).get("parts") or [{}])[0].get("text", "")
+    )
+    if not text:
+        raise ValueError("Gemini devolvió contenido vacío para presentation schema")
+    return GeminiBase._tolerant_json_parse(text)
+
+
+def _propose_presentation_schema(request: PresentationSchemaRequest) -> Dict[str, Any]:
+    heuristic_schema = _build_heuristic_presentation_schema(request.study_type, request.extracted_data)
+    schema = heuristic_schema
+    summary = _build_presentation_summary(heuristic_schema)
+    model_name = "heuristic-fallback"
+
+    if GEMINI_API_KEY:
+        try:
+            model_result = _call_presentation_gemini(_build_presentation_prompt(request))
+            schema = _sanitize_presentation_schema(
+                model_result.get("schema"), request.study_type, request.extracted_data
+            )
+            if not schema.get("sections"):
+                schema = heuristic_schema
+            summary = str(model_result.get("summary") or _build_presentation_summary(schema))
+            model_name = GEMINI_MODEL_EXTRACTION
+        except Exception as exc:
+            print(f"⚠️ Presentation schema fallback heurístico: {_sanitize_error(str(exc))}")
+
+    return {
+        "schema": schema,
+        "summary": summary,
+        "audit": {
+            "model_name": model_name,
+            "prompt_source": "presentation_schema_assistant",
+            "prompt_version": "presentation-schema-v1",
+        },
+    }
+
+
 @app.get("/")
 def read_root():
     """Health check endpoint."""
@@ -272,6 +559,21 @@ def v2_ai_status():
         "prediagnosis_prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
         "last_init_error": ai_init_error,
     }
+
+
+@app.post("/api/v2/studies/presentation-schema/propose")
+def propose_presentation_schema(request: PresentationSchemaRequest):
+    """
+    IMPL-20260604-01. Respaldo: context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md.
+    Genera una propuesta de schema declarativo persistible a partir de extracted_data.
+    Solo se invoca desde calibración bajo demanda; nunca en runtime de la papeleta.
+    """
+    if not request.study_type.strip():
+        raise HTTPException(status_code=400, detail="study_type es obligatorio")
+    if not isinstance(request.extracted_data, dict) or not request.extracted_data:
+        raise HTTPException(status_code=400, detail="extracted_data es obligatorio y debe ser objeto")
+
+    return _propose_presentation_schema(request)
 
 
 @app.post("/api/v1/upload-only")
