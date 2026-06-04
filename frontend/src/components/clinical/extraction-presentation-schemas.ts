@@ -5,6 +5,8 @@
  * @backup context/checkpoints/CHK_IMPL-20260518-13-RENDERER-CLINICO.md
  * @extends IMPL-20260518-14 — Audiometría (tabla bilateral por frecuencia)
  * @backup context/checkpoints/CHK_IMPL-20260518-14-RENDERER-CLINICO-AUDIOMETRIA.md
+ * @realigned IMPL-20260603-01
+ * @backup context/SPECs/SPEC_ARCH-20260603-05-REALINEACION-RENDERER-ESPIROMETRIA-PAYLOAD-REAL.md
  */
 
 // --- Tipos de secciones ---
@@ -77,15 +79,15 @@ const espirometriaSchema: StudyPresentationSchema = {
     {
       kind: "keyValue",
       title: "Resumen principal",
-      fields: ["fvc", "fev1", "fev1_fvc", "fvc_pct_pred", "fev1_pct_pred"],
+      fields: ["fvc", "fev1", "fev1_fvc_ratio", "fvc_percent_predicho", "fev1_percent_predicho"],
     },
     {
       kind: "keyValue",
       title: "Datos del paciente",
       sourceKey: "paciente",
       fields: [
-        "nombre_completo", "nombre", "sexo", "edad",
-        "talla", "peso", "imc", "motivo", "procedencia",
+        "nombre_completo", "sexo", "edad_anios", "talla_cm",
+        "peso_kg", "imc", "motivo", "procedencia", "fuma",
       ],
     },
     {
@@ -93,7 +95,7 @@ const espirometriaSchema: StudyPresentationSchema = {
       title: "Datos del estudio",
       sourceKey: "estudio",
       fields: [
-        "referencia", "fecha", "hora",
+        "referencia", "fecha_estudio", "hora_estudio",
         "tipo_reporte", "equipo_modelo", "version_software",
       ],
     },
@@ -102,8 +104,8 @@ const espirometriaSchema: StudyPresentationSchema = {
       title: "Condiciones técnicas",
       sourceKey: "condiciones",
       fields: [
-        "tecnico", "transductor", "temperatura", "humedad", "presion",
-        "ecuacion_referencia", "factor_etnico", "factor_btps",
+        "tecnico", "transductor", "temperatura_c", "humedad_pct", "presion_mmhg",
+        "referencia_ecuacion", "factor_etnico", "factor_btps",
       ],
     },
     {
@@ -111,9 +113,8 @@ const espirometriaSchema: StudyPresentationSchema = {
       title: "Calidad técnica del estudio",
       sourceKey: "calidad",
       fields: [
-        "repetibilidad_ats_fvc", "repetibilidad_ats_fev1",
-        "repetibilidad_fvc", "repetibilidad_fev1",
-        "notas", "completitud",
+        "repetibilidad_ats_ers_fvc", "repetibilidad_ats_ers_fev1",
+        "es_interpretable", "completitud_documental", "notas_calidad",
       ],
     },
     {
@@ -122,15 +123,15 @@ const espirometriaSchema: StudyPresentationSchema = {
       source: "parametros",
       columns: [
         { key: "label", label: "Parámetro" },
-        { key: "unidad", label: "Unidad" },
-        { key: "m1", label: "M1" },
-        { key: "m2", label: "M2" },
-        { key: "m3", label: "M3" },
-        { key: "ref", label: "REF" },
-        { key: "lln", label: "LLN" },
-        { key: "pref_m1", label: "%REF M1" },
-        { key: "pref_m2", label: "%REF M2" },
-        { key: "pref_m3", label: "%REF M3" },
+        { key: "unit", label: "Unidad" },
+        { key: "m1_value", label: "M1" },
+        { key: "m2_value", label: "M2" },
+        { key: "m3_value", label: "M3" },
+        { key: "ref_value", label: "REF" },
+        { key: "lln_value", label: "LLN" },
+        { key: "m1_pct_ref", label: "%REF M1" },
+        { key: "m2_pct_ref", label: "%REF M2" },
+        { key: "m3_pct_ref", label: "%REF M3" },
       ],
     },
     {
@@ -138,8 +139,8 @@ const espirometriaSchema: StudyPresentationSchema = {
       title: "Gráficas e indicadores",
       sourceKey: "graficas",
       fields: [
-        "curva_flujo_volumen", "curva_volumen_tiempo",
-        "maniobras_graficadas", "observaciones",
+        "curva_flujo_volumen_presente", "curva_volumen_tiempo_presente",
+        "maniobras_graficadas", "observaciones_grafica",
       ],
     },
   ],
