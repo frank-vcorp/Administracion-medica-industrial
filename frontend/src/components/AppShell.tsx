@@ -88,8 +88,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { data: session, status } = useSession()
 
-  // Sin chrome en pantalla de login
-  if (pathname?.startsWith('/login')) {
+  // Sin chrome en pantalla de login y en rutas /demo (datos estáticos, sin AMI chrome)
+  // IMPL-20260623-02: bypass también para /demo/* (demo navegable público)
+  const isChromeFreePage = pathname?.startsWith('/login') || pathname?.startsWith('/demo')
+  if (isChromeFreePage) {
     return <>{children}</>
   }
 
