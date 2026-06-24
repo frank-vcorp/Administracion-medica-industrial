@@ -24,6 +24,7 @@ import {
   assertRfcNotRegistered,
   assertUserIsActive,
 } from '@/lib/schemas/company-full-form'
+import { getPublicBaseUrl } from '@/lib/env/public-base-url'
 
 // --------------------------------------------------------------------------
 // Compatibilidad: CRUD básico reusado por src/actions/company.actions.ts
@@ -122,7 +123,7 @@ export async function validateCompanySelfRegToken(plainToken: string) {
 
 /** Crea un nuevo link de auto-alta. */
 export async function generateCompanySelfRegLink(
-  createdByUserId?: string,
+  createdByUserId?: string | null,
   ttlHours = 168
 ): Promise<{
   id: string
@@ -141,8 +142,9 @@ export async function generateCompanySelfRegLink(
       uploadedFiles: [],
     },
   })
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
-  const url = `${baseUrl.replace(/\/$/, '')}/auto-alta/${plain}`
+  const baseUrl = getPublicBaseUrl()
+  const refSuffix = createdByUserId ? `?ref=${encodeURIComponent(createdByUserId)}` : ''
+  const url = `${baseUrl}/auto-alta/${plain}${refSuffix}`
   return { id: created.id, token: plain, url, expiresAt }
 }
 
