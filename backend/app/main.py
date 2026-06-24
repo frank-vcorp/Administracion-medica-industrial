@@ -10,7 +10,7 @@ IMPL-20260604-01: Propuesta asistida de schema de presentación persistida (SPEC
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 import os
 import re
@@ -577,32 +577,66 @@ def propose_presentation_schema(request: PresentationSchemaRequest):
 
 
 @app.post("/api/v1/upload-only")
-async def upload_only(file: UploadFile = File(...)):
+async def upload_only(file: UploadFile = File(...), key: Optional[str] = Form(default=None)):
     """
     Persiste físicamente el archivo en /uploads sin ejecutar análisis IA.
     FIX ARCH-20260326-04: Fallback para cuando el pipeline IA V2 no está disponible.
     Garantiza que fileUrl en DB apunte a un archivo que realmente existe.
+
+    IMPL-20260624-01: Soporta campo opcional `key` en FormData.
+      - Si el cliente envía `key`, se respeta como ruta exacta de almacenamiento
+        (ej. `companies/public/<scope>/<section>/<filename>`). Esto permite
+        organizar el bucket por scope/sección en lugar de un flat namespace.
+      - Si NO envía `key` (compatibilidad con event-test.actions.ts), se usa
+        el comportamiento legacy: `<filename> = {int(time.time())}-{file.filename}`.
+      - El response siempre expone `key` (ruta efectiva usada) y `file_url` (URL
+        accesible vía /api/files/{key} cuando S3 está habilitado, o /uploads/{key}
+        en fallback local). Ambos campos son retrocompatibles: `file` se mantiene
+        como alias de `key` para no romper consumidores legacy.
     """
-    filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
+    # IMPL-20260624-01: Si el cliente envía `key`, validarlo mínimamente y usarlo.
+    # Si no, fallback al filename timestamping para mantener compat con event-test.actions.ts.
+    if key and isinstance(key, str) and key.strip():
+        safe_key = key.strip()
+        # Defensa contra path traversal: no permitir `..`, ni absolutas, ni caracteres peligrosos.
+        if safe_key.startswith("/") or ".." in safe_key.split("/"):
+            return {"status": "error", "error": "key inválida (path traversal o absoluta no permitida)"}
+        # En sistemas locales, prevenir escribir fuera de UPLOAD_DIR.
+        target_filename = safe_key.replace(" ", "_")
+    else:
+        target_filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
+
     try:
         contents = await file.read()
-        # IMPL-20260513-S3: priorizar bucket cuando está configurado
-        if _s3_enabled and _upload_file_to_s3(contents, filename):
-            print(f"📁 Upload-only (S3): {filename} ({len(contents)} bytes)")
+        # IMPL-20260624-01: priorizar bucket cuando está configurado, usando `target_filename` como key.
+        if _s3_enabled and _upload_file_to_s3(contents, target_filename):
+            print(f"📁 Upload-only (S3): {target_filename} ({len(contents)} bytes)")
             return {
                 "status": "success",
-                "file": filename,
-                "file_url": f"/api/files/{filename}",
+                "key": target_filename,
+                "file": target_filename,  # retrocompat
+                "file_url": f"/api/files/{target_filename}",
             }
-        # Fallback: filesystem local
-        local_path = os.path.join(UPLOAD_DIR, filename)
+        # Fallback: filesystem local. Si la key trae subcarpetas (ej. companies/public/abc/constancia/x.pdf),
+        # crear los directorios padre antes de escribir.
+        local_path = os.path.join(UPLOAD_DIR, target_filename)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
         with open(local_path, "wb") as f:
             f.write(contents)
-        print(f"📁 Upload-only (local): {filename} ({len(contents)} bytes)")
+        print(f"📁 Upload-only (local): {target_filename} ({len(contents)} bytes)")
+        # IMPL-20260624-01: Si la key tenía subcarpetas, devolvemos /api/files/{key}
+        # para que el frontend pueda resolverla vía el endpoint /api/files (con fallback local).
+        # En modo flat legacy (sin subcarpetas), seguimos devolviendo /uploads/{file} para
+        # no romper consumidores que ya servían vía StaticFiles mounted en /uploads.
+        if "/" in target_filename:
+            file_url = f"/api/files/{target_filename}"
+        else:
+            file_url = f"/uploads/{target_filename}"
         return {
             "status": "success",
-            "file": filename,
-            "file_url": f"/uploads/{filename}",
+            "key": target_filename,
+            "file": target_filename,  # retrocompat
+            "file_url": file_url,
         }
     except Exception as e:
         print(f"❌ Error en upload-only: {e}")
@@ -1224,30 +1258,75 @@ def v2_prediagnosis_from_params(
 @app.get("/api/files/{key:path}")
 def resolve_file(key: str):
     """
-    IMPL-20260513-S3: Resuelve una key de archivo en el bucket S3-compatible y
-    redirige (HTTP 302) a una URL presignada de corta duración (5 min).
+    IMPL-20260513-S3: Resuelve una key de archivo y devuelve acceso al objeto.
+
+    IMPL-20260624-01 (ruta pública sin token /solicitar-alta):
+      - Si S3 está habilitado y la key existe en el bucket:
+          genera URL presigned (5 min) y redirige con 302.
+          Para PDF/imágenes fuerza ResponseContentType e inline (ARCH-20260516-01).
+      - Si S3 está habilitado pero la operación falla, intenta fallback local.
+      - Si S3 NO está habilitado en absoluto, sirve desde filesystem local:
+          ruta = path.join(UPLOAD_DIR, key); Content-Type según extensión.
+      - 404 si no se encuentra ni en S3 ni localmente.
+      - 503 si S3 no está configurado Y no se encuentra localmente.
+
     Permite al frontend y a regenerateStudyAI descargar archivos sin exponer
     credenciales ni almacenar URLs efímeras en la base de datos.
-    IMPL-20260516-01: Para PDF/imágenes se fuerzan ResponseContentType e inline en la URL
-    presignada como capa de defensa adicional sobre los metadatos del objeto. ARCH-20260516-01.
     NUNCA loguea la presigned URL generada.
     """
-    if not _s3_enabled or not _s3_client:
-        raise HTTPException(status_code=503, detail="Storage S3 no configurado en este entorno")
+    content_type, is_embeddable = _detect_content_type(key)
+
+    # --- Camino A: S3 habilitado → intentar presigned URL -----------------------
+    if _s3_enabled and _s3_client:
+        try:
+            params: dict = {"Bucket": STORAGE_S3_BUCKET, "Key": key}
+            if is_embeddable:
+                params["ResponseContentDisposition"] = "inline"
+                params["ResponseContentType"] = content_type
+            presigned_url = _s3_client.generate_presigned_url(
+                "get_object",
+                Params=params,
+                ExpiresIn=300,  # 5 minutos — suficiente para visor y descarga
+            )
+            return RedirectResponse(url=presigned_url, status_code=302)
+        except Exception as e:
+            # Falla S3 → intentar fallback local antes de rendirse.
+            print(f"⚠️ S3 presigned URL falló para key={key}: {_sanitize_error(str(e))}; intentando fallback local.")
+
+    # --- Camino B: Fallback a filesystem local ----------------------------------
+    local_path = os.path.join(UPLOAD_DIR, key)
+    # Defensa contra path traversal: la key podría contener `..` y escapar de UPLOAD_DIR.
     try:
-        content_type, is_embeddable = _detect_content_type(key)
-        params: dict = {"Bucket": STORAGE_S3_BUCKET, "Key": key}
-        if is_embeddable:
-            params["ResponseContentDisposition"] = "inline"
-            params["ResponseContentType"] = content_type
-        presigned_url = _s3_client.generate_presigned_url(
-            "get_object",
-            Params=params,
-            ExpiresIn=300,  # 5 minutos — suficiente para visor y descarga
+        local_abs = os.path.realpath(local_path)
+        upload_abs = os.path.realpath(UPLOAD_DIR)
+        if not local_abs.startswith(upload_abs + os.sep) and local_abs != upload_abs:
+            raise HTTPException(status_code=400, detail="key inválida")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="key inválida")
+
+    if os.path.isfile(local_path):
+        try:
+            with open(local_path, "rb") as fh:
+                file_bytes = fh.read()
+            headers: Dict[str, str] = {"Content-Type": content_type}
+            if is_embeddable:
+                # Inline para que el visor embebido no fuerce descarga.
+                headers["Content-Disposition"] = "inline"
+            return Response(content=file_bytes, headers=headers, media_type=content_type)
+        except Exception as e:
+            print(f"❌ Error leyendo archivo local key={key}: {_sanitize_error(str(e))}")
+            raise HTTPException(status_code=500, detail="No se pudo leer el archivo local")
+
+    # --- Camino C: No encontrado -----------------------------------------------
+    if not _s3_enabled:
+        # S3 nunca estuvo configurado y el archivo no está local: 503 explícito
+        # para distinguir de un 404 "el archivo fue borrado".
+        raise HTTPException(
+            status_code=503,
+            detail="Storage S3 no configurado y archivo no disponible localmente",
         )
-        return RedirectResponse(url=presigned_url, status_code=302)
-    except Exception as e:
-        print(f"⚠️ Error generando presigned URL para key={key}: {_sanitize_error(str(e))}")
-        raise HTTPException(status_code=500, detail="No se pudo generar acceso al archivo")
+    raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {key}")
 
 
