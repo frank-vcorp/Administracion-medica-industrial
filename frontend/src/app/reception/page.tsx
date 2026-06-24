@@ -61,13 +61,14 @@ export default async function ReceptionPage() {
             </div>
 
             <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-hidden">
-                <Lane title="SALA DE ESPERA" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
+                {/* IMPL-20260624-02-RENOMBRES-FASE2-NAV-LANE: Lane 'Registro de pruebas' (primer estado del flujo Kanban) */}
+                <Lane title="Registro de pruebas" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
                     {scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" nextStatus="IN_PROGRESS" />)}
                 </Lane>
-                <Lane title="EN CONSULTORIO" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
+                <Lane title="en proceso de prueba" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
                     {inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" />)}
                 </Lane>
-                <Lane title="POR VALIDAR" count={completed.length} color="bg-emerald-50/30" borderColor="border-emerald-100" icon="🛡️">
+                <Lane title="Por dictaminar" count={completed.length} color="bg-emerald-50/30" borderColor="border-emerald-100" icon="🛡️">
                     {completed.map(e => <PatientCard key={e.id} event={e} status="done" />)}
                 </Lane>
             </div>

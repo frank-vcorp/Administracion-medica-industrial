@@ -396,14 +396,14 @@ export default function WorkerFormModal({
                                 </div>
                             </div>
 
-                            {/* Banner ID Universal (solo creación) */}
+                            {/* Banner ID (solo creación) */}
                             {!workerToEdit && (
                                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">🆔</div>
                                         <div>
                                             <p className="text-[10px] font-black text-blue-600 uppercase">Seguridad AMI</p>
-                                            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-tighter">ID Universal se generará automáticamente</p>
+                                            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-tighter">ID se generará automáticamente</p>
                                         </div>
                                     </div>
                                 </div>

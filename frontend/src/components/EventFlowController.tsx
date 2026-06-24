@@ -95,7 +95,7 @@ export default function EventFlowController({
                                 🩺
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-slate-800">Dictamen Médico Final</h3>
+                                <h3 className="text-xl font-bold text-slate-800">Reporte médico de aptitud</h3>
                                 <p className="text-sm text-slate-500">Completa la evaluación para generar el certificado firmado.</p>
                             </div>
                         </div>

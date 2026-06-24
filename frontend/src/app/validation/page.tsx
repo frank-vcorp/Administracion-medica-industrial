@@ -25,7 +25,7 @@ export default async function ValidationPage() {
         <div className="space-y-8 pb-12">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Validación Médica</h2>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Validación diagnóstica</h2>
                     <p className="text-sm text-slate-500 font-medium">Revisión, diagnóstico y firma digital de expedientes.</p>
                 </div>
                 <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-2">

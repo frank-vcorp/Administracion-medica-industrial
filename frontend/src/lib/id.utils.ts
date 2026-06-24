@@ -4,7 +4,7 @@
  */
 
 /**
- * Genera el ID Universal del Trabajador
+ * Genera el ID del Trabajador
  * Formato: [INICIALES]-[YYYYMMDD]-[G]-[AMI-CLI]
  * Algoritmo de iniciales:
  * 1. 1ra letra Apellido Paterno

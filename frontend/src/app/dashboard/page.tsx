@@ -86,14 +86,14 @@ export default function DashboardPage() {
                     value={kpis.completedEvents}
                     icon="✅"
                     color="emerald"
-                    description="Dictámenes firmados"
+                    description="Reporte médico de aptitud"
                 />
                 <StatCard
                     title="Total Padron"
                     value={kpis.totalWorkers}
                     icon="👥"
                     color="indigo"
-                    description="Trabajadores base"
+                    description="Pacientes atendidos"
                 />
             </div>
 
@@ -103,7 +103,7 @@ export default function DashboardPage() {
                     <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
                         <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
                             <span className="w-2 h-6 bg-indigo-500 rounded-full"></span>
-                            Estado Operativo del Sistema
+                            Resumen de atenciones del día
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <InfoBox label="Flujo de hoy" value={`${kpis.appointmentsToday} citas programadas`} trend="+12% vs ayer" />

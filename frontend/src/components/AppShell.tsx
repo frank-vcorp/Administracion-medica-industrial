@@ -127,14 +127,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <nav className={`flex-1 overflow-y-auto ${isEventWorkspace ? 'px-2' : 'px-4'} pb-6 space-y-1`}>
           {/* Ítems operativos — personal interno */}
+          {/* IMPL-20260624-02-RENOMBRES-FASE2-NAV-LANE: reorden aprobado (Citas → Listado → Proceso → Agenda, Vista 3 Agendas secondary bajo Citas) */}
           {showStaffItems && (
             <>
-              <NavItem href="/dashboard" icon="📊" label="Dashboard" collapsed={isEventWorkspace} />
-              <NavItem href="/workers" icon="👥" label="Trabajadores" collapsed={isEventWorkspace} />
-              <NavItem href="/reception" icon="🏥" label="Piso Clínico" collapsed={isEventWorkspace} />
               <NavItem href="/appointments" icon="📅" label="Gestión de Citas" collapsed={isEventWorkspace} />
               {/* Vista de 3 agendas simultáneas como acceso secundario */}
               <NavItem href="/appointments/overview" icon="🗓️" label="Vista 3 Agendas" secondary collapsed={isEventWorkspace} />
+              <NavItem href="/workers" icon="👥" label="Listado de pacientes" collapsed={isEventWorkspace} />
+              <NavItem href="/reception" icon="🏥" label="Proceso de atención clínica" collapsed={isEventWorkspace} />
+              <NavItem href="/dashboard" icon="📊" label="Agenda" collapsed={isEventWorkspace} />
 
               <NavSection label="Médico" collapsed={isEventWorkspace} />
               <NavItem href="/events" icon="📁" label="Expedientes Activos" collapsed={isEventWorkspace} />

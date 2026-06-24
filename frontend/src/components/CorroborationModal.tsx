@@ -253,7 +253,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
               </div>
               {worker.universalId && (
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">ID Universal</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">ID</p>
                   <p className="text-xs font-mono text-slate-500">{worker.universalId}</p>
                 </div>
               )}

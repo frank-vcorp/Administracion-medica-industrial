@@ -72,19 +72,22 @@ export default function WorkersTable({ workers, companies, jobPositions, initial
         <>
             <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-100 border border-slate-100 overflow-hidden">
                 <table className="w-full text-left text-sm">
+                    {/* IMPL-20260624-03: Tabla re-estructurada — Empresa/Puesto y Contacto se separan en columnas independientes (ID, Nombre, Empresa, Puesto, Correo, Teléfono, Acciones) */}
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-medium">
                         <tr>
-                            <th className="px-6 py-4">ID Universal</th>
+                            <th className="px-6 py-4">ID</th>
                             <th className="px-6 py-4">Nombre Completo</th>
-                            <th className="px-6 py-4">Empresa / Puesto</th>
-                            <th className="px-6 py-4">Contacto</th>
+                            <th className="px-6 py-4">Empresa</th>
+                            <th className="px-6 py-4">Puesto</th>
+                            <th className="px-6 py-4">Correo</th>
+                            <th className="px-6 py-4">Teléfono</th>
                             <th className="px-6 py-4 text-right">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {workers.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="p-8 text-center text-slate-400">Sin trabajadores registrados</td>
+                                <td colSpan={7} className="p-8 text-center text-slate-400">Sin trabajadores registrados</td>
                             </tr>
                         )}
                         {workers.map(w => (
@@ -92,22 +95,25 @@ export default function WorkersTable({ workers, companies, jobPositions, initial
                                 <td className="px-6 py-4 font-mono text-xs text-slate-500">{w.universalId}</td>
                                 <td className="px-6 py-4 font-medium text-slate-900">{w.firstName} {w.lastName}</td>
                                 <td className="px-6 py-4">
-                                    <div className="flex flex-col gap-1">
-                                        {w.company ? (
-                                            <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100 w-fit">
-                                                {w.company.name}
-                                            </span>
-                                        ) : (
-                                            <span className="text-slate-400 text-xs italic">Sin Empresa</span>
-                                        )}
-                                        {w.jobPosition && (
-                                            <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-xs font-bold border border-amber-100 w-fit">
-                                                {w.jobPosition.name}
-                                            </span>
-                                        )}
-                                    </div>
+                                    {w.company ? (
+                                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100 w-fit inline-block">
+                                            {w.company.name}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-400 text-xs italic">Sin Empresa</span>
+                                    )}
                                 </td>
-                                <td className="px-6 py-4 text-slate-500 text-xs">{w.email || w.phone || '-'}</td>
+                                <td className="px-6 py-4">
+                                    {w.jobPosition ? (
+                                        <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-xs font-bold border border-amber-100 w-fit inline-block">
+                                            {w.jobPosition.name}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-400 text-xs italic">—</span>
+                                    )}
+                                </td>
+                                <td className="px-6 py-4 text-slate-500 text-xs">{w.email || <span className="text-slate-400">—</span>}</td>
+                                <td className="px-6 py-4 text-slate-500 text-xs">{w.phone || <span className="text-slate-400">—</span>}</td>
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-3">
                                         <button

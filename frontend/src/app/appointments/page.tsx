@@ -221,16 +221,16 @@ export default function AppointmentsPage() {
 
             {/* Stats Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Total" value={appointments.length} color="blue" />
+                <StatCard label="completar con pacientes citados" value={appointments.length} color="blue" />
                 <StatCard label="Pendientes" value={appointments.filter(a => a.status === 'SCHEDULED').length} color="amber" />
-                <StatCard label="Completadas" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
-                <StatCard label="Ausentes" value={appointments.filter(a => a.status === 'NO_SHOW').length} color="slate" />
+                <StatCard label="Atención completa" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
+                <StatCard label="no se presentó" value={appointments.filter(a => a.status === 'NO_SHOW').length} color="slate" />
             </div>
 
             {/* Agenda Timeline View */}
             <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
                 <div className="p-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <h2 className="font-bold text-slate-700 uppercase tracking-widest text-xs">Cronograma de Atención</h2>
+                    <h2 className="font-bold text-slate-700 uppercase tracking-widest text-xs">agenda del día</h2>
                     <div className="flex gap-2">
                         <span className="w-3 h-3 rounded-full bg-blue-500 border border-white shadow-sm"></span>
                         <span className="w-3 h-3 rounded-full bg-slate-300 border border-white shadow-sm"></span>
