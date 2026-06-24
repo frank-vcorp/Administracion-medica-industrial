@@ -19,6 +19,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { isCompanyOperativa } from '@/services/company.service'
 import { logAudit } from '@/actions/audit.actions'
 import { generateExpedientId } from '@/lib/id.utils'
 import {
@@ -48,6 +49,18 @@ export async function createAppointment(data: {
 
     if (!session?.user) {
       throw new Error('Usuario no autenticado')
+    }
+
+    // IMPL-20260623-03 (GAP-4): Bloquear creación de citas para clientes
+    // DESHABILITADOS o PENDIENTE_REVISION. Citas previas persisten.
+    if (data.companyId) {
+      const operativa = await isCompanyOperativa(data.companyId)
+      if (!operativa) {
+        return {
+          success: false,
+          error: 'CLIENTE_DESHABILITADO',
+        }
+      }
     }
 
     // Convertir scheduledAt a Date si es string

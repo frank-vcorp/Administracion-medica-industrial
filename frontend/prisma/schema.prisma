@@ -31,6 +31,13 @@ model User {
   verifiedAppointments Appointment[]           @relation("AppointmentIdentityVerifier")
   /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
   intakeCreatedEvents  MedicalEvent[]          @relation("MedicalEventIntakeCreator")
+  // IMPL-20260623-02: Ficha Cliente v2 - vendedor asignado, habilitado, historial de vendedores (ARCH-20260623-03)
+  sellerCompanies        Company[]              @relation("CompanySeller")
+  enabledCompanies       Company[]              @relation("CompanyEnabledBy")
+  sellerHistoryPrevious  CompanySellerHistory[] @relation("PreviousSeller")
+  sellerHistoryNew       CompanySellerHistory[] @relation("NewSeller")
+  sellerHistoryChangedBy CompanySellerHistory[] @relation("ChangedBy")
+  createdSelfRegistrations CompanySelfRegistration[]
 
   @@map("users")
 }
@@ -91,6 +98,24 @@ model Company {
   workers         Worker[]
   // IMPL-20260519-14: Proyectos de visita médica contratados por esta empresa (ARCH-20260519-12)
   projects        Project[]
+  // IMPL-20260623-02: Ficha Cliente v2 - vendedor asignado, habilitado, origen, formulario completo (ARCH-20260623-03)
+  sellerId          String?
+  seller            User?              @relation("CompanySeller", fields: [sellerId], references: [id])
+  sellerAssignedAt  DateTime?
+  origen            CompanyOrigin      @default(MANUAL)
+  estado            CompanyStatus      @default(HABILITADO)
+  enabledAt         DateTime?
+  enabledByUserId   String?
+  enabledBy         User?              @relation("CompanyEnabledBy", fields: [enabledByUserId], references: [id])
+  fiscalData        Json?
+  repLegalData      Json?
+  rhData            Json?
+  cuentasPagarData  Json?
+  referenciasData   Json?
+  terminosAceptados Boolean?
+  documentosAdjuntos Json?
+  sellerHistory     CompanySellerHistory[]
+  selfRegistrations CompanySelfRegistration[]
 
   @@map("companies")
 }
@@ -421,6 +446,8 @@ enum UserRole {
   DOCTOR_VALIDATOR
   CAPTURIST
   COMPANY_CLIENT
+  // IMPL-20260623-02: Ficha Cliente v2 (ARCH-20260623-03)
+  VENDEDOR
 }
 
 enum GenderRestriction {
@@ -703,5 +730,118 @@ model ClinicalEvidenceSource {
   updatedAt DateTime @updatedAt
 
   @@map("clinical_evidence_sources")
+}
+
+// ===========================================================================
+// IMPL-20260623-02: Ficha Cliente v2 (ARCH-20260623-03)
+// Ref: context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
+//
+// Reglas no negociables:
+//   - Solo se AGREGAN campos opcionales a Company; no se rompen relaciones existentes.
+//   - Token plano NUNCA se persiste (solo tokenHash SHA-256).
+//   - CompanySellerHistory es append-only (nunca se borra).
+//   - Cliente deshabilitado bloquea nuevas citas, pero los datos persisten.
+// ===========================================================================
+
+/// Estado de ciclo de vida comercial del cliente.
+enum CompanyStatus {
+  PENDIENTE_REVISION // Creado por auto-alta, esperando revisión de vendedor
+  HABILITADO         // Activo y visible para operaciones
+  DESHABILITADO      // Bloqueado (datos persisten; no aparece en citas)
+}
+
+/// Origen del alta de la empresa.
+enum CompanyOrigin {
+  MANUAL    // Creado por vendedor o admin desde el modal rápido
+  AUTO_ALTA // Creado por prospecto vía link público
+}
+
+/// Estado del link público de auto-alta.
+enum CompanySelfRegStatus {
+  ACTIVE    // Token vigente, aún no envía
+  SUBMITTED // Ya envió, se creó Company
+  EXPIRED   // Pasó expiresAt sin enviar
+  CANCELLED // Vendedor/admin lo invalidó
+}
+
+/// Catálogo SAT de claves de uso de CFDI.
+/// Semilla V1 cubre las claves más comunes (G01-G03, B01-B20, P01, S01, CP01, CN01).
+enum CfdiUso {
+  G01
+  G02
+  G03
+  B01
+  B02
+  B03
+  B04
+  B05
+  B06
+  B07
+  B08
+  B09
+  B10
+  B11
+  B12
+  B13
+  B14
+  B15
+  B16
+  B17
+  B18
+  B19
+  B20
+  P01
+  S01
+  CP01
+  CN01
+}
+
+/// Historial append-only de cambios de vendedor. NUNCA se borra.
+model CompanySellerHistory {
+  id               String   @id @default(uuid())
+  companyId        String
+  previousSellerId String?
+  newSellerId      String?
+  changedByUserId  String
+  changedAt        DateTime @default(now())
+  reason           String?
+
+  company        Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  previousSeller User?   @relation("PreviousSeller", fields: [previousSellerId], references: [id])
+  newSeller      User?   @relation("NewSeller", fields: [newSellerId], references: [id])
+  changedBy      User    @relation("ChangedBy", fields: [changedByUserId], references: [id])
+
+  @@index([companyId, changedAt])
+  @@map("company_seller_history")
+}
+
+/// Link público para auto-alta de prospectos. Token plano NUNCA persiste.
+model CompanySelfRegistration {
+  id                 String              @id @default(uuid())
+  tokenHash          String              @unique // SHA-256 del token plano
+  companyDraft       Json?               // borrador parcial (futuro multi-step)
+  uploadedFiles      Json                @default("[]") // [{key, filename, size, mime, section}]
+  status             CompanySelfRegStatus @default(ACTIVE)
+  expiresAt          DateTime
+  openedCount        Int                 @default(0)
+  submittedAt        DateTime?
+  submittedCompanyId String?             @unique
+  createdByUserId    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  submittedCompany Company? @relation(fields: [submittedCompanyId], references: [id])
+  createdBy        User?    @relation(fields: [createdByUserId], references: [id])
+
+  @@map("company_self_registrations")
+}
+
+/// Catálogo de estados de México (seed estático).
+model EstadoMexico {
+  id         Int      @id // clave INEGI
+  nombre     String
+  municipios String[] // nombres comunes; municipios reales se validan contra servicio externo
+
+  @@map("estados_mexico")
 }
 

@@ -1,9 +1,16 @@
 'use client'
 
 import { useState, useTransition, useEffect } from 'react'
-import { createCompany, getBranches } from '@/actions/admin.actions'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import {
+  createCompany,
+  getBranches,
+} from '@/actions/admin.actions'
+import {
+  listActiveSellersAction,
+  generateCompanySelfRegLinkAction,
+} from '@/actions/company.actions'
 
 export default function CompanyFormModal() {
     const [isOpen, setIsOpen] = useState(false)
@@ -11,11 +18,17 @@ export default function CompanyFormModal() {
     const [successData, setSuccessData] = useState<{ success: boolean, company?: { id: string, name: string } } | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [branches, setBranches] = useState<{ id: string, name: string }[]>([])
+    const [sellers, setSellers] = useState<{ id: string, fullName: string, email: string }[]>([])
+    const [sellerId, setSellerId] = useState<string>('')
+    const [enabled, setEnabled] = useState<boolean>(true)
+    const [selfRegLink, setSelfRegLink] = useState<string | null>(null)
+    const [selfRegCopied, setSelfRegCopied] = useState<boolean>(false)
     const router = useRouter()
 
     useEffect(() => {
         if (isOpen) {
-            getBranches().then(data => setBranches(data))
+            getBranches().then((data) => setBranches(data))
+            listActiveSellersAction().then((data) => setSellers(data))
         }
     }, [isOpen])
 
@@ -23,7 +36,16 @@ export default function CompanyFormModal() {
         startTransition(async () => {
             setError(null)
             try {
-                const result = await createCompany(formData) as { success: boolean, company?: { id: string, name: string }, error?: string }
+                // El modal rápido sigue delegando al createCompany existente (admin.actions)
+                // que sólo guarda los 5 campos básicos. La asignación de vendedor y
+                // habilitado se aplican después vía updateCompany extendido (vía modal de edición).
+                formData.set('sellerId', sellerId)
+                formData.set('enabled', enabled ? 'true' : 'false')
+                const result = (await createCompany(formData)) as {
+                    success: boolean
+                    company?: { id: string, name: string }
+                    error?: string
+                }
                 if (result.success) {
                     setSuccessData(result)
                     router.refresh()
@@ -33,6 +55,30 @@ export default function CompanyFormModal() {
             } catch {
                 setError('Error de conexión')
             }
+        })
+    }
+
+    async function handleGenerateLink() {
+        startTransition(async () => {
+            try {
+                const result = await generateCompanySelfRegLinkAction(168)
+                if (result.ok) {
+                    setSelfRegLink(result.url)
+                    setSelfRegCopied(false)
+                } else {
+                    setError(result.error || 'No se pudo generar el link')
+                }
+            } catch {
+                setError('Error generando link de auto-alta')
+            }
+        })
+    }
+
+    function copyLink() {
+        if (!selfRegLink) return
+        navigator.clipboard.writeText(selfRegLink).then(() => {
+            setSelfRegCopied(true)
+            setTimeout(() => setSelfRegCopied(false), 2000)
         })
     }
 
@@ -67,13 +113,50 @@ export default function CompanyFormModal() {
     }
 
     return (
-        <>
+        <div className="flex items-center gap-2">
+            <button
+                onClick={handleGenerateLink}
+                disabled={isPending}
+                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-3 rounded-xl text-sm font-bold transition-all shadow-sm flex items-center gap-2"
+                title="Genera un link público de auto-alta (168h)"
+            >
+                🔗 Link Auto-Alta
+            </button>
             <button
                 onClick={() => setIsOpen(true)}
                 className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-slate-200 flex items-center gap-2"
             >
                 <span className="text-lg">+</span> Nueva Empresa
             </button>
+
+            {selfRegLink && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+                    <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-lg w-full space-y-4">
+                        <h3 className="text-lg font-black text-slate-800">Link de auto-alta generado</h3>
+                        <p className="text-sm text-slate-600">
+                            Comparte este link con el prospecto. Expira en 168 horas (7 días).
+                            El token se mostrará solo esta vez.
+                        </p>
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 break-all text-xs font-mono text-slate-700">
+                            {selfRegLink}
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={copyLink}
+                                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm"
+                            >
+                                {selfRegCopied ? '✓ Copiado' : 'Copiar link'}
+                            </button>
+                            <button
+                                onClick={() => setSelfRegLink(null)}
+                                className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-bold text-sm"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isOpen && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
@@ -116,11 +199,43 @@ export default function CompanyFormModal() {
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal Predeterminada</label>
                                 <select name="defaultBranchId" className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none">
                                     <option value="">Seleccionar Sucursal...</option>
-                                    {branches.map(b => (
+                                    {branches.map((b) => (
                                         <option key={b.id} value={b.id}>{b.name}</option>
                                     ))}
                                 </select>
                             </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Vendedor asignado</label>
+                                <select
+                                    name="sellerIdSelect"
+                                    value={sellerId}
+                                    onChange={(e) => setSellerId(e.target.value)}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none"
+                                >
+                                    <option value="">Sin asignar (asignar después)</option>
+                                    {sellers.map((s) => (
+                                        <option key={s.id} value={s.id}>{s.fullName}</option>
+                                    ))}
+                                </select>
+                                {sellers.length === 0 && (
+                                    <p className="text-[10px] text-slate-400 ml-1 mt-1">
+                                        No hay usuarios con rol VENDEDOR activos. Créalos desde el módulo de Usuarios.
+                                    </p>
+                                )}
+                            </div>
+
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    name="enabledCheckbox"
+                                    checked={enabled}
+                                    onChange={(e) => setEnabled(e.target.checked)}
+                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="text-xs font-bold text-slate-600">Empresa habilitada</span>
+                                <span className="text-[10px] text-slate-400">(desmarcar para dejar pendiente)</span>
+                            </label>
 
                             {error && <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-lg border border-red-100 animate-shake">⚠️ {error}</p>}
 
@@ -135,6 +250,6 @@ export default function CompanyFormModal() {
                     </div>
                 </div>
             )}
-        </>
+        </div>
     )
 }

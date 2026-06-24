@@ -60,6 +60,9 @@ export async function createCompany(formData: FormData) {
         const name = formData.get('name') as string
         const rfc = formData.get('rfc') as string
         const defaultBranchId = formData.get('defaultBranchId') as string
+        // IMPL-20260623-02: vendedor asignado + habilitado (Ficha Cliente v2)
+        const sellerId = (formData.get('sellerId') as string) || (formData.get('sellerIdSelect') as string) || null
+        const enabled = ((formData.get('enabled') as string) ?? (formData.get('enabledCheckbox') ? 'true' : 'false')) === 'true'
 
         if (!name || !rfc) {
             return { success: false, error: 'Nombre y RFC son obligatorios' }
@@ -73,7 +76,12 @@ export async function createCompany(formData: FormData) {
                 contactName: formData.get('contactName') as string,
                 email: formData.get('email') as string,
                 phone: formData.get('phone') as string,
-                defaultBranchId: defaultBranchId || null
+                defaultBranchId: defaultBranchId || null,
+                sellerId: sellerId || null,
+                sellerAssignedAt: sellerId ? new Date() : null,
+                enabledAt: enabled ? new Date() : null,
+                origen: 'MANUAL',
+                estado: enabled ? 'HABILITADO' : 'PENDIENTE_REVISION',
             }
         })
         revalidatePath('/companies')
