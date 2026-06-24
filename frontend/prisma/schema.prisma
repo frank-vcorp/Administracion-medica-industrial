@@ -116,6 +116,8 @@ model Company {
   documentosAdjuntos Json?
   sellerHistory     CompanySellerHistory[]
   selfRegistrations CompanySelfRegistration[]
+  // IMPL-20260624-03 (ARCH-20260624-03): Links de "completar datos de empresa existente"
+  targetSelfRegistrations CompanySelfRegistration[] @relation("CompanySelfRegTarget")
 
   @@map("companies")
 }
@@ -819,7 +821,11 @@ model CompanySellerHistory {
 model CompanySelfRegistration {
   id                 String              @id @default(uuid())
   tokenHash          String              @unique // SHA-256 del token plano (o 'public-<uuid>' en modo PUBLIC_DIRECT)
-  channel            String?             @default("VENDOR_LINK") // 'VENDOR_LINK' | 'PUBLIC_DIRECT' (IMPL-20260624-01)
+  channel            String?             @default("VENDOR_LINK") // 'VENDOR_LINK' | 'PUBLIC_DIRECT' | 'COMPANY_UPDATE' (ARCH-20260624-03)
+  // IMPL-20260624-03 (ARCH-20260624-03): Si se setea, el submit hace UPDATE sobre esta Company
+  // en vez de crear una nueva. Soporta la vía "completar datos de empresa existente".
+  targetCompanyId    String?
+  targetCompany      Company?            @relation("CompanySelfRegTarget", fields: [targetCompanyId], references: [id])
   companyDraft       Json?               // borrador parcial (futuro multi-step)
   uploadedFiles      Json                @default("[]") // [{key, filename, size, mime, section}]
   status             CompanySelfRegStatus @default(ACTIVE)
@@ -834,6 +840,7 @@ model CompanySelfRegistration {
   submittedCompany Company? @relation(fields: [submittedCompanyId], references: [id])
   createdBy        User?    @relation(fields: [createdByUserId], references: [id])
 
+  @@index([targetCompanyId]) // IMPL-20260624-03 (ARCH-20260624-03)
   @@map("company_self_registrations")
 }
 

@@ -1,6 +1,7 @@
 /**
  * @fileoverview Script de Node que aplica las migraciones pendientes de Prisma en la DB de Railway
  * @id FIX-20260624-06
+ * @id IMPL-20260624-03 (ARCH-20260624-03) — añade migración 20260624214342_add_target_company_id_to_self_reg
  *
  * USO:
  *   railway run --service frontend node -e "require('./context/infra/apply-migrations.js')"
@@ -93,6 +94,8 @@ async function run() {
     { name: "company_self_registrations existe", exists: await checkTable("company_self_registrations") },
     { name: "estados_mexico existe", exists: await checkTable("estados_mexico") },
     { name: "company_self_registrations.channel existe", exists: await checkColumn("company_self_registrations", "channel") },
+    // IMPL-20260624-03 (ARCH-20260624-03): checks de targetCompanyId
+    { name: "company_self_registrations.targetCompanyId existe", exists: await checkColumn("company_self_registrations", "targetCompanyId") },
   ]
   diag0.forEach((r) => console.log(`  ${r.exists ? "✓" : "✗"} ${r.name}`))
   console.log()
@@ -316,6 +319,38 @@ async function run() {
   }
   console.log()
 
+  // 4. MIGRACIÓN 20260624214342_add_target_company_id_to_self_reg (IMPL-20260624-03 / ARCH-20260624-03)
+  console.log("--- 4. MIGRACIÓN 20260624214342_add_target_company_id_to_self_reg ---")
+  try {
+    await prisma.$executeRaw`
+      ALTER TABLE "company_self_registrations"
+        ADD COLUMN IF NOT EXISTS "targetCompanyId" TEXT
+    `
+    console.log("  ✓ Columna targetCompanyId agregada/verificada")
+
+    await prisma.$executeRaw`
+      CREATE INDEX IF NOT EXISTS "company_self_registrations_targetCompanyId_idx"
+        ON "company_self_registrations"("targetCompanyId")
+    `
+    console.log("  ✓ Índice company_self_registrations_targetCompanyId_idx creado/verificado")
+
+    if (!(await checkConstraint("company_self_registrations_targetCompanyId_fkey", "company_self_registrations"))) {
+      await prisma.$executeRaw`
+        ALTER TABLE "company_self_registrations"
+          ADD CONSTRAINT "company_self_registrations_targetCompanyId_fkey"
+          FOREIGN KEY ("targetCompanyId") REFERENCES "companies"("id")
+          ON DELETE SET NULL ON UPDATE CASCADE
+      `
+      console.log("  ✓ FK company_self_registrations_targetCompanyId_fkey creada")
+    } else {
+      console.log("  ⊙ FK company_self_registrations_targetCompanyId_fkey ya existe")
+    }
+  } catch (e) {
+    console.error("  ✗ Error:", (e as Error).message)
+    throw e
+  }
+  console.log()
+
   // 4. SINCRONIZAR _prisma_migrations
   console.log("--- 4. Sincronizando _prisma_migrations ---")
   try {
@@ -345,13 +380,14 @@ async function run() {
       VALUES
           (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260527121500_add_intake_trace_to_medical_event', NOW(), 1),
           (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260623170000_company_v2_vendedor_historial_link_publico', NOW(), 1),
-          (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260624120000_company_self_reg_channel', NOW(), 1)
+          (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260624120000_company_self_reg_channel', NOW(), 1),
+          (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260624214342_add_target_company_id_to_self_reg', NOW(), 1)
       ON CONFLICT ("migration_name") DO UPDATE SET
           "finished_at" = NOW(),
           "rolled_back_at" = NULL,
           "applied_steps_count" = 1
     `)
-    console.log("  ✓ _prisma_migrations sincronizado")
+    console.log("  ✓ _prisma_migrations sincronizado (4 migraciones)")
   } catch (e) {
     console.error("  ✗ Error:", (e as Error).message)
     throw e
@@ -360,12 +396,13 @@ async function run() {
 
   // 5. Verificación final
   console.log("--- 5. Verificación final ---")
-  const appliedCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    const appliedCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*)::int AS count FROM "_prisma_migrations"
     WHERE "migration_name" IN (
       '20260527121500_add_intake_trace_to_medical_event',
       '20260623170000_company_v2_vendedor_historial_link_publico',
-      '20260624120000_company_self_reg_channel'
+      '20260624120000_company_self_reg_channel',
+      '20260624214342_add_target_company_id_to_self_reg'
     ) AND "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
   `
   const finalDiag: CheckResult[] = [
@@ -375,13 +412,15 @@ async function run() {
     { name: "company_seller_history existe", exists: await checkTable("company_seller_history") },
     { name: "estados_mexico existe", exists: await checkTable("estados_mexico") },
     { name: "company_self_registrations.channel existe", exists: await checkColumn("company_self_registrations", "channel") },
+    // IMPL-20260624-03 (ARCH-20260624-03): verificación final targetCompanyId
+    { name: "company_self_registrations.targetCompanyId existe", exists: await checkColumn("company_self_registrations", "targetCompanyId") },
   ]
   finalDiag.forEach((r) => console.log(`  ${r.exists ? "✓" : "✗"} ${r.name}`))
 
   const count = Number(appliedCount[0]?.count ?? 0)
-  console.log(`\n  Migraciones aplicadas: ${count} / 3`)
+  console.log(`\n  Migraciones aplicadas: ${count} / 4`)
 
-  if (count === 3 && finalDiag.every((r) => r.exists)) {
+  if (count === 4 && finalDiag.every((r) => r.exists)) {
     console.log("\n✅ OK: La DB está sincronizada. Refresca /workers y /companies en el navegador.")
   } else {
     console.log("\n❌ INCOMPLETO: Revisa los mensajes de error arriba.")
