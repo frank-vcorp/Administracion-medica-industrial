@@ -70,6 +70,8 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   const sellerId = (company as { sellerId?: string | null }).sellerId ?? null
 
   const canEdit = role !== 'COMPANY_CLIENT' && estado === 'HABILITADO'
+  // IMPL-20260624-03 (ARCH-20260624-03): Solo ADMIN puede editar datos completos internos.
+  const canEditFullData = role === 'ADMIN' && estado === 'HABILITADO'
 
   return (
     <div className="space-y-6">
@@ -103,6 +105,16 @@ export default async function CompanyDetailPage({ params }: PageProps) {
               {company.email && <span>✉️ {company.email}</span>}
             </div>
           </div>
+          {/* IMPL-20260624-03 (ARCH-20260624-03) Sub-B: botón "Editar datos completos"
+              Solo visible para ADMIN y si la Company está HABILITADO. */}
+          {canEditFullData && (
+            <Link
+              href={`/companies/${id}/edit`}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-2 flex-shrink-0"
+            >
+              <span>✏️</span> Editar datos completos
+            </Link>
+          )}
         </div>
       </div>
 

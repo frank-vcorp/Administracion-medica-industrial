@@ -1,7 +1,8 @@
 /**
  * @file Server Actions: Empresas (Ficha Cliente v2)
- * @id IMPL-20260623-02
+ * @id IMPL-20260623-02 / IMPL-20260624-03
  * @backup context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
+ * @backup context/SPECs/SPEC_ARCH-20260624-03-EDICION-DATOS-COMPLETOS-EMPRESA.md
  *
  * Esta capa añade:
  *   - Validación de sesión NextAuth (excepto submitCompanySelfRegistration
@@ -9,6 +10,12 @@
  *   - Validación de rol (ADMIN/VENDEDOR donde aplique).
  *   - revalidatePath() tras mutaciones.
  *   - Propagación de errores con códigos estables.
+ *
+ * IMPL-20260624-03 (ARCH-20260624-03): Nuevas actions:
+ *   - generateCompanyDataCompletionLinkAction(companyId) — ADMIN/VENDEDOR
+ *     → genera link externo para que la empresa complete sus datos.
+ *   - updateCompanyAction(companyId, data) — solo ADMIN
+ *     → edición interna con optimistic locking + AuditLog.
  */
 'use server'
 
@@ -19,6 +26,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { updateCompanyAllowedBranches as _updateCompanyAllowedBranches } from './admin.actions'
 import type { CompanyStatus, CompanyOrigin } from '@prisma/client'
+import { updateCompanySchema } from '@/lib/schemas/company-update'
 
 // --------------------------------------------------------------------------
 // Read-only: APIs existentes (compatibilidad)
@@ -204,6 +212,119 @@ export async function toggleCompanyEnabledAction(args: { companyId: string; enab
   if (result.ok) {
     revalidatePath('/companies')
     revalidatePath(`/companies/${args.companyId}`)
+  }
+  return result
+}
+
+// --------------------------------------------------------------------------
+// IMPL-20260624-03 (ARCH-20260624-03) Sub-A: link externo para completar
+// datos de empresa existente.
+// --------------------------------------------------------------------------
+
+/**
+ * Genera un link público (channel='COMPANY_UPDATE') que la empresa puede abrir
+ * para completar/actualizar sus datos completos. El submit a través de ese
+ * link hace UPDATE (no CREATE) sobre la Company indicada.
+ *
+ * RBAC: ADMIN o VENDEDOR.
+ * Estado requerido: la Company NO debe estar en PENDIENTE_REVISION.
+ *
+ * @param companyId id de la Company a la que el link estará asociado.
+ * @param ttlHours horas de vigencia del link (default 168h = 7 días).
+ */
+export async function generateCompanyDataCompletionLinkAction(
+  companyId: string,
+  ttlHours = 168
+) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { ok: false as const, code: 'UNAUTHENTICATED' as const, error: 'Sin sesión' }
+  const role = (session.user as { role?: string }).role
+  if (role !== 'ADMIN' && role !== 'VENDEDOR') {
+    return {
+      ok: false as const,
+      code: 'FORBIDDEN' as const,
+      error: 'Solo ADMIN o VENDEDOR pueden generar links de completar datos',
+    }
+  }
+  if (!companyId || typeof companyId !== 'string') {
+    return { ok: false as const, code: 'INVALID_PAYLOAD' as const, error: 'companyId requerido' }
+  }
+  try {
+    const result = await CompanyService.generateCompanySelfRegLink(
+      (session.user as { id: string }).id,
+      { ttlHours, targetCompanyId: companyId }
+    )
+    return { ok: true as const, ...result }
+  } catch (e) {
+    const err = e as Error
+    if (err.message === 'TARGET_COMPANY_NOT_FOUND') {
+      return { ok: false as const, code: 'NOT_FOUND' as const, error: 'Empresa no encontrada' }
+    }
+    if (err.message === 'TARGET_COMPANY_PENDING') {
+      return {
+        ok: false as const,
+        code: 'TARGET_COMPANY_PENDING' as const,
+        error: 'Empresa con auto-alta en curso. Espere a que el prospecto complete el alta.',
+      }
+    }
+    throw e
+  }
+}
+
+// --------------------------------------------------------------------------
+// IMPL-20260624-03 (ARCH-20260624-03) Sub-B: edición interna de Company.
+// Solo ADMIN. Optimistic locking + AuditLog.
+// --------------------------------------------------------------------------
+
+/**
+ * Edita datos completos de una Company existente. Solo ADMIN.
+ *
+ * Validaciones:
+ *  - Sesión ADMIN (VENDEDOR/RECEPCIONIST/DOCTOR → FORBIDDEN).
+ *  - Payload validado por updateCompanySchema (RFC, CP, expectedUpdatedAt).
+ *  - Optimistic locking: data.expectedUpdatedAt debe coincidir con Company.updatedAt.
+ *  - Si el RFC cambió, valida unicidad contra otras Company.
+ *
+ * Si todo OK, retorna `{ ok: true, company }` y revalida las rutas relevantes.
+ * Si hay conflicto de concurrencia, retorna `{ ok: false, code: 'CONCURRENT_UPDATE' }`.
+ */
+export async function updateCompanyAction(
+  companyId: string,
+  data: unknown
+) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { ok: false as const, code: 'UNAUTHENTICATED' as const, error: 'Sin sesión' }
+  const role = (session.user as { role?: string }).role
+  if (role !== 'ADMIN') {
+    return {
+      ok: false as const,
+      code: 'FORBIDDEN' as const,
+      error: 'Solo ADMIN puede editar datos completos de empresa',
+    }
+  }
+  if (!companyId || typeof companyId !== 'string') {
+    return { ok: false as const, code: 'INVALID_PAYLOAD' as const, error: 'companyId requerido' }
+  }
+
+  const parsed = updateCompanySchema.safeParse(data)
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      code: 'INVALID_PAYLOAD' as const,
+      error: parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+    }
+  }
+
+  const ip = await CompanyService.getClientIp().catch(() => null)
+  const result = await CompanyService.updateCompanyFull(companyId, parsed.data, {
+    userId: (session.user as { id: string }).id,
+    ipAddress: ip,
+  })
+
+  if (result.ok) {
+    revalidatePath('/companies')
+    revalidatePath(`/companies/${companyId}`)
+    revalidatePath(`/companies/${companyId}/edit`)
   }
   return result
 }

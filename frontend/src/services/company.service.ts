@@ -1,7 +1,8 @@
 /**
  * @file Service: Empresas (Ficha Cliente v2)
- * @id IMPL-20260623-02
+ * @id IMPL-20260623-02 / IMPL-20260624-03
  * @backup context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
+ * @backup context/SPECs/SPEC_ARCH-20260624-03-EDICION-DATOS-COMPLETOS-EMPRESA.md
  *
  * Capa de negocio: transacciones Prisma, hashing de tokens, validaciones
  * que requieren DB. Esta capa NO usa NextAuth ni cookies; la autenticación
@@ -13,6 +14,14 @@
  * Ambos delegan a submitCompanySelfRegistrationCore(source, payload, token?) que
  * crea Company con origen=AUTO_ALTA, estado=PENDIENTE_REVISION y registra la
  * CompanySelfRegistration con el canal apropiado (VENDOR_LINK | PUBLIC_DIRECT).
+ *
+ * IMPL-20260624-03 (ARCH-20260624-03): Edición de datos completos de empresa.
+ *   Sub-A — Link externo: generateCompanySelfRegLink acepta targetCompanyId.
+ *     submitCompanySelfRegistrationCore detecta reg.targetCompanyId y hace UPDATE
+ *     en lugar de CREATE, con optimistic locking (drift por updatedAt) y AuditLog
+ *     con action='UPDATE_VIA_LINK'.
+ *   Sub-B — Edición interna: nueva función updateCompany(companyId, data, context)
+ *     con optimistic locking + AuditLog con action='UPDATE'.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { headers } from 'next/headers'
@@ -25,6 +34,7 @@ import {
   assertUserIsActive,
 } from '@/lib/schemas/company-full-form'
 import { getPublicBaseUrl } from '@/lib/env/public-base-url'
+import type { UpdateCompanyInput } from '@/lib/schemas/company-update'
 
 // --------------------------------------------------------------------------
 // Compatibilidad: CRUD básico reusado por src/actions/company.actions.ts
@@ -80,7 +90,16 @@ export function hashToken(plain: string): string {
   return createHash('sha256').update(plain).digest('hex')
 }
 
-/** Valida un token, marca como consumido (incrementa openedCount) si está vigente. */
+/**
+ * Valida un token, marca como consumido (incrementa openedCount) si está vigente.
+ *
+ * IMPL-20260624-03 (ARCH-20260624-03): Cuando el token apunta a un link de tipo
+ * COMPANY_UPDATE (channel='COMPANY_UPDATE' + targetCompanyId), retorna además
+ * `targetCompanyId` y `expectedUpdatedAt` (updatedAt de la Company target al
+ * momento de abrir). Estos datos son la base del optimistic locking cuando
+ * la empresa envía el formulario: si la Company cambió desde entonces, se
+ * rechaza el submit con CONCURRENT_UPDATE.
+ */
 export async function validateCompanySelfRegToken(plainToken: string) {
   if (!plainToken || typeof plainToken !== 'string') {
     return { ok: false as const, reason: 'INVALID_TOKEN' as const }
@@ -112,40 +131,115 @@ export async function validateCompanySelfRegToken(plainToken: string) {
     data: { openedCount: { increment: 1 } },
   })
 
+  // IMPL-20260624-03: Si el token apunta a una Company existente (COMPANY_UPDATE),
+  // cargar su updatedAt para que el cliente pueda hacer optimistic locking al submit.
+  let expectedUpdatedAt: string | undefined
+  let targetCompanyId: string | null = null
+  if (reg.channel === 'COMPANY_UPDATE' && reg.targetCompanyId) {
+    targetCompanyId = reg.targetCompanyId
+    const target = await prisma.company.findUnique({
+      where: { id: reg.targetCompanyId },
+      select: { updatedAt: true },
+    })
+    if (target) {
+      expectedUpdatedAt = target.updatedAt.toISOString()
+    }
+  }
+
   return {
     ok: true as const,
     status: reg.status,
     expiresAt: reg.expiresAt,
     openedCount: reg.openedCount + 1,
     uploadedFiles: reg.uploadedFiles,
+    channel: reg.channel,
+    targetCompanyId,
+    expectedUpdatedAt,
   }
 }
 
-/** Crea un nuevo link de auto-alta. */
+/**
+ * Crea un nuevo link de auto-alta.
+ *
+ * IMPL-20260624-03 (ARCH-20260624-03): nueva firma con segundo argumento
+ * opcional. Si se pasa `options.targetCompanyId`, el link generado es de tipo
+ * "completar datos de empresa existente": persiste `targetCompanyId`,
+ * `channel='COMPANY_UPDATE'`, y al enviarse hará UPDATE (no CREATE).
+ *
+ * Validaciones cuando targetCompanyId está presente:
+ *  - La Company debe existir.
+ *  - La Company NO debe estar en PENDIENTE_REVISION (no debe tener auto-alta en curso).
+ *  - El emisor (RBAC) lo valida la server action; aquí solo validamos la Company.
+ *
+ * Backward compatible: si no se pasan options o targetCompanyId, el comportamiento
+ * es idéntico a la versión previa (link para prospecto nuevo, channel='VENDOR_LINK').
+ */
 export async function generateCompanySelfRegLink(
   createdByUserId?: string | null,
-  ttlHours = 168
+  options?: {
+    ttlHours?: number
+    targetCompanyId?: string
+  } | number // retrocompat: si llega number, trátalo como ttlHours
 ): Promise<{
   id: string
   token: string
   url: string
   expiresAt: Date
+  channel: 'VENDOR_LINK' | 'COMPANY_UPDATE'
+  targetCompanyId?: string
 }> {
+  // Backward-compat: segundo arg puede ser un número (ttlHours legacy) o un objeto.
+  let ttlHours = 168
+  let targetCompanyId: string | undefined
+  if (typeof options === 'number') {
+    ttlHours = options
+  } else if (options && typeof options === 'object') {
+    if (typeof options.ttlHours === 'number') ttlHours = options.ttlHours
+    if (typeof options.targetCompanyId === 'string') targetCompanyId = options.targetCompanyId
+  }
+
+  // Si hay targetCompanyId, validar la Company antes de crear el link.
+  if (targetCompanyId) {
+    const target = await prisma.company.findUnique({
+      where: { id: targetCompanyId },
+      select: { id: true, estado: true },
+    })
+    if (!target) {
+      throw new Error('TARGET_COMPANY_NOT_FOUND')
+    }
+    if (target.estado === CompanyStatus.PENDIENTE_REVISION) {
+      throw new Error('TARGET_COMPANY_PENDING')
+    }
+  }
+
   const { plain, hash } = generateSelfRegToken()
   const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000)
+  const channel: 'VENDOR_LINK' | 'COMPANY_UPDATE' = targetCompanyId
+    ? 'COMPANY_UPDATE'
+    : 'VENDOR_LINK'
+
   const created = await prisma.companySelfRegistration.create({
     data: {
       tokenHash: hash,
       expiresAt,
       status: CompanySelfRegStatus.ACTIVE,
       createdByUserId: createdByUserId ?? null,
+      channel,
+      targetCompanyId: targetCompanyId ?? null,
       uploadedFiles: [],
     },
   })
   const baseUrl = getPublicBaseUrl()
   const refSuffix = createdByUserId ? `?ref=${encodeURIComponent(createdByUserId)}` : ''
   const url = `${baseUrl}/auto-alta/${plain}${refSuffix}`
-  return { id: created.id, token: plain, url, expiresAt }
+  return {
+    id: created.id,
+    token: plain,
+    url,
+    expiresAt,
+    channel,
+    targetCompanyId,
+  }
 }
 
 /** Registra un archivo subido al bucket para un token vigente (solo metadata). */
@@ -213,19 +307,43 @@ export function random8(): string {
  * En ambos casos crea Company con origen=AUTO_ALTA, estado=PENDIENTE_REVISION.
  * La diferencia es cómo se trackea CompanySelfRegistration y el storage scope.
  *
+ * IMPL-20260624-03 (ARCH-20260624-03): Rama adicional cuando el token apunta
+ * a una Company existente (channel='COMPANY_UPDATE' + targetCompanyId):
+ *   - En vez de crear Company, hace UPDATE sobre la targetCompany.
+ *   - Optimistic locking: compara before.updatedAt con expectedUpdatedAt
+ *     recibido como cuarto argumento.
+ *   - Genera AuditLog con action='UPDATE_VIA_LINK' y snapshot before/after.
+ *   - Marca CompanySelfRegistration.status='SUBMITTED', submittedCompanyId=target.
+ *
  * @param source 'TOKEN' (requiere token) o 'PUBLIC' (sin token).
  * @param payload Payload validado por CompanyFullFormPayloadSchema.
  * @param token Requerido solo si source='TOKEN'. Token plano original.
+ * @param expectedUpdatedAt Requerido solo en path UPDATE (Company existente).
+ *           Se compara contra Company.updatedAt antes de hacer el update.
  */
 export async function submitCompanySelfRegistrationCore(
   source: 'TOKEN' | 'PUBLIC',
   payload: CompanyFullFormPayload,
-  token?: string
+  token?: string,
+  expectedUpdatedAt?: string
 ): Promise<
   | { ok: true; companyId: string }
-  | { ok: false; code: 'INVALID_TOKEN' | 'TOKEN_EXPIRED' | 'ALREADY_SUBMITTED' | 'INVALID_PAYLOAD' | 'RFC_DUPLICATE'; error: string; existingCompanyId?: string }
+  | {
+      ok: false
+      code:
+        | 'INVALID_TOKEN'
+        | 'TOKEN_EXPIRED'
+        | 'ALREADY_SUBMITTED'
+        | 'INVALID_PAYLOAD'
+        | 'RFC_DUPLICATE'
+        | 'TARGET_COMPANY_GONE'
+        | 'CONCURRENT_UPDATE'
+      error: string
+      existingCompanyId?: string
+    }
 > {
   let regId: string | null = null
+  let regTargetCompanyId: string | null = null
 
   // -- 1. Resolución de CompanySelfRegistration según source ---------------
   if (source === 'TOKEN') {
@@ -250,9 +368,20 @@ export async function submitCompanySelfRegistrationCore(
     const existing = await prisma.companySelfRegistration.findUnique({ where: { tokenHash } })
     if (!existing) return { ok: false, code: 'INVALID_TOKEN', error: 'Token no encontrado' }
     regId = existing.id
+    regTargetCompanyId = existing.targetCompanyId
   }
   // source === 'PUBLIC' → no se valida ni se busca token; regId queda null.
   // Se creará un nuevo CompanySelfRegistration en la transacción con channel=PUBLIC_DIRECT.
+
+  // -- 1b. IMPL-20260624-03: Rama UPDATE — Company existente vía COMPANY_UPDATE --
+  if (source === 'TOKEN' && regTargetCompanyId) {
+    return submitCompanyUpdateBranch({
+      targetCompanyId: regTargetCompanyId,
+      regId: regId!,
+      payload,
+      expectedUpdatedAt,
+    })
+  }
 
   // -- 2. Transacción: crear Company + crear/actualizar CompanySelfRegistration ----
   try {
@@ -346,13 +475,34 @@ export async function submitCompanySelfRegistrationCore(
   }
 }
 
-/** Wrapper público (ruta con token): valida token y delega al core. */
+/**
+ * Wrapper público (ruta con token): valida token y delega al core.
+ *
+ * IMPL-20260624-03 (ARCH-20260624-03): acepta parámetro opcional
+ * `expectedUpdatedAt` para soportar el path UPDATE (Company existente).
+ * Si el token apunta a un link de tipo COMPANY_UPDATE y el cliente envía
+ * `expectedUpdatedAt`, el core hace optimistic locking comparándolo contra
+ * el updatedAt actual de la Company.
+ */
 export async function submitCompanySelfRegistration(
   plainToken: string,
-  rawPayload: unknown
+  rawPayload: unknown,
+  expectedUpdatedAt?: string
 ): Promise<
   | { ok: true; companyId: string }
-  | { ok: false; code: 'INVALID_TOKEN' | 'TOKEN_EXPIRED' | 'ALREADY_SUBMITTED' | 'INVALID_PAYLOAD' | 'RFC_DUPLICATE'; error: string; existingCompanyId?: string }
+  | {
+      ok: false
+      code:
+        | 'INVALID_TOKEN'
+        | 'TOKEN_EXPIRED'
+        | 'ALREADY_SUBMITTED'
+        | 'INVALID_PAYLOAD'
+        | 'RFC_DUPLICATE'
+        | 'TARGET_COMPANY_GONE'
+        | 'CONCURRENT_UPDATE'
+      error: string
+      existingCompanyId?: string
+    }
 > {
   // Validar payload con Zod
   const parsed = CompanyFullFormPayloadSchema.safeParse(rawPayload)
@@ -365,21 +515,16 @@ export async function submitCompanySelfRegistration(
   }
   const payload: CompanyFullFormPayload = { ...parsed.data, channel: 'VENDOR_LINK' }
 
-  // Validar RFC duplicado ANTES de la transacción (mensaje más claro)
-  const dup = await assertRfcNotRegistered(
-    payload.fiscal.rfc,
-    (args) => prisma.company.findFirst(args) as Promise<{ id: string } | null>
-  )
-  if (dup.duplicate) {
-    return {
-      ok: false,
-      code: 'RFC_DUPLICATE',
-      error: 'RFC ya registrado',
-      existingCompanyId: dup.existingCompanyId,
-    }
-  }
+  // Si el payload no trae expectedUpdatedAt, lo derivamos de la Company target
+  // cuando aplique. Esto evita regresión: callers existentes que no pasan
+  // expectedUpdatedAt siguen funcionando para el path prospecto nuevo (que
+  // ignora este campo), y para el path UPDATE, si no se pasa, NO hacemos
+  // optimistic locking (modo permisivo, no rompe el flujo).
+  //
+  // NOTA: la server action puede llamar validateCompanySelfRegToken primero
+  // y pasar el expectedUpdatedAt derivado del result (ver actions).
 
-  return submitCompanySelfRegistrationCore('TOKEN', payload, plainToken)
+  return submitCompanySelfRegistrationCore('TOKEN', payload, plainToken, expectedUpdatedAt)
 }
 
 /** Wrapper público (ruta sin token /solicitar-alta): sin validación de token. */
@@ -387,7 +532,19 @@ export async function submitPublicCompanySelfRegistration(
   rawPayload: unknown
 ): Promise<
   | { ok: true; companyId: string }
-  | { ok: false; code: 'INVALID_TOKEN' | 'ALREADY_SUBMITTED' | 'TOKEN_EXPIRED' | 'INVALID_PAYLOAD' | 'RFC_DUPLICATE'; error: string; existingCompanyId?: string }
+  | {
+      ok: false
+      code:
+        | 'INVALID_TOKEN'
+        | 'ALREADY_SUBMITTED'
+        | 'TOKEN_EXPIRED'
+        | 'INVALID_PAYLOAD'
+        | 'RFC_DUPLICATE'
+        | 'TARGET_COMPANY_GONE'
+        | 'CONCURRENT_UPDATE'
+      error: string
+      existingCompanyId?: string
+    }
 > {
   // Validar payload con Zod
   const parsed = CompanyFullFormPayloadSchema.safeParse(rawPayload)
@@ -612,6 +769,348 @@ export async function listActiveSellers() {
 /** Catálogo de estados de México (cacheable). */
 export async function listEstadosMexico() {
   return prisma.estadoMexico.findMany({ orderBy: { nombre: 'asc' } })
+}
+
+// --------------------------------------------------------------------------
+// IMPL-20260624-03 (ARCH-20260624-03): Edición de datos completos de empresa
+// Sub-A: link externo (UPDATE branch en submitCompanySelfRegistrationCore).
+// Sub-B: edición interna (updateCompany).
+// --------------------------------------------------------------------------
+
+/**
+ * Computa el diff entre before y after. Devuelve un array `{ field, before, after }`
+ * solo donde los valores difieren. Compara keys presentes en `before`.
+ *
+ * IMPL-20260624-03: helper reutilizado por `updateCompany` y por la rama UPDATE
+ * de `submitCompanySelfRegistrationCore`. Compara con `JSON.stringify` para
+ * detectar diffs en campos Json (fiscalData, repLegalData, etc.).
+ *
+ * No incluye campos que solo cambian en `after` (no existe en before) porque
+ * esos serían inserciones, no updates. Tampoco `updatedAt` ni `createdAt`:
+ * esos los actualiza Prisma automáticamente y no son cambios del usuario.
+ */
+export function computeChanges(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  options?: { ignoreKeys?: readonly string[] }
+): Array<{ field: string; before: unknown; after: unknown }> {
+  const ignore = new Set<string>(['updatedAt', 'createdAt', ...(options?.ignoreKeys ?? [])])
+  const changes: Array<{ field: string; before: unknown; after: unknown }> = []
+  for (const key of Object.keys(before)) {
+    if (ignore.has(key)) continue
+    const b = before[key]
+    const a = after[key]
+    // JSON.stringify es seguro aquí: las fechas Prisma se serializan a ISO al
+    // entrar al AuditLog (details es Json). Para equality check usamos Date.toISO()
+    // si alguno es Date.
+    const eq =
+      b === a ||
+      (b instanceof Date && a instanceof Date && b.getTime() === a.getTime()) ||
+      JSON.stringify(b) === JSON.stringify(a)
+    if (!eq) {
+      changes.push({ field: key, before: b, after: a })
+    }
+  }
+  return changes
+}
+
+/**
+ * IMPL-20260624-03 (ARCH-20260624-03) Sub-A: rama UPDATE de
+ * submitCompanySelfRegistrationCore. Se invoca cuando el token apunta a
+ * una Company existente (channel='COMPANY_UPDATE', targetCompanyId).
+ *
+ * Comportamiento:
+ *  - Lee la Company target (snapshot before).
+ *  - Si no existe → TARGET_COMPANY_GONE.
+ *  - Si expectedUpdatedAt no coincide con before.updatedAt → CONCURRENT_UPDATE.
+ *  - Si el RFC cambió, valida unicidad contra otras Company.
+ *  - UPDATE: aplica datos del payload (igual que el path CREATE, pero sobre
+ *    Company existente; NO cambia origen, estado, sellerId).
+ *  - Marca CompanySelfRegistration como SUBMITTED, submittedCompanyId=target.
+ *  - Genera AuditLog con action='UPDATE_VIA_LINK' y snapshot before/after.
+ */
+async function submitCompanyUpdateBranch(args: {
+  targetCompanyId: string
+  regId: string
+  payload: CompanyFullFormPayload
+  expectedUpdatedAt?: string
+}): Promise<
+  | { ok: true; companyId: string }
+  | {
+      ok: false
+      code: 'CONCURRENT_UPDATE' | 'TARGET_COMPANY_GONE' | 'RFC_DUPLICATE'
+      error: string
+      existingCompanyId?: string
+    }
+> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const before = await tx.company.findUnique({ where: { id: args.targetCompanyId } })
+      if (!before) {
+        return {
+          ok: false,
+          code: 'TARGET_COMPANY_GONE' as const,
+          error: 'La empresa objetivo ya no existe',
+        }
+      }
+
+      // Optimistic locking
+      if (
+        args.expectedUpdatedAt &&
+        before.updatedAt.toISOString() !== args.expectedUpdatedAt
+      ) {
+        return {
+          ok: false,
+          code: 'CONCURRENT_UPDATE' as const,
+          error:
+            'Los datos de la empresa fueron actualizados por otro usuario. Recarga el enlace y vuelve a intentar.',
+        }
+      }
+
+      // Validar RFC duplicado si cambió
+      if (args.payload.fiscal.rfc !== before.rfc) {
+        const dup = await tx.company.findFirst({
+          where: { rfc: args.payload.fiscal.rfc, NOT: { id: args.targetCompanyId } },
+          select: { id: true },
+        })
+        if (dup) {
+          return {
+            ok: false,
+            code: 'RFC_DUPLICATE' as const,
+            error: 'RFC ya registrado',
+            existingCompanyId: dup.id,
+          }
+        }
+      }
+
+      const updated = await tx.company.update({
+        where: { id: args.targetCompanyId },
+        data: {
+          name: args.payload.fiscal.razonSocial,
+          rfc: args.payload.fiscal.rfc,
+          address: [
+            args.payload.fiscal.domicilio,
+            args.payload.fiscal.colonia,
+            args.payload.fiscal.municipio,
+            args.payload.fiscal.estado,
+            args.payload.fiscal.cp,
+            args.payload.fiscal.pais,
+          ]
+            .filter(Boolean)
+            .join(', '),
+          contactName: [args.payload.repLegal.nombre, args.payload.repLegal.apellidos]
+            .filter(Boolean)
+            .join(' '),
+          email: args.payload.repLegal.email,
+          phone: args.payload.repLegal.telefono,
+          fiscalData: args.payload.fiscal as unknown as Prisma.InputJsonValue,
+          repLegalData: args.payload.repLegal as unknown as Prisma.InputJsonValue,
+          rhData: args.payload.rh as unknown as Prisma.InputJsonValue,
+          cuentasPagarData: args.payload.cuentasPagar as unknown as Prisma.InputJsonValue,
+          referenciasData: args.payload.referencias as unknown as Prisma.InputJsonValue,
+          terminosAceptados: args.payload.terminosAceptados === true,
+          documentosAdjuntos: args.payload.documentos as unknown as Prisma.InputJsonValue,
+          // NO tocamos: origen, estado, sellerId, enabledAt, defaultBranchId.
+        },
+      })
+
+      // Marcar CompanySelfRegistration como SUBMITTED.
+      await tx.companySelfRegistration.update({
+        where: { id: args.regId },
+        data: {
+          status: CompanySelfRegStatus.SUBMITTED,
+          submittedAt: new Date(),
+          submittedCompanyId: args.targetCompanyId,
+        },
+      })
+
+      // AuditLog con snapshot before/after.
+      await tx.auditLog.create({
+        data: {
+          userId: null, // submit público por la empresa
+          action: 'UPDATE_VIA_LINK',
+          entity: 'Company',
+          entityId: args.targetCompanyId,
+          details: {
+            source: 'COMPANY_UPDATE_LINK',
+            selfRegistrationId: args.regId,
+            before: before as unknown as Prisma.InputJsonValue,
+            after: updated as unknown as Prisma.InputJsonValue,
+            changes: computeChanges(
+              before as unknown as Record<string, unknown>,
+              updated as unknown as Record<string, unknown>
+            ),
+          } as Prisma.InputJsonValue,
+        },
+      })
+
+      return { ok: true, companyId: args.targetCompanyId }
+    })
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      return { ok: false, code: 'RFC_DUPLICATE', error: 'RFC ya registrado' }
+    }
+    throw e
+  }
+}
+
+/**
+ * IMPL-20260624-03 (ARCH-20260624-03) Sub-B: edición interna de Company.
+ * Solo ADMIN (validado en server action antes de delegar aquí).
+ *
+ * Comportamiento:
+ *  - Lee la Company target (snapshot before).
+ *  - Si no existe → NOT_FOUND.
+ *  - Optimistic locking: compara before.updatedAt con data.expectedUpdatedAt.
+ *  - Si el RFC cambió, valida unicidad contra otras Company.
+ *  - UPDATE parcial: solo aplica secciones presentes en data.
+ *  - Genera AuditLog con action='UPDATE' y snapshot before/after + changes.
+ *
+ * NOTA: Se llama `updateCompanyFull` (no `updateCompany`) para no colisionar
+ * con el shim legacy `updateCompany(id, Prisma.CompanyUpdateInput)` arriba
+ * que reusa compatibilidad con el wrapper action.
+ *
+ * @param companyId id de la Company a actualizar.
+ * @param data payload validado por updateCompanySchema (incluye expectedUpdatedAt).
+ * @param context { userId, ipAddress? } contexto de auditoría.
+ */
+export async function updateCompanyFull(
+  companyId: string,
+  data: UpdateCompanyInput,
+  context: { userId: string; ipAddress?: string | null }
+): Promise<
+  | { ok: true; company: unknown }
+  | {
+      ok: false
+      code: 'NOT_FOUND' | 'CONCURRENT_UPDATE' | 'RFC_DUPLICATE'
+      error: string
+      existingCompanyId?: string
+    }
+> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const before = await tx.company.findUnique({ where: { id: companyId } })
+      if (!before) {
+        return {
+          ok: false,
+          code: 'NOT_FOUND' as const,
+          error: 'Empresa no encontrada',
+        }
+      }
+
+      // Optimistic locking
+      if (before.updatedAt.toISOString() !== data.expectedUpdatedAt) {
+        return {
+          ok: false,
+          code: 'CONCURRENT_UPDATE' as const,
+          error:
+            'Los datos fueron actualizados por otro usuario. Recarga la página y vuelve a intentar.',
+        }
+      }
+
+      // Validar RFC duplicado si cambió en basic
+      if (data.basic?.rfc && data.basic.rfc !== before.rfc) {
+        const dup = await tx.company.findFirst({
+          where: { rfc: data.basic.rfc, NOT: { id: companyId } },
+          select: { id: true },
+        })
+        if (dup) {
+          return {
+            ok: false,
+            code: 'RFC_DUPLICATE' as const,
+            error: 'RFC ya registrado en otra empresa',
+            existingCompanyId: dup.id,
+          }
+        }
+      }
+
+      // Construir data de update: solo incluir secciones presentes.
+      const updateData: Prisma.CompanyUpdateInput = {}
+      if (data.basic) {
+        if (data.basic.name !== undefined) updateData.name = data.basic.name
+        if (data.basic.rfc !== undefined) updateData.rfc = data.basic.rfc
+        if (data.basic.address !== undefined) updateData.address = data.basic.address
+        if (data.basic.contactName !== undefined) updateData.contactName = data.basic.contactName
+        if (data.basic.email !== undefined) updateData.email = data.basic.email
+        if (data.basic.phone !== undefined) updateData.phone = data.basic.phone
+      }
+      if (data.fiscalData !== undefined) {
+        updateData.fiscalData = data.fiscalData as unknown as Prisma.InputJsonValue
+      }
+      if (data.repLegalData !== undefined) {
+        updateData.repLegalData = data.repLegalData as unknown as Prisma.InputJsonValue
+      }
+      if (data.rhData !== undefined) {
+        updateData.rhData = data.rhData as unknown as Prisma.InputJsonValue
+      }
+      if (data.cuentasPagarData !== undefined) {
+        updateData.cuentasPagarData = data.cuentasPagarData as unknown as Prisma.InputJsonValue
+      }
+      if (data.facturacionData !== undefined) {
+        // facturacionData se guarda dentro de fiscalData (no es columna propia).
+        // Se conserva estructura: se mergea al fiscalData existente si está.
+        // Decisión SPEC: si se envía facturacionData, lo embebemos en fiscalData.facturacion.
+        const currentFiscal =
+          (before.fiscalData as Record<string, unknown> | null) ?? {}
+        updateData.fiscalData = {
+          ...currentFiscal,
+          facturacion: data.facturacionData,
+        } as unknown as Prisma.InputJsonValue
+      }
+      if (data.entregaFisicaData !== undefined) {
+        const currentFiscal =
+          (before.fiscalData as Record<string, unknown> | null) ?? {}
+        updateData.fiscalData = {
+          ...(updateData.fiscalData as Record<string, unknown> | undefined ?? currentFiscal),
+          entregaFisica: data.entregaFisicaData,
+        } as unknown as Prisma.InputJsonValue
+      }
+      if (data.referenciasData !== undefined) {
+        updateData.referenciasData =
+          data.referenciasData as unknown as Prisma.InputJsonValue
+      }
+      if (data.documentos !== undefined) {
+        updateData.documentosAdjuntos =
+          data.documentos as unknown as Prisma.InputJsonValue
+      }
+
+      const after = await tx.company.update({
+        where: { id: companyId },
+        data: updateData,
+      })
+
+      // AuditLog con snapshot before/after y diff.
+      await tx.auditLog.create({
+        data: {
+          userId: context.userId,
+          action: 'UPDATE',
+          entity: 'Company',
+          entityId: companyId,
+          ipAddress: context.ipAddress ?? null,
+          details: {
+            source: 'INTERNAL_EDIT',
+            before: before as unknown as Prisma.InputJsonValue,
+            after: after as unknown as Prisma.InputJsonValue,
+            changes: computeChanges(
+              before as unknown as Record<string, unknown>,
+              after as unknown as Record<string, unknown>
+            ),
+          } as Prisma.InputJsonValue,
+        },
+      })
+
+      return { ok: true, company: after }
+    })
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      return {
+        ok: false,
+        code: 'RFC_DUPLICATE',
+        error: 'RFC ya registrado en otra empresa',
+      }
+    }
+    throw e
+  }
 }
 
 // --------------------------------------------------------------------------

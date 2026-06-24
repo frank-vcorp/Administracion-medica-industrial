@@ -10,9 +10,41 @@ import {
 import {
   listActiveSellersAction,
   generateCompanySelfRegLinkAction,
+  generateCompanyDataCompletionLinkAction,
 } from '@/actions/company.actions'
 
-export default function CompanyFormModal() {
+/**
+ * @file Modal de creación rápida de empresa + generador de link de auto-alta.
+ * @id IMPL-20260623-02 / IMPL-20260624-03
+ * @backup context/SPECs/SPEC_ARCH-20260624-03-EDICION-DATOS-COMPLETOS-EMPRESA.md
+ *
+ * IMPL-20260624-03 (ARCH-20260624-03) Sub-A: en modo edición (mode='edit' +
+ * existingCompany presente), muestra el botón "🔗 Generar link para que la
+ * empresa complete sus datos". El botón se renderiza solo si:
+ *  - El usuario es ADMIN o VENDEDOR.
+ *  - La Company NO está en PENDIENTE_REVISION.
+ *
+ * Firma retrocompatible: si no se pasan props, el modal funciona como creación
+ * rápida (comportamiento previo). Los nuevos props son opcionales.
+ */
+export default function CompanyFormModal(props?: {
+  existingCompany?: {
+    id: string
+    name: string
+    estado: 'HABILITADO' | 'PENDIENTE_REVISION' | 'DESHABILITADO'
+  } | null
+  mode?: 'create' | 'edit'
+  role?: string | null
+}) {
+    const existingCompany = props?.existingCompany
+    const mode = props?.mode ?? 'create'
+    const role = props?.role ?? null
+    const showCompletionLinkButton =
+      mode === 'edit' &&
+      existingCompany != null &&
+      existingCompany.estado !== 'PENDIENTE_REVISION' &&
+      (role === 'ADMIN' || role === 'VENDEDOR')
+
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [successData, setSuccessData] = useState<{ success: boolean, company?: { id: string, name: string } } | null>(null)
@@ -23,6 +55,9 @@ export default function CompanyFormModal() {
     const [enabled, setEnabled] = useState<boolean>(true)
     const [selfRegLink, setSelfRegLink] = useState<string | null>(null)
     const [selfRegCopied, setSelfRegCopied] = useState<boolean>(false)
+    const [completionLinkUrl, setCompletionLinkUrl] = useState<string | null>(null)
+    const [completionLinkExpiresAt, setCompletionLinkExpiresAt] = useState<string | null>(null)
+    const [completionLinkError, setCompletionLinkError] = useState<string | null>(null)
     const router = useRouter()
 
     useEffect(() => {
@@ -74,11 +109,37 @@ export default function CompanyFormModal() {
         })
     }
 
-    function copyLink() {
-        if (!selfRegLink) return
-        navigator.clipboard.writeText(selfRegLink).then(() => {
-            setSelfRegCopied(true)
-            setTimeout(() => setSelfRegCopied(false), 2000)
+    /**
+     * IMPL-20260624-03 (ARCH-20260624-03) Sub-A: genera link para que la
+     * empresa complete sus datos completos a través de un portal externo.
+     */
+    async function handleGenerateCompletionLink() {
+        if (!existingCompany) return
+        startTransition(async () => {
+            setCompletionLinkError(null)
+            try {
+                const result = await generateCompanyDataCompletionLinkAction(existingCompany.id, 168)
+                if (result.ok) {
+                    setCompletionLinkUrl(result.url)
+                    setCompletionLinkExpiresAt(
+                    result.expiresAt instanceof Date
+                      ? result.expiresAt.toISOString()
+                      : String(result.expiresAt ?? '')
+                  )
+                } else {
+                    setCompletionLinkError(result.error || 'No se pudo generar el link')
+                }
+            } catch {
+                setCompletionLinkError('Error generando link de completar datos')
+            }
+        })
+    }
+
+    function copyLink(url: string, setCopied: (b: boolean) => void) {
+        if (!url) return
+        navigator.clipboard.writeText(url).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2000)
         })
     }
 
@@ -122,6 +183,18 @@ export default function CompanyFormModal() {
             >
                 🔗 Link Auto-Alta
             </button>
+            {/* IMPL-20260624-03 (ARCH-20260624-03) Sub-A: botón visible solo en modo edición + RBAC + estado HABILITADO */}
+            {showCompletionLinkButton && (
+                <button
+                    type="button"
+                    onClick={handleGenerateCompletionLink}
+                    disabled={isPending}
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-3 rounded-xl text-sm font-bold transition-all shadow-sm flex items-center gap-2"
+                    title="Genera un link para que la empresa complete sus datos completos"
+                >
+                    🔗 Generar link para que la empresa complete sus datos
+                </button>
+            )}
             <button
                 onClick={() => setIsOpen(true)}
                 className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-slate-200 flex items-center gap-2"
@@ -142,7 +215,7 @@ export default function CompanyFormModal() {
                         </div>
                         <div className="flex gap-2">
                             <button
-                                onClick={copyLink}
+                                onClick={() => copyLink(selfRegLink, setSelfRegCopied)}
                                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm"
                             >
                                 {selfRegCopied ? '✓ Copiado' : 'Copiar link'}
@@ -155,6 +228,50 @@ export default function CompanyFormModal() {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* IMPL-20260624-03 (ARCH-20260624-03) Sub-A: modal con URL para completar datos */}
+            {completionLinkUrl && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+                    <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-lg w-full space-y-4">
+                        <h3 className="text-lg font-black text-slate-800">Link para completar datos generado</h3>
+                        <p className="text-sm text-slate-600">
+                            Este enlace es válido por 168 horas y permite a la empresa completar o
+                            actualizar su información. Comparte el enlace de forma segura.
+                        </p>
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 break-all text-xs font-mono text-slate-700">
+                            {completionLinkUrl}
+                        </div>
+                        {completionLinkExpiresAt && (
+                            <p className="text-[10px] text-slate-500">
+                                Expira: {new Date(completionLinkExpiresAt).toLocaleString('es-MX')}
+                            </p>
+                        )}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => copyLink(completionLinkUrl, () => {})}
+                                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold text-sm"
+                            >
+                                Copiar link
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setCompletionLinkUrl(null)
+                                    setCompletionLinkExpiresAt(null)
+                                }}
+                                className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-bold text-sm"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {completionLinkError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs">
+                    ⚠️ {completionLinkError}
                 </div>
             )}
 
