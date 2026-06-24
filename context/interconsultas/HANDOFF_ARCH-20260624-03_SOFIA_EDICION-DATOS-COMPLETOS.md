@@ -8,23 +8,37 @@
 
 ---
 
-## ⚠️ CRÍTICO — Procedimiento de migración a Railway
+## ⚠️ CRÍTICO — Procedimiento de migración a Railway (USAR RAILWAY CLI)
 
 **NO usar `prisma migrate deploy` en build de Vercel.** Ese enfoque fue revertido en `FIX-20260624-02/03/04` porque falla por drift entre el schema local y el remoto.
 
-**El patrón vigente (FIX-20260624-05)** es:
-1. Crear la migración Prisma localmente con `prisma migrate dev`.
-2. **Crear un script SQL idempotente** en `context/infra/` que aplique el cambio aditivo manualmente en Railway.
-3. **Sincronizar `_prisma_migrations`** para que Prisma no intente reaplicar la migración.
-4. El humano lo ejecuta en **Railway Dashboard → Postgres → Query**.
-5. (Opcional) Actualizar el script consolidado `context/infra/apply-pending-migrations-railway.sql` si aplica.
+**El patrón vigente (FIX-20260624-05 + FIX-20260624-06)** es usar **Railway CLI** para extender y ejecutar el script `context/infra/apply-migrations.ts`. Railway CLI 4.31.0+ está disponible y autenticado al proyecto `administracion-medica-industrial`.
+
+**Procedimiento exacto (Frank lo confirmó el 2026-06-24):**
+1. **Extender `context/infra/apply-migrations.ts`** para incluir el caso de la nueva migración `20260624214342_add_target_company_id_to_self_reg`:
+   - Agregar checks de diagnóstico (`checkColumn("company_self_registrations", "targetCompanyId")`, `checkConstraint(...)`, índice).
+   - Agregar bloque de aplicación idempotente (3 sentencias: ALTER TABLE, CREATE INDEX, ADD CONSTRAINT).
+   - Agregar entrada en el INSERT de `_prisma_migrations` con `migration_name='20260624214342_add_target_company_id_to_self_reg'`.
+   - Agregar checks en la verificación final.
+2. **Ejecutar con Railway CLI** (en el contexto del proyecto):
+   ```bash
+   railway run --service frontend npx tsx context/infra/apply-migrations.ts
+   ```
+   Esto aplica las migraciones + sincroniza `_prisma_migrations` en una sola corrida.
+3. **Verificar output**: el script debe terminar con "✅ OK: La DB está sincronizada...".
 
 **Si no haces este paso, el código fallará en producción** porque el campo `targetCompanyId` no existirá en la tabla `company_self_registrations` de Railway.
 
-Ver archivos de referencia:
-- `context/infra/apply-pending-migrations-railway.sql` (script consolidado vigente, FIX-20260624-05)
-- `context/infra/01-migration-20260527.sql` (ejemplo de migración idempotente por separado)
-- `context/infra/03-migration-20260623b-and-20260624.sql` (ejemplo de migración + sync de `_prisma_migrations`)
+**Archivos de referencia:**
+- `context/infra/apply-migrations.ts` (FIX-20260624-06 — script TypeScript idempotente, **el que debes extender**)
+- `context/infra/apply-pending-migrations-railway.sql` (FIX-20260624-05 — versión SQL equivalente, respaldo por si Railway CLI no está disponible)
+- `frontend/prisma/migrations/20260624214342_add_target_company_id_to_self_reg/migration.sql` (migración Prisma local ya escrita por INTEGRA — úsala como referencia para las 3 sentencias idempotentes)
+
+**Estado actual del repo al recibir este handoff:**
+- ✅ `frontend/prisma/schema.prisma` ya modificado con `targetCompanyId`, relación `CompanySelfRegTarget` y `@@index([targetCompanyId])`.
+- ✅ `frontend/prisma/migrations/20260624214342_add_target_company_id_to_self_reg/migration.sql` ya escrito a mano (idempotente, con los 3 cambios aditivos). NO usar `prisma migrate dev` para regenerarlo.
+- ❌ `context/infra/apply-migrations.ts` aún NO incluye la nueva migración — debes extenderlo.
+- ❌ Migración NO aplicada a Railway todavía.
 
 ---
 
@@ -46,7 +60,7 @@ Decisiones validadas con el humano:
 
 ## Cambios concretos
 
-### 1. Migración Prisma local
+### 1. Migración Prisma local — YA HECHA por INTEGRA
 
 `frontend/prisma/schema.prisma`:
 
@@ -91,9 +105,82 @@ model Company {
 
 Generar migración: `npx prisma migrate dev --name add_target_company_id_to_self_reg`
 
-### 1.1 Script SQL idempotente para Railway (OBLIGATORIO)
+**⚠️ NO EJECUTES `prisma migrate dev` — el directorio ya está creado con `migration.sql` escrito a mano.** Solo verifica que el directorio `frontend/prisma/migrations/20260624214342_add_target_company_id_to_self_reg/` existe y contiene `migration.sql` + `migration_lock.toml`.
 
-Crear archivo `context/infra/05-migration-20260624-target-company-self-reg.sql` con el SQL aditivo equivalente a la migración Prisma. Estructura mínima (basada en `context/infra/apply-pending-migrations-railway.sql`):
+### 1.1 Extender `context/infra/apply-migrations.ts` (OBLIGATORIO)
+
+Añadir al script existente la lógica para la nueva migración `20260624214342_add_target_company_id_to_self_reg`. El script actual sincroniza hasta `20260624120000_company_self_reg_channel`. Debes añadir:
+
+**A) Diagnóstico inicial (en el array `diag0`, después del check de `channel`):**
+```ts
+{ name: "company_self_registrations.targetCompanyId existe", exists: await checkColumn("company_self_registrations", "targetCompanyId") },
+```
+
+**B) Nueva sección 4 (después de "MIGRACIÓN 20260623170000 (PARTE B) + 20260624120000"):**
+```ts
+// 4. MIGRACIÓN 20260624214342_add_target_company_id_to_self_reg
+console.log("--- 4. MIGRACIÓN 20260624214342_add_target_company_id_to_self_reg ---")
+try {
+  await prisma.$executeRaw`
+    ALTER TABLE "company_self_registrations"
+      ADD COLUMN IF NOT EXISTS "targetCompanyId" TEXT
+  `
+  console.log("  ✓ Columna targetCompanyId agregada/verificada")
+
+  await prisma.$executeRaw`
+    CREATE INDEX IF NOT EXISTS "company_self_registrations_targetCompanyId_idx"
+      ON "company_self_registrations"("targetCompanyId")
+  `
+  console.log("  ✓ Índice targetCompanyId_idx creado/verificado")
+
+  if (!(await checkConstraint("company_self_registrations_targetCompanyId_fkey", "company_self_registrations"))) {
+    await prisma.$executeRaw`
+      ALTER TABLE "company_self_registrations"
+        ADD CONSTRAINT "company_self_registrations_targetCompanyId_fkey"
+        FOREIGN KEY ("targetCompanyId") REFERENCES "companies"("id")
+        ON DELETE SET NULL ON UPDATE CASCADE
+    `
+    console.log("  ✓ FK targetCompanyId_fkey creada")
+  } else {
+    console.log("  ⊙ FK targetCompanyId_fkey ya existe")
+  }
+} catch (e) {
+  console.error("  ✗ Error:", (e as Error).message)
+  throw e
+}
+console.log()
+```
+
+**C) Sincronización `_prisma_migrations` (modificar el INSERT existente):**
+```ts
+await prisma.$executeRawUnsafe(`
+  INSERT INTO "_prisma_migrations" ("id", "checksum", "finished_at", "migration_name", "started_at", "applied_steps_count")
+  VALUES
+      (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260527121500_add_intake_trace_to_medical_event', NOW(), 1),
+      (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260623170000_company_v2_vendedor_historial_link_publico', NOW(), 1),
+      (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260624120000_company_self_reg_channel', NOW(), 1),
+      (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260624214342_add_target_company_id_to_self_reg', NOW(), 1)
+  ON CONFLICT ("migration_name") DO UPDATE SET
+      "finished_at" = NOW(),
+      "rolled_back_at" = NULL,
+      "applied_steps_count" = 1
+`)
+```
+
+**D) Verificación final (en `finalDiag`):**
+```ts
+{ name: "company_self_registrations.targetCompanyId existe", exists: await checkColumn("company_self_registrations", "targetCompanyId") },
+```
+
+**E) Aplicar a Railway con CLI:**
+```bash
+railway run --service frontend npx tsx context/infra/apply-migrations.ts
+```
+Output esperado: "✅ OK: La DB está sincronizada...".
+
+### 1.2 (Opcional) Actualizar script SQL de respaldo
+
+Si quieres mantener `context/infra/apply-pending-migrations-railway.sql` actualizado como respaldo (por si Railway CLI no estuviera disponible en otra máquina), añade al final la misma sección de la nueva migración siguiendo el patrón existente. Esto es opcional pero recomendado para consistencia.
 
 ```sql
 -- =====================================================================
@@ -553,12 +640,12 @@ export default async function CompanyEditPage({
 ### Validación extra de migración a Railway
 
 En tu reporte final debes confirmar:
-- [ ] ¿La migración Prisma local fue generada en `frontend/prisma/migrations/<TIMESTAMP>_add_target_company_id_to_self_reg/`?
-- [ ] ¿El script SQL idempotente fue creado en `context/infra/0X-migration-<FECHA>-target-company-self-reg.sql`?
-- [ ] ¿El nombre de la migración insertado en `_prisma_migrations` coincide **EXACTAMENTE** con el directorio Prisma?
-- [ ] ¿Las 3 sentencias (ALTER TABLE, CREATE INDEX, ADD CONSTRAINT) son idempotentes (usan `IF NOT EXISTS` o `EXISTS()`)?
-- [ ] ¿La verificación final retorna 4 booleanos TRUE?
-- [ ] ¿El script NO se ejecutó por ti, solo quedó listo para Frank?
+- [ ] ¿La migración Prisma local existe en `frontend/prisma/migrations/20260624214342_add_target_company_id_to_self_reg/` con `migration.sql` y `migration_lock.toml`?
+- [ ] ¿`context/infra/apply-migrations.ts` fue extendido con los 4 bloques (A: diagnóstico, B: aplicación, C: sync `_prisma_migrations`, D: verificación)?
+- [ ] ¿El nombre de la migración en el INSERT de `_prisma_migrations` es **EXACTAMENTE** `20260624214342_add_target_company_id_to_self_reg`?
+- [ ] ¿Las 3 sentencias (ALTER TABLE, CREATE INDEX, ADD CONSTRAINT) son idempotentes?
+- [ ] ¿Ejecutaste `railway run --service frontend npx tsx context/infra/apply-migrations.ts` y la salida terminó con "✅ OK"?
+- [ ] ¿El schema en `prisma studio` (vía Railway) ahora muestra `targetCompanyId` en `CompanySelfRegistration`?
 
 ---
 
@@ -584,8 +671,8 @@ En tu reporte final debes confirmar:
 
 ## Verificación post-implementación
 
-1. **Migración local**: `npx prisma migrate dev` aplica sin errores. `npx prisma studio` muestra `targetCompanyId` en `CompanySelfRegistration`.
-2. **Migración Railway**: Frank corre el script `context/infra/0X-migration-<FECHA>-target-company-self-reg.sql` en Railway Query. La verificación final debe retornar 4 booleanos TRUE y estado 'OK'.
+1. **Migración local**: el directorio `frontend/prisma/migrations/20260624214342_add_target_company_id_to_self_reg/` ya existe con `migration.sql` escrito a mano. NO regenerar.
+2. **Migración Railway**: SOFIA ejecuta `railway run --service frontend npx tsx context/infra/apply-migrations.ts`. La salida debe terminar con "✅ OK: La DB está sincronizada...".
 3. **Link externo**: como ADMIN, abrir `/companies`, editar una empresa HABILITADA, click en botón nuevo. URL retornado tiene `?ref=<userId>`. Pegar en ventana incógnito, completar form. Verificar que la Company se actualizó, no se creó una nueva. Verificar AuditLog con `action='UPDATE_VIA_LINK'`.
 4. **Edición interna**: como ADMIN, ir a `/companies/<id>`, click "Editar". Modificar un campo, guardar. Verificar cambio. Verificar AuditLog con `action='UPDATE'`.
 5. **RBAC**: como VENDEDOR, intentar acceder a `/companies/<id>/edit` → redirect a `/companies/<id>`. Como ADMIN, mismo path → form visible.
@@ -593,16 +680,17 @@ En tu reporte final debes confirmar:
 
 ---
 
-## ⚠️ Después del merge: Frank aplica la migración en Railway
+## ⚠️ Después del merge: SOFIA aplica la migración con Railway CLI
 
-Una vez que INTEGRA apruebe el merge y el push a `origin/main`:
+SOFIA ejecuta esto (con Railway CLI ya autenticado al proyecto `administracion-medica-industrial`):
 
-1. Frank abre Railway Dashboard → servicio Postgres → Query.
-2. Pega el contenido de `context/infra/0X-migration-<FECHA>-target-company-self-reg.sql`.
-3. Ejecuta (Run).
-4. Verifica que la tabla final retorna 4 booleanos TRUE + estado 'OK'.
-5. Refresca `/workers` y `/companies` en el navegador.
-6. Reporta a INTEGRA que la migración está aplicada.
+```bash
+railway run --service frontend npx tsx context/infra/apply-migrations.ts
+```
+
+Esto aplica TODAS las migraciones pendientes + sincroniza `_prisma_migrations` en una sola corrida. El output debe terminar con "✅ OK".
+
+Si por algún motivo Railway CLI falla en esa máquina, Frank puede correr el script SQL equivalente `context/infra/apply-pending-migrations-railway.sql` en Railway Dashboard → Postgres → Query (versión manual como respaldo).
 
 **Sin este paso, el código de `ARCH-20260624-03` fallará en producción** con errores tipo:
 - `Unknown column 'targetCompanyId' in 'where clause'`
