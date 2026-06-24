@@ -23,6 +23,7 @@ import { CompanyOriginBadge, type CompanyChannel } from '@/components/companies/
 import CompanySellerHistoryPanel from '@/components/companies/CompanySellerHistoryPanel'
 import CompanyFullFormView from '@/components/companies/CompanyFullFormView'
 import CompanyActionsPanel, { type SellerOption } from '@/components/companies/CompanyActionsPanel'
+import GenerateCompletionLinkButton from '@/components/companies/GenerateCompletionLinkButton'
 import { getCompanyOriginChannel } from '@/services/company.service'
 
 export const dynamic = 'force-dynamic'
@@ -107,14 +108,26 @@ export default async function CompanyDetailPage({ params }: PageProps) {
           </div>
           {/* IMPL-20260624-03 (ARCH-20260624-03) Sub-B: botón "Editar datos completos"
               Solo visible para ADMIN y si la Company está HABILITADO. */}
-          {canEditFullData && (
-            <Link
-              href={`/companies/${id}/edit`}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-2 flex-shrink-0"
-            >
-              <span>✏️</span> Editar datos completos
-            </Link>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* IMPL-20260624-05 (ARCH-20260624-03) Sub-A: botón "Generar link para
+                completar datos". Visible para ADMIN/VENDEDOR + estado HABILITADO.
+                El componente valida su propia visibilidad (gated) y maneja el
+                modal de URL generado. */}
+            <GenerateCompletionLinkButton
+              companyId={id}
+              companyName={company.name}
+              role={role}
+              estado={estado}
+            />
+            {canEditFullData && (
+              <Link
+                href={`/companies/${id}/edit`}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-2"
+              >
+                <span>✏️</span> Editar datos completos
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
