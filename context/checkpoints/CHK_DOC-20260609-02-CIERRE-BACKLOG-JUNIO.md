@@ -1,4 +1,4 @@
-# CHK_DOC-20260609-02: Cierre de Backlog Junio 2026
+# CHK DOC-20260609-02 — Cierre Backlog Junio 2026
 
 ## Resumen Ejecutivo
 
@@ -44,6 +44,17 @@ Se confirma implementación en producción de las tareas del backlog de junio 20
 **Estado:** [✓] Operación estabilizada — backlog de junio completado
 
 **Fase:** Fase operativa: estabilización productiva | IA clínica (MedGemma/DR7) | persistencia de uploads | integraciones comerciales MEDGEMMA APIS
+
+## Work items próximos
+
+- ARCH-20260604-01: Presentation schema asistida (alta prioridad)
+- ARCH-20260527-24: Búsqueda externa server-side (media prioridad)
+- FIX-20260603-01: Corrimiento tabular residual (baja prioridad)
+
+## Infraestructura
+
+- pnpm build falló: Prisma 7 incompatible con schema sintaxis antigua
+- Solución: instalar dependencias o usar Prisma 5.x
 
 ## Referencias
 
