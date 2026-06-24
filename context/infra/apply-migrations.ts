@@ -367,12 +367,28 @@ async function run() {
           CONSTRAINT "_prisma_migrations_pkey" PRIMARY KEY ("id")
       )
     `)
+    // IMPL-20260624-04: Crear UNIQUE constraint en migration_name si no existe
+    // (algunas DBs antiguas no lo tienen; sin esto, ON CONFLICT falla con 42P10)
+    const hasUnique: Array<{ exists: boolean }> = await prisma.$queryRaw`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = '_prisma_migrations_migration_name_key'
+      ) as exists
+    `
+    if (!hasUnique[0]?.exists) {
+      console.log("  + Creando UNIQUE constraint en _prisma_migrations.migration_name")
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "_prisma_migrations"
+          ADD CONSTRAINT "_prisma_migrations_migration_name_key" UNIQUE ("migration_name")
+      `)
+    }
     await prisma.$executeRaw`
       DELETE FROM "_prisma_migrations"
       WHERE "migration_name" IN (
           '20260527121500_add_intake_trace_to_medical_event',
           '20260623170000_company_v2_vendedor_historial_link_publico',
-          '20260624120000_company_self_reg_channel'
+          '20260624120000_company_self_reg_channel',
+          '20260624214342_add_target_company_id_to_self_reg'
       )
     `
     await prisma.$executeRawUnsafe(`
