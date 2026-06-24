@@ -6,3 +6,8 @@
 backend/.venv/
 __pycache__/
 *.pyc
+
+# Basura del filesystem FUSE (metadata del IDE/Next dev server)
+# No es código, no debe commitearse
+.fuse_hidden*
+.playwright-mcp/
