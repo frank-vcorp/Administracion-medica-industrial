@@ -6,8 +6,16 @@
  * Capa de negocio: transacciones Prisma, hashing de tokens, validaciones
  * que requieren DB. Esta capa NO usa NextAuth ni cookies; la autenticación
  * se valida en src/actions/company.actions.ts antes de delegar aquí.
+ *
+ * IMPL-20260624-01: Refactor para soportar dos paths de auto-alta:
+ *   - submitCompanySelfRegistration(token, payload) → ruta con token (/auto-alta/[token])
+ *   - submitPublicCompanySelfRegistration(payload)  → ruta pública sin token (/solicitar-alta)
+ * Ambos delegan a submitCompanySelfRegistrationCore(source, payload, token?) que
+ * crea Company con origen=AUTO_ALTA, estado=PENDIENTE_REVISION y registra la
+ * CompanySelfRegistration con el canal apropiado (VENDOR_LINK | PUBLIC_DIRECT).
  */
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { headers } from 'next/headers'
 import prisma from '@/lib/prisma'
 import { Prisma, CompanyStatus, CompanyOrigin, CompanySelfRegStatus } from '@prisma/client'
 import {
@@ -168,63 +176,85 @@ export async function registerSelfRegFile(
   return { ok: true as const, key: metadata.key, fileUrl: `/api/files/${metadata.key}` }
 }
 
-/** Envía el formulario completo de auto-alta. Crea Company + marca SUBMITTED. */
-export async function submitCompanySelfRegistration(
-  plainToken: string,
-  rawPayload: unknown
+/**
+ * IMPL-20260624-01: Helper server-side para obtener la IP del cliente
+ * a partir de headers estándar de proxy. Solo se usa dentro de server actions.
+ * Retorna null si no hay headers confiables (cliente directo sin proxy).
+ */
+export async function getClientIp(): Promise<string | null> {
+  try {
+    const h = await headers()
+    return (
+      h.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      h.get('x-real-ip') ??
+      null
+    )
+  } catch {
+    // headers() lanza si se llama fuera de un request context (tests, etc.)
+    return null
+  }
+}
+
+/**
+ * IMPL-20260624-01: Genera un identificador aleatorio de 8 caracteres
+ * base64url-safe para scopes de storage público.
+ */
+export function random8(): string {
+  return randomBytes(6).toString('base64url').slice(0, 8)
+}
+
+/**
+ * IMPL-20260624-01: Núcleo compartido de auto-alta. Soporta dos paths:
+ *   - source='TOKEN'   → requiere token vigente (link de vendedor)
+ *   - source='PUBLIC'  → sin token (ruta pública /solicitar-alta)
+ *
+ * En ambos casos crea Company con origen=AUTO_ALTA, estado=PENDIENTE_REVISION.
+ * La diferencia es cómo se trackea CompanySelfRegistration y el storage scope.
+ *
+ * @param source 'TOKEN' (requiere token) o 'PUBLIC' (sin token).
+ * @param payload Payload validado por CompanyFullFormPayloadSchema.
+ * @param token Requerido solo si source='TOKEN'. Token plano original.
+ */
+export async function submitCompanySelfRegistrationCore(
+  source: 'TOKEN' | 'PUBLIC',
+  payload: CompanyFullFormPayload,
+  token?: string
 ): Promise<
   | { ok: true; companyId: string }
   | { ok: false; code: 'INVALID_TOKEN' | 'TOKEN_EXPIRED' | 'ALREADY_SUBMITTED' | 'INVALID_PAYLOAD' | 'RFC_DUPLICATE'; error: string; existingCompanyId?: string }
 > {
-  // 1. Validar token
-  const tokenCheck = await validateCompanySelfRegToken(plainToken)
-  if (!tokenCheck.ok) {
-    if (tokenCheck.reason === 'EXPIRED') return { ok: false, code: 'TOKEN_EXPIRED', error: 'Token expirado' }
-    if (tokenCheck.reason === 'ALREADY_SUBMITTED') {
-      return {
-        ok: false,
-        code: 'ALREADY_SUBMITTED',
-        error: 'Este enlace ya fue utilizado',
-        existingCompanyId: tokenCheck.submittedCompanyId ?? undefined,
+  let regId: string | null = null
+
+  // -- 1. Resolución de CompanySelfRegistration según source ---------------
+  if (source === 'TOKEN') {
+    if (!token) {
+      return { ok: false, code: 'INVALID_TOKEN', error: 'Token requerido para source=TOKEN' }
+    }
+    const tokenCheck = await validateCompanySelfRegToken(token)
+    if (!tokenCheck.ok) {
+      if (tokenCheck.reason === 'EXPIRED') return { ok: false, code: 'TOKEN_EXPIRED', error: 'Token expirado' }
+      if (tokenCheck.reason === 'ALREADY_SUBMITTED') {
+        return {
+          ok: false,
+          code: 'ALREADY_SUBMITTED',
+          error: 'Este enlace ya fue utilizado',
+          existingCompanyId: tokenCheck.submittedCompanyId ?? undefined,
+        }
       }
+      if (tokenCheck.reason === 'CANCELLED') return { ok: false, code: 'INVALID_TOKEN', error: 'Token cancelado' }
+      return { ok: false, code: 'INVALID_TOKEN', error: 'Token inválido' }
     }
-    if (tokenCheck.reason === 'CANCELLED') return { ok: false, code: 'INVALID_TOKEN', error: 'Token cancelado' }
-    return { ok: false, code: 'INVALID_TOKEN', error: 'Token inválido' }
+    const tokenHash = hashToken(token)
+    const existing = await prisma.companySelfRegistration.findUnique({ where: { tokenHash } })
+    if (!existing) return { ok: false, code: 'INVALID_TOKEN', error: 'Token no encontrado' }
+    regId = existing.id
   }
+  // source === 'PUBLIC' → no se valida ni se busca token; regId queda null.
+  // Se creará un nuevo CompanySelfRegistration en la transacción con channel=PUBLIC_DIRECT.
 
-  // 2. Validar payload con Zod
-  const parsed = CompanyFullFormPayloadSchema.safeParse(rawPayload)
-  if (!parsed.success) {
-    return {
-      ok: false,
-      code: 'INVALID_PAYLOAD',
-      error: parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
-    }
-  }
-  const payload: CompanyFullFormPayload = parsed.data
-
-  // 3. Validar RFC duplicado
-  const dup = await assertRfcNotRegistered(
-    payload.fiscal.rfc,
-    (args) => prisma.company.findFirst(args) as Promise<{ id: string } | null>
-  )
-  if (dup.duplicate) {
-    return {
-      ok: false,
-      code: 'RFC_DUPLICATE',
-      error: 'RFC ya registrado',
-      existingCompanyId: dup.existingCompanyId,
-    }
-  }
-
-  // 4. Transacción: crear Company PENDIENTE_REVISION + marcar SUBMITTED
-  const tokenHash = hashToken(plainToken)
+  // -- 2. Transacción: crear Company + crear/actualizar CompanySelfRegistration ----
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const reg = await tx.companySelfRegistration.findUnique({ where: { tokenHash } })
-      if (!reg) throw new Error('TOKEN_NOT_FOUND')
-      if (reg.status !== CompanySelfRegStatus.ACTIVE) throw new Error('TOKEN_INACTIVE')
-
+    const companyId = await prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
           name: payload.fiscal.razonSocial,
@@ -254,18 +284,57 @@ export async function submitCompanySelfRegistration(
         },
       })
 
-      await tx.companySelfRegistration.update({
-        where: { id: reg.id },
-        data: {
-          status: CompanySelfRegStatus.SUBMITTED,
-          submittedAt: new Date(),
-          submittedCompanyId: company.id,
-        },
-      })
+      if (source === 'TOKEN' && regId) {
+        // Path con token: actualizar CompanySelfRegistration existente a SUBMITTED.
+        await tx.companySelfRegistration.update({
+          where: { id: regId },
+          data: {
+            status: CompanySelfRegStatus.SUBMITTED,
+            submittedAt: new Date(),
+            submittedCompanyId: company.id,
+            // channel: VENDOR_LINK es el default de Prisma; no lo tocamos.
+          },
+        })
+      } else {
+        // Path público: crear CompanySelfRegistration nuevo con channel=PUBLIC_DIRECT.
+        // expiresAt es informativo (placeholder 168h); un registro público no tiene expiración real.
+        await tx.companySelfRegistration.create({
+          data: {
+            tokenHash: `public-${randomUUID()}`,
+            channel: 'PUBLIC_DIRECT',
+            status: CompanySelfRegStatus.SUBMITTED,
+            expiresAt: new Date(Date.now() + 168 * 60 * 60 * 1000),
+            submittedAt: new Date(),
+            submittedCompanyId: company.id,
+            createdByUserId: null,
+            uploadedFiles: [],
+          },
+        })
+      }
 
       return company.id
     })
-    return { ok: true, companyId: result }
+
+    // -- 3. AuditLog para submits públicos (fuera de la txn para no bloquear) ----
+    if (source === 'PUBLIC') {
+      const ip = await getClientIp()
+      await prisma.auditLog.create({
+        data: {
+          userId: null,
+          action: 'COMPANY_PUBLIC_SELF_REG_SUBMITTED',
+          entity: 'Company',
+          entityId: companyId,
+          ipAddress: ip,
+          details: {
+            source: 'PUBLIC',
+            companyName: payload.fiscal.razonSocial,
+            rfc: payload.fiscal.rfc,
+          } as Prisma.InputJsonValue,
+        },
+      })
+    }
+
+    return { ok: true, companyId }
   } catch (e) {
     // Si la transacción falló por UNIQUE en RFC (carrera), mapear
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -273,6 +342,77 @@ export async function submitCompanySelfRegistration(
     }
     throw e
   }
+}
+
+/** Wrapper público (ruta con token): valida token y delega al core. */
+export async function submitCompanySelfRegistration(
+  plainToken: string,
+  rawPayload: unknown
+): Promise<
+  | { ok: true; companyId: string }
+  | { ok: false; code: 'INVALID_TOKEN' | 'TOKEN_EXPIRED' | 'ALREADY_SUBMITTED' | 'INVALID_PAYLOAD' | 'RFC_DUPLICATE'; error: string; existingCompanyId?: string }
+> {
+  // Validar payload con Zod
+  const parsed = CompanyFullFormPayloadSchema.safeParse(rawPayload)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: 'INVALID_PAYLOAD',
+      error: parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+    }
+  }
+  const payload: CompanyFullFormPayload = { ...parsed.data, channel: 'VENDOR_LINK' }
+
+  // Validar RFC duplicado ANTES de la transacción (mensaje más claro)
+  const dup = await assertRfcNotRegistered(
+    payload.fiscal.rfc,
+    (args) => prisma.company.findFirst(args) as Promise<{ id: string } | null>
+  )
+  if (dup.duplicate) {
+    return {
+      ok: false,
+      code: 'RFC_DUPLICATE',
+      error: 'RFC ya registrado',
+      existingCompanyId: dup.existingCompanyId,
+    }
+  }
+
+  return submitCompanySelfRegistrationCore('TOKEN', payload, plainToken)
+}
+
+/** Wrapper público (ruta sin token /solicitar-alta): sin validación de token. */
+export async function submitPublicCompanySelfRegistration(
+  rawPayload: unknown
+): Promise<
+  | { ok: true; companyId: string }
+  | { ok: false; code: 'INVALID_TOKEN' | 'ALREADY_SUBMITTED' | 'TOKEN_EXPIRED' | 'INVALID_PAYLOAD' | 'RFC_DUPLICATE'; error: string; existingCompanyId?: string }
+> {
+  // Validar payload con Zod
+  const parsed = CompanyFullFormPayloadSchema.safeParse(rawPayload)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: 'INVALID_PAYLOAD',
+      error: parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+    }
+  }
+  const payload: CompanyFullFormPayload = { ...parsed.data, channel: 'PUBLIC_DIRECT' }
+
+  // Validar RFC duplicado ANTES de la transacción
+  const dup = await assertRfcNotRegistered(
+    payload.fiscal.rfc,
+    (args) => prisma.company.findFirst(args) as Promise<{ id: string } | null>
+  )
+  if (dup.duplicate) {
+    return {
+      ok: false,
+      code: 'RFC_DUPLICATE',
+      error: 'RFC ya registrado',
+      existingCompanyId: dup.existingCompanyId,
+    }
+  }
+
+  return submitCompanySelfRegistrationCore('PUBLIC', payload)
 }
 
 /** Cambia el vendedor asignado de una Company. Transaccional. */
@@ -483,4 +623,27 @@ export async function isCompanyOperativa(companyId: string): Promise<boolean> {
     select: { estado: true },
   })
   return c?.estado === CompanyStatus.HABILITADO
+}
+
+/**
+ * IMPL-20260624-01: Obtiene el canal de origen de auto-alta de una Company.
+ * Retorna:
+ *   - 'VENDOR_LINK'   → si la última CompanySelfRegistration es de link de vendedor
+ *   - 'PUBLIC_DIRECT' → si la última CompanySelfRegistration es pública directa
+ *   - null            → si la Company es MANUAL o no tiene selfRegistrations
+ *
+ * Se usa en la ficha del cliente para discriminar el sub-canal dentro de AUTO_ALTA.
+ */
+export async function getCompanyOriginChannel(
+  companyId: string
+): Promise<'VENDOR_LINK' | 'PUBLIC_DIRECT' | null> {
+  const latest = await prisma.companySelfRegistration.findFirst({
+    where: { submittedCompanyId: companyId },
+    orderBy: { submittedAt: 'desc' },
+    select: { channel: true },
+  })
+  if (!latest) return null
+  if (latest.channel === 'PUBLIC_DIRECT') return 'PUBLIC_DIRECT'
+  // Default retrocompatible: cualquier valor no-PUBLIC_DIRECT se trata como VENDOR_LINK.
+  return 'VENDOR_LINK'
 }

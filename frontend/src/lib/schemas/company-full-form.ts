@@ -183,6 +183,13 @@ export const CompanyFullFormPayloadSchema = z.object({
   terminosAceptados: z.boolean().refine((v) => v === true, {
     message: 'Debe aceptar los términos y condiciones',
   }),
+  /**
+   * IMPL-20260624-01: Canal de origen del submit.
+   * 'VENDOR_LINK' → link generado por vendedor (default retrocompatible).
+   * 'PUBLIC_DIRECT' → submit desde ruta pública /solicitar-alta sin token.
+   * El server action fuerza el valor según la ruta; este campo es informativo.
+   */
+  channel: z.enum(['VENDOR_LINK', 'PUBLIC_DIRECT']).optional(),
 })
 
 // --------------------------------------------------------------------------

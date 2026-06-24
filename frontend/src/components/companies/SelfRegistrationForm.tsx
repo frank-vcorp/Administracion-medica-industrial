@@ -2,11 +2,19 @@
  * @file Formulario público de auto-alta (10 secciones).
  * @id IMPL-20260623-02
  * @spec context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
+ * @id-mod IMPL-20260624-01
+ * @spec-mod context/SPECs/SPEC_ARCH-20260624-01-RUTA-PUBLICA-SIN-TOKEN.md
  *
- * Server component: renderiza el formulario para un token previamente validado.
- * La subida de archivos al bucket se hace client-side contra POST /api/v1/upload-only
- * con key companies/selfreg/{tokenHash[:8]}/{section}/{filename}.
- * El submit final llama a submitCompanySelfRegistrationAction (server action pública).
+ * Client component: renderiza el formulario para un token previamente validado
+ * (source='TOKEN') o sin token (source='PUBLIC').
+ *
+ * - source='TOKEN':   key = companies/selfreg/{tokenHash[:8]}/{section}/{filename}
+ *                     submit → submitCompanySelfRegistrationAction(token, payload)
+ * - source='PUBLIC':  key = companies/public/{random8()}/{section}/{filename}
+ *                     submit → submitPublicCompanySelfRegistrationAction(payload)
+ *                     NO valida token (no hay); archivos NO se registran via
+ *                     registerSelfRegFileAction (no hay CompanySelfRegistration
+ *                     previa; el registro se crea en submit con channel=PUBLIC_DIRECT).
  *
  * Tamaños máximos por sección (cliente y servidor):
  *   - constanciaFiscal / identificacionRepLegal → 3 MB
@@ -16,11 +24,12 @@
  */
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import {
   validateCompanySelfRegTokenAction,
   registerSelfRegFileAction,
   submitCompanySelfRegistrationAction,
+  submitPublicCompanySelfRegistrationAction,
 } from '@/actions/company.actions'
 import { ALLOWED_DOCUMENT_EXTENSIONS, MAX_FILE_SIZE_2MB, MAX_FILE_SIZE_3MB, MAX_FILE_SIZE_4MB, MAX_FILE_SIZE_10MB } from '@/lib/schemas/company-full-form'
 
@@ -74,22 +83,59 @@ interface InvalidState {
   existingCompanyId?: string
 }
 
-export default function SelfRegistrationForm({
-  token,
-  initial,
-  estados,
-  cfdiOptions,
-}: {
-  token: string
+/**
+ * IMPL-20260624-01: Props del formulario.
+ * - source='TOKEN'   → ruta /auto-alta/[token] (requiere token vigente).
+ * - source='PUBLIC'  → ruta /solicitar-alta (sin token, sin auth).
+ * Default 'TOKEN' para retrocompatibilidad con callers existentes.
+ */
+interface SelfRegistrationFormProps {
+  token?: string
+  source?: 'TOKEN' | 'PUBLIC'
   initial: InitialState | InvalidState
   estados: { id: number; nombre: string }[]
   cfdiOptions: readonly string[]
-}) {
+}
+
+export default function SelfRegistrationForm({
+  token,
+  source = 'TOKEN',
+  initial,
+  estados,
+  cfdiOptions,
+}: SelfRegistrationFormProps) {
+  // IMPL-20260624-01: Guard retrocompatible. En source='TOKEN' el token es obligatorio.
+  if (source === 'TOKEN' && (!token || token.length < 8)) {
+    // eslint-disable-next-line no-console
+    console.warn('[SelfRegistrationForm] source=TOKEN requires a valid token prop')
+  }
+
+  // IMPL-20260624-01: En modo PUBLIC, el form siempre se renderiza activo
+  // (no hay token que validar). La página provee initial.status='ACTIVE'.
+  if (source === 'PUBLIC') {
+    return (
+      <SelfRegistrationFormActive
+        source="PUBLIC"
+        initial={initial.status === 'ACTIVE' ? initial : { status: 'ACTIVE', expiresAt: '', openedCount: 0 }}
+        estados={estados}
+        cfdiOptions={cfdiOptions}
+      />
+    )
+  }
+
   if (initial.status !== 'ACTIVE') {
     return <InvalidTokenView state={initial} />
   }
 
-  return <SelfRegistrationFormActive token={token} initial={initial} estados={estados} cfdiOptions={cfdiOptions} />
+  return (
+    <SelfRegistrationFormActive
+      source="TOKEN"
+      token={token}
+      initial={initial}
+      estados={estados}
+      cfdiOptions={cfdiOptions}
+    />
+  )
 }
 
 function InvalidTokenView({ state }: { state: InvalidState }) {
@@ -130,11 +176,13 @@ function InvalidTokenView({ state }: { state: InvalidState }) {
 
 function SelfRegistrationFormActive({
   token,
+  source,
   initial,
   estados,
   cfdiOptions,
 }: {
-  token: string
+  token?: string
+  source: 'TOKEN' | 'PUBLIC'
   initial: InitialState
   estados: { id: number; nombre: string }[]
   cfdiOptions: readonly string[]
@@ -158,6 +206,24 @@ function SelfRegistrationFormActive({
     actaConstitutiva: false,
     otraDocumentacion: false,
   })
+
+  // IMPL-20260624-01: random8 estable para scope de storage público.
+  // Se genera perezosamente en el primer upload para evitar IDs huérfanos
+  // si el usuario nunca llega a subir un archivo.
+  const publicScopeRef = useRef<string | null>(null)
+  function getPublicScope(): string {
+    if (!publicScopeRef.current) {
+      // 6 bytes → 8 chars base64url (compatible con el scope del server).
+      const arr = new Uint8Array(6)
+      crypto.getRandomValues(arr)
+      publicScopeRef.current = btoa(String.fromCharCode(...arr))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
+        .slice(0, 8)
+    }
+    return publicScopeRef.current
+  }
   const [form, setForm] = useState({
     // Fiscal
     fecha: new Date().toISOString().slice(0, 10),
@@ -233,16 +299,27 @@ function SelfRegistrationFormActive({
     setUploading((u) => ({ ...u, [seccion]: true }))
     setSubmitError(null)
     try {
-      // 1. Re-validar token antes de subir
-      const tokenCheck = await validateCompanySelfRegTokenAction(token)
-      if (!tokenCheck.ok) {
-        setSubmitError(`Token no vigente: ${tokenCheck.reason}`)
-        return
+      // IMPL-20260624-01: Branch según source.
+      let key: string
+      if (source === 'TOKEN') {
+        if (!token) {
+          setSubmitError('Token no disponible')
+          return
+        }
+        // 1. Re-validar token antes de subir
+        const tokenCheck = await validateCompanySelfRegTokenAction(token)
+        if (!tokenCheck.ok) {
+          setSubmitError(`Token no vigente: ${tokenCheck.reason}`)
+          return
+        }
+        // 2. Subir a /api/v1/upload-only con scope companies/selfreg/{tokenHash[:8]}/
+        const tokenHash = await getTokenHashFromClient(token)
+        key = `companies/selfreg/${tokenHash.slice(0, 8)}/${seccion}/${file.name}`
+      } else {
+        // source='PUBLIC': scope companies/public/{random8}/
+        key = `companies/public/${getPublicScope()}/${seccion}/${file.name}`
       }
-      // 2. Subir a /api/v1/upload-only
       const fd = new FormData()
-      const tokenHash = await getTokenHashFromClient(token)
-      const key = `companies/selfreg/${tokenHash.slice(0, 8)}/${seccion}/${file.name}`
       fd.append('key', key)
       fd.append('file', file)
       const upRes = await fetch('/api/v1/upload-only', { method: 'POST', body: fd })
@@ -253,17 +330,20 @@ function SelfRegistrationFormActive({
       const upJson = (await upRes.json()) as { file_url?: string; key?: string }
       const fileUrl = upJson.file_url ?? `/api/files/${key}`
       const ext = (file.name.split('.').pop() ?? '').toLowerCase()
-      // 3. Registrar metadata en DB
-      const reg = await registerSelfRegFileAction(token, {
-        key,
-        filename: file.name,
-        size: file.size,
-        mime: file.type || 'application/octet-stream',
-        section: seccion,
-      })
-      if (!reg.ok) {
-        setSubmitError(`No se pudo registrar el archivo: ${reg.reason}`)
-        return
+      // IMPL-20260624-01: En modo PUBLIC no se llama registerSelfRegFileAction
+      // (no hay CompanySelfRegistration previa; se crea en submit con channel=PUBLIC_DIRECT).
+      if (source === 'TOKEN' && token) {
+        const reg = await registerSelfRegFileAction(token, {
+          key,
+          filename: file.name,
+          size: file.size,
+          mime: file.type || 'application/octet-stream',
+          section: seccion,
+        })
+        if (!reg.ok) {
+          setSubmitError(`No se pudo registrar el archivo: ${reg.reason}`)
+          return
+        }
       }
       setUploads((u) => ({
         ...u,
@@ -368,7 +448,11 @@ function SelfRegistrationFormActive({
     }
 
     startTransition(async () => {
-      const result = await submitCompanySelfRegistrationAction(token, payload)
+      // IMPL-20260624-01: Branch según source.
+      const result =
+        source === 'PUBLIC'
+          ? await submitPublicCompanySelfRegistrationAction(payload)
+          : await submitCompanySelfRegistrationAction(token!, payload)
       if (result.ok) {
         setSuccess({ companyId: result.companyId })
       } else {

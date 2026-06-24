@@ -19,9 +19,11 @@ import JobPositionsPanel from './JobPositionsPanel'
 import AllowedBranchesPanel from './AllowedBranchesPanel'
 import CompanyMedicalProfilesPanel from './CompanyMedicalProfilesPanel'
 import { CompanyStatusBadge } from '@/components/companies/CompanyStatusBadge'
+import { CompanyOriginBadge, type CompanyChannel } from '@/components/companies/CompanyOriginBadge'
 import CompanySellerHistoryPanel from '@/components/companies/CompanySellerHistoryPanel'
 import CompanyFullFormView from '@/components/companies/CompanyFullFormView'
 import CompanyActionsPanel, { type SellerOption } from '@/components/companies/CompanyActionsPanel'
+import { getCompanyOriginChannel } from '@/services/company.service'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +37,7 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   const session = await getServerSession(authOptions)
   const role = (session?.user?.role as string | undefined) ?? 'COMPANY_CLIENT'
 
-  const [company, jobPositions, profiles, branches, availableTests, sellersRaw] =
+  const [company, jobPositions, profiles, branches, availableTests, sellersRaw, originChannel] =
     await Promise.all([
       getCompanyById(id),
       getJobPositionsByCompany(id),
@@ -44,6 +46,8 @@ export default async function CompanyDetailPage({ params }: PageProps) {
       getMedicalTests(),
       // La server action valida sesión; aquí ya estamos autenticados
       listActiveSellersAction().catch(() => []),
+      // IMPL-20260624-01: canal de origen (VENDOR_LINK | PUBLIC_DIRECT | null)
+      getCompanyOriginChannel(id).catch(() => null),
     ])
 
   if (!company) notFound()
@@ -88,6 +92,8 @@ export default async function CompanyDetailPage({ params }: PageProps) {
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold text-slate-900">{company.name}</h1>
               <CompanyStatusBadge estado={estado} origen={origen} size="md" />
+              {/* IMPL-20260624-01: badge de canal/origen (VENDOR_LINK | PUBLIC_DIRECT | Alta Manual) */}
+              <CompanyOriginBadge channel={originChannel as CompanyChannel} size="md" />
             </div>
             {company.rfc && (
               <p className="text-sm font-mono text-slate-500 mt-0.5">RFC: {company.rfc}</p>

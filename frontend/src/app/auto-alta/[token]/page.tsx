@@ -112,6 +112,7 @@ export default async function AutoAltaPage({ params }: PageProps) {
       <main className="py-8">
         <SelfRegistrationForm
           token={token}
+          source="TOKEN"
           initial={initial}
           estados={estados}
           cfdiOptions={CFDI_USO_VALUES}

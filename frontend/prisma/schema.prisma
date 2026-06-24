@@ -818,7 +818,8 @@ model CompanySellerHistory {
 /// Link público para auto-alta de prospectos. Token plano NUNCA persiste.
 model CompanySelfRegistration {
   id                 String              @id @default(uuid())
-  tokenHash          String              @unique // SHA-256 del token plano
+  tokenHash          String              @unique // SHA-256 del token plano (o 'public-<uuid>' en modo PUBLIC_DIRECT)
+  channel            String?             @default("VENDOR_LINK") // 'VENDOR_LINK' | 'PUBLIC_DIRECT' (IMPL-20260624-01)
   companyDraft       Json?               // borrador parcial (futuro multi-step)
   uploadedFiles      Json                @default("[]") // [{key, filename, size, mime, section}]
   status             CompanySelfRegStatus @default(ACTIVE)

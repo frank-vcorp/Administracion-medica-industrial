@@ -132,13 +132,30 @@ export async function registerSelfRegFileAction(
   return CompanyService.registerSelfRegFile(token, metadata)
 }
 
-/** Envía el formulario completo de auto-alta (público). */
+/** Envía el formulario completo de auto-alta (público, requiere token). */
 export async function submitCompanySelfRegistrationAction(
   token: string,
   payload: unknown
 ) {
   // Público: cualquier prospecto con token vigente puede enviar.
   const result = await CompanyService.submitCompanySelfRegistration(token, payload)
+  return result
+}
+
+/**
+ * IMPL-20260624-01: Server action pública para submit desde /solicitar-alta.
+ * NO valida sesión (la ruta es 100% pública, sin token, sin auth).
+ * Crea Company con origen=AUTO_ALTA, estado=PENDIENTE_REVISION y
+ * CompanySelfRegistration con channel='PUBLIC_DIRECT'.
+ */
+export async function submitPublicCompanySelfRegistrationAction(
+  payload: unknown
+) {
+  // Público: sin auth check, sin token.
+  const result = await CompanyService.submitPublicCompanySelfRegistration(payload)
+  if (result.ok) {
+    revalidatePath('/companies')
+  }
   return result
 }
 
