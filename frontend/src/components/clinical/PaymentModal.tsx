@@ -15,13 +15,12 @@ import { pdf } from '@react-pdf/renderer'
 import { PaymentReceiptPDF, type ReceiptPDFData } from '@/components/pdf/PaymentReceiptPDF'
 import {
   createPaymentRecord,
-  uploadReceiptPdf,
-  sendReceiptWhatsApp,
 } from '@/actions/payment.actions'
 import {
   getPaymentMethodLabel,
   PAYMENT_METHODS,
   buildDefaultReceiptMessage,
+  buildWhatsAppShareUrl,
   normalizeWhatsAppPhone,
   type PaymentMethod,
 } from '@/lib/payment.constants'
@@ -80,6 +79,13 @@ export default function PaymentModal({
   // ARCH-20260630-02: WhatsApp Web option
   const [sendWhatsApp, setSendWhatsApp] = useState(false)
   const [whatsAppPhone, setWhatsAppPhone] = useState('')
+  // FIX-20260630-04: Estado de éxito con datos para construir <a> wa.me
+  // Patrón copiado de AppointmentFormModal.tsx (línea 286-328)
+  const [successInfo, setSuccessInfo] = useState<{
+    paymentId: string
+    whatsAppUrl: string | null
+    receiptSent: boolean
+  } | null>(null)
 
   const amount = useMemo(() => parseAmount(amountStr), [amountStr])
   const amountValid = Number.isFinite(amount) && amount > 0
@@ -104,6 +110,7 @@ export default function PaymentModal({
     setRecipientEmail('')
     setSendWhatsApp(false)
     setWhatsAppPhone('')
+    setSuccessInfo(null)
     setError(null)
   }, [])
 
@@ -155,27 +162,21 @@ export default function PaymentModal({
       return
     }
 
-    // FIX-20260630-03: No abrimos ventanas aquí. Hacemos todo el trabajo async
-    // y al final navegamos a un endpoint del servidor que hace 302 redirect a
-    // wa.me con el mensaje completo (incluyendo el link del PDF cuando esté listo).
-    //
-    // Por qué funciona:
-    // - El navegador trata la navegación GET como una navegación normal del usuario
-    //   → NO la bloquea el popup blocker.
-    // - El endpoint del servidor construye la URL final con el link del PDF y
-    //   devuelve un redirect 302 a wa.me → el usuario aterriza en WhatsApp Web.
-    // - Usamos un <a> dinámico con target="_blank" + .click() porque es la forma
-    //   más confiable de abrir nueva pestaña desde código sin ser bloqueado.
-    //
-    // Flujo:
-    // 1. startTransition: persistir pago + subir PDF
-    // 2. Cuando tenemos paymentId, crear <a> y dispararlo .click() con target="_blank"
-    // 3. El navegador abre nueva pestaña al endpoint, que redirige a wa.me
-
     startTransition(async () => {
-      // Generar PDF si vamos a enviar por email y/o WhatsApp
-      const needPdf = sendReceipt || sendWhatsApp
-      const pdfDataUrl = needPdf ? await generatePdfDataUrl() : undefined
+      // FIX-20260630-04: Patrón copiado de AppointmentFormModal.tsx.
+      //
+      // Simplicidad:
+      //   1. Solo persistir el pago (sin PDF, sin storage, sin upload).
+      //   2. Construir la URL de wa.me client-side con los datos del pago.
+      //   3. Mostrar un botón <a href="wa.me..." target="_blank"> que el usuario
+      //      hace click → el navegador abre nueva pestaña a WhatsApp Web.
+      //   4. Si el usuario no quiere WhatsApp, solo cierra el modal.
+      //
+      // NO popup blocker, NO endpoint, NO storage, NO complejidad.
+      // Patrón ya probado en producción: AppointmentFormModal línea 286.
+
+      // Generar PDF solo si se va a enviar por email
+      const pdfDataUrl = sendReceipt ? await generatePdfDataUrl() : undefined
 
       // 1. Persistir el pago (puede incluir envío email)
       const result = await createPaymentRecord({
@@ -193,61 +194,31 @@ export default function PaymentModal({
         return
       }
 
-      // 2. ARCH-20260630-02 / FIX-20260630-03: Si marcó WhatsApp, subir PDF,
-      //    registrar trazabilidad y disparar navegación a wa.me vía endpoint redirect
-      if (sendWhatsApp && pdfDataUrl) {
-        const base64Match = pdfDataUrl.match(/^data:application\/pdf;base64,(.+)$/)
-        if (base64Match) {
-          const uploadRes = await uploadReceiptPdf({
-            paymentId: result.paymentId,
-            pdfBase64: base64Match[1],
-          })
-
-          if (uploadRes.success && uploadRes.downloadUrl) {
-            // Construir mensaje completo con link
-            const message = buildDefaultReceiptMessage({
+      // 2. Construir URL de WhatsApp client-side (si el usuario marcó WhatsApp)
+      const whatsAppUrl = sendWhatsApp
+        ? buildWhatsAppShareUrl(
+            whatsAppPhone.trim(),
+            buildDefaultReceiptMessage({
               amount: formatCurrency(amount),
               methodLabel: getPaymentMethodLabel(method),
               paymentId: result.paymentId,
               workerName,
-              downloadUrl: uploadRes.downloadUrl,
+              downloadUrl: null,
             })
+          )
+        : null
 
-            // Registrar trazabilidad (sin abrir ventanas)
-            const waRes = await sendReceiptWhatsApp({
-              paymentId: result.paymentId,
-              phone: whatsAppPhone.trim(),
-              message,
-              downloadUrl: uploadRes.downloadUrl,
-            })
-
-            if (!waRes.success) {
-              console.warn('[PaymentModal] Trazabilidad WhatsApp falló:', waRes.error)
-            }
-
-            // FIX-20260630-03: Disparar navegación a endpoint que hace 302 redirect
-            // a wa.me. Usamos un <a> con target="_blank" porque el navegador lo
-            // trata como navegación iniciada por el usuario (NO popup blocker).
-            const redirectUrl = `/api/payment/receipt/whatsapp/${result.paymentId}?phone=${encodeURIComponent(whatsAppPhone.trim())}`
-            const link = document.createElement('a')
-            link.href = redirectUrl
-            link.target = '_blank'
-            link.rel = 'noopener,noreferrer'
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-          } else {
-            console.warn('[PaymentModal] Upload PDF falló:', uploadRes.error)
-          }
-        }
-      }
+      // 3. Mostrar pantalla de éxito con el botón de WhatsApp (si aplica)
+      setSuccessInfo({
+        paymentId: result.paymentId,
+        whatsAppUrl,
+        receiptSent: !!result.receiptSent,
+      })
 
       onSuccess?.({
         paymentId: result.paymentId,
         receiptSent: !!result.receiptSent,
       })
-      reset()
-      onClose()
     })
   }, [
     amountValid,
@@ -270,6 +241,78 @@ export default function PaymentModal({
   ])
 
   if (!isOpen) return null
+
+  // FIX-20260630-04: Pantalla de éxito (patrón AppointmentFormModal).
+  // Render ANTES del formulario para no mostrarlo después del pago.
+  if (successInfo) {
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden">
+          {/* Header verde de éxito */}
+          <div className="bg-emerald-500 px-8 py-6 text-white">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">✅</span>
+              <div>
+                <h2 className="text-lg font-black">¡Pago Registrado!</h2>
+                <p className="text-emerald-100 text-xs font-medium">
+                  Folio: <span className="font-mono">{successInfo.paymentId.slice(0, 8)}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-8 space-y-5">
+            {/* Resumen del pago */}
+            <section className="bg-slate-50 rounded-2xl p-5 space-y-2 border border-slate-100">
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500">Trabajador:</span>
+                <span className="text-sm font-bold text-slate-800">{workerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500">Monto:</span>
+                <span className="text-sm font-bold text-emerald-700">${formatCurrency(amount)} MXN</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500">Método:</span>
+                <span className="text-sm font-medium text-slate-700">{getPaymentMethodLabel(method)}</span>
+              </div>
+              {successInfo.receiptSent && (
+                <div className="pt-2 border-t border-slate-200">
+                  <p className="text-xs text-emerald-700 font-medium">
+                    📧 Recibo enviado por email
+                  </p>
+                </div>
+              )}
+            </section>
+
+            {/* Botón WhatsApp (patrón AppointmentFormModal) */}
+            {successInfo.whatsAppUrl && (
+              <a
+                href={successInfo.whatsAppUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+              >
+                <span>📱</span> Enviar Recibo por WhatsApp
+              </a>
+            )}
+
+            {/* Botón cerrar */}
+            <button
+              onClick={() => {
+                setSuccessInfo(null)
+                reset()
+                onClose()
+              }}
+              className="block w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
@@ -471,7 +514,7 @@ export default function PaymentModal({
                   </p>
                 )}
                 <p className="text-[10px] text-emerald-700">
-                  Se abrirá WhatsApp Web con el mensaje prellenado y un link al PDF (válido 24h).
+                  Después de registrar el pago, verás un botón verde para abrir WhatsApp Web con el mensaje prellenado.
                 </p>
               </div>
             )}
