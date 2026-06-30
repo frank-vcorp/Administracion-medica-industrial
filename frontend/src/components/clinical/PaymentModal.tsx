@@ -5,7 +5,9 @@
  * z-50, animación fade-in.
  *
  * @id IMPL-20260630-01
+ * @id IMPL-20260630-02 — WhatsApp Web receipt support
  * @spec context/SPECs/SPEC_ARCH-20260630-01-MODAL-PAGO-RECIBO-PAPELETA.md
+ * @spec context/SPECs/SPEC_ARCH-20260630-02-WHATSAPP-RECIBO.md
  */
 
 import { useState, useTransition, useMemo, useCallback } from 'react'
@@ -13,10 +15,14 @@ import { pdf } from '@react-pdf/renderer'
 import { PaymentReceiptPDF, type ReceiptPDFData } from '@/components/pdf/PaymentReceiptPDF'
 import {
   createPaymentRecord,
+  uploadReceiptPdf,
+  sendReceiptWhatsApp,
 } from '@/actions/payment.actions'
 import {
   getPaymentMethodLabel,
   PAYMENT_METHODS,
+  buildDefaultReceiptMessage,
+  normalizeWhatsAppPhone,
   type PaymentMethod,
 } from '@/lib/payment.constants'
 
@@ -71,6 +77,9 @@ export default function PaymentModal({
   const [reference, setReference] = useState('')
   const [sendReceipt, setSendReceipt] = useState(false)
   const [recipientEmail, setRecipientEmail] = useState('')
+  // ARCH-20260630-02: WhatsApp Web option
+  const [sendWhatsApp, setSendWhatsApp] = useState(false)
+  const [whatsAppPhone, setWhatsAppPhone] = useState('')
 
   const amount = useMemo(() => parseAmount(amountStr), [amountStr])
   const amountValid = Number.isFinite(amount) && amount > 0
@@ -80,7 +89,12 @@ export default function PaymentModal({
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail.trim())
   }, [sendReceipt, recipientEmail])
 
-  const canSubmit = amountValid && emailValid && !isPending
+  const whatsAppPhoneValid = useMemo(() => {
+    if (!sendWhatsApp) return true
+    return normalizeWhatsAppPhone(whatsAppPhone).length >= 12
+  }, [sendWhatsApp, whatsAppPhone])
+
+  const canSubmit = amountValid && emailValid && whatsAppPhoneValid && !isPending
 
   const reset = useCallback(() => {
     setMethod('EFECTIVO')
@@ -88,6 +102,8 @@ export default function PaymentModal({
     setReference('')
     setSendReceipt(false)
     setRecipientEmail('')
+    setSendWhatsApp(false)
+    setWhatsAppPhone('')
     setError(null)
   }, [])
 
@@ -134,11 +150,17 @@ export default function PaymentModal({
       setError('Ingresa un email válido para enviar el recibo.')
       return
     }
+    if (sendWhatsApp && !whatsAppPhoneValid) {
+      setError('Ingresa un teléfono válido para enviar por WhatsApp (mínimo 10 dígitos).')
+      return
+    }
 
     startTransition(async () => {
-      // Generar PDF solo si vamos a enviar recibo
-      const pdfDataUrl = sendReceipt ? await generatePdfDataUrl() : undefined
+      // Generar PDF si vamos a enviar por email y/o WhatsApp
+      const needPdf = sendReceipt || sendWhatsApp
+      const pdfDataUrl = needPdf ? await generatePdfDataUrl() : undefined
 
+      // 1. Persistir el pago (puede incluir envío email)
       const result = await createPaymentRecord({
         eventId,
         workerId,
@@ -149,28 +171,71 @@ export default function PaymentModal({
         pdfDataUrl,
       })
 
-      if (result.success) {
-        onSuccess?.({
-          paymentId: result.paymentId ?? '',
-          receiptSent: !!result.receiptSent,
-        })
-        reset()
-        onClose()
-      } else {
+      if (!result.success || !result.paymentId) {
         setError(result.error ?? 'Error al registrar el pago.')
+        return
       }
+
+      // 2. ARCH-20260630-02: Si marcó WhatsApp, subir PDF a URL temporal y abrir WhatsApp Web
+      if (sendWhatsApp && pdfDataUrl) {
+        // Extraer base64 del dataURL
+        const base64Match = pdfDataUrl.match(/^data:application\/pdf;base64,(.+)$/)
+        if (base64Match) {
+          const uploadRes = await uploadReceiptPdf({
+            paymentId: result.paymentId,
+            pdfBase64: base64Match[1],
+          })
+
+          if (uploadRes.success && uploadRes.downloadUrl) {
+            const message = buildDefaultReceiptMessage({
+              amount: formatCurrency(amount),
+              methodLabel: getPaymentMethodLabel(method),
+              paymentId: result.paymentId,
+              workerName,
+              downloadUrl: uploadRes.downloadUrl,
+            })
+
+            const waRes = await sendReceiptWhatsApp({
+              paymentId: result.paymentId,
+              phone: whatsAppPhone.trim(),
+              message,
+              downloadUrl: uploadRes.downloadUrl,
+            })
+
+            if (waRes.success && waRes.whatsAppUrl) {
+              // Abrir WhatsApp Web en nueva pestaña
+              window.open(waRes.whatsAppUrl, '_blank', 'noopener,noreferrer')
+            } else {
+              console.warn('[PaymentModal] WhatsApp URL no generada:', waRes.error)
+            }
+          } else {
+            console.warn('[PaymentModal] Upload PDF falló:', uploadRes.error)
+          }
+        }
+      }
+
+      onSuccess?.({
+        paymentId: result.paymentId,
+        receiptSent: !!result.receiptSent,
+      })
+      reset()
+      onClose()
     })
   }, [
     amountValid,
     amount,
     emailValid,
+    whatsAppPhoneValid,
     sendReceipt,
+    sendWhatsApp,
     recipientEmail,
+    whatsAppPhone,
     generatePdfDataUrl,
     eventId,
     workerId,
     method,
     reference,
+    workerName,
     onSuccess,
     reset,
     onClose,
@@ -188,7 +253,7 @@ export default function PaymentModal({
             <div>
               <h2 className="text-lg font-black">Pago y Recibo</h2>
               <p className="text-amber-100 text-xs font-medium">
-                Registra el pago de la papeleta y emite un comprobante · ARCH-20260630-01
+                Registra el pago de la papeleta y emite un comprobante · Email o WhatsApp
               </p>
             </div>
           </div>
@@ -345,6 +410,45 @@ export default function PaymentModal({
             )}
           </section>
 
+          {/* ARCH-20260630-02: Enviar recibo por WhatsApp Web */}
+          <section className="space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sendWhatsApp}
+                onChange={(e) => setSendWhatsApp(e.target.checked)}
+                disabled={isPending}
+                className="w-4 h-4 accent-emerald-500"
+              />
+              <span className="text-xs font-bold text-slate-700">
+                📱 Enviar recibo por WhatsApp
+              </span>
+            </label>
+            {sendWhatsApp && (
+              <div className="space-y-2 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                <label className="text-xs font-bold text-emerald-700 block">
+                  Teléfono destino <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  value={whatsAppPhone}
+                  onChange={(e) => setWhatsAppPhone(e.target.value)}
+                  disabled={isPending}
+                  placeholder="+52 1 55 1234 5678"
+                  className="w-full bg-white ring-1 ring-emerald-200 focus:ring-2 focus:ring-emerald-400 border-none p-3 rounded-xl text-sm outline-none disabled:opacity-60"
+                />
+                {whatsAppPhone && !whatsAppPhoneValid && (
+                  <p className="text-[10px] text-red-600 font-medium">
+                    Teléfono inválido (mínimo 10 dígitos).
+                  </p>
+                )}
+                <p className="text-[10px] text-emerald-700">
+                  Se abrirá WhatsApp Web con el mensaje prellenado y un link al PDF (válido 24h).
+                </p>
+              </div>
+            )}
+          </section>
+
           {/* Error */}
           {error && (
             <p className="text-xs text-red-600 bg-red-50 p-3 rounded-xl border border-red-100 font-medium">
@@ -369,7 +473,7 @@ export default function PaymentModal({
           >
             {isPending
               ? '⏳ Procesando...'
-              : sendReceipt
+              : sendReceipt || sendWhatsApp
                 ? '🧾 Registrar y Enviar Recibo'
                 : '💾 Registrar Pago'}
           </button>

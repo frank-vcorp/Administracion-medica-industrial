@@ -858,21 +858,27 @@ model CompanySelfRegistration {
 // ===========================================================================
 
 /// Pago asociado a una papeleta (MedicalEvent). Genera un recibo descargable
-/// y opcionalmente lo envía por email.
+/// y opcionalmente lo envía por email y/o WhatsApp.
 model PaymentRecord {
-  id            String   @id @default(cuid())
-  eventId       String
-  event         MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  workerId      String
-  amount        Decimal  @db.Decimal(10, 2)
-  method        String   // EFECTIVO | TARJETA | TRANSFERENCIA | CHEQUE | OTRO
-  reference     String?
-  receiptSent   Boolean  @default(false)
-  receiptEmail  String?
-  receiptPdfUrl String?
-  createdAt     DateTime @default(now())
-  createdById   String
-  createdBy     User     @relation("PaymentRecordCreator", fields: [createdById], references: [id])
+  id                    String   @id @default(cuid())
+  eventId               String
+  event                 MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  workerId              String
+  amount                Decimal  @db.Decimal(10, 2)
+  method                String   // EFECTIVO | TARJETA | TRANSFERENCIA | CHEQUE | OTRO
+  reference             String?
+  receiptSent           Boolean  @default(false)
+  receiptEmail          String?
+  receiptPdfUrl         String?
+  // ARCH-20260630-02: Envío de recibo por WhatsApp Web
+  receiptWhatsAppSent   Boolean  @default(false)
+  receiptWhatsAppPhone  String?
+  receiptWhatsAppAt     DateTime?
+  receiptDownloadUrl    String?
+  receiptDownloadExpires DateTime?
+  createdAt             DateTime @default(now())
+  createdById           String
+  createdBy             User     @relation("PaymentRecordCreator", fields: [createdById], references: [id])
 
   @@index([eventId])
   @@index([workerId])
