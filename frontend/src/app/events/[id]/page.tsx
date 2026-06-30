@@ -434,7 +434,8 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                 <h2 className="text-xl font-bold text-red-700 mb-2">Error al cargar el expediente</h2>
                 <p className="text-red-500 text-sm">Hubo un problema de conexión con el servidor de base de datos o de serialización de datos.</p>
                 <div className="mt-4">
-                    <Link href="/reception" className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Volver al Piso Clínico</Link>
+                    {/* IMPL-20260630-01: mantener consistencia con el rename "Piso Clínico" → "Proceso de atención clínica" (commit 1f97e85) */}
+                    <Link href="/reception" className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Volver al Proceso de atención clínica</Link>
                 </div>
             </div>
         )
