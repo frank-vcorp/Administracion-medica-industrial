@@ -20,7 +20,9 @@ export async function middleware(request: NextRequest) {
   // FIX REFERENCE: FIX-20260225-02 - Evitar startsWith("/") que hace match con todo
   // IMPL-20260325-01: /prefill es portal público de prellenado (sin sesión, validado por token)
   // IMPL-20260623-02: /demo/* es público (datos estáticos, sin tocar backend)
-  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/prefill") || pathname.startsWith("/demo")
+  // IMPL-20260624-01: /solicitar-alta es portal público de auto-registro (validado por service, no auth)
+  // IMPL-20260624-01: /auto-alta/[token] es portal público de auto-alta por link (validado por token)
+  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/prefill") || pathname.startsWith("/demo") || pathname.startsWith("/auto-alta") || pathname.startsWith("/solicitar-alta")
   if (isPublicRoute) {
     return NextResponse.next()
   }
