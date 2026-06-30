@@ -27,11 +27,13 @@ type TrazTest = {
   status: StudyStatus
 }
 
+// IMPL-20260630-02: rename de labels según doc Renombramiento de catálogos (líneas 67-73)
 const STATUS_LABELS: Record<StudyStatus, string> = {
   PENDING: 'Pendiente de resultado de prueba',
+  IN_PROGRESS: 'En proceso',
   SAMPLE_TAKEN: 'Pendiente de resultado de prueba de laboratorio',
   RESULT_REGISTERED: 'Pendiente de Reporte de aptitud',
-  COMPLETED: 'Completado',
+  COMPLETED: 'Pendiente de envio',
   SKIPPED: 'Omitido',
   CANCELLED: 'Cancelado',
 }
