@@ -33,6 +33,8 @@ import { authOptions } from '@/auth'
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import PapeletaCronograma from '@/components/clinical/PapeletaCronograma'
 import { getEventTimeline } from '@/actions/timeline.actions'
+// IMPL-20260630-01: Modal de pago y recibo (ARCH-20260630-01)
+import PaymentModalTrigger from '@/components/clinical/PaymentModalTrigger'
 
 export const dynamic = 'force-dynamic'
 
@@ -134,6 +136,11 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
             company: event.worker.company?.name || (eventWithIntake.intakeSource === 'EXTERNAL_WALK_IN' ? 'Externo sin empresa' : '—'),
             profile: appointmentWithProfile?.serviceProfile?.name || ''
         }
+
+        // IMPL-20260630-01: Permisos para registrar pagos (ARCH-20260630-01)
+        const paymentRoles = ['ADMIN', 'RECEPTIONIST', 'DOCTOR_GENERAL', 'DOCTOR_VALIDATOR', 'CAPTURIST']
+        const canRegisterPayments = !!userRole && paymentRoles.includes(userRole)
+        const receivedBy = session?.user?.fullName || session?.user?.email || 'Sistema'
 
         type PrefillSection = Record<string, string | number | boolean>
         type PrefillBase = {
@@ -306,6 +313,18 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                             >
                                 Ficha trabajador
                             </Link>
+                            {/* IMPL-20260630-01: Trigger del modal de pago y recibo (ARCH-20260630-01) */}
+                            <PaymentModalTrigger
+                                eventId={event.id}
+                                workerId={event.worker.id}
+                                workerFirstName={event.worker.firstName}
+                                workerLastName={event.worker.lastName}
+                                universalId={event.worker.universalId}
+                                companyName={workerInfo.company}
+                                branchName={event.branch?.name ?? null}
+                                receivedBy={receivedBy}
+                                canRegisterPayments={canRegisterPayments}
+                            />
                             <Link
                                 href={`/history/${event.worker.id}`}
                                 className="bg-white hover:bg-slate-50 text-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border border-slate-200"

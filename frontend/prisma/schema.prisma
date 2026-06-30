@@ -38,6 +38,8 @@ model User {
   sellerHistoryNew       CompanySellerHistory[] @relation("NewSeller")
   sellerHistoryChangedBy CompanySellerHistory[] @relation("ChangedBy")
   createdSelfRegistrations CompanySelfRegistration[]
+  // IMPL-20260630-01: Pagos creados por este usuario (ARCH-20260630-01)
+  createdPaymentRecords PaymentRecord[] @relation("PaymentRecordCreator")
 
   @@map("users")
 }
@@ -291,6 +293,8 @@ model MedicalEvent {
   timeline         PapeletaTimelineEntry[]
   /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
   projectWorker    ProjectWorker?
+  // IMPL-20260630-01: Pagos y recibos asociados al evento médico (ARCH-20260630-01)
+  paymentRecords   PaymentRecord[]
 
   @@map("medical_events")
 }
@@ -842,6 +846,37 @@ model CompanySelfRegistration {
 
   @@index([targetCompanyId]) // IMPL-20260624-03 (ARCH-20260624-03)
   @@map("company_self_registrations")
+}
+
+// ===========================================================================
+// IMPL-20260630-01: Pagos y Recibos en Papeleta (ARCH-20260630-01)
+// Ref: context/SPECs/SPEC_ARCH-20260630-01-MODAL-PAGO-RECIBO-PAPELETA.md
+//
+// Trazabilidad completa de pagos asociados a una papeleta.
+// Opción A: tabla independiente append-only por evento. No se borra, no se
+// sobrescribe — auditoría contable.
+// ===========================================================================
+
+/// Pago asociado a una papeleta (MedicalEvent). Genera un recibo descargable
+/// y opcionalmente lo envía por email.
+model PaymentRecord {
+  id            String   @id @default(cuid())
+  eventId       String
+  event         MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  workerId      String
+  amount        Decimal  @db.Decimal(10, 2)
+  method        String   // EFECTIVO | TARJETA | TRANSFERENCIA | CHEQUE | OTRO
+  reference     String?
+  receiptSent   Boolean  @default(false)
+  receiptEmail  String?
+  receiptPdfUrl String?
+  createdAt     DateTime @default(now())
+  createdById   String
+  createdBy     User     @relation("PaymentRecordCreator", fields: [createdById], references: [id])
+
+  @@index([eventId])
+  @@index([workerId])
+  @@map("payment_records")
 }
 
 /// Catálogo de estados de México (seed estático).
