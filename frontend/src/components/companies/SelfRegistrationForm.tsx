@@ -4,6 +4,9 @@
  * @spec context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
  * @id-mod IMPL-20260624-01
  * @spec-mod context/SPECs/SPEC_ARCH-20260624-01-RUTA-PUBLICA-SIN-TOKEN.md
+ * @id-mod-fix FIX-ARCH-20260624-05
+ * (alineación con medicaindustrial.com/alta_de_cliente: domicilio interior/exterior,
+ *  horarios De/A, contacto estructurado)
  *
  * Client component: renderiza el formulario para un token previamente validado
  * (source='TOKEN') o sin token (source='PUBLIC').
@@ -245,7 +248,10 @@ function SelfRegistrationFormActive({
     razonSocial: '',
     rfc: '',
     giro: '',
-    domicilio: '',
+    // FIX-ARCH-20260624-05: domicilio en 3 campos (calle req, int/ext opt).
+    domicilioCalle: '',
+    domicilioInterior: '',
+    domicilioExterior: '',
     colonia: '',
     estado: '',
     municipio: '',
@@ -281,11 +287,13 @@ function SelfRegistrationFormActive({
     correoXml: '',
     correoComplemento: '',
     procesoFacturacion: '',
-    // Entrega física
+    // Entrega física — FIX-ARCH-20260624-05: rango horario De/A + contacto estructurado.
     dias: [] as string[],
-    hora: '09',
-    minuto: '00',
-    contactoRecibe: '',
+    horaDe: '09',
+    minutoDe: '00',
+    horaA: '',
+    minutoA: '',
+    contactoRecibe: { nombre: '', telefono: '', celular: '' },
     // Términos
     terminos: false,
   })
@@ -407,7 +415,10 @@ function SelfRegistrationFormActive({
         razonSocial: form.razonSocial,
         rfc: form.rfc.toUpperCase().trim(),
         giro: form.giro,
-        domicilio: form.domicilio,
+        // FIX-ARCH-20260624-05: 3 campos para domicilio.
+        domicilioCalle: form.domicilioCalle,
+        domicilioInterior: form.domicilioInterior || undefined,
+        domicilioExterior: form.domicilioExterior || undefined,
         colonia: form.colonia,
         estado: form.estado,
         municipio: form.municipio,
@@ -449,12 +460,19 @@ function SelfRegistrationFormActive({
         correoComplemento: form.correoComplemento,
         procesoFacturacion: form.procesoFacturacion,
       },
+      // FIX-ARCH-20260624-05: horarios De/A + contacto estructurado.
       entregaFisica: form.dias.length > 0
         ? {
             dias: form.dias,
-            horaRecepcion: form.hora,
-            minutoRecepcion: form.minuto,
-            contactoRecibe: form.contactoRecibe,
+            horaDe: form.horaDe,
+            minutoDe: form.minutoDe,
+            horaA: form.horaA || undefined,
+            minutoA: form.minutoA || undefined,
+            contactoRecibe: {
+              nombre: form.contactoRecibe.nombre || undefined,
+              telefono: form.contactoRecibe.telefono || undefined,
+              celular: form.contactoRecibe.celular || undefined,
+            },
           }
         : undefined,
       referencias: undefined,
@@ -516,9 +534,18 @@ function SelfRegistrationFormActive({
         <Field label="Giro de la empresa *" hint="Industria o actividad principal">
           <input required value={form.giro} onChange={(e) => setField('giro', e.target.value)} className={inputClass} />
         </Field>
-        <Field label="Domicilio Fiscal *">
-          <input required value={form.domicilio} onChange={(e) => setField('domicilio', e.target.value)} className={inputClass} placeholder="Calle + número int/ext" />
+        {/* FIX-ARCH-20260624-05: Domicilio Fiscal en 3 inputs (calle req + int/ext opt) */}
+        <Field label="Domicilio Fiscal (calle y número) *" hint="Calle y número exterior">
+          <input required value={form.domicilioCalle} onChange={(e) => setField('domicilioCalle', e.target.value)} className={inputClass} placeholder="Ej. Av. Industrias 1234" />
         </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Número Interior (opcional)">
+            <input value={form.domicilioInterior} onChange={(e) => setField('domicilioInterior', e.target.value)} className={inputClass} maxLength={50} placeholder="Ej. 5" />
+          </Field>
+          <Field label="Número Exterior (opcional)">
+            <input value={form.domicilioExterior} onChange={(e) => setField('domicilioExterior', e.target.value)} className={inputClass} maxLength={50} placeholder="Ej. B" />
+          </Field>
+        </div>
         <Field label="Colonia *">
           <input required value={form.colonia} onChange={(e) => setField('colonia', e.target.value)} className={inputClass} />
         </Field>
@@ -620,6 +647,127 @@ function SelfRegistrationFormActive({
         <Field label="Proceso de facturación (textarea)">
           <textarea value={form.procesoFacturacion} onChange={(e) => setField('procesoFacturacion', e.target.value)} className={inputClass} rows={3} />
         </Field>
+      </Section>
+
+      {/* Sección 7: Entrega Física — FIX-ARCH-20260624-05: rango horario De/A + contacto estructurado */}
+      <Section title="7. Entrega Física (opcional)">
+        <p className="text-xs text-slate-500 -mt-1">
+          Días y horario en que se pueden recibir facturas físicas en el domicilio fiscal.
+        </p>
+        <Field label="Días de entrega">
+          <div className="flex flex-wrap gap-2">
+            {([
+              ['L', 'Lun'],
+              ['M', 'Mar'],
+              ['X', 'Mié'],
+              ['J', 'Jue'],
+              ['V', 'Vie'],
+              ['S', 'Sáb'],
+              ['D', 'Dom'],
+            ] as const).map(([code, label]) => {
+              const checked = form.dias.includes(code)
+              return (
+                <label key={code} className={`cursor-pointer select-none px-3 py-1.5 rounded-lg text-xs font-bold border ${checked ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...form.dias, code]
+                        : form.dias.filter((d) => d !== code)
+                      setField('dias', next)
+                    }}
+                    className="hidden"
+                  />
+                  {label}
+                </label>
+              )
+            })}
+          </div>
+        </Field>
+        {/* FIX-ARCH-20260624-05: combos HH:MM "De" (req si hay días) + "A" (opt) */}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Horario De: *" hint="Hora de inicio de recepción">
+            <div className="flex items-center gap-2">
+              <select
+                required
+                value={form.horaDe}
+                onChange={(e) => setField('horaDe', e.target.value)}
+                className={inputClass}
+              >
+                {Array.from({ length: 24 }, (_, h) => h.toString().padStart(2, '0')).map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+              <span className="text-slate-500 font-bold">:</span>
+              <select
+                required
+                value={form.minutoDe}
+                onChange={(e) => setField('minutoDe', e.target.value)}
+                className={inputClass}
+              >
+                {Array.from({ length: 60 }, (_, m) => m.toString().padStart(2, '0')).map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          </Field>
+          <Field label="Horario A: (opcional)" hint="Hora de cierre de recepción">
+            <div className="flex items-center gap-2">
+              <select
+                value={form.horaA}
+                onChange={(e) => setField('horaA', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">—</option>
+                {Array.from({ length: 24 }, (_, h) => h.toString().padStart(2, '0')).map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+              <span className="text-slate-500 font-bold">:</span>
+              <select
+                value={form.minutoA}
+                onChange={(e) => setField('minutoA', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">—</option>
+                {Array.from({ length: 60 }, (_, m) => m.toString().padStart(2, '0')).map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          </Field>
+        </div>
+        {/* FIX-ARCH-20260624-05: contacto estructurado (3 inputs) en lugar de textarea libre */}
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Contacto Recibe — Nombre">
+            <input
+              value={form.contactoRecibe.nombre}
+              onChange={(e) => setField('contactoRecibe', { ...form.contactoRecibe, nombre: e.target.value })}
+              className={inputClass}
+              maxLength={255}
+              placeholder="Ej. María García"
+            />
+          </Field>
+          <Field label="Teléfono">
+            <input
+              value={form.contactoRecibe.telefono}
+              onChange={(e) => setField('contactoRecibe', { ...form.contactoRecibe, telefono: e.target.value })}
+              className={inputClass}
+              maxLength={40}
+              placeholder="Ej. 4421234500"
+            />
+          </Field>
+          <Field label="Celular">
+            <input
+              value={form.contactoRecibe.celular}
+              onChange={(e) => setField('contactoRecibe', { ...form.contactoRecibe, celular: e.target.value })}
+              className={inputClass}
+              maxLength={40}
+              placeholder="Ej. 4425556677"
+            />
+          </Field>
+        </div>
       </Section>
 
       {/* Sección 9: Documentación Adjunta */}

@@ -1,6 +1,7 @@
 /**
  * @file Zod schemas: Ficha Cliente v2 (ARCH-20260623-03)
  * @id IMPL-20260623-02
+ * @id-mod FIX-ARCH-20260624-05
  * @backup context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
  *
  * Validación consolidada del formulario extenso de auto-alta (10 secciones).
@@ -13,6 +14,13 @@
  *   - El CP debe ser exactamente 5 dígitos numéricos.
  *   - El teléfono debe tener al menos 7 caracteres (mínimo operativo).
  *   - Los archivos obligatorios validan tamaño máximo server-side.
+ *
+ * FIX-ARCH-20260624-05: 3 campos alineados con medicaindustrial.com/alta_de_cliente:
+ *   - domicilio (string único) → domicilioCalle (req) + domicilioInterior + domicilioExterior (opt)
+ *   - horaRecepcion/minutoRecepcion → horaDe/minutoDe + horaA/minutoA (rango horario)
+ *   - contactoRecibe (texto libre) → { nombre, telefono, celular } sub-objeto
+ * Backwards compat: se acepta el shape viejo vía z.preprocess para no romper
+ * submits en curso o formularios con estado cacheado antes del fix.
  */
 import { z } from 'zod'
 
@@ -65,7 +73,7 @@ export const DIAS_ENTREGA_VALUES = ['L', 'M', 'X', 'J', 'V', 'S', 'D'] as const
 // --------------------------------------------------------------------------
 
 /** Sección 1: Información General y Fiscal. */
-export const FiscalSchema = z.object({
+const FiscalShape = z.object({
   fecha: z.string().min(1, 'Fecha requerida'),
   razonSocial: z.string().min(1, 'Razón Social requerida').max(255),
   rfc: z
@@ -76,7 +84,10 @@ export const FiscalSchema = z.object({
       'RFC inválido (formato SAT: 3-4 letras, 6 dígitos, 3 alfanuméricos)'
     ),
   giro: z.string().min(1, 'Giro requerido').max(255),
-  domicilio: z.string().min(1, 'Domicilio requerido').max(255),
+  // FIX-ARCH-20260624-05: calle + número (req); interior y exterior opt.
+  domicilioCalle: z.string().min(1, 'Domicilio (calle y número) requerido').max(255),
+  domicilioInterior: z.string().max(50).optional().or(z.literal('')),
+  domicilioExterior: z.string().max(50).optional().or(z.literal('')),
   colonia: z.string().min(1, 'Colonia requerida').max(255),
   estado: z.string().min(1, 'Estado requerido'),
   municipio: z.string().min(1, 'Municipio requerido').max(255),
@@ -91,6 +102,22 @@ export const FiscalSchema = z.object({
     error: 'Método de Pago inválido',
   }),
 })
+
+/**
+ * FIX-ARCH-20260624-05: backwards-compat.
+ * Acepta payloads viejos que aún envían `domicilio: string` y los normaliza
+ * al nuevo shape `domicilioCalle`. Si ya viene `domicilioCalle`, no toca nada.
+ */
+function migrateLegacyFiscal(val: unknown): unknown {
+  if (!val || typeof val !== 'object') return val
+  const v = val as Record<string, unknown>
+  if (typeof v.domicilio === 'string' && v.domicilioCalle === undefined) {
+    return { ...v, domicilioCalle: v.domicilio }
+  }
+  return val
+}
+
+export const FiscalSchema = z.preprocess(migrateLegacyFiscal, FiscalShape)
 
 /** Sección 2: Datos Bancarios (opcional). */
 export const BancarioSchema = z
@@ -121,14 +148,75 @@ export const FacturacionSchema = z.object({
 })
 
 /** Sección 7: Entrega Factura Física (opcional). */
-export const EntregaFisicaSchema = z
-  .object({
-    dias: z.array(z.enum(DIAS_ENTREGA_VALUES)).optional(),
-    horaRecepcion: z.string().regex(/^([01]\d|2[0-3])$/, 'Hora inválida (00-23)').optional().or(z.literal('')),
-    minutoRecepcion: z.string().regex(/^[0-5]\d$/, 'Minuto inválido (00-59)').optional().or(z.literal('')),
-    contactoRecibe: z.string().max(2000).optional().or(z.literal('')),
-  })
-  .optional()
+const EntregaFisicaShape = z.object({
+  dias: z.array(z.enum(DIAS_ENTREGA_VALUES)).optional(),
+  // FIX-ARCH-20260624-05: rango horario De (req si hay datos) / A (opt).
+  horaDe: z
+    .string()
+    .regex(/^([01]\d|2[0-3])$/, 'Hora "De" inválida (00-23)')
+    .optional()
+    .or(z.literal('')),
+  minutoDe: z
+    .string()
+    .regex(/^[0-5]\d$/, 'Minuto "De" inválido (00-59)')
+    .optional()
+    .or(z.literal('')),
+  horaA: z
+    .string()
+    .regex(/^([01]\d|2[0-3])$/, 'Hora "A" inválida (00-23)')
+    .optional()
+    .or(z.literal('')),
+  minutoA: z
+    .string()
+    .regex(/^[0-5]\d$/, 'Minuto "A" inválido (00-59)')
+    .optional()
+    .or(z.literal('')),
+  // FIX-ARCH-20260624-05: contacto estructurado en lugar de texto libre.
+  contactoRecibe: z
+    .object({
+      nombre: z.string().max(255).optional().or(z.literal('')),
+      telefono: z.string().max(40).optional().or(z.literal('')),
+      celular: z.string().max(40).optional().or(z.literal('')),
+    })
+    .optional(),
+})
+
+/**
+ * FIX-ARCH-20260624-05: backwards-compat.
+ * Acepta payloads viejos con `horaRecepcion`/`minutoRecepcion` (los mapea a
+ * `horaDe`/`minutoDe`) y con `contactoRecibe: string` (lo convierte a sub-objeto
+ * `{ nombre: <texto>, telefono: '', celular: '' }` para no perder el dato).
+ * Si los nuevos campos ya están presentes, no toca nada.
+ */
+function migrateLegacyEntregaFisica(val: unknown): unknown {
+  if (!val || typeof val !== 'object') return val
+  const v = val as Record<string, unknown>
+  const result: Record<string, unknown> = { ...v }
+
+  if (typeof v.horaRecepcion === 'string' && v.horaDe === undefined) {
+    result.horaDe = v.horaRecepcion
+  }
+  if (typeof v.minutoRecepcion === 'string' && v.minutoDe === undefined) {
+    result.minutoDe = v.minutoRecepcion
+  }
+
+  if (typeof v.contactoRecibe === 'string') {
+    if (v.contactoRecibe === '') {
+      // Empty string legacy → drop field (objeto es .optional()).
+      delete result.contactoRecibe
+    } else if (result.contactoRecibe === undefined || typeof result.contactoRecibe !== 'object') {
+      result.contactoRecibe = {
+        nombre: v.contactoRecibe,
+        telefono: '',
+        celular: '',
+      }
+    }
+  }
+
+  return result
+}
+
+export const EntregaFisicaSchema = z.preprocess(migrateLegacyEntregaFisica, EntregaFisicaShape).optional()
 
 /** Sección 8: Referencias comerciales (opcional, hasta 3). */
 export const ReferenciaComercialSchema = z.object({

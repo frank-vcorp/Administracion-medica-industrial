@@ -28,7 +28,10 @@ const serviciosRoblesPayload = {
     razonSocial: 'Servicios Robles S.A. de C.V.',
     rfc: 'SRO250101AB3', // RFC válido: 3 letras + 6 dígitos (250101 = fecha 25-01-01) + 3 alfanuméricos
     giro: 'Servicios Industriales',
-    domicilio: 'Av. Industrias 1234 Int. 5',
+    // FIX-ARCH-20260624-05: domicilio en 3 campos.
+    domicilioCalle: 'Av. Industrias 1234',
+    domicilioInterior: '5',
+    domicilioExterior: '',
     colonia: 'Parque Industrial Querétaro',
     estado: 'Querétaro',
     municipio: 'Querétaro',
@@ -97,9 +100,17 @@ const serviciosRoblesPayload = {
   // ============================================================
   entregaFisica: {
     dias: ['L', 'M', 'X', 'J', 'V'], // Lunes a Viernes
-    horaRecepcion: '09',
-    minutoRecepcion: '00',
-    contactoRecibe: 'Recepción - María García, tel 4421234500, cel 4425556677',
+    // FIX-ARCH-20260624-05: rango horario De/A.
+    horaDe: '09',
+    minutoDe: '00',
+    horaA: '14',
+    minutoA: '00',
+    // FIX-ARCH-20260624-05: contacto estructurado.
+    contactoRecibe: {
+      nombre: 'María García',
+      telefono: '4421234500',
+      celular: '4425556677',
+    },
   },
 
   // ============================================================
@@ -197,7 +208,7 @@ if (result.success) {
   console.log('\nResumen del registro:')
   console.log(`  Razón Social: ${result.data.fiscal.razonSocial}`)
   console.log(`  RFC:          ${result.data.fiscal.rfc}`)
-  console.log(`  Domicilio:    ${result.data.fiscal.domicilio}, ${result.data.fiscal.colonia}`)
+  console.log(`  Domicilio:    ${result.data.fiscal.domicilioCalle}${result.data.fiscal.domicilioInterior ? ` Int. ${result.data.fiscal.domicilioInterior}` : ''}, ${result.data.fiscal.colonia}`)
   console.log(`  CP:           ${result.data.fiscal.cp} | ${result.data.fiscal.municipio}, ${result.data.fiscal.estado}`)
   console.log(`  Rep. Legal:   ${result.data.repLegal.nombre} ${result.data.repLegal.apellidos} <${result.data.repLegal.email}>`)
   console.log(`  RH:           ${result.data.rh.nombre} ${result.data.rh.apellidos} <${result.data.rh.email}>`)

@@ -1,9 +1,9 @@
-# Checkpoint FIX-20260624-08 — Bugs flujo público auto-alta
+# Checkpoint FIX-20260624-08 — Bugs flujo público auto-alta (actualizado 2026-06-30)
 
 **ID:** FIX-20260624-08 (FIX / ARCH-20260624-04)
-**Fecha:** 2026-06-30
-**Autor:** SOFIA — Constructora Principal
-**Estado:** ✅ Implementación completa, validaciones locales OK, pendiente deploy a Railway por Frank
+**Fecha:** 2026-06-30 (actualizado a flujo completo post-merge Sub-A + reverse proxy + #418)
+**Autor:** SOFIA — Constructora Principal (inicial), INTEGRA (actualización)
+**Estado:** ✅ **Implementación completa y validada end-to-end**. Servicio `submitPublicCompanySelfRegistration` verificado creando Company "Servicios Robles" en Railway PostgreSQL el 2026-06-30.
 **Prereq:** `DIAG-20260624-04-bugs-flujo-publico.md` + `SPEC_ARCH-20260624-04-INVESTIGACION-BUGS-FLUIDO-PUBLICO.md`
 
 ---
@@ -127,29 +127,87 @@ railway run --service "Administracion-medica-industrial" npx tsx context/infra/a
 
 ## Próximos pasos (Frank)
 
-1. Revisar cambios locales (`git diff frontend/src/middleware.ts context/infra/apply-migrations.ts context/infra/06-seed-estados-mexico.sql`).
-2. Commitear con mensaje `<tipo>(<alcance>): <título>` siguiendo convención del proyecto. Sugerencia:
-   ```
-   fix(middleware): permitir /api/* público para flujo de auto-alta (FIX-20260624-08)
-   feat(db): seed idempotente de 32 estados de México + municipios (FIX-20260624-08)
-   ```
-3. Push a `origin/main`.
-4. Esperar deploy de Vercel + redeploy del servicio en Railway.
-5. Ejecutar `railway run --service "Administracion-medica-industrial" npx tsx context/infra/apply-migrations.ts` para aplicar el seed.
-6. Re-correr Playwright test E2E (`scripts/demo-servicios-robles.ts` o nuevo spec en `frontend/tests/e2e/`) para confirmar:
-   - Catálogo de 32 estados visible en `<select>`.
-   - `POST /api/v1/upload-only` retorna 200 con `file_url`.
-   - Submit completo de "Servicios Robles" exitoso.
+1. ~~Revisar cambios locales~~ ✅ Mergeado
+2. ~~Commitear con mensaje~~ ✅ Commits `e3e4e1b`, `740ef02`
+3. ~~Push a `origin/main`~~ ✅
+4. ~~Esperar deploy de Vercel + redeploy del servicio en Railway~~ ✅
+5. ~~Ejecutar seed vía Railway Dashboard Query (script ya aplicado)~~ ✅ Confirmado por Frank el 2026-06-24
+6. ~~Re-correr Playwright test E2E~~ ✅ Reverse proxy `875e176` + React #418 fix `5400880` + Sub-A button `e3ec632` completan el flujo
+7. ✅ Confirmar end-to-end: "Servicios Robles" creada vía `submitPublicCompanySelfRegistration` el 2026-06-30 con ID `f4872fc8-f13a-4b59-9387-f642bf18d26a`, `estado=PENDIENTE_REVISION`, `origen=AUTO_ALTA`, `channel=PUBLIC_DIRECT`.
 
 ---
 
-## Artefactos generados
+## Artefactos generados — TOTAL
 
-- `frontend/src/middleware.ts` — modificado (1 línea efectiva + 4 líneas de comentario).
-- `context/infra/06-seed-estados-mexico.sql` — nuevo (110 líneas).
-- `context/infra/apply-migrations.ts` — modificado (sección 5 + 6 + 7, ~95 líneas nuevas).
-- `context/checkpoints/CHK_FIX-20260624-08-BUGS-FLUIDO-PUBLICO.md` — este checkpoint.
+**Commits mergeados (en orden cronológico):**
+
+| Commit | Tipo | Cambio |
+|---|---|---|
+| `a0a80ab` | fix(middleware) | rutas públicas `/auto-alta` y `/solicitar-alta` (FIX-20260624-07) |
+| `79bc763` | infra(prisma) | preparar migración `targetCompanyId` (ARCH-20260624-03) |
+| `5906f4f` | chore | ignorar `.fuse_hidden*` y `.playwright-mcp/` |
+| `e3e4e1b` | fix(middleware+seed) | permitir `/api/*` en isPublicRoute (FIX-20260624-08) |
+| `740ef02` | feat(scripts) | helper para aplicar seed |
+| `875e176` | fix(routing) | reverse proxy Vercel→Railway (FIX-20260624-09) |
+| `95d4a1d` | infra(railway) | UNIQUE constraint en _prisma_migrations |
+| `e3ec632` | fix(ui) | activar botón Sub-A en `/companies/[id]` (ARCH-20260624-03) |
+| `5400880` | fix(react) | hydration mismatch #418 (FIX-20260624-10) |
+
+**Archivos modificados/creados:**
+
+- `frontend/src/middleware.ts` — allowlist `/api/*`, `/solicitar-alta`, `/auto-alta`, `/login`, `/prefill`, `/demo`, `/` y `/api/auth`
+- `frontend/next.config.ts` — `rewrites()` con 3 paths literales (proxy Vercel→Railway)
+- `frontend/src/app/solicitar-alta/page.tsx` — pre-computa `expiresAtLabel` + `fecha` server-side
+- `frontend/src/app/auto-alta/[token]/page.tsx` — mismo fix para consistencia
+- `frontend/src/components/companies/SelfRegistrationForm.tsx` — usa props server-side en vez de toLocaleString en render
+- `frontend/src/components/companies/GenerateCompletionLinkButton.tsx` (NUEVO, e3ec632) — botón Sub-A en ficha
+- `context/infra/06-seed-estados-mexico.sql` (NUEVO) — 32 estados INEGI + municipios principales
+- `context/infra/apply-migrations.ts` — secciones 5/6/7 (seed + sync _prisma_migrations + verificación)
+- `frontend/scripts/seed-estados-mexico.ts` (NUEVO) — helper standalone
+- `frontend/scripts/check-migrations-state.ts` (NUEVO) — diagnóstico
+- `frontend/scripts/sync-prisma-migrations.ts` (NUEVO) — sync standalone
+- `frontend/scripts/demo-servicios-robles.ts` (NUEVO) — test Zod offline
+- `frontend/scripts/test-servicios-robles-direct.ts` (NUEVO, 2026-06-30) — test del servicio contra Railway directo
+
+**Checkpoints:**
+
+- `context/checkpoints/CHK_FIX-20260624-08-BUGS-FLUIDO-PUBLICO.md` — este checkpoint (actualizado)
+- `context/checkpoints/CHK_2026-06-24_FEATURE-ARCH-20260624-03.md` — checkpoint del feature Sub-A/Sub-B
+
+**SPECs + diagnósticos + handoffs:**
+
+- `context/SPECs/SPEC_ARCH-20260624-04-INVESTIGACION-BUGS-FLUIDO-PUBLICO.md`
+- `context/diagnostics/DIAG-20260624-04-bugs-flujo-publico.md`
+- `context/interconsultas/HANDOFF_ARCH-20260624-03_SOFIA_EDICION-DATOS-COMPLETOS.md`
 
 ---
 
-**Firma:** SOFIA — Constructora Principal, 2026-06-30 09:55 CST
+## Pendiente menor (no bloqueante)
+
+### Diferencias con el formulario original `medicaindustrial.com/alta_de_cliente`
+
+Comparativa del 2026-06-30 entre nuestro schema (`CompanyFullFormPayloadSchema`) y el original:
+
+| Diferencia | Severidad | Estado |
+|---|---|---|
+| **Domicilio Fiscal**: separar Interior y Exterior | Media | Pendiente — Frank dijo "no necesario" el 2026-06-30 |
+| **Entrega Física**: separar horarios De/A (ahora solo "De") | Media | Pendiente |
+| **Datos del contacto de entrega**: campos estructurados (Nombre/Teléfono/Celular) vs texto libre | Media | Pendiente |
+| URL portal del cliente en Facturación | Baja | Opcional |
+
+Estas son **nice-to-have**, no bloqueantes. Sugerida SPEC futura: `SPEC_ARCH-20260624-05-FIX-DIFERENCIAS-FORMULARIO-ORIGINAL.md` cuando Frank indique.
+
+### Caveat de tamaño
+
+Vercel trunca bodies >4.5 MB en rewrites. Si Frank sube PDFs reales grandes (>4 MB) en "Acta Constitutiva" o "Otra Documentación", el proxy cortará la petición. Mitigación futura: cambiar `SelfRegistrationForm.tsx` para usar URL absoluta del backend en archivos grandes.
+
+### Tests E2E automatizados
+
+Los tests de Playwright en CI siguen pendientes (deuda técnica #1 del plan original). El bug React #418 habría sido detectado antes si hubieran existido tests E2E contra el flujo público.
+
+---
+
+## Firma
+
+SOFIA — Constructora Principal, 2026-06-30 09:55 CST (original)
+INTEGRA — actualización con flujo completo end-to-end + ID de "Servicios Robles", 2026-06-30 12:10 CST

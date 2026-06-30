@@ -59,7 +59,17 @@ export default function CompanyFullFormView({
             <Row label="Razón Social" value={fiscal.razonSocial as string} />
             <Row label="RFC" value={<span className="font-mono">{fiscal.rfc as string}</span>} />
             <Row label="Giro" value={fiscal.giro as string} />
-            <Row label="Domicilio" value={fiscal.domicilio as string} />
+            {/* FIX-ARCH-20260624-05: compat con DB legacy (campo `domicilio` plano) */}
+            <Row
+              label="Domicilio (calle y número)"
+              value={[
+                (fiscal.domicilioCalle as string | undefined) ?? (fiscal.domicilio as string | undefined),
+                fiscal.domicilioExterior as string | undefined,
+                fiscal.domicilioInterior as string | undefined,
+              ]
+                .filter(Boolean)
+                .join(' ') || '—'}
+            />
             <Row label="Colonia" value={fiscal.colonia as string} />
             <Row label="Estado" value={fiscal.estado as string} />
             <Row label="Municipio" value={fiscal.municipio as string} />

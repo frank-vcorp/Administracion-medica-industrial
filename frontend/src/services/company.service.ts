@@ -391,7 +391,14 @@ export async function submitCompanySelfRegistrationCore(
           name: payload.fiscal.razonSocial,
           rfc: payload.fiscal.rfc,
           address: [
-            payload.fiscal.domicilio,
+            // FIX-ARCH-20260624-05: compone calle + int/ext en el campo address legacy.
+            [
+              payload.fiscal.domicilioCalle,
+              payload.fiscal.domicilioExterior,
+              payload.fiscal.domicilioInterior,
+            ]
+              .filter(Boolean)
+              .join(' '),
             payload.fiscal.colonia,
             payload.fiscal.municipio,
             payload.fiscal.estado,
@@ -888,8 +895,15 @@ async function submitCompanyUpdateBranch(args: {
         data: {
           name: args.payload.fiscal.razonSocial,
           rfc: args.payload.fiscal.rfc,
-          address: [
-            args.payload.fiscal.domicilio,
+address: [
+            // FIX-ARCH-20260624-05: compone calle + int/ext en el campo address legacy.
+            [
+              args.payload.fiscal.domicilioCalle,
+              args.payload.fiscal.domicilioExterior,
+              args.payload.fiscal.domicilioInterior,
+            ]
+              .filter(Boolean)
+              .join(' '),
             args.payload.fiscal.colonia,
             args.payload.fiscal.municipio,
             args.payload.fiscal.estado,

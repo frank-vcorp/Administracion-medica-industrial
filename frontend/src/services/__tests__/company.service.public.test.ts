@@ -94,7 +94,10 @@ describe('CompanyFullFormPayloadSchema — channel (IMPL-20260624-01)', () => {
       razonSocial: 'PUBLI SA DE CV',
       rfc: 'XAXX010101000',
       giro: 'Servicios',
-      domicilio: 'Av Reforma 100',
+      // FIX-ARCH-20260624-05: domicilio en 3 campos.
+      domicilioCalle: 'Av Reforma 100',
+      domicilioInterior: '',
+      domicilioExterior: '',
       colonia: 'Centro',
       estado: 'Ciudad de México',
       municipio: 'Cuauhtémoc',
