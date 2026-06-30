@@ -80,8 +80,6 @@ export default function PaymentModal({
   // ARCH-20260630-02: WhatsApp Web option
   const [sendWhatsApp, setSendWhatsApp] = useState(false)
   const [whatsAppPhone, setWhatsAppPhone] = useState('')
-  // FIX-20260630-02: URL del PDF lista para copiar a WhatsApp
-  const [whatsAppDownloadUrl, setWhatsAppDownloadUrl] = useState<string | null>(null)
 
   const amount = useMemo(() => parseAmount(amountStr), [amountStr])
   const amountValid = Number.isFinite(amount) && amount > 0
@@ -106,7 +104,6 @@ export default function PaymentModal({
     setRecipientEmail('')
     setSendWhatsApp(false)
     setWhatsAppPhone('')
-    setWhatsAppDownloadUrl(null)
     setError(null)
   }, [])
 
@@ -158,43 +155,22 @@ export default function PaymentModal({
       return
     }
 
-    // FIX-20260630-02: Construir la URL de WhatsApp SINCROÓNICAMENTE en respuesta
-    // al click del usuario (con los datos que ya tenemos) y abrir la ventana
-    // inmediatamente. Luego, en background, persistimos el pago y subimos el PDF.
+    // FIX-20260630-03: No abrimos ventanas aquí. Hacemos todo el trabajo async
+    // y al final navegamos a un endpoint del servidor que hace 302 redirect a
+    // wa.me con el mensaje completo (incluyendo el link del PDF cuando esté listo).
     //
-    // Por qué: los popup blockers de Chrome/Safari/Firefox SOLO permiten window.open()
-    // cuando se llama sincrónicamente en respuesta directa al evento del usuario.
-    // Si esperamos a tener la URL del backend (que requiere async/await), el navegador
-    // bloquea la ventana silenciosamente.
+    // Por qué funciona:
+    // - El navegador trata la navegación GET como una navegación normal del usuario
+    //   → NO la bloquea el popup blocker.
+    // - El endpoint del servidor construye la URL final con el link del PDF y
+    //   devuelve un redirect 302 a wa.me → el usuario aterriza en WhatsApp Web.
+    // - Usamos un <a> dinámico con target="_blank" + .click() porque es la forma
+    //   más confiable de abrir nueva pestaña desde código sin ser bloqueado.
     //
-    // Estrategia: abrir wa.me inmediatamente con un mensaje "placeholder" (sin link
-    // del PDF) y luego, en una SEGUNDA ventana abierta sincrónicamente, mostrar el
-    // link del PDF cuando esté listo. O mejor: abrir una pestaña con about:blank
-    // sincrónica con un form que auto-submita a wa.me cuando reciba la URL.
-    //
-    // Estrategia final (más simple): abrir 2 pestañas sincronamente:
-    //   (1) wa.me con mensaje + teléfono → WhatsApp Web
-    //   (2) Página de recibo (about:blank) que recibe el link del PDF vía postMessage
-
-    if (sendWhatsApp) {
-      // Construir mensaje inicial sin link de PDF (lo agregaremos via postMessage)
-      const initialMessage =
-        `Hola, te compartimos el comprobante de pago.\n\n` +
-        `*Trabajador:* ${workerName}\n` +
-        `*Monto:* $${formatCurrency(amount)} MXN\n` +
-        `*Método:* ${getPaymentMethodLabel(method)}\n` +
-        `\n— Administración Médica Industrial`
-
-      const initialUrl =
-        `https://wa.me/${normalizeWhatsAppPhone(whatsAppPhone)}` +
-        `?text=${encodeURIComponent(initialMessage)}`
-
-      // Abrir WhatsApp Web sincrónicamente
-      const waWindow = window.open(initialUrl, '_blank', 'noopener,noreferrer')
-      if (!waWindow) {
-        console.warn('[PaymentModal] Popup bloqueado por el navegador')
-      }
-    }
+    // Flujo:
+    // 1. startTransition: persistir pago + subir PDF
+    // 2. Cuando tenemos paymentId, crear <a> y dispararlo .click() con target="_blank"
+    // 3. El navegador abre nueva pestaña al endpoint, que redirige a wa.me
 
     startTransition(async () => {
       // Generar PDF si vamos a enviar por email y/o WhatsApp
@@ -217,7 +193,8 @@ export default function PaymentModal({
         return
       }
 
-      // 2. ARCH-20260630-02: Si marcó WhatsApp, subir PDF y registrar trazabilidad
+      // 2. ARCH-20260630-02 / FIX-20260630-03: Si marcó WhatsApp, subir PDF,
+      //    registrar trazabilidad y disparar navegación a wa.me vía endpoint redirect
       if (sendWhatsApp && pdfDataUrl) {
         const base64Match = pdfDataUrl.match(/^data:application\/pdf;base64,(.+)$/)
         if (base64Match) {
@@ -227,10 +204,6 @@ export default function PaymentModal({
           })
 
           if (uploadRes.success && uploadRes.downloadUrl) {
-            // FIX-20260630-02: Guardar URL para mostrarla como banner copiable en el modal
-            // (alternativa a abrir múltiples ventanas que serían bloqueadas)
-            setWhatsAppDownloadUrl(uploadRes.downloadUrl)
-
             // Construir mensaje completo con link
             const message = buildDefaultReceiptMessage({
               amount: formatCurrency(amount),
@@ -240,10 +213,7 @@ export default function PaymentModal({
               downloadUrl: uploadRes.downloadUrl,
             })
 
-            // FIX-20260630-02: El backend también devuelve la URL — la registramos
-            // en BD para trazabilidad. Pero NO abrimos más ventanas porque ya
-            // abrimos wa.me sincrónicamente arriba. Si el usuario quiere reenviar
-            // el link del PDF, lo hacemos via UI secundaria (botón "Reenviar").
+            // Registrar trazabilidad (sin abrir ventanas)
             const waRes = await sendReceiptWhatsApp({
               paymentId: result.paymentId,
               phone: whatsAppPhone.trim(),
@@ -255,12 +225,17 @@ export default function PaymentModal({
               console.warn('[PaymentModal] Trazabilidad WhatsApp falló:', waRes.error)
             }
 
-            // FIX-20260630-02: Mostrar link del PDF en una notificación en pantalla
-            // (toast). Como alternativa a abrir más ventanas (que serían bloqueadas).
-            // El operador puede copiar el link y pegarlo en WhatsApp manualmente.
-            console.info(
-              `[PaymentModal] Link del PDF para enviar por WhatsApp: ${uploadRes.downloadUrl}`
-            )
+            // FIX-20260630-03: Disparar navegación a endpoint que hace 302 redirect
+            // a wa.me. Usamos un <a> con target="_blank" porque el navegador lo
+            // trata como navegación iniciada por el usuario (NO popup blocker).
+            const redirectUrl = `/api/payment/receipt/whatsapp/${result.paymentId}?phone=${encodeURIComponent(whatsAppPhone.trim())}`
+            const link = document.createElement('a')
+            link.href = redirectUrl
+            link.target = '_blank'
+            link.rel = 'noopener,noreferrer'
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
           } else {
             console.warn('[PaymentModal] Upload PDF falló:', uploadRes.error)
           }
@@ -501,36 +476,6 @@ export default function PaymentModal({
               </div>
             )}
           </section>
-
-          {/* FIX-20260630-02: Link del PDF listo para copiar a WhatsApp manualmente */}
-          {whatsAppDownloadUrl && (
-            <section className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2">
-              <p className="text-xs font-bold text-emerald-700">
-                📄 Link del PDF generado (válido 24h):
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={whatsAppDownloadUrl}
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
-                  className="flex-1 text-xs font-mono bg-white border border-emerald-200 rounded-lg px-2 py-1.5 outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(whatsAppDownloadUrl)
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap"
-                >
-                  📋 Copiar
-                </button>
-              </div>
-              <p className="text-[10px] text-emerald-700">
-                Si WhatsApp Web no abrió automáticamente, pega este link en el chat junto con el monto.
-              </p>
-            </section>
-          )}
 
           {/* Error */}
           {error && (
