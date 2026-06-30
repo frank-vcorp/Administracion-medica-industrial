@@ -45,8 +45,8 @@ interface PapeletaCronogramaProps {
 
 const TYPE_LABELS: Record<TimelineEntryType, string> = {
   STUDY_STARTED:      'Estudio iniciado',
-  SAMPLE_TAKEN:       'Muestra tomada',
-  RESULT_REGISTERED:  'Resultado registrado',
+  SAMPLE_TAKEN:       'Pendiente de resultado de prueba de laboratorio',
+  RESULT_REGISTERED:  'Pendiente de Reporte de aptitud',
   STUDY_COMPLETED:    'Estudio completado',
   MEDICAL_EXAM_SAVED: 'Examen médico',
   ADMIN_INCIDENCE:    'Incidencia',

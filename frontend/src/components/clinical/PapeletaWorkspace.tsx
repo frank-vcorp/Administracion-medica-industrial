@@ -132,12 +132,13 @@ interface PapeletaWorkspaceProps {
 
 // --- Labels y estilos para estados V1 ---
 
+// IMPL-20260630-02: rename de labels según doc Renombramiento de catálogos (líneas 67-73)
 const STATUS_LABELS: Record<StudyStatus, string> = {
-  PENDING: 'Pendiente',
+  PENDING: 'Pendiente de resultado de prueba',
   IN_PROGRESS: 'En proceso',
-  SAMPLE_TAKEN: 'Muestra tomada',
-  RESULT_REGISTERED: 'Resultado registrado',
-  COMPLETED: 'Completado',
+  SAMPLE_TAKEN: 'Pendiente de resultado de prueba de laboratorio',
+  RESULT_REGISTERED: 'Pendiente de Reporte de aptitud',
+  COMPLETED: 'Pendiente de envio',
   SKIPPED: 'Omitido',
   CANCELLED: 'Cancelado',
 }
@@ -1134,7 +1135,7 @@ function StudyPanel({
                     </p>
                   </div>
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-200 text-purple-800' : 'bg-white text-purple-700 border border-purple-200'}`}>
-                    {sampleTracked ? '✓ Muestra tomada' : 'Muestra pendiente'}
+                    {sampleTracked ? '✓ Pendiente de resultado de prueba de laboratorio' : 'Muestra pendiente'}
                   </span>
                 </div>
 

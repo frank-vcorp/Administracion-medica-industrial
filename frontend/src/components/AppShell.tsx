@@ -130,7 +130,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {/* IMPL-20260624-02-RENOMBRES-FASE2-NAV-LANE: reorden aprobado (Citas → Listado → Proceso → Agenda, Vista 3 Agendas secondary bajo Citas) */}
           {showStaffItems && (
             <>
-              <NavItem href="/appointments" icon="📅" label="Gestión de Citas" collapsed={isEventWorkspace} />
+              {/* IMPL-20260630-02: rename "Gestión de Citas" → "Agenda de Citas" (doc Renombramiento de catálogos línea 41) */}
+              <NavItem href="/appointments" icon="📅" label="Agenda de Citas" collapsed={isEventWorkspace} />
               {/* Vista de 3 agendas simultáneas como acceso secundario */}
               <NavItem href="/appointments/overview" icon="🗓️" label="Vista 3 Agendas" secondary collapsed={isEventWorkspace} />
               <NavItem href="/workers" icon="👥" label="Listado de pacientes" collapsed={isEventWorkspace} />

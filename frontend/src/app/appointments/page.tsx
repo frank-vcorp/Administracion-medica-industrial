@@ -222,7 +222,8 @@ export default function AppointmentsPage() {
             {/* Stats Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard label="completar con pacientes citados" value={appointments.length} color="blue" />
-                <StatCard label="Pendientes" value={appointments.filter(a => a.status === 'SCHEDULED').length} color="amber" />
+                {/* IMPL-20260630-02: rename "Pendientes" → "Pruebas pendientes" (doc Renombramiento de catálogos línea 51) */}
+                <StatCard label="Pruebas pendientes" value={appointments.filter(a => a.status === 'SCHEDULED').length} color="amber" />
                 <StatCard label="Atención completa" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
                 <StatCard label="no se presentó" value={appointments.filter(a => a.status === 'NO_SHOW').length} color="slate" />
             </div>

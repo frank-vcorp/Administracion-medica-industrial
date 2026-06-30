@@ -28,10 +28,9 @@ type TrazTest = {
 }
 
 const STATUS_LABELS: Record<StudyStatus, string> = {
-  PENDING: 'Pendiente',
-  IN_PROGRESS: 'En proceso',
-  SAMPLE_TAKEN: 'Muestra tomada',
-  RESULT_REGISTERED: 'Resultado registrado',
+  PENDING: 'Pendiente de resultado de prueba',
+  SAMPLE_TAKEN: 'Pendiente de resultado de prueba de laboratorio',
+  RESULT_REGISTERED: 'Pendiente de Reporte de aptitud',
   COMPLETED: 'Completado',
   SKIPPED: 'Omitido',
   CANCELLED: 'Cancelado',

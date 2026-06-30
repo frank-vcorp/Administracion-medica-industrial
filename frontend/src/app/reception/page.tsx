@@ -50,7 +50,8 @@ export default async function ReceptionPage() {
         <div className="space-y-8 h-[calc(100vh-100px)] flex flex-col pb-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Centro de Control</h2>
+                    {/* IMPL-20260630-02: rename "Centro de Control" → "Flujo de pacientes en tiempo real" (doc Renombramiento de catálogos línea 23) */}
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Flujo de pacientes en tiempo real</h2>
                     <p className="text-sm text-slate-500 font-medium">Recepción, Triage y Flujo de Pacientes en Tiempo Real.</p>
                 </div>
 
