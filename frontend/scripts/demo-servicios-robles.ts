@@ -204,7 +204,7 @@ if (result.success) {
   console.log(`  CxP:          ${result.data.cuentasPagar.nombre} ${result.data.cuentasPagar.apellidos} <${result.data.cuentasPagar.email}>`)
   console.log(`  Docs:         ${result.data.documentos.length} archivos (5 obligatorios)`)
   console.log(`  Referencias:  ${result.data.referencias?.length ?? 0} comerciales`)
-  console.log(`  Entrega:      ${result.data.entregaFisica ? `${result.data.entregaFisica.dias.length} días` : 'no requiere'}`)
+  console.log(`  Entrega:      ${result.data.entregaFisica ? `${result.data.entregaFisica.dias?.length ?? 0} días` : 'no requiere'}`)
   console.log(`  Términos:     ${result.data.terminosAceptados ? 'aceptados ✓' : 'NO aceptados ✗'}`)
   console.log('\n--- Para persistir en DB: ---')
   console.log(`  POST /api/v1/submitPublicCompanySelfRegistration`)
