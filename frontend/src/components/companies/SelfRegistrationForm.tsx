@@ -74,6 +74,19 @@ type UploadedFile = {
 interface InitialState {
   status: 'ACTIVE'
   expiresAt: string
+  /**
+   * FIX-20260624-10: Label formateado de expiresAt, pre-computado en el server
+   * con timezone America/Mexico_City. Se pasa como string para evitar que el
+   * client recalcule con `new Date().toLocaleString('es-MX')` y produzca un
+   * string distinto por diferencia de timezone → React #418 hydration mismatch.
+   */
+  expiresAtLabel: string
+  /**
+   * FIX-20260624-10: Fecha inicial (YYYY-MM-DD UTC) pre-computada en el server.
+   * Evita que `new Date().toISOString().slice(0,10)` en el useState initializer
+   * diverja entre server y client si el render cruza medianoche UTC.
+   */
+  fecha: string
   openedCount: number
 }
 
@@ -116,7 +129,7 @@ export default function SelfRegistrationForm({
     return (
       <SelfRegistrationFormActive
         source="PUBLIC"
-        initial={initial.status === 'ACTIVE' ? initial : { status: 'ACTIVE', expiresAt: '', openedCount: 0 }}
+        initial={initial.status === 'ACTIVE' ? initial : { status: 'ACTIVE', expiresAt: '', expiresAtLabel: '', fecha: '', openedCount: 0 }}
         estados={estados}
         cfdiOptions={cfdiOptions}
       />
@@ -226,7 +239,9 @@ function SelfRegistrationFormActive({
   }
   const [form, setForm] = useState({
     // Fiscal
-    fecha: new Date().toISOString().slice(0, 10),
+    // FIX-20260624-10: usar initial.fecha pre-computado en server para evitar
+    // divergencia con el client (cruce de medianoche UTC).
+    fecha: initial.fecha,
     razonSocial: '',
     rfc: '',
     giro: '',
@@ -486,7 +501,7 @@ function SelfRegistrationFormActive({
         <h1 className="text-2xl font-black text-slate-800">Alta de Cliente</h1>
         <p className="text-sm text-slate-500 mt-1">
           Completa las 10 secciones. El link expira el{' '}
-          <strong>{new Date(initial.expiresAt).toLocaleString('es-MX')}</strong>.
+          <strong>{initial.expiresAtLabel}</strong>.
         </p>
       </header>
 

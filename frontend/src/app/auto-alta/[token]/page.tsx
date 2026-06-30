@@ -25,7 +25,21 @@ interface PageProps {
 }
 
 type FormInitial =
-  | { status: 'ACTIVE'; expiresAt: string; openedCount: number }
+  | {
+      status: 'ACTIVE'
+      expiresAt: string
+      /**
+       * FIX-20260624-10: Pre-computado en server con timezone America/Mexico_City
+       * para evitar hydration mismatch (#418) por diferencia de timezone entre
+       * server (UTC) y client (browser TZ) al usar toLocaleString.
+       */
+      expiresAtLabel: string
+      /**
+       * FIX-20260624-10: Fecha inicial YYYY-MM-DD (UTC) pre-computada en server.
+       */
+      fecha: string
+      openedCount: number
+    }
   | { status: 'EXPIRED'; expiresAt?: string }
   | { status: 'ALREADY_SUBMITTED'; existingCompanyId?: string }
   | { status: 'CANCELLED' }
@@ -36,12 +50,15 @@ function mapTokenResultToInitial(
   fallbackExpiresAt?: string
 ): FormInitial {
   if (result.ok) {
+    const expiresAtIso =
+      result.expiresAt instanceof Date
+        ? result.expiresAt.toISOString()
+        : String(result.expiresAt ?? fallbackExpiresAt ?? new Date().toISOString())
     return {
       status: 'ACTIVE',
-      expiresAt:
-        result.expiresAt instanceof Date
-          ? result.expiresAt.toISOString()
-          : String(result.expiresAt ?? fallbackExpiresAt ?? new Date().toISOString()),
+      expiresAt: expiresAtIso,
+      expiresAtLabel: new Date(expiresAtIso).toLocaleString('es-MX'),
+      fecha: new Date().toISOString().slice(0, 10),
       openedCount: typeof result.openedCount === 'number' ? result.openedCount : 1,
     }
   }

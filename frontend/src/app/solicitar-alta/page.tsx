@@ -28,9 +28,18 @@ export default async function SolicitarAltaPage() {
   // IMPL-20260624-01: initial sintético. expiresAt es un placeholder lejano;
   // el form lo muestra como "El link expira el..." (mismo copy que TOKEN).
   // En PUBLIC no hay expiración real; es solo para evitar "Invalid Date" en UI.
+  //
+  // FIX-20260624-10: Pre-computamos `expiresAtLabel` en el server con el timezone
+  // del server (America/Mexico_City). Si lo calculáramos en el client con
+  // `new Date().toLocaleString('es-MX')`, el browser usaría su timezone local
+  // y produciría un string distinto → React #418 hydration mismatch.
+  // Mismo motivo para `fecha`: la inicialización con `new Date()` en el client
+  // puede divergir de la del server si cruza medianoche UTC.
   const initial = {
     status: 'ACTIVE' as const,
     expiresAt: '2099-12-31T23:59:59.000Z',
+    expiresAtLabel: new Date('2099-12-31T23:59:59.000Z').toLocaleString('es-MX'),
+    fecha: new Date().toISOString().slice(0, 10),
     openedCount: 0,
   }
 
