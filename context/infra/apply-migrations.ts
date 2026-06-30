@@ -2,6 +2,7 @@
  * @fileoverview Script de Node que aplica las migraciones pendientes de Prisma en la DB de Railway
  * @id FIX-20260624-06
  * @id IMPL-20260624-03 (ARCH-20260624-03) — añade migración 20260624214342_add_target_company_id_to_self_reg
+ * @id FIX-20260624-08 (ARCH-20260624-04) — añade seed 20260630180000_seed_estados_mexico (Bug B)
  *
  * USO:
  *   railway run --service frontend node -e "require('./context/infra/apply-migrations.js')"
@@ -410,15 +411,92 @@ async function run() {
   }
   console.log()
 
-  // 5. Verificación final
-  console.log("--- 5. Verificación final ---")
+  // 5. SEED ESTADOS DE MÉXICO (FIX-20260624-08) — Bug B (catálogo vacío en /solicitar-alta)
+  console.log("--- 5. SEED estados_mexico (FIX-20260624-08) ---")
+  try {
+    // a. Detectar si la tabla está poblada antes
+    const beforeCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::int AS count FROM "estados_mexico"
+    `
+    const before = Number(beforeCount[0]?.count ?? 0)
+    console.log(`  Estados México antes del seed: ${before}`)
+
+    if (!(await checkTable("estados_mexico"))) {
+      console.log("  ⚠ Tabla estados_mexico no existe; el seed se omite (debería existir por sección 3)")
+    } else {
+      // b. Leer y ejecutar el seed desde el archivo SQL
+      const sqlPath = resolve(__dirname, "06-seed-estados-mexico.sql")
+      const sqlFull = readFileSync(sqlPath, "utf-8")
+
+      // Extraer solo la sentencia INSERT (no la verificación SELECT al final)
+      const insertMatch = sqlFull.match(/INSERT INTO[\s\S]*?ON CONFLICT[\s\S]*?;/i)
+      if (!insertMatch) {
+        throw new Error("No se encontró la sentencia INSERT en 06-seed-estados-mexico.sql")
+      }
+      const insertSql = insertMatch[0]
+
+      if (before === 0) {
+        console.log("  + Tabla vacía → ejecutando seed completo (32 estados)")
+      } else {
+        console.log(`  ⊙ Tabla ya poblada (${before}) → ejecutando UPSERT idempotente`)
+      }
+      await prisma.$executeRawUnsafe(insertSql)
+      console.log("  ✓ INSERT/UPSERT ejecutado")
+
+      // c. Verificación final
+      const afterCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*)::int AS count FROM "estados_mexico"
+      `
+      const after = Number(afterCount[0]?.count ?? 0)
+      const municipiosCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*)::int AS count FROM "estados_mexico" WHERE array_length("municipios", 1) > 0
+      `
+      const withMunicipios = Number(municipiosCount[0]?.count ?? 0)
+      console.log(`  Estados México después del seed: ${after}`)
+      console.log(`  Estados con municipios poblados: ${withMunicipios} / 32`)
+
+      if (after === 32) {
+        console.log("  ✓ Catálogo completo (32/32 estados)")
+      } else if (after > 0) {
+        console.log(`  ⚠ Catálogo parcial (${after}/32). Revisar script SQL.`)
+      } else {
+        throw new Error("No se insertó ningún estado después del seed")
+      }
+    }
+  } catch (e) {
+    console.error("  ✗ Error:", (e as Error).message)
+    throw e
+  }
+  console.log()
+
+  // 6. Sincronizar _prisma_migrations con la nueva migración seed
+  console.log("--- 6. Sincronizando _prisma_migrations (FIX-20260624-08 seed) ---")
+  try {
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "_prisma_migrations" ("id", "checksum", "finished_at", "migration_name", "started_at", "applied_steps_count")
+      VALUES (gen_random_uuid()::text, 'manual-railway-fix', NOW(), '20260630180000_seed_estados_mexico', NOW(), 1)
+      ON CONFLICT ("migration_name") DO UPDATE SET
+          "finished_at" = NOW(),
+          "rolled_back_at" = NULL,
+          "applied_steps_count" = 1
+    `)
+    console.log("  ✓ _prisma_migrations sincronizado (1 entrada nueva: seed_estados_mexico)")
+  } catch (e) {
+    console.error("  ✗ Error:", (e as Error).message)
+    throw e
+  }
+  console.log()
+
+  // 7. Verificación final
+  console.log("--- 7. Verificación final ---")
     const appliedCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*)::int AS count FROM "_prisma_migrations"
     WHERE "migration_name" IN (
       '20260527121500_add_intake_trace_to_medical_event',
       '20260623170000_company_v2_vendedor_historial_link_publico',
       '20260624120000_company_self_reg_channel',
-      '20260624214342_add_target_company_id_to_self_reg'
+      '20260624214342_add_target_company_id_to_self_reg',
+      '20260630180000_seed_estados_mexico'
     ) AND "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
   `
   const finalDiag: CheckResult[] = [
@@ -433,11 +511,19 @@ async function run() {
   ]
   finalDiag.forEach((r) => console.log(`  ${r.exists ? "✓" : "✗"} ${r.name}`))
 
-  const count = Number(appliedCount[0]?.count ?? 0)
-  console.log(`\n  Migraciones aplicadas: ${count} / 4`)
+  // FIX-20260624-08: verificación adicional del seed de estados
+  const estadosCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*)::int AS count FROM "estados_mexico"
+  `
+  const estadosTotal = Number(estadosCount[0]?.count ?? 0)
+  console.log(`  ✓ estados_mexico poblada con ${estadosTotal} / 32 registros`)
 
-  if (count === 4 && finalDiag.every((r) => r.exists)) {
+  const count = Number(appliedCount[0]?.count ?? 0)
+  console.log(`\n  Migraciones aplicadas: ${count} / 5`)
+
+  if (count === 5 && finalDiag.every((r) => r.exists) && estadosTotal === 32) {
     console.log("\n✅ OK: La DB está sincronizada. Refresca /workers y /companies en el navegador.")
+    console.log("✅ FIX-20260624-08 Bug B aplicado: catálogo de estados México (32) cargado.")
   } else {
     console.log("\n❌ INCOMPLETO: Revisa los mensajes de error arriba.")
   }

@@ -22,7 +22,11 @@ export async function middleware(request: NextRequest) {
   // IMPL-20260623-02: /demo/* es público (datos estáticos, sin tocar backend)
   // IMPL-20260624-01: /solicitar-alta es portal público de auto-registro (validado por service, no auth)
   // IMPL-20260624-01: /auto-alta/[token] es portal público de auto-alta por link (validado por token)
-  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/prefill") || pathname.startsWith("/demo") || pathname.startsWith("/auto-alta") || pathname.startsWith("/solicitar-alta")
+  // FIX-20260624-08: /api/* se permite sin sesión — los endpoints de flujo público (upload-only, files, etc.)
+  //   son llamados desde el navegador sin token de NextAuth. La autorización fina la hace el handler
+  //   (validación de token propio, scope público, etc.). NO usar `(.*)` que haría todo público: el matcher
+  //   ya excluye _next/static, _next/image, favicon.ico y public.
+  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/") || pathname.startsWith("/prefill") || pathname.startsWith("/demo") || pathname.startsWith("/auto-alta") || pathname.startsWith("/solicitar-alta")
   if (isPublicRoute) {
     return NextResponse.next()
   }
