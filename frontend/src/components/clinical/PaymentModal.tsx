@@ -155,6 +155,27 @@ export default function PaymentModal({
       return
     }
 
+    // FIX-20260630-01: Abrir ventana de WhatsApp SINCROÓNICAMENTE en respuesta
+    // al click (antes del async) para evitar que los popup blockers la bloqueen.
+    // Luego actualizamos su location cuando tengamos la URL real.
+    let whatsAppWindow: Window | null = null
+    if (sendWhatsApp) {
+      whatsAppWindow = window.open(
+        'about:blank',
+        '_blank',
+        'noopener,noreferrer'
+      )
+      // Mostrar mensaje de espera en la pestaña recién abierta
+      if (whatsAppWindow) {
+        whatsAppWindow.document.write(
+          '<html><body style="font-family:system-ui;text-align:center;padding:40px;">' +
+            '<h2>⏳ Generando recibo...</h2>' +
+            '<p style="color:#666;">Estamos preparando tu mensaje de WhatsApp.</p>' +
+            '</body></html>'
+        )
+      }
+    }
+
     startTransition(async () => {
       // Generar PDF si vamos a enviar por email y/o WhatsApp
       const needPdf = sendReceipt || sendWhatsApp
@@ -173,6 +194,8 @@ export default function PaymentModal({
 
       if (!result.success || !result.paymentId) {
         setError(result.error ?? 'Error al registrar el pago.')
+        // Cerrar ventana de espera si quedó abierta
+        if (whatsAppWindow && !whatsAppWindow.closed) whatsAppWindow.close()
         return
       }
 
@@ -203,13 +226,29 @@ export default function PaymentModal({
             })
 
             if (waRes.success && waRes.whatsAppUrl) {
-              // Abrir WhatsApp Web en nueva pestaña
-              window.open(waRes.whatsAppUrl, '_blank', 'noopener,noreferrer')
+              // FIX-20260630-01: Navegar la ventana ya abierta (no abrir una nueva)
+              // Esto evita el bloqueo del popup y el problema de cierre por modal.
+              if (whatsAppWindow && !whatsAppWindow.closed) {
+                whatsAppWindow.location.href = waRes.whatsAppUrl
+                whatsAppWindow.focus()
+              } else {
+                // Fallback: si se cerró la ventana de espera, abrir directo
+                window.open(waRes.whatsAppUrl, '_blank', 'noopener,noreferrer')
+              }
             } else {
               console.warn('[PaymentModal] WhatsApp URL no generada:', waRes.error)
+              if (whatsAppWindow && !whatsAppWindow.closed) {
+                whatsAppWindow.document.write(
+                  '<html><body style="font-family:system-ui;text-align:center;padding:40px;">' +
+                    '<h2>❌ Error</h2>' +
+                    '<p>No se pudo generar el enlace de WhatsApp. Cierra esta pestaña e intenta de nuevo.</p>' +
+                    '</body></html>'
+                )
+              }
             }
           } else {
             console.warn('[PaymentModal] Upload PDF falló:', uploadRes.error)
+            if (whatsAppWindow && !whatsAppWindow.closed) whatsAppWindow.close()
           }
         }
       }
