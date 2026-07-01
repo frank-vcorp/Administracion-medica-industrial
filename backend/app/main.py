@@ -1369,4 +1369,20 @@ try:
 except Exception as _lab_import_err:
     print(f"⚠️ No se pudo registrar router de lab-catalogs: {_sanitize_error(str(_lab_import_err))}")
 
+# ========================================
+# IMPL-20260701-03: SLICE B NOVA ABSORCIÓN (ARCH-20260701-03)
+# Admisión LabOrder + LabOrderItem + autocomplete (workers/doctors/companies/tests).
+# Reusa el mismo Prisma client inyectado por lab_catalog_service para que tests
+# y runtime compartan la misma conexión. Prefijo: /api/v1/lab/orders y /api/v1/lab/search
+# ========================================
+try:
+    from app.api.v1.lab.orders import router as lab_orders_router
+    from app.api.v1.lab.search import router as lab_search_router
+
+    app.include_router(lab_orders_router)
+    app.include_router(lab_search_router)
+    print("✅ Routers lab-orders + lab-search registrados (/api/v1/lab/orders, /api/v1/lab/search)")
+except Exception as _lab_b_import_err:
+    print(f"⚠️ No se pudieron registrar routers de lab-orders/lab-search: {_sanitize_error(str(_lab_b_import_err))}")
+
 
