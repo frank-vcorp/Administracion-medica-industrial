@@ -68,14 +68,14 @@ END $$;
 -- pero no registradas (patrón PROYECTO.md 2026-06-24 ARCH-20260624-03).
 -- =====================================================================
 
-INSERT INTO _prisma_migrations (id, migration_name, finished_at, applied_steps_count)
+INSERT INTO _prisma_migrations (id, migration_name, checksum, finished_at, applied_steps_count)
 VALUES
-  (gen_random_uuid()::text, '20260527133500_project_worker_reception_queue', NOW(), 1),
-  (gen_random_uuid()::text, '20260623170000_company_v2_vendedor_historial_link_publico', NOW(), 1),
-  (gen_random_uuid()::text, '20260624120000_company_self_reg_channel', NOW(), 1),
-  (gen_random_uuid()::text, '20260624214342_add_target_company_id_to_self_reg', NOW(), 1),
-  (gen_random_uuid()::text, '20260630140000_add_payment_record', NOW(), 1),
-  (gen_random_uuid()::text, '20260630150000_add_whatsapp_receipt_fields', NOW(), 1)
+  (gen_random_uuid()::text, '20260527133500_project_worker_reception_queue', encode(digest('20260527133500_project_worker_reception_queue', 'sha256'), 'hex'), NOW(), 1),
+  (gen_random_uuid()::text, '20260623170000_company_v2_vendedor_historial_link_publico', encode(digest('20260623170000_company_v2_vendedor_historial_link_publico', 'sha256'), 'hex'), NOW(), 1),
+  (gen_random_uuid()::text, '20260624120000_company_self_reg_channel', encode(digest('20260624120000_company_self_reg_channel', 'sha256'), 'hex'), NOW(), 1),
+  (gen_random_uuid()::text, '20260624214342_add_target_company_id_to_self_reg', encode(digest('20260624214342_add_target_company_id_to_self_reg', 'sha256'), 'hex'), NOW(), 1),
+  (gen_random_uuid()::text, '20260630140000_add_payment_record', encode(digest('20260630140000_add_payment_record', 'sha256'), 'hex'), NOW(), 1),
+  (gen_random_uuid()::text, '20260630150000_add_whatsapp_receipt_fields', encode(digest('20260630150000_add_whatsapp_receipt_fields', 'sha256'), 'hex'), NOW(), 1)
 ON CONFLICT (migration_name) DO NOTHING;
 
 -- =====================================================================
@@ -271,10 +271,11 @@ ALTER TABLE "_LabContainerDefaultFor" ADD CONSTRAINT "_LabContainerDefaultFor_B_
 -- =====================================================================
 -- PARTE 5: Registrar Slice A como aplicada en _prisma_migrations
 -- =====================================================================
-INSERT INTO _prisma_migrations (id, migration_name, finished_at, applied_steps_count)
+INSERT INTO _prisma_migrations (id, migration_name, checksum, finished_at, applied_steps_count)
 VALUES (
   gen_random_uuid()::text,
   '20260701000000_add_lab_catalogs',
+  encode(digest('20260701000000_add_lab_catalogs', 'sha256'), 'hex'),
   NOW(),
   1
 )
