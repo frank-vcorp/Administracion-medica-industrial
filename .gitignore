@@ -11,3 +11,11 @@ __pycache__/
 # No es código, no debe commitearse
 .fuse_hidden*
 .playwright-mcp/
+
+# ARCH-20260630-02
+# Auditoría NOVA: cookies de sesión y HTML descargado NO deben commitearse
+# (contienen posibles secretos y son artefactos forenses efímeros)
+context/audits/**/cookies.txt
+context/audits/**/step*.json
+context/audits/**/*.html
+context/audits/**/pages/

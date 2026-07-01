@@ -1,0 +1,328 @@
+{
+  "empresas": {
+    "inputs": [
+      "accion",
+      "clave",
+      "nombre"
+    ],
+    "selects": [
+      {
+        "name": "estadoEmpresa",
+        "options_sample": [
+          "Mostrar todos",
+          "Se muestran en recepción",
+          "No se muestran en recepción"
+        ]
+      }
+    ],
+    "headings": [
+      "Buscar Empresas",
+      "Catálogo de Empresas"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "medicos": {
+    "inputs": [
+      "accion",
+      "clave_medico",
+      "nombre",
+      "colonia",
+      "especialidad"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Médicos",
+      "Catálogo de Médicos"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "pacientes": {
+    "inputs": [
+      "accion",
+      "clave",
+      "nombre"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar paciente",
+      "Catálogo de pacientes"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "servicios": {
+    "inputs": [
+      "accion",
+      "clave",
+      "nombre"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar servicio",
+      "Catálogo de Servicios"
+    ],
+    "buttons": [
+      "Cerrar sesión"
+    ],
+    "textareas": []
+  },
+  "descuentos": {
+    "inputs": [
+      "accion",
+      "nombre"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar descuento",
+      "Catálogo de Descuentos"
+    ],
+    "buttons": [
+      "Cerrar sesión"
+    ],
+    "textareas": []
+  },
+  "usuarios": {
+    "inputs": [
+      "accion",
+      "clave",
+      "nombre"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar usuario",
+      "Catálogo de Usuarios"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "firmas": {
+    "inputs": [
+      "accion",
+      "clave_buscar",
+      "nombre_buscar"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Firmas",
+      "Catálogo de firmas"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "lugares_proceso": {
+    "inputs": [
+      "accion",
+      "clave",
+      "nombre"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar lugar de proceso",
+      "Catálogo de Lugares de Proceso"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "departamentos": {
+    "inputs": [
+      "id",
+      "departamento"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Departamento",
+      "Catálogo de Departamentos"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "recipientes": {
+    "inputs": [
+      "accion",
+      "id",
+      "recipiente"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Recipientes",
+      "Catálogo de Recipientes"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "muestras": {
+    "inputs": [
+      "accion",
+      "id",
+      "muestra"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Muestras",
+      "Catálogo de Muestras"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "metodologias": {
+    "inputs": [
+      "accion",
+      "id",
+      "metodologia"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Metodologías",
+      "Catálogo de Metodologías"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "indicaciones": {
+    "inputs": [
+      "accion",
+      "id",
+      "indicacion"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Indicaciones",
+      "Catálogo de Indicaciones"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "valores_referencia": {
+    "inputs": [
+      "accion",
+      "id",
+      "valorReferencia"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Valores de Referencia",
+      "Catálogo de Valores de Referencia"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "unidades": {
+    "inputs": [
+      "accion",
+      "id",
+      "unidad"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Unidades",
+      "Catálogo de Unidades"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "clasificaciones": {
+    "inputs": [
+      "accion",
+      "id",
+      "clasificacion"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar Clasificaciones",
+      "Catálogo de Clasificaciones"
+    ],
+    "buttons": [
+      "Cerrar sesión",
+      "Buscar"
+    ],
+    "textareas": []
+  },
+  "respuestas_rapidas": {
+    "inputs": [
+      "accion",
+      "clave",
+      "respuesta"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar respuesta",
+      "Catálogo de Respuestas rápidas"
+    ],
+    "buttons": [
+      "Cerrar sesión"
+    ],
+    "textareas": []
+  },
+  "tipos_cargos": {
+    "inputs": [
+      "accion",
+      "clave",
+      "movimiento"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar movimiento",
+      "Catálogo de Movimientos de caja"
+    ],
+    "buttons": [
+      "Cerrar sesión"
+    ],
+    "textareas": []
+  },
+  "bacterias": {
+    "inputs": [
+      "accion",
+      "bacteria"
+    ],
+    "selects": [],
+    "headings": [
+      "Buscar bacteria",
+      "Catálogo de Bacterias"
+    ],
+    "buttons": [
+      "Cerrar sesión"
+    ],
+    "textareas": []
+  }
+}

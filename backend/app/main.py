@@ -1348,3 +1348,25 @@ except Exception as _reports_import_err:
     print(f"⚠️ No se pudo registrar router de reports: {_sanitize_error(str(_reports_import_err))}")
 
 
+# ========================================
+# IMPL-20260630-06: SLICE A NOVA ABSORCIÓN (ARCH-20260630-02)
+# Catálogos LIS — 8 mods (unidades, muestras, recipientes, metodologías,
+# lugares de proceso, clasificaciones, indicaciones, departamentos).
+# Prefijo: /api/v1/lab
+# ========================================
+try:
+    from app.api.v1.lab.catalogs import router as lab_catalogs_router
+    from app.services.lab_catalog_service import set_prisma_client as _set_lab_prisma
+
+    try:
+        from app.services.prisma_client import get_prisma_client as _get_lab_prisma
+        _set_lab_prisma(_get_lab_prisma())
+    except Exception as _lab_prisma_inject_err:
+        print(f"[lab-catalogs] Prisma no inyectado (modo testing o sin DB): {_sanitize_error(str(_lab_prisma_inject_err))}")
+
+    app.include_router(lab_catalogs_router)
+    print("✅ Router lab-catalogs registrado (/api/v1/lab/catalogs)")
+except Exception as _lab_import_err:
+    print(f"⚠️ No se pudo registrar router de lab-catalogs: {_sanitize_error(str(_lab_import_err))}")
+
+
