@@ -26,4 +26,9 @@ matplotlib>=3.5.0
 # IMPL-20260701-01: EBOOK PDF — compresión de imágenes embebidas (Decisión 11 SPEC_ARCH-20260630-01)
 # Pillow ya estaba en línea 10; documentado aquí como dependencia canónica.
 pytest
-pytest-asyncio
+# IMPL-20260701-06: FIX Prisma Python client para Railway.
+# El backend usa prisma.X.find_unique() etc. (Reportes Masivos IMPL-20260630-05,
+# Slice A IMPL-20260630-06, Slice B IMPL-20260701-03) y NUNCA estuvo instalado
+# en Railway, por eso TODOS los routers que usan prisma.* retornaban 503.
+# 0.15.0 es compatible con Prisma CLI 5.x (frontend/package.json usa ^5.22.0).
+prisma==0.15.0

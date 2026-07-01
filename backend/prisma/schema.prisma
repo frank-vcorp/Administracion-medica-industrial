@@ -1,0 +1,1288 @@
+
+// IMPL-20260701-06: Generador Python para backend FastAPI (prisma==0.15.0).
+// ESTE ES UN ESPEJO de frontend/prisma/schema.prisma — NO usar 'prisma generate'
+// directamente aquí; el Dockerfile lo invoca apuntando a este archivo.
+// Si modificas schema.prisma en frontend/, regenera esta copia.
+generator pyclient {
+  provider                     = "prisma-client-py"
+  enable_experimental_decimal  = true
+  recursive_type_depth         = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                        String                    @id @default(uuid())
+  email                     String                    @unique
+  hashedPassword            String
+  fullName                  String
+  role                      UserRole                  @default(DOCTOR_GENERAL)
+  isActive                  Boolean                   @default(true)
+  companyId                 String?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  auditLogs                 AuditLog[]
+  performedTests            EventTest[]
+  signatures                MedicalVerdict[]
+  company                   Company?                  @relation(fields: [companyId], references: [id])
+  generatedInvitations      PrefilledInvitation[] // IMPL-20260324-07
+  // IMPL-20260326-16: Revisiones médicas de prediagnóstico IA (ARCH-20260326-16)
+  doctorStudyReviews        DoctorStudyReview[]
+  // IMPL-20260507-08: Entradas del cronograma operativo registradas por este usuario
+  papeletaTimeline          PapeletaTimelineEntry[]   @relation("PapeletaTimelineCreator")
+  // IMPL-20260519-10: Citas donde este usuario realizó la corroboración de identidad
+  verifiedAppointments      Appointment[]             @relation("AppointmentIdentityVerifier")
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+  intakeCreatedEvents       MedicalEvent[]            @relation("MedicalEventIntakeCreator")
+  // IMPL-20260623-02: Ficha Cliente v2 - vendedor asignado, habilitado, historial de vendedores (ARCH-20260623-03)
+  sellerCompanies           Company[]                 @relation("CompanySeller")
+  enabledCompanies          Company[]                 @relation("CompanyEnabledBy")
+  sellerHistoryPrevious     CompanySellerHistory[]    @relation("PreviousSeller")
+  sellerHistoryNew          CompanySellerHistory[]    @relation("NewSeller")
+  sellerHistoryChangedBy    CompanySellerHistory[]    @relation("ChangedBy")
+  createdSelfRegistrations  CompanySelfRegistration[]
+  // IMPL-20260630-01: Pagos creados por este usuario (ARCH-20260630-01)
+  createdPaymentRecords     PaymentRecord[]           @relation("PaymentRecordCreator")
+  // IMPL-20260630-03: Reportes masivos generados por este usuario (ARCH-20260623-01)
+  generatedProjectReports   ProjectReport[]           @relation("ProjectReportGenerator")
+  // IMPL-20260630-06: Slice A NOVA absorción (ARCH-20260630-02) — mapeo a médicos NOVA + rol LIS + firma
+  novaMedicoClave           String?                   @unique
+  labRole                   LabRole?
+  labSignature              LabSignature?
+  // Auditoría de catálogos LIS creados/editados por este usuario
+  createdLabUnits           LabUnit[]                 @relation("LabUnitCreator")
+  createdLabSamples         LabSample[]               @relation("LabSampleCreator")
+  createdLabContainers      LabContainer[]            @relation("LabContainerCreator")
+  createdLabMethods         LabMethod[]               @relation("LabMethodCreator")
+  createdLabProcessAreas    LabProcessArea[]          @relation("LabProcessAreaCreator")
+  createdLabDepartments     LabDepartment[]           @relation("LabDepartmentCreator")
+  createdLabClassifications LabClassification[]       @relation("LabClassificationCreator")
+  createdLabIndications     LabIndication[]           @relation("LabIndicationCreator")
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  createdLabOrders          LabOrder[]                @relation("LabOrderCreator")
+  cancelledLabOrders        LabOrder[]                @relation("LabOrderCanceller")
+
+  @@map("users")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  config    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branches  Branch[]
+
+  @@map("tenants")
+}
+
+model Branch {
+  id                 String         @id @default(uuid())
+  name               String
+  address            String?
+  phone              String?
+  managerName        String?
+  tenantId           String
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  closingTime        String         @default("17:00")
+  hourlyCapacity     Int            @default(15)
+  openingTime        String         @default("07:00")
+  appointments       Appointment[]
+  tenant             Tenant         @relation(fields: [tenantId], references: [id])
+  companies          Company[]
+  allowedByCompanies Company[]      @relation("CompanyAllowedBranches")
+  events             MedicalEvent[]
+  workers            Worker[]
+  // IMPL-20260519-14: Proyectos de visita médica referenciados a esta sucursal (ARCH-20260519-12)
+  projects           Project[]
+
+  @@map("branches")
+}
+
+model Company {
+  id                      String                    @id @default(uuid())
+  name                    String
+  rfc                     String?
+  address                 String?
+  contactName             String?
+  email                   String?
+  phone                   String?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  defaultBranchId         String?
+  appointments            Appointment[]
+  defaultBranch           Branch?                   @relation(fields: [defaultBranchId], references: [id])
+  allowedBranches         Branch[]                  @relation("CompanyAllowedBranches")
+  billedEvents            MedicalEvent[]            @relation("BillingCompany")
+  medicalProfiles         MedicalProfile[]
+  jobPositions            JobPosition[]
+  users                   User[]
+  workers                 Worker[]
+  // IMPL-20260519-14: Proyectos de visita médica contratados por esta empresa (ARCH-20260519-12)
+  projects                Project[]
+  // IMPL-20260623-02: Ficha Cliente v2 - vendedor asignado, habilitado, origen, formulario completo (ARCH-20260623-03)
+  sellerId                String?
+  seller                  User?                     @relation("CompanySeller", fields: [sellerId], references: [id])
+  sellerAssignedAt        DateTime?
+  origen                  CompanyOrigin             @default(MANUAL)
+  estado                  CompanyStatus             @default(HABILITADO)
+  enabledAt               DateTime?
+  enabledByUserId         String?
+  enabledBy               User?                     @relation("CompanyEnabledBy", fields: [enabledByUserId], references: [id])
+  fiscalData              Json?
+  repLegalData            Json?
+  rhData                  Json?
+  cuentasPagarData        Json?
+  referenciasData         Json?
+  terminosAceptados       Boolean?
+  documentosAdjuntos      Json?
+  sellerHistory           CompanySellerHistory[]
+  selfRegistrations       CompanySelfRegistration[]
+  // IMPL-20260624-03 (ARCH-20260624-03): Links de "completar datos de empresa existente"
+  targetSelfRegistrations CompanySelfRegistration[] @relation("CompanySelfRegTarget")
+  // IMPL-20260630-06: Slice A NOVA absorción (ARCH-20260630-02) — mapeo a convenio NOVA
+  novaConvenioId          String?
+  discountPolicyId        String?
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  labOrders               LabOrder[]
+
+  @@map("companies")
+}
+
+model Worker {
+  id                       String           @id @default(uuid())
+  universalId              String           @unique
+  firstName                String
+  lastName                 String
+  nationalId               String?
+  dob                      DateTime?
+  email                    String?
+  phone                    String?
+  companyId                String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  branchId                 String?
+  appointments             Appointment[]
+  clinicalHistory          ClinicalHistory?
+  medicalHistory           MedicalEvent[]
+  jobPositionId            String?
+  branch                   Branch?          @relation(fields: [branchId], references: [id])
+  company                  Company?         @relation(fields: [companyId], references: [id])
+  jobPosition              JobPosition?     @relation(fields: [jobPositionId], references: [id])
+  // IMPL-20260519-10: Referencia a última identificación válida reutilizable (ARCH-20260519-10)
+  lastIdentityDocumentType String? // IdentityDocumentType catalog
+  lastIdentityFrontFileUrl String?
+  lastIdentityBackFileUrl  String?
+  lastIdentityVerifiedAt   DateTime?
+  // IMPL-20260519-14: Participación en proyectos de visita médica (ARCH-20260519-12)
+  projectWorkers           ProjectWorker[]
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  labOrders                LabOrder[]
+
+  @@map("workers")
+}
+
+model ClinicalHistory {
+  id          String   @id @default(uuid())
+  workerId    String   @unique
+  data        Json     @default("{}")
+  lastUpdated DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  worker      Worker   @relation(fields: [workerId], references: [id])
+
+  @@map("clinical_histories")
+}
+
+model Service {
+  id              String            @id @default(uuid())
+  name            String
+  code            String            @unique
+  description     String?
+  price           Decimal?
+  category        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  ProfileServices ProfileServices[]
+
+  @@map("services")
+}
+
+model ServiceProfile {
+  id              String            @id @default(uuid())
+  name            String
+  description     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  ProfileServices ProfileServices[]
+
+  @@map("service_profiles")
+}
+
+model TestCategory {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  tests       MedicalTest[]
+
+  @@map("test_categories")
+}
+
+model MedicalTest {
+  id               String            @id @default(uuid())
+  code             String            @unique
+  name             String
+  categoryId       String
+  options          Json              @default("[]")
+  targetGender     GenderRestriction @default(ALL)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  eventTests       EventTest[]
+  category         TestCategory      @relation(fields: [categoryId], references: [id])
+  profiles         ProfileTest[]
+  // IMPL-20260630-06: Slice A NOVA absorción (ARCH-20260630-02) — campos LIS
+  novaClave        String?           @unique
+  labMethodId      String?
+  labMethod        LabMethod?        @relation(fields: [labMethodId], references: [id])
+  labSampleId      String?
+  labSample        LabSample?        @relation(fields: [labSampleId], references: [id])
+  labProcessAreaId String?
+  labProcessArea   LabProcessArea?   @relation(fields: [labProcessAreaId], references: [id])
+  daysToResult     Int?
+  isProfile        Boolean           @default(false)
+  isPackage        Boolean           @default(false)
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  labOrderItems    LabOrderItem[]
+
+  @@map("medical_tests")
+}
+
+model MedicalProfile {
+  id           String        @id @default(uuid())
+  name         String
+  companyId    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  appointments Appointment[]
+  company      Company?      @relation(fields: [companyId], references: [id])
+  jobPositions JobPosition[]
+  tests        ProfileTest[]
+
+  @@map("medical_profiles")
+}
+
+model ProfileTest {
+  id        String         @id @default(uuid())
+  profileId String
+  testId    String
+  profile   MedicalProfile @relation(fields: [profileId], references: [id])
+  test      MedicalTest    @relation(fields: [testId], references: [id])
+
+  @@unique([profileId, testId])
+  @@map("profile_tests")
+}
+
+model EventTest {
+  id                  String                    @id @default(uuid())
+  eventId             String
+  testId              String?
+  testNameSnapshot    String
+  selectedOption      String?
+  status              EventTestStatus           @default(PENDING)
+  performedById       String?
+  fileUrl             String? // IMPL-20260324-06: Upload atómico por estudio
+  resultNotes         String? // IMPL-20260324-06: Notas del resultado
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  event               MedicalEvent              @relation(fields: [eventId], references: [id])
+  performedBy         User?                     @relation(fields: [performedById], references: [id])
+  test                MedicalTest?              @relation(fields: [testId], references: [id])
+  // IMPL-20260326-16: Snapshots de extracción IA por estudio (ARCH-20260326-16)
+  extractionSnapshots StudyExtractionSnapshot[]
+
+  @@map("event_tests")
+}
+
+model MedicalEvent {
+  id                    String                  @id @default(uuid())
+  status                EventStatus             @default(SCHEDULED)
+  workerId              String
+  branchId              String
+  checkInDate           DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  appointmentId         String?                 @unique
+  billingCompanyId      String?
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+  intakeSource          IntakeSource?
+  projectId             String?
+  intakeCreatedByUserId String?
+  eventTests            EventTest[]
+  labs                  LabRecord[]
+  appointment           Appointment?            @relation(fields: [appointmentId], references: [id])
+  billingCompany        Company?                @relation("BillingCompany", fields: [billingCompanyId], references: [id])
+  branch                Branch                  @relation(fields: [branchId], references: [id])
+  project               Project?                @relation(fields: [projectId], references: [id])
+  intakeCreatedByUser   User?                   @relation("MedicalEventIntakeCreator", fields: [intakeCreatedByUserId], references: [id])
+  worker                Worker                  @relation(fields: [workerId], references: [id])
+  exam                  MedicalExam?
+  verdict               MedicalVerdict?
+  studies               StudyRecord[]
+  // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
+  timeline              PapeletaTimelineEntry[]
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
+  projectWorker         ProjectWorker?
+  // IMPL-20260630-01: Pagos y recibos asociados al evento médico (ARCH-20260630-01)
+  paymentRecords        PaymentRecord[]
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  labOrders             LabOrder[]
+
+  @@map("medical_events")
+}
+
+model MedicalExam {
+  id               String       @id @default(uuid())
+  eventId          String       @unique
+  weight           Float?
+  height           Float?
+  bloodPressure    String?
+  heartRate        Int?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  eyeAcuityData    Json?        @default("{}")
+  physicalExamData Json?        @default("{}")
+  somatometryData  Json?        @default("{}")
+  vitalSignsData   Json?        @default("{}")
+  event            MedicalEvent @relation(fields: [eventId], references: [id])
+
+  @@map("medical_exams")
+}
+
+model StudyRecord {
+  id             String       @id @default(uuid())
+  eventId        String
+  serviceName    String
+  fileUrl        String?
+  extractedData  Json?
+  aiPrediction   String?
+  isCompleted    Boolean      @default(false)
+  validatorNotes String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  event          MedicalEvent @relation(fields: [eventId], references: [id])
+
+  @@map("study_records")
+}
+
+model LabRecord {
+  id            String       @id @default(uuid())
+  eventId       String
+  serviceName   String
+  fileUrl       String?
+  extractedData Json?
+  aiPrediction  String?
+  isCompleted   Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  event         MedicalEvent @relation(fields: [eventId], references: [id])
+
+  @@map("lab_records")
+}
+
+model MedicalVerdict {
+  id              String       @id @default(uuid())
+  eventId         String       @unique
+  finalDiagnosis  String
+  recommendations String?
+  validatorId     String
+  signedAt        DateTime     @default(now())
+  signatureHash   String?
+  pdfUrl          String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  event           MedicalEvent @relation(fields: [eventId], references: [id])
+  validator       User         @relation(fields: [validatorId], references: [id])
+
+  @@map("medical_verdicts")
+}
+
+model Appointment {
+  id                       String               @id @default(uuid())
+  workerId                 String
+  companyId                String
+  branchId                 String
+  scheduledAt              DateTime
+  status                   AppointmentStatus    @default(SCHEDULED)
+  notes                    String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  expedientId              String?              @unique
+  qrCode                   String?
+  source                   String               @default("SUCURSAL")
+  serviceProfileId         String?
+  // IMPL-20260519-10: Evidencia de corroboración de identidad en recepción (ARCH-20260519-10)
+  identityDocumentType     String? // IdentityDocumentType catalog
+  identityFrontFileUrl     String?
+  identityBackFileUrl      String?
+  identityVerifiedAt       DateTime?
+  identityVerifiedByUserId String?
+  identityExceptionReason  String? // IdentityExceptionReason catalog
+  identityExceptionComment String?
+  identityEvidenceMode     String? // IdentityEvidenceMode: NEW_CAPTURE | REUSED_PREVIOUS | EXCEPTION_WITHOUT_CAPTURE
+  corroborationResult      String? // CorroborationResult catalog
+  qrOperativo              String? // QR operativo mínimo AMI|NOMBRE=...|FN=...
+  branch                   Branch               @relation(fields: [branchId], references: [id])
+  company                  Company              @relation(fields: [companyId], references: [id])
+  serviceProfile           MedicalProfile?      @relation(fields: [serviceProfileId], references: [id])
+  worker                   Worker               @relation(fields: [workerId], references: [id])
+  identityVerifiedBy       User?                @relation("AppointmentIdentityVerifier", fields: [identityVerifiedByUserId], references: [id])
+  medicalEvents            MedicalEvent?
+  prefilledInvitation      PrefilledInvitation? // IMPL-20260324-07
+
+  @@map("appointments")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model ProfileServices {
+  A                String
+  B                String
+  services         Service        @relation(fields: [A], references: [id], onDelete: Cascade)
+  service_profiles ServiceProfile @relation(fields: [B], references: [id], onDelete: Cascade)
+
+  @@unique([A, B], map: "_ProfileServices_AB_unique")
+  @@index([B], map: "_ProfileServices_B_index")
+  @@map("_ProfileServices")
+}
+
+// IMPL-20260313-05: Modelo de Puestos de Trabajo para arquitectura B2B
+model JobPosition {
+  id               String  @id @default(uuid())
+  name             String
+  description      String?
+  companyId        String
+  defaultProfileId String?
+
+  company        Company         @relation(fields: [companyId], references: [id])
+  defaultProfile MedicalProfile? @relation(fields: [defaultProfileId], references: [id])
+  workers        Worker[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("job_positions")
+}
+
+enum UserRole {
+  ADMIN
+  RECEPTIONIST
+  DOCTOR_GENERAL
+  DOCTOR_VALIDATOR
+  CAPTURIST
+  COMPANY_CLIENT
+  // IMPL-20260623-02: Ficha Cliente v2 (ARCH-20260623-03)
+  VENDEDOR
+}
+
+enum GenderRestriction {
+  ALL
+  MALE
+  FEMALE
+}
+
+// IMPL-20260324-06: Estados V1 para workflow de papeleta de estudios
+enum EventTestStatus {
+  PENDING // Pendiente
+  IN_PROGRESS // En proceso
+  SAMPLE_TAKEN // Muestra tomada (principalmente laboratorios)
+  RESULT_REGISTERED // Resultado registrado (archivo o formulario capturado)
+  COMPLETED // Completado y cerrado
+  SKIPPED
+  CANCELLED
+}
+
+enum EventStatus {
+  SCHEDULED
+  CHECKED_IN
+  IN_PROGRESS
+  VALIDATING
+  COMPLETED
+  CANCELED
+}
+
+/// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+enum IntakeSource {
+  APPOINTMENT
+  PROJECT_PRE_REGISTERED
+  PROJECT_SAME_DAY
+  EXTERNAL_WALK_IN
+  DIRECT_RECEPTION
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+}
+
+// IMPL-20260324-07: Estados del portal de prellenado temporal (SPEC ARCH-20260324-09)
+enum PrefilledStatus {
+  NOT_GENERATED // Nunca se generó invitación
+  INVITATION_ACTIVE // Token vigente, sin acceso del trabajador aún
+  OPENED // El trabajador accedió al portal
+  PARTIAL // Existe avance guardado parcialmente
+  SUBMITTED // El trabajador envió el módulo 1
+  EXPIRED // La vigencia terminó sin envío válido
+  CANCELLED // Invitación invalidada por reemplazo u operación
+}
+
+// IMPL-20260324-07: Invitación temporal para portal de prellenado (SPEC ARCH-20260324-09)
+model PrefilledInvitation {
+  id            String          @id @default(uuid())
+  appointmentId String          @unique // Una invitación activa por cita
+  tokenHash     String          @unique // SHA-256 del token aleatorio; nunca el token plano
+  expiresAt     DateTime
+  status        PrefilledStatus @default(INVITATION_ACTIVE)
+  module1Data   Json? // Payload estructurado del Módulo 1 (parcial o completo)
+  channel       String? // WHATSAPP | LINK | QR | TABLET
+  generatedById String? // Usuario staff que generó la invitación
+  openedCount   Int             @default(0) // Veces que se abrió el enlace
+  submittedAt   DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  generatedBy User?       @relation(fields: [generatedById], references: [id])
+
+  @@map("prefilled_invitations")
+}
+
+// ===========================================================================
+// IMPL-20260326-16: Prediagnóstico IA Estructurado por Estudio (ARCH-20260326-16)
+// Ref: context/SPECs/SPEC_ARCH-20260326-16-PREDIAGNOSTICO-IA-ESTRUCTURADO.md
+//
+// Política de inmutabilidad:
+//   StudyExtractionSnapshot, AIPrediagnosisSnapshot son INMUTABLES tras creación.
+//   Una nueva corrida crea nueva versión; nunca sobrescribe payload clínico previo.
+//   DoctorStudyReview es la única capa mutable (registra respuesta del médico).
+// ===========================================================================
+
+/// Snapshot inmutable de extracción estructurada por estudio.
+/// Capa extractiva: parámetros canónicos sin interpretación clínica.
+model StudyExtractionSnapshot {
+  id                String   @id @default(uuid())
+  eventTestId       String
+  version           Int      @default(1)
+  studyType         String // Audiometria | Laboratorio | Espirometria | Rayos_X | Otro
+  sourceFileName    String?
+  sourceFileUrl     String?
+  sourceFileHash    String? // SHA-256 del archivo fuente
+  // structuredData: ExtractionSnapshotPayload (ver medical.py)
+  // Incluye extracted_data, missing_fields, quality_notes, audit
+  structuredData    Json
+  clinicalState     String   @default("DRAFT_EXTRACTED")
+  modelName         String   @default("gemini-2.5-flash")
+  promptVersion     String   @default("extract-v2")
+  pipelineVersion   String   @default("ai-pipeline-2026-03")
+  triggeredByUserId String?
+  triggerReason     String   @default("initial_upload")
+  isSuperseded      Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  eventTest      EventTest                @relation(fields: [eventTestId], references: [id], onDelete: Cascade)
+  aiPrediagnoses AIPrediagnosisSnapshot[]
+
+  @@map("study_extraction_snapshots")
+}
+
+/// Snapshot inmutable de prediagnóstico IA por estudio.
+/// Capa interpretativa: se basa exactamente en una versión de extracción.
+/// GUARDRAIL: nunca propaga a dictamen final, aptitud ni PDF firmado sin revisión médica.
+model AIPrediagnosisSnapshot {
+  id                   String   @id @default(uuid())
+  extractionSnapshotId String
+  version              Int      @default(1)
+  // prediagnosisData: AIPrediagnosisResult (ver medical.py)
+  // Incluye summary, confidence, justification, clinical_basis, citations, limitations, red_flags
+  prediagnosisData     Json
+  clinicalState        String   @default("AI_PENDING_REVIEW")
+  modelName            String   @default("gemini-2.5-flash")
+  promptVersion        String   @default("predx-v1")
+  corpusVersion        String?
+  triggeredByUserId    String?
+  isSuperseded         Boolean  @default(false)
+  createdAt            DateTime @default(now())
+
+  extractionSnapshot StudyExtractionSnapshot @relation(fields: [extractionSnapshotId], references: [id])
+  doctorReviews      DoctorStudyReview[]
+
+  @@map("ai_prediagnosis_snapshots")
+}
+
+/// Revisión médica por estudio. Una revisión vigente activa por versión de prediagnóstico.
+/// Incluye feedback comparativo para mejora supervisada posterior.
+model DoctorStudyReview {
+  id                     String   @id @default(uuid())
+  prediagnosisSnapshotId String
+  // Estados: REVIEWED_ACCEPTED | REVIEWED_EDITED | REVIEWED_REJECTED
+  doctorStatus           String
+  doctorDiagnosis        String?
+  doctorNotes            String?
+  reviewedByUserId       String
+  // Feedback comparativo IA vs médico
+  aiAgreementScore       Int? // 0-100: 100 = concordancia total
+  aiUsefulnessScore      Int? // 0-100: 100 = muy útil para acelerar revisión
+  // same_conclusion | same_line_with_edits | different_conclusion | ai_non_conclusive
+  differenceType         String?
+  // none | low | medium | high
+  errorSeverity          String   @default("none")
+  // omission | wrong_interpretation | unsupported_claim | low_document_quality | insufficient_context | other
+  errorCategory          String?
+  doctorFeedbackNote     String?
+  createdAt              DateTime @default(now())
+
+  prediagnosisSnapshot AIPrediagnosisSnapshot @relation(fields: [prediagnosisSnapshotId], references: [id])
+  reviewedBy           User                   @relation(fields: [reviewedByUserId], references: [id])
+
+  @@map("doctor_study_reviews")
+}
+
+// ===========================================================================
+// IMPL-20260507-08: Cronograma Persistente de Papeleta Admin (ARCH-20260507-08)
+// Ref: context/SPECs/SPEC_ARCH-20260507-08-CRONOGRAMA-PAPELETA-ADMIN.md
+//
+// Capa operativa paralela al flujo clínico. No reemplaza EventTest.status.
+// Visibilidad: ADMIN_ONLY — nunca exponer a roles clínicos generales.
+// ===========================================================================
+
+enum TimelineEntryType {
+  STUDY_STARTED // Estudio iniciado (status → IN_PROGRESS)
+  SAMPLE_TAKEN // Muestra tomada (status → SAMPLE_TAKEN)
+  RESULT_REGISTERED // Resultado registrado (status → RESULT_REGISTERED)
+  STUDY_COMPLETED // Estudio completado (status → COMPLETED)
+  MEDICAL_EXAM_SAVED // Examen médico guardado
+  ADMIN_INCIDENCE // Incidencia manual registrada por administrador
+}
+
+/// Bitácora operativa persistente de papeleta. Cada entrada es inmutable.
+/// La capa clínica (EventTest.status) y esta tabla son independientes.
+model PapeletaTimelineEntry {
+  id          String            @id @default(uuid())
+  eventId     String
+  eventTestId String?
+  entryType   TimelineEntryType
+  area        String            @default("general")
+  title       String
+  description String?
+  occurredAt  DateTime          @default(now())
+  createdById String?
+  visibility  String            @default("ADMIN_ONLY")
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+
+  event     MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("PapeletaTimelineCreator", fields: [createdById], references: [id])
+
+  @@map("papeleta_timeline_entries")
+}
+
+// ===========================================================================
+// IMPL-20260519-14: Entidad Project — Proyectos de Visita Médica (ARCH-20260519-12)
+// Ref: context/SPECs/SPEC_ARCH-20260519-12-ENTIDAD-PROJECT-VISITA-MEDICA.md
+// ===========================================================================
+
+enum ProjectStatus {
+  DRAFT // En planeación, no confirmado
+  CONFIRMED // Confirmado con la empresa
+  IN_PROGRESS // Fechas activas — la visita está ocurriendo
+  COMPLETED // Visita finalizada
+  CANCELLED // Cancelado
+}
+
+/// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
+enum ProjectWorkerReceptionStatus {
+  PENDING
+  ARRIVED
+  CHECKED_IN
+}
+
+model Project {
+  id        String        @id @default(uuid())
+  name      String
+  companyId String
+  branchId  String? // Sucursal AMI de referencia (null si es planta del cliente)
+  unitRef   String? // Texto libre provisional hasta entidad Equipment (Sprint 5)
+  startDate DateTime
+  endDate   DateTime
+  status    ProjectStatus @default(DRAFT)
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  company Company         @relation(fields: [companyId], references: [id])
+  branch  Branch?         @relation(fields: [branchId], references: [id])
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+  events  MedicalEvent[]
+  workers ProjectWorker[]
+  // IMPL-20260630-03: Reportes masivos generados para este proyecto (ARCH-20260623-01)
+  reports ProjectReport[]
+
+  @@map("projects")
+}
+
+model ProjectWorker {
+  projectId       String
+  workerId        String
+  addedAt         DateTime                     @default(now())
+  addedBy         String? // userId del admin que hizo la importación (trazabilidad)
+  /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-12_SOFIA_SLICE-B-RECEPCION-PROJECT.md
+  receptionStatus ProjectWorkerReceptionStatus @default(PENDING)
+  arrivedAt       DateTime?
+  eventId         String?                      @unique
+
+  project Project       @relation(fields: [projectId], references: [id])
+  worker  Worker        @relation(fields: [workerId], references: [id])
+  event   MedicalEvent? @relation(fields: [eventId], references: [id])
+
+  @@id([projectId, workerId])
+  @@map("project_workers")
+}
+
+/// Fuentes de evidencia clínica controlada y versionada para el corpus de prediagnóstico.
+/// Semilla V1 — referenciadas por las citas del AIPrediagnosisSnapshot.
+model ClinicalEvidenceSource {
+  id        String   @id @default(uuid())
+  sourceId  String   @unique // ej: "NOM-011-STPS-2001", "ATS-ERS-2022"
+  title     String
+  section   String?
+  excerpt   String?
+  version   String?
+  // audiometria | espirometria | laboratorio | rayos_x | general
+  category  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("clinical_evidence_sources")
+}
+
+// ===========================================================================
+// IMPL-20260623-02: Ficha Cliente v2 (ARCH-20260623-03)
+// Ref: context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
+//
+// Reglas no negociables:
+//   - Solo se AGREGAN campos opcionales a Company; no se rompen relaciones existentes.
+//   - Token plano NUNCA se persiste (solo tokenHash SHA-256).
+//   - CompanySellerHistory es append-only (nunca se borra).
+//   - Cliente deshabilitado bloquea nuevas citas, pero los datos persisten.
+// ===========================================================================
+
+/// Estado de ciclo de vida comercial del cliente.
+enum CompanyStatus {
+  PENDIENTE_REVISION // Creado por auto-alta, esperando revisión de vendedor
+  HABILITADO // Activo y visible para operaciones
+  DESHABILITADO // Bloqueado (datos persisten; no aparece en citas)
+}
+
+/// Origen del alta de la empresa.
+enum CompanyOrigin {
+  MANUAL // Creado por vendedor o admin desde el modal rápido
+  AUTO_ALTA // Creado por prospecto vía link público
+}
+
+/// Estado del link público de auto-alta.
+enum CompanySelfRegStatus {
+  ACTIVE // Token vigente, aún no envía
+  SUBMITTED // Ya envió, se creó Company
+  EXPIRED // Pasó expiresAt sin enviar
+  CANCELLED // Vendedor/admin lo invalidó
+}
+
+/// Catálogo SAT de claves de uso de CFDI.
+/// Semilla V1 cubre las claves más comunes (G01-G03, B01-B20, P01, S01, CP01, CN01).
+enum CfdiUso {
+  G01
+  G02
+  G03
+  B01
+  B02
+  B03
+  B04
+  B05
+  B06
+  B07
+  B08
+  B09
+  B10
+  B11
+  B12
+  B13
+  B14
+  B15
+  B16
+  B17
+  B18
+  B19
+  B20
+  P01
+  S01
+  CP01
+  CN01
+}
+
+/// Historial append-only de cambios de vendedor. NUNCA se borra.
+model CompanySellerHistory {
+  id               String   @id @default(uuid())
+  companyId        String
+  previousSellerId String?
+  newSellerId      String?
+  changedByUserId  String
+  changedAt        DateTime @default(now())
+  reason           String?
+
+  company        Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  previousSeller User?   @relation("PreviousSeller", fields: [previousSellerId], references: [id])
+  newSeller      User?   @relation("NewSeller", fields: [newSellerId], references: [id])
+  changedBy      User    @relation("ChangedBy", fields: [changedByUserId], references: [id])
+
+  @@index([companyId, changedAt])
+  @@map("company_seller_history")
+}
+
+/// Link público para auto-alta de prospectos. Token plano NUNCA persiste.
+model CompanySelfRegistration {
+  id                 String               @id @default(uuid())
+  tokenHash          String               @unique // SHA-256 del token plano (o 'public-<uuid>' en modo PUBLIC_DIRECT)
+  channel            String?              @default("VENDOR_LINK") // 'VENDOR_LINK' | 'PUBLIC_DIRECT' | 'COMPANY_UPDATE' (ARCH-20260624-03)
+  // IMPL-20260624-03 (ARCH-20260624-03): Si se setea, el submit hace UPDATE sobre esta Company
+  // en vez de crear una nueva. Soporta la vía "completar datos de empresa existente".
+  targetCompanyId    String?
+  targetCompany      Company?             @relation("CompanySelfRegTarget", fields: [targetCompanyId], references: [id])
+  companyDraft       Json? // borrador parcial (futuro multi-step)
+  uploadedFiles      Json                 @default("[]") // [{key, filename, size, mime, section}]
+  status             CompanySelfRegStatus @default(ACTIVE)
+  expiresAt          DateTime
+  openedCount        Int                  @default(0)
+  submittedAt        DateTime?
+  submittedCompanyId String?              @unique
+  createdByUserId    String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  submittedCompany Company? @relation(fields: [submittedCompanyId], references: [id])
+  createdBy        User?    @relation(fields: [createdByUserId], references: [id])
+
+  @@index([targetCompanyId]) // IMPL-20260624-03 (ARCH-20260624-03)
+  @@map("company_self_registrations")
+}
+
+// ===========================================================================
+// IMPL-20260630-01: Pagos y Recibos en Papeleta (ARCH-20260630-01)
+// Ref: context/SPECs/SPEC_ARCH-20260630-01-MODAL-PAGO-RECIBO-PAPELETA.md
+//
+// Trazabilidad completa de pagos asociados a una papeleta.
+// Opción A: tabla independiente append-only por evento. No se borra, no se
+// sobrescribe — auditoría contable.
+// ===========================================================================
+
+/// Pago asociado a una papeleta (MedicalEvent). Genera un recibo descargable
+/// y opcionalmente lo envía por email y/o WhatsApp.
+model PaymentRecord {
+  id                     String       @id @default(cuid())
+  eventId                String
+  event                  MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  workerId               String
+  amount                 Decimal      @db.Decimal(10, 2)
+  method                 String // EFECTIVO | TARJETA | TRANSFERENCIA | CHEQUE | OTRO
+  reference              String?
+  receiptSent            Boolean      @default(false)
+  receiptEmail           String?
+  receiptPdfUrl          String?
+  // ARCH-20260630-02: Envío de recibo por WhatsApp Web
+  receiptWhatsAppSent    Boolean      @default(false)
+  receiptWhatsAppPhone   String?
+  receiptWhatsAppAt      DateTime?
+  receiptDownloadUrl     String?
+  receiptDownloadExpires DateTime?
+  createdAt              DateTime     @default(now())
+  createdById            String
+  createdBy              User         @relation("PaymentRecordCreator", fields: [createdById], references: [id])
+
+  @@index([eventId])
+  @@index([workerId])
+  @@map("payment_records")
+}
+
+/// Catálogo de estados de México (seed estático).
+model EstadoMexico {
+  id         Int      @id // clave INEGI
+  nombre     String
+  municipios String[] // nombres comunes; municipios reales se validan contra servicio externo
+
+  @@map("estados_mexico")
+}
+
+// ===========================================================================
+// IMPL-20260630-03: Reportes Masivos por Proyecto (ARCH-20260623-01)
+// Ref: context/SPECs/SPEC_ARCH-20260623-01-MODULO-REPORTES-MASIVOS.md
+//
+// Job asíncrono (FastAPI BackgroundTasks) que genera XLSX + PDF a partir
+// de los datos reales del proyecto. Archivos viven en
+// uploads/reports/{projectId}/{reportId}/.
+// ===========================================================================
+
+model ProjectReport {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  format        String // 'XLSX' | 'PDF' | 'BOTH'
+  status        String // 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED'
+  fileUrlXlsx   String? // path relativo: uploads/reports/{projectId}/{reportId}/archivo.xlsx
+  fileUrlPdf    String? // path relativo: uploads/reports/{projectId}/{reportId}/archivo.pdf
+  errorMessage  String?
+  generatedById String
+  generatedBy   User      @relation("ProjectReportGenerator", fields: [generatedById], references: [id])
+  generatedAt   DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@index([projectId])
+  @@index([status])
+  @@map("project_reports")
+}
+
+// ===========================================================================
+// IMPL-20260630-06: Slice A NOVA absorción (ARCH-20260630-02)
+// Ref: context/SPECs/SPEC_ARCH-20260630-02-DEMO-NOVA-ABSORBIDO.md
+//
+// Nuevas entidades LIS (Laboratorio). 9 modelos + 2 enums.
+// Catálogos demo navegables en /admin/lab/catalogs?mod=<X>.
+// Las tablas operativas (LabOrder, LabResult, etc.) se crean en slices B-G.
+// ===========================================================================
+
+/// Sistema de unidades aceptado en unidades LIS.
+enum LabUnitSystem {
+  SI
+  CONVENTIONAL
+}
+
+/// Roles LIS asignables a un User AMI (futuros slices B/C/D/G los consumirán).
+enum LabRole {
+  LAB_RECEPTIONIST // Admisión y toma de muestra
+  LAB_ANALYST // Captura de resultados
+  LAB_VALIDATOR // Autoriza y valida
+  LAB_ADMIN // Administra catálogos LIS
+}
+
+/// Unidad de medida (mg/dL, mmol/L, %, U/L, etc.).
+model LabUnit {
+  id          String        @id @default(cuid())
+  symbol      String        @unique // "mg/dL", "mmol/L", "%"
+  name        String
+  system      LabUnitSystem
+  active      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdById String?
+  createdBy   User?         @relation("LabUnitCreator", fields: [createdById], references: [id])
+
+  @@index([symbol])
+  @@map("lab_units")
+}
+
+/// Tipo de muestra biológica (Sangre, Orina, Heces, etc.).
+model LabSample {
+  id                 String        @id @default(cuid())
+  code               String        @unique // "SANGRE", "ORINA"
+  name               String
+  defaultContainerId String?
+  defaultContainer   LabContainer? @relation(fields: [defaultContainerId], references: [id])
+  preservation       String? // "Refrigerada 4°C", "Ambiente"
+  minVolume          String? // "5 mL"
+  active             Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  createdById        String?
+  createdBy          User?         @relation("LabSampleCreator", fields: [createdById], references: [id])
+
+  // Relación inversa con LabContainer
+  containers LabContainer[] @relation("LabContainerDefaultFor")
+  // Estudios que usan esta muestra
+  tests      MedicalTest[]
+
+  @@index([code])
+  @@map("lab_samples")
+}
+
+/// Recipiente / tubo de toma de muestra (Tubo lila, Frasco estéril, etc.).
+model LabContainer {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  color       String?
+  cap         String? // Tipo de tapa
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("LabContainerCreator", fields: [createdById], references: [id])
+
+  // Muestras que tienen este recipiente como default
+  samplesDefaultFor LabSample[] @relation("LabContainerDefaultFor")
+  LabSample         LabSample[]
+
+  @@index([code])
+  @@map("lab_containers")
+}
+
+/// Metodología analítica (Química seca, ELISA, Hematimetría, etc.).
+model LabMethod {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  principle   String? // Descripción técnica
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("LabMethodCreator", fields: [createdById], references: [id])
+
+  tests MedicalTest[]
+
+  @@index([code])
+  @@map("lab_methods")
+}
+
+/// Lugar de proceso (Hematología, Química Clínica, Microbiología, etc.).
+model LabProcessArea {
+  id           String         @id @default(cuid())
+  code         String         @unique
+  name         String
+  departmentId String?
+  department   LabDepartment? @relation(fields: [departmentId], references: [id])
+  active       Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  createdById  String?
+  createdBy    User?          @relation("LabProcessAreaCreator", fields: [createdById], references: [id])
+
+  tests MedicalTest[]
+
+  @@index([code])
+  @@map("lab_process_areas")
+}
+
+/// Departamento de laboratorio (agrupa lugares de proceso).
+model LabDepartment {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("LabDepartmentCreator", fields: [createdById], references: [id])
+
+  processAreas LabProcessArea[]
+
+  @@index([code])
+  @@map("lab_departments")
+}
+
+/// Clasificación de resultado (Normal, Patrón A, Patrón B, Crítico, etc.).
+model LabClassification {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  color       String? // Hex (#RRGGBB)
+  sortOrder   Int        @default(0)
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  createdById String?
+  createdBy   User?      @relation("LabClassificationCreator", fields: [createdById], references: [id])
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  orders      LabOrder[]
+
+  @@index([code])
+  @@map("lab_classifications")
+}
+
+/// Indicación / preparación del paciente (Ayuno 8h, Recolecta 24h, etc.).
+model LabIndication {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  text        String // "Ayuno de 8 horas"
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("LabIndicationCreator", fields: [createdById], references: [id])
+
+  @@index([code])
+  @@map("lab_indications")
+}
+
+/// Firma digital de un usuario LIS (imagen almacenada en S3).
+model LabSignature {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imageKey  String // Ruta en bucket S3
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("lab_signatures")
+}
+
+// ===========================================================================
+// IMPL-20260701-03: Slice B NOVA absorción (ARCH-20260701-03)
+// Ref: context/SPECs/SPEC_IMPL-20260701-SLICE-B-RECEPCION.md
+//
+// Entidades operativas: LabOrder (admisión) y LabOrderItem (estudios agregados).
+// Capturan el flujo end-to-end de admisión de laboratorio con descuentos por
+// línea, totales live (subtotal/iva/total) y ciclo de vida DRAFT→SAVED.
+// ===========================================================================
+
+/// Estado del ciclo de vida de una LabOrder.
+enum LabOrderStatus {
+  DRAFT // En captura, no se ha confirmado
+  SAVED // Guardado, muestra pendiente
+  SAMPLE_TAKEN // Muestra tomada en laboratorio
+  IN_PROCESS // En proceso
+  COMPLETED // Resultados completos
+  CANCELLED // Cancelada
+}
+
+/// Urgencia clínica de la orden.
+enum LabOrderUrgency {
+  NORMAL
+  URGENT
+}
+
+/// Nivel de confidencialidad del resultado (default NORMAL).
+enum LabOrderConfidentiality {
+  NORMAL
+  CONFIDENTIAL
+}
+
+/// Orden de admisión de laboratorio. Replica el flujo NOVA Recepción.
+model LabOrder {
+  id        String  @id @default(cuid())
+  folio     Int     @unique // auto-increment, único por sucursal
+  novaFolio String? @unique // mapeo NOVA
+  branch    String  @default("MATRIZ")
+
+  // Relaciones humanas (obligatoria worker; resto opcional)
+  workerId         String
+  worker           Worker             @relation(fields: [workerId], references: [id], onDelete: Restrict)
+  medicalEventId   String?
+  medicalEvent     MedicalEvent?      @relation(fields: [medicalEventId], references: [id], onDelete: SetNull)
+  companyId        String?
+  company          Company?           @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  classificationId String?
+  classification   LabClassification? @relation(fields: [classificationId], references: [id], onDelete: SetNull)
+
+  // Médico (texto libre para soportar médicos externos NO mapeados a User)
+  doctorName  String
+  doctorClave String?
+
+  // Descuentos globales (a nivel orden)
+  patientDiscountPct  Float @default(0)
+  doctorDiscountPct   Float @default(0)
+  doctorCommissionPct Float @default(0)
+  companyDiscountPct  Float @default(0)
+
+  // Flags
+  urgency            LabOrderUrgency         @default(NORMAL)
+  confidentiality    LabOrderConfidentiality @default(NORMAL)
+  homeSample         Boolean                 @default(false)
+  sendResultsByEmail Boolean                 @default(false)
+  generateInvoice    Boolean                 @default(false)
+  language           String                  @default("es") // "es" | "en"
+
+  // Entrega
+  deliveryDate DateTime?
+  deliveryTime String? // formato HH:mm
+
+  // Estado
+  status       LabOrderStatus @default(DRAFT)
+  isCourtesy   Boolean        @default(false) // cortesía (cargo 0)
+  courtesyType String? // motivo de cortesía
+
+  // Totales
+  subtotal Float @default(0)
+  ivaPct   Float @default(16)
+  iva      Float @default(0)
+  total    Float @default(0)
+
+  // Notas
+  observations String? @db.Text
+
+  // Auditoría
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdById   String
+  createdBy     User      @relation("LabOrderCreator", fields: [createdById], references: [id])
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelledBy   User?     @relation("LabOrderCanceller", fields: [cancelledById], references: [id])
+  confirmedAt   DateTime?
+
+  items LabOrderItem[]
+
+  @@index([workerId])
+  @@index([medicalEventId])
+  @@index([companyId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([folio])
+  @@map("lab_orders")
+}
+
+/// Item de una LabOrder: un estudio del catálogo con descuentos aplicados.
+model LabOrderItem {
+  id            String      @id @default(cuid())
+  labOrderId    String
+  labOrder      LabOrder    @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  medicalTestId String
+  medicalTest   MedicalTest @relation(fields: [medicalTestId], references: [id], onDelete: Restrict)
+
+  // Snapshot del precio y configuración al momento de captura
+  price          Float @default(0) // precio base del MedicalTest al momento
+  discountAmount Float @default(0) // descuento monetario $
+  discountPct    Float @default(0) // descuento porcentaje %
+  amount         Float @default(0) // monto final: price - discountAmount - (price * discountPct/100)
+
+  // Estado del item (ciclo de vida del resultado)
+  resultStatus String @default("P") // P=pendiente, R=reportado, A=autorizado, V=validado, X=invalidado
+
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([labOrderId])
+  @@index([medicalTestId])
+  @@index([resultStatus])
+  @@map("lab_order_items")
+}
