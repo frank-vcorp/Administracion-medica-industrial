@@ -17,7 +17,13 @@ import re
 import time
 import json
 import hashlib
+from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
+
+from app.services.prisma_client import (
+    init_prisma_client,
+    disconnect_prisma_client,
+)
 
 from services.ai import DocumentClassifierService, ExtractorService, PrediagnosticService
 from services.ai.base import GeminiBase
@@ -37,9 +43,47 @@ def _read_env_var(key: str) -> Optional[str]:
 
     return None
 
+# IMPL-20260630-06: Lifespan para inicializar Prisma al startup y desconectar
+# al shutdown. Inyecta el cliente en reports, lab_catalog_service y
+# lab_order_service (estos dos últimos cubren los routers lab-orders y lab-search
+# que importan el prisma vía el servicio).
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Inicializa Prisma al startup y desconecta al shutdown."""
+    try:
+        prisma = init_prisma_client()
+        # Inyecta en reports (router con set_prisma_client propio)
+        try:
+            from app.api.reports import set_prisma_client as _set_reports
+            _set_reports(prisma)
+        except Exception as e:
+            print(f"[reports] set_prisma_client failed: {_sanitize_error(str(e))}")
+        # Inyecta en lab_catalog_service (cubre router lab-catalogs)
+        try:
+            from app.services.lab_catalog_service import set_prisma_client as _set_lab_cat
+            _set_lab_cat(prisma)
+        except Exception as e:
+            print(f"[lab-catalogs] set_prisma_client failed: {_sanitize_error(str(e))}")
+        # Inyecta en lab_order_service (cubre routers lab-orders + lab-search,
+        # los cuales obtienen prisma vía svc.get_prisma() y NO exponen
+        # set_prisma_client a nivel de router — decisión deliberada para
+        # mantener una sola fuente de inyección por concern).
+        try:
+            from app.services.lab_order_service import set_prisma_client as _set_lab_ord
+            _set_lab_ord(prisma)
+        except Exception as e:
+            print(f"[lab-orders] set_prisma_client failed: {_sanitize_error(str(e))}")
+        print("✅ Prisma client inicializado y conectado")
+    except Exception as e:
+        print(f"⚠️ No se pudo inicializar Prisma al startup: {_sanitize_error(str(e))}")
+    yield
+    await disconnect_prisma_client()
+
+
 app = FastAPI(
     title="Residente Digital API",
-    description="Pipeline IA modular para análisis de documentos médicos"
+    description="Pipeline IA modular para análisis de documentos médicos",
+    lifespan=lifespan,
 )
 
 # CORS: permitir al frontend de Vercel comunicarse con este backend
@@ -1334,15 +1378,11 @@ def resolve_file(key: str):
 # IMPL-20260630-03: ENDPOINTS REPORTES MASIVOS POR PROYECTO (ARCH-20260623-01)
 # ========================================
 try:
-    from app.api.reports import router as reports_router, set_prisma_client as _set_reports_prisma
+    from app.api.reports import router as reports_router
 
-    # Inyectar Prisma client si esta disponible (entorno real con Prisma corriendo).
-    try:
-        from app.services.prisma_client import get_prisma_client as _get_prisma
-        _set_reports_prisma(_get_prisma())
-    except Exception as _prisma_inject_err:
-        print(f"[reports] Prisma no inyectado (modo testing o sin DB): {_sanitize_error(str(_prisma_inject_err))}")
-
+    # IMPL-20260630-06: Prisma se inyecta vía lifespan (ver arriba). No se hace
+    # inyección top-level aquí porque antes del lifespan el cliente aún no
+    # está inicializado (conexión asíncrona a Railway Postgres).
     app.include_router(reports_router)
 except Exception as _reports_import_err:
     print(f"⚠️ No se pudo registrar router de reports: {_sanitize_error(str(_reports_import_err))}")
@@ -1356,14 +1396,10 @@ except Exception as _reports_import_err:
 # ========================================
 try:
     from app.api.v1.lab.catalogs import router as lab_catalogs_router
-    from app.services.lab_catalog_service import set_prisma_client as _set_lab_prisma
 
-    try:
-        from app.services.prisma_client import get_prisma_client as _get_lab_prisma
-        _set_lab_prisma(_get_lab_prisma())
-    except Exception as _lab_prisma_inject_err:
-        print(f"[lab-catalogs] Prisma no inyectado (modo testing o sin DB): {_sanitize_error(str(_lab_prisma_inject_err))}")
-
+    # IMPL-20260630-06: Prisma se inyecta vía lifespan (ver arriba) en
+    # lab_catalog_service.set_prisma_client. La inyección top-level aquí era
+    # la causa del ModuleNotFoundError silencioso (prisma_client.py no existía).
     app.include_router(lab_catalogs_router)
     print("✅ Router lab-catalogs registrado (/api/v1/lab/catalogs)")
 except Exception as _lab_import_err:
