@@ -1,7 +1,3 @@
-generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl"]
-}
 
 // IMPL-20260701-06: Generador Python para backend FastAPI (prisma==0.15.0).
 // ESTE ES UN ESPEJO de frontend/prisma/schema.prisma — NO usar 'prisma generate'
