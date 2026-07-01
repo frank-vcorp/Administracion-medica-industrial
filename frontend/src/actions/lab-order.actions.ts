@@ -3,10 +3,13 @@
  * @id IMPL-20260701-03 — Slice B Recepción (ARCH-20260701-03).
  * @backup context/SPECs/SPEC_IMPL-20260701-SLICE-B-RECEPCION.md
  *
+ * HOTFIX IMPL-20260701-07: bypass de FastAPI (bug Prisma JS→Python).
+ * Las actions ahora llaman a las Next.js API routes internas en
+ * `/api/lab/orders/...` que usan Prisma JS directo.
+ *
  * Patrón: idéntico a lab-catalog.actions.ts.
  * - Validación Zod server-side
- * - Rol permitido: ADMIN o LAB_RECEPTIONIST
- * - Header X-AMI-UserId para autenticación placeholder FastAPI
+ * - Rol permitido: ADMIN (LAB_RECEPTIONIST pendiente)
  * - revalidatePath('/lab/reception') tras cada mutación
  */
 "use server";
@@ -24,10 +27,23 @@ import {
   type WorkerSearchResult,
 } from "@/lib/validations/lab-order";
 
+// BACKEND_URL conservado por compatibilidad, ya no se usa.
+// IMPL-20260701-07: usamos Next.js API routes locales.
 const BACKEND_URL =
   process.env.BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000";
+
+function _localBase(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.NEXT_PUBLIC_VERCEL_URL) {
+    return process.env.NEXT_PUBLIC_VERCEL_URL.startsWith("http")
+      ? process.env.NEXT_PUBLIC_VERCEL_URL
+      : `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
+  }
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
 
 // ---------------------------------------------------------------------------
 // Tipos de retorno y errores
@@ -45,20 +61,18 @@ async function _requireReception(): Promise<{ userId: string; role: string } | n
   const userId = session?.user?.id;
   if (!session?.user || !userId) return null;
   // ADM-20260701-01: roles permitidos LabOrder = ADMIN (LAB_RECEPTIONIST
-  // pendiente de incorporarse al enum de roles de NextAuth). FastAPI no
-  // valida roles aún (header placeholder), pero el gate cliente evita que
-  // COMPANY_CLIENT u OPERATOR lleguen a tocar admisión.
+  // pendiente de incorporarse al enum de roles de NextAuth).
   if (role !== "ADMIN") return null;
   return { userId, role: role as string };
 }
 
-async function _backendFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const url = new URL(path, BACKEND_URL);
-  return fetch(url.toString(), {
+async function _localFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const base = _localBase();
+  const url = path.startsWith("http") ? path : `${base}${path}`;
+  return fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "X-AMI-UserId": (await _requireReception())?.userId ?? "",
       ...(init.headers || {}),
     },
     cache: "no-store",
@@ -91,9 +105,9 @@ export async function createLabOrderAction(
     };
   }
   try {
-    const res = await _backendFetch("/api/v1/lab/orders", {
+    // IMPL-20260701-07: ruta Next.js API local.
+    const res = await _localFetch("/api/lab/orders", {
       method: "POST",
-      headers: { "X-AMI-UserId": guard.userId },
       body: JSON.stringify(parsed.data),
     });
     if (!res.ok) {
@@ -128,9 +142,9 @@ export async function updateLabOrderAction(
     };
   }
   try {
-    const res = await _backendFetch(`/api/v1/lab/orders/${orderId}`, {
+    // IMPL-20260701-07: ruta Next.js API local.
+    const res = await _localFetch(`/api/lab/orders/${orderId}`, {
       method: "PATCH",
-      headers: { "X-AMI-UserId": guard.userId },
       body: JSON.stringify(parsed.data),
     });
     if (!res.ok) {
@@ -154,10 +168,8 @@ export async function getLabOrderAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    const res = await _backendFetch(`/api/v1/lab/orders/${orderId}`, {
-      method: "GET",
-      headers: { "X-AMI-UserId": guard.userId },
-    });
+    // IMPL-20260701-07: ruta Next.js API local.
+    const res = await _localFetch(`/api/lab/orders/${orderId}`, { method: "GET" });
     if (res.status === 404) {
       return { ok: false, error: `LabOrder ${orderId} no existe`, code: "NOT_FOUND" };
     }
@@ -186,12 +198,10 @@ export async function cancelLabOrderAction(
     return { ok: false, error: "Motivo inválido (min 3 caracteres)", code: "VALIDATION" };
   }
   try {
-    const url = new URL(`/api/v1/lab/orders/${orderId}`, BACKEND_URL);
-    url.searchParams.set("motivo", parsed.data.motivo);
-    const res = await fetch(url.toString(), {
+    // IMPL-20260701-07: ruta Next.js API local (?motivo=… ).
+    const qs = new URLSearchParams({ motivo: parsed.data.motivo });
+    const res = await _localFetch(`/api/lab/orders/${orderId}?${qs.toString()}`, {
       method: "DELETE",
-      headers: { "X-AMI-UserId": guard.userId },
-      cache: "no-store",
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -214,9 +224,9 @@ export async function confirmLabOrderAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    const res = await _backendFetch(`/api/v1/lab/orders/${orderId}/confirm`, {
+    // IMPL-20260701-07: ruta Next.js API local.
+    const res = await _localFetch(`/api/lab/orders/${orderId}/confirm`, {
       method: "POST",
-      headers: { "X-AMI-UserId": guard.userId },
       body: JSON.stringify({}),
     });
     if (!res.ok) {
@@ -241,9 +251,9 @@ export async function addLabOrderItemAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    const res = await _backendFetch(`/api/v1/lab/orders/${orderId}/items`, {
+    // IMPL-20260701-07: ruta Next.js API local.
+    const res = await _localFetch(`/api/lab/orders/${orderId}/items`, {
       method: "POST",
-      headers: { "X-AMI-UserId": guard.userId },
       body: JSON.stringify(item),
     });
     if (!res.ok) {
@@ -268,12 +278,10 @@ export async function removeLabOrderItemAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    const res = await _backendFetch(
-      `/api/v1/lab/orders/${orderId}/items/${itemId}`,
-      {
-        method: "DELETE",
-        headers: { "X-AMI-UserId": guard.userId },
-      }
+    // IMPL-20260701-07: ruta Next.js API local.
+    const res = await _localFetch(
+      `/api/lab/orders/${orderId}/items/${itemId}`,
+      { method: "DELETE" }
     );
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -310,18 +318,17 @@ export async function listLabOrdersAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    const url = new URL("/api/v1/lab/orders", BACKEND_URL);
-    url.searchParams.set("draw", String(filters.draw ?? 1));
-    url.searchParams.set("start", String(filters.start ?? 0));
-    url.searchParams.set("length", String(filters.length ?? 25));
-    if (filters.search) url.searchParams.set("search[value]", filters.search);
-    if (filters.status) url.searchParams.set("status", filters.status);
-    if (filters.dateFrom) url.searchParams.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) url.searchParams.set("dateTo", filters.dateTo);
-    const res = await fetch(url.toString(), {
+    // IMPL-20260701-07: ruta Next.js API local.
+    const qs = new URLSearchParams();
+    qs.set("draw", String(filters.draw ?? 1));
+    qs.set("start", String(filters.start ?? 0));
+    qs.set("length", String(filters.length ?? 25));
+    if (filters.search) qs.set("search[value]", filters.search);
+    if (filters.status) qs.set("status", filters.status);
+    if (filters.dateFrom) qs.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) qs.set("dateTo", filters.dateTo);
+    const res = await _localFetch(`/api/lab/orders?${qs.toString()}`, {
       method: "GET",
-      headers: { "X-AMI-UserId": guard.userId },
-      cache: "no-store",
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -345,22 +352,19 @@ export async function listLabOrdersAction(
 async function _search(
   path: string,
   q: string,
-  guardUserId: string
+  _guardUserId: string
 ): Promise<Response> {
-  const url = new URL(path, BACKEND_URL);
-  if (q.trim()) url.searchParams.set("q", q.trim());
-  return fetch(url.toString(), {
-    method: "GET",
-    headers: { "X-AMI-UserId": guardUserId },
-    cache: "no-store",
-  });
+  // IMPL-20260701-07: ruta Next.js API local.
+  const qs = new URLSearchParams();
+  if (q.trim()) qs.set("q", q.trim());
+  return _localFetch(`${path}?${qs.toString()}`, { method: "GET" });
 }
 
 export async function searchWorkersAction(q: string): Promise<WorkerSearchResult[]> {
   const guard = await _requireReception();
   if (!guard) return [];
   try {
-    const res = await _search("/api/v1/lab/search/workers", q, guard.userId);
+    const res = await _search("/api/lab/search/workers", q, guard.userId);
     if (!res.ok) return [];
     return (await res.json()) as WorkerSearchResult[];
   } catch {
@@ -372,7 +376,7 @@ export async function searchDoctorsAction(q: string): Promise<DoctorSearchResult
   const guard = await _requireReception();
   if (!guard) return [];
   try {
-    const res = await _search("/api/v1/lab/search/doctors", q, guard.userId);
+    const res = await _search("/api/lab/search/doctors", q, guard.userId);
     if (!res.ok) return [];
     return (await res.json()) as DoctorSearchResult[];
   } catch {
@@ -384,7 +388,7 @@ export async function searchCompaniesAction(q: string): Promise<CompanySearchRes
   const guard = await _requireReception();
   if (!guard) return [];
   try {
-    const res = await _search("/api/v1/lab/search/companies", q, guard.userId);
+    const res = await _search("/api/lab/search/companies", q, guard.userId);
     if (!res.ok) return [];
     return (await res.json()) as CompanySearchResult[];
   } catch {
@@ -396,7 +400,7 @@ export async function searchLabTestsAction(q: string): Promise<LabTestSearchResu
   const guard = await _requireReception();
   if (!guard) return [];
   try {
-    const res = await _search("/api/v1/lab/search/tests", q, guard.userId);
+    const res = await _search("/api/lab/search/tests", q, guard.userId);
     if (!res.ok) return [];
     return (await res.json()) as LabTestSearchResult[];
   } catch {
