@@ -3,9 +3,13 @@
  * @id IMPL-20260630-06 — Slice A NOVA absorción (ARCH-20260630-02).
  * @backup context/SPECs/SPEC_ARCH-20260630-02-DEMO-NOVA-ABSORBIDO.md
  *
+ * HOTFIX IMPL-20260701-07: bypass de FastAPI (bug Prisma JS→Python).
+ * Las actions ahora llaman a las Next.js API routes internas en
+ * `/api/lab/catalogs/[mod]` que usan Prisma JS directo. BACKEND_URL se
+ * conserva para referencia pero ya no se usa.
+ *
  * Todas las actions validan server-side con Zod (incluso aunque el cliente
- * ya valide) y restringen por rol ADMIN. Reusan `BACKEND_URL` según el
- * patrón de project-reports.actions.ts.
+ * ya valide) y restringen por rol ADMIN.
  */
 "use server";
 
@@ -20,10 +24,28 @@ import {
   isValidLabMod,
 } from "@/lib/validations/lab-catalog";
 
+// BACKEND_URL conservado por compatibilidad/rollback, ya no se usa.
+// IMPL-20260701-07: usamos Next.js API routes locales.
 const BACKEND_URL =
   process.env.BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000";
+
+/**
+ * Base URL absoluta para fetch server-side a las API routes locales.
+ * Resuelve el host según el entorno (Vercel → NEXT_PUBLIC_VERCEL_URL,
+ * local → localhost:3000). Si NEXT_PUBLIC_APP_URL está definida se respeta.
+ */
+function _localBase(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.NEXT_PUBLIC_VERCEL_URL) {
+    return process.env.NEXT_PUBLIC_VERCEL_URL.startsWith("http")
+      ? process.env.NEXT_PUBLIC_VERCEL_URL
+      : `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
+  }
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,13 +63,18 @@ async function _requireAdmin(): Promise<{ id: string; userId: string } | null> {
   return { id, userId: id };
 }
 
-async function _backendFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const url = new URL(path, BACKEND_URL);
-  return fetch(url.toString(), {
+async function _localFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  // IMPL-20260701-07: Next.js API routes locales.
+  // Importante: las server actions de Next.js ejecutan en Node, no en
+  // Edge, por lo que fetch a rutas relativas puede resolverse al mismo
+  // host sin necesidad de URL absoluta (next 14+ soporta esto), pero
+  // construimos URL absoluta de forma defensiva.
+  const base = _localBase();
+  const url = path.startsWith("http") ? path : `${base}${path}`;
+  return fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "X-AMI-UserId": (await _requireAdmin())?.userId ?? "",
       ...(init.headers || {}),
     },
     cache: "no-store",
@@ -80,23 +107,18 @@ export async function listLabCatalogAction(params: {
   if (!modCheck.ok) return { ok: false, error: modCheck.error };
 
   try {
-    const url = new URL("/api/v1/lab/catalogs", BACKEND_URL);
-    url.searchParams.set("mod", modCheck.mod);
-    url.searchParams.set("draw", String(params.draw ?? 1));
-    url.searchParams.set("start", String(params.start ?? 0));
-    url.searchParams.set("length", String(params.length ?? 25));
-    if (params.search) url.searchParams.set("search[value]", params.search);
-    url.searchParams.set("onlyActive", String(params.onlyActive ?? false));
-    url.searchParams.set("order[0][column]", String(params.orderColumn ?? 0));
-    url.searchParams.set("order[0][dir]", params.orderDir ?? "asc");
+    // IMPL-20260701-07: ruta Next.js API local.
+    const path = `/api/lab/catalogs/${modCheck.mod}`;
+    const qs = new URLSearchParams();
+    qs.set("draw", String(params.draw ?? 1));
+    qs.set("start", String(params.start ?? 0));
+    qs.set("length", String(params.length ?? 25));
+    if (params.search) qs.set("search[value]", params.search);
+    qs.set("onlyActive", String(params.onlyActive ?? false));
+    qs.set("order[0][column]", String(params.orderColumn ?? 0));
+    qs.set("order[0][dir]", params.orderDir ?? "asc");
 
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        "X-AMI-UserId": guard.userId,
-      },
-      cache: "no-store",
-    });
+    const res = await _localFetch(`${path}?${qs.toString()}`, { method: "GET" });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
@@ -134,14 +156,10 @@ export async function createLabCatalogAction(params: {
   }
 
   try {
-    const url = new URL("/api/v1/lab/catalogs", BACKEND_URL);
-    url.searchParams.set("mod", modCheck.mod);
-    const res = await fetch(url.toString(), {
+    // IMPL-20260701-07: ruta Next.js API local.
+    const path = `/api/lab/catalogs/${modCheck.mod}`;
+    const res = await _localFetch(path, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-AMI-UserId": guard.userId,
-      },
       body: JSON.stringify(parsed.data),
     });
     if (!res.ok) {
@@ -194,14 +212,15 @@ export async function updateLabCatalogAction(params: {
       };
     }
 
-    const url = new URL(`/api/v1/lab/catalogs/${modCheck.mod}/${params.id}`, BACKEND_URL);
-    const res = await fetch(url.toString(), {
+    // IMPL-20260701-07: ruta Next.js API local.
+    // El id viene como query o body; este route PATCH recibe id en body.
+    const path = `/api/lab/catalogs/${modCheck.mod}`;
+    const res = await _localFetch(path, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "X-AMI-UserId": guard.userId,
-      },
-      body: JSON.stringify(parsed.data),
+      body: JSON.stringify({
+        id: params.id,
+        ...(parsed.data as Record<string, unknown>),
+      }),
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -231,12 +250,11 @@ export async function deleteLabCatalogAction(params: {
   if (!modCheck.ok) return { ok: false, error: modCheck.error };
 
   try {
-    const url = new URL(`/api/v1/lab/catalogs/${modCheck.mod}/${params.id}`, BACKEND_URL);
-    const res = await fetch(url.toString(), {
+    // IMPL-20260701-07: ruta Next.js API local (id en body).
+    const path = `/api/lab/catalogs/${modCheck.mod}`;
+    const res = await _localFetch(path, {
       method: "DELETE",
-      headers: {
-        "X-AMI-UserId": guard.userId,
-      },
+      body: JSON.stringify({ id: params.id }),
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
