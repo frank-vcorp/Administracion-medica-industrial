@@ -1,6 +1,6 @@
 -- =====================================================================
 -- IMPL-20260630-06 — Migración consolidada Slice A NOVA Catálogos LIS
--- v2: con deduplicación previa de _prisma_migrations
+-- v4: sin dependencia de pgcrypto (usa md5 nativo de Postgres)
 -- Aplicable via Railway Query Editor o psql.
 -- Idempotente.
 -- =====================================================================
@@ -70,12 +70,12 @@ END $$;
 
 INSERT INTO _prisma_migrations (id, migration_name, checksum, finished_at, applied_steps_count)
 VALUES
-  (gen_random_uuid()::text, '20260527133500_project_worker_reception_queue', encode(digest('20260527133500_project_worker_reception_queue', 'sha256'), 'hex'), NOW(), 1),
-  (gen_random_uuid()::text, '20260623170000_company_v2_vendedor_historial_link_publico', encode(digest('20260623170000_company_v2_vendedor_historial_link_publico', 'sha256'), 'hex'), NOW(), 1),
-  (gen_random_uuid()::text, '20260624120000_company_self_reg_channel', encode(digest('20260624120000_company_self_reg_channel', 'sha256'), 'hex'), NOW(), 1),
-  (gen_random_uuid()::text, '20260624214342_add_target_company_id_to_self_reg', encode(digest('20260624214342_add_target_company_id_to_self_reg', 'sha256'), 'hex'), NOW(), 1),
-  (gen_random_uuid()::text, '20260630140000_add_payment_record', encode(digest('20260630140000_add_payment_record', 'sha256'), 'hex'), NOW(), 1),
-  (gen_random_uuid()::text, '20260630150000_add_whatsapp_receipt_fields', encode(digest('20260630150000_add_whatsapp_receipt_fields', 'sha256'), 'hex'), NOW(), 1)
+  (gen_random_uuid()::text, '20260527133500_project_worker_reception_queue', md5('20260527133500_project_worker_reception_queue') || md5('20260527133500_project_worker_reception_queue'), NOW(), 1),
+  (gen_random_uuid()::text, '20260623170000_company_v2_vendedor_historial_link_publico', md5('20260623170000_company_v2_vendedor_historial_link_publico') || md5('20260623170000_company_v2_vendedor_historial_link_publico'), NOW(), 1),
+  (gen_random_uuid()::text, '20260624120000_company_self_reg_channel', md5('20260624120000_company_self_reg_channel') || md5('20260624120000_company_self_reg_channel'), NOW(), 1),
+  (gen_random_uuid()::text, '20260624214342_add_target_company_id_to_self_reg', md5('20260624214342_add_target_company_id_to_self_reg') || md5('20260624214342_add_target_company_id_to_self_reg'), NOW(), 1),
+  (gen_random_uuid()::text, '20260630140000_add_payment_record', md5('20260630140000_add_payment_record') || md5('20260630140000_add_payment_record'), NOW(), 1),
+  (gen_random_uuid()::text, '20260630150000_add_whatsapp_receipt_fields', md5('20260630150000_add_whatsapp_receipt_fields') || md5('20260630150000_add_whatsapp_receipt_fields'), NOW(), 1)
 ON CONFLICT (migration_name) DO NOTHING;
 
 -- =====================================================================
@@ -275,7 +275,7 @@ INSERT INTO _prisma_migrations (id, migration_name, checksum, finished_at, appli
 VALUES (
   gen_random_uuid()::text,
   '20260701000000_add_lab_catalogs',
-  encode(digest('20260701000000_add_lab_catalogs', 'sha256'), 'hex'),
+  md5('20260701000000_add_lab_catalogs') || md5('20260701000000_add_lab_catalogs'),
   NOW(),
   1
 )
