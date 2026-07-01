@@ -1,4 +1,5 @@
-// IMPL-20260630-03: Tests para ProjectMassiveReportModal (smoke + logica).
+// IMPL-20260701-04: Tests para ProjectMassiveReportModal (Fase 4 EBOOK).
+// IMPL-20260630-03: Tests originales.
 // Usa solo vitest + lectura de source code (sin @testing-library/react).
 
 import { describe, expect, it, vi } from 'vitest';
@@ -89,9 +90,33 @@ describe('ProjectMassiveReportModal (smoke)', () => {
     );
     expect(src).toMatch(/data-testid="generate-button"/);
     expect(src).toMatch(/data-testid="format-XLSX"/);
-    expect(src).toMatch(/data-testid="format-PDF"/);
+    // IMPL-20260701-04: 'EBOOK' reemplaza a 'PDF'.
+    expect(src).toMatch(/data-testid="format-EBOOK"/);
+    expect(src).not.toMatch(/data-testid="format-PDF"/);
     expect(src).toMatch(/data-testid="format-BOTH"/);
     expect(src).toMatch(/data-testid="download-section"/);
+  });
+
+  it('la fuente usa el tipo ReportFormat con EBOOK (no PDF)', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const typesSrc = await fs.promises.readFile(
+      path.join(__dirname, '..', '..', '..', 'lib', 'reports', 'types.ts'),
+      'utf-8',
+    );
+    expect(typesSrc).toMatch(/'XLSX'\s*\|\s*'EBOOK'\s*\|\s*'BOTH'/);
+    expect(typesSrc).not.toMatch(/'XLSX'\s*\|\s*'PDF'/);
+  });
+
+  it('la fuente muestra nota de traduccion via browser (SPEC decision 15)', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const src = await fs.promises.readFile(
+      path.join(__dirname, '..', 'ProjectMassiveReportModal.tsx'),
+      'utf-8',
+    );
+    expect(src).toMatch(/Chrome\/Edge/);
+    expect(src).toMatch(/funcion de traduccion/i);
   });
 
   it('la fuente deshabilita el boton si total=0', async () => {

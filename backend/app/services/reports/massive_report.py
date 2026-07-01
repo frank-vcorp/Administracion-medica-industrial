@@ -1,20 +1,37 @@
 """
-IMPL-20260630-03: Orquestador de generacion de reportes masivos.
+IMPL-20260701-04: Orquestador de generacion de reportes masivos (Fase 4 EBOOK).
+IMPL-20260630-03: Orquestador original.
 ARCH-20260623-01: Modulo de Reportes Masivos.
 
-Lee los datos reales del proyecto desde Prisma, genera XLSX y/o PDF,
-los guarda en uploads/reports/{projectId}/{reportId}/ y actualiza
-el ProjectReport correspondiente.
+Lee los datos reales del proyecto desde Prisma, genera XLSX y/o EBOOK (PDF
+navegable con TOC, bookmarks, estadisticas con mini-graficas y secciones
+por trabajador con imagenes embebidas), los guarda en
+uploads/reports/{projectId}/{reportId}/ y actualiza el ProjectReport.
+
+Formatos aceptados (validados tambien en api/reports.py):
+  - 'XLSX'  -> concentrado tabular + graficas
+  - 'EBOOK'  -> PDF navegable generado con pdf_ebook_writer
+  - 'BOTH'   -> XLSX + EBOOK en la misma corrida
+  - 'PDF'    -> DEPRECATED, aceptado por retro-compatibilidad (usa EBOOK)
+
+Naming:
+  - XLSX: concentrado.xlsx
+  - EBOOK/PDF (legacy): EBOOK_{empresa_slug}_{fecha}.pdf
 """
 from __future__ import annotations
 
+import logging
 import os
+import re
 import traceback
+import unicodedata
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from app.services.reports.pdf_writer import generar_pdf
 from app.services.reports.xlsx_writer import generar_xlsx
+
+
+logger = logging.getLogger(__name__)
 
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR") or "/uploads"
@@ -225,6 +242,25 @@ def _laboratorio(et: Dict[str, Any]) -> Dict[str, Any]:
 
 # --- Orquestacion ----------------------------------------------------------
 
+ALLOWED_FORMATS = {"XLSX", "EBOOK", "BOTH", "PDF"}
+
+
+def _empresa_slug(empresa: str) -> str:
+    """Normaliza el nombre de empresa a un slug ASCII seguro para filename."""
+    if not empresa:
+        return "PROYECTO"
+    # Quitar acentos usando unicodedata (no .normalize() que es metodo de str).
+    texto = (
+        unicodedata.normalize("NFD", empresa)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .upper()
+    )
+    # Reemplazar todo lo no alfanumerico por guion bajo.
+    texto = re.sub(r"[^A-Z0-9]+", "_", texto)
+    return texto.strip("_") or "PROYECTO"
+
+
 def generar_reporte_masivo(
     snapshot: Dict[str, Any],
     project_id: str,
@@ -234,25 +270,47 @@ def generar_reporte_masivo(
     """
     Genera el reporte en el formato pedido. Retorna dict con
     fileUrlXlsx / fileUrlPdf (relativos) o levanta excepcion.
+
+    IMPL-20260701-04: EBOOK reemplaza PDF. Se conserva 'PDF' como alias
+    deprecado para no romper integraciones legacy.
     """
-    if format not in ("XLSX", "PDF", "BOTH"):
-        raise ValueError(f"Formato invalido: {format}")
+    if format not in ALLOWED_FORMATS:
+        raise ValueError(
+            f"Formato invalido: {format!r}. Permitidos: {sorted(ALLOWED_FORMATS)}"
+        )
 
     storage_dir = report_storage_dir(project_id, report_id)
     out: Dict[str, Any] = {"fileUrlXlsx": None, "fileUrlPdf": None}
 
     if format in ("XLSX", "BOTH"):
         xlsx_path = os.path.join(storage_dir, "concentrado.xlsx")
-        # Import local para evitar import circular si pdf_writer importa massive_report.
+        # Import local para evitar import circular si pdf_ebook_writer importa massive_report.
         from app.services.reports.xlsx_writer import generar_xlsx as _gen_xlsx
         _gen_xlsx(snapshot, xlsx_path)
         out["fileUrlXlsx"] = relative_path(project_id, report_id, "concentrado.xlsx")
 
-    if format in ("PDF", "BOTH"):
-        pdf_path = os.path.join(storage_dir, "diagnostico.pdf")
-        from app.services.reports.pdf_writer import generar_pdf as _gen_pdf
-        _gen_pdf(snapshot, pdf_path)
-        out["fileUrlPdf"] = relative_path(project_id, report_id, "diagnostico.pdf")
+    if format in ("EBOOK", "BOTH", "PDF"):
+        # 'PDF' es legacy -> log warning y tratar como EBOOK.
+        if format == "PDF":
+            logger.warning(
+                "generar_reporte_masivo: format='PDF' recibido pero deprecado "
+                "(IMPL-20260701-04). Se usara EBOOK en su lugar."
+            )
+
+        # Import local: pdf_ebook_writer importa matplotlib/reportlab pesados.
+        from app.services.reports.pdf_ebook_writer import generar_ebook as _gen_ebook
+
+        empresa_slug = _empresa_slug(snapshot.get("empresa") or "")
+        fecha_str = snapshot.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d")
+        ebook_filename = f"EBOOK_{empresa_slug}_{fecha_str}.pdf"
+        ebook_path = os.path.join(storage_dir, ebook_filename)
+
+        _gen_ebook(snapshot, ebook_path)
+        out["fileUrlPdf"] = relative_path(project_id, report_id, ebook_filename)
+        logger.info(
+            "EBOOK generado para proyecto=%s report=%s -> %s",
+            project_id, report_id, ebook_filename,
+        )
 
     return out
 

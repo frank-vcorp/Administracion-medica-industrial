@@ -1,14 +1,19 @@
 """
 Tests pytest para el modulo de Reportes Masivos.
-IMPL-20260630-03: ARCH-20260623-01.
+IMPL-20260701-04: Fase 4 EBOOK — actualizacion de orquestador + API.
+IMPL-20260630-03: ARCH-20260623-01 (tests originales).
 
 Cubre:
   1. test_create_project_report_returns_pending
   2. test_xlsx_writer_creates_3_sheets
-  3. test_pdf_writer_creates_portada_and_concentrado
+  3. test_pdf_writer_creates_portada_and_concentrado  (legacy directo)
   4. test_conteos_calculation
   5. test_report_status_transitions_pending_to_ready
   6. test_report_failed_with_error_message
+  + IMPL-20260701-04:
+  7. test_generar_reporte_masivo_ebook     (nuevo)
+  8. test_generar_reporte_masivo_both_ebook (actualizado)
+  9. test_api_rejects_legacy_pdf_format    (nuevo)
 
 Los tests de endpoints usan mocks del Prisma client para no depender
 de una DB real. Los generadores se prueban con un snapshot construido
@@ -250,14 +255,45 @@ def test_generar_reporte_masivo_xlsx(tmp_uploads, sample_project):
 
 
 def test_generar_reporte_masivo_both(tmp_uploads, sample_project):
-    """Formato BOTH genera XLSX + PDF."""
+    """Formato BOTH genera XLSX + EBOOK (IMPL-20260701-04)."""
     paths = generar_reporte_masivo(sample_project, "proj-2", "rep-2", "BOTH")
     assert paths["fileUrlXlsx"] is not None
     assert paths["fileUrlPdf"] is not None
 
     base = Path(tmp_uploads) / "reports" / "proj-2" / "rep-2"
     assert (base / "concentrado.xlsx").exists()
-    assert (base / "diagnostico.pdf").exists()
+    # IMPL-20260701-04: el PDF ahora se nombra EBOOK_{empresa}_{fecha}.pdf.
+    ebook_files = list(base.glob("EBOOK_*.pdf"))
+    assert len(ebook_files) == 1, (
+        f"Esperaba exactamente 1 archivo EBOOK_*.pdf, encontre: "
+        f"{[p.name for p in base.glob('*.pdf')]}"
+    )
+    assert ebook_files[0].stat().st_size > 1000, "EBOOK demasiado pequeno"
+
+
+def test_generar_reporte_masivo_ebook(tmp_uploads, sample_project):
+    """IMPL-20260701-04: format='EBOOK' solo genera el PDF ebook."""
+    paths = generar_reporte_masivo(sample_project, "proj-e", "rep-e", "EBOOK")
+    assert paths["fileUrlXlsx"] is None
+    assert paths["fileUrlPdf"] is not None
+    assert paths["fileUrlPdf"].startswith("reports/proj-e/rep-e/EBOOK_")
+    assert paths["fileUrlPdf"].endswith(".pdf")
+
+    base = Path(tmp_uploads) / "reports" / "proj-e" / "rep-e"
+    assert not (base / "concentrado.xlsx").exists()
+    ebook_files = list(base.glob("EBOOK_*.pdf"))
+    assert len(ebook_files) == 1
+    # Magic bytes PDF
+    with open(ebook_files[0], "rb") as fh:
+        assert fh.read(8).startswith(b"%PDF")
+
+
+def test_generar_reporte_masivo_legacy_pdf(tmp_uploads, sample_project):
+    """IMPL-20260701-04: 'PDF' legacy sigue funcionando (deprecated, fallback EBOOK)."""
+    paths = generar_reporte_masivo(sample_project, "proj-p", "rep-p", "PDF")
+    assert paths["fileUrlXlsx"] is None
+    assert paths["fileUrlPdf"] is not None
+    assert paths["fileUrlPdf"].startswith("reports/proj-p/rep-p/EBOOK_")
 
 
 def test_generar_reporte_masivo_invalid_format(tmp_uploads, sample_project):
@@ -391,6 +427,70 @@ def test_download_endpoint_rejects_when_not_ready(monkeypatch):
         params={"format": "xlsx"},
     )
     assert resp.status_code == 409
+
+
+def test_api_rejects_legacy_pdf_format(monkeypatch):
+    """IMPL-20260701-04: API rechaza 'PDF' (validacion pattern=^(XLSX|EBOOK|BOTH)$)."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api.reports import router as reports_router, set_prisma_client
+
+    prisma = MagicMock()
+    prisma.project.find_unique.return_value = MagicMock(id="proj-1")
+    set_prisma_client(prisma)
+
+    app = FastAPI()
+    app.include_router(reports_router)
+    client = TestClient(app)
+
+    resp = client.post(
+        "/api/v2/projects/proj-1/reports/massive",
+        params={"format": "PDF", "generatedById": "user-1"},
+    )
+    # FastAPI responde 422 cuando el parametro no matchea el pattern.
+    assert resp.status_code == 422, (
+        f"Esperaba 422 (validation error), obtuve {resp.status_code}: {resp.text}"
+    )
+
+
+def test_api_accepts_ebook_format(monkeypatch):
+    """IMPL-20260701-04: API acepta 'EBOOK' y crea ProjectReport en PENDING."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api.reports import router as reports_router, set_prisma_client
+
+    prisma = MagicMock()
+    created = MagicMock(
+        id="rep-ebook",
+        projectId="proj-1",
+        format="EBOOK",
+        status="PENDING",
+        fileUrlXlsx=None,
+        fileUrlPdf=None,
+        errorMessage=None,
+        generatedById="user-1",
+        generatedAt=datetime(2026, 6, 30, 12, 0, 0),
+        completedAt=None,
+    )
+    prisma.projectreport.create.return_value = created
+    prisma.project.find_unique.return_value = MagicMock(id="proj-1")
+    set_prisma_client(prisma)
+
+    app = FastAPI()
+    app.include_router(reports_router)
+    client = TestClient(app)
+
+    resp = client.post(
+        "/api/v2/projects/proj-1/reports/massive",
+        params={"format": "EBOOK", "generatedById": "user-1"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["format"] == "EBOOK"
+    assert body["status"] == "PENDING"
+    assert body["projectId"] == "proj-1"
 
 
 if __name__ == "__main__":

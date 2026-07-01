@@ -1,8 +1,15 @@
 """
-IMPL-20260630-03: Endpoints FastAPI para reportes masivos por proyecto.
+IMPL-20260701-04: Endpoints FastAPI para reportes masivos por proyecto (Fase 4 EBOOK).
+IMPL-20260630-03: Endpoints originales.
 ARCH-20260623-01: Modulo de Reportes Masivos.
 
 Prefijo: /api/v2/projects/{project_id}/reports
+
+Formato aceptado en POST /massive:
+  - 'XLSX'   -> solo concentrado XLSX
+  - 'EBOOK'  -> solo PDF ebook navegable (TOC, bookmarks, estadisticas con
+                mini-graficas, secciones por trabajador con imagenes embebidas)
+  - 'BOTH'   -> XLSX + EBOOK en la misma corrida
 """
 from __future__ import annotations
 
@@ -60,7 +67,7 @@ def _serialize_report(report) -> dict:
 async def create_massive_report(
     project_id: str,
     background_tasks: BackgroundTasks,
-    format: str = Query(..., pattern="^(XLSX|PDF|BOTH)$"),
+    format: str = Query(..., pattern="^(XLSX|EBOOK|BOTH)$"),
     generatedById: str = Query(..., description="User ID que solicita el reporte"),
 ):
     """Crea un ProjectReport en PENDING y dispara generacion asincrona."""

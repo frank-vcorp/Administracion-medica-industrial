@@ -1,4 +1,5 @@
-// IMPL-20260630-03: Server Actions para ProjectReport (reportes masivos por proyecto).
+// IMPL-20260701-04: Server Actions para ProjectReport (Fase 4 EBOOK).
+// IMPL-20260630-03: Server Actions originales.
 // ARCH-20260623-01: Modulo de Reportes Masivos.
 
 'use server';
@@ -25,7 +26,11 @@ async function _requireUserId(): Promise<string | null> {
 }
 
 /**
- * POST /api/v2/projects/{projectId}/reports/massive?format=XLSX|PDF|BOTH&generatedById=...
+ * POST /api/v2/projects/{projectId}/reports/massive?format=XLSX|EBOOK|BOTH&generatedById=...
+ *
+ * IMPL-20260701-04: 'EBOOK' reemplaza 'PDF'. Backend ahora valida con
+ * pattern=^(XLSX|EBOOK|BOTH)$ y rechaza 'PDF' (aunque el orquestador
+ * mantiene fallback por retro-compatibilidad).
  */
 export async function createMassiveReportAction(
   projectId: string,

@@ -161,7 +161,7 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
                 Formato de salida
               </h3>
               <div className="flex flex-col gap-2">
-                {(['XLSX', 'PDF', 'BOTH'] as const).map((f) => (
+                {(['XLSX', 'EBOOK', 'BOTH'] as const).map((f) => (
                   <label
                     key={f}
                     className={`flex items-start gap-3 p-3 rounded border cursor-pointer ${
@@ -180,16 +180,25 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
                       data-testid={`format-${f}`}
                     />
                     <div>
-                      <div className="text-sm font-medium text-slate-900">{f}</div>
+                      <div className="text-sm font-medium text-slate-900">
+                        {f === 'EBOOK' ? 'EBOOK (PDF navegable)' : f}
+                      </div>
                       <div className="text-xs text-slate-500">
                         {f === 'XLSX' && '3 hojas: CONCENTRADO, LABORATORIOS, GRAFICAS'}
-                        {f === 'PDF' && 'Portada + concentrado tabular'}
-                        {f === 'BOTH' && 'XLSX + PDF en la misma corrida'}
+                        {f === 'EBOOK' &&
+                          'Documento unico con indice, bookmarks, estadisticas con mini-graficas y una seccion por trabajador con sus estudios e imagenes embebidas. Reemplaza la carpeta fisica.'}
+                        {f === 'BOTH' && 'Genera XLSX + EBOOK en la misma corrida'}
                       </div>
                     </div>
                   </label>
                 ))}
               </div>
+              {/* IMPL-20260701-04: nota de traduccion via browser built-in (SPEC seccion 3, decision 15). */}
+              <p className="text-xs italic text-slate-500 mt-2">
+                💡 Los EBOOKs estan en espanol. Si necesita traducirlo, abralo en
+                Chrome/Edge y use la funcion de traduccion del navegador
+                (click derecho &rarr; Traducir).
+              </p>
             </section>
           ) : null}
 
@@ -225,10 +234,10 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
                 {generation.pdfUrl && pollingReportId && (
                   <a
                     href={downloadUrl(projectId, pollingReportId, 'pdf')}
-                    download={`DIAGNOSTICO_${slug}.pdf`}
+                    download={`EBOOK_${slug}.pdf`}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm w-fit"
                   >
-                    Descargar PDF
+                    Descargar EBOOK (PDF)
                   </a>
                 )}
               </div>

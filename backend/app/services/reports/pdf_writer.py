@@ -5,6 +5,24 @@ ARCH-20260623-01: Modulo de Reportes Masivos.
 Usa reportlab para producir:
   - Pagina 1: Portada "Diagnostico Situacional"
   - Pagina 2+: Concentrado tabular (landscape A4)
+
+============================================================================
+⚠️  DEPRECATED  ⚠️
+============================================================================
+IMPL-20260701-04: Este modulo esta DEPRECADO desde la Fase 4 del modulo
+EBOOK PDF.
+
+Reemplazado por: app.services.reports.pdf_ebook_writer.generar_ebook
+                  (SPEC_ARCH-20260630-01-EBOOK-PDF.md)
+
+El orquestador (massive_report.py) ya NO llama a generar_pdf() para
+format='EBOOK' ni 'BOTH'. Se conserva intacto en este archivo para:
+  1) Rollback de emergencia (cambio de una linea en massive_report.py).
+  2) Referencia historica.
+  3) Tests legacy (test_pdf_writer_creates_portada_and_concentrado).
+
+NO MODIFICAR LA LOGICA. Su implementacion esta congelada.
+============================================================================
 """
 from __future__ import annotations
 

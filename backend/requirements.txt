@@ -19,5 +19,11 @@ pandas
 cryptography
 # IMPL-20260630-03: Generador PDF para reportes masivos (ARCH-20260623-01)
 reportlab>=4.0.0
+# IMPL-20260701-01: EBOOK PDF — merge de PDFs de estudios (Decisión 12 SPEC_ARCH-20260630-01)
+pypdf>=3.0.0
+# IMPL-20260701-01: EBOOK PDF — mini-gráficas en estadísticas (Decisión 4 SPEC_ARCH-20260630-01)
+matplotlib>=3.5.0
+# IMPL-20260701-01: EBOOK PDF — compresión de imágenes embebidas (Decisión 11 SPEC_ARCH-20260630-01)
+# Pillow ya estaba en línea 10; documentado aquí como dependencia canónica.
 pytest
 pytest-asyncio
