@@ -1,29 +1,44 @@
 /**
  * @file /api/lab/orders/[id]/confirm — DRAFT → SAVED.
  * @id IMPL-20260701-07 — Bypass FastAPI.
+ * IMPL-20260701-07 (hotfix): handler envuelto en `withApiErrors`.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { withApiErrors } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await getServerSession(authOptions);
-  const role = session?.user?.role;
-  const userId = session?.user?.id;
-  if (!session?.user || !userId || role !== "ADMIN") {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
-
-  const { id } = await params;
+async function _getAdminSession(): Promise<{ userId: string } | null> {
   try {
+    const session = await getServerSession(authOptions);
+    const role = session?.user?.role;
+    const userId = session?.user?.id;
+    if (!session?.user || !userId || role !== "ADMIN") return null;
+    return { userId };
+  } catch (err) {
+     
+    console.error("[confirm] session error:", err);
+    return null;
+  }
+}
+
+export const POST = withApiErrors(
+  "POST /api/lab/orders/[id]/confirm",
+  async (
+    _req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+  ) => {
+    const guard = await _getAdminSession();
+    if (!guard) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const { id } = await params;
     const existing = await prisma.labOrder.findUnique({
       where: { id },
       include: { _count: { select: { items: true } } },
@@ -50,10 +65,5 @@ export async function POST(
       include: { items: true },
     });
     return NextResponse.json({ order: updated });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Error desconocido" },
-      { status: 500 }
-    );
   }
-}
+);
