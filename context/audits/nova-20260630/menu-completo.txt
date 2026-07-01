@@ -1,0 +1,47 @@
+=== MENÚ COMPLETO NOVA ===
+recepcion                                                    | Recepción
+modificar_folio                                              | Modificar folio
+cortesias                                                    | Cortesías
+corte_caja                                                   | Corte de caja
+resultados                                                   | Resultados
+tesoreria                                                    | Tesorería
+facturacion                                                  | Facturación
+notificaciones                                               | Notificaciones
+catalogos/catalogo_empresas                                  | Empresas
+catalogos/catalogo_medicos                                   | Médicos
+catalogos/catalogo_pacientes                                 | Pacientes
+catalogo_pruebas?tipo=estudios                               | Estudios
+catalogo_pruebas?tipo=perfiles                               | Perfiles
+catalogo_pruebas?tipo=cultivos                               | Cultivos
+paquetes                                                     | Paquetes
+catalogo_pruebas?tipo=elementos                              | Elementos
+catalogos/catalogo_bacterias                                 | Bacterias
+catalogo_pruebas?tipo=antibiogramas                          | Antibiogramas
+catalogos/catalogo_servicios                                 | Servicios
+catalogos/catalogo_descuentos                                | Descuentos
+catalogos/catalogo_usuarios                                  | Usuarios
+catalogos/catalogo_firmas                                    | Firmas
+catalogos/catalogo_lugares_proceso                           | Lugares de proceso
+catalogos/catalogo_departamentos                             | Departamentos
+catalogos/catalogo_recipientes                               | Recipientes
+catalogos/catalogo_muestras                                  | Muestras
+catalogos/catalogo_metodologias                              | Metodologías
+catalogos/catalogo_indicaciones                              | Indicaciones
+catalogos/catalogo_valores_referencia                        | Valores de referencia
+catalogos/catalogo_unidades                                  | Unidades
+catalogos/catalogo_clasificaciones                           | Clasificaciones
+catalogos/catalogo_respuestas_rapidas                        | Respuestas rápidas
+catalogos/catalogo_tipos_cargos                              | Movs. de caja
+ordenes_canceladas                                           | Ordenes canceladas
+bitacora_resultados                                          | Bitacora de resultados
+trazabilidad                                                 | Trazabilidad
+reportes/requisitos                                          | Requisitos ordenes
+reimpresion_etiquetas                                        | Etiquetas
+reimpresion_cotizaciones                                     | Cotizaciones
+reimpresion_recibos                                          | Recibos
+reimpresion_resultados                                       | Resultados
+ajustes                                                      | Ajustes
+precios_pruebas                                              | Lista de precios
+formulas                                                     | Fórmulas
+respuestas_predefinidas                                      | Respuestas predefinidas
+logout                                                       | Cerrar sesión

@@ -155,6 +155,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <NavItem href="/branches" icon="🏥" label="Sucursales AMI" collapsed={isEventWorkspace} />
               <NavItem href="/admin/users" icon="👨‍⚕️" label="Personal AMI" collapsed={isEventWorkspace} />
               <NavItem href="/admin/services" icon="🧪" label="Catálogo de Pruebas" collapsed={isEventWorkspace} />
+              {/* IMPL-20260630-06: Slice A NOVA absorción — módulo LIS (catálogos demo) */}
+              <NavItem href="/admin/lab/catalogs?mod=unidades" icon="🧬" label="Módulo de Laboratorios" collapsed={isEventWorkspace} />
               <NavItem href="/admin/profiles" icon="🩻" label="Perfiles Médicos" collapsed={isEventWorkspace} />
               <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" collapsed={isEventWorkspace} />
             </>
