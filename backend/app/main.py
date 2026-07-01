@@ -1330,3 +1330,21 @@ def resolve_file(key: str):
     raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {key}")
 
 
+# ========================================
+# IMPL-20260630-03: ENDPOINTS REPORTES MASIVOS POR PROYECTO (ARCH-20260623-01)
+# ========================================
+try:
+    from app.api.reports import router as reports_router, set_prisma_client as _set_reports_prisma
+
+    # Inyectar Prisma client si esta disponible (entorno real con Prisma corriendo).
+    try:
+        from app.services.prisma_client import get_prisma_client as _get_prisma
+        _set_reports_prisma(_get_prisma())
+    except Exception as _prisma_inject_err:
+        print(f"[reports] Prisma no inyectado (modo testing o sin DB): {_sanitize_error(str(_prisma_inject_err))}")
+
+    app.include_router(reports_router)
+except Exception as _reports_import_err:
+    print(f"⚠️ No se pudo registrar router de reports: {_sanitize_error(str(_reports_import_err))}")
+
+

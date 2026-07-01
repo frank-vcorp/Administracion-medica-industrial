@@ -17,4 +17,7 @@ pyhanko
 openpyxl
 pandas
 cryptography
+# IMPL-20260630-03: Generador PDF para reportes masivos (ARCH-20260623-01)
+reportlab>=4.0.0
 pytest
+pytest-asyncio
