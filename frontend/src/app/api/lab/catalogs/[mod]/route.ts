@@ -17,6 +17,10 @@
  *
  * IMPORTANTE: usa `lib/prisma.ts` (cliente Prisma JS ya configurado para
  * User, Worker, Company, etc.). NUNCA importar nada del backend FastAPI.
+ *
+ * IMPL-20260701-07 (hotfix): cada handler se envuelve en `withApiErrors`
+ * para garantizar que cualquier excepción (auth, Prisma, params) retorne
+ * JSON con `{ error, message }` en vez del HTML 500 de Next.js.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -25,6 +29,7 @@ import { z } from "zod";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { withApiErrors } from "@/lib/api-handler";
 import {
   LAB_CATALOG_MODS,
   LAB_SCHEMA_BY_MOD,
@@ -54,14 +59,22 @@ export const dynamic = "force-dynamic";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Gate de auth: solo ADMIN puede tocar catálogos. */
+/** Gate de auth: solo ADMIN puede tocar catálogos. Envuelto en try/catch
+ *  para que un fallo de NextAuth (ej. NEXTAUTH_SECRET faltante) NO
+ *  derrote al handler completo con HTML 500. */
 async function _requireAdmin(): Promise<{ userId: string } | null> {
-  const session = await getServerSession(authOptions);
-  const role = session?.user?.role;
-  const id = session?.user?.id;
-  if (!session?.user || !id) return null;
-  if (role !== "ADMIN") return null;
-  return { userId: id };
+  try {
+    const session = await getServerSession(authOptions);
+    const role = session?.user?.role;
+    const id = session?.user?.id;
+    if (!session?.user || !id) return null;
+    if (role !== "ADMIN") return null;
+    return { userId: id };
+  } catch (err) {
+     
+    console.error("[_requireAdmin] session error:", err);
+    return null;
+  }
 }
 
 function _pickModel(mod: LabCatalogMod): string {
@@ -69,6 +82,7 @@ function _pickModel(mod: LabCatalogMod): string {
 }
 
 /** Acceso dinámico al modelo Prisma (TS no lo expone). */
+ 
 function _modelFor(modelName: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (prisma as any)[modelName];
@@ -77,55 +91,56 @@ function _modelFor(modelName: string) {
 // ---------------------------------------------------------------------------
 // GET — list paginado server-side (DataTables-compatible)
 // ---------------------------------------------------------------------------
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ mod: string }> }
-) {
-  const guard = await _requireAdmin();
-  if (!guard) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
+export const GET = withApiErrors(
+  "GET /api/lab/catalogs/[mod]",
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ mod: string }> }
+  ) => {
+    const guard = await _requireAdmin();
+    if (!guard) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
 
-  const { mod: rawMod } = await params;
-  if (!isValidLabMod(rawMod)) {
-    return NextResponse.json(
-      {
-        error: `mod inválido: ${rawMod}. Permitidos: ${LAB_CATALOG_MODS.join(", ")}`,
-      },
-      { status: 400 }
+    const { mod: rawMod } = await params;
+    if (!isValidLabMod(rawMod)) {
+      return NextResponse.json(
+        {
+          error: `mod inválido: ${rawMod}. Permitidos: ${LAB_CATALOG_MODS.join(", ")}`,
+        },
+        { status: 400 }
+      );
+    }
+    const mod = rawMod as LabCatalogMod;
+
+    const url = new URL(req.url);
+    const draw = parseInt(url.searchParams.get("draw") || "1", 10);
+    const start = parseInt(url.searchParams.get("start") || "0", 10);
+    const length = parseInt(url.searchParams.get("length") || "25", 10);
+    const searchValue =
+      url.searchParams.get("search[value]") ||
+      url.searchParams.get("search") ||
+      "";
+    const orderCol = parseInt(
+      url.searchParams.get("order[0][column]") || "0",
+      10
     );
-  }
-  const mod = rawMod as LabCatalogMod;
+    const orderDir =
+      (url.searchParams.get("order[0][dir]") || "asc").toLowerCase() === "desc"
+        ? "desc"
+        : "asc";
+    const onlyActive =
+      (url.searchParams.get("onlyActive") || "false").toLowerCase() === "true";
 
-  const url = new URL(req.url);
-  const draw = parseInt(url.searchParams.get("draw") || "1", 10);
-  const start = parseInt(url.searchParams.get("start") || "0", 10);
-  const length = parseInt(url.searchParams.get("length") || "25", 10);
-  const searchValue =
-    url.searchParams.get("search[value]") ||
-    url.searchParams.get("search") ||
-    "";
-  const orderCol = parseInt(
-    url.searchParams.get("order[0][column]") || "0",
-    10
-  );
-  const orderDir =
-    (url.searchParams.get("order[0][dir]") || "asc").toLowerCase() === "desc"
-      ? "desc"
-      : "asc";
-  const onlyActive =
-    (url.searchParams.get("onlyActive") || "false").toLowerCase() === "true";
+    const modelName = _pickModel(mod);
+    const model = _modelFor(modelName);
+    if (!model) {
+      return NextResponse.json(
+        { error: `Modelo ${modelName} no disponible` },
+        { status: 500 }
+      );
+    }
 
-  const modelName = _pickModel(mod);
-  const model = _modelFor(modelName);
-  if (!model) {
-    return NextResponse.json(
-      { error: `Modelo ${modelName} no disponible` },
-      { status: 500 }
-    );
-  }
-
-  try {
     // Search + onlyActive where clause
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = {};
@@ -161,67 +176,61 @@ export async function GET(
       recordsFiltered,
       data: data as unknown[],
     });
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error: err instanceof Error ? err.message : "Error desconocido",
-      },
-      { status: 500 }
-    );
   }
-}
+);
 
 // ---------------------------------------------------------------------------
 // POST — create
 // ---------------------------------------------------------------------------
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ mod: string }> }
-) {
-  const guard = await _requireAdmin();
-  if (!guard) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
+export const POST = withApiErrors(
+  "POST /api/lab/catalogs/[mod]",
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ mod: string }> }
+  ) => {
+    const guard = await _requireAdmin();
+    if (!guard) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
 
-  const { mod: rawMod } = await params;
-  if (!isValidLabMod(rawMod)) {
-    return NextResponse.json(
-      { error: `mod inválido: ${rawMod}` },
-      { status: 400 }
-    );
-  }
-  const mod = rawMod as LabCatalogMod;
+    const { mod: rawMod } = await params;
+    if (!isValidLabMod(rawMod)) {
+      return NextResponse.json(
+        { error: `mod inválido: ${rawMod}` },
+        { status: 400 }
+      );
+    }
+    const mod = rawMod as LabCatalogMod;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+    }
 
-  const schema: z.ZodTypeAny = LAB_SCHEMA_BY_MOD[mod];
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      {
-        error: "VALIDATION",
-        details: parsed.error.format(),
-      },
-      { status: 400 }
-    );
-  }
+    const schema: z.ZodTypeAny = LAB_SCHEMA_BY_MOD[mod];
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "VALIDATION",
+          details: parsed.error.format(),
+        },
+        { status: 400 }
+      );
+    }
 
-  const modelName = _pickModel(mod);
-  const model = _modelFor(modelName);
-  if (!model) {
-    return NextResponse.json(
-      { error: `Modelo ${modelName} no disponible` },
-      { status: 500 }
-    );
-  }
+    const modelName = _pickModel(mod);
+    const model = _modelFor(modelName);
+    if (!model) {
+      return NextResponse.json(
+        { error: `Modelo ${modelName} no disponible` },
+        { status: 500 }
+      );
+    }
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const created = await model.create({
       data: {
         ...(parsed.data as Record<string, unknown>),
@@ -232,150 +241,132 @@ export async function POST(
       { id: (created as { id: string }).id, item: created },
       { status: 201 }
     );
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error: err instanceof Error ? err.message : "Error desconocido",
-      },
-      { status: 500 }
-    );
   }
-}
+);
 
 // ---------------------------------------------------------------------------
 // PATCH — update por id (en body: { id, ...values })
 // ---------------------------------------------------------------------------
 const patchBodySchema = z.object({ id: z.string().min(1) }).passthrough();
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ mod: string }> }
-) {
-  const guard = await _requireAdmin();
-  if (!guard) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
+export const PATCH = withApiErrors(
+  "PATCH /api/lab/catalogs/[mod]",
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ mod: string }> }
+  ) => {
+    const guard = await _requireAdmin();
+    if (!guard) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
 
-  const { mod: rawMod } = await params;
-  if (!isValidLabMod(rawMod)) {
-    return NextResponse.json(
-      { error: `mod inválido: ${rawMod}` },
-      { status: 400 }
-    );
-  }
-  const mod = rawMod as LabCatalogMod;
+    const { mod: rawMod } = await params;
+    if (!isValidLabMod(rawMod)) {
+      return NextResponse.json(
+        { error: `mod inválido: ${rawMod}` },
+        { status: 400 }
+      );
+    }
+    const mod = rawMod as LabCatalogMod;
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await req.json()) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+    let body: Record<string, unknown>;
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+    }
 
-  const id = body.id as string | undefined;
-  if (!id) {
-    return NextResponse.json({ error: "id obligatorio" }, { status: 400 });
-  }
+    const id = body.id as string | undefined;
+    if (!id) {
+      return NextResponse.json({ error: "id obligatorio" }, { status: 400 });
+    }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _idParsed = patchBodySchema.safeParse(body);
-  if (!_idParsed.success) {
-    return NextResponse.json({ error: "id obligatorio" }, { status: 400 });
-  }
+     
+    const _idParsed = patchBodySchema.safeParse(body);
+    if (!_idParsed.success) {
+      return NextResponse.json({ error: "id obligatorio" }, { status: 400 });
+    }
 
-  const schema: z.ZodTypeAny = LAB_SCHEMA_BY_MOD[mod];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const partialSchema =
-    typeof (schema as any).partial === "function"
-      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (schema as any).partial()
-      : schema;
-  const parsed = partialSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "VALIDATION", details: parsed.error.format() },
-      { status: 400 }
-    );
-  }
+    const schema: z.ZodTypeAny = LAB_SCHEMA_BY_MOD[mod];
+    const partialSchema =
+      typeof (schema as unknown as { partial?: () => z.ZodTypeAny }).partial ===
+      "function"
+        ? (
+            schema as unknown as { partial: () => z.ZodTypeAny }
+          ).partial()
+        : schema;
+    const parsed = partialSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "VALIDATION", details: parsed.error.format() },
+        { status: 400 }
+      );
+    }
 
-  const modelName = _pickModel(mod);
-  const model = _modelFor(modelName);
-  if (!model) {
-    return NextResponse.json(
-      { error: `Modelo ${modelName} no disponible` },
-      { status: 500 }
-    );
-  }
+    const modelName = _pickModel(mod);
+    const model = _modelFor(modelName);
+    if (!model) {
+      return NextResponse.json(
+        { error: `Modelo ${modelName} no disponible` },
+        { status: 500 }
+      );
+    }
 
-  try {
     const updated = await model.update({
       where: { id },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: parsed.data as any,
     });
     return NextResponse.json({ item: updated });
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error: err instanceof Error ? err.message : "Error desconocido",
-      },
-      { status: 500 }
-    );
   }
-}
+);
 
 // ---------------------------------------------------------------------------
 // DELETE — soft delete (active=false) por id en body
 // ---------------------------------------------------------------------------
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ mod: string }> }
-) {
-  const guard = await _requireAdmin();
-  if (!guard) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
+export const DELETE = withApiErrors(
+  "DELETE /api/lab/catalogs/[mod]",
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ mod: string }> }
+  ) => {
+    const guard = await _requireAdmin();
+    if (!guard) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
 
-  const { mod: rawMod } = await params;
-  if (!isValidLabMod(rawMod)) {
-    return NextResponse.json(
-      { error: `mod inválido: ${rawMod}` },
-      { status: 400 }
-    );
-  }
-  const mod = rawMod as LabCatalogMod;
+    const { mod: rawMod } = await params;
+    if (!isValidLabMod(rawMod)) {
+      return NextResponse.json(
+        { error: `mod inválido: ${rawMod}` },
+        { status: 400 }
+      );
+    }
+    const mod = rawMod as LabCatalogMod;
 
-  let body: { id?: string };
-  try {
-    body = (await req.json()) as { id?: string };
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
-  if (!body.id) {
-    return NextResponse.json({ error: "id obligatorio" }, { status: 400 });
-  }
+    let body: { id?: string };
+    try {
+      body = (await req.json()) as { id?: string };
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+    }
+    if (!body.id) {
+      return NextResponse.json({ error: "id obligatorio" }, { status: 400 });
+    }
 
-  const modelName = _pickModel(mod);
-  const model = _modelFor(modelName);
-  if (!model) {
-    return NextResponse.json(
-      { error: `Modelo ${modelName} no disponible` },
-      { status: 500 }
-    );
-  }
+    const modelName = _pickModel(mod);
+    const model = _modelFor(modelName);
+    if (!model) {
+      return NextResponse.json(
+        { error: `Modelo ${modelName} no disponible` },
+        { status: 500 }
+      );
+    }
 
-  try {
     const updated = await model.update({
       where: { id: body.id },
       data: { active: false },
     });
     return NextResponse.json({ item: updated });
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error: err instanceof Error ? err.message : "Error desconocido",
-      },
-      { status: 500 }
-    );
   }
-}
+);

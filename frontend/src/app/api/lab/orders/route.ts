@@ -8,12 +8,16 @@
  * nombres camelCase EXACTOS del schema.prisma).
  *
  * Auth: ADMIN o LAB_RECEPTIONIST (gate igual que lab-order.actions.ts).
+ *
+ * IMPL-20260701-07 (hotfix): handlers envueltos en `withApiErrors` para
+ * garantizar JSON en errores (auth, Prisma, etc.) en vez de HTML 500.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { withApiErrors } from "@/lib/api-handler";
 import {
   createLabOrderSchema,
 } from "@/lib/validations/lab-order";
@@ -23,57 +27,64 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function _requireReception(): Promise<{ userId: string } | null> {
-  const session = await getServerSession(authOptions);
-  const role = session?.user?.role;
-  const userId = session?.user?.id;
-  if (!session?.user || !userId) return null;
-  // ADM-20260701-01: solo ADMIN (LAB_RECEPTIONIST pendiente de incorporarse).
-  if (role !== "ADMIN") return null;
-  return { userId };
+  try {
+    const session = await getServerSession(authOptions);
+    const role = session?.user?.role;
+    const userId = session?.user?.id;
+    if (!session?.user || !userId) return null;
+    // ADM-20260701-01: solo ADMIN (LAB_RECEPTIONIST pendiente de incorporarse).
+    if (role !== "ADMIN") return null;
+    return { userId };
+  } catch (err) {
+     
+    console.error("[_requireReception] session error:", err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // GET — list paginado
 // ---------------------------------------------------------------------------
-export async function GET(req: NextRequest) {
-  const guard = await _requireReception();
-  if (!guard) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
-
-  const url = new URL(req.url);
-  const draw = parseInt(url.searchParams.get("draw") || "1", 10);
-  const start = parseInt(url.searchParams.get("start") || "0", 10);
-  const length = parseInt(url.searchParams.get("length") || "25", 10);
-  const searchValue =
-    url.searchParams.get("search[value]") ||
-    url.searchParams.get("search") ||
-    "";
-  const status = url.searchParams.get("status") || "";
-  const dateFrom = url.searchParams.get("dateFrom") || "";
-  const dateTo = url.searchParams.get("dateTo") || "";
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {};
-  if (status) where.status = status;
-  if (dateFrom || dateTo) {
-    where.createdAt = {};
-    if (dateFrom) where.createdAt.gte = new Date(dateFrom);
-    if (dateTo) {
-      const end = new Date(dateTo);
-      end.setHours(23, 59, 59, 999);
-      where.createdAt.lte = end;
+export const GET = withApiErrors(
+  "GET /api/lab/orders",
+  async (req: NextRequest) => {
+    const guard = await _requireReception();
+    if (!guard) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
-  }
-  if (searchValue.trim()) {
-    where.OR = [
-      { folio: { equals: isNaN(Number(searchValue)) ? -1 : Number(searchValue) } },
-      { doctorName: { contains: searchValue, mode: "insensitive" } },
-      { novaFolio: { contains: searchValue, mode: "insensitive" } },
-    ];
-  }
 
-  try {
+    const url = new URL(req.url);
+    const draw = parseInt(url.searchParams.get("draw") || "1", 10);
+    const start = parseInt(url.searchParams.get("start") || "0", 10);
+    const length = parseInt(url.searchParams.get("length") || "25", 10);
+    const searchValue =
+      url.searchParams.get("search[value]") ||
+      url.searchParams.get("search") ||
+      "";
+    const status = url.searchParams.get("status") || "";
+    const dateFrom = url.searchParams.get("dateFrom") || "";
+    const dateTo = url.searchParams.get("dateTo") || "";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = {};
+    if (status) where.status = status;
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+    if (searchValue.trim()) {
+      where.OR = [
+        { folio: { equals: isNaN(Number(searchValue)) ? -1 : Number(searchValue) } },
+        { doctorName: { contains: searchValue, mode: "insensitive" } },
+        { novaFolio: { contains: searchValue, mode: "insensitive" } },
+      ];
+    }
+
     const [recordsTotal, recordsFiltered, data] = await Promise.all([
       prisma.labOrder.count(),
       prisma.labOrder.count({ where }),
@@ -95,42 +106,38 @@ export async function GET(req: NextRequest) {
       recordsFiltered,
       data,
     });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Error desconocido" },
-      { status: 500 }
-    );
   }
-}
+);
 
 // ---------------------------------------------------------------------------
 // POST — create (DRAFT)
 // ---------------------------------------------------------------------------
-export async function POST(req: NextRequest) {
-  const guard = await _requireReception();
-  if (!guard) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
+export const POST = withApiErrors(
+  "POST /api/lab/orders",
+  async (req: NextRequest) => {
+    const guard = await _requireReception();
+    if (!guard) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+    }
 
-  const parsed = createLabOrderSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      {
-        error: "VALIDATION",
-        details: parsed.error.format(),
-      },
-      { status: 400 }
-    );
-  }
+    const parsed = createLabOrderSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "VALIDATION",
+          details: parsed.error.format(),
+        },
+        { status: 400 }
+      );
+    }
 
-  try {
     // Calcular folio: max(folio) + 1 (atómico a nivel de transacción).
     const last = await prisma.labOrder.findFirst({
       orderBy: { folio: "desc" },
@@ -207,10 +214,5 @@ export async function POST(req: NextRequest) {
       { id: created.id, order: created },
       { status: 201 }
     );
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Error desconocido" },
-      { status: 500 }
-    );
   }
-}
+);

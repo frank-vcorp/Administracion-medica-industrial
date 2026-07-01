@@ -1,52 +1,61 @@
 /**
  * @file /api/lab/orders/[id]/items — POST add item.
  * @id IMPL-20260701-07 — Bypass FastAPI.
+ * IMPL-20260701-07 (hotfix): handler envuelto en `withApiErrors`.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { withApiErrors } from "@/lib/api-handler";
 import { labOrderItemInputSchema } from "@/lib/validations/lab-order";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function _requireReception(): Promise<{ userId: string } | null> {
-  const session = await getServerSession(authOptions);
-  const role = session?.user?.role;
-  const userId = session?.user?.id;
-  if (!session?.user || !userId) return null;
-  if (role !== "ADMIN") return null;
-  return { userId };
+  try {
+    const session = await getServerSession(authOptions);
+    const role = session?.user?.role;
+    const userId = session?.user?.id;
+    if (!session?.user || !userId) return null;
+    if (role !== "ADMIN") return null;
+    return { userId };
+  } catch (err) {
+     
+    console.error("[items POST] session error:", err);
+    return null;
+  }
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const guard = await _requireReception();
-  if (!guard) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
-  const { id: orderId } = await params;
+export const POST = withApiErrors(
+  "POST /api/lab/orders/[id]/items",
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+  ) => {
+    const guard = await _requireReception();
+    if (!guard) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    const { id: orderId } = await params;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+    }
 
-  const parsed = labOrderItemInputSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "VALIDATION", details: parsed.error.format() },
-      { status: 400 }
-    );
-  }
+    const parsed = labOrderItemInputSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "VALIDATION", details: parsed.error.format() },
+        { status: 400 }
+      );
+    }
 
-  try {
     const order = await prisma.labOrder.findUnique({ where: { id: orderId } });
     if (!order) {
       return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -81,10 +90,5 @@ export async function POST(
       },
     });
     return NextResponse.json({ item }, { status: 201 });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Error desconocido" },
-      { status: 500 }
-    );
   }
-}
+);

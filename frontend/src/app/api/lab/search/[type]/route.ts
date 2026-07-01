@@ -7,12 +7,15 @@
  *   - doctors   → User[] con labRole != null (médicos NOVA) por fullName
  *   - companies → Company[] por name/rfc
  *   - tests     → MedicalTest[] por code/name
+ *
+ * IMPL-20260701-07 (hotfix): handler envuelto en `withApiErrors`.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { withApiErrors } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,27 +26,35 @@ function isValidType(t: string): t is SearchType {
   return ["workers", "doctors", "companies", "tests"].includes(t);
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ type: string }> }
-) {
-  const session = await getServerSession(authOptions);
-  const role = session?.user?.role;
-  const userId = session?.user?.id;
-  if (!session?.user || !userId || role !== "ADMIN") {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  }
+export const GET = withApiErrors(
+  "GET /api/lab/search/[type]",
+  async (
+    req: NextRequest,
+    { params }: { params: Promise<{ type: string }> }
+  ) => {
+    let session;
+    try {
+      session = await getServerSession(authOptions);
+    } catch (err) {
+       
+      console.error("[search] session error:", err);
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    const role = session?.user?.role;
+    const userId = session?.user?.id;
+    if (!session?.user || !userId || role !== "ADMIN") {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
 
-  const { type: rawType } = await params;
-  if (!isValidType(rawType)) {
-    return NextResponse.json({ type: "tipo inválido" }, { status: 400 });
-  }
-  const type = rawType as SearchType;
+    const { type: rawType } = await params;
+    if (!isValidType(rawType)) {
+      return NextResponse.json({ type: "tipo inválido" }, { status: 400 });
+    }
+    const type = rawType as SearchType;
 
-  const url = new URL(req.url);
-  const q = (url.searchParams.get("q") || "").trim();
+    const url = new URL(req.url);
+    const q = (url.searchParams.get("q") || "").trim();
 
-  try {
     if (type === "workers") {
       const where = q
         ? {
@@ -164,10 +175,5 @@ export async function GET(
         };
       })
     );
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Error desconocido" },
-      { status: 500 }
-    );
   }
-}
+);
