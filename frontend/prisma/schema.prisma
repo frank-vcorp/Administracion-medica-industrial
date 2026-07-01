@@ -55,6 +55,9 @@ model User {
   createdLabDepartments     LabDepartment[]           @relation("LabDepartmentCreator")
   createdLabClassifications LabClassification[]       @relation("LabClassificationCreator")
   createdLabIndications     LabIndication[]           @relation("LabIndicationCreator")
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  createdLabOrders          LabOrder[]                @relation("LabOrderCreator")
+  cancelledLabOrders        LabOrder[]                @relation("LabOrderCanceller")
 
   @@map("users")
 }
@@ -138,6 +141,8 @@ model Company {
   // IMPL-20260630-06: Slice A NOVA absorción (ARCH-20260630-02) — mapeo a convenio NOVA
   novaConvenioId          String?
   discountPolicyId        String?
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  labOrders               LabOrder[]
 
   @@map("companies")
 }
@@ -169,6 +174,8 @@ model Worker {
   lastIdentityVerifiedAt   DateTime?
   // IMPL-20260519-14: Participación en proyectos de visita médica (ARCH-20260519-12)
   projectWorkers           ProjectWorker[]
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  labOrders                LabOrder[]
 
   @@map("workers")
 }
@@ -243,6 +250,8 @@ model MedicalTest {
   daysToResult     Int?
   isProfile        Boolean           @default(false)
   isPackage        Boolean           @default(false)
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  labOrderItems    LabOrderItem[]
 
   @@map("medical_tests")
 }
@@ -324,6 +333,8 @@ model MedicalEvent {
   projectWorker         ProjectWorker?
   // IMPL-20260630-01: Pagos y recibos asociados al evento médico (ARCH-20260630-01)
   paymentRecords        PaymentRecord[]
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  labOrders             LabOrder[]
 
   @@map("medical_events")
 }
@@ -1093,16 +1104,18 @@ model LabDepartment {
 
 /// Clasificación de resultado (Normal, Patrón A, Patrón B, Crítico, etc.).
 model LabClassification {
-  id          String   @id @default(cuid())
-  code        String   @unique
+  id          String     @id @default(cuid())
+  code        String     @unique
   name        String
   color       String? // Hex (#RRGGBB)
-  sortOrder   Int      @default(0)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  sortOrder   Int        @default(0)
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
   createdById String?
-  createdBy   User?    @relation("LabClassificationCreator", fields: [createdById], references: [id])
+  createdBy   User?      @relation("LabClassificationCreator", fields: [createdById], references: [id])
+  // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
+  orders      LabOrder[]
 
   @@index([code])
   @@map("lab_classifications")
@@ -1134,4 +1147,136 @@ model LabSignature {
   updatedAt DateTime @updatedAt
 
   @@map("lab_signatures")
+}
+
+// ===========================================================================
+// IMPL-20260701-03: Slice B NOVA absorción (ARCH-20260701-03)
+// Ref: context/SPECs/SPEC_IMPL-20260701-SLICE-B-RECEPCION.md
+//
+// Entidades operativas: LabOrder (admisión) y LabOrderItem (estudios agregados).
+// Capturan el flujo end-to-end de admisión de laboratorio con descuentos por
+// línea, totales live (subtotal/iva/total) y ciclo de vida DRAFT→SAVED.
+// ===========================================================================
+
+/// Estado del ciclo de vida de una LabOrder.
+enum LabOrderStatus {
+  DRAFT // En captura, no se ha confirmado
+  SAVED // Guardado, muestra pendiente
+  SAMPLE_TAKEN // Muestra tomada en laboratorio
+  IN_PROCESS // En proceso
+  COMPLETED // Resultados completos
+  CANCELLED // Cancelada
+}
+
+/// Urgencia clínica de la orden.
+enum LabOrderUrgency {
+  NORMAL
+  URGENT
+}
+
+/// Nivel de confidencialidad del resultado (default NORMAL).
+enum LabOrderConfidentiality {
+  NORMAL
+  CONFIDENTIAL
+}
+
+/// Orden de admisión de laboratorio. Replica el flujo NOVA Recepción.
+model LabOrder {
+  id        String  @id @default(cuid())
+  folio     Int     @unique // auto-increment, único por sucursal
+  novaFolio String? @unique // mapeo NOVA
+  branch    String  @default("MATRIZ")
+
+  // Relaciones humanas (obligatoria worker; resto opcional)
+  workerId         String
+  worker           Worker             @relation(fields: [workerId], references: [id], onDelete: Restrict)
+  medicalEventId   String?
+  medicalEvent     MedicalEvent?      @relation(fields: [medicalEventId], references: [id], onDelete: SetNull)
+  companyId        String?
+  company          Company?           @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  classificationId String?
+  classification   LabClassification? @relation(fields: [classificationId], references: [id], onDelete: SetNull)
+
+  // Médico (texto libre para soportar médicos externos NO mapeados a User)
+  doctorName  String
+  doctorClave String?
+
+  // Descuentos globales (a nivel orden)
+  patientDiscountPct  Float @default(0)
+  doctorDiscountPct   Float @default(0)
+  doctorCommissionPct Float @default(0)
+  companyDiscountPct  Float @default(0)
+
+  // Flags
+  urgency            LabOrderUrgency         @default(NORMAL)
+  confidentiality    LabOrderConfidentiality @default(NORMAL)
+  homeSample         Boolean                 @default(false)
+  sendResultsByEmail Boolean                 @default(false)
+  generateInvoice    Boolean                 @default(false)
+  language           String                  @default("es") // "es" | "en"
+
+  // Entrega
+  deliveryDate DateTime?
+  deliveryTime String? // formato HH:mm
+
+  // Estado
+  status       LabOrderStatus @default(DRAFT)
+  isCourtesy   Boolean        @default(false) // cortesía (cargo 0)
+  courtesyType String? // motivo de cortesía
+
+  // Totales
+  subtotal Float @default(0)
+  ivaPct   Float @default(16)
+  iva      Float @default(0)
+  total    Float @default(0)
+
+  // Notas
+  observations String? @db.Text
+
+  // Auditoría
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdById   String
+  createdBy     User      @relation("LabOrderCreator", fields: [createdById], references: [id])
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelledBy   User?     @relation("LabOrderCanceller", fields: [cancelledById], references: [id])
+  confirmedAt   DateTime?
+
+  items LabOrderItem[]
+
+  @@index([workerId])
+  @@index([medicalEventId])
+  @@index([companyId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([folio])
+  @@map("lab_orders")
+}
+
+/// Item de una LabOrder: un estudio del catálogo con descuentos aplicados.
+model LabOrderItem {
+  id            String      @id @default(cuid())
+  labOrderId    String
+  labOrder      LabOrder    @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  medicalTestId String
+  medicalTest   MedicalTest @relation(fields: [medicalTestId], references: [id], onDelete: Restrict)
+
+  // Snapshot del precio y configuración al momento de captura
+  price          Float @default(0) // precio base del MedicalTest al momento
+  discountAmount Float @default(0) // descuento monetario $
+  discountPct    Float @default(0) // descuento porcentaje %
+  amount         Float @default(0) // monto final: price - discountAmount - (price * discountPct/100)
+
+  // Estado del item (ciclo de vida del resultado)
+  resultStatus String @default("P") // P=pendiente, R=reportado, A=autorizado, V=validado, X=invalidado
+
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([labOrderId])
+  @@index([medicalTestId])
+  @@index([resultStatus])
+  @@map("lab_order_items")
 }
