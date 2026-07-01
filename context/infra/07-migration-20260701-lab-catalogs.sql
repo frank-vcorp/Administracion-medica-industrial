@@ -1,14 +1,45 @@
 -- =====================================================================
 -- IMPL-20260630-06 — Migración consolidada Slice A NOVA Catálogos LIS
+-- v2: con deduplicación previa de _prisma_migrations
 -- Aplicable via Railway Query Editor o psql.
--- Idempotente: corre múltiples veces sin romper.
+-- Idempotente.
 -- =====================================================================
 
 -- =====================================================================
+-- PARTE 0: Deduplicar _prisma_migrations (resuelve error
+-- "could not create unique index _prisma_migrations_migration_name_key")
+-- Para cada migration_name duplicado, conservar UNA fila:
+--   - Prioridad: finalizada (finished_at IS NOT NULL Y rolled_back_at IS NULL)
+--   - Si no: la más reciente
+-- =====================================================================
+
+-- Ver duplicados antes de limpiar
+SELECT migration_name, COUNT(*) AS duplicados
+FROM _prisma_migrations
+GROUP BY migration_name
+HAVING COUNT(*) > 1
+ORDER BY migration_name;
+
+-- Eliminar duplicados conservando el finalizado más reciente, o el más reciente si no hay finalizados
+DELETE FROM _prisma_migrations
+WHERE id IN (
+  SELECT id FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (
+             PARTITION BY migration_name
+             ORDER BY
+               CASE WHEN finished_at IS NOT NULL AND rolled_back_at IS NULL THEN 0 ELSE 1 END,
+               COALESCE(finished_at, started_at, NOW()) DESC
+           ) AS rn
+    FROM _prisma_migrations
+  ) t
+  WHERE rn > 1
+);
+
+-- =====================================================================
 -- PARTE 1: Resolver migración parcial pre-existente
--- La migración 20260527121500_add_intake_trace_to_medical_event quedó
--- registrada como "pendiente" pero su SQL ya está aplicado en la DB
--- (el enum IntakeSource ya existe). Marcamos como finalizada.
+-- 20260527121500_add_intake_trace_to_medical_event quedó como pendiente
+-- pero su SQL ya está aplicado (el enum IntakeSource ya existe).
 -- =====================================================================
 
 UPDATE _prisma_migrations
@@ -18,13 +49,9 @@ WHERE migration_name = '20260527121500_add_intake_trace_to_medical_event'
   AND finished_at IS NULL;
 
 -- =====================================================================
--- PARTE 2: Sincronizar migraciones que ya están aplicadas en DB pero
--- no registradas (patrón PROYECTO.md 2026-06-24 ARCH-20260624-03).
--- Cada INSERT es idempotente: si la fila ya existe, se ignora.
+-- PARTE 2: Crear UNIQUE constraint sobre migration_name (idempotente)
 -- =====================================================================
 
--- Asegurar que existe constraint UNIQUE sobre migration_name
--- (necesario para ON CONFLICT; falla silenciosamente si ya existe)
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -36,7 +63,11 @@ BEGIN
   END IF;
 END $$;
 
--- Sincronizar las 6 migraciones faltantes (orden cronológico)
+-- =====================================================================
+-- PARTE 3: Sincronizar las 6 migraciones que están aplicadas en DB
+-- pero no registradas (patrón PROYECTO.md 2026-06-24 ARCH-20260624-03).
+-- =====================================================================
+
 INSERT INTO _prisma_migrations (id, migration_name, finished_at, applied_steps_count)
 VALUES
   (gen_random_uuid()::text, '20260527133500_project_worker_reception_queue', NOW(), 1),
@@ -48,21 +79,15 @@ VALUES
 ON CONFLICT (migration_name) DO NOTHING;
 
 -- =====================================================================
--- PARTE 3: Aplicar migración Slice A (20260701000000_add_lab_catalogs)
--- Crea 9 tablas LIS, 2 enums, y 8 columnas extendidas.
--- Cada CREATE es seguro: falla si ya existe, pero como Prisma las
--- registra nuevas, no habrá conflicto en un ambiente limpio.
--- Si por algún motivo se ejecuta dos veces, las CREATE fallarán con
--- "already exists" — eso es esperado y no rompe nada.
+-- PARTE 4: Aplicar migración Slice A (20260701000000_add_lab_catalogs)
+-- Crea 9 tablas LIS, 2 enums, 8 columnas extendidas, FKs e índices.
 -- =====================================================================
 
 -- CreateEnum
 CREATE TYPE "LabUnitSystem" AS ENUM ('SI', 'CONVENTIONAL');
-
--- CreateEnum
 CREATE TYPE "LabRole" AS ENUM ('LAB_RECEPTIONIST', 'LAB_ANALYST', 'LAB_VALIDATOR', 'LAB_ADMIN');
 
--- AlterTable (extensiones no-breaking a tablas existentes)
+-- AlterTable (extensiones no-breaking)
 ALTER TABLE "users" ADD COLUMN     "labRole" "LabRole",
 ADD COLUMN     "novaMedicoClave" TEXT;
 
@@ -87,7 +112,6 @@ CREATE TABLE "lab_units" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,
-
     CONSTRAINT "lab_units_pkey" PRIMARY KEY ("id")
 );
 
@@ -103,7 +127,6 @@ CREATE TABLE "lab_samples" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,
-
     CONSTRAINT "lab_samples_pkey" PRIMARY KEY ("id")
 );
 
@@ -118,7 +141,6 @@ CREATE TABLE "lab_containers" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,
-
     CONSTRAINT "lab_containers_pkey" PRIMARY KEY ("id")
 );
 
@@ -132,7 +154,6 @@ CREATE TABLE "lab_methods" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,
-
     CONSTRAINT "lab_methods_pkey" PRIMARY KEY ("id")
 );
 
@@ -146,7 +167,6 @@ CREATE TABLE "lab_process_areas" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,
-
     CONSTRAINT "lab_process_areas_pkey" PRIMARY KEY ("id")
 );
 
@@ -159,7 +179,6 @@ CREATE TABLE "lab_departments" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,
-
     CONSTRAINT "lab_departments_pkey" PRIMARY KEY ("id")
 );
 
@@ -174,7 +193,6 @@ CREATE TABLE "lab_classifications" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,
-
     CONSTRAINT "lab_classifications_pkey" PRIMARY KEY ("id")
 );
 
@@ -187,7 +205,6 @@ CREATE TABLE "lab_indications" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,
-
     CONSTRAINT "lab_indications_pkey" PRIMARY KEY ("id")
 );
 
@@ -199,11 +216,10 @@ CREATE TABLE "lab_signatures" (
     "active" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-
     CONSTRAINT "lab_signatures_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable join LabContainer default-for (m:n relación inversa LabSample ↔ LabContainer)
+-- CreateTable join LabContainer default-for
 CREATE TABLE "_LabContainerDefaultFor" (
     "A" TEXT NOT NULL,
     "B" TEXT NOT NULL
@@ -231,7 +247,7 @@ CREATE INDEX "lab_departments_code_idx" ON "lab_departments"("code");
 CREATE INDEX "lab_classifications_code_idx" ON "lab_classifications"("code");
 CREATE INDEX "lab_indications_code_idx" ON "lab_indications"("code");
 
--- AddForeignKey (relaciones con tablas existentes AMI)
+-- AddForeignKey
 ALTER TABLE "medical_tests" ADD CONSTRAINT "medical_tests_labMethodId_fkey" FOREIGN KEY ("labMethodId") REFERENCES "lab_methods"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "medical_tests" ADD CONSTRAINT "medical_tests_labSampleId_fkey" FOREIGN KEY ("labSampleId") REFERENCES "lab_samples"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "medical_tests" ADD CONSTRAINT "medical_tests_labProcessAreaId_fkey" FOREIGN KEY ("labProcessAreaId") REFERENCES "lab_process_areas"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -253,7 +269,7 @@ ALTER TABLE "_LabContainerDefaultFor" ADD CONSTRAINT "_LabContainerDefaultFor_A_
 ALTER TABLE "_LabContainerDefaultFor" ADD CONSTRAINT "_LabContainerDefaultFor_B_fkey" FOREIGN KEY ("B") REFERENCES "lab_samples"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- =====================================================================
--- PARTE 4: Registrar la migración Slice A como aplicada en _prisma_migrations
+-- PARTE 5: Registrar Slice A como aplicada en _prisma_migrations
 -- =====================================================================
 INSERT INTO _prisma_migrations (id, migration_name, finished_at, applied_steps_count)
 VALUES (
@@ -267,8 +283,11 @@ ON CONFLICT (migration_name) DO UPDATE SET
   applied_steps_count = 1;
 
 -- =====================================================================
--- VERIFICACIÓN (opcional — devuelve estado actual)
+-- VERIFICACIÓN FINAL — debería listar 18 migraciones todas finalizadas
 -- =====================================================================
-SELECT migration_name, finished_at IS NOT NULL AS finished
+SELECT
+  migration_name,
+  finished_at IS NOT NULL AS finished,
+  rolled_back_at IS NOT NULL AS rolled_back
 FROM _prisma_migrations
 ORDER BY migration_name;
