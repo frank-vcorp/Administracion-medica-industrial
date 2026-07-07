@@ -48,14 +48,17 @@ def _build_test_app() -> FastAPI:
 # Mock Prisma client (in-memory)
 # ---------------------------------------------------------------------------
 def _make_prisma_mock() -> MagicMock:
+    # FIX-20260706-16 (Slice 2): Prisma Python usa snake_case para modelos.
+    # labOrder -> laborder, labOrderItem -> laborderitem, medicalTest -> medicaltest,
+    # auditLog -> auditlog. worker/company/user ya son snake_case.
     tables: Dict[str, List[Dict[str, Any]]] = {
-        "labOrder": [],
-        "labOrderItem": [],
+        "laborder": [],
+        "laborderitem": [],
         "worker": [],
         "company": [],
-        "medicalTest": [],
+        "medicaltest": [],
         "user": [],
-        "auditLog": [],
+        "auditlog": [],
     }
     counters = {"id": 0}
 
@@ -124,7 +127,7 @@ def _make_prisma_mock() -> MagicMock:
             new.setdefault("id", _new_id())
             new.setdefault("createdAt", datetime.utcnow().isoformat())
             new.setdefault("updatedAt", datetime.utcnow().isoformat())
-            if name == "labOrder" and "status" not in new:
+            if name == "laborder" and "status" not in new:
                 new["status"] = "DRAFT"
             tables[name].append(new)
             return new
@@ -154,12 +157,12 @@ def _make_prisma_mock() -> MagicMock:
         return delegate
 
     for name in tables:
-        if name != "auditLog":
+        if name != "auditlog":
             setattr(prisma, name, _make_delegate(name))
 
     audit = MagicMock()
-    audit.create.side_effect = lambda data: tables["auditLog"].append(data)
-    prisma.auditLog = audit
+    audit.create.side_effect = lambda data: tables["auditlog"].append(data)
+    prisma.auditlog = audit
 
     return prisma
 
@@ -200,7 +203,7 @@ def _seed_company(pid: str = "c-1", name="Vectoria") -> str:
 
 def _seed_test(pid: str = "t-1", code="BH", name="Biometría Hemática") -> str:
     tid = pid
-    svc.get_prisma().medicalTest.create(data={"id": tid, "code": code, "name": name, "categoryId": "cat-1"})
+    svc.get_prisma().medicaltest.create(data={"id": tid, "code": code, "name": name, "categoryId": "cat-1"})
     return tid
 
 

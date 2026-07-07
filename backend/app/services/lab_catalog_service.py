@@ -19,15 +19,18 @@ from typing import Any, Dict, List, Optional, Tuple
 # ---------------------------------------------------------------------------
 # Dispatcher: nombre del modelo Prisma → operaciones CRUD
 # ---------------------------------------------------------------------------
+# FIX-20260706-16 (Slice 2): Prisma Python usa snake_case para nombres de modelos.
+# Model `LabUnit` -> prisma.labunit. Los field names del schema (workerId, etc.)
+# mantienen camelCase.
 MOD_TO_MODEL = {
-    "unidades": "labUnit",
-    "muestras": "labSample",
-    "recipientes": "labContainer",
-    "metodologias": "labMethod",
-    "lugares_proceso": "labProcessArea",
-    "clasificaciones": "labClassification",
-    "indicaciones": "labIndication",
-    "departamentos": "labDepartment",
+    "unidades": "labunit",
+    "muestras": "labsample",
+    "recipientes": "labcontainer",
+    "metodologias": "labmethod",
+    "lugares_proceso": "labprocessarea",
+    "clasificaciones": "labclassification",
+    "indicaciones": "labindication",
+    "departamentos": "labdepartment",
 }
 
 
@@ -226,7 +229,8 @@ def delete_catalog_item(mod: str, item_id: str, user_id: Optional[str] = None) -
 def record_audit(prisma: Any, action: str, entity: str, entity_id: str, before: Optional[Dict[str, Any]], after: Optional[Dict[str, Any]], user_id: Optional[str] = None) -> None:
     """Inserta una fila en AuditLog. Tolerante a fallos (no rompe el flujo principal)."""
     try:
-        audit = getattr(prisma, "auditLog", None)
+        # FIX-20260706-16: Prisma Python model AuditLog -> prisma.auditlog.
+        audit = getattr(prisma, "auditlog", None)
         if audit is None:
             return
         details = {
