@@ -24,7 +24,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from openpyxl import load_workbook
@@ -364,7 +364,7 @@ def test_create_project_report_returns_pending(monkeypatch):
     from fastapi.testclient import TestClient
     from app.api.reports import router as reports_router, set_prisma_client
 
-    prisma = MagicMock()
+    prisma = AsyncMock()
     created = MagicMock(
         id="rep-new",
         projectId="proj-1",
@@ -402,7 +402,7 @@ def test_download_endpoint_rejects_when_not_ready(monkeypatch):
     from fastapi.testclient import TestClient
     from app.api.reports import router as reports_router, set_prisma_client
 
-    prisma = MagicMock()
+    prisma = AsyncMock()
     not_ready = MagicMock(
         id="rep-pending",
         projectId="proj-1",
@@ -461,7 +461,7 @@ def test_api_accepts_ebook_format(monkeypatch):
 
     from app.api.reports import router as reports_router, set_prisma_client
 
-    prisma = MagicMock()
+    prisma = AsyncMock()
     created = MagicMock(
         id="rep-ebook",
         projectId="proj-1",

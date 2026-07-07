@@ -73,11 +73,11 @@ async def create_massive_report(
     """Crea un ProjectReport en PENDING y dispara generacion asincrona."""
     prisma = _require_prisma()
 
-    project = prisma.project.find_unique(where={"id": project_id})
+    project = await prisma.project.find_unique(where={"id": project_id})
     if project is None:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
 
-    report = prisma.projectreport.create(
+    report = await prisma.projectreport.create(
         data={
             "projectId": project_id,
             "format": format,
@@ -101,7 +101,7 @@ async def create_massive_report(
 async def list_project_reports(project_id: str):
     """Lista el historial de reportes del proyecto, ordenados por fecha desc."""
     prisma = _require_prisma()
-    reports = prisma.projectreport.find_many(
+    reports = await prisma.projectreport.find_many(
         where={"projectId": project_id},
         order={"generatedAt": "desc"},
     )
@@ -112,7 +112,7 @@ async def list_project_reports(project_id: str):
 async def get_report_status(project_id: str, report_id: str):
     """Retorna el estado actual del reporte (PENDING|PROCESSING|READY|FAILED)."""
     prisma = _require_prisma()
-    report = prisma.projectreport.find_unique(where={"id": report_id})
+    report = await prisma.projectreport.find_unique(where={"id": report_id})
     if report is None or report.projectId != project_id:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     return _serialize_report(report)
@@ -126,7 +126,7 @@ async def download_report(
 ):
     """Sirve el archivo XLSX o PDF asociado al reporte."""
     prisma = _require_prisma()
-    report = prisma.projectreport.find_unique(where={"id": report_id})
+    report = await prisma.projectreport.find_unique(where={"id": report_id})
     if report is None or report.projectId != project_id:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     if report.status != "READY":
