@@ -26,14 +26,33 @@ def get_prisma_client() -> Any:
 
 
 def init_prisma_client() -> Any:
-    """Inicializa el cliente Prisma singleton (llamar desde FastAPI lifespan)."""
+    """Inicializa el cliente Prisma singleton (llamar desde FastAPI lifespan).
+
+    FIX-20260706-14: connect() debe ser await (Prisma client internamente es
+    async). Llamarlo sync retorna una coroutine que nunca se ejecuta, dejando
+    el cliente en estado 'no conectado' — lo que provoca ClientNotConnectedError
+    en la primera query.
+
+    Esta función solo crea la instancia. La conexión real debe hacerse
+    en el lifespan via `await connect_prisma_client()` (async).
+    """
     global _prisma_client
     if _prisma_client is not None:
         return _prisma_client
     from prisma import Prisma
     _prisma_client = Prisma()
-    _prisma_client.connect()
     return _prisma_client
+
+
+async def connect_prisma_client() -> None:
+    """Conecta el cliente Prisma al motor de queries (async).
+
+    FIX-20260706-14: connect() es async. Esta función envuelve el await.
+    """
+    global _prisma_client
+    if _prisma_client is None:
+        init_prisma_client()
+    await _prisma_client.connect()
 
 
 def set_prisma_client(client: Any) -> None:

@@ -22,6 +22,7 @@ from typing import List, Dict, Any, Optional
 
 from app.services.prisma_client import (
     init_prisma_client,
+    connect_prisma_client,
     disconnect_prisma_client,
 )
 
@@ -52,6 +53,9 @@ async def lifespan(app: FastAPI):
     """Inicializa Prisma al startup y desconecta al shutdown."""
     try:
         prisma = init_prisma_client()
+        # FIX-20260706-14: connect() es async. Hacer await antes de inyectar
+        # para que el cliente esté realmente conectado al motor de queries.
+        await connect_prisma_client()
         # Inyecta en reports (router con set_prisma_client propio)
         try:
             from app.api.reports import set_prisma_client as _set_reports
