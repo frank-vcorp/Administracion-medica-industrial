@@ -78,7 +78,7 @@ def project_to_snapshot(project: Dict[str, Any]) -> Dict[str, Any]:
     empresa = (getattr(project.company, "name", "") if project.company else "")
     empresa_legal = (getattr(project.company, "legalName", None) or empresa) if project.company else empresa
     fecha = (
-        project.get("startDate").strftime("%Y-%m-%d")
+        project.startDate.strftime("%Y-%m-%d")
         if hasattr(project.startDate, "strftime")
         else str(project.startDate or "")[:10]
     )
