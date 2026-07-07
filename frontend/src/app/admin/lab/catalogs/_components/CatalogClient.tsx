@@ -1,6 +1,8 @@
 /**
  * @file Catálogo Client: orquesta CatalogTable + modal crear/editar.
  * @id IMPL-20260630-06 — Slice A NOVA absorción (ARCH-20260630-02).
+ *
+ * IMPL-20260706-02: banner amarillo reemplazado por InfoBanner neutro (paleta AMI).
  */
 "use client";
 
@@ -9,6 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import CatalogTable from "./CatalogTable";
 import CatalogForm from "./CatalogForm";
 import { CATALOG_DEFS, type CatalogDef } from "../_lib/catalog-defs";
+import { InfoBanner } from "@/components/shared/InfoBanner";
 import {
   type LabCatalogMod,
   LAB_CATALOG_MODS,
@@ -42,17 +45,14 @@ export default function LabCatalogClient({ initialMod }: { initialMod: LabCatalo
 
   return (
     <div className="space-y-6">
-      {/* Banner demo Slice A */}
-      <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3">
-        <span className="text-xl" aria-hidden>🧪</span>
-        <div className="flex-1 text-sm text-amber-900">
-          <p className="font-semibold">Módulo LAB — Slice A — Solo catálogos demo</p>
-          <p className="text-amber-800 mt-0.5">
-            {def.description}. Las tablas operativas (LabOrder, LabResult, etc.) llegan en
-            slices B-G.
-          </p>
-        </div>
-      </div>
+      {/* Banner info — antes era amarillo chillón, ahora neutro AMI */}
+      <InfoBanner
+        icon={<span aria-hidden>🧪</span>}
+        title="Módulo LAB — Slice A — Solo catálogos demo"
+      >
+        {def.description}. Las tablas operativas (LabOrder, LabResult, etc.) llegan en
+        slices B-G.
+      </InfoBanner>
 
       {/* Header con selector de mod y botón Nuevo */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -71,7 +71,7 @@ export default function LabCatalogClient({ initialMod }: { initialMod: LabCatalo
             value={mod}
             onChange={(e) => handleModChange(e.target.value as LabCatalogMod)}
             disabled={isPending}
-            className="border border-slate-300 rounded-md px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {LAB_CATALOG_MODS.map((m) => (
               <option key={m} value={m}>
@@ -82,7 +82,7 @@ export default function LabCatalogClient({ initialMod }: { initialMod: LabCatalo
           <button
             type="button"
             onClick={() => setModalState({ mode: "create" })}
-            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 shadow-sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
           >
             + Nuevo
           </button>

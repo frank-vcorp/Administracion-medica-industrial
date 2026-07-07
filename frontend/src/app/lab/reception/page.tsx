@@ -6,9 +6,12 @@
  * Server Component.
  * Next.js 16+ requiere `await searchParams`.
  * Layout 2 columnas: Form (2/3) + Listado (1/3).
+ *
+ * IMPL-20260706-02: banner amarillo reemplazado por InfoBanner neutro (paleta AMI).
  */
 import { LabOrderForm } from "./_components/LabOrderForm";
 import { LabOrdersList } from "./_components/LabOrdersList";
+import { InfoBanner } from "@/components/shared/InfoBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -23,14 +26,24 @@ export default async function LabReceptionPage({
   const orderId = sp.orderId || sp.edit;
 
   return (
-    <div className="p-6">
-      <div className="bg-amber-100 border-l-4 border-amber-500 px-3 py-2 mb-4 text-sm flex items-center justify-between">
-        <span>🧪 Módulo LAB — Slice B — Solo admisión demo</span>
-        <span className="text-xs text-amber-700">
-          Backend: /api/v1/lab/orders · FastAPI · Slice B estable
-        </span>
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Recepción de Laboratorio</h2>
+          <p className="text-sm text-slate-500">
+            Admisión de órdenes, estudios y totales. Backend FastAPI (Slice B estable).
+          </p>
+        </div>
       </div>
-      <h1 className="text-2xl font-bold mb-4">Recepción de Laboratorio</h1>
+
+      <InfoBanner
+        icon={<span aria-hidden>🧪</span>}
+        title="Módulo LAB — Slice B — Solo admisión demo"
+      >
+        Backend: <code className="bg-slate-100 px-1 rounded text-xs">/api/v1/lab/orders</code>{" "}
+        · FastAPI · Slice B estable.
+      </InfoBanner>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           <LabOrderForm orderId={orderId} />

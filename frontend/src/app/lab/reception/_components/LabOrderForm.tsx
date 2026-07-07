@@ -5,6 +5,8 @@
  * Cliente Component: orquesta todos los paneles + acciones.
  * Si recibe orderId por props (vía searchParams), carga la orden con
  * getLabOrderAction y la presenta en modo edición DRAFT.
+ *
+ * IMPL-20260706-02: refactor visual a paleta AMI (slate + blue-600).
  */
 "use client";
 
@@ -45,6 +47,12 @@ const EMPTY_FLAGS: LabOrderFlagsState = {
   isCourtesy: false,
   courtesyType: null,
 };
+
+// Inputs estilo AMI: border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500
+const BASE_INPUT =
+  "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500";
+const READONLY_INPUT = `${BASE_INPUT} bg-slate-100 text-slate-500`;
+const LABEL = "block text-xs font-medium text-slate-700 mb-1";
 
 export function LabOrderForm({ orderId }: Props) {
   const router = useRouter();
@@ -236,26 +244,37 @@ export function LabOrderForm({ orderId }: Props) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="bg-white border rounded p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-bold text-base">
-            Nueva Admisión {currentOrderId && `(Editando: ${currentOrderId.slice(0, 8)}…)`}
-          </h2>
-          <span className="text-xs text-gray-500">Fecha: {new Date().toLocaleDateString()}</span>
+    <div className="space-y-4">
+      {/* Cabecera */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">
+              Nueva Admisión
+              {currentOrderId && (
+                <span className="ml-2 font-mono text-xs text-slate-500">
+                  Editando: {currentOrderId.slice(0, 8)}…
+                </span>
+              )}
+            </h2>
+          </div>
+          <span className="text-xs text-slate-500">
+            Fecha: {new Date().toLocaleDateString()}
+          </span>
         </div>
+
         {error && (
-          <div className="mb-2 px-2 py-1 text-xs bg-red-100 text-red-800 border border-red-200 rounded">
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             {error}
           </div>
         )}
         {message && (
-          <div className="mb-2 px-2 py-1 text-xs bg-green-100 text-green-800 border border-green-200 rounded">
+          <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
             {message}
           </div>
         )}
 
-        <div className="grid grid-cols-12 gap-2">
+        <div className="grid grid-cols-12 gap-3">
           <div className="col-span-6">
             <LabOrderAutocomplete<WorkerSearchResult>
               label="Paciente *"
@@ -266,27 +285,27 @@ export function LabOrderForm({ orderId }: Props) {
               displayValue={(w) => `${w.fullName} (${w.code})`}
               renderItem={(w) => (
                 <span>
-                  <strong>{w.fullName}</strong>{" "}
-                  <span className="text-gray-500">[{w.code}]</span>
+                  <strong className="text-slate-800">{w.fullName}</strong>{" "}
+                  <span className="text-slate-500">[{w.code}]</span>
                   {w.age != null && (
-                    <span className="ml-2 text-xs text-gray-600">{w.age} años</span>
+                    <span className="ml-2 text-xs text-slate-600">{w.age} años</span>
                   )}
                 </span>
               )}
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Edad</label>
+            <label className={LABEL}>Edad</label>
             <input
               type="text"
               readOnly
               value={worker?.age ?? ""}
               placeholder="—"
-              className="w-full px-2 py-1.5 border rounded text-sm bg-gray-100"
+              className={READONLY_INPUT}
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Dto% Pac.</label>
+            <label className={LABEL}>Dto% Pac.</label>
             <input
               type="number"
               min={0}
@@ -294,22 +313,22 @@ export function LabOrderForm({ orderId }: Props) {
               value={patientDiscountPct}
               disabled={readOnly}
               onChange={(e) => setPatientDiscountPct(Number(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 border rounded text-sm"
+              className={BASE_INPUT}
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Empresa</label>
+            <label className={LABEL}>Empresa</label>
             <input
               type="text"
               value={worker?.companyName ?? ""}
               readOnly
               placeholder="—"
-              className="w-full px-2 py-1.5 border rounded text-sm bg-gray-100"
+              className={READONLY_INPUT}
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-12 gap-2 mt-2">
+        <div className="grid grid-cols-12 gap-3 mt-3">
           <div className="col-span-6">
             <LabOrderAutocomplete<DoctorSearchResult>
               label="Médico *"
@@ -323,24 +342,24 @@ export function LabOrderForm({ orderId }: Props) {
               displayValue={(d) => d.name}
               renderItem={(d) => (
                 <span>
-                  <strong>{d.name}</strong>
-                  {d.clave && <span className="ml-2 text-gray-500">{d.clave}</span>}
+                  <strong className="text-slate-800">{d.name}</strong>
+                  {d.clave && <span className="ml-2 text-slate-500">{d.clave}</span>}
                 </span>
               )}
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Clave</label>
+            <label className={LABEL}>Clave</label>
             <input
               type="text"
               value={doctorClave}
               disabled={readOnly}
               onChange={(e) => setDoctorClave(e.target.value)}
-              className="w-full px-2 py-1.5 border rounded text-sm"
+              className={BASE_INPUT}
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Dto% Méd.</label>
+            <label className={LABEL}>Dto% Méd.</label>
             <input
               type="number"
               min={0}
@@ -348,11 +367,11 @@ export function LabOrderForm({ orderId }: Props) {
               value={doctorDiscountPct}
               disabled={readOnly}
               onChange={(e) => setDoctorDiscountPct(Number(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 border rounded text-sm"
+              className={BASE_INPUT}
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Comisión%</label>
+            <label className={LABEL}>Comisión%</label>
             <input
               type="number"
               min={0}
@@ -360,12 +379,12 @@ export function LabOrderForm({ orderId }: Props) {
               value={doctorCommissionPct}
               disabled={readOnly}
               onChange={(e) => setDoctorCommissionPct(Number(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 border rounded text-sm"
+              className={BASE_INPUT}
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-12 gap-2 mt-2">
+        <div className="grid grid-cols-12 gap-3 mt-3">
           <div className="col-span-6">
             <LabOrderAutocomplete<CompanySearchResult>
               label="Empresa (opcional)"
@@ -376,14 +395,14 @@ export function LabOrderForm({ orderId }: Props) {
               displayValue={(c) => c.name}
               renderItem={(c) => (
                 <span>
-                  <strong>{c.name}</strong>
-                  {c.rfc && <span className="ml-2 text-gray-500">{c.rfc}</span>}
+                  <strong className="text-slate-800">{c.name}</strong>
+                  {c.rfc && <span className="ml-2 text-slate-500">{c.rfc}</span>}
                 </span>
               )}
             />
           </div>
           <div className="col-span-3">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Dto% Empresa</label>
+            <label className={LABEL}>Dto% Empresa</label>
             <input
               type="number"
               min={0}
@@ -391,31 +410,31 @@ export function LabOrderForm({ orderId }: Props) {
               value={companyDiscountPct}
               disabled={readOnly}
               onChange={(e) => setCompanyDiscountPct(Number(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 border rounded text-sm"
+              className={BASE_INPUT}
             />
           </div>
           <div className="col-span-3">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Clasificación</label>
+            <label className={LABEL}>Clasificación</label>
             <input
               type="text"
               value={classificationId}
               disabled={readOnly}
               onChange={(e) => setClassificationId(e.target.value)}
-              className="w-full px-2 py-1.5 border rounded text-sm"
+              className={BASE_INPUT}
               placeholder="ID clasificación"
             />
           </div>
         </div>
 
-        <div className="mt-2">
-          <label className="block text-xs font-medium text-gray-700 mb-1">Observaciones</label>
+        <div className="mt-3">
+          <label className={LABEL}>Observaciones</label>
           <textarea
             value={observations}
             disabled={readOnly}
             onChange={(e) => setObservations(e.target.value)}
             maxLength={2000}
             rows={2}
-            className="w-full px-2 py-1.5 border rounded text-sm"
+            className={BASE_INPUT}
           />
         </div>
       </div>
@@ -430,12 +449,12 @@ export function LabOrderForm({ orderId }: Props) {
       />
       <LabOrderTotalsPanel items={items} />
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
           onClick={onSaveDraft}
           disabled={busy || readOnly}
-          className="px-3 py-2 bg-gray-600 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50"
+          className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Guardar Borrador
         </button>
@@ -443,12 +462,12 @@ export function LabOrderForm({ orderId }: Props) {
           type="button"
           onClick={onConfirm}
           disabled={busy || readOnly || !worker || items.length === 0}
-          className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Confirmar y Generar Folio
         </button>
       </div>
-      <p className="text-xs text-gray-500 italic">
+      <p className="text-xs text-slate-500 italic">
         Para cancelar una orden DRAFT usa el botón × en el listado lateral.
       </p>
     </div>

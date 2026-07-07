@@ -106,14 +106,14 @@ export default function CatalogForm({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="px-4 py-2 rounded-md border border-slate-300 bg-white text-slate-700 text-sm hover:bg-slate-50"
+              className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm hover:bg-slate-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
               {submitting ? "Guardando…" : "Guardar"}
             </button>
@@ -136,7 +136,7 @@ function FieldRow({
   onChange: (v: unknown) => void;
 }) {
   const baseInput =
-    "w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50";
+    "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50";
   const errText = error ? <p className="text-xs text-red-600 mt-1">{error}</p> : null;
 
   if (field.type === "select") {
@@ -221,7 +221,7 @@ function FieldRow({
             type="color"
             value={(value as string) ?? "#000000"}
             onChange={(e) => onChange(e.target.value)}
-            className="h-10 w-12 border border-slate-300 rounded-md cursor-pointer"
+            className="h-10 w-12 border border-slate-300 rounded-lg cursor-pointer"
           />
           <input
             type="text"

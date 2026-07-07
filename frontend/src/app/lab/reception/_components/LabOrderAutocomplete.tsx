@@ -2,6 +2,8 @@
  * @file Componente autocomplete reusable — debounce + click-outside.
  * @id IMPL-20260701-03 — Slice B Recepción.
  * @backup context/SPECs/SPEC_IMPL-20260701-SLICE-B-RECEPCION.md
+ *
+ * IMPL-20260706-02: refactor visual a paleta AMI.
  */
 "use client";
 
@@ -86,7 +88,7 @@ export function LabOrderAutocomplete<T extends AutocompleteItem>({
 
   return (
     <div className="relative" ref={ref}>
-      <label className="block text-xs font-medium text-gray-700 mb-1">
+      <label className="block text-xs font-medium text-slate-700 mb-1">
         {label}
       </label>
       <input
@@ -98,22 +100,22 @@ export function LabOrderAutocomplete<T extends AutocompleteItem>({
         }}
         onFocus={() => setOpen(true)}
         placeholder={placeholder}
-        className={`w-full px-2 py-1.5 border rounded text-sm ${
+        className={`w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
           inputClassName || ""
         }`}
       />
       {open && (
-        <ul className="absolute z-20 w-full bg-white border rounded mt-1 max-h-60 overflow-auto shadow-lg">
+        <ul className="absolute z-20 w-full bg-white border border-slate-200 rounded-lg mt-1 max-h-60 overflow-auto shadow-lg">
           {loading && (
-            <li className="px-2 py-1 text-xs text-gray-500">Buscando...</li>
+            <li className="px-3 py-2 text-xs text-slate-500">Buscando...</li>
           )}
           {!loading && results.length === 0 && query.length >= 2 && (
-            <li className="px-2 py-1 text-xs text-gray-500">{emptyMessage}</li>
+            <li className="px-3 py-2 text-xs text-slate-500">{emptyMessage}</li>
           )}
           {results.map((item, idx) => (
             <li
               key={item.id != null ? String(item.id) : `ac-${idx}`}
-              className="px-2 py-1.5 text-sm cursor-pointer hover:bg-blue-50"
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-slate-50 text-slate-700"
               onClick={() => {
                 onChange(item);
                 setQuery(
