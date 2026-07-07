@@ -49,9 +49,12 @@ function downloadUrl(projectId: string, reportId: string, format: 'xlsx' | 'pdf'
   // en Railway (NO a Vercel), porque el endpoint /api/v2/projects/{}/reports/{}/download
   // NO existe en el frontend Next.js — solo existe en el backend Python.
   //
-  // NEXT_PUBLIC_BACKEND_URL debe estar configurada en Vercel con el dominio
-  // público del backend Railway (https://administracion-medica-industrial-production.up.railway.app).
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+  // FIX-UI-20260706-20: trim() defensivo para evitar que un newline trailing
+  // en la variable de entorno rompa la URL. Si NEXT_PUBLIC_BACKEND_URL
+  // tiene \n al final (porque se configuró mal vía CLI), la URL resultante
+  // tendría un newline entre el host y el path, lo cual el browser
+  // URL-encodea y rompe la descarga.
+  const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().replace(/\/+$/, '');
   return `${backendUrl}/api/v2/projects/${projectId}/reports/${reportId}/download?format=${format}`;
 }
 
@@ -279,7 +282,7 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
                         <div className="flex gap-3">
                           {(h.format === 'XLSX' || h.format === 'BOTH') && (
                             <a
-                              href={`${process.env.NEXT_PUBLIC_BACKEND_URL || ''}/api/v2/projects/${projectId}/reports/${h.id}/download?format=xlsx`}
+                              href={`${(process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().replace(/\/+$/, '')}/api/v2/projects/${projectId}/reports/${h.id}/download?format=xlsx`}
                               className="text-blue-600 hover:underline"
                               target="_blank"
                               rel="noopener noreferrer"
@@ -289,7 +292,7 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
                           )}
                           {(h.format === 'EBOOK' || h.format === 'BOTH') && (
                             <a
-                              href={`${process.env.NEXT_PUBLIC_BACKEND_URL || ''}/api/v2/projects/${projectId}/reports/${h.id}/download?format=pdf`}
+                              href={`${(process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().replace(/\/+$/, '')}/api/v2/projects/${projectId}/reports/${h.id}/download?format=pdf`}
                               className="text-blue-600 hover:underline"
                               target="_blank"
                               rel="noopener noreferrer"
