@@ -25,8 +25,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/auth';
-import prisma from '@/lib/prisma';
-import { ProjectMassiveReportButton } from '@/components/projects/ProjectMassiveReportButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,77 +40,10 @@ export default async function ReportsIndexPage() {
   }
 
   const role = (session.user?.role as string | undefined) ?? '';
-  const userId = (session.user as { id?: string })?.id ?? '';
   const canGenerate = REPORT_ROLES.includes(role);
 
-  // ── Query batched #1 ───────────────────────────────────────────────────────
-  // Lista de proyectos con conteo de trabajadores + nombre de empresa.
-  // Una sola consulta cubre la rejilla (evita N+1 al pintar la card).
-  const projects = await prisma.project.findMany({
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      startDate: true,
-      company: { select: { id: true, name: true } },
-      _count: { select: { workers: true } },
-    },
-    orderBy: { startDate: 'desc' },
-    take: 50,
-  });
-
-  // Filtramos en memoria: solo mostramos proyectos con al menos 1 trabajador,
-  // porque sin trabajadores no hay nada que reportar.
-  const projectsWithWorkers = projects.filter((p) => p._count.workers > 0);
-
-  // ── Query batched #2 ───────────────────────────────────────────────────────
-  // FIX UI-20260706-02: Simplificado para evitar 500 — el nested select
-  // event.eventTests con Prisma 6 generaba error de tipos en runtime.
-  // Solo cargamos los IDs de workers (lo mínimo que ProjectMassiveReportButton
-  // necesita para renderizar el conteo en el modal preview).
-  let workersByProject = new Map<string, Array<{ id?: string; event: null }>>();
-
-  if (canGenerate && projectsWithWorkers.length > 0) {
-    const projectIds = projectsWithWorkers.map((p) => p.id);
-
-    const projectWorkers = await prisma.projectWorker.findMany({
-      where: { projectId: { in: projectIds } },
-      select: {
-        projectId: true,
-        workerId: true,
-      },
-    });
-
-    const grouped = new Map<string, Array<{ id?: string; event: null }>>();
-    for (const pw of projectWorkers) {
-      const bucket = grouped.get(pw.projectId) ?? [];
-      bucket.push({ id: pw.workerId, event: null });
-      grouped.set(pw.projectId, bucket);
-    }
-
-    workersByProject = grouped;
-  }
-
-  // ── Query batched #3 ───────────────────────────────────────────────────────
-  // Historial reciente de reportes. Como session.user.id puede ser undefined
-  // (NextAuth default no incluye id en JWT), mostramos el historial GLOBAL
-  // ordenado por fecha en lugar de filtrar por usuario. Cuando se configure
-  // el callback `jwt` para incluir userId, se podrá filtrar de nuevo.
-  const recentReports = await prisma.projectReport.findMany({
-    select: {
-      id: true,
-      projectId: true,
-      format: true,
-      status: true,
-      fileUrlXlsx: true,
-      fileUrlPdf: true,
-      generatedAt: true,
-      project: { select: { id: true, name: true } },
-    },
-    orderBy: { generatedAt: 'desc' },
-    take: 20,
-  });
-
+  // UI-20260706-04: Versión ultra-minimalista para identificar causa del 500.
+  // Solo verificamos que la página renderiza sin queries Prisma.
   return (
     <div className="container mx-auto p-6 space-y-8">
       <header className="space-y-2">
@@ -120,7 +51,23 @@ export default async function ReportsIndexPage() {
         <p className="text-slate-600">
           Genera concentrados XLSX o EBOOKs PDF navegables por proyecto.
         </p>
+        <p className="text-sm text-slate-500 italic">
+          Versión simplificada — UI-20260706-04 debug.
+        </p>
       </header>
+
+      <section className="bg-white border border-slate-200 rounded-lg p-6">
+        <h2 className="text-xl font-semibold text-slate-900 mb-3">
+          Acceso directo
+        </h2>
+        <p className="text-sm text-slate-700">
+          Para generar un reporte, ve a{' '}
+          <Link href="/projects" className="text-blue-600 hover:underline font-medium">
+            /projects
+          </Link>{' '}
+          y selecciona el proyecto deseado.
+        </p>
+      </section>
 
       {/* SECCIÓN 1: Generar nuevo reporte */}
       <section className="space-y-4">
@@ -133,49 +80,14 @@ export default async function ReportsIndexPage() {
             a un administrador si necesitas acceso.
           </p>
         )}
-        {canGenerate && projectsWithWorkers.length === 0 && (
+        {canGenerate && (
           <p className="text-sm text-slate-500 italic">
-            No hay proyectos con trabajadores asignados. Agrega trabajadores
-            en la vista de detalle de cada proyecto para poder generar un
-            reporte masivo.
+            Lista de proyectos próximamente. Mientras tanto, ve a{' '}
+            <Link href="/projects" className="text-blue-600 hover:underline">
+              /projects
+            </Link>{' '}
+            y selecciona un proyecto.
           </p>
-        )}
-        {canGenerate && projectsWithWorkers.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projectsWithWorkers.map((project) => {
-              const workers = workersByProject.get(project.id) ?? [];
-              return (
-                <div
-                  key={project.id}
-                  className="bg-white border border-slate-200 rounded-lg p-4 space-y-3"
-                >
-                  <div>
-                    <h3 className="font-semibold text-slate-900">
-                      {project.name}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      {project.company?.name ?? 'Sin empresa'}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {project._count.workers} trabajador(es)
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <ProjectMassiveReportButton
-                      projectId={project.id}
-                      workers={workers}
-                    />
-                    <Link
-                      href={`/projects/${project.id}`}
-                      className="inline-flex items-center px-3 py-2 text-xs text-blue-600 hover:underline"
-                    >
-                      Ver proyecto →
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         )}
       </section>
 
@@ -184,81 +96,13 @@ export default async function ReportsIndexPage() {
         <h2 className="text-xl font-semibold text-slate-900">
           Historial reciente
         </h2>
-        {recentReports.length === 0 ? (
-          <p className="text-sm text-slate-500 italic">
-            Aún no has generado reportes.
-          </p>
-        ) : (
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-700">
-                    Fecha
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-700">
-                    Proyecto
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-700">
-                    Formato
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-700">
-                    Estado
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-700">
-                    Descargas
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentReports.map((report) => (
-                  <tr key={report.id} className="border-t border-slate-100">
-                    <td className="px-4 py-2 text-xs text-slate-600">
-                      {new Date(report.generatedAt).toLocaleString('es-MX')}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-slate-900">
-                      {report.project?.name ?? '—'}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-slate-600">
-                      {report.format}
-                    </td>
-                    <td className="px-4 py-2 text-xs">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          report.status === 'READY'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : report.status === 'FAILED'
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {report.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-xs space-x-2">
-                      {report.status === 'READY' && report.fileUrlPdf && (
-                        <a
-                          href={`/api/v2/projects/${report.projectId}/reports/${report.id}/download?format=ebook`}
-                          className="text-blue-600 hover:underline"
-                        >
-                          EBOOK
-                        </a>
-                      )}
-                      {report.status === 'READY' && report.fileUrlXlsx && (
-                        <a
-                          href={`/api/v2/projects/${report.projectId}/reports/${report.id}/download?format=xlsx`}
-                          className="text-blue-600 hover:underline"
-                        >
-                          XLSX
-                        </a>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <p className="text-sm text-slate-500 italic">
+          El historial se está reconstruyendo. Por ahora ve a{' '}
+          <Link href="/projects" className="text-blue-600 hover:underline">
+            /projects
+          </Link>{' '}
+          y selecciona un proyecto para ver los reportes generados.
+        </p>
       </section>
     </div>
   );
