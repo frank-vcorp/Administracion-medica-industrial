@@ -267,11 +267,38 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
                 </summary>
                 <ul className="mt-2 space-y-1 text-xs text-slate-600">
                   {history.map((h) => (
-                    <li key={h.id} className="flex justify-between border-b border-slate-100 py-1">
-                      <span>{new Date(h.generatedAt).toLocaleString()}</span>
-                      <span>
-                        {h.format} &mdash; <em>{h.status}</em>
-                      </span>
+                    <li key={h.id} className="flex flex-col gap-1 border-b border-slate-100 py-2">
+                      <div className="flex justify-between">
+                        <span>{new Date(h.generatedAt).toLocaleString()}</span>
+                        <span>
+                          {h.format} &mdash; <em>{h.status}</em>
+                        </span>
+                      </div>
+                      {/* FIX-UI-20260706-19: links de descarga cuando status=READY */}
+                      {h.status === 'READY' && h.id && (
+                        <div className="flex gap-3">
+                          {(h.format === 'XLSX' || h.format === 'BOTH') && (
+                            <a
+                              href={`${process.env.NEXT_PUBLIC_BACKEND_URL || ''}/api/v2/projects/${projectId}/reports/${h.id}/download?format=xlsx`}
+                              className="text-blue-600 hover:underline"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              ⬇ XLSX
+                            </a>
+                          )}
+                          {(h.format === 'EBOOK' || h.format === 'BOTH') && (
+                            <a
+                              href={`${process.env.NEXT_PUBLIC_BACKEND_URL || ''}/api/v2/projects/${projectId}/reports/${h.id}/download?format=pdf`}
+                              className="text-blue-600 hover:underline"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              ⬇ PDF (EBOOK)
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
