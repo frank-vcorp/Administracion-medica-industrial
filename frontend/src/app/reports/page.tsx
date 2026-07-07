@@ -36,6 +36,7 @@ import prisma from '@/lib/prisma';
 import { ProjectMassiveReportButton } from '@/components/projects/ProjectMassiveReportButton';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';  // Requerido: Prisma no funciona en Edge runtime
 
 // Roles habilitados para generar Reportes Masivos
 // (consistente con /projects/[id]/page.tsx — ARCH-20260623-01).
