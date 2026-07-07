@@ -19,3 +19,5 @@ context/audits/**/cookies.txt
 context/audits/**/step*.json
 context/audits/**/*.html
 context/audits/**/pages/
+.vercel
+.env*.local
