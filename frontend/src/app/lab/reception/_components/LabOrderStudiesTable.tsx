@@ -4,6 +4,8 @@
  *
  * Estado controlado por padre: items + onChange.
  * Cálculo de importe reutiliza calculateItemAmount() del helper puro.
+ *
+ * IMPL-20260706-02: refactor visual a paleta AMI.
  */
 "use client";
 
@@ -26,6 +28,9 @@ interface DisplayTest extends AutocompleteItem {
   name: string;
   price: number;
 }
+
+const NUM_INPUT =
+  "w-full px-2 py-1 border border-slate-300 rounded text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500";
 
 export function LabOrderStudiesTable({ items, onChange, readOnly }: Props) {
   const [showPicker, setShowPicker] = useState(false);
@@ -56,14 +61,16 @@ export function LabOrderStudiesTable({ items, onChange, readOnly }: Props) {
   }
 
   return (
-    <div className="border rounded bg-white">
-      <div className="px-3 py-2 border-b flex items-center justify-between bg-gray-50">
-        <h3 className="font-semibold text-sm">Estudios ({items.length})</h3>
+    <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <h3 className="font-semibold text-sm text-slate-800">
+          Estudios ({items.length})
+        </h3>
         {!readOnly && (
           <button
             type="button"
             onClick={() => setShowPicker((v) => !v)}
-            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
           >
             + Agregar estudio
           </button>
@@ -71,7 +78,7 @@ export function LabOrderStudiesTable({ items, onChange, readOnly }: Props) {
       </div>
 
       {showPicker && !readOnly && (
-        <div className="p-3 border-b bg-yellow-50">
+        <div className="p-3 border-b border-slate-200 bg-slate-50">
           <LabOrderAutocomplete<DisplayTest>
             label="Buscar estudio"
             placeholder="Clave, C.Alt o nombre..."
@@ -83,104 +90,126 @@ export function LabOrderStudiesTable({ items, onChange, readOnly }: Props) {
             displayValue={(t) => `${t.code} — ${t.name}`}
             renderItem={(t) => (
               <span>
-                <strong>{t.code}</strong> {t.alternateCode ? `(${t.alternateCode}) ` : ""}
-                — {t.name} <em className="text-gray-500">${Number(t.price ?? 0).toFixed(2)}</em>
+                <strong className="text-slate-800">{t.code}</strong>{" "}
+                {t.alternateCode ? `(${t.alternateCode}) ` : ""}
+                — {t.name}{" "}
+                <em className="text-slate-500">
+                  ${Number(t.price ?? 0).toFixed(2)}
+                </em>
               </span>
             )}
           />
         </div>
       )}
 
-      <table className="w-full text-xs">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="px-2 py-1 text-left">Clave</th>
-            <th className="px-2 py-1 text-left">Estudio</th>
-            <th className="px-2 py-1 text-right">Precio</th>
-            <th className="px-2 py-1 text-right">Dcto $</th>
-            <th className="px-2 py-1 text-right">Dcto %</th>
-            <th className="px-2 py-1 text-right">Importe</th>
-            <th className="px-2 py-1"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.length === 0 && (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-slate-700">
+          <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <td colSpan={7} className="px-2 py-3 text-center text-gray-500 italic">
-                Sin estudios. Agrega al menos uno.
-              </td>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Clave
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Estudio
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Precio
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Dcto $
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Dcto %
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Importe
+              </th>
+              <th className="px-3 py-2"></th>
             </tr>
-          )}
-          {items.map((item, idx) => {
-            const amount = calculateItemAmount(
-              item.price,
-              item.discountAmount ?? 0,
-              item.discountPct ?? 0
-            );
-            return (
-              <tr key={`${item.medicalTestId}-${idx}`} className="border-t">
-                <td className="px-2 py-1 font-mono">{item.medicalTestId}</td>
-                <td className="px-2 py-1">{/* nombre mostrado por autocomplete al agregar */}</td>
-                <td className="px-2 py-1 text-right">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={item.price}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      updateItem(idx, { price: Number(e.target.value) || 0 })
-                    }
-                    className="w-20 px-1 py-0.5 border rounded text-right"
-                  />
-                </td>
-                <td className="px-2 py-1 text-right">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={item.discountAmount}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      updateItem(idx, { discountAmount: Number(e.target.value) || 0 })
-                    }
-                    className="w-16 px-1 py-0.5 border rounded text-right"
-                  />
-                </td>
-                <td className="px-2 py-1 text-right">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.1"
-                    value={item.discountPct}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      updateItem(idx, { discountPct: Number(e.target.value) || 0 })
-                    }
-                    className="w-14 px-1 py-0.5 border rounded text-right"
-                  />
-                </td>
-                <td className="px-2 py-1 text-right font-semibold">
-                  ${amount.toFixed(2)}
-                </td>
-                <td className="px-2 py-1 text-center">
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(idx)}
-                      className="text-red-600 hover:text-red-800"
-                      title="Quitar"
-                    >
-                      ×
-                    </button>
-                  )}
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-center text-slate-500 italic">
+                  Sin estudios. Agrega al menos uno.
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            )}
+            {items.map((item, idx) => {
+              const amount = calculateItemAmount(
+                item.price,
+                item.discountAmount ?? 0,
+                item.discountPct ?? 0
+              );
+              return (
+                <tr key={`${item.medicalTestId}-${idx}`} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-mono text-slate-600 text-xs">
+                    {item.medicalTestId}
+                  </td>
+                  <td className="px-3 py-2 text-slate-500 italic">
+                    {/* nombre mostrado por autocomplete al agregar */}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={item.price}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        updateItem(idx, { price: Number(e.target.value) || 0 })
+                      }
+                      className={`${NUM_INPUT} w-20`}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={item.discountAmount}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        updateItem(idx, { discountAmount: Number(e.target.value) || 0 })
+                      }
+                      className={`${NUM_INPUT} w-16`}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.1"
+                      value={item.discountPct}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        updateItem(idx, { discountPct: Number(e.target.value) || 0 })
+                      }
+                      className={`${NUM_INPUT} w-14`}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
+                    ${amount.toFixed(2)}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(idx)}
+                        className="text-red-600 hover:text-red-800 px-1"
+                        title="Quitar"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

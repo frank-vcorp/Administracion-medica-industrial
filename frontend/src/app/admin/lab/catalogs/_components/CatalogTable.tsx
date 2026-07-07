@@ -110,7 +110,7 @@ export default function CatalogTable({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={`Buscar en ${def.label.toLowerCase()}…`}
-          className="border border-slate-300 rounded-md px-3 py-2 text-sm w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
@@ -205,7 +205,7 @@ export default function CatalogTable({
             type="button"
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="px-3 py-1 rounded border border-slate-300 bg-white text-slate-700 disabled:opacity-50 hover:bg-slate-50"
+            className="px-3 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 disabled:opacity-50 hover:bg-slate-50"
           >
             ← Anterior
           </button>
@@ -216,7 +216,7 @@ export default function CatalogTable({
                 key={i}
                 type="button"
                 onClick={() => setPage(i)}
-                className={`px-3 py-1 rounded border ${
+                className={`px-3 py-1 rounded-lg border ${
                   i === page
                     ? "bg-blue-600 text-white border-blue-600"
                     : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
@@ -229,7 +229,7 @@ export default function CatalogTable({
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
-            className="px-3 py-1 rounded border border-slate-300 bg-white text-slate-700 disabled:opacity-50 hover:bg-slate-50"
+            className="px-3 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 disabled:opacity-50 hover:bg-slate-50"
           >
             Siguiente →
           </button>
@@ -254,7 +254,7 @@ export default function CatalogTable({
                 type="button"
                 onClick={() => setPendingDelete(null)}
                 disabled={actionInProgress}
-                className="px-4 py-2 rounded-md border border-slate-300 bg-white text-slate-700 text-sm hover:bg-slate-50"
+                className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm hover:bg-slate-50"
               >
                 Cancelar
               </button>
@@ -262,7 +262,7 @@ export default function CatalogTable({
                 type="button"
                 onClick={confirmDelete}
                 disabled={actionInProgress}
-                className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
                 {actionInProgress ? "Eliminando…" : "Eliminar"}
               </button>

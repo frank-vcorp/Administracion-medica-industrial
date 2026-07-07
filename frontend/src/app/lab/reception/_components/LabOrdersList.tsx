@@ -4,6 +4,8 @@
  *
  * Server Component: carga inicial vía listLabOrdersAction en mount.
  * Mantenerlo mínimo: tabla + paginación + acciones Ver/Editar/Cancelar.
+ *
+ * IMPL-20260706-02: refactor visual a paleta AMI.
  */
 "use client";
 
@@ -25,6 +27,19 @@ interface LabOrderRow {
   total: number;
   status: string;
   itemCount?: number;
+}
+
+function statusBadge(status: string): string {
+  switch (status) {
+    case "DRAFT":
+      return "bg-amber-100 text-amber-800";
+    case "SAVED":
+      return "bg-blue-100 text-blue-800";
+    case "CANCELLED":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-slate-100 text-slate-800";
+  }
 }
 
 export function LabOrdersList() {
@@ -88,12 +103,12 @@ export function LabOrdersList() {
   }
 
   return (
-    <div className="border rounded bg-white">
-      <div className="px-3 py-2 border-b bg-gray-50 flex items-center justify-between">
-        <h3 className="font-semibold text-sm">Órdenes recientes</h3>
-        <span className="text-xs text-gray-500">{recordsTotal} total</span>
+    <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <h3 className="font-semibold text-sm text-slate-800">Órdenes recientes</h3>
+        <span className="text-xs text-slate-500">{recordsTotal} total</span>
       </div>
-      <div className="p-2 border-b">
+      <div className="p-3 border-b border-slate-200">
         <input
           type="text"
           placeholder="Buscar paciente / folio / médico..."
@@ -106,96 +121,104 @@ export function LabOrdersList() {
               void load();
             }
           }}
-          className="w-full px-2 py-1 border rounded text-xs"
+          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       {error && (
-        <div className="px-3 py-2 text-xs text-red-700 bg-red-50 border-b">
+        <div className="px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-200">
           {error}
         </div>
       )}
-      <table className="w-full text-xs">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="px-2 py-1 text-left">Folio</th>
-            <th className="px-2 py-1 text-left">Paciente</th>
-            <th className="px-2 py-1 text-right">Total</th>
-            <th className="px-2 py-1">Estado</th>
-            <th className="px-2 py-1">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading && (
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs text-slate-700">
+          <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <td colSpan={5} className="px-2 py-3 text-center text-gray-500 italic">
-                Cargando...
-              </td>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Folio
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Paciente
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Total
+              </th>
+              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Estado
+              </th>
+              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Acciones
+              </th>
             </tr>
-          )}
-          {!loading && rows.length === 0 && (
-            <tr>
-              <td colSpan={5} className="px-2 py-3 text-center text-gray-500 italic">
-                Sin órdenes. Crea una con el formulario.
-              </td>
-            </tr>
-          )}
-          {rows.map((r) => (
-            <tr key={r.id} className="border-t">
-              <td className="px-2 py-1 font-mono">{r.folio ?? "—"}</td>
-              <td className="px-2 py-1">{r.paciente ?? "—"}</td>
-              <td className="px-2 py-1 text-right">${Number(r.total ?? 0).toFixed(2)}</td>
-              <td className="px-2 py-1 text-center">
-                <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] ${
-                    r.status === "DRAFT"
-                      ? "bg-yellow-100 text-yellow-800"
-                      : r.status === "SAVED"
-                      ? "bg-blue-100 text-blue-800"
-                      : r.status === "CANCELLED"
-                      ? "bg-red-100 text-red-800"
-                      : "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  {r.status}
-                </span>
-              </td>
-              <td className="px-2 py-1 text-center space-x-1">
-                <button
-                  type="button"
-                  onClick={() => onVer(r.id)}
-                  disabled={busyId === r.id}
-                  className="text-blue-700 hover:underline"
-                  title="Ver"
-                >
-                  Ver
-                </button>
-                {r.status === "DRAFT" && (
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/lab/reception?edit=${r.id}`)}
-                    className="text-amber-700 hover:underline"
-                    title="Editar"
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {loading && (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-slate-500 italic">
+                  Cargando…
+                </td>
+              </tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-slate-500 italic">
+                  Sin órdenes. Crea una con el formulario.
+                </td>
+              </tr>
+            )}
+            {rows.map((r) => (
+              <tr key={r.id} className="hover:bg-slate-50">
+                <td className="px-3 py-2 font-mono text-slate-600">{r.folio ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-800">{r.paciente ?? "—"}</td>
+                <td className="px-3 py-2 text-right">
+                  ${Number(r.total ?? 0).toFixed(2)}
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold ${statusBadge(
+                      r.status
+                    )}`}
                   >
-                    Editar
-                  </button>
-                )}
-                {r.status === "DRAFT" && (
+                    {r.status}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-center space-x-2 whitespace-nowrap">
                   <button
                     type="button"
-                    onClick={() => onCancelar(r.id)}
+                    onClick={() => onVer(r.id)}
                     disabled={busyId === r.id}
-                    className="text-red-700 hover:underline"
-                    title="Cancelar"
+                    className="text-blue-600 hover:text-blue-800 font-medium"
+                    title="Ver"
                   >
-                    ×
+                    Ver
                   </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="p-2 border-t flex items-center justify-between text-xs">
+                  {r.status === "DRAFT" && (
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/lab/reception?edit=${r.id}`)}
+                      className="text-amber-700 hover:text-amber-900 font-medium"
+                      title="Editar"
+                    >
+                      Editar
+                    </button>
+                  )}
+                  {r.status === "DRAFT" && (
+                    <button
+                      type="button"
+                      onClick={() => onCancelar(r.id)}
+                      disabled={busyId === r.id}
+                      className="text-red-600 hover:text-red-800 font-medium"
+                      title="Cancelar"
+                    >
+                      ×
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="p-3 border-t border-slate-200 flex items-center justify-between text-xs">
         <button
           type="button"
           onClick={() => {
@@ -203,11 +226,11 @@ export function LabOrdersList() {
             setDraw(draw + 1);
           }}
           disabled={start === 0}
-          className="px-2 py-1 border rounded disabled:opacity-50"
+          className="px-3 py-1 border border-slate-300 rounded-lg bg-white text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors"
         >
           ← Anterior
         </button>
-        <span className="text-gray-500">
+        <span className="text-slate-500">
           {start + 1} – {Math.min(start + length, recordsTotal)}
         </span>
         <button
@@ -219,7 +242,7 @@ export function LabOrdersList() {
             }
           }}
           disabled={start + length >= recordsTotal}
-          className="px-2 py-1 border rounded disabled:opacity-50"
+          className="px-3 py-1 border border-slate-300 rounded-lg bg-white text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors"
         >
           Siguiente →
         </button>
