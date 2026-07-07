@@ -7,6 +7,11 @@
  * Las actions ahora llaman a las Next.js API routes internas en
  * `/api/lab/orders/...` que usan Prisma JS directo.
  *
+ * HOTFIX IMPL-20260706-10: reenviar cookies del request actual en
+ * `_localFetch`. Mismo bug que en lab-catalog.actions.ts; sin cookies,
+ * las API routes validaban sesión con `getServerSession()` y devolvían
+ * 401 (que Vercel convertía en HTML de redirect a login).
+ *
  * Patrón: idéntico a lab-catalog.actions.ts.
  * - Validación Zod server-side
  * - Rol permitido: ADMIN (LAB_RECEPTIONIST pendiente)
@@ -15,6 +20,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import {
@@ -67,12 +73,25 @@ async function _requireReception(): Promise<{ userId: string; role: string } | n
 }
 
 async function _localFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  // IMPL-20260706-10: reenviar cookies del request actual para que las
+  // API routes puedan validar sesión con getServerSession(). Sin esto,
+  // la API retornaba 401 (que Vercel convierte en HTML de redirect a
+  // login) en lugar de los datos esperados.
   const base = _localBase();
   const url = path.startsWith("http") ? path : `${base}${path}`;
+
+  // Next.js 15+: cookies() retorna Promise.
+  const cookieStore = await cookies();
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+
   return fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
       ...(init.headers || {}),
     },
     cache: "no-store",

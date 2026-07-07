@@ -8,12 +8,18 @@
  * `/api/lab/catalogs/[mod]` que usan Prisma JS directo. BACKEND_URL se
  * conserva para referencia pero ya no se usa.
  *
+ * HOTFIX IMPL-20260706-10: reenviar cookies del request actual en
+ * `_localFetch`. Sin esto, las API routes validaban sesión con
+ * `getServerSession()` y devolvían 401 (que Vercel convertía en HTML
+ * de redirect a login) en lugar de los datos.
+ *
  * Todas las actions validan server-side con Zod (incluso aunque el cliente
  * ya valide) y restringen por rol ADMIN.
  */
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import {
@@ -65,16 +71,25 @@ async function _requireAdmin(): Promise<{ id: string; userId: string } | null> {
 
 async function _localFetch(path: string, init: RequestInit = {}): Promise<Response> {
   // IMPL-20260701-07: Next.js API routes locales.
-  // Importante: las server actions de Next.js ejecutan en Node, no en
-  // Edge, por lo que fetch a rutas relativas puede resolverse al mismo
-  // host sin necesidad de URL absoluta (next 14+ soporta esto), pero
-  // construimos URL absoluta de forma defensiva.
+  // IMPL-20260706-10: reenviar cookies del request actual para que las
+  // API routes puedan validar sesión con getServerSession(). Sin esto,
+  // la API retornaba 401 (que Vercel convierte en HTML de redirect a
+  // login) en lugar de los datos esperados.
   const base = _localBase();
   const url = path.startsWith("http") ? path : `${base}${path}`;
+
+  // Next.js 15+: cookies() retorna Promise.
+  const cookieStore = await cookies();
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+
   return fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
       ...(init.headers || {}),
     },
     cache: "no-store",
