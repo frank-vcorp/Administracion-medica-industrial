@@ -105,7 +105,7 @@ def calculate_totals(
 # ---------------------------------------------------------------------------
 # Folio único — loop con retry P2002
 # ---------------------------------------------------------------------------
-def generate_unique_folio(
+async def generate_unique_folio(
     prisma: Any,
     branch: str = "MATRIZ",
     start: int = 1,
@@ -119,7 +119,7 @@ def generate_unique_folio(
     n = start
     while True:
         # FIX-20260706-16: Prisma Python model LabOrder -> prisma.laborder.
-        existing = prisma.laborder.find_unique(where={"folio": n})
+        existing = await prisma.laborder.find_unique(where={"folio": n})
         if existing is None:
             return n
         n += 1
@@ -201,7 +201,7 @@ def _json_safe(payload: Any) -> Any:
 # ---------------------------------------------------------------------------
 # CRUD principal
 # ---------------------------------------------------------------------------
-def create_lab_order(
+async def create_lab_order(
     data: Dict[str, Any],
     current_user: Dict[str, str],
     prisma: Any,
@@ -224,7 +224,7 @@ def create_lab_order(
     # Folio: si no viene, generar
     folio = data.get("folio")
     if folio is None:
-        folio = generate_unique_folio(prisma)
+        folio = await generate_unique_folio(prisma)
 
     # Crear LabOrder (status default DRAFT)
     now = _now()
@@ -240,7 +240,7 @@ def create_lab_order(
         "createdAt": now,
         "updatedAt": now,
     }
-    order = prisma.laborder.create(data=order_payload)
+    order = await prisma.laborder.create(data=order_payload)
     order_id = order["id"] if isinstance(order, dict) else getattr(order, "id", None)
 
     # Crear items
@@ -262,7 +262,7 @@ def create_lab_order(
             "createdAt": now,
             "updatedAt": now,
         }
-        item = prisma.laborderitem.create(data=item_payload)
+        item = await prisma.laborderitem.create(data=item_payload)
         item_records.append(_serialize(item))
 
     record_audit(
@@ -286,7 +286,7 @@ def create_lab_order(
     }
 
 
-def update_lab_order(
+async def update_lab_order(
     order_id: str,
     data: Dict[str, Any],
     current_user: Dict[str, str],
@@ -297,7 +297,7 @@ def update_lab_order(
     if not user_id:
         raise ValueError("current_user.id es obligatorio")
 
-    existing = prisma.laborder.find_unique(where={"id": order_id})
+    existing = await prisma.laborder.find_unique(where={"id": order_id})
     if existing is None:
         raise LookupError(f"LabOrder {order_id} no existe")
     if (existing.get("status") if isinstance(existing, dict) else getattr(existing, "status", None)) != "DRAFT":
@@ -310,9 +310,9 @@ def update_lab_order(
     if items_in is not None:
         # Reemplazar todos los items y recalcular totales
         # Borrar existentes
-        existing_items = prisma.laborderitem.find_many(where={"labOrderId": order_id})
+        existing_items = await prisma.laborderitem.find_many(where={"labOrderId": order_id})
         for old in existing_items:
-            prisma.laborderitem.delete(where={"id": old["id"] if isinstance(old, dict) else old.id})
+            await prisma.laborderitem.delete(where={"id": old["id"] if isinstance(old, dict) else old.id})
         # Crear nuevos
         for it in items_in:
             amt = calculate_item_amount(
@@ -320,7 +320,7 @@ def update_lab_order(
                 it.get("discountAmount", 0) or 0,
                 it.get("discountPct", 0) or 0,
             )
-            prisma.laborderitem.create(
+            await prisma.laborderitem.create(
                 data={
                     "labOrderId": order_id,
                     "medicalTestId": it["medicalTestId"],
@@ -332,7 +332,7 @@ def update_lab_order(
                 }
             )
         # Recalcular totales
-        new_items = prisma.laborderitem.find_many(where={"labOrderId": order_id})
+        new_items = await prisma.laborderitem.find_many(where={"labOrderId": order_id})
         item_dicts = [
             {
                 "price": (it.get("price") if isinstance(it, dict) else it.price) or 0,
@@ -351,7 +351,7 @@ def update_lab_order(
             }
         )
 
-    updated = prisma.laborder.update(where={"id": order_id}, data=payload)
+    updated = await prisma.laborder.update(where={"id": order_id}, data=payload)
 
     record_audit(
         prisma,
@@ -366,7 +366,7 @@ def update_lab_order(
     return _serialize(updated)
 
 
-def delete_lab_order(
+async def delete_lab_order(
     order_id: str,
     motivo: str,
     current_user: Dict[str, str],
@@ -379,7 +379,7 @@ def delete_lab_order(
     if not motivo or len(motivo.strip()) < 3:
         raise ValueError("motivo es obligatorio (mín 3 caracteres)")
 
-    existing = prisma.laborder.find_unique(where={"id": order_id})
+    existing = await prisma.laborder.find_unique(where={"id": order_id})
     if existing is None:
         raise LookupError(f"LabOrder {order_id} no existe")
     status = existing.get("status") if isinstance(existing, dict) else getattr(existing, "status", None)
@@ -387,7 +387,7 @@ def delete_lab_order(
         raise ValueError(f"Solo se pueden cancelar órdenes en DRAFT o SAVED (actual: {status})")
 
     now = _now()
-    updated = prisma.laborder.update(
+    updated = await prisma.laborder.update(
         where={"id": order_id},
         data={
             "status": "CANCELLED",
@@ -411,7 +411,7 @@ def delete_lab_order(
     return _serialize(updated)
 
 
-def confirm_lab_order(
+async def confirm_lab_order(
     order_id: str,
     current_user: Dict[str, str],
     prisma: Any,
@@ -421,7 +421,7 @@ def confirm_lab_order(
     if not user_id:
         raise ValueError("current_user.id es obligatorio")
 
-    existing = prisma.laborder.find_unique(where={"id": order_id})
+    existing = await prisma.laborder.find_unique(where={"id": order_id})
     if existing is None:
         raise LookupError(f"LabOrder {order_id} no existe")
     status = existing.get("status") if isinstance(existing, dict) else getattr(existing, "status", None)
@@ -429,14 +429,14 @@ def confirm_lab_order(
         raise ValueError(f"Solo se pueden confirmar órdenes en DRAFT (actual: {status})")
 
     # Verificar items
-    items = prisma.laborderitem.find_many(where={"labOrderId": order_id})
+    items = await prisma.laborderitem.find_many(where={"labOrderId": order_id})
     if not items:
         raise ValueError("La orden no tiene items; no se puede confirmar")
 
     # Folio: si no tiene, generar
     folio = existing.get("folio") if isinstance(existing, dict) else getattr(existing, "folio", None)
     if folio is None:
-        folio = generate_unique_folio(prisma)
+        folio = await generate_unique_folio(prisma)
 
     # Recalcular totales
     item_dicts = [
@@ -451,7 +451,7 @@ def confirm_lab_order(
     totals = calculate_totals(item_dicts, iva_pct=iva_pct)
 
     now = _now()
-    updated = prisma.laborder.update(
+    updated = await prisma.laborder.update(
         where={"id": order_id},
         data={
             "status": "SAVED",
@@ -477,7 +477,7 @@ def confirm_lab_order(
     return _serialize(updated)
 
 
-def add_item_to_order(
+async def add_item_to_order(
     order_id: str,
     item_data: Dict[str, Any],
     current_user: Dict[str, str],
@@ -488,7 +488,7 @@ def add_item_to_order(
     if not user_id:
         raise ValueError("current_user.id es obligatorio")
 
-    existing = prisma.laborder.find_unique(where={"id": order_id})
+    existing = await prisma.laborder.find_unique(where={"id": order_id})
     if existing is None:
         raise LookupError(f"LabOrder {order_id} no existe")
     if (existing.get("status") if isinstance(existing, dict) else getattr(existing, "status", None)) != "DRAFT":
@@ -500,7 +500,7 @@ def add_item_to_order(
         item_data.get("discountPct", 0) or 0,
     )
     now = _now()
-    item = prisma.laborderitem.create(
+    item = await prisma.laborderitem.create(
         data={
             "labOrderId": order_id,
             "medicalTestId": item_data["medicalTestId"],
@@ -515,7 +515,7 @@ def add_item_to_order(
     )
 
     # Recalcular totales
-    items = prisma.laborderitem.find_many(where={"labOrderId": order_id})
+    items = await prisma.laborderitem.find_many(where={"labOrderId": order_id})
     item_dicts = [
         {
             "price": (it.get("price") if isinstance(it, dict) else it.price) or 0,
@@ -526,7 +526,7 @@ def add_item_to_order(
     ]
     iva_pct = (existing.get("ivaPct") if isinstance(existing, dict) else existing.ivaPct) or 16
     totals = calculate_totals(item_dicts, iva_pct=iva_pct)
-    prisma.laborder.update(
+    await prisma.laborder.update(
         where={"id": order_id},
         data={
             "subtotal": totals["subtotal"],
@@ -549,7 +549,7 @@ def add_item_to_order(
     return _serialize(item)
 
 
-def remove_item_from_order(
+async def remove_item_from_order(
     order_id: str,
     item_id: str,
     current_user: Dict[str, str],
@@ -560,23 +560,23 @@ def remove_item_from_order(
     if not user_id:
         raise ValueError("current_user.id es obligatorio")
 
-    existing = prisma.laborder.find_unique(where={"id": order_id})
+    existing = await prisma.laborder.find_unique(where={"id": order_id})
     if existing is None:
         raise LookupError(f"LabOrder {order_id} no existe")
     if (existing.get("status") if isinstance(existing, dict) else getattr(existing, "status", None)) != "DRAFT":
         raise ValueError("Solo se pueden eliminar items en DRAFT")
 
-    item = prisma.laborderitem.find_unique(where={"id": item_id})
+    item = await prisma.laborderitem.find_unique(where={"id": item_id})
     if item is None:
         raise LookupError(f"LabOrderItem {item_id} no existe")
     item_order_id = item.get("labOrderId") if isinstance(item, dict) else getattr(item, "labOrderId", None)
     if item_order_id != order_id:
         raise ValueError("El item no pertenece a la orden")
 
-    prisma.laborderitem.delete(where={"id": item_id})
+    await prisma.laborderitem.delete(where={"id": item_id})
 
     # Recalcular totales
-    items = prisma.laborderitem.find_many(where={"labOrderId": order_id})
+    items = await prisma.laborderitem.find_many(where={"labOrderId": order_id})
     item_dicts = [
         {
             "price": (it.get("price") if isinstance(it, dict) else it.price) or 0,
@@ -587,7 +587,7 @@ def remove_item_from_order(
     ]
     iva_pct = (existing.get("ivaPct") if isinstance(existing, dict) else existing.ivaPct) or 16
     totals = calculate_totals(item_dicts, iva_pct=iva_pct)
-    prisma.laborder.update(
+    await prisma.laborder.update(
         where={"id": order_id},
         data={
             "subtotal": totals["subtotal"],
@@ -613,7 +613,7 @@ def remove_item_from_order(
 # ---------------------------------------------------------------------------
 # Listado paginado DataTables
 # ---------------------------------------------------------------------------
-def list_orders_paginated(
+async def list_orders_paginated(
     prisma: Any,
     draw: int = 1,
     start: int = 0,
@@ -646,12 +646,12 @@ def list_orders_paginated(
         where["createdAt"] = date_range
 
     delegate = prisma.laborder
-    total = delegate.count(where={})
-    records_filtered = delegate.count(where=where)
+    total = await delegate.count(where={})
+    records_filtered = await delegate.count(where=where)
 
-    rows = delegate.find_many(
+    rows = await delegate.find_many(
         where=where,
-        order_by={"createdAt": "desc"},
+        order={"createdAt": "desc"},
         skip=max(0, int(start or 0)),
         take=max(1, min(int(length or 25), 100)),
     )
@@ -665,9 +665,9 @@ def list_orders_paginated(
         company = None
         try:
             if d.get("workerId"):
-                worker = prisma.worker.find_unique(where={"id": d["workerId"]})
+                worker = await prisma.worker.find_unique(where={"id": d["workerId"]})
             if d.get("companyId"):
-                company = prisma.company.find_unique(where={"id": d["companyId"]})
+                company = await prisma.company.find_unique(where={"id": d["companyId"]})
         except Exception:
             pass
         d["paciente"] = (
@@ -682,7 +682,7 @@ def list_orders_paginated(
         )
         # Conteo de items
         try:
-            d["itemCount"] = prisma.laborderitem.count(where={"labOrderId": d["id"]})
+            d["itemCount"] = await prisma.laborderitem.count(where={"labOrderId": d["id"]})
         except Exception:
             d["itemCount"] = 0
         data.append(d)
@@ -698,17 +698,17 @@ def list_orders_paginated(
 # ---------------------------------------------------------------------------
 # Getter completo (con items expandidos)
 # ---------------------------------------------------------------------------
-def get_order_full(order_id: str, prisma: Any) -> Optional[Dict[str, Any]]:
-    order = prisma.laborder.find_unique(where={"id": order_id})
+async def get_order_full(order_id: str, prisma: Any) -> Optional[Dict[str, Any]]:
+    order = await prisma.laborder.find_unique(where={"id": order_id})
     if order is None:
         return None
-    items = prisma.laborderitem.find_many(where={"labOrderId": order_id})
+    items = await prisma.laborderitem.find_many(where={"labOrderId": order_id})
     out = _serialize(order)
     out["items"] = [_serialize(i) for i in items]
     # Expandir nombres de items
     for it in out["items"]:
         try:
-            test = prisma.medicaltest.find_unique(where={"id": it.get("medicalTestId")})
+            test = await prisma.medicaltest.find_unique(where={"id": it.get("medicalTestId")})
             if test:
                 it["medicalTestName"] = (
                     test.get("name") if isinstance(test, dict) else test.name
@@ -735,7 +735,7 @@ def _age_from_dob(dob: Optional[str]) -> Optional[int]:
         return None
 
 
-def search_workers(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]:
+async def search_workers(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]:
     q = (q or "").strip()
     if not q:
         return []
@@ -746,7 +746,7 @@ def search_workers(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]
             {"universalId": {"contains": q, "mode": "insensitive"}},
         ]
     }
-    rows = prisma.worker.find_many(where=where, take=min(int(limit or 10), 25))
+    rows = await prisma.worker.find_many(where=where, take=min(int(limit or 10), 25))
     out: List[Dict[str, Any]] = []
     for r in rows:
         d = _serialize(r)
@@ -754,7 +754,7 @@ def search_workers(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]
         company_name = None
         if d.get("companyId"):
             try:
-                c = prisma.company.find_unique(where={"id": d["companyId"]})
+                c = await prisma.company.find_unique(where={"id": d["companyId"]})
                 if c:
                     company_name = c.get("name") if isinstance(c, dict) else c.name
             except Exception:
@@ -779,7 +779,7 @@ def search_doctors(q: str) -> List[Dict[str, Any]]:
     return [{"name": q, "clave": None}]
 
 
-def search_companies(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]:
+async def search_companies(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]:
     q = (q or "").strip()
     if not q:
         return []
@@ -789,7 +789,7 @@ def search_companies(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any
             {"rfc": {"contains": q, "mode": "insensitive"}},
         ]
     }
-    rows = prisma.company.find_many(where=where, take=min(int(limit or 10), 25))
+    rows = await prisma.company.find_many(where=where, take=min(int(limit or 10), 25))
     return [
         {
             "id": _serialize(r)["id"],
@@ -800,7 +800,7 @@ def search_companies(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any
     ]
 
 
-def search_tests(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]:
+async def search_tests(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]:
     q = (q or "").strip()
     if not q:
         return []
@@ -813,7 +813,7 @@ def search_tests(prisma: Any, q: str, limit: int = 10) -> List[Dict[str, Any]]:
     # El modelo MedicalTest actual no tiene un campo `type` directo
     # (las pruebas son laboratorios por defecto en el esquema AMI).
     # Mantenemos el filtro abierto pero evitamos romper el endpoint.
-    rows = prisma.medicaltest.find_many(where=where, take=min(int(limit or 10), 25))
+    rows = await prisma.medicaltest.find_many(where=where, take=min(int(limit or 10), 25))
     out: List[Dict[str, Any]] = []
     for r in rows:
         d = _serialize(r)

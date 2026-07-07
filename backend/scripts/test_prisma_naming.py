@@ -92,11 +92,10 @@ async def _run_all_tests() -> List[Tuple[str, bool, str]]:
     try:
         from app.services.lab_catalog_service import list_catalog, set_prisma_client as _set_svc
         _set_svc(prisma)
-        loop = asyncio.get_event_loop()
-        res = await loop.run_in_executor(
-            None,
-            lambda: list_catalog(mod="unidades", draw=1, start=0, length=5,
-                                 search=None, order_column=0, order_dir="asc"),
+        # FIX-20260706-16: list_catalog es async (Prisma Python es async-only).
+        res = await list_catalog(
+            mod="unidades", draw=1, start=0, length=5,
+            search=None, order_column=0, order_dir="asc",
         )
         n = len(res.get("data", []))
         total = res.get("recordsTotal", "?")

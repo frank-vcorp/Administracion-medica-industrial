@@ -20,6 +20,7 @@ Cubre (≥ 12 casos según SPEC §9):
 """
 import os
 import sys
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
@@ -107,21 +108,25 @@ def _make_prisma_mock() -> MagicMock:
         delegate._items = tables[name]
         delegate._next_id = _new_id
 
-        def count(where: Optional[Dict[str, Any]] = None):
+        # FIX-20260706-16: services son async, mocks deben ser awaitable.
+        # Usamos funciones async locales con side_effect.
+        async def count(where: Optional[Dict[str, Any]] = None):
             return sum(1 for it in tables[name] if _matches(it, where))
 
-        def find_many(where=None, order_by=None, skip=0, take=25):
+        async def find_many(where=None, order_by=None, order=None, skip=0, take=25):
             matched = [it for it in tables[name] if _matches(it, where)]
-            ordered = _apply_order(matched, order_by)
+            # FIX-20260706-16: servicios usan `order=`, pero aceptamos `order_by` por compat.
+            order_clause = order or order_by
+            ordered = _apply_order(matched, order_clause)
             return ordered[skip : skip + take]
 
-        def find_unique(where: Dict[str, Any]):
+        async def find_unique(where: Dict[str, Any]):
             for it in tables[name]:
                 if all(it.get(k) == v for k, v in where.items()):
                     return it
             return None
 
-        def create(data: Dict[str, Any]):
+        async def create(data: Dict[str, Any]):
             new = dict(data)
             new.setdefault("id", _new_id())
             new.setdefault("createdAt", datetime.utcnow().isoformat())
@@ -130,8 +135,8 @@ def _make_prisma_mock() -> MagicMock:
             tables[name].append(new)
             return new
 
-        def update(where: Dict[str, Any], data: Dict[str, Any]):
-            existing = find_unique(where)
+        async def update(where: Dict[str, Any], data: Dict[str, Any]):
+            existing = await find_unique(where)
             if existing is None:
                 raise LookupError(f"{name} not found: {where}")
             for k, v in data.items():
@@ -151,7 +156,10 @@ def _make_prisma_mock() -> MagicMock:
 
     # auditlog uses .create only (Prisma Python model AuditLog -> prisma.auditlog)
     audit_delegate = MagicMock()
-    audit_delegate.create.side_effect = lambda data: tables["auditlog"].append(data)
+    async def _audit_create(data: Dict[str, Any]):
+        tables["auditlog"].append(data)
+        return data
+    audit_delegate.create.side_effect = _audit_create
     prisma.auditlog = audit_delegate
 
     return prisma
@@ -175,9 +183,9 @@ def client(prisma_mock) -> TestClient:
 def test_list_units_paginated_datatables_shape(client, prisma_mock):
     # Seed 3 unidades
     for i in range(3):
-        prisma_mock.labunit.create(
+        asyncio.run(prisma_mock.labunit.create(
             data={"symbol": f"u{i}", "name": f"Unit {i}", "system": "SI"}
-        )
+        ))
 
     resp = client.get("/api/v1/lab/catalogs", params={"mod": "unidades", "draw": 1, "start": 0, "length": 10})
     assert resp.status_code == 200
@@ -193,9 +201,9 @@ def test_list_units_paginated_datatables_shape(client, prisma_mock):
 # 2. Búsqueda textual filtra
 # ---------------------------------------------------------------------------
 def test_list_units_search_filters(client, prisma_mock):
-    prisma_mock.labunit.create(data={"symbol": "mg/dL", "name": "Miligramos por decilitro", "system": "CONVENTIONAL"})
-    prisma_mock.labunit.create(data={"symbol": "mmol/L", "name": "Milimoles por litro", "system": "SI"})
-    prisma_mock.labunit.create(data={"symbol": "%", "name": "Porcentaje", "system": "CONVENTIONAL"})
+    asyncio.run(prisma_mock.labunit.create(data={"symbol": "mg/dL", "name": "Miligramos por decilitro", "system": "CONVENTIONAL"}))
+    asyncio.run(prisma_mock.labunit.create(data={"symbol": "mmol/L", "name": "Milimoles por litro", "system": "SI"}))
+    asyncio.run(prisma_mock.labunit.create(data={"symbol": "%", "name": "Porcentaje", "system": "CONVENTIONAL"}))
 
     resp = client.get(
         "/api/v1/lab/catalogs",
@@ -210,8 +218,8 @@ def test_list_units_search_filters(client, prisma_mock):
 # 3. Filtro onlyActive=true
 # ---------------------------------------------------------------------------
 def test_list_units_only_active(client, prisma_mock):
-    prisma_mock.labunit.create(data={"symbol": "a", "name": "A", "system": "SI", "active": True})
-    prisma_mock.labunit.create(data={"symbol": "b", "name": "B", "system": "SI", "active": False})
+    asyncio.run(prisma_mock.labunit.create(data={"symbol": "a", "name": "A", "system": "SI", "active": True}))
+    asyncio.run(prisma_mock.labunit.create(data={"symbol": "b", "name": "B", "system": "SI", "active": False}))
 
     resp_all = client.get("/api/v1/lab/catalogs", params={"mod": "unidades", "onlyActive": "false"})
     resp_active = client.get("/api/v1/lab/catalogs", params={"mod": "unidades", "onlyActive": "true"})
@@ -226,10 +234,10 @@ def test_list_units_only_active(client, prisma_mock):
 def test_list_units_max_length_capped(prisma_mock):
     # Llenamos 110 unidades
     for i in range(110):
-        prisma_mock.labunit.create(data={"symbol": f"u{i}", "name": f"U{i}", "system": "SI"})
+        asyncio.run(prisma_mock.labunit.create(data={"symbol": f"u{i}", "name": f"U{i}", "system": "SI"}))
 
     # length=200 → debe caparse internamente a 100
-    res = svc.list_catalog(mod="unidades", draw=1, start=0, length=200)
+    res = asyncio.run(svc.list_catalog(mod="unidades", draw=1, start=0, length=200))
     assert len(res["data"]) == 100
 
 
@@ -292,9 +300,9 @@ def test_create_unit_records_audit(client, prisma_mock):
 # 8. PATCH parcial
 # ---------------------------------------------------------------------------
 def test_update_unit_partial(client, prisma_mock):
-    created = prisma_mock.labunit.create(
+    created = asyncio.run(prisma_mock.labunit.create(
         data={"symbol": "pg/mL", "name": "Picograms", "system": "SI"}
-    )
+    ))
     resp = client.patch(
         f"/api/v1/lab/catalogs/unidades/{created['id']}",
         json={"name": "Picogramos por mililitro"},
@@ -309,13 +317,13 @@ def test_update_unit_partial(client, prisma_mock):
 # 9. DELETE es soft delete (active=false)
 # ---------------------------------------------------------------------------
 def test_soft_delete_sets_active_false(client, prisma_mock):
-    created = prisma_mock.labunit.create(
+    created = asyncio.run(prisma_mock.labunit.create(
         data={"symbol": "cel/uL", "name": "Células", "system": "SI"}
-    )
+    ))
     resp = client.delete(f"/api/v1/lab/catalogs/unidades/{created['id']}")
     assert resp.status_code == 200
     # La fila sigue, pero active=False
-    item = prisma_mock.labunit.find_unique(where={"id": created["id"]})
+    item = asyncio.run(prisma_mock.labunit.find_unique(where={"id": created["id"]}))
     assert item["active"] is False
 
 
