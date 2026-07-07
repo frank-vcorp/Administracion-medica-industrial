@@ -42,7 +42,7 @@ export default async function ReportsIndexPage() {
   }
 
   const role = (session.user?.role as string | undefined) ?? '';
-  const userId = session.user?.id ?? '';
+  const userId = (session.user as { id?: string })?.id ?? '';
   const canGenerate = REPORT_ROLES.includes(role);
 
   // ── Query batched #1 ───────────────────────────────────────────────────────
@@ -94,9 +94,11 @@ export default async function ReportsIndexPage() {
   }
 
   // ── Query batched #3 ───────────────────────────────────────────────────────
-  // Historial reciente de reportes generados por el usuario actual.
+  // Historial reciente de reportes. Como session.user.id puede ser undefined
+  // (NextAuth default no incluye id en JWT), mostramos el historial GLOBAL
+  // ordenado por fecha en lugar de filtrar por usuario. Cuando se configure
+  // el callback `jwt` para incluir userId, se podrá filtrar de nuevo.
   const recentReports = await prisma.projectReport.findMany({
-    where: { generatedById: userId },
     select: {
       id: true,
       projectId: true,
