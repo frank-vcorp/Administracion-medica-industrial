@@ -145,6 +145,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <NavSection label="Empresas" collapsed={isEventWorkspace} />
               <NavItem href="/companies" icon="🏢" label="Empresas Cliente" collapsed={isEventWorkspace} />
               <NavItem href="/projects" icon="🗂️" label="Proyectos" collapsed={isEventWorkspace} />
+              {/* IMPL-20260706-01: Acceso directo al módulo de Reportes Masivos (sobrevuela la URL /reports index). */}
+              <NavItem href="/reports" icon="📊" label="Reportes Masivos" collapsed={isEventWorkspace} />
             </>
           )}
 
