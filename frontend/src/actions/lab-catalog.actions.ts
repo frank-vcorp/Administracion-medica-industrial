@@ -50,6 +50,21 @@ const MOD_TO_MODEL: Record<LabCatalogMod, string> = {
   departamentos: "labDepartment",
 };
 
+// Primer campo de orden por mod (debe coincidir con `sortBy` en catalog-defs.tsx).
+// IMPL-20260706-17: fix bug — antes era ["symbol","code","name"][orderCol] que
+// retornaba "symbol" para muestras (que no tiene symbol), causando 500.
+const MOD_ORDER_FIELDS: Record<LabCatalogMod, string[]> = {
+  unidades: ["symbol", "name", "system", "active", "createdAt"],
+  muestras: ["code", "name", "preservation", "minVolume", "active", "createdAt"],
+  recipientes: ["code", "name", "color", "cap", "active", "createdAt"],
+  metodologias: ["code", "name", "principle", "active", "createdAt"],
+  lugares_proceso: ["code", "name", "departmentId", "active", "createdAt"],
+  clasificaciones: ["code", "name", "color", "sortOrder", "active", "createdAt"],
+  indicaciones: ["code", "text", "active", "createdAt"],
+  departamentos: ["code", "name", "active", "createdAt"],
+};
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -137,7 +152,7 @@ export async function listLabCatalogAction(params: {
     }
 
     // Orden: symbol/code/name según columna (mismo criterio que API route)
-    const orderByCol = ["symbol", "code", "name"][orderCol] || "code";
+    const orderByCol = (MOD_ORDER_FIELDS[modCheck.mod] || ["createdAt"])[orderCol] || "createdAt";
 
     const [recordsTotal, recordsFiltered, data] = await Promise.all([
       model.count(),
