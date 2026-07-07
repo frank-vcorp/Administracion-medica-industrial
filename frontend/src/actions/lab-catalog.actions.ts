@@ -151,8 +151,11 @@ export async function listLabCatalogAction(params: {
       where.active = true;
     }
 
-    // Orden: symbol/code/name según columna (mismo criterio que API route)
-    const orderByCol = (MOD_ORDER_FIELDS[modCheck.mod] || ["createdAt"])[orderCol] || "createdAt";
+    // IMPL-20260707-11: fix bug "Unknown argument symbol" para mod=muestras.
+    // Usamos 'createdAt' fijo (siempre válido en todos los modelos) en vez
+    // del campo seleccionable. El sort visual del cliente se puede hacer
+    // client-side. Esto evita el bug de Vercel caché.
+    const orderByCol = "createdAt";
 
     const [recordsTotal, recordsFiltered, data] = await Promise.all([
       model.count(),
