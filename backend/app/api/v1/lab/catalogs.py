@@ -82,7 +82,7 @@ def _require_mod(mod_raw: str) -> LabCatalogMod:
 # GET (listar, paginado server-side DataTables-compatible)
 # ---------------------------------------------------------------------------
 @router.get("/catalogs")
-def list_catalogs(
+async def list_catalogs(
     mod: str = Query(..., description="Mod del catálogo: unidades | muestras | ..."),
     draw: int = Query(1, ge=0),
     start: int = Query(0, ge=0),
@@ -95,7 +95,7 @@ def list_catalogs(
 ):
     mod_enum = _require_mod(mod)
     try:
-        return svc.list_catalog(
+        return await svc.list_catalog(
             mod=mod_enum.value,
             draw=draw,
             start=start,
@@ -113,7 +113,7 @@ def list_catalogs(
 # POST (crear)
 # ---------------------------------------------------------------------------
 @router.post("/catalogs")
-def create_catalog_item(mod: str = Query(...), payload: dict = ..., request: Request = None):
+async def create_catalog_item(mod: str = Query(...), payload: dict = ..., request: Request = None):
     mod_enum = _require_mod(mod)
     schema = CREATE_SCHEMAS[mod_enum]
     try:
@@ -121,7 +121,7 @@ def create_catalog_item(mod: str = Query(...), payload: dict = ..., request: Req
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
     try:
-        item = svc.create_catalog_item(
+        item = await svc.create_catalog_item(
             mod_enum.value,
             validated.model_dump(),
             user_id=_extract_user_id(request) if request else None,
@@ -138,16 +138,16 @@ def create_catalog_item(mod: str = Query(...), payload: dict = ..., request: Req
 # GET / PATCH / DELETE /{mod}/{id}
 # ---------------------------------------------------------------------------
 @router.get("/catalogs/{mod}/{item_id}")
-def get_catalog_item(mod: str, item_id: str):
+async def get_catalog_item(mod: str, item_id: str):
     mod_enum = _require_mod(mod)
-    item = svc.get_catalog_item(mod_enum.value, item_id)
+    item = await svc.get_catalog_item(mod_enum.value, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail=f"{mod_enum.value}/{item_id} no existe")
     return item
 
 
 @router.patch("/catalogs/{mod}/{item_id}")
-def update_catalog_item(mod: str, item_id: str, payload: dict, request: Request):
+async def update_catalog_item(mod: str, item_id: str, payload: dict, request: Request):
     mod_enum = _require_mod(mod)
     schema = UPDATE_SCHEMAS[mod_enum]
     try:
@@ -155,7 +155,7 @@ def update_catalog_item(mod: str, item_id: str, payload: dict, request: Request)
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
     try:
-        item = svc.update_catalog_item(
+        item = await svc.update_catalog_item(
             mod_enum.value,
             item_id,
             validated.model_dump(exclude_none=True),
@@ -169,10 +169,10 @@ def update_catalog_item(mod: str, item_id: str, payload: dict, request: Request)
 
 
 @router.delete("/catalogs/{mod}/{item_id}")
-def delete_catalog_item(mod: str, item_id: str, request: Request):
+async def delete_catalog_item(mod: str, item_id: str, request: Request):
     mod_enum = _require_mod(mod)
     try:
-        item = svc.delete_catalog_item(
+        item = await svc.delete_catalog_item(
             mod_enum.value, item_id, user_id=_extract_user_id(request)
         )
     except LookupError as e:

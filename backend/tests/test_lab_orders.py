@@ -20,6 +20,7 @@ Cubre (≥ 14 casos según SPEC §9):
 """
 import os
 import sys
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
@@ -48,14 +49,17 @@ def _build_test_app() -> FastAPI:
 # Mock Prisma client (in-memory)
 # ---------------------------------------------------------------------------
 def _make_prisma_mock() -> MagicMock:
+    # FIX-20260706-16 (Slice 2): Prisma Python usa snake_case para modelos.
+    # labOrder -> laborder, labOrderItem -> laborderitem, medicalTest -> medicaltest,
+    # auditLog -> auditlog. worker/company/user ya son snake_case.
     tables: Dict[str, List[Dict[str, Any]]] = {
-        "labOrder": [],
-        "labOrderItem": [],
+        "laborder": [],
+        "laborderitem": [],
         "worker": [],
         "company": [],
-        "medicalTest": [],
+        "medicaltest": [],
         "user": [],
-        "auditLog": [],
+        "auditlog": [],
     }
     counters = {"id": 0}
 
@@ -99,13 +103,15 @@ def _make_prisma_mock() -> MagicMock:
         delegate = MagicMock()
         delegate._items = tables[name]
 
-        def count(where: Optional[Dict[str, Any]] = None):
+        # FIX-20260706-16: services son async, mocks deben ser awaitable.
+        async def count(where: Optional[Dict[str, Any]] = None):
             return sum(1 for it in tables[name] if _matches(it, where))
 
-        def find_many(where=None, order_by=None, skip=0, take=25):
+        async def find_many(where=None, order_by=None, order=None, skip=0, take=25):
             matched = [it for it in tables[name] if _matches(it, where)]
-            if order_by:
-                field, direction = next(iter(order_by.items()))
+            order_clause = order or order_by
+            if order_clause:
+                field, direction = next(iter(order_clause.items()))
                 matched = sorted(
                     matched,
                     key=lambda x: (x.get(field) is None, x.get(field)),
@@ -113,24 +119,24 @@ def _make_prisma_mock() -> MagicMock:
                 )
             return matched[skip : skip + take]
 
-        def find_unique(where: Dict[str, Any]):
+        async def find_unique(where: Dict[str, Any]):
             for it in tables[name]:
                 if all(it.get(k) == v for k, v in where.items()):
                     return it
             return None
 
-        def create(data: Dict[str, Any]):
+        async def create(data: Dict[str, Any]):
             new = dict(data)
             new.setdefault("id", _new_id())
             new.setdefault("createdAt", datetime.utcnow().isoformat())
             new.setdefault("updatedAt", datetime.utcnow().isoformat())
-            if name == "labOrder" and "status" not in new:
+            if name == "laborder" and "status" not in new:
                 new["status"] = "DRAFT"
             tables[name].append(new)
             return new
 
-        def update(where: Dict[str, Any], data: Dict[str, Any]):
-            existing = find_unique(where)
+        async def update(where: Dict[str, Any], data: Dict[str, Any]):
+            existing = await find_unique(where)
             if existing is None:
                 raise LookupError(f"{name} not found: {where}")
             for k, v in data.items():
@@ -138,8 +144,8 @@ def _make_prisma_mock() -> MagicMock:
             existing["updatedAt"] = datetime.utcnow().isoformat()
             return existing
 
-        def delete(where: Dict[str, Any]):
-            existing = find_unique(where)
+        async def delete(where: Dict[str, Any]):
+            existing = await find_unique(where)
             if existing is None:
                 raise LookupError(f"{name} not found: {where}")
             tables[name].remove(existing)
@@ -154,12 +160,15 @@ def _make_prisma_mock() -> MagicMock:
         return delegate
 
     for name in tables:
-        if name != "auditLog":
+        if name != "auditlog":
             setattr(prisma, name, _make_delegate(name))
 
     audit = MagicMock()
-    audit.create.side_effect = lambda data: tables["auditLog"].append(data)
-    prisma.auditLog = audit
+    async def _audit_create(data: Dict[str, Any]):
+        tables["auditlog"].append(data)
+        return data
+    audit.create.side_effect = _audit_create
+    prisma.auditlog = audit
 
     return prisma
 
@@ -179,28 +188,34 @@ def client(prisma_mock) -> TestClient:
 # Helpers --------------------------------------------------------------------
 def _seed_worker(pid: str = "w-1", first="Juan", last="Pérez", company_id=None, dob=None) -> str:
     wid = pid
-    svc.get_prisma().worker.create(
-        data={
-            "id": wid,
-            "universalId": f"U-{pid}",
-            "firstName": first,
-            "lastName": last,
-            "companyId": company_id,
-            "dob": dob or "1990-05-15T00:00:00",
-        }
+    asyncio.run(
+        svc.get_prisma().worker.create(
+            data={
+                "id": wid,
+                "universalId": f"U-{pid}",
+                "firstName": first,
+                "lastName": last,
+                "companyId": company_id,
+                "dob": dob or "1990-05-15T00:00:00",
+            }
+        )
     )
     return wid
 
 
 def _seed_company(pid: str = "c-1", name="Vectoria") -> str:
     cid = pid
-    svc.get_prisma().company.create(data={"id": cid, "name": name, "rfc": "VEC900101AAA"})
+    asyncio.run(
+        svc.get_prisma().company.create(data={"id": cid, "name": name, "rfc": "VEC900101AAA"})
+    )
     return cid
 
 
 def _seed_test(pid: str = "t-1", code="BH", name="Biometría Hemática") -> str:
     tid = pid
-    svc.get_prisma().medicalTest.create(data={"id": tid, "code": code, "name": name, "categoryId": "cat-1"})
+    asyncio.run(
+        svc.get_prisma().medicaltest.create(data={"id": tid, "code": code, "name": name, "categoryId": "cat-1"})
+    )
     return tid
 
 
@@ -208,10 +223,12 @@ def _create_order_via_service(prisma_mock, worker_id=None, items=None) -> dict:
     if worker_id is None:
         worker_id = _seed_worker()
     items = items or [{"medicalTestId": _seed_test(), "price": 100, "discountAmount": 0, "discountPct": 0}]
-    return svc.create_lab_order(
-        data={"workerId": worker_id, "doctorName": "Dr. López", "items": items},
-        current_user={"id": "user-admin", "role": "ADMIN"},
-        prisma=prisma_mock,
+    return asyncio.run(
+        svc.create_lab_order(
+            data={"workerId": worker_id, "doctorName": "Dr. López", "items": items},
+            current_user={"id": "user-admin", "role": "ADMIN"},
+            prisma=prisma_mock,
+        )
     )
 
 

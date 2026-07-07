@@ -34,10 +34,10 @@ def _extract_user(request: Request) -> dict:
 # POST /orders — crear DRAFT
 # ---------------------------------------------------------------------------
 @router.post("")
-def create_order(payload: LabOrderCreate, request: Request):
+async def create_order(payload: LabOrderCreate, request: Request):
     user = _extract_user(request)
     try:
-        result = svc.create_lab_order(
+        result = await svc.create_lab_order(
             data=payload.model_dump(exclude_none=True),
             current_user=user,
             prisma=svc.get_prisma(),
@@ -53,7 +53,7 @@ def create_order(payload: LabOrderCreate, request: Request):
 # GET /orders — listar paginado (DataTables)
 # ---------------------------------------------------------------------------
 @router.get("")
-def list_orders(
+async def list_orders(
     draw: int = Query(1, ge=0),
     start: int = Query(0, ge=0),
     length: int = Query(25, ge=1, le=100),
@@ -63,7 +63,7 @@ def list_orders(
     dateTo: Optional[str] = Query(None),
 ):
     try:
-        return svc.list_orders_paginated(
+        return await svc.list_orders_paginated(
             prisma=svc.get_prisma(),
             draw=draw,
             start=start,
@@ -85,8 +85,8 @@ def list_orders(
 # GET /orders/{id} — full con items
 # ---------------------------------------------------------------------------
 @router.get("/{order_id}")
-def get_order(order_id: str):
-    order = svc.get_order_full(order_id, prisma=svc.get_prisma())
+async def get_order(order_id: str):
+    order = await svc.get_order_full(order_id, prisma=svc.get_prisma())
     if order is None:
         raise HTTPException(status_code=404, detail=f"LabOrder {order_id} no existe")
     return order
@@ -96,10 +96,10 @@ def get_order(order_id: str):
 # PATCH /orders/{id} — actualizar (solo DRAFT)
 # ---------------------------------------------------------------------------
 @router.patch("/{order_id}")
-def update_order(order_id: str, payload: LabOrderUpdate, request: Request):
+async def update_order(order_id: str, payload: LabOrderUpdate, request: Request):
     user = _extract_user(request)
     try:
-        return svc.update_lab_order(
+        return await svc.update_lab_order(
             order_id=order_id,
             data=payload.model_dump(exclude_none=True),
             current_user=user,
@@ -115,10 +115,10 @@ def update_order(order_id: str, payload: LabOrderUpdate, request: Request):
 # DELETE /orders/{id}?motivo=X — soft delete
 # ---------------------------------------------------------------------------
 @router.delete("/{order_id}")
-def cancel_order(order_id: str, motivo: str = Query(..., min_length=3), request: Request = None):
+async def cancel_order(order_id: str, motivo: str = Query(..., min_length=3), request: Request = None):
     user = _extract_user(request) if request else {"id": "system", "role": "ADMIN"}
     try:
-        return svc.delete_lab_order(
+        return await svc.delete_lab_order(
             order_id=order_id,
             motivo=motivo,
             current_user=user,
@@ -134,10 +134,10 @@ def cancel_order(order_id: str, motivo: str = Query(..., min_length=3), request:
 # POST /orders/{id}/confirm — DRAFT → SAVED
 # ---------------------------------------------------------------------------
 @router.post("/{order_id}/confirm")
-def confirm_order(order_id: str, _payload: LabOrderConfirm = LabOrderConfirm(), request: Request = None):
+async def confirm_order(order_id: str, _payload: LabOrderConfirm = LabOrderConfirm(), request: Request = None):
     user = _extract_user(request) if request else {"id": "system", "role": "ADMIN"}
     try:
-        return svc.confirm_lab_order(
+        return await svc.confirm_lab_order(
             order_id=order_id,
             current_user=user,
             prisma=svc.get_prisma(),
@@ -152,10 +152,10 @@ def confirm_order(order_id: str, _payload: LabOrderConfirm = LabOrderConfirm(), 
 # POST /orders/{id}/items — agregar item
 # ---------------------------------------------------------------------------
 @router.post("/{order_id}/items")
-def add_item(order_id: str, payload: LabOrderItemCreate, request: Request):
+async def add_item(order_id: str, payload: LabOrderItemCreate, request: Request):
     user = _extract_user(request)
     try:
-        return svc.add_item_to_order(
+        return await svc.add_item_to_order(
             order_id=order_id,
             item_data=payload.model_dump(exclude_none=True),
             current_user=user,
@@ -171,10 +171,10 @@ def add_item(order_id: str, payload: LabOrderItemCreate, request: Request):
 # DELETE /orders/{id}/items/{itemId} — eliminar item
 # ---------------------------------------------------------------------------
 @router.delete("/{order_id}/items/{item_id}")
-def remove_item(order_id: str, item_id: str, request: Request):
+async def remove_item(order_id: str, item_id: str, request: Request):
     user = _extract_user(request)
     try:
-        return svc.remove_item_from_order(
+        return await svc.remove_item_from_order(
             order_id=order_id,
             item_id=item_id,
             current_user=user,

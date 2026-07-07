@@ -17,9 +17,9 @@ router = APIRouter(prefix="/api/v1/lab/search", tags=["lab-search"])
 # GET /search/workers?q=...
 # ---------------------------------------------------------------------------
 @router.get("/workers")
-def search_workers(q: str = Query("", max_length=120), limit: int = Query(10, ge=1, le=25)):
+async def search_workers(q: str = Query("", max_length=120), limit: int = Query(10, ge=1, le=25)):
     try:
-        return svc.search_workers(prisma=svc.get_prisma(), q=q, limit=limit)
+        return await svc.search_workers(prisma=svc.get_prisma(), q=q, limit=limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -28,7 +28,7 @@ def search_workers(q: str = Query("", max_length=120), limit: int = Query(10, ge
 # GET /search/doctors?q=...
 # ---------------------------------------------------------------------------
 @router.get("/doctors")
-def search_doctors(q: str = Query("", max_length=120)):
+async def search_doctors(q: str = Query("", max_length=120)):
     return svc.search_doctors(q=q)
 
 
@@ -36,9 +36,9 @@ def search_doctors(q: str = Query("", max_length=120)):
 # GET /search/companies?q=...
 # ---------------------------------------------------------------------------
 @router.get("/companies")
-def search_companies(q: str = Query("", max_length=120), limit: int = Query(10, ge=1, le=25)):
+async def search_companies(q: str = Query("", max_length=120), limit: int = Query(10, ge=1, le=25)):
     try:
-        return svc.search_companies(prisma=svc.get_prisma(), q=q, limit=limit)
+        return await svc.search_companies(prisma=svc.get_prisma(), q=q, limit=limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -47,8 +47,8 @@ def search_companies(q: str = Query("", max_length=120), limit: int = Query(10, 
 # GET /search/tests?q=...
 # ---------------------------------------------------------------------------
 @router.get("/tests")
-def search_tests(q: str = Query("", max_length=120), limit: int = Query(10, ge=1, le=25)):
+async def search_tests(q: str = Query("", max_length=120), limit: int = Query(10, ge=1, le=25)):
     try:
-        return svc.search_tests(prisma=svc.get_prisma(), q=q, limit=limit)
+        return await svc.search_tests(prisma=svc.get_prisma(), q=q, limit=limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

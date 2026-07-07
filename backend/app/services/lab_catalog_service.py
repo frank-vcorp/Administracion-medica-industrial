@@ -19,15 +19,18 @@ from typing import Any, Dict, List, Optional, Tuple
 # ---------------------------------------------------------------------------
 # Dispatcher: nombre del modelo Prisma → operaciones CRUD
 # ---------------------------------------------------------------------------
+# FIX-20260706-16 (Slice 2): Prisma Python usa snake_case para nombres de modelos.
+# Model `LabUnit` -> prisma.labunit. Los field names del schema (workerId, etc.)
+# mantienen camelCase.
 MOD_TO_MODEL = {
-    "unidades": "labUnit",
-    "muestras": "labSample",
-    "recipientes": "labContainer",
-    "metodologias": "labMethod",
-    "lugares_proceso": "labProcessArea",
-    "clasificaciones": "labClassification",
-    "indicaciones": "labIndication",
-    "departamentos": "labDepartment",
+    "unidades": "labunit",
+    "muestras": "labsample",
+    "recipientes": "labcontainer",
+    "metodologias": "labmethod",
+    "lugares_proceso": "labprocessarea",
+    "clasificaciones": "labclassification",
+    "indicaciones": "labindication",
+    "departamentos": "labdepartment",
 }
 
 
@@ -120,7 +123,7 @@ def _normalize_order(mod: str, col: int, direction: str) -> Tuple[str, str]:
 # ---------------------------------------------------------------------------
 # API pública del servicio
 # ---------------------------------------------------------------------------
-def list_catalog(
+async def list_catalog(
     mod: str,
     draw: int,
     start: int,
@@ -143,7 +146,7 @@ def list_catalog(
     if only_active:
         where["active"] = True
 
-    total = delegate.count(where=where)
+    total = await delegate.count(where=where)
 
     filtered_where = dict(where)
     if search:
@@ -154,7 +157,7 @@ def list_catalog(
                 {f: {"contains": search, "mode": "insensitive"}} for f in search_fields
             ]
 
-    records_filtered = delegate.count(where=filtered_where)
+    records_filtered = await delegate.count(where=filtered_where)
 
     order_field, order_dir_norm = _normalize_order(mod, order_column, order_dir)
     order_clause = {order_field: order_dir_norm}
@@ -162,9 +165,9 @@ def list_catalog(
     page_length = _cap_length(length)
     page_start = max(0, int(start or 0))
 
-    rows = delegate.find_many(
+    rows = await delegate.find_many(
         where=filtered_where,
-        order_by=order_clause,
+        order=order_clause,
         skip=page_start,
         take=page_length,
     )
@@ -177,15 +180,15 @@ def list_catalog(
     }
 
 
-def get_catalog_item(mod: str, item_id: str) -> Optional[Dict[str, Any]]:
+async def get_catalog_item(mod: str, item_id: str) -> Optional[Dict[str, Any]]:
     prisma = get_prisma()
     model_name = MOD_TO_MODEL[mod]
     delegate = getattr(prisma, model_name)
-    obj = delegate.find_unique(where={"id": item_id})
+    obj = await delegate.find_unique(where={"id": item_id})
     return _serialize(obj) if obj else None
 
 
-def create_catalog_item(mod: str, values: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
+async def create_catalog_item(mod: str, values: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
     prisma = get_prisma()
     model_name = MOD_TO_MODEL[mod]
     delegate = getattr(prisma, model_name)
@@ -196,37 +199,38 @@ def create_catalog_item(mod: str, values: Dict[str, Any], user_id: Optional[str]
     if user_id:
         data["createdById"] = user_id
 
-    obj = delegate.create(data=data)
+    obj = await delegate.create(data=data)
     obj_id = obj["id"] if isinstance(obj, dict) else getattr(obj, "id", None)
     record_audit(prisma, action=f"CREATE_{mod.upper().rstrip('S')}", entity=model_name, entity_id=obj_id, before=None, after=_serialize(obj), user_id=user_id)
     return _serialize(obj)
 
 
-def update_catalog_item(mod: str, item_id: str, values: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
+async def update_catalog_item(mod: str, item_id: str, values: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
     prisma = get_prisma()
     model_name = MOD_TO_MODEL[mod]
     delegate = getattr(prisma, model_name)
 
-    before = delegate.find_unique(where={"id": item_id})
+    before = await delegate.find_unique(where={"id": item_id})
     if before is None:
         raise LookupError(f"{mod}/{item_id} no existe")
 
     data = {k: v for k, v in values.items() if v is not None}
-    obj = delegate.update(where={"id": item_id}, data=data)
+    obj = await delegate.update(where={"id": item_id}, data=data)
     obj_id = obj["id"] if isinstance(obj, dict) else getattr(obj, "id", None)
     record_audit(prisma, action=f"UPDATE_{mod.upper().rstrip('S')}", entity=model_name, entity_id=obj_id, before=_serialize(before), after=_serialize(obj), user_id=user_id)
     return _serialize(obj)
 
 
-def delete_catalog_item(mod: str, item_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+async def delete_catalog_item(mod: str, item_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
     """Soft delete: pone active=False."""
-    return update_catalog_item(mod, item_id, {"active": False}, user_id=user_id)
+    return await update_catalog_item(mod, item_id, {"active": False}, user_id=user_id)
 
 
 def record_audit(prisma: Any, action: str, entity: str, entity_id: str, before: Optional[Dict[str, Any]], after: Optional[Dict[str, Any]], user_id: Optional[str] = None) -> None:
     """Inserta una fila en AuditLog. Tolerante a fallos (no rompe el flujo principal)."""
     try:
-        audit = getattr(prisma, "auditLog", None)
+        # FIX-20260706-16: Prisma Python model AuditLog -> prisma.auditlog.
+        audit = getattr(prisma, "auditlog", None)
         if audit is None:
             return
         details = {
