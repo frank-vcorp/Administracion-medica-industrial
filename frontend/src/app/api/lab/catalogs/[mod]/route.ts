@@ -156,8 +156,9 @@ export const GET = withApiErrors(
       where.active = true;
     }
 
-    // Orden: en este slice simple usamos symbol/code/name según columna
-    const orderByCol = ["symbol", "code", "name"][orderCol] || "code";
+    // IMPL-20260707-13: fix bug "Unknown argument symbol" para mod=muestras.
+    // Usamos 'createdAt' fijo (válido en todos los modelos).
+    const orderByCol = "createdAt";
 
     const [recordsTotal, recordsFiltered, data] = await Promise.all([
       model.count(),
