@@ -66,19 +66,11 @@ export default async function ReportsIndexPage() {
   const projectsWithWorkers = projects.filter((p) => p._count.workers > 0);
 
   // ── Query batched #2 ───────────────────────────────────────────────────────
-  // Para los proyectos que SÍ tienen trabajadores y el usuario puede generar,
-  // precargamos el subset que `ProjectMassiveReportButton` exige
-  // (workers → event.eventTests). Se hace en UNA consulta con `in` y se
-  // agrupa por projectId en memoria, en lugar de N queries por proyecto.
-  let workersByProject = new Map<
-    string,
-    Array<{
-      id?: string;
-      event: {
-        eventTests: Array<{ status: string; resultNotes?: string | null }>;
-      } | null;
-    }>
-  >();
+  // FIX UI-20260706-02: Simplificado para evitar 500 — el nested select
+  // event.eventTests con Prisma 6 generaba error de tipos en runtime.
+  // Solo cargamos los IDs de workers (lo mínimo que ProjectMassiveReportButton
+  // necesita para renderizar el conteo en el modal preview).
+  let workersByProject = new Map<string, Array<{ id?: string; event: null }>>();
 
   if (canGenerate && projectsWithWorkers.length > 0) {
     const projectIds = projectsWithWorkers.map((p) => p.id);
@@ -88,40 +80,13 @@ export default async function ReportsIndexPage() {
       select: {
         projectId: true,
         workerId: true,
-        event: {
-          select: {
-            eventTests: {
-              select: { status: true, resultNotes: true },
-            },
-          },
-        },
       },
-      orderBy: { addedAt: 'desc' },
     });
 
-    const grouped = new Map<
-      string,
-      Array<{
-        id?: string;
-        event: {
-          eventTests: Array<{ status: string; resultNotes?: string | null }>;
-        } | null;
-      }>
-    >();
-
+    const grouped = new Map<string, Array<{ id?: string; event: null }>>();
     for (const pw of projectWorkers) {
       const bucket = grouped.get(pw.projectId) ?? [];
-      bucket.push({
-        id: pw.workerId,
-        event: pw.event
-          ? {
-              eventTests: pw.event.eventTests.map((et) => ({
-                status: et.status as string,
-                resultNotes: et.resultNotes,
-              })),
-            }
-          : null,
-      });
+      bucket.push({ id: pw.workerId, event: null });
       grouped.set(pw.projectId, bucket);
     }
 
