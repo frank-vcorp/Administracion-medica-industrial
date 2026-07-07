@@ -74,27 +74,32 @@ def project_to_snapshot(project: Dict[str, Any]) -> Dict[str, Any]:
     Adaptado del shape de DemoProject para que la logica de conteos sea
     reutilizable sin acoplar al ORM.
     """
-    trabajadores_raw = project.get("workers") or []
-    empresa = (project.get("company") or {}).get("name", "")
-    empresa_legal = (project.get("company") or {}).get("legalName") or empresa
+    trabajadores_raw = project.workers or []
+    empresa = (project.company.name if project.company else "")
+    empresa_legal = (project.company.legalName if project.company else None) or empresa
     fecha = (
         project.get("startDate").strftime("%Y-%m-%d")
-        if hasattr(project.get("startDate"), "strftime")
-        else str(project.get("startDate", ""))[:10]
+        if hasattr(project.startDate, "strftime")
+        else str(project.startDate or "")[:10]
     )
 
     trabajadores = []
     for pw in trabajadores_raw:
-        worker = pw.get("worker") if isinstance(pw, dict) else None
+        # FIX-20260706-15: pw es un ProjectWorker model (no dict).
+        # Acceder a atributos en lugar de .get().
+        worker = getattr(pw, "worker", None)
         if worker is None:
             continue
         # Evento medico del trabajador en este proyecto.
-        event = pw.get("event") if isinstance(pw, dict) else None
+        event = getattr(pw, "event", None)
 
         estudios: Dict[str, Any] = {}
-        if isinstance(event, dict):
-            for et in (event.get("eventTests") or []):
-                tn = (et.get("testNameSnapshot") or "").lower()
+        if event is not None:
+            event_tests = getattr(event, "eventTests", None) or []
+            for et in event_tests:
+                # FIX-20260706-15: et es un EventTest model, no dict.
+                # Acceder a atributos directamente.
+                tn = (getattr(et, "testNameSnapshot", None) or "").lower()
                 if "audiometr" in tn:
                     estudios["audiometria"] = _audiometria(et)
                 elif "espirometr" in tn:
@@ -110,11 +115,13 @@ def project_to_snapshot(project: Dict[str, Any]) -> Dict[str, Any]:
                 elif "laboratorio" in tn or "lab" in tn or "bh" in tn or "qs" in tn:
                     estudios["laboratorio"] = _laboratorio(et)
 
-        nombre = f"{(worker.get('lastName') or '').strip()} {(worker.get('firstName') or '').strip()}".strip()
-        sexo = (worker.get("sexo") or "").upper() if isinstance(worker.get("sexo"), str) else ""
+        # FIX-20260706-15: worker es un Worker model, no dict.
+        nombre = f"{(getattr(worker, 'lastName', None) or '').strip()} {(getattr(worker, 'firstName', None) or '').strip()}".strip()
+        sexo_attr = getattr(worker, "sexo", None)
+        sexo = (sexo_attr or "").upper() if isinstance(sexo_attr, str) else ""
         trabajadores.append(
             {
-                "folio": str(worker.get("universalId") or worker.get("id", ""))[:16],
+                "folio": str(getattr(worker, "universalId", None) or getattr(worker, "id", ""))[:16],
                 "nombre": nombre,
                 "sexo": sexo,
                 "area": "",
@@ -130,7 +137,7 @@ def project_to_snapshot(project: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     return {
-        "id": project.get("id"),
+        "id": getattr(project, "id", None),
         "empresa": empresa,
         "empresaLegal": empresa_legal,
         "fecha": fecha,
@@ -139,103 +146,104 @@ def project_to_snapshot(project: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # --- Adaptadores EventTest -> dicts -----------------------------------------
+# FIX-20260706-15: Prisma devuelve modelos (no dicts), usar getattr en vez de .get()
 
-def _first_extracted(et: Dict[str, Any]) -> Dict[str, Any]:
-    ed = et.get("extractedData")
-    if isinstance(ed, dict):
-        return ed
-    return {}
+def _first_extracted(et) -> Dict[str, Any]:
+    ed = getattr(et, "extractedData", None)
+    if ed is None:
+        return {}
+    return ed  # Prisma Json field es dict-like
 
 
-def _audiometria(et: Dict[str, Any]) -> Dict[str, Any]:
+def _audiometria(et) -> Dict[str, Any]:
     ed = _first_extracted(et)
-    od = ed.get("oido_derecho") or {}
-    oi = ed.get("oido_izquierdo") or {}
+    od = getattr(ed, "oido_derecho", None) or {}
+    oi = getattr(ed, "oido_izquierdo", None) or {}
     return {
-        "dx": ed.get("dx") or ed.get("diagnostico") or "N/A",
-        "oidoDerecho": ed.get("oido_derecho_dx") or od.get("umbral") or "N/A",
-        "oidoIzquierdo": ed.get("oido_izquierdo_dx") or oi.get("umbral") or "N/A",
-        "hbc": ed.get("hbc_porcentaje") or ed.get("hbc"),
+        "dx": getattr(ed, "dx", None) or getattr(ed, "diagnostico", None) or "N/A",
+        "oidoDerecho": getattr(ed, "oido_derecho_dx", None) or getattr(od, "umbral", None) or "N/A",
+        "oidoIzquierdo": getattr(ed, "oido_izquierdo_dx", None) or getattr(oi, "umbral", None) or "N/A",
+        "hbc": getattr(ed, "hbc_porcentaje", None) or getattr(ed, "hbc", None),
     }
 
 
-def _espirometria(et: Dict[str, Any]) -> Dict[str, Any]:
+def _espirometria(et) -> Dict[str, Any]:
     ed = _first_extracted(et)
     return {
-        "patron": ed.get("patron") or ed.get("interpretacion") or "N/A",
-        "fvc": ed.get("fvc"),
-        "tabaquismo": ed.get("tabaquismo") or "N/A",
+        "patron": getattr(ed, "patron", None) or getattr(ed, "interpretacion", None) or "N/A",
+        "fvc": getattr(ed, "fvc", None),
+        "tabaquismo": getattr(ed, "tabaquismo", None) or "N/A",
     }
 
 
-def _rx_columna(et: Dict[str, Any]) -> Dict[str, Any]:
+def _rx_columna(et) -> Dict[str, Any]:
     ed = _first_extracted(et)
     return {
-        "escoliosis": ed.get("escoliosis_grados") or ed.get("escoliosis"),
-        "lordosis": ed.get("lordosis_grados") or ed.get("lordosis"),
-        "basculacion": ed.get("basculacion_pelvica_cm") or ed.get("basculacion"),
-        "valoracionPostural": ed.get("valoracion_postural") or ed.get("postura") or "N/A",
-        "impresion": ed.get("impresion_diagnostica") or ed.get("impresion") or "N/A",
+        "escoliosis": getattr(ed, "escoliosis_grados", None) or getattr(ed, "escoliosis", None),
+        "lordosis": getattr(ed, "lordosis_grados", None) or getattr(ed, "lordosis", None),
+        "basculacion": getattr(ed, "basculacion_pelvica_cm", None) or getattr(ed, "basculacion", None),
+        "valoracionPostural": getattr(ed, "valoracion_postural", None) or getattr(ed, "postura", None) or "N/A",
+        "impresion": getattr(ed, "impresion_diagnostica", None) or getattr(ed, "impresion", None) or "N/A",
     }
 
 
-def _rx_torax(et: Dict[str, Any]) -> Dict[str, Any]:
+def _rx_torax(et) -> Dict[str, Any]:
     ed = _first_extracted(et)
     return {
-        "impresion": ed.get("impresion_diagnostica") or ed.get("impresion") or "N/A",
+        "impresion": getattr(ed, "impresion_diagnostica", None) or getattr(ed, "impresion", None) or "N/A",
     }
 
 
-def _ecg(et: Dict[str, Any]) -> Dict[str, Any]:
+def _ecg(et) -> Dict[str, Any]:
     ed = _first_extracted(et)
     return {
-        "impresion": ed.get("impresion_diagnostica") or ed.get("impresion") or "N/A",
+        "impresion": getattr(ed, "impresion_diagnostica", None) or getattr(ed, "impresion", None) or "N/A",
     }
 
 
-def _campimetria(et: Dict[str, Any]) -> Dict[str, Any]:
+def _campimetria(et) -> Dict[str, Any]:
     ed = _first_extracted(et)
     return {
-        "agudezaVisual": ed.get("agudeza_visual") or ed.get("agudezaVisual") or "N/A",
-        "camposVisuales": ed.get("campos_visuales") or ed.get("camposVisuales") or "N/A",
-        "discriminacionColor": ed.get("discriminacion_color") or ed.get("discriminacionColor") or "N/A",
+        "agudezaVisual": getattr(ed, "agudeza_visual", None) or getattr(ed, "agudezaVisual", None) or "N/A",
+        "camposVisuales": getattr(ed, "campos_visuales", None) or getattr(ed, "camposVisuales", None) or "N/A",
+        "discriminacionColor": getattr(ed, "discriminacion_color", None) or getattr(ed, "discriminacionColor", None) or "N/A",
     }
 
 
-def _laboratorio(et: Dict[str, Any]) -> Dict[str, Any]:
+def _laboratorio(et) -> Dict[str, Any]:
     ed = _first_extracted(et)
     return {
-        "folioLab": ed.get("folio_lab") or ed.get("folioLab") or "",
-        "edad": ed.get("edad") or "",
+        "folioLab": getattr(ed, "folio_lab", None) or getattr(ed, "folioLab", None) or "",
+        "edad": getattr(ed, "edad", None) or "",
         "bh": {
-            "hb": ed.get("bh_hb"),
-            "mchb": ed.get("bh_mchb"),
-            "chgm": ed.get("bh_chgm"),
-            "leu": ed.get("bh_leu"),
-            "pla": ed.get("bh_pla"),
+            "hb": getattr(ed, "bh_hb", None),
+            "mchb": getattr(ed, "bh_mchb", None),
+            "chgm": getattr(ed, "bh_chgm", None),
+            "leu": getattr(ed, "bh_leu", None),
+            "pla": getattr(ed, "bh_pla", None),
         },
         "qs6": {
-            "gluc": ed.get("qs_glucosa"),
-            "bun": ed.get("qs_bun"),
-            "urea": ed.get("qs_urea"),
-            "creat": ed.get("qs_creatinina"),
-            "au": ed.get("qs_acido_urico"),
-            "col": ed.get("qs_colesterol"),
-            "trig": ed.get("qs_trigliceridos"),
+            "gluc": getattr(ed, "qs_glucosa", None),
+            "bun": getattr(ed, "qs_bun", None),
+            "urea": getattr(ed, "qs_urea", None),
+            "creat": getattr(ed, "qs_creatinina", None),
+            "au": getattr(ed, "qs_acido_urico", None),
+            "col": getattr(ed, "qs_colesterol", None),
+            "trig": getattr(ed, "qs_trigliceridos", None),
         },
         "ego": {
-            "glc": ed.get("ego_glucosa"),
-            "prot": ed.get("ego_proteinas"),
-            "blo": ed.get("ego_sangre"),
-            "bac": ed.get("ego_bacterias") or "N/A",
-            "cristales": ed.get("ego_cristales") or "N/A",
+            "glc": getattr(ed, "ego_glucosa", None),
+            "prot": getattr(ed, "ego_proteinas", None),
+            "blo": getattr(ed, "ego_sangre", None),
+            "bac": getattr(ed, "ego_bacterias", None) or "N/A",
+            "cristales": getattr(ed, "ego_cristales", None) or "N/A",
         },
         "toxico": {
-            "anfeta": ed.get("tox_anfetaminas") or "N/A",
-            "coca": ed.get("tox_cocaina") or "N/A",
-            "marihua": ed.get("tox_marihuana") or "N/A",
-            "opiac": ed.get("tox_opiaceos") or "N/A",
-            "metanf": ed.get("tox_metanfetaminas") or "N/A",
+            "anfeta": getattr(ed, "tox_anfetaminas", None) or "N/A",
+            "coca": getattr(ed, "tox_cocaina", None) or "N/A",
+            "marihua": getattr(ed, "tox_marihuana", None) or "N/A",
+            "opiac": getattr(ed, "tox_opiaceos", None) or "N/A",
+            "metanf": getattr(ed, "tox_metanfetaminas", None) or "N/A",
         },
     }
 
