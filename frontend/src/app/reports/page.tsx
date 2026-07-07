@@ -22,7 +22,6 @@
  * sin funcionalidad) por esta vista índice real.
  */
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/auth';
 
@@ -33,13 +32,13 @@ export const dynamic = 'force-dynamic';
 const REPORT_ROLES = ['ADMIN', 'DOCTOR_GENERAL', 'RECEPTIONIST'];
 
 export default async function ReportsIndexPage() {
+  // UI-20260706-05: Eliminamos el redirect porque Next.js requiere que
+  // redirect() sea la ÚLTIMA instrucción del componente (tipo `never`).
+  // Sin `return`, TypeScript no compila correctamente y en runtime se
+  // intenta renderizar el componente con `session = null`.
+  // Usamos el mismo patrón que /projects/[id]: session opcional con fallback.
   const session = await getServerSession(authOptions);
-
-  if (!session) {
-    redirect('/login');
-  }
-
-  const role = (session.user?.role as string | undefined) ?? '';
+  const role = (session?.user?.role as string | undefined) ?? '';
   const canGenerate = REPORT_ROLES.includes(role);
 
   // UI-20260706-04: Versión ultra-minimalista para identificar causa del 500.
