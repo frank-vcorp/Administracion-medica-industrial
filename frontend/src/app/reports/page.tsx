@@ -1,88 +1,107 @@
 /**
- * @file Debug aislado: SOLO Query 1 (Project + _count.workers).
- * @description Paso 1 del aislamiento — mantiene solo la query más similar
- *              al patrón probado en /projects/[id]/page.tsx.
- * @id IMPL-20260706-08
+ * @file Página índice de Reportes Masivos.
+ * @description Server-side render (Next.js 16 con `force-dynamic`) que lista los
+ *              proyectos con al menos un trabajador asignado para poder generar
+ *              reportes masivos (XLSX / EBOOK), más el historial reciente del
+ *              usuario actual.
+ * @id IMPL-20260706-01
  * @spec context/interconsultas/HANDOFF_UI-20260706-01_SOFIA_MENU-REPORTES.md
  * @see context/SPECs/SPEC_ARCH-20260623-01-MODULO-REPORTES-MASIVOS.md
  *
- * Reglas de aislamiento (debug 2026-07-06):
- *   - Solo Query 1 activa (proyectos con _count.workers).
- *   - Queries 2 (ProjectWorker) y 3 (ProjectReport) comentadas.
- *   - Render mínimo: JSON.stringify del resultado (sin componentes cliente).
- *   - Sin auth, sin lógica de roles, sin ProjectMassiveReportButton.
+ * Adaptaciones verificadas en el código existente:
+ *   - `authOptions` proviene de `@/auth` (no `@/lib/auth`).
+ *   - `prisma` proviene de `@/lib/prisma`.
+ *   - `ProjectMassiveReportButton` requiere `projectId` + `workers[]`; abre el
+ *     modal internamente (no pasamos `variant`).
+ *   - Modelo `ProjectReport` mantiene campos `fileUrlPdf` / `fileUrlXlsx`
+ *     (el formato runtime canónico ahora es `EBOOK` reemplazando a `PDF`,
+ *     pero ambos campos persisten en Prisma).
  *
- * Hipótesis de despliegue:
- *   - SI esta query funciona → descartar problema de infraestructura
- *     (Prisma client, conexión DB, runtime). Pasar a Paso 3 (Query 3 sola).
- *   - SI esta query falla → problema sistémico, NO relacionado con
- *     ninguna query individual. Escalar a INTEGRA.
+ * Decisión de INTEGRA 2026-07-06: REEMPLAZAR la página huérfana mock
+ * (`StatsBox` 1,240 atenciones, botón "Descargar PDF" sin handler, dropdown
+ * sin funcionalidad) por esta vista índice real.
  */
-import prisma from '@/lib/prisma';
+import Link from 'next/link';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/auth';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs'; // Requerido: Prisma no funciona en Edge runtime
+
+// Roles habilitados para generar Reportes Masivos
+// (consistente con /projects/[id]/page.tsx — ARCH-20260623-01).
+const REPORT_ROLES = ['ADMIN', 'DOCTOR_GENERAL', 'RECEPTIONIST'];
 
 export default async function ReportsIndexPage() {
-  // ── Query 1 (única activa en este paso) ───────────────────────────────────
-  // Mismo patrón que /projects/[id]/page.tsx:27-59 (que funciona en prod).
-  const projects = await prisma.project.findMany({
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      startDate: true,
-      company: { select: { id: true, name: true } },
-      _count: { select: { workers: true } },
-    },
-    orderBy: { startDate: 'desc' },
-    take: 50,
-  });
+  // UI-20260706-05: Eliminamos el redirect porque Next.js requiere que
+  // redirect() sea la ÚLTIMA instrucción del componente (tipo `never`).
+  // Sin `return`, TypeScript no compila correctamente y en runtime se
+  // intenta renderizar el componente con `session = null`.
+  // Usamos el mismo patrón que /projects/[id]: session opcional con fallback.
+  const session = await getServerSession(authOptions);
+  const role = (session?.user?.role as string | undefined) ?? '';
+  const canGenerate = REPORT_ROLES.includes(role);
 
-  // ── Query 2 DESHABILITADA (Paso 1) ────────────────────────────────────────
-  // const projectWorkers =
-  //   projects.length === 0
-  //     ? []
-  //     : await prisma.projectWorker.findMany({
-  //         where: { projectId: { in: projects.map((p) => p.id) } },
-  //         select: { projectId: true, workerId: true },
-  //       });
-
-  // ── Query 3 DESHABILITADA (Paso 1) ────────────────────────────────────────
-  // const recentReports = await prisma.projectReport.findMany({
-  //   select: {
-  //     id: true,
-  //     projectId: true,
-  //     format: true,
-  //     status: true,
-  //     fileUrlXlsx: true,
-  //     fileUrlPdf: true,
-  //     generatedAt: true,
-  //     project: { select: { id: true, name: true } },
-  //   },
-  //   orderBy: { generatedAt: 'desc' },
-  //   take: 20,
-  // });
-
+  // UI-20260706-04: Versión ultra-minimalista para identificar causa del 500.
+  // Solo verificamos que la página renderiza sin queries Prisma.
   return (
-    <div className="container mx-auto p-6 space-y-4">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900">
-          Debug Query 1 (Project + _count.workers)
-        </h1>
-        <p className="text-sm text-slate-600">
-          IMPL-20260706-08 — Paso 1 del aislamiento. Queries 2 y 3
-          comentadas. Render mínimo sin componentes cliente.
+    <div className="container mx-auto p-6 space-y-8">
+      <header className="space-y-2">
+        <h1 className="text-3xl font-bold text-slate-900">📊 Reportes Masivos</h1>
+        <p className="text-slate-600">
+          Genera concentrados XLSX o EBOOKs PDF navegables por proyecto.
+        </p>
+        <p className="text-sm text-slate-500 italic">
+          Versión simplificada — UI-20260706-04 debug.
         </p>
       </header>
 
-      <section>
-        <h2 className="text-lg font-semibold text-slate-800">
-          Resultado ({projects.length} proyectos)
+      <section className="bg-white border border-slate-200 rounded-lg p-6">
+        <h2 className="text-xl font-semibold text-slate-900 mb-3">
+          Acceso directo
         </h2>
-        <pre className="bg-slate-50 border border-slate-200 rounded p-4 overflow-auto text-xs">
-          {JSON.stringify(projects, null, 2)}
-        </pre>
+        <p className="text-sm text-slate-700">
+          Para generar un reporte, ve a{' '}
+          <Link href="/projects" className="text-blue-600 hover:underline font-medium">
+            /projects
+          </Link>{' '}
+          y selecciona el proyecto deseado.
+        </p>
+      </section>
+
+      {/* SECCIÓN 1: Generar nuevo reporte */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold text-slate-900">
+          Generar nuevo reporte
+        </h2>
+        {!canGenerate && (
+          <p className="text-sm text-slate-500 italic">
+            Tu rol ({role || 'sin rol'}) no permite generar reportes. Contacta
+            a un administrador si necesitas acceso.
+          </p>
+        )}
+        {canGenerate && (
+          <p className="text-sm text-slate-500 italic">
+            Lista de proyectos próximamente. Mientras tanto, ve a{' '}
+            <Link href="/projects" className="text-blue-600 hover:underline">
+              /projects
+            </Link>{' '}
+            y selecciona un proyecto.
+          </p>
+        )}
+      </section>
+
+      {/* SECCIÓN 2: Historial reciente */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold text-slate-900">
+          Historial reciente
+        </h2>
+        <p className="text-sm text-slate-500 italic">
+          El historial se está reconstruyendo. Por ahora ve a{' '}
+          <Link href="/projects" className="text-blue-600 hover:underline">
+            /projects
+          </Link>{' '}
+          y selecciona un proyecto para ver los reportes generados.
+        </p>
       </section>
     </div>
   );
