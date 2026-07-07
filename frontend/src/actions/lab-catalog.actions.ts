@@ -63,7 +63,6 @@ const MOD_ORDER_FIELDS: Record<LabCatalogMod, string[]> = {
   indicaciones: ["code", "text", "active", "createdAt"],
   departamentos: ["code", "name", "active", "createdAt"],
 };
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
