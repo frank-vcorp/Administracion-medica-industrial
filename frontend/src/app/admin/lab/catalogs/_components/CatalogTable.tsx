@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  listLabCatalogAction,
+  listLabCatalogActionV2,
   deleteLabCatalogAction,
 } from "@/actions/lab-catalog.actions";
 import { type LabCatalogMod } from "@/lib/validations/lab-catalog";
@@ -39,7 +39,7 @@ export default function CatalogTable({
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const result = await listLabCatalogAction({
+    const result = await listLabCatalogActionV2({
       mod,
       draw: page + 1,
       start: page * pageSize,

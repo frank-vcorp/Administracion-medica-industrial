@@ -107,7 +107,7 @@ function _modelFor(modelName: string): any {
 // ---------------------------------------------------------------------------
 // LISTAR — paginado server-side DataTables-compatible
 // ---------------------------------------------------------------------------
-export async function listLabCatalogAction(params: {
+export async function listLabCatalogActionV2(params: {
   mod: string;
   draw?: number;
   start?: number;
