@@ -3,25 +3,30 @@
  * @id IMPL-20260630-06 — Slice A NOVA absorción (ARCH-20260630-02).
  * @backup context/SPECs/SPEC_ARCH-20260630-02-DEMO-NOVA-ABSORBIDO.md
  *
- * HOTFIX IMPL-20260701-07: bypass de FastAPI (bug Prisma JS→Python).
- * Las actions ahora llaman a las Next.js API routes internas en
- * `/api/lab/catalogs/[mod]` que usan Prisma JS directo. BACKEND_URL se
- * conserva para referencia pero ya no se usa.
+ * HOTFIX IMPL-20260706-11: server actions usan Prisma directo.
  *
- * HOTFIX IMPL-20260706-10: reenviar cookies del request actual en
- * `_localFetch`. Sin esto, las API routes validaban sesión con
- * `getServerSession()` y devolvían 401 (que Vercel convertía en HTML
- * de redirect a login) en lugar de los datos.
+ * Histórico de hotfixes anteriores (descartados):
+ * - IMPL-20260701-07: bypass FastAPI (bug Prisma JS→Python).
+ * - IMPL-20260706-10: reenviar cookies en _localFetch.
  *
- * Todas las actions validan server-side con Zod (incluso aunque el cliente
- * ya valide) y restringen por rol ADMIN.
+ * Ambos quedaron descartados porque Next.js server actions haciendo
+ * fetch a rutas del mismo server tienen problemas conocidos de
+ * enrutamiento (Vercel responde con HTML 404/login redirect, lo que
+ * generaba el error "Unexpected token '<'" en el cliente).
+ *
+ * Solución definitiva (este hotfix): el server action importa Prisma
+ * directamente y hace la query, igual que la API route. La API route
+ * se conserva intacta para uso de clientes externos en el futuro.
+ *
+ * Todas las actions validan server-side con Zod (incluso aunque el
+ * cliente ya valide) y restringen por rol ADMIN.
  */
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
+import prisma from "@/lib/prisma";
 import {
   LAB_CATALOG_MODS,
   LAB_SCHEMA_BY_MOD,
@@ -30,28 +35,20 @@ import {
   isValidLabMod,
 } from "@/lib/validations/lab-catalog";
 
-// BACKEND_URL conservado por compatibilidad/rollback, ya no se usa.
-// IMPL-20260701-07: usamos Next.js API routes locales.
-const BACKEND_URL =
-  process.env.BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:8000";
-
-/**
- * Base URL absoluta para fetch server-side a las API routes locales.
- * Resuelve el host según el entorno (Vercel → NEXT_PUBLIC_VERCEL_URL,
- * local → localhost:3000). Si NEXT_PUBLIC_APP_URL está definida se respeta.
- */
-function _localBase(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.NEXT_PUBLIC_VERCEL_URL) {
-    return process.env.NEXT_PUBLIC_VERCEL_URL.startsWith("http")
-      ? process.env.NEXT_PUBLIC_VERCEL_URL
-      : `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
-  }
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
-}
+// ---------------------------------------------------------------------------
+// Mapa: mod (URL) → nombre del modelo Prisma JS
+// (Réplica del API route; mantener sincronizado.)
+// ---------------------------------------------------------------------------
+const MOD_TO_MODEL: Record<LabCatalogMod, string> = {
+  unidades: "labUnit",
+  muestras: "labSample",
+  recipientes: "labContainer",
+  metodologias: "labMethod",
+  lugares_proceso: "labProcessArea",
+  clasificaciones: "labClassification",
+  indicaciones: "labIndication",
+  departamentos: "labDepartment",
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,39 +58,21 @@ type ActionResult<T> =
   | { ok: false; error: string; code?: string };
 
 async function _requireAdmin(): Promise<{ id: string; userId: string } | null> {
-  const session = await getServerSession(authOptions);
-  const role = session?.user?.role;
-  const id = session?.user?.id;
-  if (!session?.user || !id) return null;
-  if (role !== "ADMIN") return null;
-  return { id, userId: id };
-}
-
-async function _localFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  // IMPL-20260701-07: Next.js API routes locales.
-  // IMPL-20260706-10: reenviar cookies del request actual para que las
-  // API routes puedan validar sesión con getServerSession(). Sin esto,
-  // la API retornaba 401 (que Vercel convierte en HTML de redirect a
-  // login) en lugar de los datos esperados.
-  const base = _localBase();
-  const url = path.startsWith("http") ? path : `${base}${path}`;
-
-  // Next.js 15+: cookies() retorna Promise.
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
-
-  return fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-      ...(init.headers || {}),
-    },
-    cache: "no-store",
-  });
+  try {
+    const session = await getServerSession(authOptions);
+    const role = session?.user?.role;
+    const id = session?.user?.id;
+    if (!session?.user || !id) return null;
+    if (role !== "ADMIN") return null;
+    return { id, userId: id };
+  } catch (err) {
+    // IMPL-20260706-11: si NextAuth falla (ej. NEXTAUTH_SECRET faltante),
+    // no queremos 500 HTML — retornamos null para que la action devuelva
+    // UNAUTHORIZED con JSON parseable por el cliente.
+    // eslint-disable-next-line no-console
+    console.error("[_requireAdmin] session error:", err);
+    return null;
+  }
 }
 
 function _validateMod(mod: string): { ok: true; mod: LabCatalogMod } | { ok: false; error: string } {
@@ -101,6 +80,13 @@ function _validateMod(mod: string): { ok: true; mod: LabCatalogMod } | { ok: fal
     return { ok: false, error: `mod inválido: ${mod}. Permitidos: ${LAB_CATALOG_MODS.join(", ")}` };
   }
   return { ok: true, mod: mod as LabCatalogMod };
+}
+
+// Acceso dinámico al modelo Prisma.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function _modelFor(modelName: string): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (prisma as any)[modelName];
 }
 
 // ---------------------------------------------------------------------------
@@ -122,24 +108,58 @@ export async function listLabCatalogAction(params: {
   if (!modCheck.ok) return { ok: false, error: modCheck.error };
 
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const path = `/api/lab/catalogs/${modCheck.mod}`;
-    const qs = new URLSearchParams();
-    qs.set("draw", String(params.draw ?? 1));
-    qs.set("start", String(params.start ?? 0));
-    qs.set("length", String(params.length ?? 25));
-    if (params.search) qs.set("search[value]", params.search);
-    qs.set("onlyActive", String(params.onlyActive ?? false));
-    qs.set("order[0][column]", String(params.orderColumn ?? 0));
-    qs.set("order[0][dir]", params.orderDir ?? "asc");
+    const draw = params.draw ?? 1;
+    const start = params.start ?? 0;
+    const length = params.length ?? 25;
+    const searchValue = params.search ?? "";
+    const orderCol = params.orderColumn ?? 0;
+    const orderDir = (params.orderDir ?? "asc").toLowerCase() === "desc" ? "desc" : "asc";
+    const onlyActive = params.onlyActive ?? false;
 
-    const res = await _localFetch(`${path}?${qs.toString()}`, { method: "GET" });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const modelName = MOD_TO_MODEL[modCheck.mod];
+    const model = _modelFor(modelName);
+    if (!model) {
+      return { ok: false, error: `Modelo ${modelName} no disponible` };
     }
-    const data = (await res.json()) as DataTablesResponse;
-    return { ok: true, data };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = {};
+    if (searchValue.trim()) {
+      // Búsqueda case-insensitive por code + name (o text para indicaciones)
+      const textField = modCheck.mod === "indicaciones" ? "text" : "name";
+      where.OR = [
+        { code: { contains: searchValue, mode: "insensitive" } },
+        { [textField]: { contains: searchValue, mode: "insensitive" } },
+      ];
+    }
+    if (onlyActive) {
+      where.active = true;
+    }
+
+    // Orden: symbol/code/name según columna (mismo criterio que API route)
+    const orderByCol = ["symbol", "code", "name"][orderCol] || "code";
+
+    const [recordsTotal, recordsFiltered, data] = await Promise.all([
+      model.count(),
+      model.count({ where }),
+      model.findMany({
+        where,
+        skip: start,
+        take: length,
+        orderBy: { [orderByCol]: orderDir },
+      }),
+    ]);
+
+    return {
+      ok: true,
+      data: {
+        draw,
+        recordsTotal,
+        recordsFiltered,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: data as any[],
+      },
+    };
   } catch (err) {
     return {
       ok: false,
@@ -171,19 +191,28 @@ export async function createLabCatalogAction(params: {
   }
 
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const path = `/api/lab/catalogs/${modCheck.mod}`;
-    const res = await _localFetch(path, {
-      method: "POST",
-      body: JSON.stringify(parsed.data),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const modelName = MOD_TO_MODEL[modCheck.mod];
+    const model = _modelFor(modelName);
+    if (!model) {
+      return { ok: false, error: `Modelo ${modelName} no disponible` };
     }
-    const body = (await res.json()) as { id: string; item: Record<string, unknown>; ok: boolean };
+
+    const created = await model.create({
+      data: {
+        ...(parsed.data as Record<string, unknown>),
+        createdById: guard.userId,
+      },
+    });
+
     revalidatePath("/admin/lab/catalogs");
-    return { ok: true, data: { id: body.id, item: body.item } };
+    return {
+      ok: true,
+      data: {
+        id: (created as { id: string }).id,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        item: created as Record<string, unknown>,
+      },
+    };
   } catch (err) {
     return {
       ok: false,
@@ -215,7 +244,9 @@ export async function updateLabCatalogAction(params: {
       typeof (schema as { partial?: () => unknown }).partial === "function"
         ? (schema as unknown as { partial: () => typeof schema }).partial()
         : schema;
-    const parsed = partialSchema.safeParse(params.values);
+    // El id viene junto con los values en el body del cliente.
+    const bodyForParse = { id: params.id, ...params.values };
+    const parsed = partialSchema.safeParse(bodyForParse);
     if (!parsed.success) {
       return {
         ok: false,
@@ -227,23 +258,27 @@ export async function updateLabCatalogAction(params: {
       };
     }
 
-    // IMPL-20260701-07: ruta Next.js API local.
-    // El id viene como query o body; este route PATCH recibe id en body.
-    const path = `/api/lab/catalogs/${modCheck.mod}`;
-    const res = await _localFetch(path, {
-      method: "PATCH",
-      body: JSON.stringify({
-        id: params.id,
-        ...(parsed.data as Record<string, unknown>),
-      }),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const modelName = MOD_TO_MODEL[modCheck.mod];
+    const model = _modelFor(modelName);
+    if (!model) {
+      return { ok: false, error: `Modelo ${modelName} no disponible` };
     }
-    const body = (await res.json()) as { item: Record<string, unknown>; ok: boolean };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dataForUpdate: any = { ...(parsed.data as Record<string, unknown>) };
+    delete dataForUpdate.id; // el id va en where
+
+    const updated = await model.update({
+      where: { id: params.id },
+      data: dataForUpdate,
+    });
+
     revalidatePath("/admin/lab/catalogs");
-    return { ok: true, data: { item: body.item } };
+    return {
+      ok: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: { item: updated as Record<string, unknown> },
+    };
   } catch (err) {
     return {
       ok: false,
@@ -265,19 +300,23 @@ export async function deleteLabCatalogAction(params: {
   if (!modCheck.ok) return { ok: false, error: modCheck.error };
 
   try {
-    // IMPL-20260701-07: ruta Next.js API local (id en body).
-    const path = `/api/lab/catalogs/${modCheck.mod}`;
-    const res = await _localFetch(path, {
-      method: "DELETE",
-      body: JSON.stringify({ id: params.id }),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const modelName = MOD_TO_MODEL[modCheck.mod];
+    const model = _modelFor(modelName);
+    if (!model) {
+      return { ok: false, error: `Modelo ${modelName} no disponible` };
     }
-    const body = (await res.json()) as { item: Record<string, unknown>; ok: boolean };
+
+    const updated = await model.update({
+      where: { id: params.id },
+      data: { active: false },
+    });
+
     revalidatePath("/admin/lab/catalogs");
-    return { ok: true, data: { item: body.item } };
+    return {
+      ok: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: { item: updated as Record<string, unknown> },
+    };
   } catch (err) {
     return {
       ok: false,

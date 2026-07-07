@@ -3,14 +3,19 @@
  * @id IMPL-20260701-03 — Slice B Recepción (ARCH-20260701-03).
  * @backup context/SPECs/SPEC_IMPL-20260701-SLICE-B-RECEPCION.md
  *
- * HOTFIX IMPL-20260701-07: bypass de FastAPI (bug Prisma JS→Python).
- * Las actions ahora llaman a las Next.js API routes internas en
- * `/api/lab/orders/...` que usan Prisma JS directo.
+ * HOTFIX IMPL-20260706-11: server actions usan Prisma directo.
  *
- * HOTFIX IMPL-20260706-10: reenviar cookies del request actual en
- * `_localFetch`. Mismo bug que en lab-catalog.actions.ts; sin cookies,
- * las API routes validaban sesión con `getServerSession()` y devolvían
- * 401 (que Vercel convertía en HTML de redirect a login).
+ * Histórico de hotfixes anteriores (descartados):
+ * - IMPL-20260701-07: bypass FastAPI (bug Prisma JS→Python).
+ * - IMPL-20260706-10: reenviar cookies en _localFetch.
+ *
+ * Ambos quedaron descartados por problemas conocidos de enrutamiento
+ * de fetch desde server actions hacia rutas del mismo server Next.js
+ * (Vercel respondía con HTML 404/login redirect → "Unexpected token '<'").
+ *
+ * Solución definitiva (este hotfix): el server action importa Prisma
+ * directamente. La API route se conserva intacta para uso de clientes
+ * externos en el futuro.
  *
  * Patrón: idéntico a lab-catalog.actions.ts.
  * - Validación Zod server-side
@@ -20,36 +25,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
+import prisma from "@/lib/prisma";
+import { calculateTotals } from "@/lib/lab-order-totals";
 import {
   cancelLabOrderSchema,
   createLabOrderSchema,
+  labOrderItemInputSchema,
   updateLabOrderSchema,
   type CompanySearchResult,
   type DoctorSearchResult,
   type LabTestSearchResult,
   type WorkerSearchResult,
 } from "@/lib/validations/lab-order";
-
-// BACKEND_URL conservado por compatibilidad, ya no se usa.
-// IMPL-20260701-07: usamos Next.js API routes locales.
-const BACKEND_URL =
-  process.env.BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:8000";
-
-function _localBase(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.NEXT_PUBLIC_VERCEL_URL) {
-    return process.env.NEXT_PUBLIC_VERCEL_URL.startsWith("http")
-      ? process.env.NEXT_PUBLIC_VERCEL_URL
-      : `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
-  }
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
-}
 
 // ---------------------------------------------------------------------------
 // Tipos de retorno y errores
@@ -62,40 +51,21 @@ type ActionResult<T> =
 // Helpers internos
 // ---------------------------------------------------------------------------
 async function _requireReception(): Promise<{ userId: string; role: string } | null> {
-  const session = await getServerSession(authOptions);
-  const role = session?.user?.role;
-  const userId = session?.user?.id;
-  if (!session?.user || !userId) return null;
-  // ADM-20260701-01: roles permitidos LabOrder = ADMIN (LAB_RECEPTIONIST
-  // pendiente de incorporarse al enum de roles de NextAuth).
-  if (role !== "ADMIN") return null;
-  return { userId, role: role as string };
-}
-
-async function _localFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  // IMPL-20260706-10: reenviar cookies del request actual para que las
-  // API routes puedan validar sesión con getServerSession(). Sin esto,
-  // la API retornaba 401 (que Vercel convierte en HTML de redirect a
-  // login) en lugar de los datos esperados.
-  const base = _localBase();
-  const url = path.startsWith("http") ? path : `${base}${path}`;
-
-  // Next.js 15+: cookies() retorna Promise.
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
-
-  return fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-      ...(init.headers || {}),
-    },
-    cache: "no-store",
-  });
+  try {
+    const session = await getServerSession(authOptions);
+    const role = session?.user?.role;
+    const userId = session?.user?.id;
+    if (!session?.user || !userId) return null;
+    // ADM-20260701-01: roles permitidos LabOrder = ADMIN (LAB_RECEPTIONIST
+    // pendiente de incorporarse al enum de roles de NextAuth).
+    if (role !== "ADMIN") return null;
+    return { userId, role: role as string };
+  } catch (err) {
+    // IMPL-20260706-11: si NextAuth falla, no devolver 500 HTML.
+    // eslint-disable-next-line no-console
+    console.error("[_requireReception] session error:", err);
+    return null;
+  }
 }
 
 function _err(error: unknown): ActionResult<never> {
@@ -124,18 +94,79 @@ export async function createLabOrderAction(
     };
   }
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const res = await _localFetch("/api/lab/orders", {
-      method: "POST",
-      body: JSON.stringify(parsed.data),
+    // Calcular folio: max(folio) + 1
+    const last = await prisma.labOrder.findFirst({
+      orderBy: { folio: "desc" },
+      select: { folio: true },
     });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
-    }
-    const body = (await res.json()) as { id: string; order: Record<string, unknown> };
+    const nextFolio = (last?.folio ?? 0) + 1;
+
+    // IMPL-20260701-07: MedicalTest no tiene columna `price` en el schema.
+    // El precio viaja explícito en cada item.
+    const itemsForTotal = parsed.data.items.map((i) => ({
+      price: i.price ?? 0,
+      discountAmount: i.discountAmount ?? 0,
+      discountPct: i.discountPct ?? 0,
+    }));
+    const totals = calculateTotals(itemsForTotal, 16);
+
+    const created = await prisma.labOrder.create({
+      data: {
+        folio: nextFolio,
+        branch: "MATRIZ",
+        workerId: parsed.data.workerId,
+        medicalEventId: parsed.data.medicalEventId ?? null,
+        companyId: parsed.data.companyId ?? null,
+        classificationId: parsed.data.classificationId ?? null,
+        doctorName: parsed.data.doctorName,
+        doctorClave: parsed.data.doctorClave ?? null,
+        patientDiscountPct: parsed.data.patientDiscountPct ?? 0,
+        doctorDiscountPct: parsed.data.doctorDiscountPct ?? 0,
+        doctorCommissionPct: parsed.data.doctorCommissionPct ?? 0,
+        companyDiscountPct: parsed.data.companyDiscountPct ?? 0,
+        urgency: parsed.data.urgency ?? "NORMAL",
+        confidentiality: parsed.data.confidentiality ?? "NORMAL",
+        homeSample: parsed.data.homeSample ?? false,
+        sendResultsByEmail: parsed.data.sendResultsByEmail ?? false,
+        generateInvoice: parsed.data.generateInvoice ?? false,
+        language: parsed.data.language ?? "es",
+        deliveryDate: parsed.data.deliveryDate
+          ? new Date(parsed.data.deliveryDate)
+          : null,
+        deliveryTime: parsed.data.deliveryTime ?? null,
+        status: "DRAFT",
+        isCourtesy: parsed.data.isCourtesy ?? false,
+        courtesyType: parsed.data.courtesyType ?? null,
+        subtotal: totals.subtotal,
+        ivaPct: 16,
+        iva: totals.iva,
+        total: totals.total,
+        observations: parsed.data.observations ?? null,
+        createdById: guard.userId,
+        items: {
+          create: parsed.data.items.map((i) => {
+            const basePrice = i.price ?? 0;
+            const amount =
+              basePrice -
+              (i.discountAmount ?? 0) -
+              (basePrice * (i.discountPct ?? 0)) / 100;
+            return {
+              medicalTestId: i.medicalTestId,
+              price: basePrice,
+              discountAmount: i.discountAmount ?? 0,
+              discountPct: i.discountPct ?? 0,
+              amount: Math.max(0, Number(amount.toFixed(2))),
+              resultStatus: "P",
+            };
+          }),
+        },
+      },
+      include: { items: true },
+    });
+
     revalidatePath("/lab/reception");
-    return { ok: true, data: { id: body.id, order: body.order } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { ok: true, data: { id: created.id, order: created as any } };
   } catch (err) {
     return _err(err);
   }
@@ -161,18 +192,34 @@ export async function updateLabOrderAction(
     };
   }
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const res = await _localFetch(`/api/lab/orders/${orderId}`, {
-      method: "PATCH",
-      body: JSON.stringify(parsed.data),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const existing = await prisma.labOrder.findUnique({ where: { id: orderId } });
+    if (!existing) {
+      return { ok: false, error: `LabOrder ${orderId} no existe`, code: "NOT_FOUND" };
     }
-    const body = (await res.json()) as { order: Record<string, unknown> };
+    if (existing.status === "CANCELLED") {
+      return {
+        ok: false,
+        error: "No se puede modificar una orden cancelada",
+        code: "CONFLICT",
+      };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = { ...parsed.data };
+    if (data.deliveryDate) {
+      data.deliveryDate = new Date(data.deliveryDate);
+    }
+    // No se actualizan items por aquí — se gestiona via /items endpoints.
+    delete data.items;
+
+    const updated = await prisma.labOrder.update({
+      where: { id: orderId },
+      data,
+      include: { items: true },
+    });
     revalidatePath("/lab/reception");
-    return { ok: true, data: { order: body.order } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { ok: true, data: { order: updated as any } };
   } catch (err) {
     return _err(err);
   }
@@ -187,17 +234,20 @@ export async function getLabOrderAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const res = await _localFetch(`/api/lab/orders/${orderId}`, { method: "GET" });
-    if (res.status === 404) {
+    const order = await prisma.labOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        items: { include: { medicalTest: true } },
+        worker: true,
+        company: true,
+        classification: true,
+      },
+    });
+    if (!order) {
       return { ok: false, error: `LabOrder ${orderId} no existe`, code: "NOT_FOUND" };
     }
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
-    }
-    const body = (await res.json()) as Record<string, unknown>;
-    return { ok: true, data: { order: body } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { ok: true, data: { order: order as any } };
   } catch (err) {
     return _err(err);
   }
@@ -217,18 +267,25 @@ export async function cancelLabOrderAction(
     return { ok: false, error: "Motivo inválido (min 3 caracteres)", code: "VALIDATION" };
   }
   try {
-    // IMPL-20260701-07: ruta Next.js API local (?motivo=… ).
-    const qs = new URLSearchParams({ motivo: parsed.data.motivo });
-    const res = await _localFetch(`/api/lab/orders/${orderId}?${qs.toString()}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const existing = await prisma.labOrder.findUnique({ where: { id: orderId } });
+    if (!existing) {
+      return { ok: false, error: `LabOrder ${orderId} no existe`, code: "NOT_FOUND" };
     }
-    const body = (await res.json()) as { order: Record<string, unknown> };
+
+    const cancelled = await prisma.labOrder.update({
+      where: { id: orderId },
+      data: {
+        status: "CANCELLED",
+        cancelledAt: new Date(),
+        cancelledById: guard.userId,
+        observations:
+          (existing.observations ?? "") +
+          `\n[CANCELADO ${new Date().toISOString()}] ${parsed.data.motivo}`,
+      },
+    });
     revalidatePath("/lab/reception");
-    return { ok: true, data: { order: body.order } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { ok: true, data: { order: cancelled as any } };
   } catch (err) {
     return _err(err);
   }
@@ -243,18 +300,36 @@ export async function confirmLabOrderAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const res = await _localFetch(`/api/lab/orders/${orderId}/confirm`, {
-      method: "POST",
-      body: JSON.stringify({}),
+    const existing = await prisma.labOrder.findUnique({
+      where: { id: orderId },
+      include: { _count: { select: { items: true } } },
     });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    if (!existing) {
+      return { ok: false, error: `LabOrder ${orderId} no existe`, code: "NOT_FOUND" };
     }
-    const body = (await res.json()) as { order: Record<string, unknown> };
+    if (existing.status !== "DRAFT") {
+      return {
+        ok: false,
+        error: `Solo se confirman órdenes en DRAFT (actual: ${existing.status})`,
+        code: "CONFLICT",
+      };
+    }
+    if (existing._count.items === 0) {
+      return {
+        ok: false,
+        error: "La orden no tiene estudios",
+        code: "UNPROCESSABLE",
+      };
+    }
+
+    const updated = await prisma.labOrder.update({
+      where: { id: orderId },
+      data: { status: "SAVED", confirmedAt: new Date() },
+      include: { items: true },
+    });
     revalidatePath("/lab/reception");
-    return { ok: true, data: { order: body.order } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { ok: true, data: { order: updated as any } };
   } catch (err) {
     return _err(err);
   }
@@ -270,18 +345,49 @@ export async function addLabOrderItemAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const res = await _localFetch(`/api/lab/orders/${orderId}/items`, {
-      method: "POST",
-      body: JSON.stringify(item),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const parsed = labOrderItemInputSchema.safeParse(item);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: `Validación Zod: ${parsed.error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ")}`,
+        code: "VALIDATION",
+      };
     }
-    const body = (await res.json()) as { item: Record<string, unknown> };
+
+    const order = await prisma.labOrder.findUnique({ where: { id: orderId } });
+    if (!order) {
+      return { ok: false, error: `LabOrder ${orderId} no existe`, code: "NOT_FOUND" };
+    }
+    if (order.status === "CANCELLED") {
+      return { ok: false, error: "Orden cancelada", code: "CONFLICT" };
+    }
+
+    // IMPL-20260701-07: MedicalTest no tiene columna `price`; el precio
+    // viaja en el body del item. Si llega 0, lo aceptamos.
+    const basePrice = parsed.data.price ?? 0;
+    const discountAmount = parsed.data.discountAmount ?? 0;
+    const discountPct = parsed.data.discountPct ?? 0;
+    const amount = Math.max(
+      0,
+      Number((basePrice - discountAmount - (basePrice * discountPct) / 100).toFixed(2))
+    );
+
+    const created = await prisma.labOrderItem.create({
+      data: {
+        labOrderId: orderId,
+        medicalTestId: parsed.data.medicalTestId,
+        price: basePrice,
+        discountAmount,
+        discountPct,
+        amount,
+        resultStatus: "P",
+      },
+    });
     revalidatePath("/lab/reception");
-    return { ok: true, data: { item: body.item } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { ok: true, data: { item: created as any } };
   } catch (err) {
     return _err(err);
   }
@@ -297,15 +403,18 @@ export async function removeLabOrderItemAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const res = await _localFetch(
-      `/api/lab/orders/${orderId}/items/${itemId}`,
-      { method: "DELETE" }
-    );
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const item = await prisma.labOrderItem.findUnique({
+      where: { id: itemId },
+      select: { labOrderId: true },
+    });
+    if (!item) {
+      return { ok: false, error: `LabOrderItem ${itemId} no existe`, code: "NOT_FOUND" };
     }
+    if (item.labOrderId !== orderId) {
+      return { ok: false, error: "El item no pertenece a esta orden", code: "CONFLICT" };
+    }
+
+    await prisma.labOrderItem.delete({ where: { id: itemId } });
     revalidatePath("/lab/reception");
     return { ok: true, data: { ok: true } };
   } catch (err) {
@@ -337,29 +446,60 @@ export async function listLabOrdersAction(
   const guard = await _requireReception();
   if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
   try {
-    // IMPL-20260701-07: ruta Next.js API local.
-    const qs = new URLSearchParams();
-    qs.set("draw", String(filters.draw ?? 1));
-    qs.set("start", String(filters.start ?? 0));
-    qs.set("length", String(filters.length ?? 25));
-    if (filters.search) qs.set("search[value]", filters.search);
-    if (filters.status) qs.set("status", filters.status);
-    if (filters.dateFrom) qs.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) qs.set("dateTo", filters.dateTo);
-    const res = await _localFetch(`/api/lab/orders?${qs.toString()}`, {
-      method: "GET",
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, error: `Backend ${res.status}: ${detail || res.statusText}` };
+    const draw = filters.draw ?? 1;
+    const start = filters.start ?? 0;
+    const length = filters.length ?? 25;
+    const searchValue = filters.search ?? "";
+    const status = filters.status ?? "";
+    const dateFrom = filters.dateFrom ?? "";
+    const dateTo = filters.dateTo ?? "";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = {};
+    if (status) where.status = status;
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
     }
-    const body = (await res.json()) as {
-      draw: number;
-      recordsTotal: number;
-      recordsFiltered: number;
-      data: Record<string, unknown>[];
+    if (searchValue.trim()) {
+      where.OR = [
+        { folio: { equals: isNaN(Number(searchValue)) ? -1 : Number(searchValue) } },
+        { doctorName: { contains: searchValue, mode: "insensitive" } },
+        { novaFolio: { contains: searchValue, mode: "insensitive" } },
+      ];
+    }
+
+    const [recordsTotal, recordsFiltered, data] = await Promise.all([
+      prisma.labOrder.count(),
+      prisma.labOrder.count({ where }),
+      prisma.labOrder.findMany({
+        where,
+        skip: start,
+        take: length,
+        orderBy: { createdAt: "desc" },
+        include: {
+          worker: { select: { firstName: true, lastName: true, universalId: true } },
+          company: { select: { name: true } },
+          _count: { select: { items: true } },
+        },
+      }),
+    ]);
+
+    return {
+      ok: true,
+      data: {
+        draw,
+        recordsTotal,
+        recordsFiltered,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: data as any[],
+      },
     };
-    return { ok: true, data: body };
   } catch (err) {
     return _err(err);
   }
@@ -368,24 +508,43 @@ export async function listLabOrdersAction(
 // ---------------------------------------------------------------------------
 // 9-12) SEARCH — autocomplete admisión
 // ---------------------------------------------------------------------------
-async function _search(
-  path: string,
-  q: string,
-  _guardUserId: string
-): Promise<Response> {
-  // IMPL-20260701-07: ruta Next.js API local.
-  const qs = new URLSearchParams();
-  if (q.trim()) qs.set("q", q.trim());
-  return _localFetch(`${path}?${qs.toString()}`, { method: "GET" });
-}
-
 export async function searchWorkersAction(q: string): Promise<WorkerSearchResult[]> {
   const guard = await _requireReception();
   if (!guard) return [];
   try {
-    const res = await _search("/api/lab/search/workers", q, guard.userId);
-    if (!res.ok) return [];
-    return (await res.json()) as WorkerSearchResult[];
+    const trimmed = q.trim();
+    const where = trimmed
+      ? {
+          OR: [
+            { firstName: { contains: trimmed, mode: "insensitive" as const } },
+            { lastName: { contains: trimmed, mode: "insensitive" as const } },
+            { universalId: { contains: trimmed, mode: "insensitive" as const } },
+          ],
+        }
+      : {};
+    const list = await prisma.worker.findMany({
+      where,
+      take: 25,
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      include: { company: { select: { name: true } } },
+    });
+    const today = new Date();
+    return list.map((w) => {
+      const age =
+        w.dob
+          ? Math.floor(
+              (today.getTime() - new Date(w.dob).getTime()) /
+                (365.25 * 24 * 60 * 60 * 1000)
+            )
+          : null;
+      return {
+        id: w.id,
+        fullName: `${w.firstName} ${w.lastName}`.trim(),
+        code: w.universalId,
+        age,
+        companyName: w.company?.name ?? null,
+      };
+    });
   } catch {
     return [];
   }
@@ -395,9 +554,25 @@ export async function searchDoctorsAction(q: string): Promise<DoctorSearchResult
   const guard = await _requireReception();
   if (!guard) return [];
   try {
-    const res = await _search("/api/lab/search/doctors", q, guard.userId);
-    if (!res.ok) return [];
-    return (await res.json()) as DoctorSearchResult[];
+    const trimmed = q.trim();
+    const where = trimmed
+      ? {
+          AND: [
+            { labRole: { not: null } },
+            { fullName: { contains: trimmed, mode: "insensitive" as const } },
+          ],
+        }
+      : { labRole: { not: null } };
+    const list = await prisma.user.findMany({
+      where,
+      take: 25,
+      orderBy: { fullName: "asc" },
+      select: { fullName: true, novaMedicoClave: true },
+    });
+    return list.map((u) => ({
+      name: u.fullName,
+      clave: u.novaMedicoClave ?? null,
+    }));
   } catch {
     return [];
   }
@@ -407,9 +582,26 @@ export async function searchCompaniesAction(q: string): Promise<CompanySearchRes
   const guard = await _requireReception();
   if (!guard) return [];
   try {
-    const res = await _search("/api/lab/search/companies", q, guard.userId);
-    if (!res.ok) return [];
-    return (await res.json()) as CompanySearchResult[];
+    const trimmed = q.trim();
+    const where = trimmed
+      ? {
+          OR: [
+            { name: { contains: trimmed, mode: "insensitive" as const } },
+            { rfc: { contains: trimmed, mode: "insensitive" as const } },
+          ],
+        }
+      : {};
+    const list = await prisma.company.findMany({
+      where,
+      take: 25,
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, rfc: true },
+    });
+    return list.map((c) => ({
+      id: c.id,
+      name: c.name,
+      rfc: c.rfc ?? null,
+    }));
   } catch {
     return [];
   }
@@ -419,9 +611,44 @@ export async function searchLabTestsAction(q: string): Promise<LabTestSearchResu
   const guard = await _requireReception();
   if (!guard) return [];
   try {
-    const res = await _search("/api/lab/search/tests", q, guard.userId);
-    if (!res.ok) return [];
-    return (await res.json()) as LabTestSearchResult[];
+    const trimmed = q.trim();
+    const where = trimmed
+      ? {
+          OR: [
+            { code: { contains: trimmed, mode: "insensitive" as const } },
+            { name: { contains: trimmed, mode: "insensitive" as const } },
+          ],
+        }
+      : {};
+    // IMPL-20260701-07: MedicalTest no tiene columna `price`; extraemos
+    // desde `options` (Json) si existe `price`/`basePrice`, si no 0.
+    const list = await prisma.medicalTest.findMany({
+      where,
+      take: 25,
+      orderBy: { code: "asc" },
+      select: { id: true, code: true, name: true, options: true },
+    });
+    return list.map((t) => {
+      const opts = (t.options ?? {}) as Record<string, unknown>;
+      const rawPrice =
+        typeof opts.price === "number"
+          ? opts.price
+          : typeof opts.basePrice === "number"
+            ? opts.basePrice
+            : 0;
+      return {
+        id: t.id,
+        code: t.code,
+        alternateCode:
+          typeof opts.alternateCode === "string"
+            ? opts.alternateCode
+            : typeof opts.alternate_code === "string"
+              ? opts.alternate_code
+              : null,
+        name: t.name,
+        price: Number(rawPrice) || 0,
+      };
+    });
   } catch {
     return [];
   }
