@@ -45,9 +45,14 @@ function sanitizeFilename(texto: string): string {
 }
 
 function downloadUrl(projectId: string, reportId: string, format: 'xlsx' | 'pdf'): string {
-  // Las URLs devueltas por backend ya son rutas internas (/api/files/...) — se sirven
-  // desde el backend via fetch con auth. Aqui construimos un endpoint proxy-equivalente.
-  return `/api/v2/projects/${projectId}/reports/${reportId}/download?format=${format}`;
+  // FIX-UI-20260706-18: Las URLs de descarga deben apuntar al backend FastAPI
+  // en Railway (NO a Vercel), porque el endpoint /api/v2/projects/{}/reports/{}/download
+  // NO existe en el frontend Next.js — solo existe en el backend Python.
+  //
+  // NEXT_PUBLIC_BACKEND_URL debe estar configurada en Vercel con el dominio
+  // público del backend Railway (https://administracion-medica-industrial-production.up.railway.app).
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+  return `${backendUrl}/api/v2/projects/${projectId}/reports/${reportId}/download?format=${format}`;
 }
 
 export function ProjectMassiveReportModal({ projectId, workers, open, onClose }: Props) {
