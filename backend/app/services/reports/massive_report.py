@@ -315,7 +315,7 @@ def generar_reporte_masivo(
     return out
 
 
-def run_generation_job(
+async def run_generation_job(
     *,
     prisma_client: Any,
     project_id: str,
@@ -330,12 +330,12 @@ def run_generation_job(
     """
     try:
         # Marcar como PROCESSING.
-        prisma_client.projectreport.update(
+        await prisma_client.projectreport.update(
             where={"id": report_id},
             data={"status": "PROCESSING"},
         )
 
-        project = prisma_client.project.find_unique(
+        project = await prisma_client.project.find_unique(
             where={"id": project_id},
             include={
                 "company": True,
@@ -356,7 +356,7 @@ def run_generation_job(
         snapshot = project_to_snapshot(project)
         paths = generar_reporte_masivo(snapshot, project_id, report_id, format)
 
-        prisma_client.projectreport.update(
+        await prisma_client.projectreport.update(
             where={"id": report_id},
             data={
                 "status": "READY",
@@ -368,7 +368,7 @@ def run_generation_job(
         )
     except Exception as exc:
         try:
-            prisma_client.projectreport.update(
+            await prisma_client.projectreport.update(
                 where={"id": report_id},
                 data={
                     "status": "FAILED",

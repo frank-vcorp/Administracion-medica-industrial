@@ -19,6 +19,7 @@ Los tests de endpoints usan mocks del Prisma client para no depender
 de una DB real. Los generadores se prueban con un snapshot construido
 a mano (mismo shape que project_to_snapshot).
 """
+import asyncio
 import os
 import sys
 import tempfile
@@ -304,8 +305,10 @@ def test_generar_reporte_masivo_invalid_format(tmp_uploads, sample_project):
 
 def test_report_status_transitions_pending_to_ready(tmp_uploads):
     """Job completo: PENDING -> PROCESSING -> READY."""
-    # Mock Prisma
+    # Mock Prisma (AsyncMock para soportar await en BackgroundTask)
     prisma = MagicMock()
+    prisma.projectreport = MagicMock()
+    prisma.project = MagicMock()
     created = MagicMock(id="rep-success", status="PENDING", projectId="proj-x")
     updated_processing = MagicMock(id="rep-success", status="PROCESSING")
     updated_ready = MagicMock(
@@ -314,8 +317,9 @@ def test_report_status_transitions_pending_to_ready(tmp_uploads):
         fileUrlXlsx="reports/proj-x/rep-success/concentrado.xlsx",
         fileUrlPdf=None,
     )
-    prisma.projectreport.create.return_value = created
-    prisma.projectreport.update.side_effect = [updated_processing, updated_ready]
+    prisma.projectreport.create = AsyncMock(return_value=created)
+    prisma.projectreport.update = AsyncMock(side_effect=[updated_processing, updated_ready])
+    prisma.project.find_unique = AsyncMock()
 
     project = MagicMock(
         id="proj-x",
@@ -325,11 +329,13 @@ def test_report_status_transitions_pending_to_ready(tmp_uploads):
     )
     prisma.project.find_unique.return_value = project
 
-    run_generation_job(
-        prisma_client=prisma,
-        project_id="proj-x",
-        report_id="rep-success",
-        format="XLSX",
+    asyncio.run(
+        run_generation_job(
+            prisma_client=prisma,
+            project_id="proj-x",
+            report_id="rep-success",
+            format="XLSX",
+        )
     )
 
     # Verificar que se llamo update al menos 2 veces (PROCESSING, READY).
@@ -344,14 +350,18 @@ def test_report_status_transitions_pending_to_ready(tmp_uploads):
 def test_report_failed_with_error_message(tmp_uploads):
     """Si el proyecto no existe, el job termina con status=FAILED."""
     prisma = MagicMock()
-    prisma.projectreport.update.return_value = MagicMock()
-    prisma.project.find_unique.return_value = None  # Proyecto inexistente
+    prisma.projectreport = MagicMock()
+    prisma.project = MagicMock()
+    prisma.projectreport.update = AsyncMock(return_value=MagicMock())
+    prisma.project.find_unique = AsyncMock(return_value=None)  # Proyecto inexistente
 
-    run_generation_job(
-        prisma_client=prisma,
-        project_id="proj-missing",
-        report_id="rep-fail",
-        format="XLSX",
+    asyncio.run(
+        run_generation_job(
+            prisma_client=prisma,
+            project_id="proj-missing",
+            report_id="rep-fail",
+            format="XLSX",
+        )
     )
 
     final_call_args = prisma.projectreport.update.call_args_list[-1]
