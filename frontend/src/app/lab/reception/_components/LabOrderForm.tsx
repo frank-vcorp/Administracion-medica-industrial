@@ -38,6 +38,28 @@ interface Props {
   // IMPL-20260707-16: Slice C — prefill desde papeleta AMI
   initialWorkerId?: string | null;
   initialMedicalEventId?: string | null;
+  /**
+   * IMPL-20260707-17 — Fase 1 B-v2: admisión auto-llenada desde papeleta.
+   * Si viene, pre-llena worker, doctor, company, branchId y estudios desde MedicalEvent.
+   */
+  initialMedicalEvent?: {
+    medicalEventId: string;
+    workerId: string;
+    workerName: string;
+    workerCode: string;
+    companyId: string | null;
+    companyName: string | null;
+    branchId: string | null;
+    branchName: string | null;
+    doctorName: string;
+    intakeCreatedByUserId: string | null;
+    eventTests: Array<{
+      id: string;
+      testNameSnapshot: string;
+      medicalTestId: string | null;
+      medicalTestCode: string | null;
+    }>;
+  } | null;
 }
 
 const EMPTY_FLAGS: LabOrderFlagsState = {
@@ -57,15 +79,25 @@ const BASE_INPUT =
 const READONLY_INPUT = `${BASE_INPUT} bg-slate-100 text-slate-500`;
 const LABEL = "block text-xs font-medium text-slate-700 mb-1";
 
-export function LabOrderForm({ orderId, initialWorkerId, initialMedicalEventId }: Props) {
+export function LabOrderForm({ orderId, initialWorkerId, initialMedicalEventId, initialMedicalEvent }: Props) {
   const router = useRouter();
   // IMPL-20260707-16: Slice C — prefill desde papeleta
   const [worker, setWorker] = useState<WorkerSearchResult | null>(
-    initialWorkerId
-      ? { id: initialWorkerId, fullName: "", code: "", age: null, companyName: null }
-      : null
+    initialMedicalEvent
+      ? {
+          id: initialMedicalEvent.workerId,
+          fullName: initialMedicalEvent.workerName,
+          code: initialMedicalEvent.workerCode,
+          age: null,
+          companyName: initialMedicalEvent.companyName,
+        }
+      : initialWorkerId
+        ? { id: initialWorkerId, fullName: "", code: "", age: null, companyName: null }
+        : null
   );
-  const [medicalEventId, setMedicalEventId] = useState<string>(initialMedicalEventId ?? "");
+  const [medicalEventId, setMedicalEventId] = useState<string>(
+    initialMedicalEvent?.medicalEventId ?? initialMedicalEventId ?? ""
+  );
   const [doctorInput, setDoctorInput] = useState(""); // doctorName libre
   const [doctorClave, setDoctorClave] = useState("");
   const [doctorPicked, setDoctorPicked] = useState<DoctorSearchResult | null>(null);
@@ -149,6 +181,37 @@ export function LabOrderForm({ orderId, initialWorkerId, initialMedicalEventId }
       }
     })();
   }, [orderId]);
+
+  // IMPL-20260707-17: Fase 1 B-v2 — prefill desde MedicalEvent (admisin auto-llenada)
+  useEffect(() => {
+    if (!initialMedicalEvent) return;
+    if (orderId) return; // si estamos editando, no pisar
+    if (initialMedicalEvent.eventTests.length > 0 && items.length === 0) {
+      // Pre-llenar items con los EventTests de la papeleta (precios en 0)
+      const preItems: LabOrderItemInput[] = initialMedicalEvent.eventTests
+        .filter((et) => et.medicalTestId)
+        .map((et) => ({
+          medicalTestId: et.medicalTestId as string,
+          price: 0,
+          discountAmount: 0,
+          discountPct: 0,
+        }));
+      setItems(preItems);
+    }
+    // Pre-llenar doctor
+    if (initialMedicalEvent.doctorName && !doctorPicked && !doctorInput) {
+      setDoctorInput(initialMedicalEvent.doctorName);
+    }
+    // Pre-llenar company
+    if (initialMedicalEvent.companyId && !company) {
+      setCompany({
+        id: initialMedicalEvent.companyId,
+        name: initialMedicalEvent.companyName ?? "",
+        rfc: null,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMedicalEvent]);
 
   const readOnly = status !== "NEW" && status !== "DRAFT";
 

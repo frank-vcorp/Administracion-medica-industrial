@@ -1,14 +1,18 @@
 /**
  * @file Sección "Laboratorio" en la papeleta AMI.
  * @id IMPL-20260707-16 — Slice C — integración papeleta ↔ LabOrder.
+ * @id IMPL-20260707-17 — Fase 1 — botón "Tomar muestra" por EventTest.
  *
  * Server Component: lista LabOrders asociadas al MedicalEvent + LabResults
  * con sus analitos, valores, rangos y estado. Link "Crear nueva orden" que
- * pre-llena workerId + medicalEventId en /lab/reception.
+ * pre-llena workerId + medicalEventId en /lab/reception. Botón "Tomar muestra"
+ * por EventTest de categoría Laboratorio (Fase 1 — B-v2).
  */
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { getStatusColor, getStatusLabel } from "@/lib/lab-result-utils";
+import { SampleTakenButton } from "./SampleTakenButton";
+import { LAB_CATEGORY_ID } from "@/lib/validations/study";
 
 interface Props {
   medicalEventId: string;
@@ -16,27 +20,38 @@ interface Props {
 }
 
 export async function LabSection({ medicalEventId, workerId }: Props) {
-  const labOrders = await prisma.labOrder.findMany({
-    where: { medicalEventId },
-    include: {
-      items: {
-        include: {
-          medicalTest: { select: { code: true, name: true } },
-          results: {
-            include: {
-              analyte: { select: { code: true, name: true, dataType: true } },
-              unit: { select: { symbol: true } },
+  const [labOrders, labEventTests] = await Promise.all([
+    prisma.labOrder.findMany({
+      where: { medicalEventId },
+      include: {
+        items: {
+          include: {
+            medicalTest: { select: { code: true, name: true } },
+            results: {
+              include: {
+                analyte: { select: { code: true, name: true, dataType: true } },
+                unit: { select: { symbol: true } },
+              },
             },
           },
         },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+    }),
+    // IMPL-20260707-17: Fase 1 — EventTests de categoría Laboratorio pendientes de muestra
+    prisma.eventTest.findMany({
+      where: {
+        eventId: medicalEventId,
+        test: { categoryId: LAB_CATEGORY_ID },
+      },
+      include: { test: { select: { code: true, name: true, categoryId: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-4">
+      <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-slate-800">Laboratorio</h3>
           <p className="text-xs text-slate-500">
@@ -46,16 +61,49 @@ export async function LabSection({ medicalEventId, workerId }: Props) {
           </p>
         </div>
         <Link
-          href={`/lab/reception?workerId=${workerId}&medicalEventId=${medicalEventId}`}
+          href={`/lab/reception/${medicalEventId}`}
           className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
         >
-          + Nueva orden
+          + Admisión Lab (auto-llenar)
         </Link>
       </div>
 
+      {/* IMPL-20260707-17: Fase 1 — Estudios Lab de la papeleta + botón "Tomar muestra" */}
+      {labEventTests.length > 0 && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold text-slate-700 mb-2">
+            🧪 Estudios de Laboratorio de esta papeleta ({labEventTests.length})
+          </p>
+          <ul className="space-y-1.5">
+            {labEventTests.map((et) => (
+              <li
+                key={et.id}
+                className="flex items-center justify-between text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-slate-700">
+                    {et.test?.code ?? et.testNameSnapshot}
+                  </span>
+                  <span className="text-slate-500">{et.test?.name}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                    {String(et.status)}
+                  </span>
+                </div>
+                <SampleTakenButton
+                  eventTestId={et.id}
+                  eventTestStatus={String(et.status)}
+                  medicalEventId={medicalEventId}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {labOrders.length === 0 ? (
         <p className="text-sm text-slate-500 italic">
-          Aún no hay órdenes. Crea una nueva para empezar.
+          Aún no hay órdenes de laboratorio creadas. Las admisiones se generan automáticamente
+          al marcar los EventTests como <span className="font-mono">SAMPLE_TAKEN</span>.
         </p>
       ) : (
         <ul className="space-y-3">
