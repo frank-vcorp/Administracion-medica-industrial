@@ -77,6 +77,13 @@ async def lifespan(app: FastAPI):
             _set_lab_ord(prisma)
         except Exception as e:
             print(f"[lab-orders] set_prisma_client failed: {_sanitize_error(str(e))}")
+        # IMPL-20260707-16: Slice C NOVA absorción — inyecta prisma en
+        # lab_result_service (cubre router lab-results + worklist + transición).
+        try:
+            from app.services.lab_result_service import set_prisma_client as _set_lab_res
+            _set_lab_res(prisma)
+        except Exception as e:
+            print(f"[lab-results] set_prisma_client failed: {_sanitize_error(str(e))}")
         print("✅ Prisma client inicializado y conectado")
     except Exception as e:
         print(f"⚠️ No se pudo inicializar Prisma al startup: {_sanitize_error(str(e))}")
@@ -1424,5 +1431,19 @@ try:
     print("✅ Routers lab-orders + lab-search registrados (/api/v1/lab/orders, /api/v1/lab/search)")
 except Exception as _lab_b_import_err:
     print(f"⚠️ No se pudieron registrar routers de lab-orders/lab-search: {_sanitize_error(str(_lab_b_import_err))}")
+
+# ========================================
+# IMPL-20260707-16: SLICE C NOVA ABSORCIÓN (ARCH-20260707-16)
+# Captura de LabResult + ciclo P/R/A/V + worklist + integración papeleta.
+# Inyección del prisma client se hace en lifespan() (arriba) siguiendo el
+# patrón de Slice A/B. Aquí solo se monta el router.
+# ========================================
+try:
+    from app.api.v1.lab.results import router as lab_results_router
+
+    app.include_router(lab_results_router)
+    print("✅ Router lab-results registrado (/api/v1/lab/results)")
+except Exception as _lab_c_import_err:
+    print(f"⚠️ No se pudo registrar router de lab-results: {_sanitize_error(str(_lab_c_import_err))}")
 
 

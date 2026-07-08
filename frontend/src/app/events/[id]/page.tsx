@@ -33,6 +33,8 @@ import { authOptions } from '@/auth'
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import PapeletaCronograma from '@/components/clinical/PapeletaCronograma'
 import { getEventTimeline } from '@/actions/timeline.actions'
+// IMPL-20260707-16: Slice C NOVA absorción — sección Laboratorio en papeleta
+import { LabSection } from './_components/LabSection'
 // IMPL-20260630-01: Modal de pago y recibo (ARCH-20260630-01)
 import PaymentModalTrigger from '@/components/clinical/PaymentModalTrigger'
 
@@ -420,6 +422,14 @@ export default async function EventPage(props: { params: Promise<{ id: string }>
                     <PapeletaCronograma
                         eventId={serializedEventId}
                         initialEntries={initialTimeline as Parameters<typeof PapeletaCronograma>[0]['initialEntries']}
+                    />
+                )}
+
+                {/* IMPL-20260707-16: Slice C — Sección Laboratorio (LabOrders + LabResults) */}
+                {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS' || activeView === 'VALIDATING') && userRole === 'ADMIN' && (
+                    <LabSection
+                        medicalEventId={serializedEventId}
+                        workerId={event.worker.id}
                     />
                 )}
 

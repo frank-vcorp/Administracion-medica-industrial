@@ -15,7 +15,14 @@ import { InfoBanner } from "@/components/shared/InfoBanner";
 
 export const dynamic = "force-dynamic";
 
-type SP = { list?: string; orderId?: string; edit?: string };
+// IMPL-20260707-16: Slice C — soporte para medicalEventId y workerId vía URL.
+type SP = {
+  list?: string;
+  orderId?: string;
+  edit?: string;
+  workerId?: string;
+  medicalEventId?: string;
+};
 
 export default async function LabReceptionPage({
   searchParams,
@@ -38,15 +45,19 @@ export default async function LabReceptionPage({
 
       <InfoBanner
         icon={<span aria-hidden>🧪</span>}
-        title="Módulo LAB — Slice B — Solo admisión demo"
+        title="Módulo LAB — Slice B/C — Admisión + Resultados"
       >
         Backend: <code className="bg-slate-100 px-1 rounded text-xs">/api/v1/lab/orders</code>{" "}
-        · FastAPI · Slice B estable.
+        · FastAPI · Slice B+C estables.
       </InfoBanner>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <LabOrderForm orderId={orderId} />
+          <LabOrderForm
+            orderId={orderId}
+            initialWorkerId={sp.workerId ?? null}
+            initialMedicalEventId={sp.medicalEventId ?? null}
+          />
         </div>
         <div className="lg:col-span-1">
           <LabOrdersList />

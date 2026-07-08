@@ -35,6 +35,9 @@ import { LabOrderTotalsPanel } from "./LabOrderTotalsPanel";
 
 interface Props {
   orderId?: string;
+  // IMPL-20260707-16: Slice C — prefill desde papeleta AMI
+  initialWorkerId?: string | null;
+  initialMedicalEventId?: string | null;
 }
 
 const EMPTY_FLAGS: LabOrderFlagsState = {
@@ -54,9 +57,15 @@ const BASE_INPUT =
 const READONLY_INPUT = `${BASE_INPUT} bg-slate-100 text-slate-500`;
 const LABEL = "block text-xs font-medium text-slate-700 mb-1";
 
-export function LabOrderForm({ orderId }: Props) {
+export function LabOrderForm({ orderId, initialWorkerId, initialMedicalEventId }: Props) {
   const router = useRouter();
-  const [worker, setWorker] = useState<WorkerSearchResult | null>(null);
+  // IMPL-20260707-16: Slice C — prefill desde papeleta
+  const [worker, setWorker] = useState<WorkerSearchResult | null>(
+    initialWorkerId
+      ? { id: initialWorkerId, fullName: "", code: "", age: null, companyName: null }
+      : null
+  );
+  const [medicalEventId, setMedicalEventId] = useState<string>(initialMedicalEventId ?? "");
   const [doctorInput, setDoctorInput] = useState(""); // doctorName libre
   const [doctorClave, setDoctorClave] = useState("");
   const [doctorPicked, setDoctorPicked] = useState<DoctorSearchResult | null>(null);
@@ -147,6 +156,7 @@ export function LabOrderForm({ orderId }: Props) {
     if (!worker) return null;
     return {
       workerId: worker.id,
+      medicalEventId: medicalEventId || null, // IMPL-20260707-16: Slice C
       doctorName: doctorPicked?.name || doctorInput,
       doctorClave: doctorClave || doctorPicked?.clave || null,
       classificationId: classificationId || null,
@@ -163,6 +173,7 @@ export function LabOrderForm({ orderId }: Props) {
     };
   }, [
     worker,
+    medicalEventId,
     doctorInput,
     doctorPicked,
     doctorClave,
@@ -423,6 +434,36 @@ export function LabOrderForm({ orderId }: Props) {
               className={BASE_INPUT}
               placeholder="ID clasificación"
             />
+          </div>
+        </div>
+
+        {/* IMPL-20260707-16: Slice C — Selector opcional de Papeleta Asociada */}
+        <div className="grid grid-cols-12 gap-3 mt-3">
+          <div className="col-span-12">
+            <label className={LABEL}>
+              Papeleta Asociada (opcional)
+            </label>
+            <input
+              type="text"
+              value={medicalEventId}
+              disabled={readOnly}
+              onChange={(e) => setMedicalEventId(e.target.value)}
+              placeholder="ID de MedicalEvent (papeleta AMI)"
+              className={BASE_INPUT}
+            />
+            {medicalEventId && (
+              <p className="mt-1 text-xs text-blue-700">
+                📎 Esta orden quedará vinculada a la papeleta:{" "}
+                <a
+                  href={`/events/${medicalEventId}`}
+                  className="underline hover:text-blue-900"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {medicalEventId.slice(0, 12)}…
+                </a>
+              </p>
+            )}
           </div>
         </div>
 
