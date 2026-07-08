@@ -39,6 +39,8 @@ import {
   type LabTestSearchResult,
   type WorkerSearchResult,
 } from "@/lib/validations/lab-order";
+// IMPL-20260707-18: Fase 2 — D Trazabilidad (auto-record SAMPLE_RECEIVED al confirmar)
+import { autoRecordLabTraceEventAction } from "@/actions/lab-trace.actions";
 
 // ---------------------------------------------------------------------------
 // Tipos de retorno y errores
@@ -327,7 +329,18 @@ export async function confirmLabOrderAction(
       data: { status: "SAVED", confirmedAt: new Date() },
       include: { items: true },
     });
+    // IMPL-20260707-18: Fase 2 — D Trazabilidad (auto-record SAMPLE_RECEIVED)
+    try {
+      await autoRecordLabTraceEventAction(
+        orderId,
+        "SAMPLE_RECEIVED",
+        `Orden confirmada (${updated.folio ?? "s/folio"})`
+      );
+    } catch {
+      // nunca romper el flujo principal
+    }
     revalidatePath("/lab/reception");
+    revalidatePath(`/lab/results/${orderId}`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return { ok: true, data: { order: updated as any } };
   } catch (err) {

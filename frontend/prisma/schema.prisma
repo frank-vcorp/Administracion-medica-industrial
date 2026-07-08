@@ -65,6 +65,8 @@ model User {
   validatedResults          LabResult[]               @relation("LabResultValidator")
   invalidatedResults        LabResult[]               @relation("LabResultInvalidator")
   resultAudits              LabResultAudit[]
+  // IMPL-20260707-18: Fase 2 NOVA absorción — trazabilidad de LabOrder (D)
+  labTraceEvents            LabTraceEvent[]
 
   @@map("users")
 }
@@ -1263,7 +1265,9 @@ model LabOrder {
   cancelledBy   User?     @relation("LabOrderCanceller", fields: [cancelledById], references: [id])
   confirmedAt   DateTime?
 
-  items LabOrderItem[]
+  items       LabOrderItem[]
+  // IMPL-20260707-18: Fase 2 NOVA absorción — trazabilidad (D) muestra→proceso→entrega
+  traceEvents LabTraceEvent[]
 
   @@index([workerId])
   @@index([medicalEventId])
@@ -1465,4 +1469,34 @@ model LabResultAudit {
 
   @@index([resultId, createdAt])
   @@map("lab_result_audits")
+}
+
+// ===========================================================================
+// IMPL-20260707-18: Fase 2 NOVA absorción (ARCH-20260707-17) — D Trazabilidad
+// Ref: context/SPECs/SPEC_IMPL-20260707-SLICES-D-G-FINAL.md §2 (FASE 2)
+//
+// Bitácora inmutable del ciclo de vida operativo de la LabOrder:
+// muestra recibida → proceso iniciado → análisis terminado → validado → entregado.
+// Un evento por (labOrderId, timestamp) — append-only.
+// ===========================================================================
+
+/// Trazabilidad operativa de la LabOrder: muestra → proceso → entrega.
+/// `event` ∈ {"SAMPLE_RECEIVED","PROCESS_STARTED","ANALYSIS_DONE","VALIDATED","DELIVERED"}
+model LabTraceEvent {
+  id         String   @id @default(cuid())
+  labOrderId String
+  labOrder   LabOrder @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+
+  event     String // SAMPLE_RECEIVED | PROCESS_STARTED | ANALYSIS_DONE | VALIDATED | DELIVERED
+  timestamp DateTime @default(now())
+
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+  notes    String?
+  location String?
+
+  @@index([labOrderId])
+  @@index([event])
+  @@index([timestamp])
+  @@map("lab_trace_events")
 }

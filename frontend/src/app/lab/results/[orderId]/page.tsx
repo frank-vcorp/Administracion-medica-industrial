@@ -1,6 +1,7 @@
 /**
  * @file Página detalle de LabOrder con worklist de analitos + ciclo P/R/A/V.
  * @id IMPL-20260707-16 — Slice C Resultados.
+ * @id IMPL-20260707-18 — Fase 2 — D Trazabilidad (LabTraceTimeline).
  *
  * Server Component: lee orderId desde params y carga el worklist.
  * Next.js 16+ requiere `await params`.
@@ -8,6 +9,8 @@
 import { notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { WorklistView } from "../_components/WorklistView";
+// IMPL-20260707-18: Fase 2 — D Trazabilidad (timeline muestra→proceso→entrega)
+import { LabTraceTimeline } from "../_components/LabTraceTimeline";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +73,8 @@ export default async function LabOrderResultsPage({
         </div>
       </div>
       <WorklistView orderId={orderId} header={headerData} />
+      {/* IMPL-20260707-18: Fase 2 — D Trazabilidad (timeline cronológico) */}
+      <LabTraceTimeline orderId={orderId} />
     </div>
   );
 }
