@@ -5,6 +5,7 @@ import { getCompanies, getJobPositions, getBranches } from "@/actions/admin.acti
 import WorkerFormModal from "@/components/WorkerFormModal"
 import WorkersTable from "@/components/WorkersTable"
 import BulkWorkerImportModal from "@/components/BulkWorkerImportModal"
+import BulkClinicWalkInImportModal from "@/components/BulkClinicWalkInImportModal"
 
 /**
  * @id ARCH-20260318-09
@@ -12,6 +13,7 @@ import BulkWorkerImportModal from "@/components/BulkWorkerImportModal"
  * @id IMPL-20260519-14: Botón Carga Masiva integrado (ARCH-20260519-11)
  * @id FIX-20260519-08: Fallback defensivo de branches para no romper /workers
  * @backup context/checkpoints/CHK_IMPL-20260519-14-PROJECT-ALTA-MASIVA.md
+ * @id ARCH-20260708-01: distinción Alta Masiva Unidad Móvil (verde) vs Clínica Física (azul).
  */
 export default async function WorkersPage(props: { searchParams: Promise<{ edit?: string }> }) {
     const searchParams = await props.searchParams
@@ -39,8 +41,11 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
                     <p className="text-sm text-slate-500 font-medium">Gestión integral de empleados y afiliaciones.</p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Verde: BulkWorkerImportModal renderiza su propio botón "Carga Masiva" (Unidad Móvil, con proyecto, intakeSource=UNIT_MOBILE_MASS) */}
                     <BulkWorkerImportModal companies={companyOptions} branches={branchOptions} />
+                    {/* Azul: Clínica Física (sin proyecto, intakeSource=CLINIC_WALK_IN_MASS) */}
+                    <BulkClinicWalkInImportModal branches={branchOptions} />
                     <WorkerFormModal companies={companies.value} jobPositions={jobPositions.value} />
                 </div>
             </div>

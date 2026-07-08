@@ -4,6 +4,11 @@
  *   Ruta oficial única. Reemplaza la lógica de ServiceProfile/Baterías.
  * @id IMPL-20260324-01
  * @see ARCH-20260324-23 — Unificación lógica de perfiles
+ * @id ARCH-20260708-01
+ * @see SPEC_ARCH-20260708-01-PERFILES-PACIENTE-CORREOS-CLONACION.md
+ *   - Correos de envío múltiples
+ *   - Comentarios especiales (specialNotes)
+ *   - Clonación de perfiles
  */
 'use client'
 
@@ -12,6 +17,8 @@ import {
   createMedicalProfile,
   updateMedicalProfile,
   deleteMedicalProfile,
+  removeProfileReportEmail,
+  cloneMedicalProfile,
 } from '@/actions/medical-profiles'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,6 +36,12 @@ type ProfileTestItem = {
   test: AvailableTest
 }
 
+type ProfileEmail = {
+  id: string
+  email: string
+  label: string | null
+}
+
 type MedicalProfileItem = {
   id: string
   name: string
@@ -36,6 +49,8 @@ type MedicalProfileItem = {
   company: { id: string; name: string } | null
   tests: ProfileTestItem[]
   _count: { tests: number }
+  reportEmails?: ProfileEmail[]
+  specialNotes?: string | null
 }
 
 interface Props {
@@ -52,6 +67,7 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editTarget, setEditTarget] = useState<MedicalProfileItem | null>(null)
+  const [cloneSource, setCloneSource] = useState<MedicalProfileItem | null>(null)
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message })
@@ -92,6 +108,11 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
         showFeedback('error', result.error ?? 'Error al eliminar perfil')
       }
     })
+  }
+
+  const handleCloned = () => {
+    showFeedback('success', 'Perfil clonado correctamente. Refresca la lista.')
+    setCloneSource(null)
   }
 
   return (
@@ -147,7 +168,7 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
             </p>
 
             {/* Preview de códigos de prueba */}
-            <div className="flex flex-wrap gap-1 mb-4 flex-1">
+            <div className="flex flex-wrap gap-1 mb-3 flex-1">
               {profile.tests.slice(0, 6).map(({ test }) => (
                 <span
                   key={test.id}
@@ -163,6 +184,41 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
               )}
             </div>
 
+            {/* Correos configurados */}
+            {profile.reportEmails && profile.reportEmails.length > 0 && (
+              <div className="mb-3 rounded-lg bg-amber-50 border border-amber-100 p-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-1">
+                  📬 {profile.reportEmails.length} correo{profile.reportEmails.length !== 1 ? 's' : ''}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {profile.reportEmails.slice(0, 3).map((em) => (
+                    <span
+                      key={em.id}
+                      title={em.email}
+                      className="bg-white text-amber-800 text-[11px] px-2 py-0.5 rounded border border-amber-200 truncate max-w-full"
+                    >
+                      {em.email}
+                    </span>
+                  ))}
+                  {profile.reportEmails.length > 3 && (
+                    <span className="text-[11px] text-amber-700">+{profile.reportEmails.length - 3} más</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Comentarios especiales */}
+            {profile.specialNotes && (
+              <div className="mb-3 rounded-lg bg-purple-50 border border-purple-100 p-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 mb-1">
+                  📝 Comentarios
+                </p>
+                <p className="text-xs text-purple-800 line-clamp-3 whitespace-pre-line">
+                  {profile.specialNotes}
+                </p>
+              </div>
+            )}
+
             {/* Acciones */}
             <div className="pt-4 border-t border-slate-100 flex gap-2">
               <button
@@ -171,6 +227,14 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
                 className="flex-1 border border-slate-200 hover:bg-slate-50 text-slate-600 py-1.5 rounded-lg text-xs font-medium transition-colors"
               >
                 Editar
+              </button>
+              <button
+                onClick={() => setCloneSource(profile)}
+                disabled={isPending}
+                className="border border-blue-200 hover:bg-blue-50 text-blue-600 hover:text-blue-700 py-1.5 px-3 rounded-lg text-xs font-medium transition-colors"
+                title="Duplicar este perfil (clona pruebas, correos y notas)"
+              >
+                Duplicar
               </button>
               <button
                 onClick={() => handleDelete(profile.id, profile.name)}
@@ -209,11 +273,118 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
           availableTests={availableTests}
           initialTestIds={editTarget.tests.map(({ test }) => test.id)}
           initialName={editTarget.name}
+          initialSpecialNotes={editTarget.specialNotes ?? ''}
+          initialEmails={editTarget.reportEmails ?? []}
           onClose={() => setEditTarget(null)}
           onSubmit={(formData) => handleUpdate(editTarget.id, formData)}
           isPending={isPending}
         />
       )}
+
+      {/* Modal Clonar (SPEC ARCH-20260708-01) */}
+      {cloneSource && (
+        <CloneProfileModal
+          sourceName={cloneSource.name}
+          sourceId={cloneSource.id}
+          onCancel={() => setCloneSource(null)}
+          onCreated={handleCloned}
+          onError={(msg) => showFeedback('error', msg)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODAL CLONAR
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CloneProfileModal({
+  sourceName,
+  sourceId,
+  onCancel,
+  onCreated,
+  onError,
+}: {
+  sourceName: string
+  sourceId: string
+  onCancel: () => void
+  onCreated: () => void
+  onError: (msg: string) => void
+}) {
+  const [name, setName] = useState(`${sourceName} (Copia)`)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    startTransition(async () => {
+      const result = await cloneMedicalProfile(sourceId, name)
+      if (!result.success) {
+        const msg = result.error ?? 'Error al clonar'
+        setError(msg)
+        onError(msg)
+      } else {
+        onCreated()
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+      <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-slate-800">Duplicar perfil</h3>
+          <button
+            onClick={onCancel}
+            type="button"
+            className="text-slate-400 hover:text-red-500 font-bold text-xl leading-none"
+          >
+            ✕
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Se creará una copia del perfil <strong>{sourceName}</strong> con sus
+            pruebas, correos de envío y comentarios especiales. El nombre debe ser único.
+          </p>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Nombre del clon <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              maxLength={200}
+              className="w-full border border-slate-200 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          {error && (
+            <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isPending || !name.trim()}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 font-medium text-sm disabled:opacity-50"
+            >
+              {isPending ? 'Clonando…' : 'Crear clon'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
@@ -227,21 +398,32 @@ function ProfileModal({
   availableTests,
   initialTestIds,
   initialName = '',
+  initialSpecialNotes = '',
+  initialEmails = [],
   onClose,
   onSubmit,
   isPending,
+  readOnlyEmails = false,
 }: {
   title: string
   availableTests: AvailableTest[]
   initialTestIds: string[]
   initialName?: string
+  initialSpecialNotes?: string
+  initialEmails?: ProfileEmail[]
   onClose: () => void
   onSubmit: (formData: FormData) => void
   isPending: boolean
+  readOnlyEmails?: boolean
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(initialTestIds))
+  const [emails, setEmails] = useState<ProfileEmail[]>(initialEmails)
+  const [newEmail, setNewEmail] = useState('')
+  const [newLabel, setNewLabel] = useState('')
+  const [emailError, setEmailError] = useState<string | null>(null)
+  const [notesCharCount, setNotesCharCount] = useState(initialSpecialNotes.length)
+  const [, startTransitionInner] = useTransition()
 
-  // Agrupar por categoría para mostrar secciones ordenadas
   const byCategory = availableTests.reduce<Record<string, AvailableTest[]>>((acc, test) => {
     const cat = test.category.name
     if (!acc[cat]) acc[cat] = []
@@ -258,6 +440,48 @@ function ProfileModal({
     })
   }
 
+  function addEmail() {
+    setEmailError(null)
+    const trimmed = newEmail.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError('Formato de correo inválido')
+      return
+    }
+    if (emails.some((e) => e.email === trimmed)) {
+      setEmailError('Este correo ya está configurado')
+      return
+    }
+    // Sin límite duro en BD; UI sugiere hasta 10 como máximo razonable.
+    if (emails.length >= 10) {
+      setEmailError('Se recomienda un máximo de 10 correos por perfil.')
+      return
+    }
+    // El id se asignará al guardar (server genera uuid). Para UI optimista usamos id temporal.
+    setEmails((prev) => [
+      ...prev,
+      { id: `temp-${Date.now()}`, email: trimmed, label: newLabel.trim() || null },
+    ])
+    setNewEmail('')
+    setNewLabel('')
+  }
+
+  function removeEmail(id: string) {
+    if (id.startsWith('temp-')) {
+      // Aún no persistido: solo remover del estado local
+      setEmails((prev) => prev.filter((e) => e.id !== id))
+      return
+    }
+    if (!confirm('¿Eliminar este correo del perfil?')) return
+    startTransitionInner(async () => {
+      const result = await removeProfileReportEmail(id)
+      if (result.success) {
+        setEmails((prev) => prev.filter((e) => e.id !== id))
+      } else {
+        setEmailError(result.error ?? 'Error al eliminar correo')
+      }
+    })
+  }
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
@@ -268,7 +492,7 @@ function ProfileModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-      <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
         {/* Encabezado modal */}
         <div className="flex justify-between items-center mb-4 shrink-0">
           <h3 className="text-lg font-bold text-slate-800">{title}</h3>
@@ -297,7 +521,7 @@ function ProfileModal({
               Pruebas incluidas{' '}
               <span className="text-blue-600 font-bold">({selectedIds.size} seleccionadas)</span>
             </p>
-            <div className="border border-slate-200 rounded-lg overflow-y-auto flex-1 divide-y divide-slate-100">
+            <div className="border border-slate-200 rounded-lg overflow-y-auto flex-1 divide-y divide-slate-100 max-h-40">
               {Object.entries(byCategory).map(([category, tests]) => (
                 <div key={category}>
                   <div className="px-3 py-1.5 bg-slate-50 text-xs uppercase text-slate-400 font-semibold sticky top-0">
@@ -328,6 +552,82 @@ function ProfileModal({
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Comentarios especiales */}
+          <div>
+            <label htmlFor="special-notes" className="block text-sm font-semibold text-slate-700 mb-1">
+              Comentarios especiales
+              <span className="text-[11px] font-normal text-slate-500 ml-2">
+                (firma autógrafa, cédula del médico, pruebas no reportadas, formatos especiales)
+              </span>
+            </label>
+            <textarea
+              id="special-notes"
+              name="specialNotes"
+              defaultValue={initialSpecialNotes}
+              maxLength={2000}
+              placeholder="Ej. Requiere firma autógrafa. Excluir VIH. Adjuntar cédula."
+              onChange={(e) => setNotesCharCount(e.currentTarget.value.length)}
+              className="w-full border border-slate-200 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 min-h-[80px]"
+            />
+            <p className="text-xs text-slate-400 text-right">{notesCharCount} / 2000 caracteres</p>
+          </div>
+
+          {/* Correos de envío */}
+          <div>
+            <p className="text-sm font-semibold text-slate-700 mb-1">
+              Correos de envío de resultados{' '}
+              <span className="text-amber-600 text-xs">({emails.length} configurados)</span>
+            </p>
+            {emails.length > 0 && (
+              <ul className="border border-slate-200 rounded-lg divide-y divide-slate-100 mb-2 max-h-32 overflow-y-auto">
+                {emails.map((em) => (
+                  <li key={em.id} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                    <span className="truncate flex-1">
+                      <span className="text-slate-700">{em.email}</span>
+                      {em.label && <span className="text-xs text-slate-400 ml-2">({em.label})</span>}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeEmail(em.id)}
+                      className="text-red-500 hover:text-red-700 text-xs"
+                      disabled={readOnlyEmails}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {!readOnlyEmails && (
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="correo@empresa.com"
+                  className="flex-1 border border-slate-200 p-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <input
+                  type="text"
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  placeholder="Etiqueta (opcional)"
+                  maxLength={100}
+                  className="w-40 border border-slate-200 p-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={addEmail}
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-sm font-semibold"
+                >
+                  + Agregar
+                </button>
+              </div>
+            )}
+            {emailError && <p className="text-xs text-red-600 mt-1">{emailError}</p>}
           </div>
 
           {/* Botones */}
