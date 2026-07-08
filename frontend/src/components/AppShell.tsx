@@ -159,6 +159,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <NavItem href="/admin/services" icon="🧪" label="Catálogo de Pruebas" collapsed={isEventWorkspace} />
               {/* IMPL-20260630-06: Slice A NOVA absorción — módulo LIS (catálogos demo) */}
               <NavItem href="/admin/lab/catalogs?mod=unidades" icon="🧬" label="Módulo de Laboratorios" collapsed={isEventWorkspace} />
+              {/* IMPL-20260708-FINAL: Fase 4 NOVA absorción — migración y cutover (admin only) */}
+              <NavItem href="/admin/lab/migration" icon="🔄" label="Migración NOVA" secondary collapsed={isEventWorkspace} />
+              <NavItem href="/admin/lab/cutover" icon="🚦" label="Cutover NOVA" secondary collapsed={isEventWorkspace} />
               {/* IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder */}
               <NavItem href="/lab/reception" icon="🧪" label="Recepción Lab" collapsed={isEventWorkspace} />
               <NavItem href="/admin/profiles" icon="🩻" label="Perfiles Médicos" collapsed={isEventWorkspace} />

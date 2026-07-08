@@ -1518,3 +1518,15 @@ except Exception as _fase3_import_err:
     print(f"⚠️ No se pudieron registrar routers de Fase 3: {_sanitize_error(str(_fase3_import_err))}")
 
 
+# ========================================
+# IMPL-20260708-FINAL: Fase 4 NOVA absorción (ARCH-20260707-17) — I Cutover
+# Estado de las 9 fases del roadmap NOVA→AMI. Read-only, sin auth.
+# ========================================
+try:
+    from app.api.v1.lab.cutover import router as lab_cutover_router
+    app.include_router(lab_cutover_router)
+    print("✅ Router Fase 4 (cutover-status) registrado (/api/v1/lab/cutover-status)")
+except Exception as _fase4_cutover_import_err:
+    print(f"⚠️ No se pudo registrar router de cutover: {_sanitize_error(str(_fase4_cutover_import_err))}")
+
+
