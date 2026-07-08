@@ -58,6 +58,13 @@ model User {
   // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
   createdLabOrders          LabOrder[]                @relation("LabOrderCreator")
   cancelledLabOrders        LabOrder[]                @relation("LabOrderCanceller")
+  // IMPL-20260707-16: Slice C NOVA absorción — auditoría de LabResult
+  capturedResults           LabResult[]               @relation("LabResultCapturer")
+  reportedResults           LabResult[]               @relation("LabResultReporter")
+  authorizedResults         LabResult[]               @relation("LabResultAuthorizer")
+  validatedResults          LabResult[]               @relation("LabResultValidator")
+  invalidatedResults        LabResult[]               @relation("LabResultInvalidator")
+  resultAudits              LabResultAudit[]
 
   @@map("users")
 }
@@ -252,6 +259,9 @@ model MedicalTest {
   isPackage        Boolean           @default(false)
   // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
   labOrderItems    LabOrderItem[]
+  // IMPL-20260707-16: Slice C NOVA absorción — analitos y resultados (ARCH-20260707-16)
+  analytes         LabAnalyte[]
+  labResults       LabResult[]
 
   @@map("medical_tests")
 }
@@ -298,6 +308,9 @@ model EventTest {
   test                MedicalTest?              @relation(fields: [testId], references: [id])
   // IMPL-20260326-16: Snapshots de extracción IA por estudio (ARCH-20260326-16)
   extractionSnapshots StudyExtractionSnapshot[]
+  // IMPL-20260707-16: Slice C NOVA absorción — relación inversa con LabResult
+  labResults          LabResult[]
+  LabOrderItem        LabOrderItem[]
 
   @@map("event_tests")
 }
@@ -335,6 +348,9 @@ model MedicalEvent {
   paymentRecords        PaymentRecord[]
   // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
   labOrders             LabOrder[]
+  // IMPL-20260707-16: Slice C — labResults transitivos vía LabOrder
+  // (accesibles por la consulta Prisma anidada; no requiere relation directa
+  //  porque el modelo MedicalEvent no tiene FK explícita a LabResult)
 
   @@map("medical_events")
 }
@@ -989,15 +1005,19 @@ enum LabRole {
 
 /// Unidad de medida (mg/dL, mmol/L, %, U/L, etc.).
 model LabUnit {
-  id          String        @id @default(cuid())
-  symbol      String        @unique // "mg/dL", "mmol/L", "%"
-  name        String
-  system      LabUnitSystem
-  active      Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  createdById String?
-  createdBy   User?         @relation("LabUnitCreator", fields: [createdById], references: [id])
+  id              String              @id @default(cuid())
+  symbol          String              @unique // "mg/dL", "mmol/L", "%"
+  name            String
+  system          LabUnitSystem
+  active          Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  createdById     String?
+  createdBy       User?               @relation("LabUnitCreator", fields: [createdById], references: [id])
+  // IMPL-20260707-16: Slice C — analitos/rangos/resultados que usan esta unidad
+  analyteDefaults LabAnalyte[]        @relation("LabUnitAnalyteDefault")
+  resultUnits     LabResult[]
+  rangeUnits      LabReferenceRange[]
 
   @@index([symbol])
   @@map("lab_units")
@@ -1271,6 +1291,11 @@ model LabOrderItem {
   // Estado del item (ciclo de vida del resultado)
   resultStatus String @default("P") // P=pendiente, R=reportado, A=autorizado, V=validado, X=invalidado
 
+  // IMPL-20260707-16: Slice C — relación opcional con EventTest (papeleta) y resultados
+  eventTestId String?
+  eventTest   EventTest?  @relation(fields: [eventTestId], references: [id], onDelete: SetNull)
+  results     LabResult[]
+
   // Auditoría
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1279,4 +1304,165 @@ model LabOrderItem {
   @@index([medicalTestId])
   @@index([resultStatus])
   @@map("lab_order_items")
+}
+
+// ===========================================================================
+// IMPL-20260707-16: Slice C NOVA absorción (ARCH-20260707-16)
+// Ref: context/SPECs/SPEC_IMPL-20260707-SLICE-C-RESULTADOS.md
+//
+// Captura de resultados + ciclo de vida P/R/A/V + bitácora auditoría
+// + integración bidireccional con la papeleta AMI vía EventTest.
+// ===========================================================================
+
+/// Estado del ciclo de vida de un LabResult.
+enum LabResultStatus {
+  PENDING // capturado pero sin valor final
+  REPORTED // valor capturado, pendiente de autorización
+  AUTHORIZED // firmado por analista (médico/responsable)
+  VALIDATED // validado por responsable final
+  INVALIDATED // cancelado/inválido (con motivo)
+}
+
+/// Tipo de dato del analito: numérico, texto libre o categórico (enum).
+enum LabAnalyteDataType {
+  NUMERIC
+  TEXT
+  ENUM
+}
+
+/// Sexo aplicable al rango de referencia. A = ambos.
+enum LabSex {
+  M
+  F
+  A
+}
+
+/// Analito / parámetro dentro de un estudio (ej. "Hemoglobina" en "BH").
+model LabAnalyte {
+  id            String             @id @default(cuid())
+  medicalTestId String
+  medicalTest   MedicalTest        @relation(fields: [medicalTestId], references: [id], onDelete: Cascade)
+  code          String // "HGB" para Hemoglobina
+  name          String // "Hemoglobina"
+  orderIndex    Int                @default(0)
+  dataType      LabAnalyteDataType @default(NUMERIC)
+  defaultUnitId String?
+  defaultUnit   LabUnit?           @relation("LabUnitAnalyteDefault", fields: [defaultUnitId], references: [id])
+  active        Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  referenceRanges LabReferenceRange[]
+  results         LabResult[]
+
+  @@unique([medicalTestId, code])
+  @@index([medicalTestId])
+  @@map("lab_analytes")
+}
+
+/// Rango normal por edad/sexo para un analito (FK a LabAnalyte).
+model LabReferenceRange {
+  id           String     @id @default(cuid())
+  analyteId    String
+  analyte      LabAnalyte @relation(fields: [analyteId], references: [id], onDelete: Cascade)
+  sex          LabSex // M / F / A
+  ageMinMonths Int? // 0 = nacimiento
+  ageMaxMonths Int? // null = sin límite
+  valueMin     Float? // rango numérico
+  valueMax     Float?
+  textValue    String? // para ENUM/TEXT (ej. "Negativo", "Positivo")
+  unitId       String?
+  unit         LabUnit?   @relation(fields: [unitId], references: [id])
+  criticalLow  Float? // valor crítico bajo
+  criticalHigh Float? // valor crítico alto
+  isCritical   Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([analyteId, sex, ageMinMonths, ageMaxMonths])
+  @@map("lab_reference_ranges")
+}
+
+/// Valor capturado por analito por orden.
+model LabResult {
+  id             String       @id @default(cuid())
+  labOrderItemId String
+  labOrderItem   LabOrderItem @relation(fields: [labOrderItemId], references: [id], onDelete: Cascade)
+  analyteId      String
+  analyte        LabAnalyte   @relation(fields: [analyteId], references: [id])
+
+  // Vínculo opcional con papeleta (EventTest específico)
+  eventTestId String?
+  eventTest   EventTest? @relation(fields: [eventTestId], references: [id], onDelete: SetNull)
+
+  // Valor capturado
+  valueText   String? // para TEXT/ENUM
+  valueNumber Float? // para NUMERIC
+  unitId      String?
+  unit        LabUnit? @relation(fields: [unitId], references: [id])
+
+  // Estado del ciclo
+  status LabResultStatus @default(PENDING)
+
+  // Auditoría (5 relaciones a User)
+  capturedById String?
+  capturedBy   User?     @relation("LabResultCapturer", fields: [capturedById], references: [id])
+  capturedAt   DateTime?
+
+  reportedById String?
+  reportedBy   User?     @relation("LabResultReporter", fields: [reportedById], references: [id])
+  reportedAt   DateTime?
+
+  authorizedById String?
+  authorizedBy   User?     @relation("LabResultAuthorizer", fields: [authorizedById], references: [id])
+  authorizedAt   DateTime?
+
+  validatedById String?
+  validatedBy   User?     @relation("LabResultValidator", fields: [validatedById], references: [id])
+  validatedAt   DateTime?
+
+  invalidatedById  String?
+  invalidatedBy    User?     @relation("LabResultInvalidator", fields: [invalidatedById], references: [id])
+  invalidatedAt    DateTime?
+  invalidateReason String?
+
+  // Flags
+  isOutOfRange Boolean @default(false)
+  isCritical   Boolean @default(false)
+  isAbnormal   Boolean @default(false)
+
+  observations String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditEvents   LabResultAudit[]
+  MedicalTest   MedicalTest?     @relation(fields: [medicalTestId], references: [id])
+  medicalTestId String?
+
+  @@unique([labOrderItemId, analyteId])
+  @@index([analyteId])
+  @@index([status])
+  @@index([eventTestId])
+  @@map("lab_results")
+}
+
+/// Bitácora inmutable de cambios de estado con snapshots before/after en JSON.
+model LabResultAudit {
+  id       String    @id @default(cuid())
+  resultId String
+  result   LabResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  action     String // CREATE | UPDATE_VALUE | REPORT | AUTHORIZE | VALIDATE | INVALIDATE | OUT_OF_RANGE_DETECTED
+  fromStatus LabResultStatus?
+  toStatus   LabResultStatus?
+  before     Json? // snapshot antes del cambio
+  after      Json? // snapshot después del cambio
+  reason     String?
+  userId     String
+  user       User             @relation(fields: [userId], references: [id])
+  createdAt  DateTime         @default(now())
+
+  @@index([resultId, createdAt])
+  @@map("lab_result_audits")
 }
