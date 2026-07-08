@@ -1447,3 +1447,22 @@ except Exception as _lab_c_import_err:
     print(f"⚠️ No se pudo registrar router de lab-results: {_sanitize_error(str(_lab_c_import_err))}")
 
 
+# ========================================
+# IMPL-20260707-17: Fase 1 NOVA absorción (ARCH-20260707-17) — B-v2 + E
+# Bandeja de papeletas + trigger SAMPLE_TAKEN + catálogo avanzado de estudios.
+# Reusa el Prisma client inyectado por lifespan() arriba (mismo patrón Slice A/B/C).
+# Prefijos: /api/v1/lab/pending-orders, /api/v1/event_tests, /api/v1/lab/auto-generate-from-event,
+#           /api/v1/medical_tests/lab-catalog, /api/v1/lab/analytes, /api/v1/lab/reference-ranges,
+#           /api/v1/lab/seed-typical-tests
+# ========================================
+try:
+    from app.api.v1.lab.pending_orders import router as lab_pending_orders_router
+    from app.api.v1.lab.medical_tests import router as lab_medical_tests_router
+
+    app.include_router(lab_pending_orders_router)
+    app.include_router(lab_medical_tests_router)
+    print("✅ Routers Fase 1 registrados (pending-orders + medical-tests catalog)")
+except Exception as _fase1_import_err:
+    print(f"⚠️ No se pudieron registrar routers de Fase 1: {_sanitize_error(str(_fase1_import_err))}")
+
+
