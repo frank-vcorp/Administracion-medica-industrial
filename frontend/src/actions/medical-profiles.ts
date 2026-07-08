@@ -40,6 +40,14 @@ const MedicalProfileSchema = z.object({
   testIds: z
     .array(z.string().uuid('ID de prueba inválido'))
     .min(1, 'Debe seleccionar al menos una prueba médica'),
+  // ARCH-20260708-01: Comentarios especiales (firma autógrafa, cédula, pruebas excluidas)
+  specialNotes: z.string().max(2000).nullable().optional(),
+})
+
+// ARCH-20260708-01: Schema Zod para correos configurados por perfil médico
+const ReportEmailSchema = z.object({
+  email: z.string().email('Formato de correo inválido'),
+  label: z.string().max(100).nullable().optional(),
 })
 
 const MedicalTestSchema = z.object({
@@ -145,6 +153,8 @@ export async function getMedicalProfilesForCompany(companyId: string) {
       id: true,
       name: true,
       companyId: true,
+      // ARCH-20260708-01: incluir correos y notas para mostrar en panel de empresa
+      specialNotes: true,
       tests: {
         select: {
           test: {
@@ -157,6 +167,10 @@ export async function getMedicalProfilesForCompany(companyId: string) {
           },
         },
       },
+      reportEmails: {
+        select: { id: true, email: true, label: true },
+        orderBy: { createdAt: 'asc' },
+      },
     },
     orderBy: { name: 'asc' },
   })
@@ -164,7 +178,12 @@ export async function getMedicalProfilesForCompany(companyId: string) {
 
 export async function getMedicalProfiles() {
   return await prisma.medicalProfile.findMany({
-    include: {
+    select: {
+      id: true,
+      name: true,
+      companyId: true,
+      // ARCH-20260708-01: incluir correos y notas para mostrar en la grilla
+      specialNotes: true,
       company: { select: { id: true, name: true } },
       tests: {
         include: {
@@ -179,6 +198,10 @@ export async function getMedicalProfiles() {
         },
       },
       _count: { select: { tests: true } },
+      reportEmails: {
+        select: { id: true, email: true, label: true },
+        orderBy: { createdAt: 'asc' },
+      },
     },
     orderBy: { name: 'asc' },
   })
@@ -193,11 +216,13 @@ export async function createMedicalProfile(
 ): Promise<ActionResult> {
   const testIds = parseTestIds(formData)
   const rawCompanyId = formData.get('companyId')
+  const rawSpecialNotes = formData.get('specialNotes')
 
   const parsed = MedicalProfileSchema.safeParse({
     name: formData.get('name'),
     companyId: typeof rawCompanyId === 'string' && rawCompanyId ? rawCompanyId : null,
     testIds,
+    specialNotes: typeof rawSpecialNotes === 'string' && rawSpecialNotes ? rawSpecialNotes : null,
   })
 
   if (!parsed.success) {
@@ -209,6 +234,7 @@ export async function createMedicalProfile(
       data: {
         name: parsed.data.name,
         companyId: parsed.data.companyId ?? null,
+        specialNotes: parsed.data.specialNotes ?? null,
         tests: {
           create: parsed.data.testIds.map((testId) => ({ testId })),
         },
@@ -229,6 +255,7 @@ export async function updateMedicalProfile(
 ): Promise<ActionResult> {
   const testIds = parseTestIds(formData)
   const rawCompanyId = formData.get('companyId')
+  const rawSpecialNotes = formData.get('specialNotes')
   const previousProfile = await prisma.medicalProfile.findUnique({
     where: { id },
     select: { companyId: true },
@@ -238,6 +265,7 @@ export async function updateMedicalProfile(
     name: formData.get('name'),
     companyId: typeof rawCompanyId === 'string' && rawCompanyId ? rawCompanyId : null,
     testIds,
+    specialNotes: typeof rawSpecialNotes === 'string' ? rawSpecialNotes : null,
   })
 
   if (!parsed.success) {
@@ -251,6 +279,7 @@ export async function updateMedicalProfile(
       data: {
         name: parsed.data.name,
         companyId: parsed.data.companyId ?? null,
+        specialNotes: parsed.data.specialNotes ?? null,
         tests: {
           deleteMany: {},
           create: parsed.data.testIds.map((testId) => ({ testId })),
@@ -285,6 +314,218 @@ export async function deleteMedicalProfile(id: string): Promise<ActionResult> {
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error eliminando perfil:', e)
     return { success: false, error: 'Error al eliminar el perfil médico' }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ARCH-20260708-01: Correos de envío, comentarios especiales y clonación
+// Ref: context/SPECs/SPEC_ARCH-20260708-01-PERFILES-PACIENTE-CORREOS-CLONACION.md
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Recupera un perfil médico con sus correos configurados y notas especiales.
+ */
+export async function getMedicalProfileWithEmails(profileId: string) {
+  return await prisma.medicalProfile.findUnique({
+    where: { id: profileId },
+    include: {
+      reportEmails: {
+        select: { id: true, email: true, label: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      },
+      tests: {
+        select: {
+          test: { select: { id: true, name: true, code: true } },
+        },
+      },
+    },
+  })
+}
+
+/**
+ * Agrega un correo configurado al perfil médico.
+ */
+export async function addProfileReportEmail(
+  profileId: string,
+  payload: { email: string; label?: string | null }
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = ReportEmailSchema.safeParse(payload)
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  try {
+    const profile = await prisma.medicalProfile.findUnique({
+      where: { id: profileId },
+      select: { companyId: true },
+    })
+    if (!profile) {
+      return { success: false, error: 'Perfil médico no encontrado' }
+    }
+
+    const created = await prisma.medicalProfileReportEmail.create({
+      data: {
+        profileId,
+        email: parsed.data.email.toLowerCase().trim(),
+        label: parsed.data.label ?? null,
+      },
+      select: { id: true },
+    })
+
+    revalidatePath('/admin/profiles')
+    revalidateCompanyProfilePath(profile.companyId)
+    return { success: true, data: { id: created.id } }
+  } catch (e: unknown) {
+    const err = e as { code?: string }
+    if (err?.code === 'P2002') {
+      return { success: false, error: 'Este correo ya está configurado en el perfil' }
+    }
+    console.error('[addProfileReportEmail]', e)
+    return { success: false, error: 'Error al agregar el correo al perfil' }
+  }
+}
+
+/**
+ * Elimina un correo configurado del perfil médico.
+ */
+export async function removeProfileReportEmail(
+  emailId: string
+): Promise<ActionResult> {
+  try {
+    const row = await prisma.medicalProfileReportEmail.findUnique({
+      where: { id: emailId },
+      select: { profile: { select: { companyId: true, id: true } } },
+    })
+    if (!row) {
+      return { success: false, error: 'Correo no encontrado' }
+    }
+
+    await prisma.medicalProfileReportEmail.delete({ where: { id: emailId } })
+
+    revalidatePath('/admin/profiles')
+    revalidatePath(`/admin/profiles/${row.profile.id}`)
+    revalidateCompanyProfilePath(row.profile.companyId)
+    return { success: true }
+  } catch (e: unknown) {
+    console.error('[removeProfileReportEmail]', e)
+    return { success: false, error: 'Error al eliminar el correo del perfil' }
+  }
+}
+
+/**
+ * Actualiza el campo `specialNotes` de un perfil médico.
+ * Longitud máxima: 2000 caracteres (validación Zod enforced).
+ */
+export async function updateProfileSpecialNotes(
+  profileId: string,
+  notes: string | null
+): Promise<ActionResult> {
+  const Schema = z
+    .string()
+    .max(2000, 'Las notas no pueden exceder 2000 caracteres')
+    .nullable()
+
+  const parsed = Schema.safeParse(notes ?? null)
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  try {
+    const profile = await prisma.medicalProfile.findUnique({
+      where: { id: profileId },
+      select: { companyId: true },
+    })
+    if (!profile) {
+      return { success: false, error: 'Perfil no encontrado' }
+    }
+
+    await prisma.medicalProfile.update({
+      where: { id: profileId },
+      data: { specialNotes: parsed.data },
+    })
+
+    revalidatePath('/admin/profiles')
+    revalidatePath(`/admin/profiles/${profileId}`)
+    revalidateCompanyProfilePath(profile.companyId)
+    return { success: true }
+  } catch (e: unknown) {
+    console.error('[updateProfileSpecialNotes]', e)
+    return { success: false, error: 'Error al actualizar los comentarios del perfil' }
+  }
+}
+
+/**
+ * Clona un perfil médico: copia nombre (con nuevo nombre), pruebas, correos y notas.
+ * Todo se ejecuta en una transacción Prisma para garantizar atomicidad.
+ */
+export async function cloneMedicalProfile(
+  profileId: string,
+  newName: string
+): Promise<ActionResult<{ id: string }>> {
+  const NameSchema = z
+    .string()
+    .min(1, 'El nombre del clon es obligatorio')
+    .max(200, 'El nombre no puede exceder 200 caracteres')
+
+  const parsed = NameSchema.safeParse(newName)
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  try {
+    const source = await prisma.medicalProfile.findUnique({
+      where: { id: profileId },
+      include: {
+        tests: { select: { testId: true } },
+        reportEmails: {
+          select: { email: true, label: true },
+        },
+      },
+    })
+
+    if (!source) {
+      return { success: false, error: 'Perfil de origen no encontrado' }
+    }
+
+    // Uniqueness check del nombre para no contaminar
+    const duplicate = await prisma.medicalProfile.findFirst({
+      where: { name: { equals: parsed.data, mode: 'insensitive' } },
+      select: { id: true },
+    })
+    if (duplicate) {
+      return {
+        success: false,
+        error: `Ya existe un perfil con el nombre "${parsed.data}". Usa un nombre único.`,
+      }
+    }
+
+    const cloned = await prisma.$transaction(async (tx) => {
+      const newProfile = await tx.medicalProfile.create({
+        data: {
+          name: parsed.data,
+          companyId: source.companyId ?? null,
+          specialNotes: source.specialNotes ?? null,
+          tests: {
+            create: source.tests.map(({ testId }) => ({ testId })),
+          },
+          reportEmails: {
+            create: source.reportEmails.map(({ email, label }) => ({
+              email,
+              label: label ?? null,
+            })),
+          },
+        },
+        select: { id: true, companyId: true },
+      })
+      return newProfile
+    })
+
+    revalidatePath('/admin/profiles')
+    revalidateCompanyProfilePath(source.companyId)
+    return { success: true, data: { id: cloned.id } }
+  } catch (e: unknown) {
+    console.error('[cloneMedicalProfile]', e)
+    return { success: false, error: 'Error al clonar el perfil médico' }
   }
 }
 

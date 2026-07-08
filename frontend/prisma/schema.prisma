@@ -188,8 +188,27 @@ model Worker {
   projectWorkers           ProjectWorker[]
   // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
   labOrders                LabOrder[]
+  // ARCH-20260708-01: Correos adicionales de envío de resultados (SPEC: hasta 5)
+  reportEmails             WorkerReportEmail[]
+  // ARCH-20260708-01: Huella de origen del alta para distinguir clínica vs unidad móvil
+  intakeSource             IntakeSource     @default(PROJECT_SAME_DAY)
 
   @@map("workers")
+}
+
+/// ARCH-20260708-01: Correos adicionales de envío de resultados por paciente.
+/// Worker.email sigue siendo el correo principal; esta tabla añade hasta 5 correos extra
+/// (validación enforced a nivel UI). SPEC_ARCH-20260708-01-PERFILES-PACIENTE-CORREOS-CLONACION.md
+model WorkerReportEmail {
+  id        String   @id @default(uuid())
+  workerId  String
+  email     String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  worker    Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([workerId, email])
+  @@map("worker_report_emails")
 }
 
 model ClinicalHistory {
@@ -272,17 +291,37 @@ model MedicalTest {
 }
 
 model MedicalProfile {
-  id           String        @id @default(uuid())
+  id           String                     @id @default(uuid())
   name         String
   companyId    String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  /// ARCH-20260708-01: Comentarios especiales (firma autógrafa, cédula del médico,
+  /// pruebas NO reportadas, formatos). Empresa-específico o global según companyId.
+  specialNotes String?
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
   appointments Appointment[]
-  company      Company?      @relation(fields: [companyId], references: [id])
+  company      Company?                   @relation(fields: [companyId], references: [id])
   jobPositions JobPosition[]
   tests        ProfileTest[]
+  /// ARCH-20260708-01: Lista de correos a los que se envían los resultados
+  reportEmails MedicalProfileReportEmail[]
 
   @@map("medical_profiles")
+}
+
+/// ARCH-20260708-01: Correos configurados a nivel perfil médico.
+/// Regla de negocio: "ciertos perfiles reportan a ciertos correos".
+/// SPEC_ARCH-20260708-01-PERFILES-PACIENTE-CORREOS-CLONACION.md
+model MedicalProfileReportEmail {
+  id        String         @id @default(uuid())
+  profileId String
+  email     String
+  label     String? // ej. "Gerente RH", "Médico ocupacional"
+  createdAt DateTime       @default(now())
+  profile   MedicalProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, email])
+  @@map("medical_profile_report_emails")
 }
 
 model ProfileTest {
@@ -544,12 +583,17 @@ enum EventStatus {
 }
 
 /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
+/// ARCH-20260708-01: Se agregan CLINIC_WALK_IN_MASS (alta masiva para clínica física)
+/// y UNIT_MOBILE_MASS (alta masiva para proyecto de unidad móvil) — ver SPEC sección Decisión 4.
 enum IntakeSource {
   APPOINTMENT
   PROJECT_PRE_REGISTERED
   PROJECT_SAME_DAY
   EXTERNAL_WALK_IN
   DIRECT_RECEPTION
+  // ARCH-20260708-01
+  CLINIC_WALK_IN_MASS
+  UNIT_MOBILE_MASS
 }
 
 enum AppointmentStatus {

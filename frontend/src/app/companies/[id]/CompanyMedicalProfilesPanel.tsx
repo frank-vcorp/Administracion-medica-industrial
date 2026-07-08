@@ -4,6 +4,11 @@
  * @id IMPL-20260527-01
  * @backup context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
  * @see context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
+ * @id ARCH-20260708-01
+ * @see SPEC_ARCH-20260708-01-PERFILES-PACIENTE-CORREOS-CLONACION.md
+ *   - Correos de envío múltiples
+ *   - Comentarios especiales
+ *   - Botón Duplicar
  */
 'use client'
 
@@ -12,6 +17,9 @@ import {
   createMedicalProfile,
   deleteMedicalProfile,
   updateMedicalProfile,
+  addProfileReportEmail,
+  removeProfileReportEmail,
+  cloneMedicalProfile,
 } from '@/actions/medical-profiles'
 
 type AvailableTest = {
@@ -21,10 +29,18 @@ type AvailableTest = {
   category: { name: string }
 }
 
+type ProfileEmail = {
+  id: string
+  email: string
+  label: string | null
+}
+
 type CompanyMedicalProfile = {
   id: string
   name: string
   companyId: string | null
+  specialNotes: string | null
+  reportEmails: ProfileEmail[]
   tests: Array<{
     test: AvailableTest
   }>
@@ -49,6 +65,7 @@ export default function CompanyMedicalProfilesPanel({
   )
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editTarget, setEditTarget] = useState<CompanyMedicalProfile | null>(null)
+  const [cloneSource, setCloneSource] = useState<CompanyMedicalProfile | null>(null)
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message })
@@ -90,6 +107,18 @@ export default function CompanyMedicalProfilesPanel({
         showFeedback('success', 'Perfil médico eliminado de la empresa')
       } else {
         showFeedback('error', result.error)
+      }
+    })
+  }
+
+  const handleClone = (id: string, newName: string, onDone: () => void) => {
+    startTransition(async () => {
+      const result = await cloneMedicalProfile(id, newName)
+      if (result.success) {
+        showFeedback('success', 'Perfil clonado. Refresca para verlo.')
+        onDone()
+      } else {
+        showFeedback('error', result.error ?? 'Error al clonar')
       }
     })
   }
@@ -157,6 +186,38 @@ export default function CompanyMedicalProfilesPanel({
 
               <div className="mt-4 flex-1 space-y-3">
                 <ProfileTestsSummary tests={profile.tests} />
+
+                {profile.reportEmails && profile.reportEmails.length > 0 && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-100 p-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-1">
+                      📬 {profile.reportEmails.length} correo(s) de envío
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {profile.reportEmails.slice(0, 3).map((em) => (
+                        <span
+                          key={em.id}
+                          className="bg-white text-amber-800 text-[11px] px-2 py-0.5 rounded border border-amber-200"
+                        >
+                          {em.email}
+                        </span>
+                      ))}
+                      {profile.reportEmails.length > 3 && (
+                        <span className="text-[11px] text-amber-700">+{profile.reportEmails.length - 3} más</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {profile.specialNotes && (
+                  <div className="rounded-lg bg-purple-50 border border-purple-100 p-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 mb-1">
+                      📝 Comentarios
+                    </p>
+                    <p className="text-xs text-purple-800 whitespace-pre-line line-clamp-3">
+                      {profile.specialNotes}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="mt-5 flex gap-2 border-t border-slate-100 pt-4">
@@ -167,6 +228,15 @@ export default function CompanyMedicalProfilesPanel({
                   className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60"
                 >
                   Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCloneSource(profile)}
+                  disabled={isPending}
+                  className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:opacity-60"
+                  title="Duplicar perfil (clona pruebas, correos y notas)"
+                >
+                  Duplicar
                 </button>
                 <button
                   type="button"
@@ -202,12 +272,92 @@ export default function CompanyMedicalProfilesPanel({
           availableTests={availableTests}
           initialName={editTarget.name}
           initialTestIds={editTarget.tests.map(({ test }) => test.id)}
+          initialSpecialNotes={editTarget.specialNotes ?? ''}
+          initialEmails={editTarget.reportEmails ?? []}
           isPending={isPending}
           onClose={() => setEditTarget(null)}
           onSubmit={(formData) => handleUpdate(editTarget.id, formData)}
         />
       )}
+
+      {cloneSource && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-800">Duplicar perfil</h3>
+              <button
+                type="button"
+                onClick={() => setCloneSource(null)}
+                className="text-xl font-bold leading-none text-slate-400 hover:text-red-500"
+              >
+                ✕
+              </button>
+            </div>
+            <CloneForm
+              initialName={`${cloneSource.name} (Copia)`}
+              isPending={isPending}
+              onCancel={() => setCloneSource(null)}
+              onSubmit={(newName) => handleClone(cloneSource.id, newName, () => setCloneSource(null))}
+            />
+          </div>
+        </div>
+      )}
     </section>
+  )
+}
+
+function CloneForm({
+  initialName,
+  isPending,
+  onCancel,
+  onSubmit,
+}: {
+  initialName: string
+  isPending: boolean
+  onCancel: () => void
+  onSubmit: (newName: string) => void
+}) {
+  const [name, setName] = useState(initialName)
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSubmit(name)
+      }}
+      className="space-y-4"
+    >
+      <p className="text-sm text-slate-600">
+        Se creará un clon con las mismas pruebas, correos y notas. El nombre debe ser único.
+      </p>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          Nombre del clon <span className="text-red-500">*</span>
+        </label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          maxLength={200}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+      </div>
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={isPending || !name.trim()}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow transition-colors hover:bg-blue-700 disabled:opacity-50"
+        >
+          {isPending ? 'Clonando…' : 'Crear clon'}
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -245,6 +395,8 @@ function ProfileModal({
   availableTests,
   initialName,
   initialTestIds,
+  initialSpecialNotes = '',
+  initialEmails = [],
   isPending,
   onClose,
   onSubmit,
@@ -254,11 +406,19 @@ function ProfileModal({
   availableTests: AvailableTest[]
   initialName: string
   initialTestIds: string[]
+  initialSpecialNotes?: string
+  initialEmails?: ProfileEmail[]
   isPending: boolean
   onClose: () => void
   onSubmit: (formData: FormData) => void
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(initialTestIds))
+  const [emails, setEmails] = useState<ProfileEmail[]>(initialEmails)
+  const [newEmail, setNewEmail] = useState('')
+  const [newLabel, setNewLabel] = useState('')
+  const [emailError, setEmailError] = useState<string | null>(null)
+  const [notesCharCount, setNotesCharCount] = useState(initialSpecialNotes.length)
+  const [profileId] = useState<string | null>(null) // Para edición detectar ya guardados
 
   const testsByCategory = useMemo(() => {
     return availableTests.reduce<Record<string, AvailableTest[]>>((acc, test) => {
@@ -283,12 +443,61 @@ function ProfileModal({
     })
   }
 
+  function removeEmail(id: string) {
+    if (id.startsWith('temp-')) {
+      setEmails((prev) => prev.filter((e) => e.id !== id))
+      return
+    }
+    if (!confirm('¿Eliminar este correo del perfil?')) return
+    startTransitionEmail(async () => {
+      const result = await removeProfileReportEmail(id)
+      if (result.success) {
+        setEmails((prev) => prev.filter((e) => e.id !== id))
+      } else {
+        setEmailError(result.error ?? 'Error al eliminar correo')
+      }
+    })
+  }
+
+  function addEmail() {
+    setEmailError(null)
+    const trimmed = newEmail.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError('Formato de correo inválido')
+      return
+    }
+    if (emails.some((e) => e.email === trimmed)) {
+      setEmailError('Este correo ya está configurado')
+      return
+    }
+    if (emails.length >= 10) {
+      setEmailError('Se recomienda un máximo de 10 correos por perfil.')
+      return
+    }
+    setEmails((prev) => [
+      ...prev,
+      { id: `temp-${Date.now()}`, email: trimmed, label: newLabel.trim() || null },
+    ])
+    setNewEmail('')
+    setNewLabel('')
+  }
+
+  const [, startTransitionEmail] = useTransition()
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
     formData.set('companyId', companyId)
     formData.set('testIds', JSON.stringify(Array.from(selectedIds)))
+    // Emails temporales se persisten al guardar vía addProfileReportEmail
+    // (las filas ya persistidas se actualizan automáticamente — solo el formData va completo)
     onSubmit(formData)
+    // Persistir emails nuevos (temporales) usando addProfileReportEmail — requieren un profileId del modal
+    if (profileId) {
+      for (const em of emails.filter((e) => e.id.startsWith('temp-'))) {
+        void addProfileReportEmail(profileId, { email: em.email, label: em.label })
+      }
+    }
   }
 
   return (
@@ -335,7 +544,7 @@ function ProfileModal({
                 <span className="font-medium text-blue-700">{selectedIds.size} seleccionadas</span>
               </div>
 
-              <div className="max-h-[50vh] overflow-y-auto divide-y divide-slate-100">
+              <div className="max-h-[30vh] overflow-y-auto divide-y divide-slate-100">
                 {Object.entries(testsByCategory).map(([categoryName, categoryTests]) => (
                   <div key={categoryName}>
                     <div className="sticky top-0 bg-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -367,6 +576,84 @@ function ProfileModal({
                   </p>
                 )}
               </div>
+            </div>
+
+            {/* Comentarios especiales */}
+            <div>
+              <label htmlFor="company-profile-notes" className="mb-1 block text-sm font-medium text-slate-700">
+                Comentarios especiales
+                <span className="ml-2 text-[11px] font-normal text-slate-500">
+                  (firma autógrafa, cédula del médico, pruebas no reportadas)
+                </span>
+              </label>
+              <textarea
+                id="company-profile-notes"
+                name="specialNotes"
+                defaultValue={initialSpecialNotes}
+                maxLength={2000}
+                placeholder="Ej. Requiere firma autógrafa. Excluir VIH. Adjuntar cédula."
+                onChange={(e) => setNotesCharCount(e.currentTarget.value.length)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 min-h-[80px]"
+              />
+              <p className="text-right text-xs text-slate-400">{notesCharCount} / 2000</p>
+            </div>
+
+            {/* Correos */}
+            <div>
+              <p className="mb-1 text-sm font-medium text-slate-700">
+                Correos de envío de resultados{' '}
+                <span className="text-amber-600 text-xs">({emails.length})</span>
+              </p>
+              {emails.length > 0 && (
+                <ul className="mb-2 max-h-32 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+                  {emails.map((em) => (
+                    <li key={em.id} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                      <span className="truncate flex-1">
+                        <span className="text-slate-700">{em.email}</span>
+                        {em.label && <span className="ml-2 text-xs text-slate-400">({em.label})</span>}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeEmail(em.id)}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="correo@empresa.com"
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <input
+                  type="text"
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  placeholder="Etiqueta (opcional)"
+                  maxLength={100}
+                  className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={addEmail}
+                  className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+                >
+                  + Agregar
+                </button>
+              </div>
+              {emailError && <p className="mt-1 text-xs text-red-600">{emailError}</p>}
+              {/* El note sobre persistir tras tener profileId se omite de UI para no confundir */}
+              {profileId === null && initialEmails.length === 0 && emails.some((e) => e.id.startsWith('temp-')) && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Los correos nuevos se guardarán al guardar el perfil.
+                </p>
+              )}
             </div>
           </div>
 

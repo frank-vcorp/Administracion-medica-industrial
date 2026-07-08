@@ -271,6 +271,11 @@ export interface BulkImportResult {
     error?: string
 }
 
+// ARCH-20260708-01: Tipo para retornos de actions nuevos
+type ActionResult<T = undefined> =
+    | { success: true; data?: T }
+    | { success: false; error: string }
+
 const QuickWorkerRowSchema = z.object({
     firstName: z.string().min(1).max(100),
     lastName: z.string().min(1).max(100),
@@ -457,6 +462,8 @@ export async function bulkImportWorkers(
                     phone: row.phone?.trim() || null,
                     companyId,
                     jobPositionId: matchedPosition?.id ?? null,
+                    // ARCH-20260708-01: Huella de origen — distingue unidad móvil (con proyecto)
+                    intakeSource: 'UNIT_MOBILE_MASS',
                     // gender NO se incluye — no existe columna gender en Worker
                 },
             })
@@ -489,12 +496,14 @@ export async function bulkImportWorkers(
         await prisma.auditLog.create({
             data: {
                 userId: addedBy,
-                action: 'BULK_IMPORT',
+                // ARCH-20260708-01: distinción explícita de la ruta de alta masiva
+                action: 'BULK_IMPORT_UNIT',
                 entity: 'Worker',
                 entityId: projectId,
                 details: {
                     projectId,
                     companyId,
+                    intakeSource: 'UNIT_MOBILE_MASS',
                     created: result.created,
                     duplicates: result.duplicates.length,
                     warnings: result.warnings.length,
@@ -733,4 +742,275 @@ export async function createExternalWorkerIntake(input: {
         console.error('[createExternalWorkerIntake]', error)
         return { success: false, error: 'No se pudo crear la persona externa.' }
     }
+}
+
+// ===========================================================================
+// ARCH-20260708-01: Alta masiva de clínica física + correos adicionales de envío
+// Ref: context/SPECs/SPEC_ARCH-20260708-01-PERFILES-PACIENTE-CORREOS-CLONACION.md
+// Distingue de bulkImportWorkers: NO crea Project, NO crea ProjectWorker,
+// marca intakeSource = CLINIC_WALK_IN_MASS y se queda en una sola sucursal.
+// ===========================================================================
+
+const ClinicWalkInRowSchema = z.object({
+    firstName: z.string().min(1, 'Nombre obligatorio').max(100),
+    lastName: z.string().min(1, 'Apellidos obligatorios').max(100),
+    nationalId: z.string().max(18).optional(),
+    dob: z.string().optional(),
+    phone: z.string().max(15).optional(),
+    email: z.union([z.string().email(), z.literal('')]).optional(),
+    jobPositionName: z.string().optional(),
+    _rowIndex: z.number(),
+})
+
+export type ClinicWalkInRow = z.infer<typeof ClinicWalkInRowSchema>
+
+/**
+ * Alta masiva para clínica física (pacientes que llegan al mostrador sin proyecto).
+ * Sin Project, sin ProjectWorker. Marca intakeSource = 'CLINIC_WALK_IN_MASS'.
+ * Límite: 20 filas por sesión (regla "clínica física" según junta 2026-07-01).
+ */
+export async function bulkRegisterClinicWalkIn(
+    rows: ClinicWalkInRow[],
+    branchId: string | null
+): Promise<BulkImportResult> {
+    const empty: BulkImportResult = { created: 0, duplicates: [], warnings: [], errors: [] }
+
+    const session = await getServerSession(authOptions)
+    if (!session) return { ...empty, error: 'No autorizado' }
+    const _allowedRoles = ['ADMIN', 'RECEPTIONIST'] as const
+    if (!(_allowedRoles as readonly string[]).includes(session.user.role)) {
+        return { ...empty, error: 'No autorizado' }
+    }
+
+    if (rows.length === 0) {
+        return { ...empty, error: 'Debes capturar al menos una fila válida.' }
+    }
+    if (rows.length > 20) {
+        return { ...empty, error: 'El alta masiva de clínica física admite hasta 20 pacientes por operación.' }
+    }
+
+    const addedBy = (session.user as { id?: string }).id ?? null
+    const result: BulkImportResult = { created: 0, duplicates: [], warnings: [], errors: [] }
+
+    // Cargar puestos de la empresa si hubieran (no exigidos para clínica walk-in)
+    const jobPositions = await prisma.jobPosition.findMany({
+        select: { id: true, name: true },
+    })
+
+    for (const rawRow of rows) {
+        const parsed = ClinicWalkInRowSchema.safeParse(rawRow)
+        if (!parsed.success) {
+            result.errors.push({
+                rowIndex: rawRow._rowIndex,
+                firstName: rawRow.firstName,
+                lastName: rawRow.lastName,
+                reason: parsed.error.issues[0]?.message ?? 'Datos inválidos en la fila',
+            })
+            continue
+        }
+
+        const row = parsed.data
+        const dobDate = parseDob(row.dob)
+
+        // Misma matriz de dedupe que bulkImportWorkers, pero sin filtro de empresa
+        const candidates = await prisma.worker.findMany({
+            where: {
+                firstName: { equals: row.firstName.trim(), mode: 'insensitive' },
+                lastName: { equals: row.lastName.trim(), mode: 'insensitive' },
+            },
+            select: {
+                id: true,
+                universalId: true,
+                firstName: true,
+                lastName: true,
+                dob: true,
+            },
+        })
+
+        if (candidates.length > 0 && dobDate) {
+            const sameDob = candidates.find((candidate) => {
+                if (!candidate.dob) return false
+                return (
+                    candidate.dob.getFullYear() === dobDate.getFullYear() &&
+                    candidate.dob.getMonth() === dobDate.getMonth() &&
+                    candidate.dob.getDate() === dobDate.getDate()
+                )
+            })
+            if (sameDob) {
+                result.duplicates.push({
+                    rowIndex: row._rowIndex,
+                    firstName: row.firstName,
+                    lastName: row.lastName,
+                    existingId: sameDob.id,
+                    existingUniversalId: sameDob.universalId,
+                })
+                continue
+            }
+        } else if (candidates.length > 0 && !dobDate) {
+            result.warnings.push({
+                rowIndex: row._rowIndex,
+                firstName: row.firstName,
+                lastName: row.lastName,
+                reason: 'Mismo nombre sin fecha de nacimiento — revisar manualmente',
+                existingId: candidates[0].id,
+            })
+            continue
+        }
+
+        try {
+            const universalId = generateUniversalId({
+                firstName: row.firstName,
+                lastName: row.lastName,
+                dob: dobDate,
+            })
+            const matchedPosition = row.jobPositionName
+                ? jobPositions.find(
+                      (jp) => jp.name.toLowerCase() === row.jobPositionName!.toLowerCase()
+                  )
+                : null
+
+            await prisma.worker.create({
+                data: {
+                    firstName: row.firstName.trim(),
+                    lastName: row.lastName.trim(),
+                    universalId,
+                    nationalId: row.nationalId?.trim() || null,
+                    dob: dobDate,
+                    email: row.email?.trim() || null,
+                    phone: row.phone?.trim() || null,
+                    companyId: null,
+                    jobPositionId: matchedPosition?.id ?? null,
+                    branchId: branchId ?? null,
+                    // Huella: alta masiva para clínica física (sin proyecto)
+                    intakeSource: 'CLINIC_WALK_IN_MASS',
+                },
+            })
+            result.created++
+        } catch (e: unknown) {
+            const err = e as Error
+            result.errors.push({
+                rowIndex: row._rowIndex,
+                firstName: row.firstName,
+                lastName: row.lastName,
+                reason: err.message.includes('Unique constraint')
+                    ? 'ID universal duplicado — revisar nombre y fecha de nacimiento'
+                    : 'Error al crear trabajador',
+            })
+        }
+    }
+
+    // Audit log con acción BULK_IMPORT_CLINIC (diferente de BULK_IMPORT_UNIT).
+    try {
+        await prisma.auditLog.create({
+            data: {
+                userId: addedBy,
+                action: 'BULK_IMPORT_CLINIC',
+                entity: 'Worker',
+                entityId: branchId ?? 'no-branch',
+                details: {
+                    branchId,
+                    intakeSource: 'CLINIC_WALK_IN_MASS',
+                    created: result.created,
+                    duplicates: result.duplicates.length,
+                    warnings: result.warnings.length,
+                    errors: result.errors.length,
+                },
+            },
+        })
+    } catch {
+        // El AuditLog no debe bloquear el alta masiva
+    }
+
+    revalidatePath('/workers')
+    return result
+}
+
+const MAX_WORKER_REPORT_EMAILS = 5
+
+const WorkerReportEmailSchema = z.object({
+    email: z.string().email('Formato de correo inválido'),
+    isPrimary: z.boolean().optional(),
+})
+
+/**
+ * Agrega un correo adicional de envío de resultados al paciente.
+ * Valida máximo 5 correos por worker (constraint UI; SPEC R2).
+ */
+export async function addWorkerReportEmail(
+    workerId: string,
+    payload: { email: string; isPrimary?: boolean }
+): Promise<ActionResult<{ id: string }>> {
+    const parsed = WorkerReportEmailSchema.safeParse(payload)
+    if (!parsed.success) {
+        return { success: false, error: parsed.error.issues[0].message }
+    }
+    const email = parsed.data.email.toLowerCase().trim()
+
+    try {
+        const existing = await prisma.workerReportEmail.count({ where: { workerId } })
+        if (existing >= MAX_WORKER_REPORT_EMAILS) {
+            return {
+                success: false,
+                error: `El paciente ya tiene ${MAX_WORKER_REPORT_EMAILS} correos configurados (máximo permitido).`,
+            }
+        }
+        // No permitir duplicados con el email principal del worker
+        const worker = await prisma.worker.findUnique({
+            where: { id: workerId },
+            select: { email: true },
+        })
+        if (worker?.email?.toLowerCase() === email) {
+            return { success: false, error: 'Este correo ya es el correo principal del paciente.' }
+        }
+
+        const created = await prisma.workerReportEmail.create({
+            data: {
+                workerId,
+                email,
+                isPrimary: parsed.data.isPrimary ?? false,
+            },
+            select: { id: true },
+        })
+        revalidatePath('/workers')
+        revalidatePath(`/workers/${workerId}`)
+        return { success: true, data: { id: created.id } }
+    } catch (e: unknown) {
+        const err = e as { code?: string }
+        if (err?.code === 'P2002') {
+            return { success: false, error: 'Este correo ya está registrado para este paciente.' }
+        }
+        console.error('[addWorkerReportEmail]', e)
+        return { success: false, error: 'Error al agregar el correo al paciente.' }
+    }
+}
+
+/**
+ * Elimina un correo adicional de envío de resultados del paciente.
+ */
+export async function removeWorkerReportEmail(emailId: string): Promise<ActionResult> {
+    try {
+        const row = await prisma.workerReportEmail.findUnique({
+            where: { id: emailId },
+            select: { workerId: true },
+        })
+        if (!row) return { success: false, error: 'Correo no encontrado' }
+        await prisma.workerReportEmail.delete({ where: { id: emailId } })
+        revalidatePath('/workers')
+        revalidatePath(`/workers/${row.workerId}`)
+        return { success: true }
+    } catch (e: unknown) {
+        console.error('[removeWorkerReportEmail]', e)
+        return { success: false, error: 'Error al eliminar el correo del paciente.' }
+    }
+}
+
+/**
+ * Lista los correos adicionales de envío configurados para un paciente.
+ */
+export async function getWorkerReportEmails(workerId: string) {
+    return await prisma.workerReportEmail.findMany({
+        where: { workerId },
+        select: { id: true, email: true, isPrimary: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+    })
 }
