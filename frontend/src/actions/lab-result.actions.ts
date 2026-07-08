@@ -28,6 +28,8 @@ import {
   type UpdateLabResultInput,
 } from "@/lib/validations/lab-result";
 import { validateValueAgainstRange } from "@/lib/lab-result-utils";
+// IMPL-20260707-18: Fase 2 — D Trazabilidad (auto-record VALIDATED)
+import { autoRecordLabTraceEventAction } from "@/actions/lab-trace.actions";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -467,6 +469,24 @@ export async function transitionLabResultAction(
       parsed.data.reason ?? null,
       guard.userId
     );
+    // IMPL-20260707-18: Fase 2 — D Trazabilidad (auto-record VALIDATED en LabOrder)
+    if (target === "VALIDATED") {
+      try {
+        const item = await prisma.labOrderItem.findUnique({
+          where: { id: updated.labOrderItemId },
+          select: { labOrderId: true },
+        });
+        if (item?.labOrderId) {
+          await autoRecordLabTraceEventAction(
+            item.labOrderId,
+            "VALIDATED",
+            `LabResult ${resultId.slice(0, 8)}… validado`
+          );
+        }
+      } catch {
+        // nunca romper el flujo principal
+      }
+    }
     revalidatePath("/lab/results");
     revalidatePath(`/lab/results/[orderId]`, "page");
     return { ok: true, data: { newStatus: target, result: updated as Record<string, unknown> } };
@@ -663,6 +683,82 @@ export async function linkLabOrderItemToEventTestAction(
     revalidatePath("/lab/reception");
     revalidatePath(`/lab/results/[orderId]`, "page");
     return { ok: true, data: { itemId: parsed.data.itemId, eventTestId: parsed.data.eventTestId ?? null } };
+  } catch (err) {
+    return _err(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8) getLabResultsForEventTestAction — Fase 2 — C-update
+// Lista todos los LabResults vinculados a un EventTest específico
+// (vía LabResult.eventTestId). Usado por el componente LabResultsSummary
+// en /events/[id] para mostrar el valor del analito capturado por cada
+// EventTest de categoría Laboratorio.
+// ---------------------------------------------------------------------------
+export interface LabResultForEventTest {
+  id: string;
+  labOrderItemId: string;
+  labOrderId: string | null;
+  labOrderFolio: number | null;
+  analyteCode: string;
+  analyteName: string;
+  valueText: string | null;
+  valueNumber: number | null;
+  unitSymbol: string | null;
+  status: string;
+  isOutOfRange: boolean;
+  isCritical: boolean;
+  createdAt: string;
+}
+
+export async function getLabResultsForEventTestAction(
+  eventTestId: string
+): Promise<ActionResult<{ rows: LabResultForEventTest[]; total: number }>> {
+  const guard = await _requireAdmin();
+  if (!guard) return { ok: false, error: "UNAUTHORIZED", code: "AUTH" };
+  if (!eventTestId) {
+    return { ok: false, error: "eventTestId obligatorio", code: "VALIDATION" };
+  }
+  try {
+    const et = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: { id: true },
+    });
+    if (!et) {
+      return { ok: false, error: `EventTest ${eventTestId} no existe`, code: "NOT_FOUND" };
+    }
+    const rows = await prisma.labResult.findMany({
+      where: { eventTestId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        analyte: { select: { code: true, name: true } },
+        unit: { select: { symbol: true } },
+        labOrderItem: {
+          select: {
+            id: true,
+            labOrder: { select: { id: true, folio: true } },
+          },
+        },
+      },
+    });
+    const mapped: LabResultForEventTest[] = rows.map((r) => ({
+      id: r.id,
+      labOrderItemId: r.labOrderItemId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      labOrderId: (r as any).labOrderItem?.labOrder?.id ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      labOrderFolio: (r as any).labOrderItem?.labOrder?.folio ?? null,
+      analyteCode: r.analyte?.code ?? "—",
+      analyteName: r.analyte?.name ?? "",
+      valueText: r.valueText,
+      valueNumber: r.valueNumber,
+      unitSymbol: r.unit?.symbol ?? null,
+      status: String(r.status),
+      isOutOfRange: r.isOutOfRange,
+      isCritical: r.isCritical,
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+    }));
+    return { ok: true, data: { rows: mapped, total: mapped.length } };
   } catch (err) {
     return _err(err);
   }

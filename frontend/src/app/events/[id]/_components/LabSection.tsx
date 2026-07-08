@@ -2,17 +2,22 @@
  * @file Sección "Laboratorio" en la papeleta AMI.
  * @id IMPL-20260707-16 — Slice C — integración papeleta ↔ LabOrder.
  * @id IMPL-20260707-17 — Fase 1 — botón "Tomar muestra" por EventTest.
+ * @id IMPL-20260707-18 — Fase 2 — LabResultsSummary por EventTest (C-update).
  *
  * Server Component: lista LabOrders asociadas al MedicalEvent + LabResults
  * con sus analitos, valores, rangos y estado. Link "Crear nueva orden" que
  * pre-llena workerId + medicalEventId en /lab/reception. Botón "Tomar muestra"
- * por EventTest de categoría Laboratorio (Fase 1 — B-v2).
+ * por EventTest de categoría Laboratorio (Fase 1 — B-v2). Para cada EventTest
+ * de cat=Laboratorio, muestra también un resumen de los LabResults ya
+ * capturados (Fase 2 — C-update).
  */
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { getStatusColor, getStatusLabel } from "@/lib/lab-result-utils";
 import { SampleTakenButton } from "./SampleTakenButton";
 import { LAB_CATEGORY_ID } from "@/lib/validations/study";
+// IMPL-20260707-18: Fase 2 — LabResultsSummary (Server Component)
+import { LabResultsSummary } from "@/app/lab/results/_components/LabResultsSummary";
 
 interface Props {
   medicalEventId: string;
@@ -74,26 +79,30 @@ export async function LabSection({ medicalEventId, workerId }: Props) {
           <p className="text-xs font-semibold text-slate-700 mb-2">
             🧪 Estudios de Laboratorio de esta papeleta ({labEventTests.length})
           </p>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {labEventTests.map((et) => (
-              <li
-                key={et.id}
-                className="flex items-center justify-between text-xs"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-700">
-                    {et.test?.code ?? et.testNameSnapshot}
-                  </span>
-                  <span className="text-slate-500">{et.test?.name}</span>
-                  <span className="text-[10px] uppercase tracking-wide text-slate-400">
-                    {String(et.status)}
-                  </span>
+              <li key={et.id} className="text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-slate-700">
+                      {et.test?.code ?? et.testNameSnapshot}
+                    </span>
+                    <span className="text-slate-500">{et.test?.name}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                      {String(et.status)}
+                    </span>
+                  </div>
+                  <SampleTakenButton
+                    eventTestId={et.id}
+                    eventTestStatus={String(et.status)}
+                    medicalEventId={medicalEventId}
+                  />
                 </div>
-                <SampleTakenButton
-                  eventTestId={et.id}
-                  eventTestStatus={String(et.status)}
-                  medicalEventId={medicalEventId}
-                />
+                {/* IMPL-20260707-18: Fase 2 — C-update: muestra los LabResults
+                    capturados para este EventTest (si existen). */}
+                <div className="mt-1.5">
+                  <LabResultsSummary eventTestId={et.id} />
+                </div>
               </li>
             ))}
           </ul>

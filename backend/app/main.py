@@ -1466,3 +1466,29 @@ except Exception as _fase1_import_err:
     print(f"⚠️ No se pudieron registrar routers de Fase 1: {_sanitize_error(str(_fase1_import_err))}")
 
 
+# ========================================
+# IMPL-20260707-18: Fase 2 NOVA absorción (ARCH-20260707-17) — D Trazabilidad
+# Timeline muestra→proceso→entrega de LabOrder.
+# Prefijo: /api/v1/lab/orders/{id}/trace
+# ========================================
+try:
+    from app.api.v1.lab.trace import router as lab_trace_router
+    from app.services.lab_trace_service import set_prisma_client as _set_lab_trace
+
+    # Reusa el mismo Prisma client ya inyectado por lifespan (mismo patrón
+    # que catalog/orders/results/pending-orders) para no abrir conexiones
+    # nuevas. Si por alguna razón no está, intenta obtenerlo de
+    # lab_order_service que es la fuente canónica de inyección.
+    try:
+        from app.services import lab_order_service as _los
+        _trace_prisma = _los.get_prisma()
+        _set_lab_trace(_trace_prisma)
+    except Exception:
+        pass  # main.py lifespan se encarga en producción
+
+    app.include_router(lab_trace_router)
+    print("✅ Router lab-trace registrado (/api/v1/lab/orders/{id}/trace)")
+except Exception as _lab_trace_import_err:
+    print(f"⚠️ No se pudo registrar router de lab-trace: {_sanitize_error(str(_lab_trace_import_err))}")
+
+
