@@ -67,6 +67,9 @@ model User {
   resultAudits              LabResultAudit[]
   // IMPL-20260707-18: Fase 2 NOVA absorción — trazabilidad de LabOrder (D)
   labTraceEvents            LabTraceEvent[]
+  // IMPL-20260708-19: Fase 3 NOVA absorción — caja (G) LabCashMovement + Courtesy
+  labCashMovements          LabCashMovement[]
+  approvedCourtesies        Courtesy[]                @relation("CourtesyApprover")
 
   @@map("users")
 }
@@ -1265,9 +1268,12 @@ model LabOrder {
   cancelledBy   User?     @relation("LabOrderCanceller", fields: [cancelledById], references: [id])
   confirmedAt   DateTime?
 
-  items       LabOrderItem[]
+  items         LabOrderItem[]
   // IMPL-20260707-18: Fase 2 NOVA absorción — trazabilidad (D) muestra→proceso→entrega
-  traceEvents LabTraceEvent[]
+  traceEvents   LabTraceEvent[]
+  // IMPL-20260708-19: Fase 3 NOVA absorción — caja (G)
+  cashMovements LabCashMovement[]
+  courtesy      Courtesy?
 
   @@index([workerId])
   @@index([medicalEventId])
@@ -1499,4 +1505,57 @@ model LabTraceEvent {
   @@index([event])
   @@index([timestamp])
   @@map("lab_trace_events")
+}
+
+// ===========================================================================
+// IMPL-20260708-19: Fase 3 NOVA absorción (ARCH-20260707-17) — G Caja y Cortesías
+// Ref: context/SPECs/SPEC_IMPL-20260707-SLICES-D-G-FINAL.md §2 (FASE 3)
+//
+// Pagos múltiples por LabOrder (no solo uno) y cortesía como flag marcado
+// por un usuario autorizado. Append-only por LabCashMovement (no se borra);
+// Courtesy es único por LabOrder (id_unique).
+// ===========================================================================
+
+/// Forma de pago aceptada por la caja del laboratorio (Fase 3 G).
+enum PaymentMethod {
+  CASH // Efectivo
+  CARD // Tarjeta (débito/crédito)
+  TRANSFER // Transferencia bancaria / SPEI
+  CHECK // Cheque
+  OTHER // Otro (especificar en reference)
+}
+
+/// Movimiento de caja por LabOrder. Append-only (cada pago = una fila).
+/// Soporta múltiples pagos parciales por la misma orden (ej. anticipo + liquidación).
+model LabCashMovement {
+  id         String        @id @default(cuid())
+  labOrderId String
+  labOrder   LabOrder      @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  amount     Float
+  method     PaymentMethod
+  reference  String? // último 4 dígitos tarjeta, SPEI ref, cheque #, etc.
+  currency   String        @default("MXN")
+  userId     String
+  user       User          @relation(fields: [userId], references: [id])
+  createdAt  DateTime      @default(now())
+
+  @@index([labOrderId])
+  @@index([createdAt])
+  @@index([method])
+  @@map("lab_cash_movements")
+}
+
+/// Marca de cortesía (cargo $0). Único por LabOrder. Si la orden es
+/// cortesía, los LabCashMovement siguen registrándose opcionalmente pero
+/// el reporte la cuenta como "cort." en lugar de sumar al total cobrado.
+model Courtesy {
+  id           String   @id @default(cuid())
+  labOrderId   String   @unique
+  labOrder     LabOrder @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  reason       String
+  approvedById String
+  approvedBy   User     @relation("CourtesyApprover", fields: [approvedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@map("courtesies")
 }

@@ -1492,3 +1492,29 @@ except Exception as _lab_trace_import_err:
     print(f"⚠️ No se pudo registrar router de lab-trace: {_sanitize_error(str(_lab_trace_import_err))}")
 
 
+# ========================================
+# IMPL-20260708-19: Fase 3 NOVA absorción (ARCH-20260707-17) — F + G
+# F: Reportes PDF imprimibles (etiquetas, resultados, recibos)
+# G: Caja, cortesías y corte de caja
+# Prefijos: /api/v1/lab/reports, /api/v1/lab/orders/{id}/payments, /api/v1/lab/orders/{id}/courtesy,
+#           /api/v1/lab/cash-closing
+# ========================================
+try:
+    from app.api.v1.lab.reports import router as lab_reports_router
+    from app.api.v1.lab.cash import router as lab_cash_router
+    from app.services.lab_cash_service import set_prisma_client as _set_lab_cash
+
+    try:
+        from app.services import lab_order_service as _los_fase3
+        _fase3_prisma = _los_fase3.get_prisma()
+        _set_lab_cash(_fase3_prisma)
+    except Exception:
+        pass  # lifespan se encarga en producción
+
+    app.include_router(lab_reports_router)
+    app.include_router(lab_cash_router)
+    print("✅ Routers Fase 3 registrados (reports PDF + cash/courtesy)")
+except Exception as _fase3_import_err:
+    print(f"⚠️ No se pudieron registrar routers de Fase 3: {_sanitize_error(str(_fase3_import_err))}")
+
+
