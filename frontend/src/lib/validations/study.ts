@@ -11,7 +11,7 @@ import { z } from "zod";
 // Categoría "Laboratorio" — id confirmado en DB
 // (context/SPECs/CONF-20260707-01-FLUJO-NOVA.md §2.1)
 // ---------------------------------------------------------------------------
-export const LAB_CATEGORY_ID = "64d3f863";
+export const LAB_CATEGORY_ID = "64d3f863-e293-4e81-88a9-a977ae48d67c";
 
 // ---------------------------------------------------------------------------
 // B-v2 — Bandeja de papeletas
