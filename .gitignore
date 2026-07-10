@@ -21,3 +21,12 @@ context/audits/**/*.html
 context/audits/**/pages/
 .vercel
 .env*.local
+
+# ARCH-20260710-01
+# Archivo 'production' (sin punto) creado por Vercel CLI contiene SECRETOS
+# (DATABASE_URL, GEMINI_API_KEY, NEXTAUTH_SECRET, VERCEL_OIDC_TOKEN).
+# NUNCA commitear. Renombrar a .env.production o mover fuera del repo.
+production
+
+# Configuración local del IDE Kilo (no debe viajar al repo)
+.kilo/
