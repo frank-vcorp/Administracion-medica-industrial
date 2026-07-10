@@ -337,7 +337,7 @@ async function seedUsers(): Promise<void> {
       email: "vendedor@ami.com",
       hashedPassword: await hash("Vendor@123", 10),
       fullName: "Vendedor Comercial",
-      role: UserRole.SELLER,
+      role: UserRole.VENDEDOR,
       isActive: true,
     },
   ];
