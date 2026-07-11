@@ -84,6 +84,12 @@ async def lifespan(app: FastAPI):
             _set_lab_res(prisma)
         except Exception as e:
             print(f"[lab-results] set_prisma_client failed: {_sanitize_error(str(e))}")
+        # IMPL-20260711-01: Módulo de Unidades Móviles (ARCH-20260711-01).
+        try:
+            from app.services.mobile_unit_service import set_prisma_client as _set_mob
+            _set_mob(prisma)
+        except Exception as e:
+            print(f"[mobile-units] set_prisma_client failed: {_sanitize_error(str(e))}")
         print("✅ Prisma client inicializado y conectado")
     except Exception as e:
         print(f"⚠️ No se pudo inicializar Prisma al startup: {_sanitize_error(str(e))}")
@@ -1528,5 +1534,23 @@ try:
     print("✅ Router Fase 4 (cutover-status) registrado (/api/v1/lab/cutover-status)")
 except Exception as _fase4_cutover_import_err:
     print(f"⚠️ No se pudo registrar router de cutover: {_sanitize_error(str(_fase4_cutover_import_err))}")
+
+
+# ========================================
+# IMPL-20260711-01: Módulo de Unidades Móviles (ARCH-20260711-01)
+# CRUD unidades, upload de imagen, validación de disponibilidad, mantenimiento,
+# reprogramación flexible de mantenimientos y completación con auto-cálculo
+# de nextDueDate según tipo. Reusa el Prisma client inyectado por lifespan().
+# Prefijos: /api/v1/mobile-units y /api/v1/maintenance
+# ========================================
+try:
+    from app.api.v1.mobile_units import router as mobile_units_router
+    from app.api.v1.maintenance import router as maintenance_router
+
+    app.include_router(mobile_units_router)
+    app.include_router(maintenance_router)
+    print("✅ Routers IMPL-20260711-01 registrados (mobile-units + maintenance)")
+except Exception as _mob_import_err:
+    print(f"⚠️ No se pudieron registrar routers mobile-units/maintenance: {_sanitize_error(str(_mob_import_err))}")
 
 

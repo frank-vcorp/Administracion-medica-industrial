@@ -70,6 +70,8 @@ model User {
   // IMPL-20260708-19: Fase 3 NOVA absorción — caja (G) LabCashMovement + Courtesy
   labCashMovements          LabCashMovement[]
   approvedCourtesies        Courtesy[]                @relation("CourtesyApprover")
+  // IMPL-20260711-01: Mantenimientos creados por este usuario (ARCH-20260711-01)
+  createdMaintenances       MaintenanceRecord[]       @relation("MaintenanceCreator")
 
   @@map("users")
 }
@@ -160,8 +162,8 @@ model Company {
 }
 
 model Worker {
-  id                       String           @id @default(uuid())
-  universalId              String           @unique
+  id                       String              @id @default(uuid())
+  universalId              String              @unique
   firstName                String
   lastName                 String
   nationalId               String?
@@ -169,16 +171,16 @@ model Worker {
   email                    String?
   phone                    String?
   companyId                String?
-  createdAt                DateTime         @default(now())
-  updatedAt                DateTime         @updatedAt
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
   branchId                 String?
   appointments             Appointment[]
   clinicalHistory          ClinicalHistory?
   medicalHistory           MedicalEvent[]
   jobPositionId            String?
-  branch                   Branch?          @relation(fields: [branchId], references: [id])
-  company                  Company?         @relation(fields: [companyId], references: [id])
-  jobPosition              JobPosition?     @relation(fields: [jobPositionId], references: [id])
+  branch                   Branch?             @relation(fields: [branchId], references: [id])
+  company                  Company?            @relation(fields: [companyId], references: [id])
+  jobPosition              JobPosition?        @relation(fields: [jobPositionId], references: [id])
   // IMPL-20260519-10: Referencia a última identificación válida reutilizable (ARCH-20260519-10)
   lastIdentityDocumentType String? // IdentityDocumentType catalog
   lastIdentityFrontFileUrl String?
@@ -191,7 +193,7 @@ model Worker {
   // ARCH-20260708-01: Correos adicionales de envío de resultados (SPEC: hasta 5)
   reportEmails             WorkerReportEmail[]
   // ARCH-20260708-01: Huella de origen del alta para distinguir clínica vs unidad móvil
-  intakeSource             IntakeSource     @default(PROJECT_SAME_DAY)
+  intakeSource             IntakeSource        @default(PROJECT_SAME_DAY)
 
   @@map("workers")
 }
@@ -291,16 +293,16 @@ model MedicalTest {
 }
 
 model MedicalProfile {
-  id           String                     @id @default(uuid())
+  id           String                      @id @default(uuid())
   name         String
   companyId    String?
   /// ARCH-20260708-01: Comentarios especiales (firma autógrafa, cédula del médico,
   /// pruebas NO reportadas, formatos). Empresa-específico o global según companyId.
   specialNotes String?
-  createdAt    DateTime                   @default(now())
-  updatedAt    DateTime                   @updatedAt
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
   appointments Appointment[]
-  company      Company?                   @relation(fields: [companyId], references: [id])
+  company      Company?                    @relation(fields: [companyId], references: [id])
   jobPositions JobPosition[]
   tests        ProfileTest[]
   /// ARCH-20260708-01: Lista de correos a los que se envían los resultados
@@ -373,6 +375,9 @@ model MedicalEvent {
   intakeSource          IntakeSource?
   projectId             String?
   intakeCreatedByUserId String?
+  // IMPL-20260711-01: Unidad móvil donde se realizó el evento (opcional). ARCH-20260711-01.
+  mobileUnitId          String?
+  mobileUnit            MobileUnit?             @relation(fields: [mobileUnitId], references: [id], onDelete: SetNull)
   eventTests            EventTest[]
   labs                  LabRecord[]
   appointment           Appointment?            @relation(fields: [appointmentId], references: [id])
@@ -786,17 +791,20 @@ enum ProjectWorkerReceptionStatus {
 }
 
 model Project {
-  id        String        @id @default(uuid())
-  name      String
-  companyId String
-  branchId  String? // Sucursal AMI de referencia (null si es planta del cliente)
-  unitRef   String? // Texto libre provisional hasta entidad Equipment (Sprint 5)
-  startDate DateTime
-  endDate   DateTime
-  status    ProjectStatus @default(DRAFT)
-  notes     String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id           String        @id @default(uuid())
+  name         String
+  companyId    String
+  branchId     String? // Sucursal AMI de referencia (null si es planta del cliente)
+  unitRef      String? // Texto libre provisional hasta entidad Equipment (Sprint 5)
+  startDate    DateTime
+  endDate      DateTime
+  status       ProjectStatus @default(DRAFT)
+  notes        String?
+  // IMPL-20260711-01: Unidad móvil asignada al proyecto (opcional). ARCH-20260711-01.
+  mobileUnitId String?
+  mobileUnit   MobileUnit?   @relation(fields: [mobileUnitId], references: [id], onDelete: SetNull)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   company Company         @relation(fields: [companyId], references: [id])
   branch  Branch?         @relation(fields: [branchId], references: [id])
@@ -806,6 +814,9 @@ model Project {
   // IMPL-20260630-03: Reportes masivos generados para este proyecto (ARCH-20260623-01)
   reports ProjectReport[]
 
+  @@index([mobileUnitId])
+  @@index([startDate])
+  @@index([endDate])
   @@map("projects")
 }
 
@@ -1261,6 +1272,9 @@ model LabOrder {
   worker           Worker             @relation(fields: [workerId], references: [id], onDelete: Restrict)
   medicalEventId   String?
   medicalEvent     MedicalEvent?      @relation(fields: [medicalEventId], references: [id], onDelete: SetNull)
+  // IMPL-20260711-01: Unidad móvil donde se tomó la muestra (opcional). ARCH-20260711-01.
+  mobileUnitId     String?
+  mobileUnit       MobileUnit?        @relation(fields: [mobileUnitId], references: [id], onDelete: SetNull)
   companyId        String?
   company          Company?           @relation(fields: [companyId], references: [id], onDelete: SetNull)
   classificationId String?
@@ -1602,4 +1616,114 @@ model Courtesy {
   createdAt    DateTime @default(now())
 
   @@map("courtesies")
+}
+
+// ===========================================================================
+// IMPL-20260711-01: Módulo de Unidades Móviles (ARCH-20260711-01)
+// Ref: context/SPECs/SPEC_ARCH-20260711-01-MODULO-UNIDADES-MOVILES.md
+//
+// Habilita la operación real de las 6 unidades móviles de AMI:
+//   - Catálogo de unidades con imágenes, equipamiento y status operativo.
+//   - Asignación de unidades a proyectos con validación de disponibilidad.
+//   - Calendario dual (proyectos + mantenimientos).
+//   - Reprogramación flexible de mantenimientos cuando hay conflictos.
+//   - Trazabilidad completa: Unidad → Proyecto → MedicalEvent → LabOrder.
+// ===========================================================================
+
+/// Estado operativo de una unidad móvil.
+enum MobileUnitStatus {
+  ACTIVA // Disponible para asignación
+  MANTENIMIENTO // Fuera de servicio por mantenimiento programado
+  REPARACION // Fuera de servicio por reparación urgente
+  FUERA_SERVICIO // Baja temporal (sin uso)
+  BAJA_PERMANENTE // Dada de baja definitivamente
+}
+
+/// Tipo de mantenimiento.
+enum MaintenanceType {
+  PREVENTIVO // Mantenimiento programado regular
+  CORRECTIVO // Reparación urgente
+  VERIFICACION // Verificación técnica (INEQUIPO, calibración)
+  LIMPIEZA // Limpieza profunda/desinfección
+}
+
+/// Estado del ciclo de vida de un mantenimiento.
+enum MaintenanceStatus {
+  PROGRAMADO // Aún no se ha ejecutado
+  COMPLETADO // Ejecutado y cerrado
+  CANCELADO // Cancelado sin ejecutar
+  REPROGRAMADO // Movido por conflicto con proyecto prioritario
+}
+
+/// Unidad móvil (trailer/vehículo equipado como clínica móvil) — ARCH-20260711-01.
+model MobileUnit {
+  id             String  @id @default(uuid())
+  name           String // "Unidad Móvil 1" (único)
+  plate          String? // Placa del vehículo
+  vin            String? // Número de serie del vehículo
+  year           Int? // Año del vehículo
+  capacity       Int? // Capacidad diaria de pacientes
+  economicNumber String? // Número económico interno (opcional)
+  imageUrl       String? // URL de imagen de la unidad (Railway Storage)
+
+  // Estado operativo
+  status MobileUnitStatus @default(ACTIVA)
+
+  // Inventario flexible (audiometro, espirometro, rayos_x, ecg, ...)
+  // Shape: { <equipmentKey>: boolean }
+  equipment Json?
+
+  // Notas operativas
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- Relaciones ---
+  projects      Project[]
+  medicalEvents MedicalEvent[]
+  labOrders     LabOrder[]
+  maintenances  MaintenanceRecord[]
+
+  @@unique([name])
+  @@map("mobile_units")
+}
+
+/// Registro de mantenimiento de una unidad móvil — ARCH-20260711-01.
+model MaintenanceRecord {
+  id           String @id @default(uuid())
+  mobileUnitId String
+
+  type   MaintenanceType
+  status MaintenanceStatus @default(PROGRAMADO)
+
+  // Fechas
+  scheduledDate DateTime // Fecha original programada
+  completedDate DateTime? // Fecha real de completación
+  rescheduledTo DateTime? // Nueva fecha si fue reprogramado
+
+  // Detalles
+  description String
+  technician  String?
+  cost        Decimal?
+  nextDueDate DateTime?
+
+  // Evidencia (fotos, documentos) — shape: [{ url, type, uploadedAt }]
+  attachments Json?
+
+  // Trazabilidad
+  createdBy   String
+  completedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- Relaciones ---
+  mobileUnit    MobileUnit @relation(fields: [mobileUnitId], references: [id], onDelete: Cascade)
+  createdByUser User       @relation("MaintenanceCreator", fields: [createdBy], references: [id])
+
+  @@index([mobileUnitId])
+  @@index([scheduledDate])
+  @@index([status])
+  @@map("maintenance_records")
 }
