@@ -458,9 +458,7 @@ function ReprogramModal({
   onConfirm: (iso: string) => void
 }) {
   const [newDate, setNewDate] = useState<string>(
-    typeof record.scheduledDate === 'string'
-      ? record.scheduledDate.slice(0, 10)
-      : new Date(record.scheduledDate).toISOString().slice(0, 10)
+    new Date(record.scheduledDate).toISOString().slice(0, 10)
   )
   const [suggestions, setSuggestions] = useState<Array<{ iso: string; label: string }>>([])
   const [busy, setBusy] = useState(false)
