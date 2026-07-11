@@ -145,6 +145,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <NavSection label="Empresas" collapsed={isEventWorkspace} />
               <NavItem href="/companies" icon="🏢" label="Empresas Cliente" collapsed={isEventWorkspace} />
               <NavItem href="/projects" icon="🗂️" label="Proyectos" collapsed={isEventWorkspace} />
+              {/* IMPL-20260711-01: Módulo de Unidades Móviles */}
+              <NavItem href="/operations/mobile-units" icon="🚑" label="Unidades Móviles" collapsed={isEventWorkspace} />
               {/* IMPL-20260706-01: Acceso directo al módulo de Reportes Masivos (sobrevuela la URL /reports index). */}
               <NavItem href="/reports" icon="📊" label="Reportes Masivos" collapsed={isEventWorkspace} />
             </>
@@ -165,6 +167,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               {/* IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder */}
               <NavItem href="/lab/reception" icon="🧪" label="Recepción Lab" collapsed={isEventWorkspace} />
               <NavItem href="/admin/profiles" icon="🩻" label="Perfiles Médicos" collapsed={isEventWorkspace} />
+              {/* IMPL-20260711-01: Administración de Unidades Móviles */}
+              <NavItem href="/admin/mobile-units" icon="🚐" label="Catálogo Unidades" collapsed={isEventWorkspace} />
               <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" collapsed={isEventWorkspace} />
             </>
           )}
