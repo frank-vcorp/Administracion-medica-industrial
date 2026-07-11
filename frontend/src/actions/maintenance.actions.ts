@@ -74,8 +74,8 @@ async function requireAnyAuth() {
   return session
 }
 
-// SPEC §3.2 — auto nextDueDate por tipo
-export function calculateNextDueDate(
+// SPEC §3.2 — auto nextDueDate por tipo (helper síncrono, NO es server action)
+function calculateNextDueDate(
   completedDate: Date,
   type: (typeof TYPE_VALUES)[number],
   override?: Date | null
