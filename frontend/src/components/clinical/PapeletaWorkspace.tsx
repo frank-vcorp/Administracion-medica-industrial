@@ -38,7 +38,6 @@ import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
 import StudyAIPrediagnosisPanel from "@/components/clinical/StudyAIPrediagnosisPanel"
 import StudyDocumentViewer from "@/components/clinical/StudyDocumentViewer"
-import StudyExtractionRawPanel from "@/components/clinical/StudyExtractionRawPanel"
 // IMPL-20260518-13: Renderer clínico general configurable por studyType
 import ClinicalExtractionRenderer from "@/components/clinical/ClinicalExtractionRenderer"
 // IMPL-20260326-18: Helper central de elegibilidad IA (reemplaza reglas dispersas)
@@ -1371,19 +1370,6 @@ function StudyPanel({
                 <span className="text-2xl block mb-1">📂</span>
                 <p className="text-sm text-slate-400 font-medium">Sin archivo vinculado</p>
                 <p className="text-xs text-slate-400 mt-1">Sube el resultado para visualizarlo aquí.</p>
-              </div>
-            )}
-
-            {/* Panel raw de extracción — separado del prediagnóstico */}
-            {test.extractionSnapshot ? (
-              <StudyExtractionRawPanel
-                rawPayload={test.extractionSnapshot.rawPayload}
-                snapshotId={test.extractionSnapshot.id}
-                version={test.extractionSnapshot.version}
-              />
-            ) : (
-              <div className="bg-slate-900 rounded-xl px-4 py-3">
-                <p className="text-xs font-mono text-slate-500">🔩 Sin snapshot de extracción disponible.</p>
               </div>
             )}
           </div>
