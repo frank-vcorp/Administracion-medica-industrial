@@ -1,17 +1,24 @@
 /**
  * @fileoverview CalibrationWorkspaceClient — layout desktop 2 columnas.
- *   Izquierda: tabs de calibración (Propuesta IA, Configuración, Historial, Snapshots).
+ *   Izquierda: tabs de calibración (Propuesta IA, Configuración, Historial, Snapshots, Pruebas).
  *   Derecha: CalibrationDocumentViewer sticky y dominante.
  *   Gestiona el snapshot seleccionado como estado compartido entre ambos paneles.
  * @id IMPL-20260327-19
  * @backup context/SPECs/SPEC_ARCH-20260327-19-CALIBRACION-IA-ASISTIDA-VERSIONADO-AUTOMATICO.md
  * @intervention IMPL-20260604-01
  * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
+ * @intervention IMPL-20260715-04
+ * @backup context/SPECs/SPEC_ARCH-20260715-04-UPLOAD-PDFS-CALIBRACION.md
  */
 "use client"
 
 import { useState } from "react"
-import type { CandidateField, AICalibrationV2, FieldDefinition } from "@/types/calibration"
+import type {
+  CandidateField,
+  AICalibrationV2,
+  CalibrationTestResults as CalibrationTestResultsData,
+  FieldDefinition,
+} from "@/types/calibration"
 import CandidateSchemaPanel from "@/components/calibration/CandidateSchemaPanel"
 import CalibrationVersionHistory from "@/components/calibration/CalibrationVersionHistory"
 import CalibrationAIAssistantRail from "@/components/calibration/CalibrationAIAssistantRail"
@@ -20,6 +27,8 @@ import CalibrationDocumentViewer, {
 } from "@/components/calibration/CalibrationDocumentViewer"
 import AICalibrationEditor from "@/components/calibration/AICalibrationEditor"
 import PresentationSchemaPanel from "@/components/calibration/PresentationSchemaPanel"
+import CalibrationTestUpload from "@/components/calibration/CalibrationTestUpload"
+import CalibrationTestResults from "@/components/calibration/CalibrationTestResults"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos derivados de los datos Prisma (serializables — dates como string)
@@ -65,7 +74,7 @@ interface CalibrationWorkspaceClientProps {
 // Tipos de tab del panel izquierdo
 // ─────────────────────────────────────────────────────────────────────────────
 
-type LeftTab = "propuesta" | "presentacion" | "configuracion" | "historial" | "snapshots"
+type LeftTab = "propuesta" | "presentacion" | "configuracion" | "historial" | "snapshots" | "pruebas"
 
 const TAB_LABELS: Record<LeftTab, string> = {
   propuesta: "🤖 Propuesta IA",
@@ -73,6 +82,8 @@ const TAB_LABELS: Record<LeftTab, string> = {
   configuracion: "⚙ Configuración",
   historial: "🕐 Historial",
   snapshots: "📋 Snapshots",
+  // IMPL-20260715-04 — Upload de PDFs de prueba directo en calibración.
+  pruebas: "📄 Pruebas",
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -293,6 +304,9 @@ export default function CalibrationWorkspaceClient({
   )
   const [selectedDocumentUrl, setSelectedDocumentUrl] = useState<string | null>(firstSnapshotUrl)
 
+  // IMPL-20260715-04 — Estado para resultados del último PDF de prueba subido.
+  const [testResults, setTestResults] = useState<CalibrationTestResultsData | null>(null)
+
   const selectedSnapshotEntry =
     allSnapshots.find(({ snap }) => snap.id === selectedSnapshotId) ?? allSnapshots[0] ?? null
   const selectedStructuredData =
@@ -354,7 +368,7 @@ export default function CalibrationWorkspaceClient({
       <div className="w-[42%] shrink-0 flex flex-col min-h-0 border-r border-slate-200">
         {/* Tabs header */}
         <div className="flex border-b border-slate-200 overflow-x-auto bg-slate-50">
-          {(["propuesta", "presentacion", "configuracion", "historial", "snapshots"] as LeftTab[]).map((tab) => (
+          {(["propuesta", "presentacion", "configuracion", "historial", "snapshots", "pruebas"] as LeftTab[]).map((tab) => (
             <button key={tab} className={tabCls(tab)} onClick={() => setActiveTab(tab)}>
               {TAB_LABELS[tab]}
               {tab === "propuesta" && candidateFields.length > 0 && (
@@ -434,6 +448,27 @@ export default function CalibrationWorkspaceClient({
               selectedSnapshotId={selectedSnapshotId}
               onSelectSnapshot={handleSnapshotSelect}
             />
+          )}
+
+          {/* ── Tab: Pruebas (IMPL-20260715-04) ── */}
+          {activeTab === "pruebas" && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700 space-y-1">
+                <p className="font-semibold">Modo de prueba — sin persistencia</p>
+                <p>
+                  Sube un PDF directamente para validar la calibración actual
+                  (extracción + prediagnóstico). Los resultados viven solo en
+                  memoria del backend durante esta sesión y no crean EventTest.
+                </p>
+              </div>
+              <CalibrationTestUpload
+                testId={testId}
+                testType={aiCalibration?.canonicalStudyType ?? "Audiometria"}
+                onResults={setTestResults}
+                apiUrl={apiUrl}
+              />
+              {testResults && <CalibrationTestResults results={testResults} />}
+            </div>
           )}
         </div>
       </div>

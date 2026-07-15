@@ -1554,3 +1554,24 @@ except Exception as _mob_import_err:
     print(f"⚠️ No se pudieron registrar routers mobile-units/maintenance: {_sanitize_error(str(_mob_import_err))}")
 
 
+# ========================================
+# IMPL-20260715-04: Upload de PDFs de prueba en módulo de Calibración.
+# SPEC: context/SPECs/SPEC_ARCH-20260715-04-UPLOAD-PDFS-CALIBRACION.md.
+# Endpoints:
+#   - POST /api/v1/calibration/upload
+#   - GET  /api/v1/calibration/test/{test_id}/results
+# NO persiste en DB ni crea EventTest real: solo ejecuta el pipeline
+# IA en runtime y retorna resultados al frontend de calibración.
+# ========================================
+try:
+    from app.api.v1.calibration import router as calibration_router
+
+    app.include_router(calibration_router)
+    print("✅ Router IMPL-20260715-04 registrado (/api/v1/calibration)")
+except Exception as _calibration_import_err:
+    print(
+        "⚠️ No se pudo registrar router de calibration: "
+        f"{_sanitize_error(str(_calibration_import_err))}"
+    )
+
+

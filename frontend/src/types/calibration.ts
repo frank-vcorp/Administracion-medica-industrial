@@ -149,3 +149,34 @@ export interface AICalibrationV2 {
     snapshotCount: number
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPL-20260715-04 — Resultado de upload de PDF de prueba en calibración.
+// SPEC: context/SPECs/SPEC_ARCH-20260715-04-UPLOAD-PDFS-CALIBRACION.md
+// Contrato entre el backend (POST /api/v1/calibration/upload) y el frontend.
+// NO se persiste en DB; vive solo en memoria del backend durante la sesión.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CalibrationTestExtractionResult {
+  structured_data: Record<string, unknown>
+  raw_payload: Record<string, unknown>
+  model_used: string
+  prompt_version: string
+  duration_seconds: number
+}
+
+export interface CalibrationTestPrediagnosisResult {
+  result: Record<string, unknown>
+  model_used: string
+  prompt_version: string
+  duration_seconds: number
+}
+
+export interface CalibrationTestResults {
+  success: boolean
+  test_id: string
+  canonical_study_type?: string
+  extraction: CalibrationTestExtractionResult
+  prediagnosis: CalibrationTestPrediagnosisResult
+  created_at?: string
+}
