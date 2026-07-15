@@ -527,6 +527,22 @@ class AIPrediagnosisResult(BaseModel):
         default=None,
         description="Si clinical_state=AI_NON_CONCLUSIVE, razón explícita"
     )
+    # ARCH-20260715-03: Campos derivados de Audiometría (predx-audiometria-v2-derivado).
+    # Opcionales porque solo aplican a Audiometría; otros estudios no los generan.
+    # Se usa Dict[str, Any] y no modelos anidados para no sobre-especificar en V1
+    # y mantener compatibilidad con estudios donde estos bloques no existen.
+    resumen_por_oido: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Audiometría: PTA, status, severity, pattern y basis por oído (OD/OI)."
+    )
+    resumen_bilateral: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Audiometría: status global, lateralidad, simetría y nota clínica bilateral."
+    )
+    clasificacion_hipoacusia: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Audiometría: clasificación de hipoacusia por oído y bilateral con confianza."
+    )
     # IMPL-20260513-01: Trazabilidad de proveedor clínico y política de calibración
     calibration_source: Optional[Literal["medical_calibration", "general_fallback"]] = Field(
         default=None,
