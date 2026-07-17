@@ -124,7 +124,11 @@ async def upload_calibration_test(
     test_type: str = Form(...),
 ):
     """
-    Sube y procesa un PDF de prueba para calibración.
+    Sube y procesa un archivo de prueba (PDF o XML) para calibración.
+
+    ARCH-20260715-06: Soporte para XML de audiómetro DD65 V2.
+    Si el archivo es XML, se usa parser directo sin IA.
+    Si es PDF, se usa el pipeline de extracción con IA.
 
     NO persiste en DB, NO crea EventTest real. Solo ejecuta el pipeline
     de extracción + prediagnóstico usando la `aiCalibration` vigente de
@@ -137,9 +141,15 @@ async def upload_calibration_test(
     """
     # ── Validaciones de input ──────────────────────────────────────────────
     if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="Archivo PDF es obligatorio")
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF")
+        raise HTTPException(status_code=400, detail="Archivo es obligatorio")
+    
+    filename_lower = file.filename.lower()
+    is_xml = filename_lower.endswith(".xml")
+    is_pdf = filename_lower.endswith(".pdf")
+    
+    if not (is_xml or is_pdf):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF o XML")
+    
     if not test_id or not test_id.strip():
         raise HTTPException(status_code=400, detail="test_id es obligatorio")
     if not test_type or not test_type.strip():
@@ -164,11 +174,13 @@ async def upload_calibration_test(
         (ai_calibration or {}).get("canonicalStudyType") or test_type
     )
 
-    # ── Guardar PDF en archivo temporal ────────────────────────────────────
+    # ── Guardar archivo en temporal (PDF o XML) ────────────────────────────
     contents = await file.read()
     if not contents:
-        raise HTTPException(status_code=400, detail="El archivo PDF está vacío")
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf", prefix="calibration_test_")
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+    
+    file_extension = ".xml" if is_xml else ".pdf"
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=file_extension, prefix="calibration_test_")
     try:
         with os.fdopen(tmp_fd, "wb") as tmp_fp:
             tmp_fp.write(contents)
@@ -183,9 +195,87 @@ async def upload_calibration_test(
                 os.unlink(tmp_path)
             except Exception:
                 pass
-        raise HTTPException(status_code=500, detail="No se pudo persistir el PDF temporal")
+        raise HTTPException(status_code=500, detail="No se pudo persistir el archivo temporal")
 
     # ── Pipeline de extracción + prediagnóstico ───────────────────────────
+    # ARCH-20260715-06: Si es XML de audiometría, usar parser directo sin IA
+    if is_xml and canonical_study_type == "Audiometria":
+        try:
+            from app.services.audiometry_xml_parser import parse_audiometry_xml
+            
+            extraction_start = time.time()
+            extraction_dict = parse_audiometry_xml(tmp_path)
+            extraction_seconds = round(time.time() - extraction_start, 2)
+            
+            # Para XML, no necesitamos IA de extracción, pero sí necesitamos prediagnóstico
+            extractor, prediagnostic_svc = _build_services()
+            if prediagnostic_svc is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Servicio de prediagnóstico no disponible.",
+                )
+            
+            # Generar prediagnóstico con los datos extraídos del XML
+            predx_start = time.time()
+            prediagnosis_obj = prediagnostic_svc.generate_prediagnosis(
+                study_type=canonical_study_type,
+                extracted_data=extraction_dict,
+                ai_calibration=ai_calibration,
+            )
+            predx_seconds = round(time.time() - predx_start, 2)
+            
+            prediagnosis_payload: Dict[str, Any] = (
+                prediagnosis_obj.model_dump()
+                if hasattr(prediagnosis_obj, "model_dump")
+                else (
+                    prediagnosis_obj.dict()
+                    if hasattr(prediagnosis_obj, "dict")
+                    else {"value": str(prediagnosis_obj)}
+                )
+            )
+            
+            response_payload = {
+                "success": True,
+                "test_id": f"calibration_test_{test_id[:8]}",
+                "canonical_study_type": canonical_study_type,
+                "data_source": "xml_direct",  # Indicar que viene de XML directo
+                "extraction": {
+                    "structured_data": extraction_dict,
+                    "raw_payload": extraction_dict,
+                    "model_used": "xml_parser",
+                    "prompt_version": "xml_direct_v1",
+                    "duration_seconds": extraction_seconds,
+                },
+                "prediagnosis": {
+                    "result": prediagnosis_payload,
+                    "model_used": _attr(prediagnosis_obj, "clinical_model_used", None)
+                    or _attr(prediagnosis_obj, "model_name", None)
+                    or "gemini",
+                    "prompt_version": _attr(prediagnosis_obj, "prompt_version", None)
+                    or (ai_calibration or {}).get("diagnosis", {}).get("version", "calibration_custom"),
+                    "duration_seconds": predx_seconds,
+                },
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            
+            _TEST_RESULTS_CACHE[response_payload["test_id"]] = response_payload
+            return response_payload
+            
+        except Exception as e:
+            print(f"❌ [ARCH-20260715-06] Error parseando XML: {type(e).__name__}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error procesando XML de audiómetro: {type(e).__name__}",
+            )
+        finally:
+            # Limpieza del archivo temporal
+            if os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+    
+    # ── Flujo PDF (existente) ──────────────────────────────────────────────
     extractor, prediagnostic_svc = _build_services()
     if extractor is None or prediagnostic_svc is None:
         if os.path.exists(tmp_path):

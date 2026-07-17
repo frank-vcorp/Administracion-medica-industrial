@@ -1,13 +1,18 @@
 /**
- * @fileoverview Componente de upload de PDF de prueba para el módulo de
- *   calibración. Envía el PDF al backend (`POST /api/v1/calibration/upload`),
+ * @fileoverview Componente de upload de archivos de prueba (PDF/XML) para el
+ *   módulo de calibración. Envía al backend (`POST /api/v1/calibration/upload`),
  *   muestra progreso y errores, y propaga los resultados al workspace padre.
  * @id IMPL-20260715-04
+ * @updated ARCH-20260715-06: Soporte para XML de audiómetro DD65 V2
  * @backup context/SPECs/SPEC_ARCH-20260715-04-UPLOAD-PDFS-CALIBRACION.md
+ * @backup context/SPECs/SPEC_ARCH-20260715-06-EXTRACCION-DIRECTA-XML-AUDIOMETRO.md
  *
  * NO persiste en DB, NO crea EventTest real — solo ejecuta el pipeline IA
  * en runtime para que el equipo de calibración valide prompts antes de
  * promover cambios.
+ *
+ * ARCH-20260715-06: Si se sube un XML de audiometría, el backend usa parser
+ * directo (valores exactos, sin IA). Si es PDF, usa IA con prompt calibrado.
  */
 "use client"
 
@@ -181,7 +186,7 @@ export default function CalibrationTestUpload({
     <div className="space-y-3">
       <div className="flex items-baseline justify-between">
         <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-          Subir PDF de prueba
+          Subir archivo de prueba
         </p>
         <p className="text-xs text-slate-400 font-mono">
           {testType} · test_id={testId.slice(0, 8)}…
@@ -214,7 +219,7 @@ export default function CalibrationTestUpload({
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf,.pdf"
+          accept=".pdf,.xml"
           onChange={handleFileChange}
           disabled={isUploading}
           className="sr-only"
@@ -225,7 +230,9 @@ export default function CalibrationTestUpload({
             <div className="w-8 h-8 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin mb-2" />
             <p className="text-sm font-medium text-slate-700">Procesando {state.fileName}…</p>
             <p className="text-xs text-slate-500 mt-1">
-              Extracción + prediagnóstico IA en curso.
+              {state.fileName?.toLowerCase().endsWith('.xml')
+                ? 'Extracción directa desde XML (sin IA)'
+                : 'Extracción + prediagnóstico IA en curso'}
             </p>
           </>
         ) : (
@@ -234,10 +241,10 @@ export default function CalibrationTestUpload({
               📄
             </p>
             <p className="text-sm font-semibold text-slate-700">
-              Arrastra un PDF aquí o haz click para seleccionar
+              Arrastra un PDF o XML aquí o haz click para seleccionar
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              El archivo se procesa en runtime — no se persiste en DB ni crea EventTest.
+              PDF: procesamiento con IA · XML: extracción directa (valores exactos)
             </p>
             <button
               type="button"
