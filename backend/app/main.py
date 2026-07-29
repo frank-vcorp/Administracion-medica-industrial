@@ -17,6 +17,7 @@ import re
 import time
 import json
 import hashlib
+import tempfile
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
 
@@ -1310,6 +1311,341 @@ def v2_prediagnosis_from_params(
     except Exception as e:
         print(f"❌ Error en prediagnosis-from-params: {e}")
         return {"status": "error", "error": str(e)}
+
+
+# ========================================
+# FIX-20260729-03-G-XML: UPLOAD XML DIRECTO DE AUDIOMETRÍA
+# Endpoint que invoca el parser XML directo (parse_audiometry_xml) sin
+# pasar por el pipeline Gemini (que devuelve HTTP 400 sobre archivos XML
+# binarios no-PDF). Mismo contrato de respuesta que
+# /api/v2/studies/upload-and-analyze para que el frontend pueda persistir
+# los snapshots (extraction + prediagnóstico) sin cambios estructurales.
+#
+# Parámetros:
+#   - file:           multipart con el XML del audiómetro
+#   - event_test_id:  ID del EventTest (papeleta) al que se asocia el archivo
+#
+# Detección XML:
+#   - extensión .xml (case-insensitive)
+#   - magic bytes <?xml al inicio del contenido
+#
+# Pipeline:
+#   1. Validar file + event_test_id
+#   2. Persistir el XML en /uploads (o S3 si está habilitado)
+#   3. Resolver el MedicalTest desde el EventTest para extraer aiCalibration
+#   4. parse_audiometry_xml(local_path) → extracción pura
+#   5. prediagnostic_svc.generate_prediagnosis(Audiometria, extracted, ai_cal)
+#      para la capa DR7.ai clínica posterior
+#   6. Retornar el mismo payload que v2_upload_and_analyze, con
+#      data_source='xml_direct', model_name='xml_parser',
+#      prompt_version='xml_direct_v1' en extraction_snapshot.audit.
+# ========================================
+def _sanitize_xml_options(raw_options: Any) -> Dict[str, Any]:
+    """FIX-20260729-03-G-XML: normaliza options de MedicalTest para extraer aiCalibration.
+
+    Réplica local del helper de calibration.py para no acoplar este endpoint
+    a un router externo (mantiene cohesión en main.py).
+    """
+    if raw_options is None:
+        return {}
+    if isinstance(raw_options, dict):
+        return raw_options
+    if isinstance(raw_options, str) and raw_options.strip():
+        try:
+            parsed = json.loads(raw_options)
+            return parsed if isinstance(parsed, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+    return {}
+
+
+@app.post("/api/v2/event-tests/upload-xml-audiometry")
+async def v2_event_test_upload_xml_audiometry(
+    file: UploadFile = File(...),
+    event_test_id: str = Form(...),
+    triggered_by_user_id: Optional[str] = Form(default=None),
+):
+    """
+    FIX-20260729-03-G-XML: Sube un XML de audiómetro DD65 V2 y lo procesa
+    con el parser directo (parse_audiometry_xml), sin pasar por Gemini para
+    extracción. El prediagnóstico clínico sí se delega a DR7.ai usando el
+    PrediagnosticService existente.
+
+    Retorna el mismo shape que /api/v2/studies/upload-and-analyze para que
+    el frontend (event-test.actions.ts) persista los snapshots inmutables
+    sin cambios de contrato.
+    """
+    # ── 1. Validaciones básicas ────────────────────────────────────────────
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="Archivo es obligatorio")
+
+    filename_lower = file.filename.lower()
+    is_xml_by_ext = filename_lower.endswith(".xml")
+    if not is_xml_by_ext:
+        raise HTTPException(
+            status_code=400,
+            detail="FIX-20260729-03-G-XML: este endpoint solo acepta archivos .xml. "
+            "Use /api/v2/studies/upload-and-analyze para PDF u otros formatos.",
+        )
+
+    if not event_test_id or not event_test_id.strip():
+        raise HTTPException(status_code=400, detail="event_test_id es obligatorio")
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+    # Validación de magic bytes para reforzar detección XML
+    head = contents[:64].lstrip().lower()
+    if not (head.startswith(b"<?xml") or head.startswith(b"<localsession")):
+        raise HTTPException(
+            status_code=400,
+            detail="FIX-20260729-03-G-XML: contenido no parece XML válido "
+            "(falta declaración <?xml o raíz <LocalSession>).",
+        )
+
+    # ── 2. Resolver MedicalTest desde el EventTest ─────────────────────────
+    prisma = get_prisma_client()
+    if prisma is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Prisma no inicializado. Reintenta en unos segundos.",
+        )
+    try:
+        et_row = await prisma.eventtest.find_unique(
+            where={"id": event_test_id},
+            include={"test": True},
+        )
+    except Exception as db_err:
+        raise HTTPException(
+            status_code=503, detail=f"Error consultando EventTest: {db_err}"
+        )
+    if et_row is None:
+        raise HTTPException(
+            status_code=404, detail=f"EventTest {event_test_id} no existe"
+        )
+
+    # _attr: dict u objeto Prisma
+    def _attr(obj: Any, key: str, default: Any = None) -> Any:
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    medical_test = _attr(et_row, "test")
+    if medical_test is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"EventTest {event_test_id} no tiene MedicalTest asociado",
+        )
+
+    options = _sanitize_xml_options(_attr(medical_test, "options"))
+    ai_calibration_raw = options.get("aiCalibration")
+    ai_calibration: Optional[Dict[str, Any]] = (
+        ai_calibration_raw if isinstance(ai_calibration_raw, dict) else None
+    )
+    canonical_study_type = (
+        (ai_calibration or {}).get("canonicalStudyType") or "Audiometria"
+    )
+
+    # ── 3. Persistir el archivo en /uploads (con S3 si está habilitado) ────
+    safe_filename = file.filename.replace(" ", "_").replace("/", "_")
+    stored_filename = f"{int(time.time())}-{safe_filename}"
+    file_hash = f"sha256:{hashlib.sha256(contents).hexdigest()}"
+
+    local_path = os.path.join(UPLOAD_DIR, stored_filename)
+    try:
+        # IMPL-20260513-S3: preferir bucket cuando está habilitado
+        if _s3_enabled and _upload_file_to_s3(contents, stored_filename):
+            file_url = f"/api/files/{stored_filename}"
+            # Aún necesitamos un path local para el parser XML (lee de disco).
+            with open(local_path, "wb") as f:
+                f.write(contents)
+        else:
+            with open(local_path, "wb") as f:
+                f.write(contents)
+            file_url = f"/uploads/{stored_filename}"
+    except Exception as persist_err:
+        raise HTTPException(
+            status_code=500,
+            detail=f"No se pudo persistir el archivo XML: {persist_err}",
+        )
+
+    # ── 4. Parser XML directo (sin IA) ─────────────────────────────────────
+    pipeline_start = time.time()
+    try:
+        from app.services.audiometry_xml_parser import parse_audiometry_xml
+
+        extraction_start = time.time()
+        extraction_dict = parse_audiometry_xml(local_path)
+        extraction_seconds = round(time.time() - extraction_start, 2)
+    except Exception as xml_err:
+        # Limpieza del archivo temporal/persistente en caso de fallo de parseo
+        try:
+            if os.path.exists(local_path):
+                os.unlink(local_path)
+        except Exception:
+            pass
+        print(f"❌ [FIX-20260729-03-G-XML] Error parseando XML: {type(xml_err).__name__}: {xml_err}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"FIX-20260729-03-G-XML: XML inválido o no compatible con "
+            f"audiómetro DD65 V2: {type(xml_err).__name__}",
+        )
+
+    # ── 5. Prediagnóstico clínico (DR7.ai) sobre los umbrales extraídos ───
+    if prediagnostic_svc is None:
+        # Si DR7.ai no está disponible, devolvemos solo la extracción (xml_direct)
+        # para que el frontend pueda persistir el snapshot y el médico revise
+        # manualmente. Marcamos explícitamente el clinical_state.
+        prediagnosis_payload: Dict[str, Any] = {
+            "clinical_state": "AI_PENDING_REVIEW",
+            "summary": "Prediagnóstico IA no disponible; revisión médica manual requerida.",
+            "confidence": None,
+            "justification": None,
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [
+                "FIX-20260729-03-G-XML: PrediagnosticService no inicializado. "
+                "Datos extraídos directamente del XML sin interpretación IA."
+            ],
+            "red_flags": [],
+            "non_conclusive_reason": "ai_service_unavailable",
+            "audit": {
+                "model_name": "none",
+                "clinical_provider": "none",
+                "prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
+                "pipeline_version": PIPELINE_VERSION,
+                "triggered_by_user_id": triggered_by_user_id,
+                "trigger_reason": "xml_direct_no_ai",
+            },
+        }
+        predx_seconds = 0.0
+    else:
+        try:
+            predx_start = time.time()
+            prediagnosis_obj = prediagnostic_svc.generate_prediagnosis(
+                study_type=canonical_study_type,
+                extracted_data=extraction_dict,
+                ai_calibration=ai_calibration,
+            )
+            predx_seconds = round(time.time() - predx_start, 2)
+
+            predx_provider = getattr(prediagnosis_obj, "clinical_provider", None)
+            predx_model_used = getattr(prediagnosis_obj, "clinical_model_used", None)
+            predx_calibration_source = getattr(prediagnosis_obj, "calibration_source", None)
+            predx_prompt_source = getattr(prediagnosis_obj, "prompt_source", None)
+            predx_prompt_version = getattr(prediagnosis_obj, "prompt_version", None)
+            predx_input_debug = getattr(prediagnosis_obj, "input_debug", None)
+
+            prediagnosis_payload = {
+                "clinical_state": prediagnosis_obj.clinical_state,
+                "summary": prediagnosis_obj.summary,
+                "confidence": prediagnosis_obj.confidence,
+                "justification": prediagnosis_obj.justification,
+                "clinical_basis": [cb.model_dump() for cb in prediagnosis_obj.clinical_basis],
+                "citations": [c.model_dump() for c in prediagnosis_obj.citations],
+                "limitations": prediagnosis_obj.limitations,
+                "red_flags": prediagnosis_obj.red_flags,
+                "non_conclusive_reason": prediagnosis_obj.non_conclusive_reason,
+                "clinical_provider": predx_provider,
+                "clinical_model_used": predx_model_used,
+                "calibration_source": predx_calibration_source,
+                "prompt_source": predx_prompt_source,
+                "audit": {
+                    "model_name": predx_model_used or GEMINI_MODEL_CLINICAL,
+                    "clinical_provider": predx_provider or "gemini",
+                    "prompt_version": predx_prompt_version or PREDIAGNOSIS_PROMPT_VERSION,
+                    "prompt_source": predx_prompt_source,
+                    "pipeline_version": PIPELINE_VERSION,
+                    "triggered_by_user_id": triggered_by_user_id,
+                    "trigger_reason": "xml_direct_then_ai",
+                },
+                "_guardrail": "Este prediagnóstico NO autoriza firma digital, "
+                "dictamen final ni aptitud laboral sin revisión médica explícita.",
+                "input_debug": predx_input_debug.model_dump() if predx_input_debug else None,
+            }
+        except Exception as predx_err:
+            print(f"⚠️ [FIX-20260729-03-G-XML] Prediagnóstico DR7.ai falló sobre "
+                  f"datos XML: {type(predx_err).__name__}: {predx_err}")
+            prediagnosis_payload = {
+                "clinical_state": "AI_PENDING_REVIEW",
+                "summary": f"Extracción XML directa exitosa; prediagnóstico IA no concluyente: {type(predx_err).__name__}",
+                "confidence": None,
+                "limitations": [
+                    f"FIX-20260729-03-G-XML: PrediagnosticService.generate_prediagnosis "
+                    f"falló: {type(predx_err).__name__}"
+                ],
+                "audit": {
+                    "model_name": "none",
+                    "prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
+                    "pipeline_version": PIPELINE_VERSION,
+                    "triggered_by_user_id": triggered_by_user_id,
+                    "trigger_reason": "xml_direct_prediagnosis_failed",
+                },
+            }
+            predx_seconds = 0.0
+
+    total_seconds = round(time.time() - pipeline_start, 2)
+
+    # ── 6. Respuesta con shape compatible con v2_upload_and_analyze ───────
+    return {
+        "status": "success",
+        "pipeline_version": PIPELINE_VERSION,
+        "data_source": "xml_direct",  # FIX-20260729-03-G-XML: trazabilidad
+        "file": stored_filename,
+        "file_url": file_url,
+        "classification": {
+            "detected_type": canonical_study_type,
+            "confidence": 1.0,
+            "reason": "xml_direct_audiometry",
+        },
+        "extraction_snapshot": {
+            "study_type": canonical_study_type,
+            "extracted_data": extraction_dict,
+            "missing_fields": _list_xml_missing_fields(extraction_dict),
+            "quality_notes": ["xml_direct", "audiometry_dd65_v2"],
+            "audit": {
+                "extraction_provider": "xml_direct",
+                "extraction_model_used": "xml_parser",
+                "model_name": "xml_parser",  # el frontend lo lee aquí
+                "prompt_version": "xml_direct_v1",
+                "prompt_source": "xml_direct",
+                "pipeline_version": PIPELINE_VERSION,
+                "source_file_hash": file_hash,
+                "triggered_by_user_id": triggered_by_user_id,
+                "trigger_reason": "initial_upload_xml",
+                "duration_seconds": extraction_seconds,
+            },
+        },
+        "prediagnosis_snapshot": prediagnosis_payload,
+        "timings": {
+            "extraction_seconds": extraction_seconds,
+            "prediagnosis_seconds": predx_seconds,
+            "total_seconds": total_seconds,
+        },
+    }
+
+
+def _list_xml_missing_fields(extracted_data: Dict[str, Any]) -> List[str]:
+    """
+    FIX-20260729-03-G-XML: detecta campos vacíos en la extracción XML para
+    alimentar el contrato `missing_fields` del StudyExtractionSnapshot.
+    """
+    missing: List[str] = []
+    for ear_key in ("oido_derecho", "oido_izquierdo"):
+        ear = extracted_data.get(ear_key) if isinstance(extracted_data, dict) else None
+        if not isinstance(ear, dict):
+            missing.append(f"{ear_key}")
+            continue
+        if not ear.get("va"):
+            missing.append(f"{ear_key}.va")
+        if not ear.get("vo"):
+            missing.append(f"{ear_key}.vo")
+        if ear.get("pta") is None:
+            missing.append(f"{ear_key}.pta")
+    return missing
 
 
 # ========================================

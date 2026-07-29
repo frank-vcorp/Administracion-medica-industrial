@@ -1,0 +1,61 @@
+
+> frontend@0.1.0 test
+> vitest run
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /home/frank/repos/Administracion-medica-industrial/frontend
+
+ ✓ src/lib/validation.utils.test.ts (43 tests) 66ms
+ ✓ src/lib/validations/lab-catalog.test.ts (26 tests) 66ms
+ ✓ src/lib/schemas/__tests__/company-full-form.test.ts (19 tests) 77ms
+ ✓ src/lib/schemas/company-update.test.ts (30 tests) 38ms
+ ✓ src/services/__tests__/company.service.test.ts (25 tests) 33ms
+ ✓ src/actions/__tests__/mobile-unit.actions.test.ts (20 tests) 30ms
+ ✓ src/actions/__tests__/project.actions.test.ts (12 tests) 24ms
+ ✓ src/actions/__tests__/maintenance.helpers.test.ts (12 tests) 17ms
+ ✓ src/lib/validations/lab-cash.test.ts (12 tests) 31ms
+stderr | src/lib/__tests__/api-handler.test.ts > withApiErrors > atrapa excepciones y devuelve JSON 500 con error y message
+[TEST] error: Error: DATABASE_URL no está definida
+    at /home/frank/repos/Administracion-medica-industrial/frontend/src/lib/__tests__/api-handler.test.ts:52:13
+    at /home/frank/repos/Administracion-medica-industrial/frontend/src/lib/api-handler.ts:40:25
+    at /home/frank/repos/Administracion-medica-industrial/frontend/src/lib/__tests__/api-handler.test.ts:54:23
+    at file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at runSuite (file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | src/lib/__tests__/api-handler.test.ts > withApiErrors > atrapa errores de NextAuth (NEXTAUTH_SECRET faltante simulado)
+[TEST] error: Error: NEXTAUTH_SECRET no está definido
+    at /home/frank/repos/Administracion-medica-industrial/frontend/src/lib/__tests__/api-handler.test.ts:65:13
+    at /home/frank/repos/Administracion-medica-industrial/frontend/src/lib/api-handler.ts:40:25
+    at /home/frank/repos/Administracion-medica-industrial/frontend/src/lib/__tests__/api-handler.test.ts:67:23
+    at file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at runSuite (file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///home/frank/repos/Administracion-medica-industrial/frontend/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | src/lib/__tests__/api-handler.test.ts > withApiErrors > atrapa strings lanzados (no solo Error instances)
+[TEST] error: algo explotó
+
+ ✓ src/lib/__tests__/api-handler.test.ts (7 tests) 50ms
+ ✓ src/lib/lab-result-utils.test.ts (12 tests) 11ms
+ ✓ src/lib/validations/lab-order.test.ts (10 tests) 32ms
+ ✓ src/lib/validations/lab-result.test.ts (12 tests) 22ms
+ ✓ src/services/__tests__/company.service.public.test.ts (7 tests) 22ms
+ ✓ src/lib/env/public-base-url.test.ts (9 tests) 7ms
+ ✓ src/lib/lab-order-totals.test.ts (9 tests) 13ms
+ ✓ src/hooks/__tests__/useProjectReportStatus.test.ts (3 tests) 41ms
+ ✓ src/lib/validations/lab-trace.test.ts (5 tests) 12ms
+
+ Test Files  18 passed (18)
+      Tests  273 passed (273)
+   Start at  08:09:35
+   Duration  2.30s (transform 1.46s, setup 0ms, collect 4.31s, tests 593ms, environment 6ms, prepare 2.36s)
+

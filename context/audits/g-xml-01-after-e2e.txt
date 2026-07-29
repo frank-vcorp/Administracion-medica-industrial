@@ -1,0 +1,80 @@
+
+Running 12 tests using 1 worker
+
+[1/12] [chromium] › tests/flujo-completo.spec.ts:132:7 › Flujo End-to-End Completo › TC-01: Crear empresa cliente
+[chromium] › tests/flujo-completo.spec.ts:132:7 › Flujo End-to-End Completo › TC-01: Crear empresa cliente
+Page URL: https://administracion-medica-industrial.vercel.app/login
+
+Page title: 
+
+✅ Login exitoso, URL actual: https://administracion-medica-industrial.vercel.app/dashboard
+
+Empresa creada con ID: 2e735810-6b12-4120-8f6b-5f4e5572dc32
+
+[2/12] [chromium] › tests/flujo-completo.spec.ts:191:7 › Flujo End-to-End Completo › TC-02: Crear perfil médico con estudios
+[3/12] [chromium] › tests/flujo-completo.spec.ts:239:7 › Flujo End-to-End Completo › TC-03: Crear puesto de trabajo con perfil default
+[4/12] [chromium] › tests/flujo-completo.spec.ts:272:7 › Flujo End-to-End Completo › TC-04: Crear trabajador asociado a empresa y puesto
+[chromium] › tests/flujo-completo.spec.ts:272:7 › Flujo End-to-End Completo › TC-04: Crear trabajador asociado a empresa y puesto
+Trabajador creado con ID: b07b4af2-b266-4197-9dff-677bea06f899
+
+[5/12] [chromium] › tests/flujo-completo.spec.ts:333:7 › Flujo End-to-End Completo › TC-05: Crear cita para trabajador
+[6/12] [chromium] › tests/flujo-completo.spec.ts:383:7 › Flujo End-to-End Completo › TC-06: Check-in y corroboración de identidad
+[chromium] › tests/flujo-completo.spec.ts:383:7 › Flujo End-to-End Completo › TC-06: Check-in y corroboración de identidad
+Papeleta creada con ID: defddade-211e-4f44-9b56-cd7851ffbb96
+
+[7/12] [chromium] › tests/flujo-completo.spec.ts:445:7 › Flujo End-to-End Completo › TC-07: Iniciar atención y generar papeleta
+[chromium] › tests/flujo-completo.spec.ts:445:7 › Flujo End-to-End Completo › TC-07: Iniciar atención y generar papeleta
+EventTests visibles en PapeletaWorkspace: 6
+
+[8/12] [chromium] › tests/flujo-completo.spec.ts:464:7 › Flujo End-to-End Completo › TC-08: Completar somatometría y agudeza visual
+[9/12] [chromium] › tests/flujo-completo.spec.ts:503:7 › Flujo End-to-End Completo › TC-09: Subir audiometría XML y verificar prediagnóstico
+[chromium] › tests/flujo-completo.spec.ts:503:7 › Flujo End-to-End Completo › TC-09: Subir audiometría XML y verificar prediagnóstico
+
+=== Resumen ejecución E2E ===
+
+Empresa ID: 2e735810-6b12-4120-8f6b-5f4e5572dc32
+
+Worker ID: b07b4af2-b266-4197-9dff-677bea06f899
+
+Appointment ID: NO EXPUESTO POR HREF; cita verificada por tarjeta y luego por el eventId del check-in
+
+Event ID: defddade-211e-4f44-9b56-cd7851ffbb96
+
+===========================
+
+
+  1) [chromium] › tests/flujo-completo.spec.ts:503:7 › Flujo End-to-End Completo › TC-09: Subir audiometría XML y verificar prediagnóstico 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('250', { exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByText('250', { exact: true })
+
+
+      521 |
+      522 |     // La tabla bilateral del parser directo expone frecuencias exactas.
+    > 523 |     await expect(authenticatedPage.getByText('250', { exact: true })).toBeVisible({ timeout: 15000 });
+          |                                                                       ^
+      524 |     await expect(authenticatedPage.getByText('500', { exact: true })).toBeVisible();
+      525 |     await expect(authenticatedPage.getByText('1000', { exact: true })).toBeVisible();
+      526 |
+        at /home/frank/repos/Administracion-medica-industrial/frontend/tests/flujo-completo.spec.ts:523:71
+
+    Error Context: test-results/flujo-completo-Flujo-End-t-f372d--y-verificar-prediagnóstico-chromium/error-context.md
+
+    Error Context: test-results/flujo-completo-Flujo-End-t-f372d--y-verificar-prediagnóstico-chromium/error-context.md
+
+
+[10/12] [chromium] › tests/flujo-completo.spec.ts:541:7 › Flujo End-to-End Completo › TC-10: Subir espirometría PDF y verificar prediagnóstico
+[11/12] [chromium] › tests/flujo-completo.spec.ts:573:7 › Flujo End-to-End Completo › TC-11: Marcar muestra tomada y verificar LabOrder
+[12/12] [chromium] › tests/flujo-completo.spec.ts:608:7 › Flujo End-to-End Completo › TC-12: Generar dictamen final y cerrar papeleta
+  1 failed
+    [chromium] › tests/flujo-completo.spec.ts:503:7 › Flujo End-to-End Completo › TC-09: Subir audiometría XML y verificar prediagnóstico 
+  3 did not run
+  8 passed (1.6m)
