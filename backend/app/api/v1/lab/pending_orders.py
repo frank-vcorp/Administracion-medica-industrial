@@ -48,11 +48,11 @@ async def list_pending_orders(
         result = await svc.list_pending_orders(
             branch_id=branchId,
             prisma=prisma,
-            category_id=categoryId or "16c16ef0-cf35-4fe5-9bef-311f6fc8674c",
+            category_id=categoryId or "64d3f863",
         )
         return {
             "branchId": branchId,
-            "categoryId": categoryId or "16c16ef0-cf35-4fe5-9bef-311f6fc8674c",
+            "categoryId": categoryId or "64d3f863",
             "total": result["total"],
             "rows": result["rows"],
         }

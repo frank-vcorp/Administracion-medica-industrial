@@ -21,9 +21,8 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 # ID de categoría "Laboratorio" — confirmado contra DB
 # (ver context/SPECs/CONF-20260707-01-FLUJO-NOVA.md §2.1)
-# FIXME-20260729-G-LAB-TRIGGER-01: hardcodeado en multiples archivos; migrar a búsqueda por nombre
 # ---------------------------------------------------------------------------
-LAB_CATEGORY_ID = "16c16ef0-cf35-4fe5-9bef-311f6fc8674c"
+LAB_CATEGORY_ID = "64d3f863"
 
 
 # ---------------------------------------------------------------------------

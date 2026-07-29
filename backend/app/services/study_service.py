@@ -323,7 +323,7 @@ async def seed_typical_tests(current_user: Dict[str, str], prisma: Any, category
         for c in cats:
             cid = c.get("id") if isinstance(c, dict) else getattr(c, "id", None)
             cname = c.get("name") if isinstance(c, dict) else getattr(c, "name", "")
-            if cid and ("lab" in str(cname).lower() or cid == "16c16ef0-cf35-4fe5-9bef-311f6fc8674c"):
+            if cid and ("lab" in str(cname).lower() or cid == "64d3f863"):
                 category_id = cid
                 break
 
