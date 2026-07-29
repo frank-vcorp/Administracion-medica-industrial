@@ -20,7 +20,9 @@ if (!TEST_EMAIL || !TEST_PASSWORD) {
 }
 
 // Datos de prueba
-const EMPRESA_NOMBRE = 'Servicios Robles S.A. de C.V.';
+// IMPL-20260729-01: timestamp en nombre para evitar duplicados entre runs (BD persistente en prod).
+const RUN_TAG = Date.now().toString().slice(-6);
+const EMPRESA_NOMBRE = `Servicios Robles S.A. de C.V. - ${RUN_TAG}`;
 const TRABAJADOR = {
   firstName: 'JESSICA GABRIELA',
   lastName: 'MORENO GOMEZ',
