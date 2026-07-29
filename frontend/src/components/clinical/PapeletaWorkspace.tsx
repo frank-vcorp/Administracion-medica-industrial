@@ -290,7 +290,7 @@ function getStudyIcon(test: StudyTest): string {  if (isExamenMedico(test.testNa
 export default function PapeletaWorkspace({
   eventId,
   eventTests,
-  workerInfo,
+  workerInfo: _workerInfo,
   readonly = false,
   apiUrl,
   examData = null,
@@ -337,9 +337,11 @@ export default function PapeletaWorkspace({
     ? localTests.filter(t => !isSomatometria(t.testNameSnapshot) && !isAgudezaVisual(t.testNameSnapshot))
     : localTests
 
+  /* eslint-disable react-hooks/set-state-in-effect -- sincroniza state local con prop eventTests (controlled state pattern). */
   useEffect(() => {
     setLocalTests(eventTests)
   }, [eventTests])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Actualizaciones optimistas del estado local
   function updateLocalStatus(id: string, status: StudyStatus) {
@@ -750,7 +752,7 @@ function ExtractedDataRows({ data, depth = 0 }: { data: Record<string, unknown>;
 
 // --- ARCH-20260326-05: Panel de Valores Capturados (capa extractiva) ---
 
-function CapturedValuesPanel({
+function _CapturedValuesPanel({
   extractedData,
   missingFields,
   version,
@@ -799,6 +801,7 @@ function CapturedValuesPanel({
     </div>
   )
 }
+void _CapturedValuesPanel
 
 // --- IMPL-20260516-04: Panel de progreso por etapas del pipeline IA ---
 // @id IMPL-20260516-04

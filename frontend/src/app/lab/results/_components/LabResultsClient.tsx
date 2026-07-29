@@ -69,6 +69,7 @@ export function LabResultsClient({ initialStatus }: Props) {
   }, [status, folioFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch al cambiar filtros.
     refresh();
   }, [refresh]);
 

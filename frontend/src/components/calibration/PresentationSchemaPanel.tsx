@@ -113,6 +113,7 @@ export default function PresentationSchemaPanel({
     initialPresentation?.lastSuggestionSummary
   )
 
+  /* eslint-disable react-hooks/set-state-in-effect -- sincroniza state derivado de props cambiantes (aiCalibration). */
   useEffect(() => {
     const fallbackStudyType = selectedSnapshot?.studyType || aiCalibration?.canonicalStudyType || ''
     setSchema(normalizeSchema(aiCalibration?.presentation?.schema, fallbackStudyType))
@@ -121,6 +122,7 @@ export default function PresentationSchemaPanel({
     setLastSuggestionModel(aiCalibration?.presentation?.lastSuggestionModel)
     setLastSuggestionSummary(aiCalibration?.presentation?.lastSuggestionSummary)
   }, [aiCalibration?.currentVersion, aiCalibration?.presentation, aiCalibration?.canonicalStudyType, selectedSnapshot?.studyType])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const selectedStudyType =
     selectedSnapshot?.studyType || schema.studyType || aiCalibration?.canonicalStudyType || ''

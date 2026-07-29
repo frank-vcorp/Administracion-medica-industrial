@@ -92,6 +92,7 @@ export default function ProjectFormModal({
     if (currentId === prevIdRef.current) return
     prevIdRef.current = currentId
     if (projectToEdit) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hidratación al cambiar proyecto en edición (controlled form pattern).
       setName(projectToEdit.name)
       setCompanyId(projectToEdit.companyId)
       setStartDate(toISOLocal(projectToEdit.startDate))

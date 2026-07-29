@@ -8,7 +8,7 @@
  * Next.js 16+ requiere `await params`.
  */
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { LabOrderForm } from "../_components/LabOrderForm";
 import { InfoBanner } from "@/components/shared/InfoBanner";
 import { getMedicalEventForLabAdmissionAction, autoGenerateLabOrderAction } from "@/actions/pending-order.actions";

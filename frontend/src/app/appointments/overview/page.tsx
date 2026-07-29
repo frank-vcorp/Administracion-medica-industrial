@@ -63,6 +63,7 @@ export default function AppointmentsOverviewPage() {
     }, [selectedDate])
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- loadData inicial; no tiene derivada de render alternativa sin causar renders adicionales.
         loadData()
     }, [loadData])
 

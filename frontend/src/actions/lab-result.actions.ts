@@ -58,7 +58,6 @@ async function _requireAdmin(): Promise<{ userId: string } | null> {
     if (session.user.role !== "ADMIN") return null;
     return { userId: session.user.id };
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error("[lab-result actions] session error:", err);
     return null;
   }

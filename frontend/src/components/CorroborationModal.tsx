@@ -319,6 +319,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 </label>
                 {frontDataUrl ? (
                   <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- preview local en data URL (no external); next/Image requiere hosts declarados. */}
                     <img src={frontDataUrl} alt="Frente" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
                     <button
                       type="button"
@@ -342,6 +343,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 </label>
                 {backDataUrl ? (
                   <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- preview local en data URL (no external); next/Image requiere hosts declarados. */}
                     <img src={backDataUrl} alt="Reverso" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
                     <button
                       type="button"
@@ -380,6 +382,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                   )}
                 </div>
                 {worker.lastIdentityFrontFileUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element -- preview local (data URL / blob) no optimizable por next/Image.
                   <img
                     src={worker.lastIdentityFrontFileUrl}
                     alt="Última evidencia"

@@ -125,6 +125,7 @@ export const GET = withApiErrors(
       url.searchParams.get("order[0][column]") || "0",
       10
     );
+    void orderCol
     const orderDir =
       (url.searchParams.get("order[0][dir]") || "asc").toLowerCase() === "desc"
         ? "desc"

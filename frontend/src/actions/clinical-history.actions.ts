@@ -35,7 +35,7 @@ export async function getWorkerClinicalHistory(workerId: string) {
         id: clinicalHistory.id,
         workerId: clinicalHistory.workerId,
         worker: clinicalHistory.worker,
-        data: clinicalHistory.data as Record<string, any>,
+        data: clinicalHistory.data as Record<string, unknown>,
         lastUpdated: clinicalHistory.lastUpdated,
         updatedAt: clinicalHistory.updatedAt
       }
@@ -54,7 +54,7 @@ export async function getWorkerClinicalHistory(workerId: string) {
  */
 export async function upsertWorkerClinicalHistory(
   workerId: string,
-  data: any
+  data: unknown
 ) {
   try {
     if (!workerId) {

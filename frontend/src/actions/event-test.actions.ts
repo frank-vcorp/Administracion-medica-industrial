@@ -314,6 +314,7 @@ export async function uploadEventTestFile(formData: FormData) {
   const eventId = formData.get('eventId') as string
   const file = formData.get('file') as File
   const triggeredByUserId = (formData.get('triggeredByUserId') as string) || 'system'
+  void triggeredByUserId
 
   if (!eventTestId || !eventId || !file) {
     return { success: false, error: 'Faltan parámetros obligatorios' }
@@ -561,6 +562,7 @@ export async function regenerateStudyAI(
       revalidatePath(`/events/${eventId}`)
     } catch (_persistErr) {
       // No interrumpir si falla la persistencia del error
+      void _persistErr
     }
     return { success: false, error: msg }
   }

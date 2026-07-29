@@ -59,6 +59,7 @@ export default function WorkersTable({ workers, companies, jobPositions, initial
         const matchedWorker = workers.find(worker => worker.id === initialEditWorkerId)
         if (!matchedWorker) return
 
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- abre modal automáticamente si initialEditWorkerId viene por query string.
         setWorkerToEdit(toEditPayload(matchedWorker))
         router.replace(pathname)
     }, [initialEditWorkerId, pathname, router, workers])

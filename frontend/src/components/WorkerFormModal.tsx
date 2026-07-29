@@ -69,6 +69,7 @@ export default function WorkerFormModal({
     const router = useRouter()
 
     // Sincroniza los selects controlados cuando cambia el trabajador en edición
+    /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- hidratación controlada al cambiar `workerToEdit` (controlled selects pattern); se omite `workerToEdit.companyId`/`jobPositionId` en deps para evitar renders espurios. */
     useEffect(() => {
         setSelectedCompanyId(workerToEdit?.companyId || '')
         setSelectedJobPositionId(workerToEdit?.jobPositionId || '')

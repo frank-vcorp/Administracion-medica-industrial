@@ -45,7 +45,6 @@ async function _requireAdmin(): Promise<{ userId: string } | null> {
     if (session.user.role !== "ADMIN") return null;
     return { userId: session.user.id };
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error("[lab-trace actions] session error:", err);
     return null;
   }
@@ -194,7 +193,6 @@ export async function autoRecordLabTraceEventAction(
     return { ok: true, created: true };
   } catch (err) {
     // Nunca romper el flujo principal por un fallo en el trace
-    // eslint-disable-next-line no-console
     console.error("[autoRecordLabTraceEventAction] error:", err);
     return { ok: false, created: false, reason: err instanceof Error ? err.message : "unknown" };
   }

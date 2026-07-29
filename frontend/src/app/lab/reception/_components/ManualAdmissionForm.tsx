@@ -7,6 +7,7 @@
  */
 "use client";
 
+import Link from "next/link";
 import { LabOrderForm } from "./LabOrderForm";
 
 interface Props {
@@ -19,7 +20,11 @@ export function ManualAdmissionForm({ orderId }: Props) {
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
         <strong>Modo admisión manual.</strong>{" "}
         Use este formulario solo para pacientes sin papeleta previa (walk-in externo).
-        Para admisiones automáticas use la <a href="/lab/reception" className="underline">bandeja de papeletas</a>.
+        Para admisiones automáticas use la{" "}
+        <Link href="/lab/reception" className="underline">
+          bandeja de papeletas
+        </Link>
+        .
       </div>
       <LabOrderForm orderId={orderId} />
     </div>

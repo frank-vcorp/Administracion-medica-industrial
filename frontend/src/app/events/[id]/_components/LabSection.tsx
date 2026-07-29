@@ -24,7 +24,7 @@ interface Props {
   workerId: string;
 }
 
-export async function LabSection({ medicalEventId, workerId }: Props) {
+export async function LabSection({ medicalEventId, workerId: _workerId }: Props) {
   const [labOrders, labEventTests] = await Promise.all([
     prisma.labOrder.findMany({
       where: { medicalEventId },

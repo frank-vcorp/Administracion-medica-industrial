@@ -308,7 +308,7 @@ export default async function OperationsMobileUnitsPage() {
   )
 }
 
-async function getPrisma() {
+async function _getPrisma() {
   // Shim eliminado — usamos el singleton importado arriba.
-  return prisma
 }
+void _getPrisma

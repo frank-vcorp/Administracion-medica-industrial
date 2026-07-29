@@ -65,12 +65,12 @@ async function login(page: Page) {
   try {
     await page.waitForURL(/\/dashboard|\/appointments|\/events|\/companies/, { timeout: 15000 });
     console.log('✅ Login exitoso, URL actual:', page.url());
-  } catch (e) {
+  } catch (_e) {
     // Si no hay redirect, verificar si hay mensaje de error
     const alert = page.locator('[role="alert"]');
     let alertText = '';
     if (await alert.count() > 0) {
-      alertText = await alert.textContent();
+      alertText = await alert.textContent() ?? '';
       console.error('❌ Error visible en UI:', alertText);
     }
     
@@ -88,9 +88,10 @@ async function login(page: Page) {
 }
 
 // Helper: Generar UUID único para evitar colisiones en tests
-function generateTestId(prefix: string): string {
+function _generateTestId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
+void _generateTestId
 
 test.describe('Flujo End-to-End Completo', () => {
   test.describe.configure({ mode: 'serial' });
@@ -110,7 +111,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 1: Crear empresa
-  test('TC-01: Crear empresa cliente', async ({ page }) => {
+  test('TC-01: Crear empresa cliente', async () => {
     test.setTimeout(60000);
     
     await authenticatedPage.goto(`${BASE_URL}/companies`);
@@ -169,7 +170,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 1.2: Crear perfil médico
-  test('TC-02: Crear perfil médico con estudios', async ({ page }) => {
+  test('TC-02: Crear perfil médico con estudios', async () => {
     test.setTimeout(60000);
     test.skip(!companyId, 'Sin empresa creada');
     
@@ -202,7 +203,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 1.3: Crear puesto con perfil default
-  test('TC-03: Crear puesto de trabajo con perfil default', async ({ page }) => {
+  test('TC-03: Crear puesto de trabajo con perfil default', async () => {
     test.setTimeout(60000);
     test.skip(!companyId, 'Sin empresa creada');
     
@@ -234,7 +235,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 2: Crear trabajador
-  test('TC-04: Crear trabajador asociado a empresa y puesto', async ({ page }) => {
+  test('TC-04: Crear trabajador asociado a empresa y puesto', async () => {
     test.setTimeout(60000);
     
     await authenticatedPage.goto(`${BASE_URL}/workers`);
@@ -309,7 +310,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 3: Crear cita
-  test('TC-05: Crear cita para trabajador', async ({ page }) => {
+  test('TC-05: Crear cita para trabajador', async () => {
     test.setTimeout(60000);
     test.skip(!workerId, 'Sin trabajador creado');
     
@@ -348,7 +349,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 4: Check-in en recepción
-  test('TC-06: Check-in y corroboración de identidad', async ({ page }) => {
+  test('TC-06: Check-in y corroboración de identidad', async () => {
     test.setTimeout(60000);
     test.skip(!appointmentId, 'Sin cita creada');
     
@@ -357,7 +358,7 @@ test.describe('Flujo End-to-End Completo', () => {
     
     // Buscar trabajador por nombre
     await authenticatedPage.getByLabel('Buscar trabajador').fill(`${TRABAJADOR.firstName} ${TRABAJADOR.lastName}`);
-    await authenticatedPage.press('Enter');
+    await authenticatedPage.keyboard.press('Enter');
     
     // Click en resultado de búsqueda
     await authenticatedPage.getByRole('button', { name: new RegExp(TRABAJADOR.lastName) }).first().click();
@@ -382,7 +383,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 5: Generar papeleta (MedicalEvent)
-  test('TC-07: Iniciar atención y generar papeleta', async ({ page }) => {
+  test('TC-07: Iniciar atención y generar papeleta', async () => {
     test.setTimeout(60000);
     test.skip(!appointmentId, 'Sin cita creada');
     
@@ -416,7 +417,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 6: Llenar examen médico
-  test('TC-08: Completar somatometría y agudeza visual', async ({ page }) => {
+  test('TC-08: Completar somatometría y agudeza visual', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
     
@@ -442,7 +443,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 7: Upload audiometría XML
-  test('TC-09: Subir audiometría XML y verificar prediagnóstico', async ({ page }) => {
+  test('TC-09: Subir audiometría XML y verificar prediagnóstico', async () => {
     test.setTimeout(120000);
     test.skip(!eventId, 'Sin papeleta creada');
     
@@ -483,7 +484,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 7.2: Upload espirometría PDF
-  test('TC-10: Subir espirometría PDF y verificar prediagnóstico', async ({ page }) => {
+  test('TC-10: Subir espirometría PDF y verificar prediagnóstico', async () => {
     test.setTimeout(120000);
     test.skip(!eventId, 'Sin papeleta creada');
     
@@ -512,13 +513,13 @@ test.describe('Flujo End-to-End Completo', () => {
     try {
       await expect(espiroSection.getByText(/FEV1|FVC/i)).toBeVisible({ timeout: 10000 });
       console.log('Valores de espirometría extraídos');
-    } catch (e) {
+    } catch (_e) {
       console.warn('Extracción de espirometría falló con PDF dummy (esperado)');
     }
   });
 
   // Fase 8: Toma de muestra laboratorio
-  test('TC-11: Marcar muestra tomada y verificar LabOrder', async ({ page }) => {
+  test('TC-11: Marcar muestra tomada y verificar LabOrder', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
     
@@ -548,7 +549,7 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 9: Dictamen final
-  test('TC-12: Generar dictamen final y cerrar papeleta', async ({ page }) => {
+  test('TC-12: Generar dictamen final y cerrar papeleta', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
     

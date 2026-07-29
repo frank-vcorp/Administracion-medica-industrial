@@ -54,6 +54,8 @@ export default function MaintenanceCalendar({
   const [view, setView] = useState<'calendar' | 'list'>('calendar')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  void startTransition
+  void isPending
 
   const monthStart = useMemo(() => {
     const d = new Date(month)

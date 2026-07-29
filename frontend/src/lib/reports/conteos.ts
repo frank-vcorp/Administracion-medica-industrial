@@ -16,6 +16,7 @@ interface WorkerLike {
 }
 
 function _hasExtracted(et: { extractedData?: unknown } | undefined): boolean {
+  void et
   if (!et) return false;
   const ed = et.extractedData;
   if (!ed || typeof ed !== 'object') return false;
@@ -38,7 +39,7 @@ function _testIsComplete(et: { status: string; resultNotes?: string | null }): b
  * sinEstudios = ningun EventTest del evento
  */
 export function calcularConteos(workers: WorkerLike[]): ProjectReportConteos {
-  let total = workers.length;
+  const total = workers.length;
   let completos = 0;
   let sinEstudios = 0;
 

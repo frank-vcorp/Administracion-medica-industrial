@@ -63,6 +63,7 @@ export function LabTraceTimeline({ orderId, refreshKey = 0 }: Props) {
   }, [orderId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga intencional del timeline.
     load();
   }, [load, refreshKey]);
 

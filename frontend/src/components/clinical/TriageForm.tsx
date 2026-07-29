@@ -3,13 +3,32 @@
 import { useState } from "react"
 import { updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 
-export default function TriageForm({ eventId, initialData = {}, readonly = false }: { eventId: string, initialData?: any, readonly?: boolean }) {
-  const [formData, setFormData] = useState(initialData)
-  const [isSaving, setIsSaving] = useState(false)
-  const [message, setMessage] = useState("")
+interface TriageFormData {
+    peso_kg?: string
+    talla_m?: string
+    ta_sistolica?: string
+    ta_diastolica?: string
+    fc_min?: string
+    temperatura?: string
+    imc?: number
+    complexion?: string
+  }
 
-  // Estado para Agudeza Visual (IMPL-20260318-07: movido desde DoctorExamForm)
-  const [formVisual, setFormVisual] = useState(initialData?.eyeAcuityData || {
+interface VisualAcuityData {
+    vision_lejana_od: string
+    vision_lejana_oi: string
+    vision_cercana_od: string
+    vision_cercana_oi: string
+    lejana_corregida_od: string
+    lejana_corregida_oi: string
+    cercana_corregida_od: string
+    cercana_corregida_oi: string
+    reflejos: string
+    test_ishihara?: string
+    campimetria?: string
+}
+
+const DEFAULT_VISUAL: VisualAcuityData = {
     vision_lejana_od: 'NO APLICA',
     vision_lejana_oi: 'NO APLICA',
     vision_cercana_od: 'NO APLICA',
@@ -20,22 +39,35 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
     cercana_corregida_oi: 'NO APLICA',
     reflejos: 'PRESENTES Y NORMOREFLECTICOS',
     test_ishihara: '',
-    campimetria: ''
-  })
+    campimetria: '',
+}
+
+export default function TriageForm({ eventId, initialData = {}, readonly = false }: { eventId: string, initialData?: Record<string, unknown>, readonly?: boolean }) {
+  const [formData, setFormData] = useState<TriageFormData>(
+    (initialData as TriageFormData) ?? {}
+  )
+  const [isSaving, setIsSaving] = useState(false)
+  const [message, setMessage] = useState("")
+
+  // Estado para Agudeza Visual (IMPL-20260318-07: movido desde DoctorExamForm)
+  const [formVisual, setFormVisual] = useState<VisualAcuityData>(
+    ((initialData.eyeAcuityData as VisualAcuityData | undefined) ?? DEFAULT_VISUAL)
+  )
   const [isSavingVisual, setIsSavingVisual] = useState(false)
   const [messageVisual, setMessageVisual] = useState("")
 
-  const handleChange = (field: string, value: string) => {
-    setFormData((prev: any) => ({ ...prev, [field]: value }))
+  const handleChange = (field: keyof TriageFormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   const handleVisualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormVisual((prev: any) => ({ ...prev, [e.target.name]: e.target.value }))
+    const name = e.target.name as keyof VisualAcuityData
+    setFormVisual((prev) => ({ ...prev, [name]: e.target.value }))
   }
 
   // Cálculos Automáticos
-  const peso = parseFloat(formData.peso_kg) || 0
-  const talla = parseFloat(formData.talla_m) || 0
+  const peso = parseFloat(formData.peso_kg ?? '') || 0
+  const talla = parseFloat(formData.talla_m ?? '') || 0
   const imc = (peso > 0 && talla > 0) ? (peso / (talla * talla)).toFixed(2) : "0.00"
   
   let complexion = "NORMAL"
@@ -81,12 +113,12 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Peso (KG)</label>
-          <input type="number" step="0.1" value={formData.peso_kg || ''} onChange={e => handleChange('peso_kg', e.target.value)} 
+          <input type="number" step="0.1" value={formData.peso_kg || ''} onChange={e => handleChange('peso_kg', e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300" placeholder="Ej: 75.5" />
         </div>
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (Metros)</label>
-          <input type="number" step="0.01" value={formData.talla_m || ''} onChange={e => handleChange('talla_m', e.target.value)} 
+          <input type="number" step="0.01" value={formData.talla_m || ''} onChange={e => handleChange('talla_m', e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300" placeholder="Ej: 1.75" />
         </div>
         <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
@@ -108,21 +140,21 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
          <div className="col-span-2">
           <label className="block text-xs font-bold text-slate-500 mb-2">TENSIÓN ARTERIAL (Sist / Diast)</label>
           <div className="flex items-center gap-2">
-            <input type="number" value={formData.ta_sistolica || ''} onChange={e => handleChange('ta_sistolica', e.target.value)} 
+            <input type="number" value={formData.ta_sistolica || ''} onChange={e => handleChange('ta_sistolica', e.target.value)}
                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 font-mono text-center" placeholder="120" />
             <span className="text-slate-400 font-bold text-xl">/</span>
-            <input type="number" value={formData.ta_diastolica || ''} onChange={e => handleChange('ta_diastolica', e.target.value)} 
+            <input type="number" value={formData.ta_diastolica || ''} onChange={e => handleChange('ta_diastolica', e.target.value)}
                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 font-mono text-center" placeholder="80" />
           </div>
         </div>
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Cardiaca</label>
-          <input type="number" value={formData.fc_min || ''} onChange={e => handleChange('fc_min', e.target.value)} 
+          <input type="number" value={formData.fc_min || ''} onChange={e => handleChange('fc_min', e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-center font-mono" placeholder="BPM" />
         </div>
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Temperatura</label>
-          <input type="number" step="0.1" value={formData.temperatura || ''} onChange={e => handleChange('temperatura', e.target.value)} 
+          <input type="number" step="0.1" value={formData.temperatura || ''} onChange={e => handleChange('temperatura', e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-center font-mono" placeholder="°C" />
         </div>
       </div>
@@ -164,7 +196,7 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
               <input
                 type="text"
                 name={f.name}
-                value={formVisual[f.name] || ''}
+                value={(formVisual as unknown as Record<string, string | undefined>)[f.name] || ''}
                 onChange={handleVisualChange}
                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono text-sm"
               />

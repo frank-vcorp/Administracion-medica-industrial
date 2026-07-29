@@ -30,9 +30,11 @@ export default function MobileUnitSelector({
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<Array<{ iso: string; label: string }>>([])
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
+  void startTransition
 
   // Si cambia valor y ya tenemos fechas, validar
+  /* eslint-disable react-hooks/set-state-in-effect -- valida disponibilidad contra Prisma al cambiar criterio de selección. */
   useEffect(() => {
     if (!value || !startDate || !endDate) {
       setError(null); setSuggestions([])
@@ -57,7 +59,6 @@ export default function MobileUnitSelector({
         setChecking(false)
       }
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, startDate, endDate, projectId])
 
   const activeUnits = units.filter((u) => u.status === 'ACTIVA')

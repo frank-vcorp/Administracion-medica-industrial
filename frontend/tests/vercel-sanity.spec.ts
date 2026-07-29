@@ -43,7 +43,7 @@ test.describe('Vercel Sanity Checks', () => {
                     page.waitForSelector('.text-red-500', { timeout: 10000 }),
                     page.waitForSelector('.bg-red-50', { timeout: 10000 })
                 ]);
-             } catch (e) {
+             } catch (_e) {
                 console.log('Timeout waiting for login response.');
              }
         }

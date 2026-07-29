@@ -240,7 +240,6 @@ export default function BulkWorkerImportModal({
   }
 
   const handleNewProjectCreated = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async (_projectId: string, _projectName: string) => {
       setNewProjectOpen(false)
       // Recargar proyectos de la empresa
@@ -302,7 +301,6 @@ export default function BulkWorkerImportModal({
     if (captureMode === 'excel') {
       const validRows = previewRows
         .filter((r) => r._status === 'valid')
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         .map(({ _status, _statusReason, ...row }) => row)
 
       if (validRows.length === 0) return

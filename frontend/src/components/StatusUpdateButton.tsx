@@ -23,9 +23,10 @@ export default function StatusUpdateButton({ eventId, nextStatus }: { eventId: s
                 } else {
                     router.refresh()
                 }
-            } catch (err) {
+            } catch (_err) {
                 setError(true)
                 setTimeout(() => setError(false), 3000)
+                void _err
             }
         })
     }

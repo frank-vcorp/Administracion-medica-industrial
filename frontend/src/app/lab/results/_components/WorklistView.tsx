@@ -59,6 +59,7 @@ export function WorklistView({ orderId, header }: Props) {
   }, [orderId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga de worklist de lab results.
     refresh();
   }, [refresh, refreshKey]);
 

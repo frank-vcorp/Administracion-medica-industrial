@@ -27,7 +27,7 @@ import type {
   LabOrderItemInput,
   WorkerSearchResult,
 } from "@/lib/validations/lab-order";
-import { LabOrderAutocomplete, type AutocompleteItem } from "./LabOrderAutocomplete";
+import { LabOrderAutocomplete } from "./LabOrderAutocomplete";
 import { LabOrderDeliveryPanel } from "./LabOrderDeliveryPanel";
 import { LabOrderFlagsPanel, type LabOrderFlagsState } from "./LabOrderFlagsPanel";
 import { LabOrderStudiesTable } from "./LabOrderStudiesTable";
@@ -182,7 +182,9 @@ export function LabOrderForm({ orderId, initialWorkerId, initialMedicalEventId, 
     })();
   }, [orderId]);
 
+
   // IMPL-20260707-17: Fase 1 B-v2 — prefill desde MedicalEvent (admisin auto-llenada)
+  /* eslint-disable react-hooks/set-state-in-effect -- prefill controlado a partir de initialMedicalEvent (controlled form pattern). */
   useEffect(() => {
     if (!initialMedicalEvent) return;
     if (orderId) return; // si estamos editando, no pisar

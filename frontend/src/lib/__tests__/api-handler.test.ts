@@ -72,7 +72,6 @@ describe("withApiErrors", () => {
 
   it("atrapa strings lanzados (no solo Error instances)", async () => {
     const handler = withApiErrors("TEST", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-throw-literal
       throw "algo explotó";
     });
     const res = await handler(makeReq(), ctx);

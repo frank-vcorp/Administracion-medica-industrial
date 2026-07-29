@@ -64,7 +64,6 @@ async function _requireReception(): Promise<{ userId: string; role: string } | n
     return { userId, role: role as string };
   } catch (err) {
     // IMPL-20260706-11: si NextAuth falla, no devolver 500 HTML.
-    // eslint-disable-next-line no-console
     console.error("[_requireReception] session error:", err);
     return null;
   }

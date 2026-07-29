@@ -60,11 +60,13 @@ export default function CatalogTable({
   }, [mod, page, pageSize, search, orderColumn, orderDir]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount intencional para recargar tabla al cambiar filtros.
     void fetchData();
   }, [fetchData]);
 
   // Reset a página 0 cuando cambia el mod o búsqueda
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de paginación ante cambio de filtro (no se puede derivar en render sin causar loop).
     setPage(0);
   }, [mod, search]);
 
@@ -157,7 +159,7 @@ export default function CatalogTable({
             {!loading && !error && items.length === 0 && (
               <tr>
                 <td colSpan={def.tableColumns.length + 1} className="px-4 py-12 text-center text-sm text-slate-500">
-                  Sin resultados. Use "+ Nuevo" para crear el primer registro.
+                  Sin resultados. Use &quot;+ Nuevo&quot; para crear el primer registro.
                 </td>
               </tr>
             )}

@@ -19,11 +19,13 @@ import { getServerSession } from 'next-auth/next'
 import { Prisma } from '@prisma/client'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
+import { calculateNextDueDate } from './maintenance.helpers'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
 const TYPE_VALUES = ['PREVENTIVO', 'CORRECTIVO', 'VERIFICACION', 'LIMPIEZA'] as const
 const STATUS_VALUES = ['PROGRAMADO', 'COMPLETADO', 'CANCELADO', 'REPROGRAMADO'] as const
+void STATUS_VALUES
 
 const CreateMaintenanceSchema = z.object({
   mobileUnitId: z.string().min(1),
@@ -72,27 +74,6 @@ async function requireAnyAuth() {
   const session = await getServerSession(authOptions)
   if (!session) return null
   return session
-}
-
-// SPEC §3.2 — auto nextDueDate por tipo (helper síncrono, NO es server action)
-function calculateNextDueDate(
-  completedDate: Date,
-  type: (typeof TYPE_VALUES)[number],
-  override?: Date | null
-): Date | null {
-  // override explícito (no undefined) gana incluso cuando es null (significa
-  // "sé que no aplica, no quiero auto").
-  if (override !== undefined) return override
-  switch (type) {
-    case 'PREVENTIVO':
-      return new Date(completedDate.getTime() + 90 * 86400_000)
-    case 'VERIFICACION':
-      return new Date(completedDate.getTime() + 365 * 86400_000)
-    case 'LIMPIEZA':
-      return new Date(completedDate.getTime() + 30 * 86400_000)
-    case 'CORRECTIVO':
-      return null
-  }
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────

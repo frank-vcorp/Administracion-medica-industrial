@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 /**
  * Vista de Agenda de Citas Premium v2.3
  * @description Agenda diaria con expedientes EXP, QR y acceso a Portal de Prellenado
@@ -66,7 +67,8 @@ export default function AppointmentsPage() {
     const [inviteLink, setInviteLink] = useState<string | null>(null)
     const [inviteLoading, setInviteLoading] = useState(false)
     const [inviteError, setInviteError] = useState<string | null>(null)
-    const router = useRouter()
+    const _router = useRouter()
+    void _router
 
     useEffect(() => {
         // Cargar sucursales al inicio
@@ -90,13 +92,14 @@ export default function AppointmentsPage() {
             } else {
                 setError(result.error || 'No se pudieron cargar las citas.')
             }
-        } catch (err) {
+        } catch {
             setError('Error de conexión al cargar la agenda.')
         } finally {
             setLoading(false)
         }
     }
 
+    /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- recarga al cambiar sucursal/fecha (SPEC FIX-20260729-01-BASELINE fetch-on-mount intencional); se omite `loadData` callback para evitar loops. */
     useEffect(() => {
         if (selectedBranchId) {
             loadData()
@@ -426,9 +429,12 @@ export default function AppointmentsPage() {
                             {/* QR CODE — check-in */}
                             <div className="flex justify-center py-4">
                                 <div className="p-4 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 group relative">
-                                    <img
+                                    <Image
                                         src={selectedApt.qrCode || 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + selectedApt.expedientId}
                                         alt="QR Code"
+                                        width={200}
+                                        height={200}
+                                        unoptimized
                                         className="w-40 h-40 opacity-90 group-hover:opacity-100 transition-opacity"
                                     />
                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -443,9 +449,12 @@ export default function AppointmentsPage() {
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-2">QR Operativo · Recaptura en Estaciones</p>
                                     <div className="flex justify-center">
                                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                                            <img
+                                            <Image
                                                 src={selectedApt.qrOperativo}
                                                 alt="QR Operativo"
+                                                width={112}
+                                                height={112}
+                                                unoptimized
                                                 className="w-28 h-28"
                                             />
                                         </div>

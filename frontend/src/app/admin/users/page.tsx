@@ -1,5 +1,4 @@
 import { getUsers, createUser } from "@/actions/user.actions"
-import Link from 'next/link'
 
 export default async function AdminUsersPage() {
     const users = await getUsers()

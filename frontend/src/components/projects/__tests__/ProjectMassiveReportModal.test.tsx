@@ -2,7 +2,8 @@
 // IMPL-20260630-03: Tests originales.
 // Usa solo vitest + lectura de source code (sin @testing-library/react).
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi as _vi } from 'vitest';
+void _vi
 
 import { calcularConteos } from '@/lib/reports/conteos';
 

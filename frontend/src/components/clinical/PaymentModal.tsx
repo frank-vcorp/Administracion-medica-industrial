@@ -220,6 +220,7 @@ export default function PaymentModal({
         receiptSent: !!result.receiptSent,
       })
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intencional: `onClose` y `reset` se usan como callbacks estables del padre.
   }, [
     amountValid,
     amount,

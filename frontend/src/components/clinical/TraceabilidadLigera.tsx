@@ -145,9 +145,11 @@ export default function TraceabilidadLigera({
   const [selTestId, setSelTestId]   = useState('')
   const [incidences, setIncidences] = useState<Incidence[]>([])
 
+  /* eslint-disable react-hooks/set-state-in-effect -- hidrata incidences desde storage al cambiar eventId. */
   useEffect(() => {
     setIncidences(loadIncidences(eventId))
   }, [eventId])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // --- Métricas derivadas ---------------------------------------------------
 

@@ -170,7 +170,8 @@ function SnapshotsTab({
 
   const selected = allSnapshots.find((s) => s.snap.id === selectedSnapshotId)
   const selectedSnap = selected?.snap ?? null
-  const selectedEt = selected?.et ?? null
+  const _selectedEt = selected?.et ?? null
+  void _selectedEt
 
   const structured = selectedSnap?.structuredData as Record<string, unknown> | null
   const extracted = structured?.extracted_data

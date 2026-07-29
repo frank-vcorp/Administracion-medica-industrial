@@ -265,7 +265,7 @@ export async function updateAppointmentStatus(
 
     const appointment = await prisma.appointment.update({
       where: { id: appointmentId },
-      // @ts-ignore - Prisma genera tipos estrictos para status enum
+      // @ts-expect-error - Prisma genera tipos estrictos para status enum
       data: { status },
       include: {
         worker: {
@@ -489,7 +489,7 @@ export async function processQRCheckIn(qrContent: string) {
     let data;
     try {
       data = JSON.parse(qrContent);
-    } catch (e) {
+    } catch {
       return { success: false, error: 'Código QR inválido o corrupto.' }
     }
 

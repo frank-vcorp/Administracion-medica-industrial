@@ -42,6 +42,7 @@ export function PendingOrdersTable({ initialBranchId }: Props) {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga inicial al cambiar sucursal.
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialBranchId]);

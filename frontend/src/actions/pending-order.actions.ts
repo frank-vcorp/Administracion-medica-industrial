@@ -20,7 +20,6 @@ import {
   LAB_CATEGORY_ID,
   markSampleTakenSchema,
   type MarkSampleTakenResponse,
-  type PendingOrderRow,
   type PendingOrdersResponse,
 } from "@/lib/validations/study";
 

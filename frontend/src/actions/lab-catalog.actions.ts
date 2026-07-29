@@ -63,6 +63,7 @@ const MOD_ORDER_FIELDS: Record<LabCatalogMod, string[]> = {
   indicaciones: ["code", "text", "active", "createdAt"],
   departamentos: ["code", "name", "active", "createdAt"],
 };
+void MOD_ORDER_FIELDS;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,7 +84,6 @@ async function _requireAdmin(): Promise<{ id: string; userId: string } | null> {
     // IMPL-20260706-11: si NextAuth falla (ej. NEXTAUTH_SECRET faltante),
     // no queremos 500 HTML — retornamos null para que la action devuelva
     // UNAUTHORIZED con JSON parseable por el cliente.
-    // eslint-disable-next-line no-console
     console.error("[_requireAdmin] session error:", err);
     return null;
   }
@@ -126,7 +126,8 @@ export async function listLabCatalogActionV2(params: {
     const start = params.start ?? 0;
     const length = params.length ?? 25;
     const searchValue = params.search ?? "";
-    const orderCol = params.orderColumn ?? 0;
+    const orderColumn = params.orderColumn ?? 0;
+    void orderColumn;
     const orderDir = (params.orderDir ?? "asc").toLowerCase() === "desc" ? "desc" : "asc";
     const onlyActive = params.onlyActive ?? false;
 
@@ -226,7 +227,6 @@ export async function createLabCatalogAction(params: {
       ok: true,
       data: {
         id: (created as { id: string }).id,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         item: created as Record<string, unknown>,
       },
     };
@@ -293,7 +293,6 @@ export async function updateLabCatalogAction(params: {
     revalidatePath("/admin/lab/catalogs");
     return {
       ok: true,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: { item: updated as Record<string, unknown> },
     };
   } catch (err) {
@@ -331,7 +330,6 @@ export async function deleteLabCatalogAction(params: {
     revalidatePath("/admin/lab/catalogs");
     return {
       ok: true,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: { item: updated as Record<string, unknown> },
     };
   } catch (err) {

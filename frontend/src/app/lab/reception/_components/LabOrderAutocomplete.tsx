@@ -47,13 +47,14 @@ export function LabOrderAutocomplete<T extends AutocompleteItem>({
   const ref = useRef<HTMLDivElement>(null);
 
   // Sincroniza input si cambia `value` desde afuera
+  /* eslint-disable react-hooks/set-state-in-effect -- sincronía controlada con valor externo (controlled input pattern). */
+  /* eslint-disable react-hooks/exhaustive-deps -- `displayValue` es prop estable; se re-evalúa intencionalmente solo ante cambio de `value`. */
   useEffect(() => {
     if (value) {
       setQuery(displayValue ? displayValue(value) : String(value.id));
     } else {
       setQuery("");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   useEffect(() => {

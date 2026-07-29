@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   getPendingCashOrdersAction,
-  type CashPaymentsSummary,
+  type CashPaymentsSummary as _CashPaymentsSummary,
 } from "@/actions/lab-cash.actions";
 import { registerLabPaymentAction } from "@/actions/lab-cash.actions";
 import {
@@ -52,6 +52,7 @@ export function CashList() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch inicial al montar; SPEC FIX-20260729-01-BASELINE.
     load();
   }, [load]);
 

@@ -17,7 +17,7 @@
  */
 /// <reference types="vitest/globals" />
 import { describe, expect, it } from 'vitest'
-import { calculateNextDueDate } from '@/actions/maintenance.actions'
+import { calculateNextDueDate } from '@/actions/maintenance.helpers'
 
 describe('maintenance.actions.calculateNextDueDate', () => {
   const completed = new Date('2026-07-11T00:00:00Z')
@@ -63,7 +63,7 @@ describe('maintenance.actions.calculateNextDueDate', () => {
   it('8. idempotente', () => {
     const a = calculateNextDueDate(completed, 'PREVENTIVO')
     const b = calculateNextDueDate(completed, 'PREVENTIVO')
-    expect(a.getTime()).toBe(b.getTime())
+    expect(a?.getTime()).toBe(b?.getTime())
   })
 
   it('9. boundary: completedAt 2026-07-11 + 90d = 2026-10-09', () => {

@@ -122,8 +122,8 @@ export default function SelfRegistrationForm({
 }: SelfRegistrationFormProps) {
   // IMPL-20260624-01: Guard retrocompatible. En source='TOKEN' el token es obligatorio.
   if (source === 'TOKEN' && (!token || token.length < 8)) {
-    // eslint-disable-next-line no-console
     console.warn('[SelfRegistrationForm] source=TOKEN requires a valid token prop')
+    return
   }
 
   // IMPL-20260624-01: En modo PUBLIC, el form siempre se renderiza activo

@@ -39,7 +39,7 @@ export async function getMedicalExam(eventId: string) {
   }
 }
 
-export async function updateSomatometria(eventId: string, rawData: any) {
+export async function updateSomatometria(eventId: string, rawData: unknown) {
   try {
     const data = SomatometriaVitalesSchema.parse(rawData)
     
@@ -90,13 +90,13 @@ export async function updateSomatometria(eventId: string, rawData: any) {
     
     revalidatePath(`/events/${eventId}`)
     return { success: true, aiWarning }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating somatometry:", error)
     return { success: false, error: "Datos de somatometría inválidos o error de servidor" }
   }
 }
 
-export async function updateAgudezaVisual(eventId: string, rawData: any) {
+export async function updateAgudezaVisual(eventId: string, rawData: unknown) {
   try {
     const data = AgudezaVisualSchema.parse(rawData)
     
@@ -139,13 +139,13 @@ export async function updateAgudezaVisual(eventId: string, rawData: any) {
     
     revalidatePath(`/events/${eventId}`)
     return { success: true, aiWarning }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating visual acuity:", error)
     return { success: false, error: "Datos de agudeza visual inválidos o error de servidor" }
   }
 }
 
-export async function updateExploracionFisica(eventId: string, rawData: any) {
+export async function updateExploracionFisica(eventId: string, rawData: unknown) {
   try {
     const data = ExploracionFisicaSchema.parse(rawData)
     
@@ -160,7 +160,7 @@ export async function updateExploracionFisica(eventId: string, rawData: any) {
     
     revalidatePath(`/events/${eventId}`)
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating physical exam:", error)
     return { success: false, error: "Datos de exploración inválidos o error de servidor" }
   }
@@ -233,7 +233,7 @@ export async function saveExamenMedicoPapeleta(
       status: newStatus,
       aiWarning: aiResult.success ? undefined : aiResult.error,
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error saving examen médico papeleta:", error)
     return { success: false, error: "Error al guardar Examen Médico" }
   }

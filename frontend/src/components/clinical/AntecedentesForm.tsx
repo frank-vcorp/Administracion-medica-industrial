@@ -11,7 +11,7 @@ import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 interface AntecedentesFormProps {
   workerId: string
   workerName: string
-  initialData?: any
+  initialData?: unknown
   onSuccess?: () => void
 }
 
@@ -86,13 +86,16 @@ export function AntecedentesForm({
   })
 
   // ── Inicialización desde datos guardados ──────────────────────────────────────
+  /* eslint-disable react-hooks/set-state-in-effect -- hidratación intencional al montar / cuando cambia initialData (editor maestro longitudinal). */
   useEffect(() => {
-    if (initialData?.datos_personales)  setDatosPersonales(p => ({ ...p, ...initialData.datos_personales }))
-    if (initialData?.historia_laboral)  setHistoriaLaboral(p => ({ ...p, ...initialData.historia_laboral }))
-    if (initialData?.heredo_familiares) setHeredofamiliares(p => ({ ...p, ...initialData.heredo_familiares }))
-    if (initialData?.no_patologicos)    setNoPatologicos(p => ({ ...p, ...initialData.no_patologicos }))
-    if (initialData?.patologicos)       setPatologicos(p => ({ ...p, ...initialData.patologicos }))
+    const data = initialData as Record<string, Record<string, string>> | undefined
+    if (data?.datos_personales)  setDatosPersonales(p => ({ ...p, ...data.datos_personales }))
+    if (data?.historia_laboral)  setHistoriaLaboral(p => ({ ...p, ...data.historia_laboral }))
+    if (data?.heredo_familiares) setHeredofamiliares(p => ({ ...p, ...data.heredo_familiares }))
+    if (data?.no_patologicos)    setNoPatologicos(p => ({ ...p, ...data.no_patologicos }))
+    if (data?.patologicos)       setPatologicos(p => ({ ...p, ...data.patologicos }))
   }, [initialData])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleHeredofamiliaresChange = (field: string, value: string) => {
     setHeredofamiliares(prev => ({ ...prev, [field]: value }))
@@ -311,7 +314,7 @@ export function AntecedentesForm({
         {activeTab === 'patologicos' && (
           <div className="space-y-6">
             <p className="text-sm text-gray-600 mb-4">
-              ℹ️ Por defecto, todos los campos están configurados como "NEGADO". Cambiar solo si aplica.
+              ℹ️ Por defecto, todos los campos están configurados como &quot;NEGADO&quot;. Cambiar solo si aplica.
             </p>
 
             {/* Sección 1: Enfermedades Endocrino-Metabólicas */}
@@ -456,7 +459,7 @@ export function AntecedentesForm({
         {activeTab === 'heredofamiliares' && (
           <div className="space-y-6">
             <p className="text-sm text-gray-600 mb-4">
-              ℹ️ Indique familiares con antecedentes de estas enfermedades (ej: "PADRE", "ABUELO", "ABUELA MATERNA", etc.)
+              ℹ️ Indique familiares con antecedentes de estas enfermedades (ej: &quot;PADRE&quot;, &quot;ABUELO&quot;, &quot;ABUELA MATERNA&quot;, etc.)
             </p>
 
             <fieldset className="border border-gray-200 rounded-lg p-4">

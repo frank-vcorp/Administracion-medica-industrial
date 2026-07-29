@@ -71,6 +71,7 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
   const statusState = useProjectReportStatus(projectId, pollingReportId);
 
   // Reflejar el resultado del polling en el state local.
+  /* eslint-disable react-hooks/set-state-in-effect -- refleja resultado del polling en state local del modal. */
   useEffect(() => {
     if (generation.kind !== 'POLLING') return;
     if (statusState.status === 'READY') {

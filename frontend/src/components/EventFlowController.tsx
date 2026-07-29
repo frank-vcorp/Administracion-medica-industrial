@@ -40,7 +40,9 @@ export default function EventFlowController({
         return null
     }
 
-    const handleFinishCapture = () => {
+    // SPEC FIX-20260729-01-BASELINE: handleFinishCapture reserved for future use;
+    // actualmente el cambio a VALIDATING se dispara por otros flujos.
+    void (function _handleFinishCapture() {
         startTransition(async () => {
             try {
                 await updateEventStatus(eventId, 'VALIDATING')
@@ -49,7 +51,7 @@ export default function EventFlowController({
                 setError('Error al cambiar estado')
             }
         })
-    }
+    })
 
     const handleSign = () => {
         if (!session?.user?.id) {

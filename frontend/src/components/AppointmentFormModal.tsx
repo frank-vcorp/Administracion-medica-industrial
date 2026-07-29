@@ -82,6 +82,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         const companyId = searchParams.get('companyId')
         
         if (action === 'new-appointment' && !isOpen) {
+             // eslint-disable-next-line react-hooks/set-state-in-effect -- modal se abre al recibir `?action=new-appointment`.
              setIsOpen(true)
              if (workerId) setPreselectedWorkerId(workerId)
              if (branchId) setSelectedBranchId(branchId)

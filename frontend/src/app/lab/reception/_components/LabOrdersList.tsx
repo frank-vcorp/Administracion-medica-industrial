@@ -74,6 +74,7 @@ export function LabOrdersList() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga cliente al cambiar draw/start (DataTable server-side).
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draw, start]);

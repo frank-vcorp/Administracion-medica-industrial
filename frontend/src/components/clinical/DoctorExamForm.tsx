@@ -3,12 +3,14 @@
 import { useState } from "react"
 import { updateExploracionFisica } from "@/actions/medical-exam.actions"
 
-export default function DoctorExamForm({ eventId, initialData, readonly = false }: { eventId: string, initialData: any, readonly?: boolean }) {
+export default function DoctorExamForm({ eventId, initialData, readonly = false }: { eventId: string, initialData?: Record<string, unknown>, readonly?: boolean }) {
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState("")
 
-  const [formFisica, setFormFisica] = useState(initialData?.physicalExamData || {})
+  const [formFisica, setFormFisica] = useState<Record<string, string>>(
+    ((initialData?.physicalExamData as Record<string, string> | undefined) ?? {})
+  )
 
   const handleFisicaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormFisica({ ...formFisica, [e.target.name]: e.target.value })

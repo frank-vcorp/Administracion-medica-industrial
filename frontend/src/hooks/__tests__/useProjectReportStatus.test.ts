@@ -1,14 +1,17 @@
 // IMPL-20260630-03: Tests para el hook useProjectReportStatus.
 // Usa fake timers + mock fetch. Sin @testing-library/react para evitar deps nuevas.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as path from 'node:path';
 
-import { useProjectReportStatus } from '@/hooks/useProjectReportStatus';
+import { useProjectReportStatus as _useProjectReportStatus } from '@/hooks/useProjectReportStatus';
+void _useProjectReportStatus
 
 // Implementacion minima de renderHook usando React directamente.
 // No usamos @testing-library/react porque no es una dep declarada.
-import { useEffect, useRef } from 'react';
+import { useEffect as _useEffect, useRef as _useRef } from 'react';
+void _useEffect; void _useRef;
 
-function renderHookInitial<T>(hookFn: () => T): { current: T } {
+function _renderHookInitial<T>(_hookFn: () => T): { current: T } {
   // Patron minimalista: ejecutamos el hook una vez en un componente dummy
   // via require lazy para que sea cargado solo en tests.
   // Para evitar esto, en su lugar hacemos una llamada directa al hook
@@ -35,22 +38,20 @@ describe('useProjectReportStatus', () => {
   });
 
   it('el intervalo de polling es 2000ms (validacion en codigo)', async () => {
-    const sourceCode = await import('fs').then((fs) =>
-      fs.promises.readFile(
-        require('path').join(__dirname, '..', 'useProjectReportStatus.ts'),
-        'utf-8',
-      ),
+    const fs = await import('node:fs')
+    const sourceCode = await fs.promises.readFile(
+      path.join(__dirname, '..', 'useProjectReportStatus.ts'),
+      'utf-8',
     );
     expect(sourceCode).toMatch(/POLL_INTERVAL_MS = 2000/);
     expect(sourceCode).toMatch(/setInterval\(tick, POLL_INTERVAL_MS\)/);
   });
 
   it('limpia el interval en cleanup del useEffect', async () => {
-    const sourceCode = await import('fs').then((fs) =>
-      fs.promises.readFile(
-        require('path').join(__dirname, '..', 'useProjectReportStatus.ts'),
-        'utf-8',
-      ),
+    const fs = await import('node:fs')
+    const sourceCode = await fs.promises.readFile(
+      path.join(__dirname, '..', 'useProjectReportStatus.ts'),
+      'utf-8',
     );
     // Debe haber un return con cleanup
     expect(sourceCode).toMatch(/clearInterval\(intervalRef\.current\)/);

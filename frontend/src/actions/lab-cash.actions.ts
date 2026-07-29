@@ -92,7 +92,6 @@ async function _requireStaff(): Promise<{ userId: string } | null> {
     if (!["ADMIN", "RECEPTIONIST", "CAPTURIST"].includes(role)) return null;
     return { userId: session.user.id };
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error("[lab-cash actions] session error:", err);
     return null;
   }
