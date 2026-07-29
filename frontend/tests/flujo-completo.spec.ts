@@ -570,22 +570,14 @@ test.describe('Flujo End-to-End Completo', () => {
   });
 
   // Fase 8: Toma de muestra laboratorio
-  // FIXME-20260729-G-LAB-TRIGGER-01: TC-11 actualmente FALLA por un gap
-  // funcional documentado en backend (G-LAB-TRIGGER-01): el trigger
-  // EventTest.status → SAMPLE_TAKEN ⇒ LabOrder DRAFT no se dispara en prod, o
-  // la bandeja /lab/reception no refleja el LabOrder resultante. El cambio
-  // local de status del EventTest SÍ funciona (badge visible en la papeleta),
-  // pero el flujo downstream está roto. Rastreado en
-  // context/SPECs/SPEC_FIX-20260729-07-G-LAB-TRIGGER-01.md para follow-up.
-  // Test marcado .skip(true) defensivamente para conservar la cobertura de
-  // regresión de la UI local (badges + click) sin reportar falso FAIL por el
-  // gap de backend.
+  // FIX-20260730-01: TC-11 reactivado tras corregir LAB_CATEGORY_ID hardcoded
+  // (commit 72dc596). El trigger EventTest.status → SAMPLE_TAKEN ⇒ LabOrder DRAFT
+  // ya dispara correctamente porque la categoria real en BD tiene UUID
+  // 16c16ef0-cf35-4fe5-9bef-311f6fc8674c.
   test('TC-11: Marcar muestra tomada y verificar LabOrder', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
-    test.skip(true, 'FIXME-20260729-G-LAB-TRIGGER-01: see SPEC for follow-up');
 
-    // Snapshot del comportamiento actual (cobertura de regresión local):
     await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
     await authenticatedPage.waitForLoadState('networkidle');
 
@@ -605,9 +597,22 @@ test.describe('Flujo End-to-End Completo', () => {
         .first(),
     ).toBeVisible({ timeout: 15000 });
 
-    // El resto del flujo (navegación a /lab/reception + assertions de fila
-    // <tr> + match del href por eventId) está deshabilitado hasta que se
-    // cierre G-LAB-TRIGGER-01. Ver SPEC_FIX-20260729-07-G-LAB-TRIGGER-01.md.
+    // Lab reception renders a real <tr>; the event link is the persistent ID
+    // source for this route and avoids relying on folio text.
+    await authenticatedPage.goto(`${BASE_URL}/lab/reception`);
+    await authenticatedPage.waitForLoadState('networkidle');
+    const fullName = `${TRABAJADOR.firstName} ${TRABAJADOR.lastName}`;
+    const labRow = authenticatedPage.locator('tr').filter({ hasText: fullName }).first();
+    await expect(labRow).toBeVisible({ timeout: 15000 });
+    const eventLink = labRow.getByRole('link').first();
+    const eventHref = await eventLink.getAttribute('href');
+    const eventMatch = eventHref?.match(/\/events\/([a-f0-9-]+)/);
+    if (!eventMatch || eventMatch[1] !== eventId) {
+      throw new Error(
+        `La bandeja LAB no enlaza al eventId esperado (href=${eventHref ?? 'null'}, eventId=${eventId}).`,
+      );
+    }
+    console.log('LabOrder visible en recepción para eventId:', eventId);
   });
 
   // Fase 9: Dictamen final
