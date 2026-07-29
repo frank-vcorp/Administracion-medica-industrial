@@ -22,15 +22,34 @@ if (!TEST_EMAIL || !TEST_PASSWORD) {
 // Datos de prueba
 // IMPL-20260729-01: timestamp en nombre para evitar duplicados entre runs (BD persistente en prod).
 const RUN_TAG = Date.now().toString().slice(-6);
+const RUN_NUMBER = Number(RUN_TAG);
+const WORKER_FIRST_INITIAL = String.fromCharCode(65 + (RUN_NUMBER % 26));
+const WORKER_DOB = (() => {
+  const date = new Date(1900, 0, 1);
+  date.setDate(date.getDate() + Math.floor(RUN_NUMBER / 26));
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+})();
 const EMPRESA_NOMBRE = `Servicios Robles S.A. de C.V. - ${RUN_TAG}`;
 const TRABAJADOR = {
-  firstName: 'JESSICA GABRIELA',
+  firstName: `${WORKER_FIRST_INITIAL} JESSICA GABRIELA ${RUN_TAG}`,
   lastName: 'MORENO GOMEZ',
-  email: 'jessica.moreno@test.com',
-  phone: '555-0123'
+  dob: WORKER_DOB,
+  email: `jessica.moreno+${RUN_TAG}@test.com`,
+  phone: `555${RUN_TAG}1`,
 };
-const PUESTO_NOMBRE = 'Soldador';
-const PERFIL_NOMBRE = 'Examen Médico General - Soldador';
+const APPOINTMENT_DATE = (() => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const year = tomorrow.getFullYear();
+  const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+  const day = String(tomorrow.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+})();
+const PUESTO_NOMBRE = `Soldador - ${RUN_TAG}`;
+const PERFIL_NOMBRE = `Examen Médico General - Soldador - ${RUN_TAG}`;
 
 // Helper: Login
 async function login(page: Page) {
@@ -100,7 +119,6 @@ test.describe('Flujo End-to-End Completo', () => {
   let authenticatedPage: Page;
   let companyId: string;
   let workerId: string;
-  let appointmentId: string;
   let eventId: string;
 
   // Fase 0: Autenticación
@@ -173,130 +191,132 @@ test.describe('Flujo End-to-End Completo', () => {
   test('TC-02: Crear perfil médico con estudios', async () => {
     test.setTimeout(60000);
     test.skip(!companyId, 'Sin empresa creada');
-    
+
     await authenticatedPage.goto(`${BASE_URL}/admin/profiles`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Click "Nuevo Perfil"
-    await authenticatedPage.getByRole('button', { name: /nuevo perfil|crear perfil/i }).click();
-    
-    // Llenar nombre
-    await authenticatedPage.getByLabel('Nombre').fill(PERFIL_NOMBRE);
-    
-    // Seleccionar empresa
-    await authenticatedPage.getByLabel('Empresa').selectOption(companyId);
-    
-    // Seleccionar estudios mínimos (checkboxes o multiselect)
-    const estudiosRequeridos = ['GEN-01', 'GEN-02', 'LAB-01', 'AUDIO-01', 'ESPIRO-01'];
-    for (const codigo of estudiosRequeridos) {
-      const checkbox = authenticatedPage.locator(`input[type="checkbox"][value*="${codigo}"]`);
-      if (await checkbox.count() > 0) {
-        await checkbox.check();
-      }
+
+    // Selector real: el botón expone el nombre accesible "+ Nuevo Perfil".
+    await authenticatedPage.getByRole('button', { name: '+ Nuevo Perfil' }).click();
+
+    // El modal no tiene role="dialog" ni selector Empresa. Se acota por el
+    // formulario que contiene el placeholder exclusivo del perfil.
+    const profileForm = authenticatedPage
+      .locator('form')
+      .filter({ has: authenticatedPage.getByPlaceholder('Nombre del perfil (ej. Ingreso Operativo)') })
+      .first();
+    await expect(profileForm).toBeVisible();
+    await profileForm
+      .getByPlaceholder('Nombre del perfil (ej. Ingreso Operativo)')
+      .fill(PERFIL_NOMBRE);
+
+    // Códigos accesibles del catálogo vigente en producción. GEN-01/GEN-02 y
+    // sus equivalentes legacy no se renderizan en la UI actual.
+    const estudiosRequeridos = [
+      /GEN-001 AGUDEZA VISUAL/i,
+      /GEN-003 AUDIOMETRIA/i,
+      /GEN-013 ESPIROMETRIA/i,
+      /LAB-018 BIOMETRIA HEMATICA COMPLETA/i,
+      /GEN-012 ELECTROCARDIOGRAMA/i,
+      /IMG-013 RX DE TORAX AP Y LAT/i,
+      /GEN-015 EXAMEN MEDICO/i,
+    ];
+    for (const nombreEstudio of estudiosRequeridos) {
+      const checkbox = profileForm.getByRole('checkbox', { name: nombreEstudio });
+      await expect(checkbox).toHaveCount(1);
+      await checkbox.check();
     }
-    
-    // Submit
-    await authenticatedPage.getByRole('button', { name: /guardar/i }).click();
-    
-    // Esperar éxito
-    await expect(authenticatedPage.getByText(/perfil creado|éxito/i)).toBeVisible({ timeout: 10000 });
+
+    // La pantalla oficial /admin/profiles crea perfiles globales; la ficha de
+    // empresa los incluye como fallback, por lo que companyId sigue cubierto.
+    const submitButton = profileForm.getByRole('button', { name: 'Guardar Perfil' });
+    await expect(submitButton).toBeEnabled();
+    await submitButton.click();
+
+    await expect(authenticatedPage.getByText('Perfil médico creado exitosamente')).toBeVisible({ timeout: 15000 });
   });
 
   // Fase 1.3: Crear puesto con perfil default
   test('TC-03: Crear puesto de trabajo con perfil default', async () => {
     test.setTimeout(60000);
     test.skip(!companyId, 'Sin empresa creada');
-    
+
     await authenticatedPage.goto(`${BASE_URL}/companies/${companyId}`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Buscar sección "Puestos de Trabajo" y click "Nuevo Puesto"
-    const nuevoPuestoBtn = authenticatedPage.getByRole('button', { name: /nuevo puesto|agregar puesto/i });
-    if (await nuevoPuestoBtn.count() > 0) {
-      await nuevoPuestoBtn.click();
-    } else {
-      // Si no hay botón, buscar enlace a gestión de puestos
-      await authenticatedPage.getByRole('link', { name: /puestos/i }).click();
-      await authenticatedPage.waitForLoadState('networkidle');
-      await authenticatedPage.getByRole('button', { name: /nuevo puesto/i }).click();
-    }
-    
-    // Llenar formulario
-    await authenticatedPage.getByLabel('Nombre').fill(PUESTO_NOMBRE);
-    
-    // Seleccionar perfil default
-    await authenticatedPage.getByLabel('Perfil Médico Default').selectOption({ label: PERFIL_NOMBRE });
-    
-    // Submit
-    await authenticatedPage.getByRole('button', { name: /guardar/i }).click();
-    
-    // Esperar éxito
-    await expect(authenticatedPage.getByText(/puesto creado|éxito/i)).toBeVisible({ timeout: 10000 });
+
+    // Selector real de JobPositionsPanel: "+ Crear Puesto".
+    await authenticatedPage.getByRole('button', { name: /crear puesto/i }).click();
+
+    const jobForm = authenticatedPage
+      .locator('form')
+      .filter({ has: authenticatedPage.getByPlaceholder('Ej: Soldador, Operador de Montacargas') })
+      .first();
+    await expect(jobForm).toBeVisible();
+    await jobForm
+      .getByPlaceholder('Ej: Soldador, Operador de Montacargas')
+      .fill(PUESTO_NOMBRE);
+
+    const profileSelect = jobForm.locator('select[name="defaultProfileId"]');
+    await expect(profileSelect).toBeVisible();
+    await profileSelect.selectOption({ label: PERFIL_NOMBRE });
+
+    await jobForm.getByRole('button', { name: /crear puesto|guardar cambios/i }).click();
+    await expect(authenticatedPage.getByText('Puesto de trabajo creado exitosamente')).toBeVisible({ timeout: 15000 });
+
+    // La mutación revalida la ruta pero no refresca el componente cliente.
+    await authenticatedPage.reload();
+    await authenticatedPage.waitForLoadState('networkidle');
+    await expect(authenticatedPage.locator('tr').filter({ hasText: PUESTO_NOMBRE })).toBeVisible({ timeout: 15000 });
   });
 
   // Fase 2: Crear trabajador
   test('TC-04: Crear trabajador asociado a empresa y puesto', async () => {
     test.setTimeout(60000);
-    
+    test.skip(!companyId, 'Sin empresa creada');
+
     await authenticatedPage.goto(`${BASE_URL}/workers`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Click "+ Registrar Trabajador" (selector real verificado en producción)
-    await authenticatedPage.getByRole('button', { name: '+ Registrar Trabajador' }).click();
-    
-    // Esperar que aparezca el formulario modal
-    await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Llenar datos del trabajador - selectores reales pueden variar
-    // Por ahora usamos placeholders comunes, ajustar según UI real
-    const nombreField = authenticatedPage.getByPlaceholder(/nombre/i).first();
-    const apellidoField = authenticatedPage.getByPlaceholder(/apellido/i).first();
-    const emailField = authenticatedPage.getByPlaceholder(/email|correo/i).first();
-    const telefonoField = authenticatedPage.getByPlaceholder(/teléfono|phone/i).first();
-    
-    if (await nombreField.count() > 0) await nombreField.fill(TRABAJADOR.firstName);
-    if (await apellidoField.count() > 0) await apellidoField.fill(TRABAJADOR.lastName);
-    if (await emailField.count() > 0) await emailField.fill(TRABAJADOR.email);
-    if (await telefonoField.count() > 0) await telefonoField.fill(TRABAJADOR.phone);
-    
-    // Seleccionar empresa y puesto si existen los campos
-    const empresaSelect = authenticatedPage.getByRole('combobox', { name: /empresa/i });
-    const puestoSelect = authenticatedPage.getByRole('combobox', { name: /puesto/i });
-    
-    if (companyId && await empresaSelect.count() > 0) {
-      await empresaSelect.selectOption(companyId);
-    }
-    
-    if (await puestoSelect.count() > 0) {
-      await puestoSelect.selectOption({ label: PUESTO_NOMBRE });
-    }
-    
-    // Buscar botón de submit del formulario
-    // Fix IMPL-20260729-SOFIA: el backdrop del modal (div.fixed.inset-0) intercepta clicks.
-    // El botón está visible dentro del modal, pero el wrapper recibe el pointer event.
-    // Usamos force:true para bypasear actionability checks del modal wrapper.
-    const submitButton = authenticatedPage.getByRole('button', { name: /guardar|crear|registrar/i }).first();
-    if (await submitButton.count() > 0) {
-      await submitButton.click({ force: true });
-    }
-    
-    // Esperar éxito
-    await authenticatedPage.waitForLoadState('networkidle');
 
-    // G1b (IMPL-20260729-01): la app NO redirige a /workers/{id} tras submit;
-    // WorkersTable renderiza un <Link href="/history/{workerId}">Historial</Link> por fila.
-    // Extraer workerId desde la fila de la tabla cuyo nombre completo coincide con TRABAJADOR.
+    // Click "+ Registrar Trabajador" (selector real verificado en producción).
+    await authenticatedPage.getByRole('button', { name: '+ Registrar Trabajador' }).click();
+
+    // El formulario exige nombre, apellido, fecha y género además de empresa y puesto.
+    const workerForm = authenticatedPage
+      .locator('form')
+      .filter({ has: authenticatedPage.getByPlaceholder('Nombre') })
+      .first();
+    await expect(workerForm).toBeVisible();
+    await workerForm.getByPlaceholder('Nombre').fill(TRABAJADOR.firstName);
+    await workerForm.getByPlaceholder('Apellidos').fill(TRABAJADOR.lastName);
+    await workerForm.locator('input[name="dob"]').fill(TRABAJADOR.dob);
+    await workerForm.locator('select[name="gender"]').selectOption('F');
+    await workerForm.getByPlaceholder('email@ejemplo.com').fill(TRABAJADOR.email);
+    await workerForm.getByPlaceholder('10 dígitos').fill(TRABAJADOR.phone);
+
+    const empresaSelect = workerForm.locator('select[name="companyId"]');
+    const puestoSelect = workerForm.locator('select[name="jobPositionId"]');
+    await empresaSelect.selectOption(companyId);
+    await expect(puestoSelect).toBeEnabled({ timeout: 10000 });
+    await puestoSelect.selectOption({ label: PUESTO_NOMBRE });
+
+    const submitButton = workerForm.getByRole('button', { name: 'Guardar Trabajador' });
+    await expect(submitButton).toBeEnabled();
+    // force:true es el fix de overlay ya existente en c8a80e1/4e9de7f;
+    // el diagnóstico actual corrige la validación de fecha/género sin añadir otro bypass.
+    await submitButton.click({ force: true });
+
+    await expect(authenticatedPage.getByRole('heading', { name: '¡Trabajador Listo!' })).toBeVisible({ timeout: 15000 });
+    await authenticatedPage.getByRole('button', { name: 'Ver Padrón' }).click();
+
+    // WorkersTable no redirige: extraer workerId desde el link persistente de la fila.
     const fullName = `${TRABAJADOR.firstName} ${TRABAJADOR.lastName}`;
-    // Buscar la fila (tr) que contenga el nombre del trabajador.
     const workerRow = authenticatedPage
       .locator('tr')
       .filter({ hasText: fullName })
       .first();
     await expect(workerRow).toBeVisible({ timeout: 15000 });
 
-    const historialLink = workerRow.locator('a:has-text("Historial")');
+    const historialLink = workerRow.getByRole('link', { name: 'Historial' });
     const href = await historialLink.getAttribute('href');
-    // El link apunta a /history/{workerId}; extraer ese ID.
     const match = href?.match(/\/history\/([a-f0-9-]+)/);
     if (match) {
       workerId = match[1];
@@ -313,168 +333,202 @@ test.describe('Flujo End-to-End Completo', () => {
   test('TC-05: Crear cita para trabajador', async () => {
     test.setTimeout(60000);
     test.skip(!workerId, 'Sin trabajador creado');
-    
+
     await authenticatedPage.goto(`${BASE_URL}/appointments`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Click "Nueva Cita"
-    await authenticatedPage.getByRole('button', { name: /nueva cita|agendar cita/i }).click();
-    
-    // Seleccionar trabajador
-    await authenticatedPage.getByLabel('Trabajador').selectOption({ label: `${TRABAJADOR.firstName} ${TRABAJADOR.lastName}` });
-    
-    // La sucursal y perfil deberían auto-llenarse
-    // Seleccionar fecha (mañana)
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const dateStr = tomorrow.toISOString().split('T')[0];
-    await authenticatedPage.getByLabel('Fecha').fill(dateStr);
-    
-    // Seleccionar hora
-    await authenticatedPage.getByLabel('Hora').fill('09:00');
-    
-    // Submit
-    await authenticatedPage.getByRole('button', { name: /guardar|agendar/i }).click();
-    
-    // Esperar éxito
-    await expect(authenticatedPage.getByText(/cita creada|éxito/i)).toBeVisible({ timeout: 10000 });
-    
-    // Extraer appointment ID
-    const url = authenticatedPage.url();
-    const match = url.match(/\/appointments\/([a-f0-9-]+)/);
-    if (match) {
-      appointmentId = match[1];
-      console.log('Cita creada con ID:', appointmentId);
+
+    await authenticatedPage.getByRole('button', { name: /agendar cita/i }).click();
+
+    // AppointmentFormModal usa selects por name; sus textos visibles no están
+    // asociados mediante <label>, por eso se acota al formulario real.
+    const appointmentForm = authenticatedPage
+      .locator('form')
+      .filter({ has: authenticatedPage.locator('select[name="companyId"]') })
+      .first();
+    await expect(appointmentForm).toBeVisible();
+
+    const companySelect = appointmentForm.locator('select[name="companyId"]');
+    const workerSelect = appointmentForm.locator('select[name="workerId"]');
+    const branchSelect = appointmentForm.locator('select[name="branchId"]');
+    await companySelect.selectOption(companyId);
+    await expect(workerSelect).toBeEnabled({ timeout: 10000 });
+    await workerSelect.selectOption(workerId);
+
+    const branchOption = branchSelect.locator('option:not([value=""])').first();
+    await expect(branchOption).toBeAttached();
+    const branchValue = await branchOption.getAttribute('value');
+    if (!branchValue) {
+      throw new Error('La empresa creada no tiene una sucursal seleccionable para la cita.');
     }
+    await branchSelect.selectOption(branchValue);
+    await appointmentForm.locator('input[name="date"]').fill(APPOINTMENT_DATE);
+    await appointmentForm.locator('input[name="time"]').fill('09:00');
+
+    await appointmentForm.getByRole('button', { name: 'Confirmar Cita' }).click();
+
+    // router.refresh() puede desmontar el modal de éxito antes de que el
+    // locator lo observe. La evidencia persistente es la tarjeta de agenda.
+    const closeButton = authenticatedPage.getByRole('button', { name: 'Cerrar' });
+    if (await closeButton.count() > 0) {
+      await closeButton.click();
+    }
+    await authenticatedPage.locator('input[type="date"]').first().fill(APPOINTMENT_DATE);
+    const fullName = `${TRABAJADOR.firstName} ${TRABAJADOR.lastName}`;
+    await expect(
+      authenticatedPage.locator('div.group').filter({ hasText: fullName }).first(),
+    ).toBeVisible({ timeout: 15000 });
   });
 
   // Fase 4: Check-in en recepción
   test('TC-06: Check-in y corroboración de identidad', async () => {
     test.setTimeout(60000);
-    test.skip(!appointmentId, 'Sin cita creada');
-    
-    await authenticatedPage.goto(`${BASE_URL}/reception`);
+    test.skip(!workerId, 'Sin trabajador creado');
+
+    // Para citas programadas el check-in real parte de /appointments y abre
+    // CorroborationModal; /reception es el kanban de eventos ya creados.
+    await authenticatedPage.goto(`${BASE_URL}/appointments`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Buscar trabajador por nombre
-    await authenticatedPage.getByLabel('Buscar trabajador').fill(`${TRABAJADOR.firstName} ${TRABAJADOR.lastName}`);
-    await authenticatedPage.keyboard.press('Enter');
-    
-    // Click en resultado de búsqueda
-    await authenticatedPage.getByRole('button', { name: new RegExp(TRABAJADOR.lastName) }).first().click();
-    
-    // Simular upload de INE (placeholder)
-    const fileInput = authenticatedPage.locator('input[type="file"]').first();
-    if (await fileInput.count() > 0) {
-      // Crear archivo dummy
-      const dummyFile = Buffer.from('dummy INE image');
-      await fileInput.setInputFiles({
-        name: 'ine_dummy.jpg',
-        mimeType: 'image/jpeg',
-        buffer: dummyFile
-      });
+    await authenticatedPage.locator('input[type="date"]').first().fill(APPOINTMENT_DATE);
+
+    const fullName = `${TRABAJADOR.firstName} ${TRABAJADOR.lastName}`;
+    const appointmentCard = authenticatedPage.locator('div.group').filter({ hasText: fullName }).first();
+    await expect(appointmentCard).toBeVisible({ timeout: 15000 });
+    await appointmentCard.locator('button[title="Check-in"]').click();
+
+    const corroborationModal = authenticatedPage
+      .locator('div.fixed.inset-0')
+      .filter({ has: authenticatedPage.getByRole('heading', { name: 'Corroboración de Identidad' }) })
+      .first();
+    await expect(corroborationModal).toBeVisible();
+
+    const dummyFile = Buffer.from('dummy INE image');
+    await corroborationModal.locator('input[type="file"]').first().setInputFiles({
+      name: `ine_dummy_${RUN_TAG}.jpg`,
+      mimeType: 'image/jpeg',
+      buffer: dummyFile,
+    });
+
+    const confirmButton = corroborationModal.getByRole('button', { name: /confirmar y hacer check-in/i });
+    await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+    await confirmButton.click();
+
+    // onClose()->loadData() puede competir con router.push() y conservar
+    // /appointments aunque el MedicalEvent ya exista. Primero acepta la URL
+    // directa y, si no llega, extrae el ID persistente desde /events.
+    await authenticatedPage
+      .waitForURL(/\/events\/[a-f0-9-]+/, { timeout: 10000 })
+      .catch(() => undefined);
+    let eventUrl = authenticatedPage.url();
+    let match = eventUrl.match(/\/events\/([a-f0-9-]+)/);
+
+    if (!match) {
+      await authenticatedPage.goto(`${BASE_URL}/events`);
+      await authenticatedPage.waitForLoadState('networkidle');
+      const eventRow = authenticatedPage.locator('tr').filter({ hasText: fullName }).first();
+      await expect(eventRow).toBeVisible({ timeout: 15000 });
+      const eventHref = await eventRow
+        .getByRole('link', { name: /abrir expediente/i })
+        .getAttribute('href');
+      eventUrl = eventHref ?? '';
+      match = eventUrl.match(/\/events\/([a-f0-9-]+)/);
     }
-    
-    // Click "Verificar identidad"
-    await authenticatedPage.getByRole('button', { name: /verificar|check-in/i }).click();
-    
-    // Esperar éxito
-    await expect(authenticatedPage.getByText(/verificado|éxito/i)).toBeVisible({ timeout: 10000 });
+
+    if (match) {
+      eventId = match[1];
+      console.log('Papeleta creada con ID:', eventId);
+    } else {
+      throw new Error(`No se pudo extraer eventId tras el check-in: ${eventUrl || 'sin href'}`);
+    }
   });
 
   // Fase 5: Generar papeleta (MedicalEvent)
   test('TC-07: Iniciar atención y generar papeleta', async () => {
     test.setTimeout(60000);
-    test.skip(!appointmentId, 'Sin cita creada');
-    
-    // Desde appointments, iniciar atención
-    await authenticatedPage.goto(`${BASE_URL}/appointments`);
+    test.skip(!eventId, 'Sin papeleta creada');
+
+    await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Buscar cita del trabajador y click "Iniciar atención"
-    await authenticatedPage.getByText(new RegExp(TRABAJADOR.lastName)).first().click();
-    await authenticatedPage.getByRole('button', { name: /iniciar atención|generar papeleta/i }).click();
-    
-    // Esperar redirección a /events/[id]
-    await authenticatedPage.waitForURL(/\/events\/[a-f0-9-]+/);
-    
-    // Extraer event ID
-    const url = authenticatedPage.url();
-    const match = url.match(/\/events\/([a-f0-9-]+)/);
-    if (match) {
-      eventId = match[1];
-      console.log('Papeleta creada con ID:', eventId);
-    }
-    
-    // Verificar MedicalEvent visible
-    await expect(authenticatedPage.getByText(/papeleta|evento médico/i)).toBeVisible();
-    
-    // CRÍTICO: Verificar EventTests pre-llenados
-    const eventTestCards = authenticatedPage.locator('[data-testid="event-test-card"]');
-    const count = await eventTestCards.count();
-    console.log(`EventTests encontrados: ${count}`);
-    expect(count).toBeGreaterThanOrEqual(5); // Mínimo 5 estudios
+
+    await expect(authenticatedPage.getByText('Papeleta electrónica', { exact: true })).toBeVisible({ timeout: 15000 });
+
+    // PapeletaWorkspace renderiza botones por estudio, no data-testid ni cards.
+    const eventTestButtons = authenticatedPage.locator('button').filter({
+      hasText: /AGUDEZA VISUAL|AUDIOMETRIA|ESPIROMETRIA|BIOMETRIA|ELECTROCARDIOGRAMA|RX DE TORAX|EXAMEN MEDICO/i,
+    });
+    const count = await eventTestButtons.count();
+    console.log(`EventTests visibles en PapeletaWorkspace: ${count}`);
+    expect(count).toBeGreaterThanOrEqual(5);
   });
 
   // Fase 6: Llenar examen médico
   test('TC-08: Completar somatometría y agudeza visual', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
-    
+
     await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Somatometría
-    await authenticatedPage.getByLabel('Peso (kg)').fill('70');
-    await authenticatedPage.getByLabel('Talla (cm)').fill('165');
-    await authenticatedPage.getByLabel('PA Sistólica').fill('120');
-    await authenticatedPage.getByLabel('PA Diastólica').fill('80');
-    await authenticatedPage.getByLabel('FC').fill('72');
-    
-    // Agudeza Visual
-    await authenticatedPage.getByLabel('OD').fill('1.0');
-    await authenticatedPage.getByLabel('OI').fill('0.8');
-    
-    // Guardar
-    await authenticatedPage.getByRole('button', { name: /guardar/i }).click();
-    
-    // Esperar éxito
-    await expect(authenticatedPage.getByText(/guardado|éxito/i)).toBeVisible({ timeout: 10000 });
+
+    // Los campos clínicos se muestran al abrir el botón del estudio Examen Médico.
+    await authenticatedPage.locator('button').filter({ hasText: /EXAMEN MEDICO/i }).first().click();
+
+    // Somatometría: la UI vigente usa talla en metros, no en centímetros.
+    await authenticatedPage.getByPlaceholder('Ej: 75.5').fill('70');
+    await authenticatedPage.getByPlaceholder('Ej: 1.75').fill('1.65');
+    await authenticatedPage.getByRole('button', { name: /completar somatometría/i }).click();
+    await expect(authenticatedPage.getByText(/somatometría completada/i)).toBeVisible({ timeout: 15000 });
+
+    // Signos vitales viven en la segunda pestaña del mismo estudio.
+    await authenticatedPage.getByRole('button', { name: /signos vitales/i }).first().click();
+    await authenticatedPage.getByPlaceholder('120').fill('120');
+    await authenticatedPage.getByPlaceholder('80').fill('80');
+    await authenticatedPage.getByPlaceholder('BPM').fill('72');
+    await authenticatedPage.getByRole('button', { name: /completar signos vitales/i }).click();
+    await expect(authenticatedPage.getByText(/signos vitales completados/i)).toBeVisible({ timeout: 15000 });
+
+    // Agudeza visual no tiene for/id; se acota al bloque Campo Visual y se
+    // llenan OD/OI por posición estable de los inputs de la tabla.
+    await authenticatedPage.getByRole('button', { name: /agudeza visual/i }).first().click();
+    const visualInputs = authenticatedPage
+      .getByText('Campo Visual', { exact: true })
+      .locator('xpath=..')
+      .locator('input');
+    await expect(visualInputs).toHaveCount(8);
+    await visualInputs.nth(0).fill('1.0');
+    await visualInputs.nth(1).fill('0.8');
+    await authenticatedPage.getByRole('button', { name: /completar agudeza visual/i }).click();
+    await expect(authenticatedPage.getByText(/agudeza visual completada/i)).toBeVisible({ timeout: 15000 });
   });
 
   // Fase 7: Upload audiometría XML
   test('TC-09: Subir audiometría XML y verificar prediagnóstico', async () => {
     test.setTimeout(120000);
     test.skip(!eventId, 'Sin papeleta creada');
-    
+
     await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Buscar sección Audiometría
-    const audioSection = authenticatedPage.locator('section:has-text("Audiometría")');
-    if (await audioSection.count() === 0) {
-      test.skip(true, 'Sección Audiometría no encontrada');
-      return;
-    }
-    
-    // Upload archivo XML real
+
+    // PapeletaWorkspace abre el estudio mediante un botón, no mediante <section>.
+    await authenticatedPage.locator('button').filter({ hasText: /AUDIOMETRIA/i }).first().click();
+    const fileInput = authenticatedPage.locator('input[type="file"]').first();
+    await expect(fileInput).toBeAttached();
+
+    // Upload del XML real; setInputFiles puede cargarlo aunque el accept visual
+    // actual enumere formatos documentales distintos.
     const xmlFilePath = '/home/frank/repos/Administracion-medica-industrial/context/PACIENTES/JESSICA GABRIELA.xml';
-    const fileInput = audioSection.locator('input[type="file"]').first();
     await fileInput.setInputFiles(xmlFilePath);
-    
-    // Esperar procesamiento (<100ms para parser directo)
-    await expect(audioSection.getByText(/procesando|subiendo/i)).not.toBeVisible({ timeout: 5000 });
-    
-    // Verificar tabla de umbrales renderizada
-    await expect(audioSection.getByText('250')).toBeVisible({ timeout: 10000 });
-    await expect(audioSection.getByText('500')).toBeVisible();
-    await expect(audioSection.getByText('1000')).toBeVisible();
-    
-    // Verificar panel RAW visible
-    await expect(audioSection.getByText(/RAW|json/i)).toBeVisible();
-    
-    // Esperar prediagnóstico (~10-30s)
-    const prediagCard = audioSection.locator('[data-testid="prediagnosis-card"]');
+
+    await expect(authenticatedPage.getByText(/procesando estudio con IA|subiendo archivo/i).first()).not.toBeVisible({ timeout: 60000 });
+
+    // La tabla bilateral del parser directo expone frecuencias exactas.
+    await expect(authenticatedPage.getByText('250', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(authenticatedPage.getByText('500', { exact: true })).toBeVisible();
+    await expect(authenticatedPage.getByText('1000', { exact: true })).toBeVisible();
+
+    // La UI vigente muestra "Extracción clínica"; los paneles RAW fueron
+    // retirados por la limpieza de papeleta y se documentan como gap restante.
+    await expect(authenticatedPage.getByText(/Extracción clínica|Valores capturados/i).first()).toBeVisible();
+
+    const prediagCard = authenticatedPage.locator('[data-testid="prediagnosis-card"]');
     if (await prediagCard.count() > 0) {
       await expect(prediagCard).toBeVisible({ timeout: 30000 });
       console.log('Prediagnóstico de audiometría generado');
@@ -487,34 +541,31 @@ test.describe('Flujo End-to-End Completo', () => {
   test('TC-10: Subir espirometría PDF y verificar prediagnóstico', async () => {
     test.setTimeout(120000);
     test.skip(!eventId, 'Sin papeleta creada');
-    
+
     await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Buscar sección Espirometría
-    const espiroSection = authenticatedPage.locator('section:has-text("Espirometría")');
-    if (await espiroSection.count() === 0) {
-      test.skip(true, 'Sección Espirometría no encontrada');
-      return;
-    }
-    
-    // Crear PDF dummy para prueba
+
+    await authenticatedPage.locator('button').filter({ hasText: /ESPIROMETRIA/i }).first().click();
+    const fileInput = authenticatedPage.locator('input[type="file"]').first();
+    await expect(fileInput).toBeAttached();
+
     const dummyPdf = Buffer.from('%PDF-1.4 dummy spirometry file');
-    await espiroSection.locator('input[type="file"]').first().setInputFiles({
-      name: 'espirometria_dummy.pdf',
+    await fileInput.setInputFiles({
+      name: `espirometria_dummy_${RUN_TAG}.pdf`,
       mimeType: 'application/pdf',
-      buffer: dummyPdf
+      buffer: dummyPdf,
     });
-    
-    // Esperar extracción IA (~10s)
-    await expect(espiroSection.getByText(/procesando|extrayendo/i)).not.toBeVisible({ timeout: 30000 });
-    
-    // Verificar tabla de valores (puede fallar con PDF dummy)
-    try {
-      await expect(espiroSection.getByText(/FEV1|FVC/i)).toBeVisible({ timeout: 10000 });
+
+    await expect(authenticatedPage.getByText(/procesando estudio con IA|subiendo archivo/i).first()).not.toBeVisible({ timeout: 30000 });
+
+    // El PDF dummy puede no producir extracción; si el renderer aparece, se
+    // valida que expone los parámetros esperados sin convertir el caso en skip.
+    const extractedValues = authenticatedPage.getByText(/FEV1|FVC/i).first();
+    if (await extractedValues.count() > 0) {
+      await expect(extractedValues).toBeVisible({ timeout: 10000 });
       console.log('Valores de espirometría extraídos');
-    } catch (_e) {
-      console.warn('Extracción de espirometría falló con PDF dummy (esperado)');
+    } else {
+      console.warn('Extracción de espirometría no disponible con PDF dummy');
     }
   });
 
@@ -522,61 +573,60 @@ test.describe('Flujo End-to-End Completo', () => {
   test('TC-11: Marcar muestra tomada y verificar LabOrder', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
-    
+
     await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Buscar sección Biometría Hemática
-    const bhSection = authenticatedPage.locator('section:has-text("Biometría")');
-    if (await bhSection.count() === 0) {
-      test.skip(true, 'Sección BH no encontrada');
-      return;
-    }
-    
-    // Click "Tomar muestra"
-    await bhSection.getByRole('button', { name: /tomar muestra/i }).click();
-    
-    // Esperar confirmación
-    await expect(bhSection.getByText(/muestra tomada|éxito/i)).toBeVisible({ timeout: 10000 });
-    
-    // Verificar LabOrder creado en /lab/reception
+
+    await authenticatedPage.locator('button').filter({ hasText: /BIOMETRIA|HEMATICA/i }).first().click();
+    const sampleButton = authenticatedPage.getByRole('button', { name: /registrar muestra tomada/i });
+    await expect(sampleButton).toBeVisible({ timeout: 15000 });
+    await sampleButton.click();
+
+    await expect(
+      authenticatedPage.getByText(/pendiente de resultado de prueba de laboratorio/i),
+    ).toBeVisible({ timeout: 15000 });
+
+    // Lab reception renders a real <tr>; the event link is the persistent ID
+    // source for this route and avoids relying on folio text.
     await authenticatedPage.goto(`${BASE_URL}/lab/reception`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Buscar papeleta en bandeja
-    await expect(authenticatedPage.getByText(new RegExp(TRABAJADOR.lastName))).toBeVisible({ timeout: 10000 });
-    console.log('LabOrder visible en recepción');
+    const fullName = `${TRABAJADOR.firstName} ${TRABAJADOR.lastName}`;
+    const labRow = authenticatedPage.locator('tr').filter({ hasText: fullName }).first();
+    await expect(labRow).toBeVisible({ timeout: 15000 });
+    const eventLink = labRow.getByRole('link').first();
+    const eventHref = await eventLink.getAttribute('href');
+    const eventMatch = eventHref?.match(/\/events\/([a-f0-9-]+)/);
+    if (!eventMatch || eventMatch[1] !== eventId) {
+      throw new Error(
+        `La bandeja LAB no enlaza al eventId esperado (href=${eventHref ?? 'null'}, eventId=${eventId}).`,
+      );
+    }
+    console.log('LabOrder visible en recepción para eventId:', eventId);
   });
 
   // Fase 9: Dictamen final
   test('TC-12: Generar dictamen final y cerrar papeleta', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
-    
+
     await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
     await authenticatedPage.waitForLoadState('networkidle');
-    
-    // Buscar sección Dictamen
-    const verdictSection = authenticatedPage.locator('section:has-text("Dictamen")');
-    if (await verdictSection.count() === 0) {
-      test.skip(true, 'Sección Dictamen no encontrada - componente pendiente de implementar');
-      return;
-    }
-    
-    // Seleccionar aptitud
-    await verdictSection.getByLabel('Aptitud').selectOption('APTO');
-    
-    // Llenar conclusiones
-    await verdictSection.getByLabel('Conclusiones').fill('Paciente sin hallazgos patológicos. Apto para el puesto.');
-    
-    // Firmar
-    await verdictSection.getByRole('button', { name: /firmar|cerrar/i }).click();
-    
-    // Esperar éxito
-    await expect(authenticatedPage.getByText(/papeleta cerrada|éxito/i)).toBeVisible({ timeout: 10000 });
-    
-    // Verificar status CLOSED
-    await expect(authenticatedPage.getByText(/cerrado|closed/i)).toBeVisible();
+
+    // Si el evento alcanza VALIDATING, el componente real es
+    // EventFlowController (no una section con select Aptitud).
+    const verdictHeading = authenticatedPage.getByRole('heading', { name: 'Reporte médico de aptitud' });
+    await expect(verdictHeading).toBeVisible({ timeout: 15000 });
+
+    await authenticatedPage
+      .getByPlaceholder('Ej: Apto para el puesto sin restricciones...')
+      .fill('Paciente sin hallazgos patológicos. Apto para el puesto.');
+    await authenticatedPage
+      .getByPlaceholder('Ej: Uso de protección auditiva...')
+      .fill('Control médico anual y uso de equipo de protección personal.');
+    await authenticatedPage.getByRole('button', { name: /firmar y emitir dictamen/i }).click();
+
+    await expect(authenticatedPage.getByRole('heading', { name: '¡Expediente Completado!' })).toBeVisible({ timeout: 15000 });
+    await expect(authenticatedPage.getByText(/dictamen médico ha sido firmado/i)).toBeVisible();
   });
 
   // Cleanup opcional al final
@@ -584,7 +634,7 @@ test.describe('Flujo End-to-End Completo', () => {
     console.log(`\n=== Resumen ejecución E2E ===`);
     console.log(`Empresa ID: ${companyId || 'NO CREADA'}`);
     console.log(`Worker ID: ${workerId || 'NO CREADO'}`);
-    console.log(`Appointment ID: ${appointmentId || 'NO CREADA'}`);
+    console.log('Appointment ID: NO EXPUESTO POR HREF; cita verificada por tarjeta y luego por el eventId del check-in');
     console.log(`Event ID: ${eventId || 'NO CREADO'}`);
     console.log(`===========================\n`);
   });
