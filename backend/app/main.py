@@ -25,6 +25,7 @@ from app.services.prisma_client import (
     init_prisma_client,
     connect_prisma_client,
     disconnect_prisma_client,
+    get_prisma_client,
 )
 
 from services.ai import DocumentClassifierService, ExtractorService, PrediagnosticService
