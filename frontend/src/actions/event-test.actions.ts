@@ -58,6 +58,124 @@ function resolveSampleGroupFromSnapshot(testNameSnapshot: string, options: unkno
 }
 
 /**
+ * IMPL-20260729-01 — Trigger automático: cuando un EventTest de categoría
+ * Laboratorio pasa a SAMPLE_TAKEN, se materializa una LabOrder DRAFT con su
+ * LabOrderItem, si aún no existe LabOrder para el MedicalEvent.
+ *
+ * Política:
+ *  - Idempotente: si ya hay LabOrder para el medicalEvent, solo agrega un
+ *    LabOrderItem si no existe ya ese eventTestId registrado.
+ *  - Folio: max(folio) + 1 (compatible con la generación existente en
+ *    lab-order.actions.ts → createLabOrderAction).
+ *  - createdById: primer usuario ADMIN encontrado. Fallback: cualquier User.
+ *  - doctorName: 'Dr. Sistema' como placeholder; el médico real se asigna en
+ *    la admisión posterior (Slice B NOVA, ARCH-20260701-03).
+ */
+async function ensureLabOrderForSampledLabTest(
+  eventTestId: string,
+  eventId: string,
+): Promise<void> {
+  try {
+    const eventTest = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: {
+        testId: true,
+        event: {
+          select: {
+            id: true,
+            workerId: true,
+            billingCompanyId: true,
+          },
+        },
+        test: {
+          select: {
+            id: true,
+            category: { select: { name: true } },
+          },
+        },
+      },
+    })
+
+    if (!eventTest?.test?.category) return
+    if (eventTest.test.category.name !== 'Laboratorio') return
+    if (!eventTest.testId) return
+
+    // Buscar o crear LabOrder para el MedicalEvent
+    let labOrder = await prisma.labOrder.findFirst({
+      where: { medicalEventId: eventId },
+      select: { id: true },
+    })
+
+    if (!labOrder) {
+      // Resolver createdById: ADMIN preferido, fallback a cualquier User
+      const adminUser =
+        (await prisma.user.findFirst({
+          where: { role: 'ADMIN' },
+          select: { id: true },
+          orderBy: { createdAt: 'asc' },
+        })) ??
+        (await prisma.user.findFirst({
+          select: { id: true },
+          orderBy: { createdAt: 'asc' },
+        }))
+
+      if (!adminUser) {
+        console.warn(
+          '[IMPL-20260729-01] No hay usuarios en BD; no se pudo crear LabOrder automática.',
+        )
+        return
+      }
+
+      // Folio: max + 1
+      const lastFolio = await prisma.labOrder.findFirst({
+        orderBy: { folio: 'desc' },
+        select: { folio: true },
+      })
+      const nextFolio = (lastFolio?.folio ?? 0) + 1
+
+      const workerCompany = await prisma.worker.findUnique({
+        where: { id: eventTest.event.workerId },
+        select: { companyId: true },
+      })
+
+      labOrder = await prisma.labOrder.create({
+        data: {
+          folio: nextFolio,
+          workerId: eventTest.event.workerId,
+          companyId:
+            eventTest.event.billingCompanyId ??
+            workerCompany?.companyId ??
+            null,
+          medicalEventId: eventTest.event.id,
+          doctorName: 'Dr. Sistema',
+          createdById: adminUser.id,
+          status: 'DRAFT',
+        },
+        select: { id: true },
+      })
+    }
+
+    // Idempotencia: no duplicar LabOrderItem para el mismo eventTest
+    const existingItem = await prisma.labOrderItem.findFirst({
+      where: { labOrderId: labOrder.id, eventTestId },
+      select: { id: true },
+    })
+    if (existingItem) return
+
+    await prisma.labOrderItem.create({
+      data: {
+        labOrderId: labOrder.id,
+        medicalTestId: eventTest.testId,
+        eventTestId,
+      },
+    })
+  } catch (err) {
+    // No interrumpir el flujo clínico ante un fallo de la auto-creación.
+    console.error('[IMPL-20260729-01] ensureLabOrderForSampledLabTest failed:', err)
+  }
+}
+
+/**
  * Actualiza el estado operativo de un estudio en la papeleta.
  * Soporta los estados V1: PENDING, IN_PROGRESS, SAMPLE_TAKEN, RESULT_REGISTERED, COMPLETED.
  * ARCH-20260507-06: Si status === SAMPLE_TAKEN, propaga a todos los EventTest hermanos
@@ -124,9 +242,20 @@ export async function updateEventTestStatus(
               where: { id: { in: siblingIdsToUpdate } },
               data: { status: 'SAMPLE_TAKEN' },
             })
+            // IMPL-20260729-01: cada hermano promovido también debe
+            // materializar su LabOrderItem si es de categoría Laboratorio.
+            for (const sibId of siblingIdsToUpdate) {
+              await ensureLabOrderForSampledLabTest(sibId, eventId)
+            }
           }
         }
       }
+    }
+
+    // IMPL-20260729-01: Si el estudio en sí es de Laboratorio, dispara la
+    // materialización de LabOrder DRAFT + LabOrderItem.
+    if (status === 'SAMPLE_TAKEN') {
+      await ensureLabOrderForSampledLabTest(eventTestId, eventId)
     }
 
     // IMPL-20260507-08: Escritura automática en cronograma operativo (ARCH-20260507-08)
