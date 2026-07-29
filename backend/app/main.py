@@ -1396,7 +1396,7 @@ async def v2_event_test_upload_xml_audiometry(
         raise HTTPException(status_code=400, detail="El archivo está vacío")
 
     # Validación de magic bytes para reforzar detección XML
-    head = contents[:64].lstrip().lower()
+    head = contents[:64].lstrip(b'\xef\xbb\xbf \t\n\r').lower()
     if not (head.startswith(b"<?xml") or head.startswith(b"<localsession")):
         raise HTTPException(
             status_code=400,
