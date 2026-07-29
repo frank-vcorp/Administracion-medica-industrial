@@ -582,8 +582,15 @@ test.describe('Flujo End-to-End Completo', () => {
     await expect(sampleButton).toBeVisible({ timeout: 15000 });
     await sampleButton.click();
 
+    // IMPL-20260729-01: el fix previo con .first() seguia resolviendo al primer
+    // match, que resultaba ser un <option hidden="">(estado del select cerrado).
+    // Se acota a <span> visibles (badges de status en el boton del estudio),
+    // excluyendo cualquier nodo con el atributo hidden.
     await expect(
-      authenticatedPage.getByText(/pendiente de resultado de prueba de laboratorio/i).first(),
+      authenticatedPage
+        .locator('span:not([hidden])')
+        .filter({ hasText: /pendiente de resultado de prueba de laboratorio/i })
+        .first(),
     ).toBeVisible({ timeout: 15000 });
 
     // Lab reception renders a real <tr>; the event link is the persistent ID
