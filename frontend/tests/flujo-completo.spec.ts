@@ -583,7 +583,7 @@ test.describe('Flujo End-to-End Completo', () => {
     await sampleButton.click();
 
     await expect(
-      authenticatedPage.getByText(/pendiente de resultado de prueba de laboratorio/i),
+      authenticatedPage.getByText(/pendiente de resultado de prueba de laboratorio/i).first(),
     ).toBeVisible({ timeout: 15000 });
 
     // Lab reception renders a real <tr>; the event link is the persistent ID
