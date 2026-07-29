@@ -6,7 +6,7 @@ Servicio de bandeja de papeletas + trigger automático al SAMPLE_TAKEN.
 Lógica del trigger (ver SPEC §3.1):
   Input: medicalEventId
   Encuentra todos los EventTest del medicalEventId con:
-    - testId.categoryId === "Laboratorio" (id 64d3f863)
+    - testId.categoryId === "Laboratorio" (id 16c16ef0-cf35-4fe5-9bef-311f6fc8674c)
     - status === SAMPLE_TAKEN
     - que NO tengan ya LabOrderItem.eventTestId apuntando a ellos
   Crea LabOrder DRAFT con:
