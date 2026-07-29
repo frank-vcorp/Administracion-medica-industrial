@@ -231,4 +231,4 @@ export default async function EventPage(props: {
 }
 
 // Re-export helper para stepper de status (no usado fuera, conservado por trazabilidad)
-export { getIntakeSourceLabel } from './_lib/event-page-data'
+export { getIntakeSourceLabel } from './_lib/intake-source-label'

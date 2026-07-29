@@ -15,27 +15,7 @@ import { getMedicalExam } from '@/actions/medical-exam.actions'
 import { getPrefilledDataForEvent } from '@/actions/prefilled-invitation.actions'
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { getEventTimeline } from '@/actions/timeline.actions'
-
-export function getIntakeSourceLabel(
-  intakeSource?: string | null,
-  appointmentId?: string | null,
-): string {
-  const source = intakeSource ?? (appointmentId ? 'APPOINTMENT' : null)
-  switch (source) {
-    case 'APPOINTMENT':
-      return 'Programado'
-    case 'PROJECT_PRE_REGISTERED':
-      return 'Proyecto'
-    case 'PROJECT_SAME_DAY':
-      return 'Proyecto hoy'
-    case 'EXTERNAL_WALK_IN':
-      return 'Externo'
-    case 'DIRECT_RECEPTION':
-      return 'Recepción'
-    default:
-      return 'Ingreso legado'
-  }
-}
+import { getIntakeSourceLabel } from './intake-source-label'
 
 const STATUS_NAMES: Record<string, string> = {
   SCHEDULED: 'Ingreso',
