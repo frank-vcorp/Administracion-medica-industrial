@@ -858,8 +858,8 @@ export async function deleteCompanies(args: {
   if (companyIds.length === 0) {
     return { ok: false, code: 'INVALID_INPUT', error: 'companyIds requerido (array no vacío)' }
   }
-  if (companyIds.length > 100) {
-    return { ok: false, code: 'INVALID_INPUT', error: 'Máximo 100 empresas por operación' }
+  if (companyIds.length > 10) {
+    return { ok: false, code: 'INVALID_INPUT', error: 'Máximo 10 empresas por operación (procese en tandas si tiene más)' }
   }
 
   // Captura de nombres previos para audit (snapshot estable pre-delete).

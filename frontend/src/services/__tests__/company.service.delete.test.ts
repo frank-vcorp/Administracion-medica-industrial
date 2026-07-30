@@ -5,7 +5,7 @@
  *
  * Cubre el flujo de hard-delete transaccional de Companies para SUPERADMIN:
  *   - companyIds vacío → INVALID_INPUT (sin tocar DB)
- *   - companyIds.length > 100 → INVALID_INPUT (sin tocar DB)
+ *   - companyIds.length > 10 → INVALID_INPUT (sin tocar DB)
  *   - companyIds con 0 resultados en DB → NOT_FOUND (sin tocar DB)
  *   - happy path 2 companies → ok: true, deletedCount=2, todas las
  *     queries de la transacción ejecutadas en orden, audit log con
@@ -128,13 +128,13 @@ describe('deleteCompanies — guardas de input (ARCH-20260730-01)', () => {
     expect(mocked.$transaction).not.toHaveBeenCalled()
   })
 
-  it('CA-D2: 101 companyIds → INVALID_INPUT (límite max 100)', async () => {
-    const ids = Array.from({ length: 101 }, (_, i) => `id_${i}`)
+  it('CA-D2: 11 companyIds → INVALID_INPUT (límite max 10)', async () => {
+    const ids = Array.from({ length: 11 }, (_, i) => `id_${i}`)
     const result = await deleteCompanies({ companyIds: ids, actorUserId: 'u1' })
     expect(result).toEqual({
       ok: false,
       code: 'INVALID_INPUT',
-      error: expect.stringContaining('100'),
+      error: expect.stringContaining('10'),
     })
     expect(mocked.$transaction).not.toHaveBeenCalled()
   })

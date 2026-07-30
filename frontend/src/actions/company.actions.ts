@@ -231,7 +231,7 @@ export async function toggleCompanyEnabledAction(args: { companyId: string; enab
  *   - Sesión activa (UNAUTHENTICATED si falta).
  *   - Rol === 'SUPERADMIN' (FORBIDDEN en cualquier otro caso).
  *   - companyIds: array no vacío (mín 1).
- *   - companyIds.length <= 100.
+ *   - companyIds.length <= 10.
  *
  * En éxito: `revalidatePath('/companies')` y retorna `{ ok: true, deletedCount, deletedCompanyIds }`.
  * En error: retorna `{ ok: false, code, error }` con códigos estables.
@@ -263,8 +263,8 @@ export async function deleteCompaniesAction(args: {
   if (!Array.isArray(args.companyIds) || args.companyIds.length === 0) {
     return { ok: false, code: 'INVALID_INPUT', error: 'companyIds requerido (array no vacío)' }
   }
-  if (args.companyIds.length > 100) {
-    return { ok: false, code: 'INVALID_INPUT', error: 'Máximo 100 empresas por operación' }
+  if (args.companyIds.length > 10) {
+    return { ok: false, code: 'INVALID_INPUT', error: 'Máximo 10 empresas por operación (procese en tandas si tiene más)' }
   }
 
   const result = await CompanyService.deleteCompanies({
