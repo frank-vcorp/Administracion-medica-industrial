@@ -1,6 +1,6 @@
 {
   "buildCommand": "cd frontend && npx prisma migrate deploy && npx prisma generate && npx next build",
-  "installCommand": "cd frontend && npm install",
+  "installCommand": "cd frontend && pnpm install --frozen-lockfile",
   "outputDirectory": "frontend/.next",
   "framework": null,
   "regions": ["iad1"]
