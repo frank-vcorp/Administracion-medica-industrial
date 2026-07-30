@@ -2,6 +2,7 @@
  * @file DeleteCompaniesButton — barra inferior fija + modal de confirmación.
  * @id IMPL-20260730-01 (retry de IMPL-20260730-01 BLOCKED)
  * @spec context/SPECs/SPEC_ARCH-20260730-01-DELETE-COMPANIES-SUPERADMIN.md
+ * @fix  FIX-20260730-05-H3 — manejo de timeout con try/catch + router.refresh().
  *
  * Client component. Sólo se renderiza cuando hay al menos 1 empresa
  * seleccionada. La barra aparece fija al fondo de la página. Al pulsar
@@ -12,7 +13,9 @@
  *   - Checkbox obligatorio de aceptación que desbloquea el botón rojo
  *
  * Llama a `deleteCompaniesAction` (server action) y refresca la página al
- * terminar vía router.refresh() para garantizar revalidate.
+ * terminar vía router.refresh() para garantizar revalidate. Si la action
+ * lanza (timeout / error de red), también se hace router.refresh() porque
+ * los chunks previos pueden haberse commitido.
  */
 'use client'
 
@@ -38,18 +41,32 @@ export default function DeleteCompaniesButton({ selectedNames, onClearSelection 
   const handleConfirm = () => {
     setError(null)
     startTransition(async () => {
-      const result = await deleteCompaniesAction({
-        companyIds: selectedNames.map((s) => s.id),
-        reason: reason.trim() || undefined,
-      })
-      if (result.ok) {
-        setOpen(false)
-        setReason('')
-        setConfirmed(false)
-        onClearSelection()
+      try {
+        const result = await deleteCompaniesAction({
+          companyIds: selectedNames.map((s) => s.id),
+          reason: reason.trim() || undefined,
+        })
+        if (result.ok) {
+          setOpen(false)
+          setReason('')
+          setConfirmed(false)
+          onClearSelection()
+          router.refresh()
+        } else {
+          setError(`${result.code}: ${result.error}`)
+        }
+      } catch (err) {
+        // FIX-20260730-05-H3: timeout o error de red. Los chunks previos pueden
+        // haberse commitido (semántica per-chunk). Refrescamos la lista para
+        // que el usuario vea el estado real y re-intente con las restantes.
+        console.error('[DeleteCompaniesButton] delete failed:', err)
         router.refresh()
-      } else {
-        setError(`${result.code}: ${result.error}`)
+        setOpen(false)
+        onClearSelection()
+        setError(
+          'La operación pudo haber eliminado algunas empresas. ' +
+          'La página se actualizó. Verifique la lista y re-intente con las restantes.'
+        )
       }
     })
   }

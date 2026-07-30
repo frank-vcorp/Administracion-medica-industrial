@@ -812,6 +812,14 @@ export async function listEstadosMexico() {
 // --------------------------------------------------------------------------
 
 /**
+ * FIX-20260730-05-H3: Tamaño de chunk para `deleteCompanies`. Cada chunk se
+ * ejecuta en su propio `prisma.$transaction` con commit intermedio. Con 5
+ * empresas × 14 ops × ~35ms ≈ 2.5s por chunk, queda margen suficiente contra
+ * el timeout de 10s de Vercel Hobby. Ajustar si el entorno cambia.
+ */
+const DELETE_CHUNK_SIZE = 5
+
+/**
  * Elimina (hard delete) un conjunto de Companies, desvincularando previamente
  * sus history rows y referencias para preservar la historia clínica
  * (workers, appointments, projects, profiles, etc. quedan con companyId=NULL).
@@ -819,13 +827,18 @@ export async function listEstadosMexico() {
  * Solo permitido para rol SUPERADMIN — la RBAC se valida en la server action
  * `deleteCompaniesAction` antes de invocar este service.
  *
- * Atomicidad: todo el trabajo se ejecuta dentro de `prisma.$transaction`
- * (callback form). Si cualquier paso falla, se hace rollback completo.
+ * Atomicidad por-chunk: el lote se divide en chunks de `DELETE_CHUNK_SIZE`
+ * empresas; cada chunk se procesa en su propio `prisma.$transaction`
+ * (callback form). Si un chunk falla (p.ej. timeout de Vercel), los chunks
+ * previos ya quedaron commitidos. El cliente detecta el corte vía
+ * `router.refresh()` y re-intenta con las restantes. Se sacrifica la
+ * atomicidad all-or-nothing del lote completo a cambio de resiliencia al
+ * timeout del plan Hobby.
  *
- * Orden de operaciones (ver SPEC §3.3 / §4.2):
+ * Por cada empresa dentro de un chunk (orden de ARCH-20260730-01 §3.3):
  *   1. deleteMany CompanySellerHistory
  *   2. deleteMany CompanySelfRegistration (origen + target)
- *   3. company.update allowedBranches set []  (por cada id)
+ *   3. company.update allowedBranches set []
  *   4. user.updateMany       companyId=null
  *   5. jobPosition.updateMany companyId=null
  *   6. medicalProfile.updateMany companyId=null
@@ -834,9 +847,12 @@ export async function listEstadosMexico() {
  *   9. medicalEvent.updateMany billingCompanyId=null
  *   10. project.updateMany   companyId=null
  *   11. labOrder.updateMany  companyId=null
- *   12. company.updateMany   defaultBranchId=null
- *   13. company.deleteMany
+ *   12. company.update defaultBranchId=null
+ *   13. company.delete
  *   14. auditLog.create      entity='Company', action='COMPANIES_HARD_DELETE'
+ *
+ * El audit log se emite una vez por chunk (no por empresa) con los ids y
+ * nombres del chunk.
  *
  * @returns
  *   - { ok: true, deletedCount, deletedCompanyIds } cuando se eliminan una o más
@@ -858,9 +874,6 @@ export async function deleteCompanies(args: {
   if (companyIds.length === 0) {
     return { ok: false, code: 'INVALID_INPUT', error: 'companyIds requerido (array no vacío)' }
   }
-  if (companyIds.length > 10) {
-    return { ok: false, code: 'INVALID_INPUT', error: 'Máximo 10 empresas por operación (procese en tandas si tiene más)' }
-  }
 
   // Captura de nombres previos para audit (snapshot estable pre-delete).
   const companies = await prisma.company.findMany({
@@ -871,111 +884,124 @@ export async function deleteCompanies(args: {
     return { ok: false, code: 'NOT_FOUND', error: 'No se encontraron empresas con esos IDs' }
   }
 
+  const nameById = new Map(companies.map((c) => [c.id, c.name] as const))
+  const deletedIds: string[] = []
+
   try {
-    await prisma.$transaction(async (tx) => {
-      // 1. CompanySellerHistory — cascade FK también lo haría, pero aquí
-      //    mantenemos el control explícito para auditoría y para que el orden
-      //    quede claro en logs.
-      await tx.companySellerHistory.deleteMany({
-        where: { companyId: { in: companyIds } },
-      })
+    for (let i = 0; i < companyIds.length; i += DELETE_CHUNK_SIZE) {
+      const chunk = companyIds.slice(i, i + DELETE_CHUNK_SIZE)
+      const chunkNames = chunk.map((id) => nameById.get(id) ?? null)
 
-      // 2. CompanySelfRegistration — Company resultante (submittedCompanyId)
-      //    o target de un link (targetCompanyId).
-      await tx.companySelfRegistration.deleteMany({
-        where: {
-          OR: [
-            { submittedCompanyId: { in: companyIds } },
-            { targetCompanyId: { in: companyIds } },
-          ],
+      await prisma.$transaction(
+        async (tx) => {
+          for (const companyId of chunk) {
+            // 1. CompanySellerHistory — cascade FK también lo haría, pero aquí
+            //    mantenemos el control explícito para auditoría y para que el
+            //    orden quede claro en logs.
+            await tx.companySellerHistory.deleteMany({
+              where: { companyId },
+            })
+
+            // 2. CompanySelfRegistration — Company resultante (submittedCompanyId)
+            //    o target de un link (targetCompanyId).
+            await tx.companySelfRegistration.deleteMany({
+              where: {
+                OR: [
+                  { submittedCompanyId: companyId },
+                  { targetCompanyId: companyId },
+                ],
+              },
+            })
+
+            // 3. allowedBranches M2M — vaciamos la relación por empresa.
+            await tx.company.update({
+              where: { id: companyId },
+              data: { allowedBranches: { set: [] } },
+            })
+
+            // 4. User.companyId = null
+            await tx.user.updateMany({
+              where: { companyId },
+              data: { companyId: null },
+            })
+
+            // 5. JobPosition.companyId = null
+            await tx.jobPosition.updateMany({
+              where: { companyId },
+              data: { companyId: null },
+            })
+
+            // 6. MedicalProfile.companyId = null
+            await tx.medicalProfile.updateMany({
+              where: { companyId },
+              data: { companyId: null },
+            })
+
+            // 7. Worker.companyId = null
+            await tx.worker.updateMany({
+              where: { companyId },
+              data: { companyId: null },
+            })
+
+            // 8. Appointment.companyId = null
+            await tx.appointment.updateMany({
+              where: { companyId },
+              data: { companyId: null },
+            })
+
+            // 9. MedicalEvent.billingCompanyId = null
+            await tx.medicalEvent.updateMany({
+              where: { billingCompanyId: companyId },
+              data: { billingCompanyId: null },
+            })
+
+            // 10. Project.companyId = null
+            await tx.project.updateMany({
+              where: { companyId },
+              data: { companyId: null },
+            })
+
+            // 11. LabOrder.companyId = null
+            await tx.labOrder.updateMany({
+              where: { companyId },
+              data: { companyId: null },
+            })
+
+            // 12. Company.defaultBranchId = null (libera la FK hacia Branch)
+            await tx.company.update({
+              where: { id: companyId },
+              data: { defaultBranchId: null },
+            })
+
+            // 13. Hard delete de la Company.
+            await tx.company.delete({
+              where: { id: companyId },
+            })
+          }
+
+          // 14. AuditLog — un registro por chunk con los ids/nombres del chunk.
+          await tx.auditLog.create({
+            data: {
+              userId: args.actorUserId,
+              action: 'COMPANIES_HARD_DELETE',
+              entity: 'Company',
+              entityId: chunk.join(','),
+              details: {
+                deletedCompanyIds: chunk,
+                deletedCompanyNames: chunkNames,
+                companyCount: chunk.length,
+                reason: args.reason ?? null,
+              } as Prisma.InputJsonValue,
+            },
+          })
         },
-      })
+        { timeout: 30000, maxWait: 10000 }
+      )
 
-      // 3. allowedBranches M2M — vaciamos la relación por cada empresa.
-      for (const id of companyIds) {
-        await tx.company.update({
-          where: { id },
-          data: { allowedBranches: { set: [] } },
-        })
-      }
+      deletedIds.push(...chunk)
+    }
 
-      // 4. User.companyId = null
-      await tx.user.updateMany({
-        where: { companyId: { in: companyIds } },
-        data: { companyId: null },
-      })
-
-      // 5. JobPosition.companyId = null
-      await tx.jobPosition.updateMany({
-        where: { companyId: { in: companyIds } },
-        data: { companyId: null },
-      })
-
-      // 6. MedicalProfile.companyId = null
-      await tx.medicalProfile.updateMany({
-        where: { companyId: { in: companyIds } },
-        data: { companyId: null },
-      })
-
-      // 7. Worker.companyId = null
-      await tx.worker.updateMany({
-        where: { companyId: { in: companyIds } },
-        data: { companyId: null },
-      })
-
-      // 8. Appointment.companyId = null
-      await tx.appointment.updateMany({
-        where: { companyId: { in: companyIds } },
-        data: { companyId: null },
-      })
-
-      // 9. MedicalEvent.billingCompanyId = null
-      await tx.medicalEvent.updateMany({
-        where: { billingCompanyId: { in: companyIds } },
-        data: { billingCompanyId: null },
-      })
-
-      // 10. Project.companyId = null
-      await tx.project.updateMany({
-        where: { companyId: { in: companyIds } },
-        data: { companyId: null },
-      })
-
-      // 11. LabOrder.companyId = null
-      await tx.labOrder.updateMany({
-        where: { companyId: { in: companyIds } },
-        data: { companyId: null },
-      })
-
-      // 12. Company.defaultBranchId = null (libera la FK hacia Branch)
-      await tx.company.updateMany({
-        where: { id: { in: companyIds } },
-        data: { defaultBranchId: null },
-      })
-
-      // 13. Hard delete de Companies.
-      await tx.company.deleteMany({
-        where: { id: { in: companyIds } },
-      })
-
-      // 14. AuditLog — registro final del batch.
-      await tx.auditLog.create({
-        data: {
-          userId: args.actorUserId,
-          action: 'COMPANIES_HARD_DELETE',
-          entity: 'Company',
-          entityId: companyIds.join(','),
-          details: {
-            deletedCompanyIds: companyIds,
-            deletedCompanyNames: companies.map((c) => c.name),
-            companyCount: companies.length,
-            reason: args.reason ?? null,
-          } as Prisma.InputJsonValue,
-        },
-      })
-    })
-
-    return { ok: true, deletedCount: companies.length, deletedCompanyIds: companyIds }
+    return { ok: true, deletedCount: deletedIds.length, deletedCompanyIds: deletedIds }
   } catch (err) {
     console.error('[deleteCompanies] failed:', err)
     return {

@@ -231,7 +231,11 @@ export async function toggleCompanyEnabledAction(args: { companyId: string; enab
  *   - Sesión activa (UNAUTHENTICATED si falta).
  *   - Rol === 'SUPERADMIN' (FORBIDDEN en cualquier otro caso).
  *   - companyIds: array no vacío (mín 1).
- *   - companyIds.length <= 10.
+ *
+ * FIX-20260730-05-H3: el límite visible de 10 empresas fue removido. El
+ * service ahora divide el lote en chunks internos de `DELETE_CHUNK_SIZE`
+ * (5) con `prisma.$transaction` por chunk, lo que permite cualquier N sin
+ * agotar el timeout de Vercel Hobby (10s).
  *
  * En éxito: `revalidatePath('/companies')` y retorna `{ ok: true, deletedCount, deletedCompanyIds }`.
  * En error: retorna `{ ok: false, code, error }` con códigos estables.
@@ -262,9 +266,6 @@ export async function deleteCompaniesAction(args: {
 
   if (!Array.isArray(args.companyIds) || args.companyIds.length === 0) {
     return { ok: false, code: 'INVALID_INPUT', error: 'companyIds requerido (array no vacío)' }
-  }
-  if (args.companyIds.length > 10) {
-    return { ok: false, code: 'INVALID_INPUT', error: 'Máximo 10 empresas por operación (procese en tandas si tiene más)' }
   }
 
   const result = await CompanyService.deleteCompanies({
