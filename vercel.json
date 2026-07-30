@@ -1,0 +1,7 @@
+{
+  "buildCommand": "cd frontend && npx prisma migrate deploy && npx prisma generate && npx next build",
+  "installCommand": "cd frontend && npm install",
+  "outputDirectory": "frontend/.next",
+  "framework": null,
+  "regions": ["iad1"]
+}
