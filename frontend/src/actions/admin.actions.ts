@@ -94,6 +94,17 @@ export async function createCompany(formData: FormData) {
 }
 
 // --- BRANCHES ---
+/**
+ * @deprecated desde 2026-07-30 (IMPL-20260730-04, PR-2 de ARCH-20260730-01).
+ * Usar `@/actions/branch.actions#getBranches` (nueva fachada con `_count`,
+ * `isActive` y búsqueda opcional). Esta fachada legacy NO incluye
+ * `isActive` ni `_count`, por lo que las cards no mostrarían badge correcto.
+ *
+ * Esta función se eliminará en PR-5 (cierre del módulo Sucursales), una vez
+ * los 6 consumidores actuales (`AppointmentFormModal`,
+ * `companies/[id]/page`, `appointments/page`, `workers/page`,
+ * `projects/page`, `projects/new/page`) migren a la fachada nueva.
+ */
 export async function getBranches() {
     const tenant = await prisma.tenant.findFirst()
     if (!tenant) return []
@@ -103,6 +114,14 @@ export async function getBranches() {
     })
 }
 
+/**
+ * @deprecated desde 2026-07-30 (IMPL-20260730-04, PR-2).
+ * Usar `@/actions/branch.actions#createBranch` (objeto validado por Zod
+ * server-side, NO FormData). Esta fachada legacy no valida con Zod y no es
+ * consistente con la nueva convención `{ok, error}`.
+ *
+ * Esta función se eliminará en PR-5.
+ */
 export async function createBranch(formData: FormData) {
     let tenant = await prisma.tenant.findFirst()
     if (!tenant) {

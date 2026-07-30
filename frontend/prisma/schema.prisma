@@ -72,6 +72,8 @@ model User {
   approvedCourtesies        Courtesy[]                @relation("CourtesyApprover")
   // IMPL-20260711-01: Mantenimientos creados por este usuario (ARCH-20260711-01)
   createdMaintenances       MaintenanceRecord[]       @relation("MaintenanceCreator")
+  // IMPL-20260730-02 (ARCH-20260730-01): Sucursales que este usuario desactivó (soft-disable) (PR-1)
+  disabledBranches          Branch[]                  @relation("BranchDisabledBy")
 
   @@map("users")
 }
@@ -99,6 +101,11 @@ model Branch {
   closingTime        String         @default("17:00")
   hourlyCapacity     Int            @default(15)
   openingTime        String         @default("07:00")
+  // IMPL-20260730-02 (ARCH-20260730-01): Soft-disable + auditoría de quién la desactivó (PR-1)
+  isActive           Boolean        @default(true)
+  disabledAt         DateTime?
+  disabledByUserId   String?
+  disabledBy         User?          @relation("BranchDisabledBy", fields: [disabledByUserId], references: [id])
   appointments       Appointment[]
   tenant             Tenant         @relation(fields: [tenantId], references: [id])
   companies          Company[]
@@ -108,6 +115,8 @@ model Branch {
   // IMPL-20260519-14: Proyectos de visita médica referenciados a esta sucursal (ARCH-20260519-12)
   projects           Project[]
 
+  @@index([tenantId, isActive])
+  @@index([name])
   @@map("branches")
 }
 
