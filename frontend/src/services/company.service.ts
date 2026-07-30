@@ -805,6 +805,187 @@ export async function listEstadosMexico() {
 // Sub-B: edición interna (updateCompany).
 // --------------------------------------------------------------------------
 
+// --------------------------------------------------------------------------
+// ARCH-20260730-01 (IMPL-20260730-01 retry): Eliminación masiva de empresas
+// (hard delete). Sólo SUPERADMIN. Véase
+// context/SPECs/SPEC_ARCH-20260730-01-DELETE-COMPANIES-SUPERADMIN.md.
+// --------------------------------------------------------------------------
+
+/**
+ * Elimina (hard delete) un conjunto de Companies, desvincularando previamente
+ * sus history rows y referencias para preservar la historia clínica
+ * (workers, appointments, projects, profiles, etc. quedan con companyId=NULL).
+ *
+ * Solo permitido para rol SUPERADMIN — la RBAC se valida en la server action
+ * `deleteCompaniesAction` antes de invocar este service.
+ *
+ * Atomicidad: todo el trabajo se ejecuta dentro de `prisma.$transaction`
+ * (callback form). Si cualquier paso falla, se hace rollback completo.
+ *
+ * Orden de operaciones (ver SPEC §3.3 / §4.2):
+ *   1. deleteMany CompanySellerHistory
+ *   2. deleteMany CompanySelfRegistration (origen + target)
+ *   3. company.update allowedBranches set []  (por cada id)
+ *   4. user.updateMany       companyId=null
+ *   5. jobPosition.updateMany companyId=null
+ *   6. medicalProfile.updateMany companyId=null
+ *   7. worker.updateMany     companyId=null
+ *   8. appointment.updateMany companyId=null
+ *   9. medicalEvent.updateMany billingCompanyId=null
+ *   10. project.updateMany   companyId=null
+ *   11. labOrder.updateMany  companyId=null
+ *   12. company.updateMany   defaultBranchId=null
+ *   13. company.deleteMany
+ *   14. auditLog.create      entity='Company', action='COMPANIES_HARD_DELETE'
+ *
+ * @returns
+ *   - { ok: true, deletedCount, deletedCompanyIds } cuando se eliminan una o más
+ *   - { ok: false, code: 'INVALID_INPUT' | 'NOT_FOUND' | 'INTERNAL_ERROR', error }
+ */
+export async function deleteCompanies(args: {
+  companyIds: string[]
+  actorUserId: string
+  reason?: string
+}): Promise<
+  | { ok: true; deletedCount: number; deletedCompanyIds: string[] }
+  | {
+      ok: false
+      code: 'INVALID_INPUT' | 'NOT_FOUND' | 'INTERNAL_ERROR'
+      error: string
+    }
+> {
+  const companyIds = Array.isArray(args.companyIds) ? args.companyIds : []
+  if (companyIds.length === 0) {
+    return { ok: false, code: 'INVALID_INPUT', error: 'companyIds requerido (array no vacío)' }
+  }
+  if (companyIds.length > 100) {
+    return { ok: false, code: 'INVALID_INPUT', error: 'Máximo 100 empresas por operación' }
+  }
+
+  // Captura de nombres previos para audit (snapshot estable pre-delete).
+  const companies = await prisma.company.findMany({
+    where: { id: { in: companyIds } },
+    select: { id: true, name: true },
+  })
+  if (companies.length === 0) {
+    return { ok: false, code: 'NOT_FOUND', error: 'No se encontraron empresas con esos IDs' }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 1. CompanySellerHistory — cascade FK también lo haría, pero aquí
+      //    mantenemos el control explícito para auditoría y para que el orden
+      //    quede claro en logs.
+      await tx.companySellerHistory.deleteMany({
+        where: { companyId: { in: companyIds } },
+      })
+
+      // 2. CompanySelfRegistration — Company resultante (submittedCompanyId)
+      //    o target de un link (targetCompanyId).
+      await tx.companySelfRegistration.deleteMany({
+        where: {
+          OR: [
+            { submittedCompanyId: { in: companyIds } },
+            { targetCompanyId: { in: companyIds } },
+          ],
+        },
+      })
+
+      // 3. allowedBranches M2M — vaciamos la relación por cada empresa.
+      for (const id of companyIds) {
+        await tx.company.update({
+          where: { id },
+          data: { allowedBranches: { set: [] } },
+        })
+      }
+
+      // 4. User.companyId = null
+      await tx.user.updateMany({
+        where: { companyId: { in: companyIds } },
+        data: { companyId: null },
+      })
+
+      // 5. JobPosition.companyId = null
+      await tx.jobPosition.updateMany({
+        where: { companyId: { in: companyIds } },
+        data: { companyId: null },
+      })
+
+      // 6. MedicalProfile.companyId = null
+      await tx.medicalProfile.updateMany({
+        where: { companyId: { in: companyIds } },
+        data: { companyId: null },
+      })
+
+      // 7. Worker.companyId = null
+      await tx.worker.updateMany({
+        where: { companyId: { in: companyIds } },
+        data: { companyId: null },
+      })
+
+      // 8. Appointment.companyId = null
+      await tx.appointment.updateMany({
+        where: { companyId: { in: companyIds } },
+        data: { companyId: null },
+      })
+
+      // 9. MedicalEvent.billingCompanyId = null
+      await tx.medicalEvent.updateMany({
+        where: { billingCompanyId: { in: companyIds } },
+        data: { billingCompanyId: null },
+      })
+
+      // 10. Project.companyId = null
+      await tx.project.updateMany({
+        where: { companyId: { in: companyIds } },
+        data: { companyId: null },
+      })
+
+      // 11. LabOrder.companyId = null
+      await tx.labOrder.updateMany({
+        where: { companyId: { in: companyIds } },
+        data: { companyId: null },
+      })
+
+      // 12. Company.defaultBranchId = null (libera la FK hacia Branch)
+      await tx.company.updateMany({
+        where: { id: { in: companyIds } },
+        data: { defaultBranchId: null },
+      })
+
+      // 13. Hard delete de Companies.
+      await tx.company.deleteMany({
+        where: { id: { in: companyIds } },
+      })
+
+      // 14. AuditLog — registro final del batch.
+      await tx.auditLog.create({
+        data: {
+          userId: args.actorUserId,
+          action: 'COMPANIES_HARD_DELETE',
+          entity: 'Company',
+          entityId: companyIds.join(','),
+          details: {
+            deletedCompanyIds: companyIds,
+            deletedCompanyNames: companies.map((c) => c.name),
+            companyCount: companies.length,
+            reason: args.reason ?? null,
+          } as Prisma.InputJsonValue,
+        },
+      })
+    })
+
+    return { ok: true, deletedCount: companies.length, deletedCompanyIds: companyIds }
+  } catch (err) {
+    console.error('[deleteCompanies] failed:', err)
+    return {
+      ok: false,
+      code: 'INTERNAL_ERROR',
+      error: (err as Error).message ?? 'Error desconocido',
+    }
+  }
+}
+
 /**
  * Computa el diff entre before y after. Devuelve un array `{ field, before, after }`
  * solo donde los valores difieren. Compara keys presentes en `before`.

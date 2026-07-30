@@ -13,6 +13,8 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { CompanyStatus, CompanyOrigin } from '@prisma/client'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/auth'
 import {
   getCompanies,
   listCompaniesWithFilters,
@@ -20,6 +22,8 @@ import {
 } from '@/actions/company.actions'
 import CompanyFormModal from '@/components/CompanyFormModal'
 import { CompanyStatusBadge } from '@/components/companies/CompanyStatusBadge'
+import CompanyBulkDeleteShell from '@/components/companies/CompanyBulkDeleteShell'
+import type { SelectableCompany } from '@/components/companies/CompanySelectableGrid'
 
 const ESTADO_OPTIONS: CompanyStatus[] = [
   'PENDIENTE_REVISION',
@@ -55,6 +59,12 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
 
   const filtersActive = Boolean(estado || origen || sellerId || q)
 
+  // IMPL-20260730-01 (ARCH-20260730-01): identificar rol para mostrar controles
+  // de eliminación masiva. Solo SUPERADMIN ve los checkboxes y la barra inferior.
+  const session = await getServerSession(authOptions)
+  const role = (session?.user as { role?: string } | undefined)?.role
+  const canDelete = role === 'SUPERADMIN'
+
   const [companies, sellers] = await Promise.all([
     filtersActive
       ? listCompaniesWithFilters({ estado, origen, sellerId, search: q })
@@ -62,8 +72,26 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
     listActiveSellersAction().catch(() => []),
   ])
 
+  // Saneamos la lista al shape que esperan los componentes cliente.
+  const selectableCompanies: SelectableCompany[] = companies.map((c) => ({
+    id: c.id,
+    name: c.name,
+    rfc: c.rfc ?? null,
+    contactName: c.contactName ?? null,
+    email: c.email ?? null,
+    defaultBranch: c.defaultBranch
+      ? { id: c.defaultBranch.id, name: c.defaultBranch.name }
+      : null,
+    estado: (c.estado ?? 'HABILITADO') as CompanyStatus,
+    origen: (c.origen ?? 'MANUAL') as CompanyOrigin,
+    seller:
+      'seller' in c && c.seller && typeof (c.seller as { fullName?: string }).fullName === 'string'
+        ? { fullName: (c.seller as { fullName?: string }).fullName ?? '' }
+        : null,
+  }))
+
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-8 pb-24">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">
@@ -71,6 +99,11 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
           </h2>
           <p className="text-sm text-slate-500 font-medium">
             Gestión de clientes corporativos y convenios activos.
+            {canDelete && (
+              <span className="ml-2 text-red-600 font-bold">
+                · Selecciona empresas para eliminar (SUPERADMIN)
+              </span>
+            )}
           </p>
         </div>
 
@@ -175,19 +208,18 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         </div>
       </form>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {companies.length === 0 && (
-          <div className="col-span-3 text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-            {filtersActive
-              ? 'No hay empresas que coincidan con los filtros.'
-              : 'No hay empresas registradas aún.'}
-          </div>
-        )}
-        {companies.map((c: { id: string; name: string; rfc: string | null; contactName: string | null; email: string | null; defaultBranch: { id: string; name: string } | null; estado?: CompanyStatus; origen?: CompanyOrigin; seller?: { fullName?: string } | null }) => {
-          const cOrigen = (c as { origen?: CompanyOrigin }).origen ?? 'MANUAL'
-          const cEstado = (c as { estado?: CompanyStatus }).estado ?? 'HABILITADO'
-          const seller = (c as { seller?: { fullName?: string } | null }).seller
-          return (
+      {canDelete ? (
+        <CompanyBulkDeleteShell companies={selectableCompanies} />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {companies.length === 0 && (
+            <div className="col-span-3 text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+              {filtersActive
+                ? 'No hay empresas que coincidan con los filtros.'
+                : 'No hay empresas registradas aún.'}
+            </div>
+          )}
+          {selectableCompanies.map((c) => (
             <CompanyCard
               key={c.id}
               id={c.id}
@@ -196,13 +228,13 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
               contact={c.contactName || '---'}
               email={c.email}
               defaultBranch={c.defaultBranch?.name}
-              estado={cEstado}
-              origen={cOrigen}
-              sellerName={seller?.fullName ?? null}
+              estado={c.estado}
+              origen={c.origen}
+              sellerName={c.seller?.fullName ?? null}
             />
-          )
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

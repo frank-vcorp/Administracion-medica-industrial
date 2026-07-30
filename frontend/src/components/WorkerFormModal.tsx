@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
 interface CompanyOption { id: string; name: string }
-interface JobPositionOption { id: string; name: string; companyId: string }
+interface JobPositionOption { id: string; name: string; companyId: string | null }
 
 /** Datos básicos del trabajador existente cuando se detecta duplicado */
 interface DuplicateWorker {

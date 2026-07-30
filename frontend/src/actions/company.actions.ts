@@ -217,7 +217,66 @@ export async function toggleCompanyEnabledAction(args: { companyId: string; enab
 }
 
 // --------------------------------------------------------------------------
-// IMPL-20260624-03 (ARCH-20260624-03) Sub-A: link externo para completar
+// ARCH-20260730-01 (IMPL-20260730-01 retry): Eliminación masiva de empresas.
+// Solo SUPERADMIN. Hard delete transaccional con cascade soft sobre historia
+// clínica (workers/appointments/projects quedan con companyId=NULL).
+// Ref: context/SPECs/SPEC_ARCH-20260730-01-DELETE-COMPANIES-SUPERADMIN.md
+// --------------------------------------------------------------------------
+
+/**
+ * Elimina (hard delete) un conjunto de empresas. RBAC: SOLO SUPERADMIN.
+ *
+ * Validaciones:
+ *   - Sesión activa (UNAUTHENTICATED si falta).
+ *   - Rol === 'SUPERADMIN' (FORBIDDEN en cualquier otro caso).
+ *   - companyIds: array no vacío (mín 1).
+ *   - companyIds.length <= 100.
+ *
+ * En éxito: `revalidatePath('/companies')` y retorna `{ ok: true, deletedCount, deletedCompanyIds }`.
+ * En error: retorna `{ ok: false, code, error }` con códigos estables.
+ */
+export async function deleteCompaniesAction(args: {
+  companyIds: string[]
+  reason?: string
+}): Promise<
+  | { ok: true; deletedCount: number; deletedCompanyIds: string[] }
+  | {
+      ok: false
+      code: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'INVALID_INPUT' | 'NOT_FOUND' | 'INTERNAL_ERROR'
+      error: string
+    }
+> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) {
+    return { ok: false, code: 'UNAUTHENTICATED', error: 'Sin sesión' }
+  }
+  const role = (session.user as { role?: string }).role
+  if (role !== 'SUPERADMIN') {
+    return {
+      ok: false,
+      code: 'FORBIDDEN',
+      error: 'Se requiere rol SUPERADMIN para eliminar empresas',
+    }
+  }
+
+  if (!Array.isArray(args.companyIds) || args.companyIds.length === 0) {
+    return { ok: false, code: 'INVALID_INPUT', error: 'companyIds requerido (array no vacío)' }
+  }
+  if (args.companyIds.length > 100) {
+    return { ok: false, code: 'INVALID_INPUT', error: 'Máximo 100 empresas por operación' }
+  }
+
+  const result = await CompanyService.deleteCompanies({
+    companyIds: args.companyIds,
+    actorUserId: (session.user as { id: string }).id,
+    reason: args.reason,
+  })
+
+  if (result.ok) {
+    revalidatePath('/companies')
+  }
+  return result
+}
 // datos de empresa existente.
 // --------------------------------------------------------------------------
 

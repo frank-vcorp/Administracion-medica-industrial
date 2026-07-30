@@ -37,9 +37,9 @@ interface ProjectItem {
   endDate: Date | string
   unitRef: string | null
   notes: string | null
-  companyId: string
+  companyId: string | null // ARCH-20260730-01: nullable tras eliminación de empresa
   branchId: string | null
-  company: { id: string; name: string }
+  company: { id: string; name: string } | null
   branch: { id: string; name: string } | null
   _count: { workers: number }
   workers: {
@@ -65,7 +65,7 @@ interface ProjectsCalendarProps {
 interface BulkImportContext {
   projectId: string
   projectName: string
-  companyId: string
+  companyId: string | null // ARCH-20260730-01: nullable tras eliminación de empresa
 }
 
 type ViewMode = 'calendar' | 'table'
@@ -510,7 +510,7 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
                                   {project._count.workers}
                                 </span>
                               </div>
-                              <p className="mt-1 truncate text-[11px] font-medium">{project.company.name}</p>
+                              <p className="mt-1 truncate text-[11px] font-medium">{project.company?.name ?? '— sin empresa —'}</p>
                               <p className="truncate text-[11px]">{getUnitLabel(project)}</p>
                               <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide">
                                 <span>{STATUS_LABELS[project.status]}</span>
@@ -560,7 +560,7 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-500">Panel de recepción</p>
                 <h3 className="text-xl font-black text-slate-900">{selectedReceptionProject.name}</h3>
                 <p className="text-xs font-medium text-slate-500">
-                  {selectedReceptionProject.company.name} · {getUnitLabel(selectedReceptionProject)}
+                  {selectedReceptionProject.company?.name ?? '— sin empresa —'} · {getUnitLabel(selectedReceptionProject)}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -670,7 +670,7 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
         branches={branches}
         isOpen={bulkImportOpen}
         onOpenChange={setBulkImportOpen}
-        initialCompanyId={bulkImportContext?.companyId}
+        initialCompanyId={bulkImportContext?.companyId ?? undefined}
         initialProjectId={bulkImportContext?.projectId}
         lockProjectContext={Boolean(bulkImportContext)}
         initialMode={bulkImportMode}

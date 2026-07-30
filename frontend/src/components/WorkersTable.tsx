@@ -22,7 +22,7 @@ interface WorkerRow {
 }
 
 interface CompanyOption { id: string; name: string }
-interface JobPositionOption { id: string; name: string; companyId: string }
+interface JobPositionOption { id: string; name: string; companyId: string | null }
 
 interface WorkersTableProps {
     workers: WorkerRow[]

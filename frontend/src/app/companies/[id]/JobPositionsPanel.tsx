@@ -23,7 +23,7 @@ type JobPositionItem = {
   id: string
   name: string
   description: string | null
-  companyId: string
+  companyId: string | null // ARCH-20260730-01: nullable tras eliminación de empresa
   defaultProfileId: string | null
   defaultProfile: { id: string; name: string } | null
   _count: { workers: number }

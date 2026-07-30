@@ -25,7 +25,7 @@ interface BranchOption {
 export interface ProjectForEdit {
   id: string
   name: string
-  companyId: string
+  companyId: string | null // ARCH-20260730-01: nullable tras eliminación de empresa
   startDate: Date | string
   endDate: Date | string
   branchId?: string | null
@@ -94,7 +94,7 @@ export default function ProjectFormModal({
     if (projectToEdit) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- hidratación al cambiar proyecto en edición (controlled form pattern).
       setName(projectToEdit.name)
-      setCompanyId(projectToEdit.companyId)
+      setCompanyId(projectToEdit.companyId ?? '')
       setStartDate(toISOLocal(projectToEdit.startDate))
       setEndDate(toISOLocal(projectToEdit.endDate))
       setBranchId(projectToEdit.branchId ?? '')
@@ -165,7 +165,7 @@ export default function ProjectFormModal({
       if (!isEditMode && result.project) {
         onSuccess?.(result.project.id, result.project.name, payload.companyId)
       } else if (isEditMode && projectToEdit) {
-        onSuccess?.(projectToEdit.id, projectToEdit.name, projectToEdit.companyId)
+        onSuccess?.(projectToEdit.id, projectToEdit.name, projectToEdit.companyId ?? undefined)
       }
     })
   }

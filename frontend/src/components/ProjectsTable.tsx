@@ -22,9 +22,9 @@ interface ProjectRow {
   endDate: Date
   unitRef: string | null
   notes: string | null
-  companyId: string
+  companyId: string | null // ARCH-20260730-01: nullable tras eliminación de empresa
   branchId: string | null
-  company: { id: string; name: string }
+  company: { id: string; name: string } | null // ARCH-20260730-01: nullable tras eliminación de empresa
   branch: { id: string; name: string } | null
   _count: { workers: number }
 }
@@ -125,7 +125,7 @@ export default function ProjectsTable({ projects, companies, branches }: Project
                     </p>
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-700">{p.company.name}</td>
+                <td className="px-4 py-3 text-slate-700">{p.company?.name ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                   {formatDate(p.startDate)}
                   <span className="text-slate-400 mx-1">→</span>

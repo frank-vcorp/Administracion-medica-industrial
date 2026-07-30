@@ -474,7 +474,7 @@ model MedicalVerdict {
 model Appointment {
   id                       String               @id @default(uuid())
   workerId                 String
-  companyId                String
+  companyId                String? // ARCH-20260730-01: nullable para permitir desvincular sin perder historia clínica
   branchId                 String
   scheduledAt              DateTime
   status                   AppointmentStatus    @default(SCHEDULED)
@@ -497,7 +497,7 @@ model Appointment {
   corroborationResult      String? // CorroborationResult catalog
   qrOperativo              String? // QR operativo mínimo AMI|NOMBRE=...|FN=...
   branch                   Branch               @relation(fields: [branchId], references: [id])
-  company                  Company              @relation(fields: [companyId], references: [id])
+  company                  Company?             @relation(fields: [companyId], references: [id])
   serviceProfile           MedicalProfile?      @relation(fields: [serviceProfileId], references: [id])
   worker                   Worker               @relation(fields: [workerId], references: [id])
   identityVerifiedBy       User?                @relation("AppointmentIdentityVerifier", fields: [identityVerifiedByUserId], references: [id])
@@ -537,10 +537,10 @@ model JobPosition {
   id               String  @id @default(uuid())
   name             String
   description      String?
-  companyId        String
+  companyId        String? // ARCH-20260730-01: nullable para permitir desvincular sin perder historia clínica
   defaultProfileId String?
 
-  company        Company         @relation(fields: [companyId], references: [id])
+  company        Company?        @relation(fields: [companyId], references: [id])
   defaultProfile MedicalProfile? @relation(fields: [defaultProfileId], references: [id])
   workers        Worker[]
 
@@ -559,6 +559,9 @@ enum UserRole {
   COMPANY_CLIENT
   // IMPL-20260623-02: Ficha Cliente v2 (ARCH-20260623-03)
   VENDEDOR
+  // ARCH-20260730-01: nuevo rol con permiso de eliminación destructiva de empresas.
+  // Frank lo asigna manualmente vía SQL (no bulk-apply).
+  SUPERADMIN
 }
 
 enum GenderRestriction {
@@ -793,7 +796,7 @@ enum ProjectWorkerReceptionStatus {
 model Project {
   id           String        @id @default(uuid())
   name         String
-  companyId    String
+  companyId    String? // ARCH-20260730-01: nullable para permitir desvincular sin perder historia clínica
   branchId     String? // Sucursal AMI de referencia (null si es planta del cliente)
   unitRef      String? // Texto libre provisional hasta entidad Equipment (Sprint 5)
   startDate    DateTime
@@ -806,7 +809,7 @@ model Project {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  company Company         @relation(fields: [companyId], references: [id])
+  company Company?        @relation(fields: [companyId], references: [id])
   branch  Branch?         @relation(fields: [branchId], references: [id])
   /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
   events  MedicalEvent[]

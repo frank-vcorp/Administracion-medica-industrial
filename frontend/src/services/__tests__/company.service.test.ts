@@ -24,13 +24,18 @@
 /// <reference types="vitest/globals" />
 
 // Mock de prisma: intercepta companySelfRegistration.create, company.findUnique, etc.
+// FIX-20260730-01: generateCompanySelfRegLink ahora también usa prisma.user.findUnique
+// para defender contra sesión huérfana — añadido al mock para que la búsqueda de
+// usuario no lance TypeError.
 vi.mock('@/lib/prisma', () => {
   const create = vi.fn()
   const findUnique = vi.fn()
+  const userFindUnique = vi.fn().mockResolvedValue({ id: 'mock' }) // FIX-20260730-01: default → usuario existe
   return {
     default: {
       companySelfRegistration: { create },
       company: { findUnique },
+      user: { findUnique: userFindUnique },
     },
   }
 })

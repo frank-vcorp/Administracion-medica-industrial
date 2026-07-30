@@ -191,6 +191,16 @@ export async function checkInProjectWorkerToClinical(projectId: string, workerId
       return { success: true, eventId: projectWorker.eventId }
     }
 
+    // ARCH-20260730-01: project.companyId es nullable. Si fue desvinculado por
+    // eliminación de la empresa, no podemos crear el evento de recepción sin
+    // billingCompanyId.
+    if (!project.companyId) {
+      return {
+        success: false,
+        error: 'El proyecto no tiene empresa de facturación asignada.',
+      }
+    }
+
     const eventId = await createProjectReceptionEvent({
       workerId,
       branchId: project.branchId,
