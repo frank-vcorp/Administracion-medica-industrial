@@ -10,6 +10,7 @@
 
 import { getToken } from "next-auth/jwt"
 import { NextRequest, NextResponse } from "next/server"
+import { isAdminLike } from "@/lib/auth/roles"
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -38,7 +39,7 @@ export async function middleware(request: NextRequest) {
 
   // Protección específica para /admin/*
   if (pathname.startsWith("/admin")) {
-    if (token.role !== "ADMIN") {
+    if (!isAdminLike(token.role)) {
       return NextResponse.redirect(new URL("/", request.url))
     }
   }

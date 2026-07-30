@@ -12,6 +12,7 @@ import { getServerSession } from 'next-auth/next'
 import { Prisma } from '@prisma/client'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
+import { isAdminLike } from '@/lib/auth/roles'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export type MobileUnitWithDetails = Prisma.MobileUnitGetPayload<{
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if (!session || session.user.role !== 'ADMIN') return null
+  if (!session || !isAdminLike(session.user.role)) return null
   return session
 }
 

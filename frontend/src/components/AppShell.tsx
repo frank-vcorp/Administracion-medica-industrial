@@ -21,6 +21,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { ReactNode } from 'react'
+import { isAdminLike } from '@/lib/auth/roles'
 
 function NavItem({ href, icon, label, secondary, collapsed }: { href: string; icon: string; label: string; secondary?: boolean; collapsed?: boolean }) {
   return (
@@ -97,7 +98,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const role = session?.user?.role
   const isLoading = status === 'loading'
-  const isAdmin = role === 'ADMIN'
+  const isAdmin = isAdminLike(role)
   const isCompanyClient = role === 'COMPANY_CLIENT'
   // Mostrar ítems de staff si se está cargando (middleware ya validó autenticación)
   // o si el usuario es staff interno (no COMPANY_CLIENT)

@@ -15,6 +15,7 @@ import { getCompanyById, listActiveSellersAction } from '@/actions/company.actio
 import { getJobPositionsByCompany } from '@/actions/job-positions.actions'
 import { getMedicalProfilesForCompany, getMedicalTests } from '@/actions/medical-profiles'
 import { getBranches } from '@/actions/admin.actions'
+import { isAdminLike } from '@/lib/auth/roles'
 import JobPositionsPanel from './JobPositionsPanel'
 import AllowedBranchesPanel from './AllowedBranchesPanel'
 import CompanyMedicalProfilesPanel from './CompanyMedicalProfilesPanel'
@@ -72,7 +73,7 @@ export default async function CompanyDetailPage({ params }: PageProps) {
 
   const canEdit = role !== 'COMPANY_CLIENT' && estado === 'HABILITADO'
   // IMPL-20260624-03 (ARCH-20260624-03): Solo ADMIN puede editar datos completos internos.
-  const canEditFullData = role === 'ADMIN' && estado === 'HABILITADO'
+  const canEditFullData = isAdminLike(role) && estado === 'HABILITADO'
 
   return (
     <div className="space-y-6">

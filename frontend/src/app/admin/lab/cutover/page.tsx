@@ -8,6 +8,7 @@
  */
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
+import { isAdminLike } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import CutoverChecklist from "./_components/CutoverChecklist";
 
@@ -46,7 +47,7 @@ export default async function LabCutoverPage() {
   if (!session) {
     redirect("/login?callbackUrl=/admin/lab/cutover");
   }
-  if (session.user?.role !== "ADMIN") {
+  if (!isAdminLike(session.user?.role)) {
     return (
       <div className="p-8 max-w-2xl mx-auto">
         <div className="bg-red-50 border border-red-300 text-red-900 rounded-lg p-6">

@@ -8,6 +8,7 @@ import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { isAdminLike } from "@/lib/auth/roles";
 import { withApiErrors } from "@/lib/api-handler";
 import { labOrderItemInputSchema } from "@/lib/validations/lab-order";
 
@@ -20,7 +21,7 @@ async function _requireReception(): Promise<{ userId: string } | null> {
     const role = session?.user?.role;
     const userId = session?.user?.id;
     if (!session?.user || !userId) return null;
-    if (role !== "ADMIN") return null;
+    if (!isAdminLike(role)) return null;
     return { userId };
   } catch (err) {
      

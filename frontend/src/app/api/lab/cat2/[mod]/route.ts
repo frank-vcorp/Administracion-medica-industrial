@@ -10,6 +10,7 @@ import { withApiErrors } from "@/lib/api-handler";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
+import { isAdminLike } from "@/lib/auth/roles";
 
 const MOD_TO_MODEL: Record<string, string> = {
   unidades: "labUnit",
@@ -28,7 +29,7 @@ export const dynamic = "force-dynamic";
 async function _requireAdmin() {
   try {
     const session = await getServerSession(authOptions);
-    if (session?.user?.role === "ADMIN") return session.user;
+    if (session?.user && isAdminLike(session.user.role)) return session.user;
     return null;
   } catch {
     return null;

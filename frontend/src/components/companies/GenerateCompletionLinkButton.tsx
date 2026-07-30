@@ -15,6 +15,7 @@
 
 import { useState, useTransition } from 'react'
 import { generateCompanyDataCompletionLinkAction } from '@/actions/company.actions'
+import { isSellerLike } from '@/lib/auth/roles'
 
 interface Props {
   companyId: string
@@ -35,7 +36,7 @@ export default function GenerateCompletionLinkButton({
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  const allowed = (role === 'ADMIN' || role === 'VENDEDOR') && estado === 'HABILITADO'
+  const allowed = isSellerLike(role) && estado === 'HABILITADO'
 
   if (!allowed) return null
 

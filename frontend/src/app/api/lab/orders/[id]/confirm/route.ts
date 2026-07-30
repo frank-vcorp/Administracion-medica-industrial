@@ -8,6 +8,7 @@ import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { isAdminLike } from "@/lib/auth/roles";
 import { withApiErrors } from "@/lib/api-handler";
 
 export const runtime = "nodejs";
@@ -18,7 +19,7 @@ async function _getAdminSession(): Promise<{ userId: string } | null> {
     const session = await getServerSession(authOptions);
     const role = session?.user?.role;
     const userId = session?.user?.id;
-    if (!session?.user || !userId || role !== "ADMIN") return null;
+    if (!session?.user || !userId || !isAdminLike(role)) return null;
     return { userId };
   } catch (err) {
      

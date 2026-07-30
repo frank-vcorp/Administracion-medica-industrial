@@ -34,6 +34,7 @@ import {
   type LabCatalogMod,
   isValidLabMod,
 } from "@/lib/validations/lab-catalog";
+import { isAdminLike } from "@/lib/auth/roles";
 
 // ---------------------------------------------------------------------------
 // Mapa: mod (URL) → nombre del modelo Prisma JS
@@ -78,7 +79,7 @@ async function _requireAdmin(): Promise<{ id: string; userId: string } | null> {
     const role = session?.user?.role;
     const id = session?.user?.id;
     if (!session?.user || !id) return null;
-    if (role !== "ADMIN") return null;
+    if (!isAdminLike(role)) return null;
     return { id, userId: id };
   } catch (err) {
     // IMPL-20260706-11: si NextAuth falla (ej. NEXTAUTH_SECRET faltante),

@@ -17,6 +17,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { getCompanyById, listEstadosMexico } from '@/services/company.service'
 import { CFDI_USO_VALUES, METODO_PAGO_VALUES } from '@/lib/schemas/company-full-form'
+import { isAdminLike } from '@/lib/auth/roles'
 import CompanyEditForm from '@/components/companies/CompanyEditForm'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +33,7 @@ export default async function CompanyEditPage({ params }: PageProps) {
   // VENDEDOR puede generar links externos pero NO editar directamente.
   const session = await getServerSession(authOptions)
   const role = (session?.user?.role as string | undefined) ?? null
-  if (!session?.user || role !== 'ADMIN') {
+  if (!session?.user || !isAdminLike(role)) {
     // Redirige a la ficha de la Company para no romper navegación.
     redirect(`/companies/${id}`)
   }

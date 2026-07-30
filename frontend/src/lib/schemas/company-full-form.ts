@@ -23,6 +23,7 @@
  * submits en curso o formularios con estado cacheado antes del fix.
  */
 import { z } from 'zod'
+import { isSellerLike } from '@/lib/auth/roles'
 
 // --------------------------------------------------------------------------
 // Constantes de tamaño (en bytes) — Sección 9 (documentos)
@@ -315,7 +316,7 @@ export async function assertUserIsActive(
 ): Promise<{ ok: true } | { ok: false; reason: 'NOT_FOUND' | 'INACTIVE' | 'NOT_SELLER' }> {
   const user = await prismaUserFindUnique({ where: { id: userId } })
   if (!user) return { ok: false, reason: 'NOT_FOUND' }
-  if (user.role !== 'VENDEDOR' && user.role !== 'ADMIN') return { ok: false, reason: 'NOT_SELLER' }
+  if (!isSellerLike(user.role)) return { ok: false, reason: 'NOT_SELLER' }
   if (!user.isActive) return { ok: false, reason: 'INACTIVE' }
   return { ok: true }
 }

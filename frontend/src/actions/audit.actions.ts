@@ -14,6 +14,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
+import { isAdminLike } from '@/lib/auth/roles'
 
 /**
  * Registra una acción en la bitácora de auditoría
@@ -76,8 +77,8 @@ export async function getAuditLogs(limit: number = 50, offset: number = 0) {
       throw new Error('Usuario no autenticado')
     }
 
-    // Validar que sea ADMIN (opcional, depende de requerimientos)
-    if (session.user.role !== 'ADMIN') {
+    // Validar que sea ADMIN o SUPERADMIN (opcional, depende de requerimientos)
+    if (!isAdminLike(session.user.role)) {
       throw new Error('Permisos insuficientes para leer auditoría')
     }
 

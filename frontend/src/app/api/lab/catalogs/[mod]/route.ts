@@ -29,6 +29,7 @@ import { z } from "zod";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { isAdminLike } from "@/lib/auth/roles";
 import { withApiErrors } from "@/lib/api-handler";
 import {
   LAB_CATALOG_MODS,
@@ -68,7 +69,7 @@ async function _requireAdmin(): Promise<{ userId: string } | null> {
     const role = session?.user?.role;
     const id = session?.user?.id;
     if (!session?.user || !id) return null;
-    if (role !== "ADMIN") return null;
+    if (!isAdminLike(role)) return null;
     return { userId: id };
   } catch (err) {
      

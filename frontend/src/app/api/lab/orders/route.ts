@@ -17,6 +17,7 @@ import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { isAdminLike } from "@/lib/auth/roles";
 import { withApiErrors } from "@/lib/api-handler";
 import {
   createLabOrderSchema,
@@ -33,7 +34,7 @@ async function _requireReception(): Promise<{ userId: string } | null> {
     const userId = session?.user?.id;
     if (!session?.user || !userId) return null;
     // ADM-20260701-01: solo ADMIN (LAB_RECEPTIONIST pendiente de incorporarse).
-    if (role !== "ADMIN") return null;
+    if (!isAdminLike(role)) return null;
     return { userId };
   } catch (err) {
      

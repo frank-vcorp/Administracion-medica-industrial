@@ -18,6 +18,7 @@ import {
   toggleCompanyEnabledAction,
   reviewAndEnableCompanyAction,
 } from '@/actions/company.actions'
+import { isAdminLike, isSellerLike } from '@/lib/auth/roles'
 
 export interface SellerOption {
   id: string
@@ -54,10 +55,9 @@ export default function CompanyActionsPanel({
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reviewSellerId, setReviewSellerId] = useState<string>('')
 
-  const canChangeSeller = role === 'ADMIN' || role === 'VENDEDOR'
-  const canToggle = role === 'ADMIN'
-  const canReview =
-    (role === 'ADMIN' || role === 'VENDEDOR') && estado === 'PENDIENTE_REVISION'
+  const canChangeSeller = isSellerLike(role)
+  const canToggle = isAdminLike(role)
+  const canReview = isSellerLike(role) && estado === 'PENDIENTE_REVISION'
 
   function handleChangeSeller() {
     setError(null)

@@ -15,6 +15,7 @@ import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
+import { isAdminLike } from "@/lib/auth/roles";
 import { recordTraceEventSchema, type RecordTraceEventInput, type LabTraceEventType } from "@/lib/validations/lab-trace";
 
 // ---------------------------------------------------------------------------
@@ -42,7 +43,7 @@ async function _requireAdmin(): Promise<{ userId: string } | null> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return null;
-    if (session.user.role !== "ADMIN") return null;
+    if (!isAdminLike(session.user.role)) return null;
     return { userId: session.user.id };
   } catch (err) {
     console.error("[lab-trace actions] session error:", err);

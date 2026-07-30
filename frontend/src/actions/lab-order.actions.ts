@@ -29,6 +29,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
 import prisma from "@/lib/prisma";
 import { calculateTotals } from "@/lib/lab-order-totals";
+import { isAdminLike } from "@/lib/auth/roles";
 import {
   cancelLabOrderSchema,
   createLabOrderSchema,
@@ -60,7 +61,7 @@ async function _requireReception(): Promise<{ userId: string; role: string } | n
     if (!session?.user || !userId) return null;
     // ADM-20260701-01: roles permitidos LabOrder = ADMIN (LAB_RECEPTIONIST
     // pendiente de incorporarse al enum de roles de NextAuth).
-    if (role !== "ADMIN") return null;
+    if (!isAdminLike(role)) return null;
     return { userId, role: role as string };
   } catch (err) {
     // IMPL-20260706-11: si NextAuth falla, no devolver 500 HTML.

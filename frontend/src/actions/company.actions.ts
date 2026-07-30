@@ -27,6 +27,7 @@ import { authOptions } from '@/auth'
 import { updateCompanyAllowedBranches as _updateCompanyAllowedBranches } from './admin.actions'
 import type { CompanyStatus, CompanyOrigin } from '@prisma/client'
 import { updateCompanySchema } from '@/lib/schemas/company-update'
+import { isAdminLike, isSellerLike } from '@/lib/auth/roles'
 
 // --------------------------------------------------------------------------
 // Read-only: APIs existentes (compatibilidad)
@@ -90,7 +91,7 @@ export async function changeCompanySellerAction(args: {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { ok: false as const, code: 'UNAUTHENTICATED' as const, error: 'Sin sesión' }
   const role = (session.user as { role?: string }).role
-  if (role !== 'ADMIN' && role !== 'VENDEDOR') {
+  if (!isSellerLike(role)) {
     return { ok: false as const, code: 'FORBIDDEN' as const, error: 'Rol insuficiente' }
   }
   const result = await CompanyService.changeCompanySeller({
@@ -115,7 +116,7 @@ export async function generateCompanySelfRegLinkAction(ttlHours = 168) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { ok: false as const, code: 'UNAUTHENTICATED' as const, error: 'Sin sesión' }
   const role = (session.user as { role?: string }).role
-  if (role !== 'ADMIN' && role !== 'VENDEDOR') {
+  if (!isSellerLike(role)) {
     return { ok: false as const, code: 'FORBIDDEN' as const, error: 'Rol insuficiente' }
   }
   const result = await CompanyService.generateCompanySelfRegLink(
@@ -178,7 +179,7 @@ export async function reviewAndEnableCompanyAction(args: {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { ok: false as const, code: 'UNAUTHENTICATED' as const, error: 'Sin sesión' }
   const role = (session.user as { role?: string }).role
-  if (role !== 'ADMIN' && role !== 'VENDEDOR') {
+  if (!isSellerLike(role)) {
     return { ok: false as const, code: 'FORBIDDEN' as const, error: 'Rol insuficiente' }
   }
   const result = await CompanyService.reviewAndEnableCompany({
@@ -201,7 +202,7 @@ export async function toggleCompanyEnabledAction(args: { companyId: string; enab
   const session = await getServerSession(authOptions)
   if (!session?.user) return { ok: false as const, code: 'UNAUTHENTICATED' as const, error: 'Sin sesión' }
   const role = (session.user as { role?: string }).role
-  if (role !== 'ADMIN') {
+  if (!isAdminLike(role)) {
     return { ok: false as const, code: 'FORBIDDEN' as const, error: 'Solo administradores pueden cambiar habilitado' }
   }
   const result = await CompanyService.toggleCompanyEnabled({
@@ -298,7 +299,7 @@ export async function generateCompanyDataCompletionLinkAction(
   const session = await getServerSession(authOptions)
   if (!session?.user) return { ok: false as const, code: 'UNAUTHENTICATED' as const, error: 'Sin sesión' }
   const role = (session.user as { role?: string }).role
-  if (role !== 'ADMIN' && role !== 'VENDEDOR') {
+  if (!isSellerLike(role)) {
     return {
       ok: false as const,
       code: 'FORBIDDEN' as const,
@@ -354,7 +355,7 @@ export async function updateCompanyAction(
   const session = await getServerSession(authOptions)
   if (!session?.user) return { ok: false as const, code: 'UNAUTHENTICATED' as const, error: 'Sin sesión' }
   const role = (session.user as { role?: string }).role
-  if (role !== 'ADMIN') {
+  if (!isAdminLike(role)) {
     return {
       ok: false as const,
       code: 'FORBIDDEN' as const,

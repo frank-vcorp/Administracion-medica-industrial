@@ -12,6 +12,7 @@ import {
   generateCompanySelfRegLinkAction,
   generateCompanyDataCompletionLinkAction,
 } from '@/actions/company.actions'
+import { isSellerLike } from '@/lib/auth/roles'
 
 /**
  * @file Modal de creación rápida de empresa + generador de link de auto-alta.
@@ -43,7 +44,7 @@ export default function CompanyFormModal(props?: {
       mode === 'edit' &&
       existingCompany != null &&
       existingCompany.estado !== 'PENDIENTE_REVISION' &&
-      (role === 'ADMIN' || role === 'VENDEDOR')
+      isSellerLike(role)
 
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()

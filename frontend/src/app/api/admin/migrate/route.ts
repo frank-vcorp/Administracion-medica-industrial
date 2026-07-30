@@ -33,6 +33,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/auth"
+import { isAdminLike } from "@/lib/auth/roles"
 import { execSync } from "child_process"
 
 export const dynamic = "force-dynamic"
@@ -152,7 +153,7 @@ async function diagnoseDatabase(): Promise<DiagnosticResult> {
 export async function POST(request: NextRequest) {
     // 1. Verificar auth ADMIN
     const session = await getServerSession(authOptions)
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user || !isAdminLike(session.user.role)) {
         return NextResponse.json(
             { error: "No autorizado. Se requiere rol ADMIN." },
             { status: 401 }

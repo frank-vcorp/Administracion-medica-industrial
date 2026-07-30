@@ -17,6 +17,7 @@
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/auth";
+import { isAdminLike } from "@/lib/auth/roles";
 import path from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -58,7 +59,7 @@ async function _ensureAdmin(): Promise<ActionResult<true>> {
   if (!session) {
     return { ok: false, error: "No autenticado" };
   }
-  if (session.user?.role !== "ADMIN") {
+  if (!isAdminLike(session.user?.role)) {
     return { ok: false, error: "Acceso restringido a rol ADMIN" };
   }
   return { ok: true, data: true };

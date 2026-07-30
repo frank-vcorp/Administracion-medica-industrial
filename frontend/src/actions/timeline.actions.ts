@@ -11,12 +11,13 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import { getTimelineForEvent, writeTimelineEntry } from '@/lib/timeline.service'
+import { isAdminLike } from '@/lib/auth/roles'
 import { revalidatePath } from 'next/cache'
 
 export async function getEventTimeline(eventId: string) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { success: false, error: 'No autenticado', data: null }
-  if (session.user.role !== 'ADMIN') {
+  if (!isAdminLike(session.user.role)) {
     return { success: false, error: 'Solo administradores pueden consultar el cronograma', data: null }
   }
   if (!eventId) return { success: false, error: 'eventId requerido', data: null }
@@ -40,7 +41,7 @@ export async function addAdminIncidence(
 ) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { success: false, error: 'No autenticado' }
-  if (session.user.role !== 'ADMIN') {
+  if (!isAdminLike(session.user.role)) {
     return { success: false, error: 'Solo administradores pueden registrar incidencias en el cronograma' }
   }
   if (!eventId || !payload.title?.trim()) {

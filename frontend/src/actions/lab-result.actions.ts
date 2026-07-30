@@ -28,6 +28,7 @@ import {
   type UpdateLabResultInput,
 } from "@/lib/validations/lab-result";
 import { validateValueAgainstRange } from "@/lib/lab-result-utils";
+import { isAdminLike } from "@/lib/auth/roles";
 // IMPL-20260707-18: Fase 2 — D Trazabilidad (auto-record VALIDATED)
 import { autoRecordLabTraceEventAction } from "@/actions/lab-trace.actions";
 
@@ -55,7 +56,7 @@ async function _requireAdmin(): Promise<{ userId: string } | null> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return null;
-    if (session.user.role !== "ADMIN") return null;
+    if (!isAdminLike(session.user.role)) return null;
     return { userId: session.user.id };
   } catch (err) {
     console.error("[lab-result actions] session error:", err);
