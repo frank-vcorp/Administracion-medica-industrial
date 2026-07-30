@@ -26,19 +26,31 @@ export default async function BranchDetailPage({
 }) {
   // OBLIGATORIO Next.js 16 — await params.
   const { id } = await params
+  console.log('[DEBUG /branches/[id]] id:', id)
 
   // Carga paralela: detalle de la sucursal + pool de empresas disponibles.
   // Si el usuario no es ADMIN_LIKE, getAvailableCompaniesForBranch devuelve
   // {ok:false} pero igualmente renderizamos la página (con array vacío).
-  const [branchResult, companiesResult] = await Promise.all([
-    getBranchById(id),
-    getAvailableCompaniesForBranch(),
-  ])
+  let branchResult: Awaited<ReturnType<typeof getBranchById>>
+  let companiesResult: Awaited<ReturnType<typeof getAvailableCompaniesForBranch>>
+  try {
+    [branchResult, companiesResult] = await Promise.all([
+      getBranchById(id),
+      getAvailableCompaniesForBranch(),
+    ])
+    console.log('[DEBUG /branches/[id]] branchResult.ok:', branchResult.ok, 'error:', 'error' in branchResult ? branchResult.error : 'N/A')
+    console.log('[DEBUG /branches/[id]] companiesResult.ok:', companiesResult.ok)
+  } catch (e) {
+    console.error('[DEBUG /branches/[id]] CRASH:', e instanceof Error ? e.message : String(e))
+    console.error('[DEBUG /branches/[id]] STACK:', e instanceof Error ? e.stack : 'N/A')
+    throw e
+  }
 
   if (!branchResult.ok) {
     // getBranchById puede fallar por: no autenticado, ID inválido, no existe.
     // En todos los casos, mostramos 404 (consistente con SPEC §7.2 "no fail
     // silencioso").
+    console.log('[DEBUG /branches/[id]] notFound() porque:', 'error' in branchResult ? branchResult.error : 'unknown')
     notFound()
   }
 
