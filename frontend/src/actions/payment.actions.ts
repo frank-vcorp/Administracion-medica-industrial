@@ -341,7 +341,6 @@ async function dispatchReceiptEmail(args: {
     // El nombre del paquete se pasa via variable para que webpack NO intente
     // resolver estáticamente la dependencia (no está en package.json).
     const nodemailerPkg = 'nodemailer'
-    // @ts-expect-error — paquete opcional, se carga solo si SMTP_HOST está configurado
     const nodemailer = await import(/* webpackIgnore: true */ nodemailerPkg).catch(() => null)
     if (!nodemailer) {
       console.warn(
