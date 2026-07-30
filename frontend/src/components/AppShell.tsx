@@ -19,7 +19,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useSession } from 'next-auth/react'
+import { signOut, useSession } from 'next-auth/react'
 import { ReactNode } from 'react'
 
 function NavItem({ href, icon, label, secondary, collapsed }: { href: string; icon: string; label: string; secondary?: boolean; collapsed?: boolean }) {
@@ -105,6 +105,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showAdminItems = isAdmin
   const showPortalItems = isCompanyClient
   const isEventWorkspace = /^\/events\/[^/]+$/.test(pathname || '')
+  const handleSignOut = () => {
+    void signOut({ callbackUrl: '/login' })
+  }
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -197,6 +200,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 {session?.user?.fullName || 'Usuario'}
               </span>
               <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-300"></div>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="text-sm font-medium text-slate-600 hover:text-red-600 transition-colors px-3 py-1.5 rounded-md border border-slate-200 hover:border-red-200"
+                aria-label="Cerrar sesión"
+              >
+                Cerrar sesión
+              </button>
             </div>
           </header>
         )}
