@@ -114,7 +114,12 @@ export const branchToggleSchema = z.object({
 })
 
 /** UUID helper para params de Branch. */
-export const branchIdSchema = z.string().uuid('ID inválido')
+// Acepta UUIDs y los IDs legacy tipo "branch-matriz" usados en fixtures.
+// Longitud razonable para evitar inputs vacíos o basura excesiva.
+export const branchIdSchema = z.string()
+  .min(1, 'ID inválido')
+  .max(100, 'ID inválido')
+  .refine(s => /^[a-zA-Z0-9_-]+$/.test(s), 'ID contiene caracteres inválidos')
 
 // --------------------------------------------------------------------------
 // Tipos inferidos (re-exports de dominio)

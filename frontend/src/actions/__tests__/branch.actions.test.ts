@@ -305,15 +305,20 @@ describe('branch.actions — IMPL-20260730-03 H1/H4/H5', () => {
       })
     })
 
-    it('rechaza branchId no-UUID', async () => {
-      const res = await updateBranchAllowedCompanies('no-uuid', [coA])
+    it('rechaza branchId con caracteres inválidos', async () => {
+      const res = await updateBranchAllowedCompanies('id!@#con simbolos', [coA])
       expect(res.ok).toBe(false)
       if (!res.ok) expect(res.error).toBe('ID de sucursal inválido')
       expect(mockBranchUpdate).not.toHaveBeenCalled()
     })
 
-    it('rechaza companyId no-UUID', async () => {
-      const res = await updateBranchAllowedCompanies(validId, ['no-uuid'])
+    it('acepta branchId legacy no-UUID como "branch-matriz"', async () => {
+      const res = await updateBranchAllowedCompanies('branch-matriz', [coA])
+      expect(res.ok).toBe(true)
+    })
+
+    it('rechaza companyId con caracteres inválidos', async () => {
+      const res = await updateBranchAllowedCompanies(validId, ['id!@# con simbolos'])
       expect(res.ok).toBe(false)
       if (!res.ok) expect(res.error).toBeDefined()
     })
@@ -385,11 +390,21 @@ describe('branch.actions — IMPL-20260730-03 H1/H4/H5', () => {
       expect(mockBranchFindUnique).not.toHaveBeenCalled()
     })
 
-    it('retorna NOT_FOUND si el ID no es UUID', async () => {
-      const res = await deleteBranch('no-uuid')
+    it('retorna NOT_FOUND si el ID tiene caracteres inválidos', async () => {
+      const res = await deleteBranch('id!@#con simbolos')
       expect(res.ok).toBe(false)
       if (!res.ok) expect(res.code).toBe('NOT_FOUND')
       expect(mockBranchFindUnique).not.toHaveBeenCalled()
+    })
+
+    it('acepta branchId legacy no-UUID como "branch-matriz" sin fallar por validación', async () => {
+      // Verifica que branchIdSchema acepta IDs legacy no-UUID.
+      // El test no verifica el flujo completo porque requiere mocks complejos;
+      // sí verifica que NO falla por "ID inválido".
+      const { branchIdSchema } = await import('@/lib/schemas/branch')
+      expect(branchIdSchema.safeParse('branch-matriz').success).toBe(true)
+      expect(branchIdSchema.safeParse('uuid').success).toBe(true)
+      expect(branchIdSchema.safeParse('id-con-guiones-y-bajos').success).toBe(true)
     })
 
     it('retorna NOT_FOUND si la sucursal no existe', async () => {

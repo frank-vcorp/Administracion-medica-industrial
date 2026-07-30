@@ -269,9 +269,9 @@ describe('branchToggleSchema', () => {
     expect(r.success).toBe(true)
   })
 
-  it('rechaza id no-UUID', () => {
+  it('rechaza id con caracteres inválidos', () => {
     const r = branchToggleSchema.safeParse({
-      id: 'no-es-uuid',
+      id: 'id con espacios y símbolos raros!@#',
       isActive: true,
     })
     expect(r.success).toBe(false)
@@ -295,8 +295,13 @@ describe('branchIdSchema', () => {
     expect(branchIdSchema.safeParse('').success).toBe(false)
   })
 
-  it('rechaza string no-UUID', () => {
-    expect(branchIdSchema.safeParse('abc').success).toBe(false)
+  it('rechaza string con caracteres inválidos', () => {
+    expect(branchIdSchema.safeParse('id con espacios y símbolos raros!@#').success).toBe(false)
+  })
+
+  it('acepta ids custom legacy (no-UUID)', () => {
+    expect(branchIdSchema.safeParse('branch-matriz').success).toBe(true)
+    expect(branchIdSchema.safeParse('abc').success).toBe(true)
   })
 })
 
