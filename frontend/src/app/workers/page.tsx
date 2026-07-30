@@ -1,11 +1,14 @@
 export const dynamic = 'force-dynamic'
 
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/auth'
 import { getWorkers } from "@/actions/worker.actions"
 import { getCompanies, getJobPositions, getBranches } from "@/actions/admin.actions"
 import WorkerFormModal from "@/components/WorkerFormModal"
-import WorkersTable from "@/components/WorkersTable"
 import BulkWorkerImportModal from "@/components/BulkWorkerImportModal"
 import BulkClinicWalkInImportModal from "@/components/BulkClinicWalkInImportModal"
+import WorkersPageClient from "@/components/workers/WorkersPageClient"
+import type { SelectableWorker } from "@/components/workers/WorkerSelectableGrid"
 
 /**
  * @id ARCH-20260318-09
@@ -14,9 +17,13 @@ import BulkClinicWalkInImportModal from "@/components/BulkClinicWalkInImportModa
  * @id FIX-20260519-08: Fallback defensivo de branches para no romper /workers
  * @backup context/checkpoints/CHK_IMPL-20260519-14-PROJECT-ALTA-MASIVA.md
  * @id ARCH-20260708-01: distinción Alta Masiva Unidad Móvil (verde) vs Clínica Física (azul).
+ * @id IMPL-20260730-07 (FIX-20260730-06): Selección masiva + botón eliminar (sólo SUPERADMIN).
  */
 export default async function WorkersPage(props: { searchParams: Promise<{ edit?: string }> }) {
     const searchParams = await props.searchParams
+    const session = await getServerSession(authOptions)
+    const isSuperAdmin = (session?.user as { role?: string } | undefined)?.role === 'SUPERADMIN'
+
     const [workers, companies, jobPositions, branchesResult] = await Promise.allSettled([
         getWorkers(),
         getCompanies(),
@@ -32,6 +39,9 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
 
     const companyOptions = companies.value.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))
     const branchOptions = branches.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name }))
+
+    // Cast al shape que consume WorkerSelectableGrid (subset de lo que devuelve getWorkers).
+    const selectableWorkers: SelectableWorker[] = (workers.value as unknown as SelectableWorker[])
 
     return (
         <div className="space-y-8 pb-12">
@@ -50,11 +60,12 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
                 </div>
             </div>
 
-            <WorkersTable
-                workers={workers.value}
+            <WorkersPageClient
+                workers={selectableWorkers}
                 companies={companies.value}
                 jobPositions={jobPositions.value}
                 initialEditWorkerId={searchParams.edit}
+                isSuperAdmin={isSuperAdmin}
             />
         </div>
     )

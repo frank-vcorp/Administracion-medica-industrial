@@ -1014,3 +1014,66 @@ export async function getWorkerReportEmails(workerId: string) {
         orderBy: { createdAt: 'asc' },
     })
 }
+
+// ===========================================================================
+// FIX-20260730-06: Eliminación masiva de pacientes/trabajadores (SUPERADMIN).
+// Ref: context/SPECs/SPEC_FIX-20260730-06-DELETE-WORKERS-SUPERADMIN.md
+//
+// Hard delete total con cascade DB (migración
+// `20260730180000_worker_cascade_delete`). Chunks de 5 con
+// `prisma.$transaction` por chunk para sobrevivir timeouts de Vercel Hobby.
+// ===========================================================================
+
+/**
+ * Elimina (hard delete) un conjunto de trabajadores con TODO su historial
+ * clínico. RBAC: SOLO SUPERADMIN.
+ *
+ * Validaciones:
+ *   - Sesión activa (UNAUTHENTICATED si falta).
+ *   - Rol === 'SUPERADMIN' (FORBIDDEN en cualquier otro caso).
+ *   - workerIds: array no vacío.
+ *
+ * En éxito: `revalidatePath('/workers')` y retorna `{ ok, deletedCount, deletedWorkerIds }`.
+ * En error: retorna `{ ok: false, code, error }` con códigos estables.
+ */
+export async function deleteWorkersAction(args: {
+    workerIds: string[]
+    reason?: string
+}): Promise<
+    | { ok: true; deletedCount: number; deletedWorkerIds: string[] }
+    | {
+        ok: false
+        code: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'INVALID_INPUT' | 'NOT_FOUND' | 'INTERNAL_ERROR'
+        error: string
+    }
+> {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+        return { ok: false, code: 'UNAUTHENTICATED', error: 'Sin sesión' }
+    }
+    const role = (session.user as { role?: string }).role
+    if (role !== 'SUPERADMIN') {
+        return {
+            ok: false,
+            code: 'FORBIDDEN',
+            error: 'Se requiere rol SUPERADMIN para eliminar trabajadores',
+        }
+    }
+
+    if (!Array.isArray(args.workerIds) || args.workerIds.length === 0) {
+        return { ok: false, code: 'INVALID_INPUT', error: 'workerIds requerido (array no vacío)' }
+    }
+
+    // Importación lazy para no romper el module-level si el service cambia.
+    const { deleteWorkers } = await import('@/services/worker.service')
+    const result = await deleteWorkers({
+        workerIds: args.workerIds,
+        actorUserId: (session.user as { id: string }).id,
+        reason: args.reason,
+    })
+
+    if (result.ok) {
+        revalidatePath('/workers')
+    }
+    return result
+}

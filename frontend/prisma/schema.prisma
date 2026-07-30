@@ -219,7 +219,7 @@ model ClinicalHistory {
   data        Json     @default("{}")
   lastUpdated DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  worker      Worker   @relation(fields: [workerId], references: [id])
+  worker      Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
 
   @@map("clinical_histories")
 }
@@ -349,7 +349,7 @@ model EventTest {
   resultNotes         String? // IMPL-20260324-06: Notas del resultado
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
-  event               MedicalEvent              @relation(fields: [eventId], references: [id])
+  event               MedicalEvent              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   performedBy         User?                     @relation(fields: [performedById], references: [id])
   test                MedicalTest?              @relation(fields: [testId], references: [id])
   // IMPL-20260326-16: Snapshots de extracción IA por estudio (ARCH-20260326-16)
@@ -385,7 +385,7 @@ model MedicalEvent {
   branch                Branch                  @relation(fields: [branchId], references: [id])
   project               Project?                @relation(fields: [projectId], references: [id])
   intakeCreatedByUser   User?                   @relation("MedicalEventIntakeCreator", fields: [intakeCreatedByUserId], references: [id])
-  worker                Worker                  @relation(fields: [workerId], references: [id])
+  worker                Worker                  @relation(fields: [workerId], references: [id], onDelete: Cascade)
   exam                  MedicalExam?
   verdict               MedicalVerdict?
   studies               StudyRecord[]
@@ -418,7 +418,7 @@ model MedicalExam {
   physicalExamData Json?        @default("{}")
   somatometryData  Json?        @default("{}")
   vitalSignsData   Json?        @default("{}")
-  event            MedicalEvent @relation(fields: [eventId], references: [id])
+  event            MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@map("medical_exams")
 }
@@ -434,7 +434,7 @@ model StudyRecord {
   validatorNotes String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-  event          MedicalEvent @relation(fields: [eventId], references: [id])
+  event          MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@map("study_records")
 }
@@ -449,7 +449,7 @@ model LabRecord {
   isCompleted   Boolean      @default(false)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
-  event         MedicalEvent @relation(fields: [eventId], references: [id])
+  event         MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@map("lab_records")
 }
@@ -465,7 +465,7 @@ model MedicalVerdict {
   pdfUrl          String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
-  event           MedicalEvent @relation(fields: [eventId], references: [id])
+  event           MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
   validator       User         @relation(fields: [validatorId], references: [id])
 
   @@map("medical_verdicts")
@@ -499,7 +499,7 @@ model Appointment {
   branch                   Branch               @relation(fields: [branchId], references: [id])
   company                  Company?             @relation(fields: [companyId], references: [id])
   serviceProfile           MedicalProfile?      @relation(fields: [serviceProfileId], references: [id])
-  worker                   Worker               @relation(fields: [workerId], references: [id])
+  worker                   Worker               @relation(fields: [workerId], references: [id], onDelete: Cascade)
   identityVerifiedBy       User?                @relation("AppointmentIdentityVerifier", fields: [identityVerifiedByUserId], references: [id])
   medicalEvents            MedicalEvent?
   prefilledInvitation      PrefilledInvitation? // IMPL-20260324-07
@@ -638,7 +638,7 @@ model PrefilledInvitation {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
-  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
   generatedBy User?       @relation(fields: [generatedById], references: [id])
 
   @@map("prefilled_invitations")
@@ -700,7 +700,7 @@ model AIPrediagnosisSnapshot {
   isSuperseded         Boolean  @default(false)
   createdAt            DateTime @default(now())
 
-  extractionSnapshot StudyExtractionSnapshot @relation(fields: [extractionSnapshotId], references: [id])
+  extractionSnapshot StudyExtractionSnapshot @relation(fields: [extractionSnapshotId], references: [id], onDelete: Cascade)
   doctorReviews      DoctorStudyReview[]
 
   @@map("ai_prediagnosis_snapshots")
@@ -728,7 +728,7 @@ model DoctorStudyReview {
   doctorFeedbackNote     String?
   createdAt              DateTime @default(now())
 
-  prediagnosisSnapshot AIPrediagnosisSnapshot @relation(fields: [prediagnosisSnapshotId], references: [id])
+  prediagnosisSnapshot AIPrediagnosisSnapshot @relation(fields: [prediagnosisSnapshotId], references: [id], onDelete: Cascade)
   reviewedBy           User                   @relation(fields: [reviewedByUserId], references: [id])
 
   @@map("doctor_study_reviews")
@@ -834,7 +834,7 @@ model ProjectWorker {
   eventId         String?                      @unique
 
   project Project       @relation(fields: [projectId], references: [id])
-  worker  Worker        @relation(fields: [workerId], references: [id])
+  worker  Worker        @relation(fields: [workerId], references: [id], onDelete: Cascade)
   event   MedicalEvent? @relation(fields: [eventId], references: [id])
 
   @@id([projectId, workerId])
@@ -1272,7 +1272,7 @@ model LabOrder {
 
   // Relaciones humanas (obligatoria worker; resto opcional)
   workerId         String
-  worker           Worker             @relation(fields: [workerId], references: [id], onDelete: Restrict)
+  worker           Worker             @relation(fields: [workerId], references: [id], onDelete: Cascade)
   medicalEventId   String?
   medicalEvent     MedicalEvent?      @relation(fields: [medicalEventId], references: [id], onDelete: SetNull)
   // IMPL-20260711-01: Unidad móvil donde se tomó la muestra (opcional). ARCH-20260711-01.
