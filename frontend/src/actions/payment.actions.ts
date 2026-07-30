@@ -338,8 +338,11 @@ async function dispatchReceiptEmail(args: {
 
   try {
     // Carga dinámica de nodemailer — opcional, el sistema funciona sin él.
+    // El nombre del paquete se pasa via variable para que webpack NO intente
+    // resolver estáticamente la dependencia (no está en package.json).
+    const nodemailerPkg = 'nodemailer'
     // @ts-expect-error — paquete opcional, se carga solo si SMTP_HOST está configurado
-    const nodemailer = await import('nodemailer').catch(() => null)
+    const nodemailer = await import(/* webpackIgnore: true */ nodemailerPkg).catch(() => null)
     if (!nodemailer) {
       console.warn(
         '[RECEIPT] SMTP_HOST configurado pero nodemailer no está instalado. Fallback a log.'
