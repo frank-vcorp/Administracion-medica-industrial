@@ -1,0 +1,55 @@
+
+> frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /home/frank/repos/Administracion-medica-industrial/frontend
+
+ ✓ src/lib/validations/lab-catalog.test.ts (26 tests) 45ms
+ ✓ src/lib/schemas/__tests__/company-full-form.test.ts (19 tests) 65ms
+ ✓ src/lib/validation.utils.test.ts (43 tests) 98ms
+ ✓ src/actions/__tests__/mobile-unit.actions.test.ts (20 tests) 28ms
+ ✓ src/lib/schemas/company-update.test.ts (30 tests) 28ms
+ ✓ src/services/__tests__/company.service.test.ts (25 tests) 26ms
+ ✓ src/actions/__tests__/project.actions.test.ts (12 tests) 21ms
+ ✓ src/lib/lab-result-utils.test.ts (12 tests) 12ms
+ ✓ src/lib/__tests__/api-handler.test.ts (7 tests) 43ms
+ ✓ src/lib/validations/lab-cash.test.ts (12 tests) 20ms
+ ✓ src/services/__tests__/company.service.public.test.ts (7 tests) 35ms
+ ✓ src/lib/validations/lab-order.test.ts (10 tests) 21ms
+ ✓ src/lib/validations/lab-result.test.ts (12 tests) 30ms
+ ✓ src/lib/env/public-base-url.test.ts (9 tests) 8ms
+ ❯ src/actions/__tests__/maintenance.helpers.test.ts (12 tests | 12 failed) 16ms
+   × maintenance.actions.calculateNextDueDate > 1. PREVENTIVO → +90 días 7ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 2. VERIFICACION → +365 días 1ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 3. LIMPIEZA → +30 días 1ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 4. CORRECTIVO → null 1ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 5. override gana sobre cálculo automático 1ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 6. override explícito null significa "sin next due" (override gana siempre) 0ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 7. resultado es instancia de Date 0ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 8. idempotente 1ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 9. boundary: completedAt 2026-07-11 + 90d = 2026-10-09 1ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 10. CORRECTIVO con override gana sobre la regla "no aplica" 1ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 11. PREVENTIVO usa timestamp exacto, no calendáreo 1ms
+     → calculateNextDueDate is not a function
+   × maintenance.actions.calculateNextDueDate > 12. fechas futuras no se modifican 0ms
+     → calculateNextDueDate is not a function
+ ✓ src/hooks/__tests__/useProjectReportStatus.test.ts (3 tests) 82ms
+ ✓ src/lib/lab-order-totals.test.ts (9 tests) 9ms
+ ✓ src/lib/validations/lab-trace.test.ts (5 tests) 13ms
+
+ Test Files  1 failed | 17 passed (18)
+      Tests  12 failed | 261 passed (273)
+   Start at  06:02:11
+   Duration  2.69s (transform 1.78s, setup 0ms, collect 5.52s, tests 600ms, environment 9ms, prepare 2.72s)
+

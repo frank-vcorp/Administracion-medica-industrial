@@ -1,7 +1,0 @@
-{
-  "buildCommand": "npx prisma migrate deploy && npx prisma generate && npx next build",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "outputDirectory": ".next",
-  "framework": null,
-  "regions": ["iad1"]
-}

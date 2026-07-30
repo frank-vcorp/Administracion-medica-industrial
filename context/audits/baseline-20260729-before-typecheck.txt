@@ -1,0 +1,36 @@
+
+> frontend@0.1.0 typecheck
+> tsc --noEmit
+
+src/actions/__tests__/maintenance.helpers.test.ts(20,10): error TS2459: Module '"@/actions/maintenance.actions"' declares 'calculateNextDueDate' locally, but it is not exported.
+src/actions/__tests__/maintenance.helpers.test.ts(42,15): error TS2339: Property 'toBeNull' does not exist on type 'ExpectChain'.
+src/actions/__tests__/maintenance.helpers.test.ts(55,15): error TS2339: Property 'toBeNull' does not exist on type 'ExpectChain'.
+src/actions/__tests__/maintenance.helpers.test.ts(60,15): error TS2339: Property 'toBeInstanceOf' does not exist on type 'ExpectChain'.
+src/actions/__tests__/mobile-unit.actions.test.ts(6,32): error TS2305: Module '"vitest"' has no exported member 'beforeEach'.
+src/actions/__tests__/mobile-unit.actions.test.ts(6,44): error TS2305: Module '"vitest"' has no exported member 'vi'.
+src/actions/__tests__/mobile-unit.actions.test.ts(68,24): error TS2339: Property 'toHaveBeenCalled' does not exist on type 'ExpectChain'.
+src/actions/__tests__/mobile-unit.actions.test.ts(100,24): error TS2339: Property 'toHaveBeenCalled' does not exist on type 'ExpectChain'.
+src/actions/__tests__/mobile-unit.actions.test.ts(152,24): error TS2339: Property 'toHaveBeenCalledWith' does not exist on type 'ExpectChain'.
+src/actions/__tests__/mobile-unit.actions.test.ts(163,28): error TS2339: Property 'toHaveBeenCalled' does not exist on type 'ExpectChain'.
+src/actions/__tests__/mobile-unit.actions.test.ts(222,40): error TS2339: Property 'toBeNull' does not exist on type 'ExpectChain'.
+src/actions/__tests__/mobile-unit.actions.test.ts(228,26): error TS2339: Property 'toHaveBeenCalledWith' does not exist on type 'ExpectChain'.
+src/actions/__tests__/mobile-unit.actions.test.ts(229,14): error TS2339: Property 'objectContaining' does not exist on type '(value: unknown) => ExpectChain'.
+src/actions/__tests__/project.actions.test.ts(72,30): error TS2339: Property 'toMatchObject' does not exist on type 'ExpectChain'.
+src/actions/__tests__/project.actions.test.ts(115,34): error TS2339: Property 'toHaveBeenCalledWith' does not exist on type 'ExpectChain'.
+src/actions/__tests__/project.actions.test.ts(116,14): error TS2339: Property 'objectContaining' does not exist on type '(value: unknown) => ExpectChain'.
+src/actions/__tests__/project.actions.test.ts(117,23): error TS2339: Property 'objectContaining' does not exist on type '(value: unknown) => ExpectChain'.
+src/actions/__tests__/project.actions.test.ts(138,24): error TS2339: Property 'toBeGreaterThan' does not exist on type 'ExpectChain'.
+src/actions/__tests__/project.actions.test.ts(147,24): error TS2339: Property 'toBeLessThanOrEqual' does not exist on type 'ExpectChain'.
+src/components/projects/__tests__/ProjectMassiveReportModal.test.tsx(5,32): error TS2305: Module '"vitest"' has no exported member 'vi'.
+src/hooks/__tests__/useProjectReportStatus.test.ts(3,10): error TS2305: Module '"vitest"' has no exported member 'afterEach'.
+src/hooks/__tests__/useProjectReportStatus.test.ts(3,21): error TS2305: Module '"vitest"' has no exported member 'beforeEach'.
+src/hooks/__tests__/useProjectReportStatus.test.ts(3,55): error TS2305: Module '"vitest"' has no exported member 'vi'.
+src/lib/__tests__/api-handler.test.ts(9,32): error TS2305: Module '"vitest"' has no exported member 'vi'.
+src/lib/__tests__/api-handler.test.ts(28,17): error TS2339: Property 'toBeInstanceOf' does not exist on type 'ExpectChain'.
+src/lib/__tests__/api-handler.test.ts(91,17): error TS2339: Property 'toHaveBeenCalledWith' does not exist on type 'ExpectChain'.
+src/lib/__tests__/api-handler.test.ts(91,66): error TS2339: Property 'any' does not exist on type '(value: unknown) => ExpectChain'.
+src/services/__tests__/company.service.test.ts(221,20): error TS2339: Property 'toBeInstanceOf' does not exist on type 'ExpectChain'.
+src/services/__tests__/company.service.test.ts(238,20): error TS2339: Property 'toBeInstanceOf' does not exist on type 'ExpectChain'.
+tests/flujo-completo.spec.ts(73,7): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+tests/flujo-completo.spec.ts(360,29): error TS2554: Expected 2-3 arguments, but got 1.

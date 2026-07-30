@@ -1,0 +1,362 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<LocalSession xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Patient>
+    <FirstName>JESSICA GABRIELA</FirstName>
+    <LastName>MORENO GOMEZ</LastName>
+    <Gender>Female</Gender>
+    <BirthDate xsi:nil="true" />
+    <Address>
+      <Address1>AMI</Address1>
+    </Address>
+    <Number>8</Number>
+    <NoahPatientId>0</NoahPatientId>
+    <Guid xsi:nil="true" />
+    <CreatedDate>2024-09-17T09:19:17.05</CreatedDate>
+    <Additional>
+      <UserText1 />
+      <UserText2 />
+      <UserText3 />
+      <UserText4 />
+      <ClientNote />
+      <ClientNotify />
+      <HearingAidDescriptions>
+        <Right>
+          <Model />
+          <SerialNumber />
+          <Style>BTE</Style>
+          <VentingSize>VentingNone</VentingSize>
+          <CompressionSpeed>Fast</CompressionSpeed>
+        </Right>
+        <Left>
+          <Model />
+          <SerialNumber />
+          <Style>BTE</Style>
+          <VentingSize>VentingNone</VentingSize>
+          <CompressionSpeed>Fast</CompressionSpeed>
+        </Left>
+        <UseSameSetupForBothEars>false</UseSameSetupForBothEars>
+      </HearingAidDescriptions>
+    </Additional>
+    <HealthInsuranceCard />
+    <PhysicianIdentification />
+  </Patient>
+  <Sessions>
+    <Session>
+      <Id xsi:nil="true" />
+      <CreateDate>2024-09-17T09:19:17.1725312</CreateDate>
+      <Actions>
+        <Action>
+          <ID>-1</ID>
+          <IsPrimusAction>true</IsPrimusAction>
+          <IsCorrupted>false</IsCorrupted>
+          <CreateDate>2024-09-17T09:19:19.542267</CreateDate>
+          <LastModifiedDate>2024-09-17T09:29:04.8132461</LastModifiedDate>
+          <ActionGroup xsi:nil="true" />
+          <UserInitials>PRADO</UserInitials>
+          <Description>Nuevo audiograma </Description>
+          <ActionType>Audiogram</ActionType>
+          <IsReadyToUpdateInSatDb>true</IsReadyToUpdateInSatDb>
+          <PublicData xsi:type="AudioSession">
+            <ToneTHRAudiogram>
+              <AudiogramOfTonePoint>
+                <AudiogramType>ToneThr</AudiogramType>
+                <AudiogramSubType>00000000-0000-0000-0000-000000000000</AudiogramSubType>
+                <IsNoiseAudiogram>false</IsNoiseAudiogram>
+                <IsSDSFAudiogram>false</IsSDSFAudiogram>
+                <AudioCdHlToSplConversionDelta xsi:nil="true" />
+                <IsBackFfUsed>false</IsBackFfUsed>
+                <IsMainAudiogramType>true</IsMainAudiogramType>
+                <MeasurementConditions>
+                  <SignalType1>Tone</SignalType1>
+                  <SignalType2>NoSignal</SignalType2>
+                  <WarbleModFreq1>-32767</WarbleModFreq1>
+                  <WarbleModFreq2>-32767</WarbleModFreq2>
+                  <WarbleModSize1>-32767</WarbleModSize1>
+                  <WarbleModSize2>-32767</WarbleModSize2>
+                  <AUXParm1>NoAUXParm</AUXParm1>
+                  <AUXParm2>NoAUXParm</AUXParm2>
+                  <SignalOutput1>ACL</SignalOutput1>
+                  <SignalOutput2>ACR</SignalOutput2>
+                  <PresentType1>Pulse</PresentType1>
+                  <PresentType2>Continuos</PresentType2>
+                  <PulseModFreq1>-32767</PulseModFreq1>
+                  <PulseModFreq2>-32767</PulseModFreq2>
+                  <PulseDutyCycle1>-32767</PulseDutyCycle1>
+                  <PulseDutyCycle2>-32767</PulseDutyCycle2>
+                  <AMModSize1>-32767</AMModSize1>
+                  <AMModSize2>-32767</AMModSize2>
+                  <FMModSize1>-32767</FMModSize1>
+                  <FMModSize2>-32767</FMModSize2>
+                  <OnTime1>-32767</OnTime1>
+                  <OnTime2>-32767</OnTime2>
+                  <OffTime1>-32767</OffTime1>
+                  <OffTime2>-32767</OffTime2>
+                  <SiSiParm1>-32767</SiSiParm1>
+                  <SiSiParm2>-32767</SiSiParm2>
+                  <TransType1>Unknown</TransType1>
+                  <TransType2>Unknown</TransType2>
+                  <TransCalStand1>NoTransCalStand</TransCalStand1>
+                  <TransCalStand2>NoTransCalStand</TransCalStand2>
+                  <dbWeighting1>HTL</dbWeighting1>
+                  <dbWeighting2>HTL</dbWeighting2>
+                  <Condition1>UnAided</Condition1>
+                  <Condition2>NoCondition</Condition2>
+                  <SpeechThresType>NotUsed</SpeechThresType>
+                  <TransDescr>DD65 V2</TransDescr>
+                  <TransDescrMasking>DD65 V2</TransDescrMasking>
+                </MeasurementConditions>
+                <Points>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>250</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>100</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>500</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>1000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>100</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>2000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>3000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>100</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>4000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>6000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>8000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                </Points>
+                <Notes />
+                <Legends>
+                  <TypeDescription>AUDIOMETRIA AUTOMATICA</TypeDescription>
+                  <LastModified>2024-09-17T09:25:26.6263986</LastModified>
+                </Legends>
+                <AdditionalPoints />
+                <TestDefinitionId>032c30e0-8808-4504-8fb2-2bf992d0c4d2</TestDefinitionId>
+                <TestDefinitionNameId>AUDIOMETRIA AUTOMATICA</TestDefinitionNameId>
+                <DisableSRT50Calculation>false</DisableSRT50Calculation>
+                <CriteriaNote />
+                <QualityAssistantResults />
+                <MeasurementConditionsExtra>
+                  <UseMaskingFromCD>false</UseMaskingFromCD>
+                  <AmbientNoise xsi:nil="true" />
+                </MeasurementConditionsExtra>
+              </AudiogramOfTonePoint>
+              <AudiogramOfTonePoint>
+                <AudiogramType>ToneThr</AudiogramType>
+                <AudiogramSubType>00000000-0000-0000-0000-000000000000</AudiogramSubType>
+                <IsNoiseAudiogram>false</IsNoiseAudiogram>
+                <IsSDSFAudiogram>false</IsSDSFAudiogram>
+                <AudioCdHlToSplConversionDelta xsi:nil="true" />
+                <IsBackFfUsed>false</IsBackFfUsed>
+                <IsMainAudiogramType>true</IsMainAudiogramType>
+                <MeasurementConditions>
+                  <SignalType1>Tone</SignalType1>
+                  <SignalType2>NoSignal</SignalType2>
+                  <WarbleModFreq1>-32767</WarbleModFreq1>
+                  <WarbleModFreq2>-32767</WarbleModFreq2>
+                  <WarbleModSize1>-32767</WarbleModSize1>
+                  <WarbleModSize2>-32767</WarbleModSize2>
+                  <AUXParm1>NoAUXParm</AUXParm1>
+                  <AUXParm2>NoAUXParm</AUXParm2>
+                  <SignalOutput1>ACR</SignalOutput1>
+                  <SignalOutput2>ACL</SignalOutput2>
+                  <PresentType1>Pulse</PresentType1>
+                  <PresentType2>Continuos</PresentType2>
+                  <PulseModFreq1>-32767</PulseModFreq1>
+                  <PulseModFreq2>-32767</PulseModFreq2>
+                  <PulseDutyCycle1>-32767</PulseDutyCycle1>
+                  <PulseDutyCycle2>-32767</PulseDutyCycle2>
+                  <AMModSize1>-32767</AMModSize1>
+                  <AMModSize2>-32767</AMModSize2>
+                  <FMModSize1>-32767</FMModSize1>
+                  <FMModSize2>-32767</FMModSize2>
+                  <OnTime1>-32767</OnTime1>
+                  <OnTime2>-32767</OnTime2>
+                  <OffTime1>-32767</OffTime1>
+                  <OffTime2>-32767</OffTime2>
+                  <SiSiParm1>-32767</SiSiParm1>
+                  <SiSiParm2>-32767</SiSiParm2>
+                  <TransType1>Unknown</TransType1>
+                  <TransType2>Unknown</TransType2>
+                  <TransCalStand1>NoTransCalStand</TransCalStand1>
+                  <TransCalStand2>NoTransCalStand</TransCalStand2>
+                  <dbWeighting1>HTL</dbWeighting1>
+                  <dbWeighting2>HTL</dbWeighting2>
+                  <Condition1>UnAided</Condition1>
+                  <Condition2>NoCondition</Condition2>
+                  <SpeechThresType>NotUsed</SpeechThresType>
+                  <TransDescr>DD65 V2</TransDescr>
+                  <TransDescrMasking>DD65 V2</TransDescrMasking>
+                </MeasurementConditions>
+                <Points>
+                  <TonePoint>
+                    <Intensity1>100</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>250</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>100</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>500</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>1000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>2000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>3000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>4000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>-50</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>6000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                  <TonePoint>
+                    <Intensity1>100</Intensity1>
+                    <Intensity2>-32767</Intensity2>
+                    <Freq1>8000</Freq1>
+                    <Freq2>0</Freq2>
+                    <Status>NoStatus</Status>
+                    <WeberResult xsi:nil="true" />
+                  </TonePoint>
+                </Points>
+                <Notes />
+                <Legends>
+                  <TypeDescription>AUDIOMETRIA AUTOMATICA</TypeDescription>
+                  <LastModified>2024-09-17T09:29:02.1700671</LastModified>
+                </Legends>
+                <AdditionalPoints />
+                <TestDefinitionId>032c30e0-8808-4504-8fb2-2bf992d0c4d2</TestDefinitionId>
+                <TestDefinitionNameId>AUDIOMETRIA AUTOMATICA</TestDefinitionNameId>
+                <DisableSRT50Calculation>false</DisableSRT50Calculation>
+                <CriteriaNote />
+                <QualityAssistantResults />
+                <MeasurementConditionsExtra>
+                  <UseMaskingFromCD>false</UseMaskingFromCD>
+                  <AmbientNoise xsi:nil="true" />
+                </MeasurementConditionsExtra>
+              </AudiogramOfTonePoint>
+            </ToneTHRAudiogram>
+            <SpeechQSINAudiogram />
+            <ToneAvgCalcValues>
+              <LeftEar1 />
+              <LeftEar2 />
+              <RightEar1 />
+              <RightEar2 />
+              <LeftEar1Frequencies>
+                <ToneAvg>p250</ToneAvg>
+                <ToneAvg>p500</ToneAvg>
+                <ToneAvg>p1000</ToneAvg>
+                <ToneAvg>p2000</ToneAvg>
+                <ToneAvg>p3000</ToneAvg>
+                <ToneAvg>p4000</ToneAvg>
+                <ToneAvg>p6000</ToneAvg>
+                <ToneAvg>p8000</ToneAvg>
+              </LeftEar1Frequencies>
+              <RightEar1Frequencies>
+                <ToneAvg>p250</ToneAvg>
+                <ToneAvg>p500</ToneAvg>
+                <ToneAvg>p1000</ToneAvg>
+                <ToneAvg>p2000</ToneAvg>
+                <ToneAvg>p3000</ToneAvg>
+                <ToneAvg>p4000</ToneAvg>
+                <ToneAvg>p6000</ToneAvg>
+                <ToneAvg>p8000</ToneAvg>
+              </RightEar1Frequencies>
+            </ToneAvgCalcValues>
+            <ModuleVersion>6.0.2.44</ModuleVersion>
+          </PublicData>
+        </Action>
+      </Actions>
+    </Session>
+    <Session>
+      <Id xsi:nil="true" />
+      <CreateDate>2026-07-01T11:39:30.5385911</CreateDate>
+      <Actions />
+    </Session>
+  </Sessions>
+  <User>
+    <Initials>PRADO</Initials>
+    <Name>PRADO</Name>
+  </User>
+</LocalSession>
