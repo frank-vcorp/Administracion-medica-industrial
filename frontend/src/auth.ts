@@ -117,6 +117,23 @@ export const authOptions: NextAuthOptions = {
         session.user.fullName = token.name || ""
         session.user.role = token.role
         session.user.companyId = token.companyId
+        // FIX-20260730-01: detectar sesión huérfana (user.id inexistente en BD).
+        // Si el JWT trae un id que no existe en users, limpiamos session.user.id
+        // para que las server actions que usan createdByUserId no rompan FK P2003.
+        // El service (company.service.ts:225) también tiene defensa por si esto falla.
+        if (session.user.id) {
+          const exists = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { id: true },
+          })
+          if (!exists) {
+            console.warn(
+              `[NextAuth session] JWT con user.id huérfano: ${session.user.id} (${session.user.email}). ` +
+              `Probable causa: seed/reset borró al user pero el JWT sigue vigente.`
+            )
+            session.user.id = ""
+          }
+        }
       }
       return session
     },

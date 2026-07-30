@@ -218,12 +218,33 @@ export async function generateCompanySelfRegLink(
     ? 'COMPANY_UPDATE'
     : 'VENDOR_LINK'
 
+  // FIX-20260730-01: defensa contra sesión huérfana. Si createdByUserId viene
+  // con un id que no existe en users, NO fallamos con P2003: registramos el
+  // link con createdByUserId=null. La trazabilidad se mantiene via el JWT y
+  // los logs (no perdemos la operación). Esta defensa es idempotente y
+  // preserva el comportamiento esperado del flow.
+  let safeCreatedByUserId: string | null = null
+  if (createdByUserId) {
+    const userExists = await prisma.user.findUnique({
+      where: { id: createdByUserId },
+      select: { id: true },
+    })
+    if (userExists) {
+      safeCreatedByUserId = createdByUserId
+    } else {
+      console.warn(
+        `[generateCompanySelfRegLink] createdByUserId huérfano: ${createdByUserId}. ` +
+        `Registrando link sin owner (createdByUserId=null).`
+      )
+    }
+  }
+
   const created = await prisma.companySelfRegistration.create({
     data: {
       tokenHash: hash,
       expiresAt,
       status: CompanySelfRegStatus.ACTIVE,
-      createdByUserId: createdByUserId ?? null,
+      createdByUserId: safeCreatedByUserId,
       channel,
       targetCompanyId: targetCompanyId ?? null,
       uploadedFiles: [],
