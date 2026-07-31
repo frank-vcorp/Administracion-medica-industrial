@@ -1,9 +1,17 @@
 /**
  * @file Vista completa (read-only) de las 10 secciones del formulario extenso.
  * @id IMPL-20260623-02
+ * @fix  FIX-FRANK-20260731-07 — vista read-only con mejor jerarquía visual.
  *
- * Si la Company está HABILITADO, el vendedor/admin puede editar.
- * En PENDIENTE_REVISION, se renderiza en modo revisión.
+ * Si la Company está HABILITADO, el vendedor/admin puede editar desde
+ * /companies/[id]/edit. En PENDIENTE_REVISION, se renderiza en modo revisión.
+ *
+ * Layout por sección:
+ *   - Header con icono + título + descripción breve.
+ *   - Grid de campos en 2 columnas (responsive: 1 col en móvil).
+ *   - Cada campo: label pequeño uppercase + valor prominent.
+ *   - Valores vacíos: placeholder "—" en gris claro.
+ *   - Domicilio descompuesto en Calle + Int + Ext (FIX-ARCH-20260624-05).
  */
 import type { Company, CompanyStatus } from '@prisma/client'
 
@@ -12,29 +20,99 @@ function safeParse<T extends Record<string, unknown>>(value: unknown): T | null 
   return value as T
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function ValueCell({
+  label,
+  value,
+  mono = false,
+  className = '',
+}: {
+  label: string
+  value: unknown
+  mono?: boolean
+  className?: string
+}) {
+  let display: React.ReactNode
+  if (value === null || value === undefined || value === '') {
+    display = <span className="text-slate-300 font-normal">—</span>
+  } else if (mono) {
+    display = <span className="font-mono text-xs">{String(value)}</span>
+  } else {
+    display = String(value)
+  }
   return (
-    <div className="flex flex-col sm:flex-row sm:gap-2 py-1.5 border-b border-slate-50 last:border-0">
-      <dt className="text-xs font-bold text-slate-400 uppercase min-w-[140px]">{label}</dt>
-      <dd className="text-sm text-slate-700 font-medium break-words">{value || '—'}</dd>
+    <div className={`bg-slate-50/60 rounded-lg px-4 py-3 border border-slate-100 ${className}`}>
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+        {label}
+      </p>
+      <p className="text-sm font-semibold text-slate-800 break-words">{display}</p>
     </div>
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  description,
+  icon,
+  children,
+}: {
+  title: string
+  description?: string
+  icon: string
+  children: React.ReactNode
+}) {
   return (
-    <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-      <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">{title}</h3>
-      <dl className="space-y-1">{children}</dl>
+    <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <header className="flex items-start gap-3 px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 to-transparent">
+        <span className="text-2xl leading-none mt-0.5" aria-hidden>
+          {icon}
+        </span>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base font-black text-slate-800 leading-tight">{title}</h3>
+          {description && (
+            <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+          )}
+        </div>
+      </header>
+      <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">{children}</div>
     </section>
   )
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="col-span-2 text-center py-8 text-sm text-slate-400 italic">
+      {message}
+    </div>
+  )
+}
+
+/** Une los componentes del domicilio en un string legible. */
+function buildDomicilio(fiscal: Record<string, unknown>): string | null {
+  const calle = (fiscal.domicilioCalle as string | undefined) ?? (fiscal.domicilio as string | undefined)
+  const exterior = fiscal.domicilioExterior as string | undefined
+  const interior = fiscal.domicilioInterior as string | undefined
+  if (!calle) return null
+  const parts = [calle.trim()]
+  if (exterior) parts.push(`Ext. ${exterior.trim()}`)
+  if (interior) parts.push(`Int. ${interior.trim()}`)
+  return parts.join(' · ')
 }
 
 export default function CompanyFullFormView({
   company,
   mode = 'readonly',
 }: {
-  company: Pick<Company, 'estado' | 'fiscalData' | 'repLegalData' | 'rhData' | 'cuentasPagarData' | 'referenciasData' | 'documentosAdjuntos' | 'origen'>
+  company: Pick<
+    Company,
+    | 'estado'
+    | 'fiscalData'
+    | 'repLegalData'
+    | 'rhData'
+    | 'cuentasPagarData'
+    | 'referenciasData'
+    | 'documentosAdjuntos'
+    | 'origen'
+  >
   mode?: 'readonly' | 'review' | 'editable'
 }) {
   const fiscal = safeParse<Record<string, unknown>>(company.fiscalData)
@@ -49,111 +127,197 @@ export default function CompanyFullFormView({
     : null
 
   const editable = mode === 'editable' || (mode === 'review' && company.estado === 'PENDIENTE_REVISION')
-  void editable // flag de control: editable se respetará al integrar editor inline
+  void editable // flag reservado para editor inline futuro
 
   return (
-    <div className="space-y-4">
-      <Section title="1. Información general y fiscal">
+    <div className="space-y-5">
+      {/* 1. Información general y fiscal */}
+      <Section
+        title="Información General y Fiscal"
+        description="Datos legales y de identificación ante el SAT"
+        icon="🏛️"
+      >
         {fiscal ? (
           <>
-            <Row label="Razón Social" value={fiscal.razonSocial as string} />
-            <Row label="RFC" value={<span className="font-mono">{fiscal.rfc as string}</span>} />
-            <Row label="Giro" value={fiscal.giro as string} />
-            {/* FIX-ARCH-20260624-05: compat con DB legacy (campo `domicilio` plano) */}
-            <Row
-              label="Domicilio (calle y número)"
-              value={[
-                (fiscal.domicilioCalle as string | undefined) ?? (fiscal.domicilio as string | undefined),
-                fiscal.domicilioExterior as string | undefined,
-                fiscal.domicilioInterior as string | undefined,
-              ]
-                .filter(Boolean)
-                .join(' ') || '—'}
+            <ValueCell label="Razón Social" value={fiscal.razonSocial} />
+            <ValueCell label="RFC" value={fiscal.rfc} mono />
+            <ValueCell label="Giro de la empresa" value={fiscal.giro} />
+            <ValueCell
+              label="Domicilio Fiscal"
+              value={buildDomicilio(fiscal)}
+              className="md:col-span-2"
             />
-            <Row label="Colonia" value={fiscal.colonia as string} />
-            <Row label="Estado" value={fiscal.estado as string} />
-            <Row label="Municipio" value={fiscal.municipio as string} />
-            <Row label="País" value={(fiscal.pais as string) ?? 'México'} />
-            <Row label="CP" value={fiscal.cp as string} />
-            <Row label="Uso de CFDI" value={fiscal.usoCFDI as string} />
-            <Row label="Método de Pago" value={fiscal.metodoPago as string} />
+            <ValueCell label="Colonia" value={fiscal.colonia} />
+            <ValueCell label="Código Postal" value={fiscal.cp} mono />
+            <ValueCell label="Estado" value={fiscal.estado} />
+            <ValueCell label="Municipio" value={fiscal.municipio} />
+            <ValueCell label="País" value={(fiscal.pais as string) ?? 'México'} />
+            <ValueCell
+              label="Uso de CFDI"
+              value={fiscal.usoCFDI}
+              mono
+            />
+            <ValueCell
+              label="Método de Pago"
+              value={fiscal.metodoPago}
+              mono
+            />
           </>
         ) : (
-          <p className="text-sm text-slate-500">No se ha capturado información fiscal.</p>
+          <EmptyState message="No se ha capturado información fiscal." />
         )}
       </Section>
 
-      <Section title="3. Representante legal">
+      {/* 2. Datos bancarios (placeholder — no se muestra el JSON en read-only actualmente) */}
+
+      {/* 3. Representante Legal */}
+      <Section
+        title="Representante Legal"
+        description="Persona que firma legalmente por la empresa"
+        icon="✍️"
+      >
         {repLegal ? (
           <>
-            <Row label="Nombre" value={`${repLegal.nombre as string} ${repLegal.apellidos as string}`} />
-            <Row label="Puesto" value={repLegal.puesto as string} />
-            <Row label="Teléfono" value={repLegal.telefono as string} />
-            <Row label="Ext." value={repLegal.extension as string} />
-            <Row label="Email" value={repLegal.email as string} />
+            <ValueCell
+              label="Nombre completo"
+              value={`${(repLegal.nombre as string) ?? ''} ${(repLegal.apellidos as string) ?? ''}`.trim()}
+              className="md:col-span-2"
+            />
+            <ValueCell label="Puesto" value={repLegal.puesto} />
+            <ValueCell label="Teléfono" value={repLegal.telefono} mono />
+            <ValueCell label="Extensión" value={repLegal.extension} mono />
+            <ValueCell
+              label="Email"
+              value={repLegal.email}
+              className="md:col-span-2"
+            />
           </>
         ) : (
-          <p className="text-sm text-slate-500">No capturado.</p>
+          <EmptyState message="No capturado." />
         )}
       </Section>
 
-      <Section title="4. RH / Seguridad / Compras">
+      {/* 4. RH / Seguridad / Compras */}
+      <Section
+        title="Responsable de RH, Seguridad o Compras"
+        description="Persona que gestiona la operación con AMI"
+        icon="👥"
+      >
         {rh ? (
           <>
-            <Row label="Nombre" value={`${rh.nombre as string} ${rh.apellidos as string}`} />
-            <Row label="Puesto" value={rh.puesto as string} />
-            <Row label="Teléfono" value={rh.telefono as string} />
-            <Row label="Email" value={rh.email as string} />
+            <ValueCell
+              label="Nombre completo"
+              value={`${(rh.nombre as string) ?? ''} ${(rh.apellidos as string) ?? ''}`.trim()}
+              className="md:col-span-2"
+            />
+            <ValueCell label="Puesto" value={rh.puesto} />
+            <ValueCell label="Teléfono" value={rh.telefono} mono />
+            <ValueCell label="Extensión" value={rh.extension} mono />
+            <ValueCell label="Email" value={rh.email} className="md:col-span-2" />
           </>
         ) : (
-          <p className="text-sm text-slate-500">No capturado.</p>
+          <EmptyState message="No capturado." />
         )}
       </Section>
 
-      <Section title="5. Cuentas por pagar">
+      {/* 5. Cuentas por pagar */}
+      <Section
+        title="Responsable de Cuentas por Pagar"
+        description="Persona que gestiona los pagos a AMI"
+        icon="💳"
+      >
         {cxp ? (
           <>
-            <Row label="Nombre" value={`${cxp.nombre as string} ${cxp.apellidos as string}`} />
-            <Row label="Puesto" value={cxp.puesto as string} />
-            <Row label="Teléfono" value={cxp.telefono as string} />
-            <Row label="Email" value={cxp.email as string} />
+            <ValueCell
+              label="Nombre completo"
+              value={`${(cxp.nombre as string) ?? ''} ${(cxp.apellidos as string) ?? ''}`.trim()}
+              className="md:col-span-2"
+            />
+            <ValueCell label="Puesto" value={cxp.puesto} />
+            <ValueCell label="Teléfono" value={cxp.telefono} mono />
+            <ValueCell label="Extensión" value={cxp.extension} mono />
+            <ValueCell label="Email" value={cxp.email} className="md:col-span-2" />
           </>
         ) : (
-          <p className="text-sm text-slate-500">No capturado.</p>
+          <EmptyState message="No capturado." />
         )}
       </Section>
 
+      {/* 8. Referencias comerciales (de la ficha extendida) */}
       {refs && refs.length > 0 && (
-        <Section title="8. Referencias comerciales">
+        <Section
+          title="Referencias Comerciales"
+          description={`${refs.length} referencia${refs.length === 1 ? '' : 's'} para solicitud de crédito`}
+          icon="🤝"
+        >
           {refs.map((r, i) => (
-            <div key={i} className="border border-slate-100 rounded-lg p-3 mb-2">
-              <p className="text-sm font-bold text-slate-700">{r.nombre as string}</p>
-              <Row label="RFC" value={r.rfc as string} />
-              <Row label="Teléfono" value={r.telefono as string} />
-              <Row label="Celular" value={r.celular as string} />
-            </div>
+            <ValueCell
+              key={i}
+              label={`Referencia #${i + 1}`}
+              value={(r.nombre as string) ?? ''}
+              className="md:col-span-2"
+            />
+          ))}
+          {refs.map((r, i) => (
+            <ValueCell
+              key={`rfc-${i}`}
+              label={`RFC Ref. ${i + 1}`}
+              value={(r.rfc as string) ?? ''}
+              mono
+            />
+          ))}
+          {refs.map((r, i) => (
+            <ValueCell
+              key={`tel-${i}`}
+              label={`Teléfono Ref. ${i + 1}`}
+              value={(r.telefono as string) ?? ''}
+              mono
+            />
+          ))}
+          {refs.map((r, i) => (
+            <ValueCell
+              key={`cel-${i}`}
+              label={`Celular Ref. ${i + 1}`}
+              value={(r.celular as string) ?? ''}
+              mono
+            />
           ))}
         </Section>
       )}
 
+      {/* 9. Documentación adjunta */}
       {docs && docs.length > 0 && (
-        <Section title="9. Documentación adjunta">
-          <ul className="space-y-1">
+        <Section
+          title="Documentación Adjunta"
+          description={`${docs.length} archivo${docs.length === 1 ? '' : 's'} subido${docs.length === 1 ? '' : 's'}`}
+          icon="📎"
+        >
+          <ul className="md:col-span-2 space-y-2">
             {docs.map((d, i) => {
-              const fileUrl = (d.fileUrl as string) ?? (d.key ? `/api/files/${d.key}` : '#')
+              const fileUrl =
+                (d.fileUrl as string) ?? (d.key ? `/api/files/${d.key}` : '#')
+              const sizeKb = Math.round(((d.size as number) ?? 0) / 1024)
               return (
-                <li key={i} className="text-sm">
-                  <a
-                    href={fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-600 hover:text-indigo-800 underline"
-                  >
-                    {d.nombre as string}
-                  </a>
-                  <span className="text-xs text-slate-400 ml-2">
-                    ({d.extension as string}, {Math.round(((d.size as number) ?? 0) / 1024)} KB)
+                <li
+                  key={i}
+                  className="flex items-center gap-3 bg-slate-50/60 rounded-lg px-4 py-2.5 border border-slate-100 hover:border-indigo-300 transition-colors"
+                >
+                  <span className="text-lg" aria-hidden>
+                    📄
                   </span>
+                  <div className="flex-1 min-w-0">
+                    <a
+                      href={fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 underline truncate block"
+                    >
+                      {d.nombre as string}
+                    </a>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                      {(d.extension as string) ?? '—'} · {sizeKb} KB
+                    </p>
+                  </div>
                 </li>
               )
             })}
