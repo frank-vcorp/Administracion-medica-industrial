@@ -83,7 +83,17 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
     razonSocial: (fiscal.razonSocial as string) ?? company.name,
     rfc: (fiscal.rfc as string) ?? company.rfc ?? '',
     giro: (fiscal.giro as string) ?? '',
-    domicilio: (fiscal.domicilio as string) ?? '',
+    // FIX-FRANK-20260731-06: domicilio se compone de 3 campos desde
+    // FIX-ARCH-20260624-05 (domicilioCalle + Interior + Exterior). El form
+    // legacy usaba un solo campo 'domicilio'. Se mantiene compat: si la
+    // empresa tiene datos en 'domicilio' (empresas creadas antes del fix),
+    // se toman como calle + 'sin interior/exterior'.
+    domicilioCalle:
+      (fiscal.domicilioCalle as string) ??
+      (fiscal.domicilio as string) ??
+      '',
+    domicilioInterior: (fiscal.domicilioInterior as string) ?? '',
+    domicilioExterior: (fiscal.domicilioExterior as string) ?? '',
     colonia: (fiscal.colonia as string) ?? '',
     estado: (fiscal.estado as string) ?? '',
     municipio: (fiscal.municipio as string) ?? '',
@@ -283,14 +293,34 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
               className={inputClass}
             />
           </Field>
-          <Field label="Domicilio *" full>
+          {/* FIX-FRANK-20260731-06: domicilio de 3 campos
+              (Calle req + Interior opt + Exterior opt) según FIX-ARCH-20260624-05.
+              Reemplaza al input único legacy que se vaciaba al editar. */}
+          <Field label="Domicilio Fiscal (Calle y número) *" full>
             <input
               required
-              value={fiscalForm.domicilio}
-              onChange={(e) => setFiscalForm({ ...fiscalForm, domicilio: e.target.value })}
+              value={fiscalForm.domicilioCalle}
+              onChange={(e) => setFiscalForm({ ...fiscalForm, domicilioCalle: e.target.value })}
               className={inputClass}
+              placeholder="Calle y número exterior"
             />
           </Field>
+          <div className="grid grid-cols-2 gap-3 col-span-full md:col-span-2">
+            <Field label="Número Interior (opcional)">
+              <input
+                value={fiscalForm.domicilioInterior}
+                onChange={(e) => setFiscalForm({ ...fiscalForm, domicilioInterior: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Número Exterior (opcional)">
+              <input
+                value={fiscalForm.domicilioExterior}
+                onChange={(e) => setFiscalForm({ ...fiscalForm, domicilioExterior: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+          </div>
           <Field label="Colonia *" full>
             <input
               required
