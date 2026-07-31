@@ -1,6 +1,7 @@
 /**
  * @file Listado de Empresas con filtros (estado, origen, vendedor, búsqueda).
  * @id IMPL-20260623-03
+ * @fix  FIX-FRANK-20260731-05 — Vista cambiada a tabla densa (era grid de cards).
  * @spec context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
  *
  * Server component. Lee `searchParams` (Promise en Next.js 16+), los parsea
@@ -8,6 +9,13 @@
  * `listCompaniesWithFilters` (server action que valida sesión).
  * El formulario se envía por GET a `/companies`, recargando la página
  * con los nuevos query params.
+ *
+ * FIX-FRANK-20260731-05: Vista anterior era grid 3 columnas. Con 1 sola
+ * empresa o pocas empresas el grid se veía torpe (1 card minúscula en
+ * esquina con mucho espacio vacío). Reemplazado por tabla densa.
+ * - Para SUPERADMIN: `CompanyBulkDeleteShell` (tabla + barra inferior).
+ * - Para otros roles: tabla plana (sin checkboxes) usando el mismo shape
+ *   que `CompanySelectableGrid` legacy, ahora desde `CompanySelectableTable`.
  */
 export const dynamic = 'force-dynamic'
 
@@ -21,9 +29,10 @@ import {
   listActiveSellersAction,
 } from '@/actions/company.actions'
 import CompanyFormModal from '@/components/CompanyFormModal'
-import { CompanyStatusBadge } from '@/components/companies/CompanyStatusBadge'
 import CompanyBulkDeleteShell from '@/components/companies/CompanyBulkDeleteShell'
-import type { SelectableCompany } from '@/components/companies/CompanySelectableGrid'
+import CompanySelectableTable, {
+  type SelectableCompany,
+} from '@/components/companies/CompanySelectableTable'
 
 const ESTADO_OPTIONS: CompanyStatus[] = [
   'PENDIENTE_REVISION',
@@ -211,100 +220,15 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
       {canDelete ? (
         <CompanyBulkDeleteShell companies={selectableCompanies} />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {companies.length === 0 && (
-            <div className="col-span-3 text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-              {filtersActive
-                ? 'No hay empresas que coincidan con los filtros.'
-                : 'No hay empresas registradas aún.'}
-            </div>
-          )}
-          {selectableCompanies.map((c) => (
-            <CompanyCard
-              key={c.id}
-              id={c.id}
-              name={c.name}
-              rfc={c.rfc || 'Sin RFC'}
-              contact={c.contactName || '---'}
-              email={c.email}
-              defaultBranch={c.defaultBranch?.name}
-              estado={c.estado}
-              origen={c.origen}
-              sellerName={c.seller?.fullName ?? null}
-            />
-          ))}
-        </div>
+        <CompanySelectableTable
+          companies={selectableCompanies}
+          selectable={false}
+          selectedIds={new Set()}
+          onSelectionChange={() => {
+            /* no-op: tabla plana para roles no-SUPERADMIN */
+          }}
+        />
       )}
-    </div>
-  )
-}
-
-interface CompanyCardProps {
-  id: string
-  name: string
-  rfc: string
-  contact: string
-  email: string | null
-  defaultBranch?: string
-  estado: CompanyStatus
-  origen: CompanyOrigin
-  sellerName: string | null
-}
-
-function CompanyCard({
-  id,
-  name,
-  rfc,
-  contact,
-  email,
-  defaultBranch,
-  estado,
-  origen,
-  sellerName,
-}: CompanyCardProps) {
-  return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all group">
-      <div className="flex justify-between items-start mb-4 gap-2">
-        <div className="w-12 h-12 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-          🏢
-        </div>
-        <CompanyStatusBadge estado={estado} origen={origen} size="sm" />
-      </div>
-
-      <h3 className="font-bold text-slate-800 text-lg mb-1">{name}</h3>
-      <p className="text-xs font-mono text-slate-400 mb-4">{rfc}</p>
-
-      <div className="space-y-2 border-t border-slate-50 pt-3">
-        <div className="flex justify-between text-sm">
-          <span className="text-slate-500">Contacto</span>
-          <span className="font-medium text-slate-700">{contact}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-slate-500">Email</span>
-          <span className="font-medium text-slate-700">{email || '-'}</span>
-        </div>
-        {sellerName && (
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Vendedor</span>
-            <span className="font-medium text-slate-700">{sellerName}</span>
-          </div>
-        )}
-        {defaultBranch && (
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Sucursal</span>
-            <span className="font-medium text-slate-700">{defaultBranch}</span>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 pt-3">
-        <Link
-          href={`/companies/${id}`}
-          className="block w-full text-center bg-slate-900 hover:bg-slate-800 text-white py-1.5 rounded text-xs font-medium transition-colors"
-        >
-          Configurar Empresa
-        </Link>
-      </div>
     </div>
   )
 }

@@ -70,7 +70,7 @@ test.describe('Sucursales - Diagnóstico', () => {
       console.log('href del link:', href);
 
       await firstConfigLink.click();
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(5000);
 
       await page.screenshot({ path: '/tmp/branch-detail.png', fullPage: true });
       console.log('After click URL:', page.url());
@@ -82,7 +82,19 @@ test.describe('Sucursales - Diagnóstico', () => {
       console.log('Body contiene "General":', bodyText.includes('General'));
       console.log('Body contiene "Operación":', bodyText.includes('Operación'));
 
-      // Body summary (first 500 chars)
+      // HTML completo para ver si hay clues del error
+      const html = await page.content();
+      console.log('HTML length:', html.length);
+      console.log('HTML contains "This page could not be found":', html.includes('could not be found'));
+      console.log('HTML contains "notFound":', html.includes('notFound'));
+      // Search for any error indicators
+      const errorMatch = html.match(/(error|Error|notFound|crash|digest|Stack)[^<]{0,200}/g);
+      if (errorMatch) {
+        console.log('---ERROR CLUES---');
+        errorMatch.slice(0, 5).forEach(m => console.log(' ', m));
+      }
+
+      // Body summary
       console.log('---BODY SUMMARY---');
       console.log(bodyText.substring(0, 1000));
       console.log('---END BODY---');

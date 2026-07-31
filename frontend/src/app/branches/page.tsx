@@ -58,8 +58,15 @@ export default async function BranchesPage({
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {branches.length === 0 && (
-          <div className="col-span-3 text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-            No hay sucursales registradas.
+          <div className="col-span-3 text-center py-12 text-slate-600 bg-amber-50 rounded-xl border border-amber-300">
+            <p className="font-medium mb-2">No hay sucursales registradas.</p>
+            <p className="text-xs">
+              Si esperas ver sucursales, verifica que:
+              <br />
+              (a) tu sesión tenga permisos ADMIN o SUPERADMIN,
+              <br />
+              (b) las sucursales estén activas (toggle "Mostrar inactivas" arriba).
+            </p>
           </div>
         )}
         {branches.map((b) => (

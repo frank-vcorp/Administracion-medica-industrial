@@ -5,9 +5,9 @@
  * @spec context/SPECs/SPEC_ARCH-20260730-01-DELETE-COMPANIES-SUPERADMIN.md
  *
  * Mantiene el estado de selección (Set de ids) compartido entre
- * CompanySelectableGrid y DeleteCompaniesButton. Se monta sólo si
- * `selectable` es true (rol SUPERADMIN). Para otros roles, este shell
- * no se renderiza y el padre renderiza el grid estático legacy.
+ * CompanySelectableTable y DeleteCompaniesButton. Se monta sólo si
+ * `canDelete` es true (rol SUPERADMIN). Para otros roles, este shell
+ * no se renderiza y el padre renderiza la tabla estática plana.
  *
  * Server-component padre (/companies/page.tsx) pasa la lista de empresas
  * saneada y la decisión de rol.
@@ -15,9 +15,9 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import CompanySelectableGrid, {
+import CompanySelectableTable, {
   type SelectableCompany,
-} from '@/components/companies/CompanySelectableGrid'
+} from '@/components/companies/CompanySelectableTable'
 import DeleteCompaniesButton from '@/components/companies/DeleteCompaniesButton'
 
 interface Props {
@@ -45,7 +45,7 @@ export default function CompanyBulkDeleteShell({ companies }: Props) {
 
   return (
     <>
-      <CompanySelectableGrid
+      <CompanySelectableTable
         companies={companies}
         selectable
         selectedIds={selectedIds}
