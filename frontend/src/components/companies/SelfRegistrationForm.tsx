@@ -900,7 +900,7 @@ function SelfRegistrationFormActive({
             className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
           />
           <span className="text-sm text-slate-700">
-            Acepto los términos y condiciones para el tratamiento de datos personales y la relación comercial.
+            Acepto los términos estipulados en la presente "Alta de Cliente"
           </span>
         </label>
       </Section>
