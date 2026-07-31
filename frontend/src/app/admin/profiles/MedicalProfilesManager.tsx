@@ -12,7 +12,7 @@
  */
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import {
   createMedicalProfile,
   updateMedicalProfile,
@@ -68,6 +68,44 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editTarget, setEditTarget] = useState<MedicalProfileItem | null>(null)
   const [cloneSource, setCloneSource] = useState<MedicalProfileItem | null>(null)
+  // FIX-FRANK-20260731-09: filtros/búsqueda de la tabla de perfiles.
+  // Locales (no persistente — Prisma queries no se modifican).
+  const [search, setSearch] = useState('')
+  const [companyFilter, setCompanyFilter] = useState<'all' | 'global' | string>('all')
+  const [emailsFilter, setEmailsFilter] = useState<'all' | 'with' | 'without'>('all')
+
+  // Lista de empresas distintas presentes en profiles (para el dropdown)
+  const companyOptions = useMemo(() => {
+    const set = new Map<string, string>()
+    for (const p of profiles) {
+      if (p.company) set.set(p.company.id, p.company.name)
+    }
+    return Array.from(set, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )
+  }, [profiles])
+
+  // Filtrado memoizado: búsqueda por nombre del perfil o código de prueba,
+  // + filtro empresa (incluido 'global' = null), + filtro correos.
+  const filteredProfiles = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return profiles.filter((p) => {
+      // Empresa
+      if (companyFilter === 'global' && p.company !== null) return false
+      if (companyFilter !== 'all' && companyFilter !== 'global') {
+        if (!p.company || p.company.id !== companyFilter) return false
+      }
+      // Correos
+      const emailCount = p.reportEmails?.length ?? 0
+      if (emailsFilter === 'with' && emailCount === 0) return false
+      if (emailsFilter === 'without' && emailCount > 0) return false
+      // Búsqueda libre
+      if (!q) return true
+      if (p.name.toLowerCase().includes(q)) return true
+      if (p.tests.some(({ test }) => test.code.toLowerCase().includes(q))) return true
+      return false
+    })
+  }, [profiles, search, companyFilter, emailsFilter])
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message })
@@ -147,112 +185,222 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
         </div>
       )}
 
-      {/* Grilla de perfiles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {profiles.map((profile) => (
-          <div
-            key={profile.id}
-            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow flex flex-col"
+      {/* FIX-FRANK-20260731-09: filtros + búsqueda + tabla densa */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="relative flex-1">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre de perfil o código de prueba (ej. Soldador, GEN-013, Audiometría)…"
+            aria-label="Buscar perfiles"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pl-9 pr-9 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          />
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+            🔍
+          </span>
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-xs font-bold text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <select
+          value={companyFilter}
+          onChange={(e) => setCompanyFilter(e.target.value)}
+          aria-label="Filtrar por empresa"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        >
+          <option value="all">Todas las empresas</option>
+          <option value="global">Solo globales</option>
+          {companyOptions.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={emailsFilter}
+          onChange={(e) => setEmailsFilter(e.target.value as 'all' | 'with' | 'without')}
+          aria-label="Filtrar por correos"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        >
+          <option value="all">Con o sin correos</option>
+          <option value="with">Con correos</option>
+          <option value="without">Sin correos</option>
+        </select>
+        {(search || companyFilter !== 'all' || emailsFilter !== 'all') && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('')
+              setCompanyFilter('all')
+              setEmailsFilter('all')
+            }}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
           >
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="font-bold text-slate-800 text-lg leading-tight">{profile.name}</h3>
-              <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full shrink-0 ml-2">
-                {profile._count.tests} Prueba{profile._count.tests !== 1 ? 's' : ''}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-400 mb-3">
-              {profile.company
-                ? `Empresa: ${profile.company.name}`
-                : 'Global — todas las empresas'}
-            </p>
-
-            {/* Preview de códigos de prueba */}
-            <div className="flex flex-wrap gap-1 mb-3 flex-1">
-              {profile.tests.slice(0, 6).map(({ test }) => (
-                <span
-                  key={test.id}
-                  className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full font-mono"
-                >
-                  {test.code}
-                </span>
-              ))}
-              {profile.tests.length > 6 && (
-                <span className="bg-slate-100 text-slate-400 text-xs px-2 py-0.5 rounded-full">
-                  +{profile.tests.length - 6} más
-                </span>
-              )}
-            </div>
-
-            {/* Correos configurados */}
-            {profile.reportEmails && profile.reportEmails.length > 0 && (
-              <div className="mb-3 rounded-lg bg-amber-50 border border-amber-100 p-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-1">
-                  📬 {profile.reportEmails.length} correo{profile.reportEmails.length !== 1 ? 's' : ''}
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {profile.reportEmails.slice(0, 3).map((em) => (
-                    <span
-                      key={em.id}
-                      title={em.email}
-                      className="bg-white text-amber-800 text-[11px] px-2 py-0.5 rounded border border-amber-200 truncate max-w-full"
-                    >
-                      {em.email}
-                    </span>
-                  ))}
-                  {profile.reportEmails.length > 3 && (
-                    <span className="text-[11px] text-amber-700">+{profile.reportEmails.length - 3} más</span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Comentarios especiales */}
-            {profile.specialNotes && (
-              <div className="mb-3 rounded-lg bg-purple-50 border border-purple-100 p-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 mb-1">
-                  📝 Comentarios
-                </p>
-                <p className="text-xs text-purple-800 line-clamp-3 whitespace-pre-line">
-                  {profile.specialNotes}
-                </p>
-              </div>
-            )}
-
-            {/* Acciones */}
-            <div className="pt-4 border-t border-slate-100 flex gap-2">
-              <button
-                onClick={() => setEditTarget(profile)}
-                disabled={isPending}
-                className="flex-1 border border-slate-200 hover:bg-slate-50 text-slate-600 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              >
-                Editar
-              </button>
-              <button
-                onClick={() => setCloneSource(profile)}
-                disabled={isPending}
-                className="border border-blue-200 hover:bg-blue-50 text-blue-600 hover:text-blue-700 py-1.5 px-3 rounded-lg text-xs font-medium transition-colors"
-                title="Duplicar este perfil (clona pruebas, correos y notas)"
-              >
-                Duplicar
-              </button>
-              <button
-                onClick={() => handleDelete(profile.id, profile.name)}
-                disabled={isPending}
-                className="border border-red-100 hover:bg-red-50 text-red-400 hover:text-red-600 py-1.5 px-3 rounded-lg text-xs font-medium transition-colors"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        ))}
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
-      {profiles.length === 0 && (
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr className="text-left text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                <th className="px-3 py-3 w-8">#</th>
+                <th className="px-3 py-3 min-w-[180px]">Perfil</th>
+                <th className="px-3 py-3 hidden md:table-cell">Empresa</th>
+                <th className="px-3 py-3">Pruebas</th>
+                <th className="px-3 py-3 hidden lg:table-cell">Correos</th>
+                <th className="px-3 py-3 w-12 text-center">Notas</th>
+                <th className="px-3 py-3 text-right w-44">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProfiles.map((profile, idx) => {
+                const emailCount = profile.reportEmails?.length ?? 0
+                const firstEmail = profile.reportEmails?.[0]?.email
+                return (
+                  <tr
+                    key={profile.id}
+                    className={`border-b border-slate-100 transition-colors hover:bg-slate-50 ${
+                      idx % 2 === 1 ? 'bg-slate-50/40' : ''
+                    }`}
+                  >
+                    <td className="px-3 py-2.5 text-slate-400 font-mono text-xs">
+                      {idx + 1}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="font-bold text-slate-800">{profile.name}</span>
+                    </td>
+                    <td className="px-3 py-2.5 hidden md:table-cell text-slate-700">
+                      {profile.company ? (
+                        profile.company.name
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5">
+                          🌐 Global
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="bg-blue-100 text-blue-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                          {profile._count.tests} prueba{profile._count.tests !== 1 ? 's' : ''}
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {profile.tests.slice(0, 4).map(({ test }) => (
+                            <span
+                              key={test.id}
+                              className="bg-slate-100 text-slate-600 text-[11px] font-mono px-1.5 py-0.5 rounded"
+                            >
+                              {test.code}
+                            </span>
+                          ))}
+                          {profile.tests.length > 4 && (
+                            <span
+                              className="text-[11px] text-slate-500"
+                              title={profile.tests.slice(4).map((t) => t.test.code).join(', ')}
+                            >
+                              +{profile.tests.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 hidden lg:table-cell">
+                      {emailCount === 0 ? (
+                        <span className="text-slate-300">—</span>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="bg-amber-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                            {emailCount}
+                          </span>
+                          {firstEmail && (
+                            <span className="text-xs text-slate-600 truncate max-w-[200px]" title={firstEmail}>
+                              {firstEmail}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {profile.specialNotes ? (
+                        <span
+                          title={profile.specialNotes}
+                          className="inline-block w-7 h-7 leading-7 text-center rounded-full bg-purple-100 text-purple-700 text-sm"
+                        >
+                          📝
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="inline-flex gap-1">
+                        <button
+                          onClick={() => setEditTarget(profile)}
+                          disabled={isPending}
+                          className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setCloneSource(profile)}
+                          disabled={isPending}
+                          title="Duplicar este perfil (clona pruebas, correos y notas)"
+                          className="rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                        >
+                          Duplicar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(profile.id, profile.name)}
+                          disabled={isPending}
+                          className="rounded-md border border-red-100 px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-500">
+          Mostrando <strong className="text-slate-800">{filteredProfiles.length}</strong> de{' '}
+          <strong className="text-slate-800">{profiles.length}</strong>{' '}
+          {profiles.length === 1 ? 'perfil' : 'perfiles'}
+        </div>
+      </div>
+
+      {profiles.length === 0 ? (
         <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-12 text-center text-slate-400">
           No hay perfiles médicos registrados. Crea el primero con el botón de arriba.
         </div>
-      )}
+      ) : filteredProfiles.length === 0 ? (
+        <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-12 text-center text-slate-500">
+          Ningún perfil coincide con los filtros actuales.{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('')
+              setCompanyFilter('all')
+              setEmailsFilter('all')
+            }}
+            className="font-semibold text-indigo-600 hover:underline"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      ) : null}
 
       {/* Modal Crear */}
       {showCreateModal && (
