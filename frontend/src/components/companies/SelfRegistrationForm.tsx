@@ -292,6 +292,13 @@ function SelfRegistrationFormActive({
     horaDe: '09',
     minutoDe: '00',
     horaA: '',
+    // FIX-FRANK-20260731-01: hasta 3 referencias comerciales para solicitud de crédito.
+    // Cada entrada tiene los 4 campos requeridos por ReferenciaComercialSchema.
+    referencias: [
+      { nombre: '', rfc: '', telefono: '', celular: '' },
+      { nombre: '', rfc: '', telefono: '', celular: '' },
+      { nombre: '', rfc: '', telefono: '', celular: '' },
+    ] as Array<{ nombre: string; rfc: string; telefono: string; celular: string }>,
     minutoA: '',
     contactoRecibe: { nombre: '', telefono: '', celular: '' },
     // Términos
@@ -300,6 +307,19 @@ function SelfRegistrationFormActive({
 
   function setField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  // FIX-FRANK-20260731-01: mutador específico para referencias[i].campo.
+  function setReferencia(
+    idx: 0 | 1 | 2,
+    campo: 'nombre' | 'rfc' | 'telefono' | 'celular',
+    valor: string,
+  ) {
+    setForm((f) => {
+      const next = [...f.referencias]
+      next[idx] = { ...next[idx], [campo]: valor }
+      return { ...f, referencias: next }
+    })
   }
 
   function validateFile(file: File, seccion: SeccionDoc): string | null {
@@ -475,7 +495,9 @@ function SelfRegistrationFormActive({
             },
           }
         : undefined,
-      referencias: undefined,
+      referencias: form.referencias.filter(
+        (r) => r.nombre || r.rfc || r.telefono || r.celular,
+      ) as Array<{ nombre: string; rfc?: string; telefono?: string; celular?: string }>,
       documentos,
       terminosAceptados: true as const,
     }
@@ -770,6 +792,73 @@ function SelfRegistrationFormActive({
         </div>
       </Section>
 
+      {/* FIX-FRANK-20260731-01: Sección 8 — Crédito y Referencias Comerciales.
+          Leyenda de contacto para solicitar crédito + 3 referencias comerciales
+          (nombre, RFC, teléfono, celular). Es opcional llenar si NO requiere crédito;
+          el filtro en el submit deja fuera entradas vacías. */}
+      <Section title="8. Crédito y Referencias Comerciales (opcional)">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-2">
+          <p className="font-semibold mb-1">Solicitudes de Crédito</p>
+          <p>
+            En caso de requerir crédito favor de comunicarse al{' '}
+            <strong>442-480-05-48</strong> a la extensión <strong>102</strong> o al
+            correo <strong>cuentasxcobrar@medicaindustrial.com</strong>.
+          </p>
+        </div>
+        <p className="text-xs text-slate-500 -mt-1 mb-3">
+          Favor de colocar 3 referencias comerciales en caso de solicitar crédito.
+          Cada referencia requiere: nombre del contacto, RFC, teléfono y celular.
+          Deja los campos vacíos si no aplica.
+        </p>
+        <div className="space-y-5">
+          {form.referencias.map((r, idx) => (
+            <div key={idx} className="rounded-lg border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">
+                Referencia #{idx + 1}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field label="Nombre del contacto">
+                  <input
+                    value={r.nombre}
+                    onChange={(e) => setReferencia(idx as 0 | 1 | 2, 'nombre', e.target.value)}
+                    className={inputClass}
+                    maxLength={255}
+                    placeholder="Ej. Juan Pérez"
+                  />
+                </Field>
+                <Field label="RFC">
+                  <input
+                    value={r.rfc}
+                    onChange={(e) => setReferencia(idx as 0 | 1 | 2, 'rfc', e.target.value.toUpperCase())}
+                    className={inputClass}
+                    maxLength={13}
+                    placeholder="XAXX010101000"
+                  />
+                </Field>
+                <Field label="Teléfono">
+                  <input
+                    value={r.telefono}
+                    onChange={(e) => setReferencia(idx as 0 | 1 | 2, 'telefono', e.target.value)}
+                    className={inputClass}
+                    maxLength={40}
+                    placeholder="Ej. 4421234500"
+                  />
+                </Field>
+                <Field label="Celular">
+                  <input
+                    value={r.celular}
+                    onChange={(e) => setReferencia(idx as 0 | 1 | 2, 'celular', e.target.value)}
+                    className={inputClass}
+                    maxLength={40}
+                    placeholder="Ej. 4425556677"
+                  />
+                </Field>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
       {/* Sección 9: Documentación Adjunta */}
       <Section title="9. Documentación Adjunta" required>
         <p className="text-xs text-slate-500 -mt-1">
@@ -790,6 +879,19 @@ function SelfRegistrationFormActive({
 
       {/* Sección 10: Términos */}
       <Section title="10. Términos y Condiciones" required>
+        {/* FIX-FRANK-20260731-01: leyenda obligatoria visible ANTES del checkbox de aceptación. */}
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-4">
+          <p className="font-bold mb-2">Importante:</p>
+          <p>
+            Solo se podrá cancelar la factura dos días hábiles después de haber sido ingresada a
+            revisión, en caso de solicitar cancelación posterior el cliente respetará los días de
+            crédito en que se realizó la primera factura, en caso de no realizar el pago en tiempo y
+            forma el cliente pagará el 5% de morosidad, el tener facturas pendiente de pago ocasiona
+            que AMI SALUD RESPONSABLE SC opte por dejar de prestar los servicios o productos que
+            le brinda hasta que se regularice en cuestión de pagos, autorizaciones pendientes y
+            órdenes de compra no enviadas.
+          </p>
+        </div>
         <label className="flex items-center gap-3 cursor-pointer select-none">
           <input
             type="checkbox"
