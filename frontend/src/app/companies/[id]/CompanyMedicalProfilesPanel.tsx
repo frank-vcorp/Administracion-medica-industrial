@@ -419,9 +419,24 @@ function ProfileModal({
   const [emailError, setEmailError] = useState<string | null>(null)
   const [notesCharCount, setNotesCharCount] = useState(initialSpecialNotes.length)
   const [profileId] = useState<string | null>(null) // Para edición detectar ya guardados
+  // FIX-FRANK-20260731-08: buscador embebido en el catálogo de pruebas del modal
+  // "Nuevo Perfil Médico". Filtra por code (GEN-009, etc.) o nombre. La selección
+  // se preserva aunque el término excluya al test (al limpiarse el filtro se ve de
+  // nuevo, y "X seleccionadas" refleja el total real).
+  const [testSearch, setTestSearch] = useState('')
+
+  const filteredTests = useMemo(() => {
+    const trimmed = testSearch.trim().toLowerCase()
+    if (!trimmed) return availableTests
+    return availableTests.filter(
+      (t) =>
+        t.code.toLowerCase().includes(trimmed) ||
+        t.name.toLowerCase().includes(trimmed),
+    )
+  }, [availableTests, testSearch])
 
   const testsByCategory = useMemo(() => {
-    return availableTests.reduce<Record<string, AvailableTest[]>>((acc, test) => {
+    return filteredTests.reduce<Record<string, AvailableTest[]>>((acc, test) => {
       const categoryName = test.category.name
       if (!acc[categoryName]) {
         acc[categoryName] = []
@@ -429,7 +444,7 @@ function ProfileModal({
       acc[categoryName].push(test)
       return acc
     }, {})
-  }, [availableTests])
+  }, [filteredTests])
 
   const toggleTest = (testId: string) => {
     setSelectedIds((previous) => {
@@ -539,9 +554,52 @@ function ProfileModal({
             </div>
 
             <div className="overflow-hidden rounded-xl border border-slate-200">
-              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm">
+              <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <span className="font-semibold text-slate-700">Pruebas incluidas</span>
-                <span className="font-medium text-blue-700">{selectedIds.size} seleccionadas</span>
+                <span className="font-medium text-blue-700">
+                  {selectedIds.size}
+                  {testSearch.trim() && filteredTests.length !== availableTests.length
+                    ? ` de ${availableTests.length}`
+                    : ''}{' '}
+                  seleccionadas
+                </span>
+              </div>
+
+              {/* FIX-FRANK-20260731-08: input de búsqueda embebido */}
+              <div className="border-b border-slate-100 bg-white px-4 py-2">
+                <div className="relative">
+                  <input
+                    type="search"
+                    value={testSearch}
+                    onChange={(e) => setTestSearch(e.target.value)}
+                    placeholder="Buscar por código o nombre (ej. GEN-013, espirometría, audiometría)…"
+                    aria-label="Buscar pruebas"
+                    className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 pl-9 pr-9 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <span
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    aria-hidden
+                  >
+                    🔍
+                  </span>
+                  {testSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTestSearch('')}
+                      aria-label="Limpiar búsqueda"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-xs font-bold text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                {testSearch.trim() && (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {filteredTests.length === 0
+                      ? 'Sin coincidencias.'
+                      : `${filteredTests.length} resultado${filteredTests.length === 1 ? '' : 's'} para "${testSearch}"`}
+                  </p>
+                )}
               </div>
 
               <div className="max-h-[30vh] overflow-y-auto divide-y divide-slate-100">
@@ -550,31 +608,50 @@ function ProfileModal({
                     <div className="sticky top-0 bg-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       {categoryName}
                     </div>
-                    {categoryTests.map((test) => (
-                      <label
-                        key={test.id}
-                        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(test.id)}
-                          onChange={() => toggleTest(test.id)}
-                          className="rounded accent-slate-900"
-                        />
-                        <span className="w-20 shrink-0 font-mono text-xs text-slate-400">
-                          {test.code}
-                        </span>
-                        <span className="text-sm text-slate-700">{test.name}</span>
-                      </label>
-                    ))}
+                    {categoryTests.map((test) => {
+                      const isSelected = selectedIds.has(test.id)
+                      return (
+                        <label
+                          key={test.id}
+                          className={`flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50 ${isSelected ? 'bg-blue-50/50' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleTest(test.id)}
+                            className="rounded accent-slate-900"
+                          />
+                          <span className="w-20 shrink-0 font-mono text-xs text-slate-400">
+                            {test.code}
+                          </span>
+                          <span className="text-sm text-slate-700">{test.name}</span>
+                          {isSelected && (
+                            <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                              ✓
+                            </span>
+                          )}
+                        </label>
+                      )
+                    })}
                   </div>
                 ))}
 
-                {availableTests.length === 0 && (
+                {availableTests.length === 0 ? (
                   <p className="px-4 py-8 text-center text-sm text-slate-400">
                     No hay pruebas disponibles en el catálogo para construir perfiles.
                   </p>
-                )}
+                ) : filteredTests.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-sm text-slate-400">
+                    Ninguna prueba coincide con "{testSearch}".{' '}
+                    <button
+                      type="button"
+                      onClick={() => setTestSearch('')}
+                      className="font-semibold text-indigo-600 hover:underline"
+                    >
+                      Limpiar búsqueda
+                    </button>
+                  </p>
+                ) : null}
               </div>
             </div>
 
