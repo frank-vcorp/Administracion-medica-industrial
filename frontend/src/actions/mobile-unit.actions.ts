@@ -192,6 +192,7 @@ export async function createMobileUnit(data: z.infer<typeof CreateMobileUnitSche
       },
     })
     revalidatePath('/admin/mobile-units')
+    revalidatePath('/operations/mobile-units')
     return { success: true as const, unit }
   } catch (e: unknown) {
     if (isPrismaKnownError(e) && e.code === 'P2002') {
@@ -235,6 +236,7 @@ export async function updateMobileUnit(
     })
     revalidatePath('/admin/mobile-units')
     revalidatePath(`/admin/mobile-units/${unitId}`)
+    revalidatePath('/operations/mobile-units')
     return { success: true as const }
   } catch (e: unknown) {
     if (isPrismaKnownError(e) && e.code === 'P2002') {
@@ -281,6 +283,7 @@ export async function deleteMobileUnit(unitId: string) {
 
     await prisma.mobileUnit.delete({ where: { id: unitId } })
     revalidatePath('/admin/mobile-units')
+    revalidatePath('/operations/mobile-units')
     return { success: true as const }
   } catch (e: unknown) {
     const err = e as Error

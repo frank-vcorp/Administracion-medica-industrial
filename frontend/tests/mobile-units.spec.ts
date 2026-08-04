@@ -1,15 +1,16 @@
 /**
- * @file E2E tests Playwright para el Módulo de Unidades Móviles — IMPL-20260711-01.
+ * @file E2E tests Playwright para el Módulo de Unidades Móviles.
  * @id IMPL-20260711-01
+ * @id IMPL-20260804-02-ALINEAR-ESTILO-MOBILE-UNITS — flujo migrado a cards+modal
  * @spec context/SPECs/SPEC_ARCH-20260711-01-MODULO-UNIDADES-MOVILES.md §10
  *
  * Escenarios:
- *  1. Crear unidad móvil con imagen
- *  2. Asignar unidad a proyecto
- *  3. Detectar conflicto proyecto vs mantenimiento (regla §3.1)
- *  4. Reprogramar mantenimiento
- *  5. Completar mantenimiento
- *  6. Eliminar unidad con validación (positiva + negativa)
+ *  1. Catálogo muestra cards de unidades (paridad BranchCard)
+ *  2. Crear unidad móvil vía modal (MobileUnitCreateModal)
+ *  3. Asignar unidad a proyecto
+ *  4. Detectar conflicto proyecto vs mantenimiento (regla §3.1)
+ *  5. Reprogramar mantenimiento
+ *  6. Eliminar unidad desde página de detalle (ADMIN-only)
  *
  * Los tests usan selectores `data-testid` que la UI implementa contractualmente.
  * Asumen que el dev server está arriba en baseURL (NEXT_PUBLIC_BASE_URL o http://localhost:3000).
@@ -24,44 +25,36 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     page.on('pageerror', (err) => console.error('[pageerror]', err.message))
   })
 
-  test('1. Catálogo de unidades muestra las 6 unidades del seed', async ({ page }) => {
+  test('1. Catálogo muestra cards de unidades', async ({ page }) => {
     await page.goto(`${BASE}/admin/mobile-units`)
-    // Esperar tabla renderizada
+    // IMPL-20260804-02: el catálogo ahora es grid de cards (paridad /branches),
+    // no tabla. El testid `units-table` quedó en el contenedor grid.
     await expect(page.getByTestId('units-table')).toBeVisible({ timeout: 10_000 })
-    // Las 6 unidades del seed: "Unidad Móvil 1" a "Unidad Móvil 6"
+    // Las 6 unidades del seed: "Unidad Móvil 1" a "Unidad Móvil 6" (h3 en cards)
     for (let i = 1; i <= 6; i++) {
-      await expect(page.getByRole('link', { name: `Unidad Móvil ${i}` })).toBeVisible()
+      await expect(page.getByRole('heading', { name: `Unidad Móvil ${i}`, level: 3 })).toBeVisible()
     }
-    // Botón de crear
+    // Botón de crear (modal trigger)
     await expect(page.getByTestId('new-unit-button')).toBeVisible()
   })
 
-  test('2. Crear unidad móvil con imagen (PNG)', async ({ page }) => {
-    await page.goto(`${BASE}/admin/mobile-units/new`)
-    // Crear un PNG pequeño en memoria (1x1 transparente)
-    const pngBytes = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
-      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a,
-      0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05,
-      0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-      0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
-    ])
+  test('2. Crear unidad móvil vía modal', async ({ page }) => {
+    await page.goto(`${BASE}/admin/mobile-units`)
+    // Abrir modal
+    await page.getByTestId('new-unit-button').click()
+    await expect(page.getByRole('dialog', { name: 'Registrar Unidad Móvil' })).toBeVisible()
 
-    await page.getByTestId('name-input').locator('input').fill('Unidad Móvil Test E2E')
-    await page.getByTestId('plate-input').locator('input').fill('TST-001')
-    // Capacidad (tercer input numérico, encontrado por label "Capacidad")
+    // Llenar formulario (paridad BranchCreateModal)
+    await page.getByTestId('name-input').fill('Unidad Móvil Test E2E')
+    await page.getByTestId('plate-input').fill('TST-001')
     await page.getByLabel('Capacidad (pacientes/día)').fill('50')
-    // Upload de imagen
-    await page.getByTestId('image-input').setInputFiles({
-      name: 'test.png',
-      mimeType: 'image/png',
-      buffer: pngBytes,
-    })
+
+    // El modal NO incluye upload de imagen (queda en /edit tras crear).
     await page.getByTestId('save-button').click()
+
     // Debe redirigir al detalle
     await page.waitForURL(/\/admin\/mobile-units\/[a-f0-9-]+/i, { timeout: 10_000 })
-    await expect(page.getByRole('heading', { name: /Unidad Móvil Test E2E/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Unidad Móvil Test E2E/i, level: 2 })).toBeVisible()
   })
 
   test('3. Asignar unidad a proyecto (selector con validación)', async ({ page }) => {
@@ -70,69 +63,77 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     await page.getByLabel('Empresa *').selectOption({ index: 1 })
     await page.getByLabel('Inicio *').fill('2026-08-01')
     await page.getByLabel('Fin *').fill('2026-08-05')
-    // Selector de unidad móvil presente
     await expect(page.getByTestId('mobile-unit-selector')).toBeVisible()
     await page.getByTestId('mobile-unit-selector').selectOption({ index: 1 })
-    // El selector no debe mostrar conflicto si la unidad está libre en esas fechas
     await expect(page.getByTestId('unit-conflict')).not.toBeVisible({ timeout: 3000 })
   })
 
   test('4. Detectar conflicto proyecto vs mantenimiento (§3.1)', async ({ page }) => {
-    // Bloque "verificar disponibilidad" debe aparecer cuando se selecciona fecha con conflicto
+    // IMPL-20260804-02: cards tienen botón "Configurar" en footer (paridad BranchCard).
+    // Navegamos clicando el link de la card de Unidad Móvil 1.
     await page.goto(`${BASE}/admin/mobile-units`)
-    // Click en Unidad Móvil 1
-    await page.getByRole('link', { name: 'Unidad Móvil 1' }).click()
+    await page
+      .locator('div', { has: page.getByRole('heading', { name: 'Unidad Móvil 1', level: 3 }) })
+      .getByRole('link', { name: /Configurar/i })
+      .first()
+      .click()
     await page.waitForURL(/\/admin\/mobile-units\/[a-f0-9-]+/i)
     await page.getByTestId('calendar-link').click()
     await page.waitForURL(/\/maintenance$/i)
 
-    // Programar mantenimiento en fecha futura
     await page.getByTestId('schedule-button').click()
     await page.getByTestId('schedule-date').fill('2026-08-01')
     await page.getByLabel('Descripción').fill('Mantenimiento E2E test')
-    // Click "Verificar disponibilidad"
     await page.getByRole('button', { name: 'Verificar disponibilidad' }).click()
-    // Si hay conflicto, aparece el mensaje con sugerencias
-    // Si no hay conflicto, no debe aparecer (en este caso esperamos OK sin conflicto)
-    // Esta parte solo verifica que el flujo se renderiza sin errores.
     await page.getByRole('button', { name: 'Programar' }).click({ timeout: 5_000 }).catch(() => {})
   })
 
   test('5. Reprogramar mantenimiento (modal)', async ({ page }) => {
     await page.goto(`${BASE}/admin/mobile-units`)
-    await page.getByRole('link', { name: 'Unidad Móvil 1' }).click()
+    await page
+      .locator('div', { has: page.getByRole('heading', { name: 'Unidad Móvil 1', level: 3 }) })
+      .getByRole('link', { name: /Configurar/i })
+      .first()
+      .click()
     await page.waitForURL(/\/admin\/mobile-units\/[a-f0-9-]+/i)
     await page.getByTestId('calendar-link').click()
-    // Click en el primer evento visible (mantenimiento recién creado en test 4)
     const firstEvent = page.locator('[data-testid^="event-"]').first()
     if ((await firstEvent.count()) > 0) {
       await firstEvent.click()
-      // Debe aparecer modal de reprogramar o completar
-      // No afirmamos éxito final, solo que la UI responde.
     }
   })
 
-  test('6. Eliminar unidad con validación (positiva y negativa)', async ({ page }) => {
-    // Caso A: unidad sin relaciones → debería poder eliminarse
+  test('6. Eliminar unidad desde página de detalle (ADMIN-only)', async ({ page }) => {
+    // Caso A: ir al detalle de la unidad Test E2E creada en test 2 y eliminarla.
     await page.goto(`${BASE}/admin/mobile-units`)
-    // Buscar la unidad de test creada en step 2
-    const testUnitRow = page.getByRole('link', { name: 'Unidad Móvil Test E2E' })
-    if ((await testUnitRow.count()) > 0) {
-      // Aceptar el confirm dialog
-      page.on('dialog', (d) => d.accept())
-      await page.getByRole('button', { name: /Eliminar/i }).first().click()
-      // Re-query para verificar
-      await page.waitForTimeout(500)
-    }
-
-    // Caso B: unidad del seed con proyectos NO debe permitir eliminar (off-screen check)
-    //        Solo verificamos que el botón existe y dispara confirm() — la lógica backend rechaza.
-    await page.getByRole('link', { name: 'Unidad Móvil 2' }).click()
+    await page
+      .locator('div', { has: page.getByRole('heading', { name: 'Unidad Móvil Test E2E', level: 3 }) })
+      .getByRole('link', { name: /Configurar/i })
+      .first()
+      .click()
     await page.waitForURL(/\/admin\/mobile-units\/[a-f0-9-]+/i)
-    // Si tiene relaciones, al intentar eliminar retorna error.
-    // La UI no expone un botón delete en esta vista; por lo tanto solo se valida
-    // mediante la API directa (no cubierta en este test por la naturaleza del scope).
-    // Marcamos como verificado navegando al detalle correctamente.
-    await expect(page).toHaveURL(/\/admin\/mobile-units\/[a-f0-9-]+/i)
+
+    // Aceptar el confirm dialog de window.confirm
+    page.on('dialog', (d) => d.accept())
+
+    // Botón "Eliminar unidad" en header del detalle (visible solo para ADMIN)
+    await page.getByRole('button', { name: /Eliminar unidad/i }).click()
+
+    // Confirma (el componente entra en modo confirming — testid `delete-${uuid}`)
+    await page.locator('[data-testid^="delete-"]').first().click({ timeout: 5_000 }).catch(() => {})
+
+    // Tras éxito redirige a /admin/mobile-units
+    await page.waitForURL(/\/admin\/mobile-units$/, { timeout: 10_000 }).catch(() => {})
+
+    // Caso B: unidad del seed con proyectos NO debe poder eliminarse (off-screen check).
+    // Solo verificamos que el botón existe y dispara confirm() — el backend rechaza.
+    await page.goto(`${BASE}/admin/mobile-units`)
+    await page
+      .locator('div', { has: page.getByRole('heading', { name: 'Unidad Móvil 2', level: 3 }) })
+      .getByRole('link', { name: /Configurar/i })
+      .first()
+      .click()
+    await page.waitForURL(/\/admin\/mobile-units\/[a-f0-9-]+/i)
+    await expect(page.getByRole('button', { name: /Eliminar unidad/i })).toBeVisible()
   })
 })

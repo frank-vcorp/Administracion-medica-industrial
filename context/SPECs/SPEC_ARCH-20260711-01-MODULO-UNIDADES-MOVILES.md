@@ -474,14 +474,15 @@ async def complete_maintenance(record_id: str, data: dict):
 - Click en mantenimiento → modal de detalle
 - Vista lista (tabla con filtros)
 
-### 5.6 Módulo Unificado (`/operations/mobile-units`) — IMPL-20260804-01
+### 5.6 Módulo Unificado (`/operations/mobile-units`) — IMPL-20260804-01 + IMPL-20260804-02
 
 A partir de esta versión, **el módulo de Unidades Móviles vive en una sola ruta** con dos pestañas (`?view=catalog|operations`, default `catalog`), replicando el patrón del módulo `/branches`:
 
-- **📋 Catálogo** (`?view=catalog`, default): tabla CRUD de unidades vía `MobileUnitManager`.
-  - ADMIN: botones `+ Nueva Unidad`, `Editar`, `Eliminar`, `Calendario` visibles.
-  - Staff no-admin: `readOnly=true` — solo lectura (botón `Ver` permanece).
-  - Filtro por estado, refresh, link a detalle.
+- **📋 Catálogo** (`?view=catalog`, default): **grid de cards** de unidades vía `MobileUnitManager` (paridad visual con `BranchCard`).
+  - ADMIN: header con toggle "Mostrar/Ocultar inactivas", botón `Actualizar`, botón modal `+ Nueva Unidad` (slate-900).
+  - Staff no-admin: `readOnly=true` — el modal de creación no se renderiza; las cards muestran "Ver" en lugar de "Configurar".
+  - Filtro por estado en card `bg-white p-4 rounded-xl border border-slate-200 shadow-sm`.
+  - Empty state banner ámbar `bg-amber-50 rounded-xl border border-amber-300` con texto explicativo de permisos.
 - **📊 Operación** (`?view=operations`): dashboard operativo semanal vía `MobileUnitOperationsPanel`.
   - Contadores: unidades activas, en mantenimiento, en reparación, fuera de servicio, baja permanente.
   - Próximos mantenimientos (7 días).
@@ -489,11 +490,25 @@ A partir de esta versión, **el módulo de Unidades Móviles vive en una sola ru
   - Calendario semanal dual (proyectos + mantenimientos) en grid por unidad/día.
   - Alertas de conflictos (proyecto vs mantenimiento en la misma fecha/unidad).
 
-**Navegación:** un único `NavItem` "Unidades Móviles" (🚑) en el bloque staff. El `NavItem` admin "Catálogo Unidades" (🚐) se eliminó porque ahora se llega desde la pestaña Catálogo en cualquier sesión. Las rutas `/admin/mobile-units/*` siguen existiendo (CRUD, detalle, mantenimiento) y son accesibles vía deep-link o desde el botón "Ver" de cada fila.
+**Tabs:** color de marca `border-purple-500 text-purple-600` (paridad con `BranchDetailTabs`). Estado persistido vía searchParam `?view=`.
 
-**Permisos:** el middleware sigue restringiendo `/admin/*` a ADMIN. La pestaña Catálogo en `/operations/mobile-units` se renderiza para todos los roles autenticados, pero `readOnly` se determina server-side con `isAdminLike(session.user.role)`. Staff no-admin que intente `/admin/mobile-units/new` directamente será redirigido por el middleware.
+**Navegación:** un único `NavItem` "Unidades Móviles" (🚑) en el bloque staff. El `NavItem` admin "Catálogo Unidades" (🚐) se eliminó porque ahora se llega desde la pestaña Catálogo en cualquier sesión. Las rutas `/admin/mobile-units/*` siguen existiendo (CRUD, detalle, mantenimiento) y son accesibles vía deep-link o desde el botón "Configurar"/"Ver" de cada card.
 
-ADR asociado: `context/decisions/ADR-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES.md`.
+**Permisos:** el middleware sigue restringiendo `/admin/*` a ADMIN. La pestaña Catálogo en `/operations/mobile-units` se renderiza para todos los roles autenticados, pero `readOnly` se determina server-side con `isAdminLike(session.user.role)`. Staff no-admin que intente `/admin/mobile-units/new` directamente será **redirigido por `redirect()` server-side** a `/admin/mobile-units` (IMPL-20260804-02: ruta `/new` ya no renderiza formulario; la creación ahora es exclusivamente vía modal).
+
+**Eliminación de unidades:** botón "Eliminar unidad" en header de `/admin/mobile-units/[id]` (paridad con `BranchDeleteGuardModal`), visible solo para ADMIN. Tras confirmar, redirige a `/admin/mobile-units`.
+
+**Tokens visuales del módulo** (alineados con `/branches` y resto del sistema):
+- Headers h2: `text-2xl font-bold text-slate-800` + subtítulo `text-sm text-slate-500`.
+- Botón primario header: `bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg shadow`.
+- Botón submit form: `bg-purple-600 hover:bg-purple-700 text-white rounded shadow`.
+- Inputs: `w-full border border-slate-300 p-2 rounded text-sm focus:ring-purple-500`.
+- Labels: `text-xs text-slate-500 mb-1 block`.
+- Cards: `bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md`.
+- Status badge: `text-[10px] uppercase font-bold rounded-full` (paridad `BranchStatusBadge`).
+- Modal backdrop: `bg-black/50 backdrop-blur-sm`; content: `bg-white p-6 rounded-xl shadow-2xl`.
+
+ADRs asociados: `context/decisions/ADR-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES.md`, `context/decisions/ADR-20260804-02-ALINEAR-ESTILO-MOBILE-UNITS.md`.
 
 ---
 

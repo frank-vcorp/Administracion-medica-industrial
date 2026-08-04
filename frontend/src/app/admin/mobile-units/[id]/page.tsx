@@ -1,21 +1,25 @@
 /**
  * @file Detalle de unidad móvil (/admin/mobile-units/[id]).
  * @id IMPL-20260711-01 — SPEC §5.3
+ * @id IMPL-20260804-02-ALINEAR-ESTILO-MOBILE-UNITS
+ *
+ * Migrado a tokens del sistema:
+ *   - Header text-2xl font-bold text-slate-800
+ *   - Status badge rounded-full text-[10px] (MobileUnitStatusBadge)
+ *   - Cards bg-white p-4 rounded-lg border border-slate-200 (paridad BranchUsageStats)
+ *   - Botones header slate-900 (primario) + outline (secundario)
  */
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/auth'
+import { isAdminLike } from '@/lib/auth/roles'
 import { getMobileUnitById } from '@/actions/mobile-unit.actions'
+import { MobileUnitStatusBadge } from '@/components/mobile-units/MobileUnitStatusBadge'
+import { MobileUnitDeleteButton } from '@/components/mobile-units/MobileUnitDeleteButton'
 
 export const dynamic = 'force-dynamic'
-
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  ACTIVA: { label: 'Activa', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-  MANTENIMIENTO: { label: 'Mantenimiento', color: 'bg-amber-100 text-amber-800 border-amber-300' },
-  REPARACION: { label: 'Reparación', color: 'bg-red-100 text-red-800 border-red-300' },
-  FUERA_SERVICIO: { label: 'Fuera de servicio', color: 'bg-slate-200 text-slate-700 border-slate-300' },
-  BAJA_PERMANENTE: { label: 'Baja permanente', color: 'bg-zinc-300 text-zinc-700 border-zinc-400' },
-}
 
 const TYPE_LABEL: Record<string, string> = {
   PREVENTIVO: 'Preventivo',
@@ -24,12 +28,22 @@ const TYPE_LABEL: Record<string, string> = {
   LIMPIEZA: 'Limpieza',
 }
 
+const STATUS_PILL: Record<string, string> = {
+  PROGRAMADO: 'bg-blue-100 text-blue-700',
+  COMPLETADO: 'bg-emerald-100 text-emerald-700',
+  CANCELADO: 'bg-slate-200 text-slate-600',
+  REPROGRAMADO: 'bg-amber-100 text-amber-700',
+}
+
 export default async function MobileUnitDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  const session = await getServerSession(authOptions)
+  const isAdmin = isAdminLike(session?.user?.role)
+
   let unit
   try {
     unit = await getMobileUnitById(id)
@@ -37,10 +51,8 @@ export default async function MobileUnitDetailPage({
     notFound()
   }
 
-  const status = STATUS_LABEL[unit.status] ?? { label: unit.status, color: 'bg-slate-100' }
   const projects = unit.projects
   const maintenances = unit.maintenances
-
   const equipment = (unit.equipment as Record<string, boolean> | null) ?? {}
   const equipmentKeys = Object.keys(equipment).filter((k) => equipment[k])
 
@@ -52,8 +64,8 @@ export default async function MobileUnitDetailPage({
   )
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-8">
+      <header className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div className="flex items-start gap-4">
           {unit.imageUrl ? (
             <Image
@@ -61,42 +73,52 @@ export default async function MobileUnitDetailPage({
               alt={unit.name}
               width={160}
               height={110}
-              className="rounded-lg border object-cover"
+              className="rounded-xl border border-slate-200 object-cover"
               unoptimized
             />
           ) : (
-            <div className="w-40 h-28 rounded-lg border bg-slate-100 flex items-center justify-center text-slate-500">
-              Sin imagen
+            <div className="w-40 h-28 rounded-xl border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-500 text-3xl">
+              🚑
             </div>
           )}
           <div>
-            <h1 className="text-2xl font-semibold">{unit.name}</h1>
-            <p className="text-sm text-slate-600 space-x-3">
+            <h2 className="text-2xl font-bold text-slate-800">{unit.name}</h2>
+            <p className="text-sm text-slate-500 mt-1 space-x-3">
               <span>Placa: {unit.plate ?? '—'}</span>
               <span>VIN: {unit.vin ?? '—'}</span>
               <span>Año: {unit.year ?? '—'}</span>
               <span>Capacidad: {unit.capacity ?? '—'}</span>
             </p>
-            <p className="mt-2">
-              <span className={`text-xs px-2 py-0.5 rounded border ${status.color}`}>{status.label}</span>
-              <span className="ml-3 text-xs text-slate-500">Económico: {unit.economicNumber ?? '—'}</span>
-            </p>
-            {unit.notes && <p className="text-sm text-slate-700 mt-2">{unit.notes}</p>}
+            <div className="mt-3 flex items-center gap-2">
+              <MobileUnitStatusBadge status={unit.status} />
+              <span className="text-xs text-slate-500">
+                Económico: {unit.economicNumber ?? '—'}
+              </span>
+            </div>
+            {unit.notes && (
+              <p className="text-sm text-slate-700 mt-3 max-w-2xl">{unit.notes}</p>
+            )}
           </div>
         </div>
-        <div className="flex gap-2">
-          <Link href={`/admin/mobile-units/${id}/edit`} className="px-3 py-1.5 text-sm rounded-md border bg-white hover:bg-slate-50">
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/admin/mobile-units/${id}/edit`}
+            className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow"
+          >
             Editar
           </Link>
           <Link
             href={`/admin/mobile-units/${id}/maintenance`}
-            className="px-3 py-1.5 text-sm rounded-md bg-emerald-600 text-white hover:bg-emerald-700"
+            className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50"
             data-testid="calendar-link"
           >
-            Ver calendario de mantenimiento
+            Calendario de mantenimiento
           </Link>
+          {isAdmin && (
+            <MobileUnitDeleteButton unitId={id} unitName={unit.name} />
+          )}
         </div>
-      </div>
+      </header>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card title="Próximo mantenimiento">
@@ -104,13 +126,16 @@ export default async function MobileUnitDetailPage({
             <div>
               <p className="text-sm">
                 {TYPE_LABEL[nextMaintenance.type] ?? nextMaintenance.type} —{' '}
-                <strong>{new Date(nextMaintenance.scheduledDate).toLocaleDateString('es-MX')}</strong>
+                <strong>
+                  {new Date(nextMaintenance.scheduledDate).toLocaleDateString('es-MX')}
+                </strong>
               </p>
               <p className="text-xs text-slate-500 mt-1">
                 Estado: {nextMaintenance.status}
                 {nextMaintenance.nextDueDate && (
                   <span className="ml-2">
-                    · Próxima sugerencia: {new Date(nextMaintenance.nextDueDate).toLocaleDateString('es-MX')}
+                    · Próxima sugerencia:{' '}
+                    {new Date(nextMaintenance.nextDueDate).toLocaleDateString('es-MX')}
                   </span>
                 )}
               </p>
@@ -131,7 +156,9 @@ export default async function MobileUnitDetailPage({
                 </strong>
               </p>
               {lastMaintenance.technician && (
-                <p className="text-xs text-slate-500 mt-1">Técnico: {lastMaintenance.technician}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Técnico: {lastMaintenance.technician}
+                </p>
               )}
             </div>
           ) : (
@@ -152,15 +179,21 @@ export default async function MobileUnitDetailPage({
       </section>
 
       <section>
-        <h2 className="text-lg font-medium mb-2">Proyectos asignados</h2>
+        <h3 className="text-lg font-medium text-slate-800 mb-2">Proyectos asignados</h3>
         {projects.length === 0 ? (
           <p className="text-sm text-slate-500">Sin proyectos asignados.</p>
         ) : (
-          <ul className="divide-y border rounded-md">
+          <ul className="bg-white divide-y border border-slate-200 rounded-lg overflow-hidden">
             {projects.map((p: (typeof projects)[number]) => (
-              <li key={p.id} className="flex justify-between items-center px-3 py-2 text-sm">
+              <li
+                key={p.id}
+                className="flex justify-between items-center px-4 py-2 text-sm"
+              >
                 <div>
-                  <Link href={`/projects/${p.id}`} className="text-blue-600 hover:underline font-medium">
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="text-blue-600 hover:underline font-medium"
+                  >
                     {p.name}
                   </Link>
                   <p className="text-xs text-slate-500">
@@ -168,7 +201,13 @@ export default async function MobileUnitDetailPage({
                     {new Date(p.endDate).toLocaleDateString('es-MX')}
                   </p>
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded border bg-slate-50">{p.status}</span>
+                <span
+                  className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                    STATUS_PILL[p.status] ?? 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {p.status}
+                </span>
               </li>
             ))}
           </ul>
@@ -176,7 +215,9 @@ export default async function MobileUnitDetailPage({
       </section>
 
       <section>
-        <h2 className="text-lg font-medium mb-2">Historial de mantenimientos</h2>
+        <h3 className="text-lg font-medium text-slate-800 mb-2">
+          Historial de mantenimientos
+        </h3>
         {maintenances.length === 0 ? (
           <p className="text-sm text-slate-500">Sin mantenimientos registrados.</p>
         ) : (
@@ -191,7 +232,9 @@ export default async function MobileUnitDetailPage({
                   </span>
                 </p>
                 <p className="text-xs text-slate-600">{m.description}</p>
-                {m.technician && <p className="text-xs text-slate-500">Técnico: {m.technician}</p>}
+                {m.technician && (
+                  <p className="text-xs text-slate-500">Técnico: {m.technician}</p>
+                )}
               </li>
             ))}
           </ol>
@@ -203,8 +246,10 @@ export default async function MobileUnitDetailPage({
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="border rounded-lg p-3 bg-white">
-      <h3 className="text-sm font-medium text-slate-600 mb-2">{title}</h3>
+    <div className="bg-white p-4 rounded-lg border border-slate-200">
+      <h4 className="text-xs uppercase font-bold tracking-wide text-slate-500 mb-2">
+        {title}
+      </h4>
       {children}
     </div>
   )
