@@ -474,14 +474,26 @@ async def complete_maintenance(record_id: str, data: dict):
 - Click en mantenimiento → modal de detalle
 - Vista lista (tabla con filtros)
 
-### 5.6 Dashboard Operativo (`/operations/mobile-units`)
+### 5.6 Módulo Unificado (`/operations/mobile-units`) — IMPL-20260804-01
 
-- Contadores: unidades activas, en mantenimiento, en reparación
-- Próximos mantenimientos (7 días)
-- Unidades con mantenimiento vencido
-- Calendario semanal dual (proyectos + mantenimientos)
-- Alertas de conflictos
-- Gráfica de utilización por unidad
+A partir de esta versión, **el módulo de Unidades Móviles vive en una sola ruta** con dos pestañas (`?view=catalog|operations`, default `catalog`), replicando el patrón del módulo `/branches`:
+
+- **📋 Catálogo** (`?view=catalog`, default): tabla CRUD de unidades vía `MobileUnitManager`.
+  - ADMIN: botones `+ Nueva Unidad`, `Editar`, `Eliminar`, `Calendario` visibles.
+  - Staff no-admin: `readOnly=true` — solo lectura (botón `Ver` permanece).
+  - Filtro por estado, refresh, link a detalle.
+- **📊 Operación** (`?view=operations`): dashboard operativo semanal vía `MobileUnitOperationsPanel`.
+  - Contadores: unidades activas, en mantenimiento, en reparación, fuera de servicio, baja permanente.
+  - Próximos mantenimientos (7 días).
+  - Mantenimientos vencidos.
+  - Calendario semanal dual (proyectos + mantenimientos) en grid por unidad/día.
+  - Alertas de conflictos (proyecto vs mantenimiento en la misma fecha/unidad).
+
+**Navegación:** un único `NavItem` "Unidades Móviles" (🚑) en el bloque staff. El `NavItem` admin "Catálogo Unidades" (🚐) se eliminó porque ahora se llega desde la pestaña Catálogo en cualquier sesión. Las rutas `/admin/mobile-units/*` siguen existiendo (CRUD, detalle, mantenimiento) y son accesibles vía deep-link o desde el botón "Ver" de cada fila.
+
+**Permisos:** el middleware sigue restringiendo `/admin/*` a ADMIN. La pestaña Catálogo en `/operations/mobile-units` se renderiza para todos los roles autenticados, pero `readOnly` se determina server-side con `isAdminLike(session.user.role)`. Staff no-admin que intente `/admin/mobile-units/new` directamente será redirigido por el middleware.
+
+ADR asociado: `context/decisions/ADR-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES.md`.
 
 ---
 

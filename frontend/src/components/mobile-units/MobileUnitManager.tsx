@@ -1,11 +1,16 @@
 /**
  * @file MobileUnitManager — Vista cliente para el catálogo de unidades móviles.
  * @id IMPL-20260711-01
+ * @id IMPL-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES: añadido props readOnly/showCreate para reutilizar en /operations/mobile-units
  * @spec context/SPECs/SPEC_ARCH-20260711-01-MODULO-UNIDADES-MOVILES.md
  *
  * Componente client. Recibe la lista inicial de unidades (server-side) y
  * muestra tabla con: thumbnail, nombre, placa, status, capacidad, próximo
  * mantenimiento, acciones (ver, editar, eliminar). Filtro por status.
+ *
+ * IMPL-20260804-01: soporta modo `readOnly` (oculta acciones de edición/eliminación
+ * y el botón "Nueva Unidad", útil para staff no-admin en /operations/mobile-units)
+ * y `showCreate` (override explícito para mostrar/ocultar el botón de alta).
  */
 'use client'
 
@@ -14,32 +19,28 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { getMobileUnits, deleteMobileUnit } from '@/actions/mobile-unit.actions'
+import {
+  MOBILE_UNIT_STATUS_LABEL as STATUS_LABEL,
+  MOBILE_UNIT_STATUS_OPTIONS as STATUS_OPTIONS,
+} from './constants'
 
 type Unit = Awaited<ReturnType<typeof getMobileUnits>>[number]
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  ACTIVA: { label: 'Activa', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-  MANTENIMIENTO: { label: 'Mantenimiento', color: 'bg-amber-100 text-amber-800 border-amber-300' },
-  REPARACION: { label: 'Reparación', color: 'bg-red-100 text-red-800 border-red-300' },
-  FUERA_SERVICIO: { label: 'Fuera de servicio', color: 'bg-slate-200 text-slate-700 border-slate-300' },
-  BAJA_PERMANENTE: { label: 'Baja permanente', color: 'bg-zinc-300 text-zinc-700 border-zinc-400' },
+type Props = {
+  initialUnits: Unit[]
+  /** IMPL-20260804-01: oculta botones de edición/borrado cuando el viewer no tiene permisos. */
+  readOnly?: boolean
+  /** IMPL-20260804-01: override del botón "+ Nueva Unidad". Default: !readOnly. */
+  showCreate?: boolean
 }
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'Todos' },
-  { value: 'ACTIVA', label: 'Activa' },
-  { value: 'MANTENIMIENTO', label: 'Mantenimiento' },
-  { value: 'REPARACION', label: 'Reparación' },
-  { value: 'FUERA_SERVICIO', label: 'Fuera de servicio' },
-  { value: 'BAJA_PERMANENTE', label: 'Baja permanente' },
-]
-
-export default function MobileUnitManager({ initialUnits }: { initialUnits: Unit[] }) {
+export default function MobileUnitManager({ initialUnits, readOnly = false, showCreate }: Props) {
   const router = useRouter()
   const [filter, setFilter] = useState<string>('')
   const [units, setUnits] = useState<Unit[]>(initialUnits)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const canCreate = showCreate ?? !readOnly
 
   const filtered = useMemo(() => {
     if (!filter) return units
@@ -94,13 +95,15 @@ export default function MobileUnitManager({ initialUnits }: { initialUnits: Unit
           >
             {isPending ? 'Actualizando…' : 'Actualizar'}
           </button>
-          <Link
-            href="/admin/mobile-units/new"
-            className="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
-            data-testid="new-unit-button"
-          >
-            + Nueva Unidad
-          </Link>
+          {canCreate && (
+            <Link
+              href="/admin/mobile-units/new"
+              className="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
+              data-testid="new-unit-button"
+            >
+              + Nueva Unidad
+            </Link>
+          )}
         </div>
       </header>
 
@@ -129,7 +132,9 @@ export default function MobileUnitManager({ initialUnits }: { initialUnits: Unit
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
                   {units.length === 0
-                    ? 'No hay unidades registradas. Crea la primera con “Nueva Unidad”.'
+                    ? readOnly
+                      ? 'No hay unidades registradas en el sistema.'
+                      : 'No hay unidades registradas. Crea la primera con “Nueva Unidad”.'
                     : 'Sin unidades que coincidan con el filtro.'}
                 </td>
               </tr>
@@ -178,15 +183,19 @@ export default function MobileUnitManager({ initialUnits }: { initialUnits: Unit
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
                         <Link href={`/admin/mobile-units/${u.id}`} className="text-blue-600 hover:underline text-xs">Ver</Link>
-                        <Link href={`/admin/mobile-units/${u.id}/edit`} className="text-amber-600 hover:underline text-xs">Editar</Link>
-                        <Link href={`/admin/mobile-units/${u.id}/maintenance`} className="text-emerald-600 hover:underline text-xs">Calendario</Link>
-                        <button
-                          onClick={() => onDelete(u.id, u.name)}
-                          className="text-red-600 hover:underline text-xs"
-                          data-testid={`delete-${u.id}`}
-                        >
-                          Eliminar
-                        </button>
+                        {!readOnly && (
+                          <>
+                            <Link href={`/admin/mobile-units/${u.id}/edit`} className="text-amber-600 hover:underline text-xs">Editar</Link>
+                            <Link href={`/admin/mobile-units/${u.id}/maintenance`} className="text-emerald-600 hover:underline text-xs">Calendario</Link>
+                            <button
+                              onClick={() => onDelete(u.id, u.name)}
+                              className="text-red-600 hover:underline text-xs"
+                              data-testid={`delete-${u.id}`}
+                            >
+                              Eliminar
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
