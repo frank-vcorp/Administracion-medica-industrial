@@ -95,6 +95,37 @@ export async function getMaintenanceRecords(
   })
 }
 
+/**
+ * ARCH-20260804-03 — Fase 4 / §4.2 SPEC.
+ * Retorna mantenimientos activos para varias unidades en una sola query (`IN`),
+ * usado por ProjectsCalendar para mostrar badge 🔧 Mant. sin N queries.
+ * Action aditivo (no rompe contrato existente).
+ */
+export async function getMaintenancesByUnitIds(
+  unitIds: string[],
+  statuses?: (typeof STATUS_VALUES)[number][]
+) {
+  const session = await requireAnyAuth()
+  if (!session) return []
+  if (!Array.isArray(unitIds) || unitIds.length === 0) return []
+
+  return prisma.maintenanceRecord.findMany({
+    where: {
+      mobileUnitId: { in: unitIds },
+      ...(statuses && statuses.length > 0 ? { status: { in: statuses } } : {}),
+    },
+    select: {
+      id: true,
+      mobileUnitId: true,
+      type: true,
+      status: true,
+      scheduledDate: true,
+      technician: true,
+    },
+    orderBy: { scheduledDate: 'desc' },
+  })
+}
+
 // ─── Mutaciones ───────────────────────────────────────────────────────────────
 
 export async function createMaintenanceRecord(
@@ -141,6 +172,8 @@ export async function createMaintenanceRecord(
     })
     revalidatePath(`/admin/mobile-units/${parsed.data.mobileUnitId}/maintenance`)
     revalidatePath('/admin/mobile-units')
+    // ARCH-20260804-03 — Fase 4 / §9.1: invalidar ProjectsCalendar para reflejar superposición.
+    revalidatePath('/projects')
     return { success: true as const, record }
   } catch (e: unknown) {
     const err = e as Error
@@ -179,6 +212,8 @@ export async function updateMaintenanceRecord(
 
     await prisma.maintenanceRecord.update({ where: { id: recordId }, data: updateData })
     revalidatePath(`/admin/mobile-units/${existing.mobileUnitId}/maintenance`)
+    // ARCH-20260804-03 — Fase 4 / §9.1: invalidar ProjectsCalendar para reflejar superposición.
+    revalidatePath('/projects')
     return { success: true as const }
   } catch (e: unknown) {
     const err = e as Error
@@ -247,6 +282,8 @@ export async function reprogramMaintenance(
     ])
 
     revalidatePath(`/admin/mobile-units/${original.mobileUnitId}/maintenance`)
+    // ARCH-20260804-03 — Fase 4 / §9.1: invalidar ProjectsCalendar para reflejar superposición.
+    revalidatePath('/projects')
     return { success: true as const }
   } catch (e: unknown) {
     const err = e as Error
@@ -298,6 +335,8 @@ export async function completeMaintenance(
     })
 
     revalidatePath(`/admin/mobile-units/${existing.mobileUnitId}/maintenance`)
+    // ARCH-20260804-03 — Fase 4 / §9.1: invalidar ProjectsCalendar para reflejar superposición.
+    revalidatePath('/projects')
     return { success: true as const, nextDueDate: nextDue }
   } catch (e: unknown) {
     const err = e as Error

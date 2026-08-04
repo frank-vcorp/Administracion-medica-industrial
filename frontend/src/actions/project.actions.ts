@@ -245,6 +245,28 @@ export async function getProjectsByCompany(companyId: string) {
 }
 
 /**
+ * ARCH-20260804-03 — Fase 2 / §4.2 SPEC.
+ * Retorna los proyectos activos (no CANCELLED) cuya unidad móvil es `unitId`,
+ * con shape mínimo para alimentar la superposición en el calendario de mantenimiento.
+ * Es un action aditivo (no rompe contrato existente).
+ */
+export async function getProjectsByMobileUnit(unitId: string) {
+  const session = await requireAdminOrReceptionist()
+  if (!session) return []
+  return prisma.project.findMany({
+    where: {
+      mobileUnitId: unitId,
+      NOT: { status: 'CANCELLED' },
+    },
+    include: {
+      company: { select: { id: true, name: true } },
+      _count: { select: { workers: true } },
+    },
+    orderBy: { startDate: 'desc' },
+  })
+}
+
+/**
  * IMPL-20260711-01 — Detalle simple de proyecto (incluye mobileUnit).
  */
 export async function getProject(projectId: string) {
@@ -314,6 +336,10 @@ export async function createProject(data: {
       },
     })
     revalidatePath('/projects')
+    // ARCH-20260804-03 — Fase 4 / §9.2: si el proyecto tiene unidad, revalidar su calendario de mantenimiento.
+    if (mobileUnitId) {
+      revalidatePath(`/admin/mobile-units/${mobileUnitId}/maintenance`)
+    }
     return { success: true, project: { id: project.id, name: project.name } }
   } catch (e: unknown) {
     const err = e as Error
@@ -387,6 +413,18 @@ export async function updateProject(
       },
     })
     revalidatePath('/projects')
+    // ARCH-20260804-03 — Fase 4 / §9.2: si el proyecto tiene unidad efectiva, revalidar su calendario.
+    let effectiveUnitId: string | null = mobileUnitId !== undefined ? mobileUnitId : null
+    if (effectiveUnitId === null) {
+      const fallback = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { mobileUnitId: true },
+      })
+      effectiveUnitId = fallback?.mobileUnitId ?? null
+    }
+    if (effectiveUnitId) {
+      revalidatePath(`/admin/mobile-units/${effectiveUnitId}/maintenance`)
+    }
     return { success: true }
   } catch (e: unknown) {
     const err = e as Error

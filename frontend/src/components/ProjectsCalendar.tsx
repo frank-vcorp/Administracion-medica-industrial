@@ -18,6 +18,8 @@ import BulkWorkerImportModal from '@/components/BulkWorkerImportModal'
 import ProjectFormModal, { ProjectForEdit } from '@/components/ProjectFormModal'
 import ProjectsTable from '@/components/ProjectsTable'
 import { checkInProjectWorkerToClinical, markProjectWorkerArrived } from '@/actions/project.actions'
+import type { UnitMaintenanceItem } from '@/components/mobile-units/maintenance-calendar-types'
+import { isMaintenanceInProjectRange } from '@/lib/calendar-utils'
 
 interface CompanyOption {
   id: string
@@ -41,6 +43,8 @@ interface ProjectItem {
   branchId: string | null
   company: { id: string; name: string } | null
   branch: { id: string; name: string } | null
+  // ARCH-20260804-03 — Fase 4 / §8.1: mobileUnit opcional, viene de `getProjects()`.
+  mobileUnit?: { id: string; name: string; plate: string | null; status: string } | null
   _count: { workers: number }
   workers: {
     workerId: string
@@ -60,6 +64,8 @@ interface ProjectsCalendarProps {
   projects: ProjectItem[]
   companies: CompanyOption[]
   branches: BranchOption[]
+  // ARCH-20260804-03 — Fase 4 / §8.2: badge 🔧 Mant. en pills de proyecto.
+  unitMaintenances?: UnitMaintenanceItem[]
 }
 
 interface BulkImportContext {
@@ -178,12 +184,14 @@ function toProjectForEdit(project: ProjectItem): ProjectForEdit {
   }
 }
 
-export default function ProjectsCalendar({ projects, companies, branches }: ProjectsCalendarProps) {
+export default function ProjectsCalendar({ projects, companies, branches, unitMaintenances }: ProjectsCalendarProps) {
   const router = useRouter()
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()))
   const [companyFilter, setCompanyFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  // ARCH-20260804-03 — Fase 4 / §8.4: toggle "Solo proyectos con mantenimiento" (default OFF).
+  const [onlyProjectsWithMaintenance, setOnlyProjectsWithMaintenance] = useState(false)
   const [editProject, setEditProject] = useState<ProjectForEdit | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [bulkImportContext, setBulkImportContext] = useState<BulkImportContext | null>(null)
@@ -198,8 +206,18 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
     return [...projects]
       .filter((project) => companyFilter === 'ALL' || project.companyId === companyFilter)
       .filter((project) => statusFilter === 'ALL' || project.status === statusFilter)
+      // ARCH-20260804-03 — Fase 4 / §8.4: filtro opcional "Solo proyectos con mantenimiento".
+      .filter((project) => {
+        if (!onlyProjectsWithMaintenance) return true
+        const unitId = project.mobileUnit?.id
+        if (!unitId) return false
+        return (unitMaintenances ?? []).some((m) =>
+          m.mobileUnitId === unitId
+          && isMaintenanceInProjectRange(m, project.startDate, project.endDate)
+        )
+      })
       .sort((left, right) => toDate(left.startDate).getTime() - toDate(right.startDate).getTime())
-  }, [companyFilter, projects, statusFilter])
+  }, [companyFilter, projects, statusFilter, onlyProjectsWithMaintenance, unitMaintenances])
 
   const visibleProjects = useMemo(() => {
     return filteredProjects.filter((project) => overlapsMonth(project, visibleMonth))
@@ -444,6 +462,20 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
                 <p className="text-sm font-semibold text-slate-700">{visibleProjects.length} proyectos en el mes</p>
                 <p className="text-xs text-slate-500">{filteredProjects.length} proyectos coinciden con los filtros activos</p>
               </div>
+
+              {/* ARCH-20260804-03 — Fase 4 / §8.4: toggle "Solo proyectos con mantenimiento". */}
+              <label className="space-y-1 text-sm text-slate-600">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Vinculación</span>
+                <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={onlyProjectsWithMaintenance}
+                    onChange={(event) => setOnlyProjectsWithMaintenance(event.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  Solo proyectos con mantenimiento
+                </span>
+              </label>
             </div>
           </div>
 
@@ -498,7 +530,17 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
                       </div>
 
                       <div className="space-y-2">
-                        {visibleItems.map((project) => (
+                        {visibleItems.map((project) => {
+                          // ARCH-20260804-03 — Fase 4 / §8.3: badge 🔧 Mant. con deep-link.
+                          const unitId = project.mobileUnit?.id ?? null
+                          const maintenancesInRange = unitId
+                            ? (unitMaintenances ?? []).filter(
+                                (m) =>
+                                  m.mobileUnitId === unitId
+                                  && isMaintenanceInProjectRange(m, project.startDate, project.endDate)
+                              )
+                            : []
+                          return (
                           <div
                             key={`${project.id}-${day.toISOString()}`}
                             className={`w-full rounded-2xl border px-3 py-2 text-left text-xs shadow-sm transition-transform hover:-translate-y-0.5 ${STATUS_BADGES[project.status]}`}
@@ -517,6 +559,19 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
                                 <span>{formatRange(project.startDate, project.endDate)}</span>
                               </div>
                             </button>
+                            {/* ARCH-20260804-03 — Fase 4 / §8.3: badge 🔧 Mant. con Link al calendario de la unidad. */}
+                            {maintenancesInRange.length > 0 && unitId && (
+                              <div className="mt-2">
+                                <Link
+                                  href={`/admin/mobile-units/${unitId}/maintenance`}
+                                  data-testid="maintenance-badge"
+                                  className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 transition-colors hover:bg-violet-100"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  🔧 {maintenancesInRange.length} mant.
+                                </Link>
+                              </div>
+                            )}
                             <div className="mt-2 border-t border-white/70 pt-2">
                               <button
                                 type="button"
@@ -527,7 +582,8 @@ export default function ProjectsCalendar({ projects, companies, branches }: Proj
                               </button>
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
 
                         {hiddenCount > 0 && (
                           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">

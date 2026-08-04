@@ -2,12 +2,14 @@
  * @file Calendar de mantenimiento de una unidad (/admin/mobile-units/[id]/maintenance).
  * @id IMPL-20260711-01 — SPEC §5.5
  * @id IMPL-20260804-02-ALINEAR-ESTILO-MOBILE-UNITS — header sistema
+ * @id ARCH-20260804-03 — superposición de proyectos (Fase 2).
  */
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import MaintenanceCalendar from '@/components/mobile-units/MaintenanceCalendar'
 import { getMobileUnitById } from '@/actions/mobile-unit.actions'
 import { getMaintenanceRecords } from '@/actions/maintenance.actions'
+import { getProjectsByMobileUnit } from '@/actions/project.actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +25,10 @@ export default async function MaintenanceCalendarPage({
   } catch {
     notFound()
   }
-  const records = await getMaintenanceRecords(id)
+  const [records, unitProjects] = await Promise.all([
+    getMaintenanceRecords(id),
+    getProjectsByMobileUnit(id),
+  ])
   return (
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
@@ -42,7 +47,12 @@ export default async function MaintenanceCalendarPage({
           ← Volver al detalle
         </Link>
       </header>
-      <MaintenanceCalendar unitId={id} initialRecords={records} />
+      <MaintenanceCalendar
+        unitId={id}
+        initialRecords={records}
+        unitProjects={unitProjects}
+        unitName={unit.name}
+      />
     </div>
   )
 }
