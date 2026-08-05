@@ -47,3 +47,5 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+# IMPL-20260804-05: storageState del fixture de auth (cookies de sesión ADMIN)
+/tests/.auth/

@@ -87,7 +87,14 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     await page.getByTestId('schedule-date').fill('2026-08-01')
     await page.getByLabel('Descripción').fill('Mantenimiento E2E test')
     await page.getByRole('button', { name: 'Verificar disponibilidad' }).click()
-    await page.getByRole('button', { name: 'Programar' }).click({ timeout: 5_000 }).catch(() => {})
+    // ARCH-20260804-04 §3.1: el botón "Programar" debe estar habilitado tras verificar
+    // disponibilidad sin conflicto. Si nunca se habilita, el test falla con diagnóstico
+    // claro en vez de silenciar el error (FIX IMPL-20260804-05 O4).
+    await expect(page.getByRole('button', { name: 'Programar' })).toBeEnabled({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Programar' }).click()
+    // Tras programar, debe aparecer el evento en el calendario (data-testid event-*).
+    // Esperar al menos un evento que coincida con la descripción.
+    await expect(page.locator('[data-testid^="event-"]').first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('5. Reprogramar mantenimiento (modal)', async ({ page }) => {
@@ -158,7 +165,13 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     await page.getByTestId('schedule-button').click()
     await page.getByTestId('schedule-date').fill('2026-08-15')
     await page.getByLabel('Descripción').fill('Mantenimiento TC-7 setup')
-    await page.getByRole('button', { name: 'Programar' }).click({ timeout: 5_000 }).catch(() => {})
+    // FIX IMPL-20260804-05 O4: assert explícito en lugar de .catch(() => {}).
+    // Si el botón no se habilita o el POST falla, Playwright reportará el error
+    // con el contexto del DOM en vez de tragar la excepción silenciosamente.
+    await expect(page.getByRole('button', { name: 'Programar' })).toBeEnabled({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Programar' }).click()
+    // Confirmar que el mantenimiento quedó registrado en el calendario.
+    await expect(page.locator('[data-testid^="event-"]').first()).toBeVisible({ timeout: 10_000 })
 
     // ─── Intento de crear proyecto sobre la misma unidad + fecha ─────────────────
     await page.goto(`${BASE}/projects/new`)
