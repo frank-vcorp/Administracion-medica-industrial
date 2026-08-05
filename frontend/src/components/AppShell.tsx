@@ -89,9 +89,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { data: session, status } = useSession()
 
-  // Sin chrome en pantalla de login y en rutas /demo (datos estáticos, sin AMI chrome)
+  // Sin chrome en pantalla de login y en rutas públicas (sin AMI chrome)
   // IMPL-20260623-02: bypass también para /demo/* (demo navegable público)
-  const isChromeFreePage = pathname?.startsWith('/login') || pathname?.startsWith('/demo')
+  // FIX-20260805-01: bypass también para /solicitar-alta y /auto-alta/* (portales
+  // públicos de auto-registro; un prospecto no debe ver sidebar admin ni "Cerrar sesión").
+  // NOTA: Esta lista DEBE mantenerse sincronizada con la lista isPublicRoute de
+  // middleware.ts:30. Considerar extraer a constante compartida (FIX-20260805-02).
+  const isChromeFreePage =
+    pathname?.startsWith('/login') ||
+    pathname?.startsWith('/demo') ||
+    pathname?.startsWith('/solicitar-alta') ||
+    pathname?.startsWith('/auto-alta')
   if (isChromeFreePage) {
     return <>{children}</>
   }
