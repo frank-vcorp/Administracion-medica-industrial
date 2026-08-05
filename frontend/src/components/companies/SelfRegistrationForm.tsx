@@ -750,7 +750,7 @@ function SelfRegistrationFormActive({
         <Field label="Correo recepción complemento de pago (opcional)">
           <input type="email" value={form.correoComplemento} onChange={(e) => setField('correoComplemento', e.target.value)} className={inputClass} />
         </Field>
-        <Field label="Proceso de facturación (textarea)">
+        <Field label="Describe el proceso de facturación">
           <textarea value={form.procesoFacturacion} onChange={(e) => setField('procesoFacturacion', e.target.value)} className={inputClass} rows={3} />
         </Field>
       </Section>
