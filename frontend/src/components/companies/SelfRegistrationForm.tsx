@@ -27,7 +27,7 @@
  */
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import {
   validateCompanySelfRegTokenAction,
   registerSelfRegFileAction,
@@ -35,6 +35,9 @@ import {
   submitPublicCompanySelfRegistrationAction,
 } from '@/actions/company.actions'
 import { ALLOWED_DOCUMENT_EXTENSIONS, MAX_FILE_SIZE_2MB, MAX_FILE_SIZE_3MB, MAX_FILE_SIZE_4MB, MAX_FILE_SIZE_10MB, SAT_CFDI_USO_DESCRIPTIONS } from '@/lib/schemas/company-full-form'
+import { useSelfRegDraft } from '@/lib/hooks/useSelfRegDraft'
+import type { SelfRegDraft } from '@/lib/self-reg-draft'
+import { DraftRestoreModal } from '@/components/companies/DraftRestoreModal'
 
 type SeccionDoc = 'constanciaFiscal' | 'identificacionRepLegal' | 'comprobanteDomicilio' | 'opinionSat' | 'actaConstitutiva' | 'otraDocumentacion'
 
@@ -224,21 +227,23 @@ function SelfRegistrationFormActive({
   })
 
   // IMPL-20260624-01: random8 estable para scope de storage público.
-  // Se genera perezosamente en el primer upload para evitar IDs huérfanos
-  // si el usuario nunca llega a subir un archivo.
-  const publicScopeRef = useRef<string | null>(null)
+  // FIX-20260805-04: se genera EAGER al mount (no perezoso) para que el draft
+  // autosave pueda usar scope desde el primer keystroke (caso borde #13 de
+  // SPEC_FIX-20260805-04). El scope solo existe en cliente, no crea entry en
+  // S3 hasta el primer upload. Mantener getPublicScope() para que handleUpload
+  // siga usando exactamente el mismo valor (consistencia de scope).
+  const [publicScope] = useState<string>(() => {
+    // 6 bytes → 8 chars base64url (compatible con el scope del server).
+    const arr = new Uint8Array(6)
+    crypto.getRandomValues(arr)
+    return btoa(String.fromCharCode(...arr))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+      .slice(0, 8)
+  })
   function getPublicScope(): string {
-    if (!publicScopeRef.current) {
-      // 6 bytes → 8 chars base64url (compatible con el scope del server).
-      const arr = new Uint8Array(6)
-      crypto.getRandomValues(arr)
-      publicScopeRef.current = btoa(String.fromCharCode(...arr))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '')
-        .slice(0, 8)
-    }
-    return publicScopeRef.current
+    return publicScope
   }
   const [form, setForm] = useState({
     // Fiscal
@@ -320,6 +325,62 @@ function SelfRegistrationFormActive({
       next[idx] = { ...next[idx], [campo]: valor }
       return { ...f, referencias: next }
     })
+  }
+
+  // FIX-20260805-04: scope estable para draft autosave.
+  // - TOKEN: tokenHash.slice(0,8), computado async al mount (mismo valor que
+  //   ya se usa en handleUpload líneas 359-360 para S3 key).
+  // - PUBLIC: random8 eager generado arriba (mismo que getPublicScope()).
+  // El autosave solo se activa cuando el scope está disponible para evitar
+  // escribir drafts bajo keys con scope vacío.
+  const [tokenScope, setTokenScope] = useState<string>('')
+  useEffect(() => {
+    if (source === 'TOKEN' && token) {
+      let cancelled = false
+      getTokenHashFromClient(token).then((h) => {
+        if (!cancelled) setTokenScope(h.slice(0, 8))
+      })
+      return () => {
+        cancelled = true
+      }
+    }
+    return undefined
+  }, [source, token])
+
+  const draftScope = source === 'TOKEN' ? tokenScope : publicScope
+
+  // FIX-20260805-04: hook de draft autosave (ver useSelfRegDraft.ts).
+  // enabled=false tras success para que el autosave no pise el éxito.
+  const draftApi = useSelfRegDraft({
+    source,
+    scope: draftScope,
+    form: form as unknown as Record<string, unknown>,
+    uploads: uploads as unknown as Record<string, unknown> | null,
+    enabled: !success && draftScope.length > 0,
+  })
+
+  /**
+   * FIX-20260805-04: aplica los valores del draft al form y uploads tras
+   * "Continuar donde me quedé". Hacemos shallow-merge controlado: solo los
+   * campos definidos en el draft que también existen en el estado actual.
+   * NO re-subimos archivos (estos ya están en S3 con su key; se re-vinculan
+   * al submit — decisión D6 de SPEC).
+   */
+  function applyDraft(draft: SelfRegDraft) {
+    setForm((f) => ({ ...f, ...(draft.form as Partial<typeof f>) }))
+    if (draft.uploads) {
+      setUploads((u) => {
+        const next = { ...u }
+        for (const [k, v] of Object.entries(draft.uploads as Record<string, unknown>)) {
+          if (k in next) {
+            // El draft solo tiene metadatos; nunca File/Blob (criterio #13).
+            next[k as SeccionDoc] = v as (typeof u)[SeccionDoc]
+          }
+        }
+        return next
+      })
+    }
+    draftApi.acceptRestore()
   }
 
   function validateFile(file: File, seccion: SeccionDoc): string | null {
@@ -509,6 +570,9 @@ function SelfRegistrationFormActive({
           ? await submitPublicCompanySelfRegistrationAction(payload)
           : await submitCompanySelfRegistrationAction(token!, payload)
       if (result.ok) {
+        // FIX-20260805-04: limpiar draft ANTES de setSuccess (caso borde #9
+        // — orden clearOnSubmit → setSuccess).
+        draftApi.clearOnSubmit()
         setSuccess({ companyId: result.companyId })
       } else {
         if (result.code === 'RFC_DUPLICATE') {
@@ -536,7 +600,18 @@ function SelfRegistrationFormActive({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-6 pb-12">
+    <>
+      {/* FIX-20260805-04: modal bloqueante de restore. Solo se muestra cuando
+          hay un draft pendiente y el usuario aún no decidió. NO cerrable con
+          Esc ni click outside — decisión D3 / caso borde #11. */}
+      {draftApi.savedDraft && !draftApi.isRestored && (
+        <DraftRestoreModal
+          draft={draftApi.savedDraft}
+          onContinue={() => applyDraft(draftApi.savedDraft!)}
+          onStartFresh={draftApi.dismissRestore}
+        />
+      )}
+      <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-6 pb-12">
       <header className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <h1 className="text-2xl font-black text-slate-800">Alta de Cliente</h1>
         <p className="text-sm text-slate-500 mt-1">
@@ -927,7 +1002,8 @@ function SelfRegistrationFormActive({
           {isPending ? 'Enviando…' : 'Enviar solicitud de alta'}
         </button>
       </div>
-    </form>
+      </form>
+    </>
   )
 }
 
