@@ -16,6 +16,13 @@ export const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000
 /** Debounce de autosave. No escribir en cada keystroke. */
 export const DRAFT_SAVE_DEBOUNCE_MS = 800
 
+/**
+ * FIX-20260805-04-HOTFIX: clave de localStorage donde se persiste el scope
+ * PUBLIC (random8 estable entre sesiones). El scope debe sobrevivir a mount
+ * nuevos para que el draft guardado en sesión 1 sea recuperable en sesión 2.
+ */
+export const PUBLIC_SCOPE_KEY = 'ami:selfreg:public-scope'
+
 /** Estructura persistida en localStorage. */
 export interface SelfRegDraft {
   version: 1
@@ -122,5 +129,49 @@ export function clearDraft(key: string): void {
     localStorage.removeItem(key)
   } catch {
     /* noop */
+  }
+}
+
+/**
+ * FIX-20260805-04-HOTFIX: obtiene o crea un scope PUBLIC estable (random8).
+ *
+ * El scope PUBLIC se persiste en localStorage para que sea el mismo entre
+ * sesiones (abrir otra pestaña / cerrar y reabrir URL). Antes del fix, el
+ * `publicScope` se generaba con `crypto.getRandomValues` en el initializer
+ * del useState, lo que producía un random distinto en cada mount y hacía
+ * que el draft guardado en sesión 1 no fuera recuperable en sesión 2.
+ *
+ * SSR-safe: si `typeof window === 'undefined'`, retorna ''. El caller debe
+ * invocarlo únicamente en `useEffect` (nunca en un initializer de useState)
+ * para evitar el hydration mismatch #418.
+ *
+ * Degradación elegante: si localStorage lanza (modo incógnito, cuota
+ * agotada, storage deshabilitado), retorna un random efímero sin persistir.
+ * En este modo el draft solo funcionará dentro de la misma sesión, pero el
+ * componente sigue operativo.
+ */
+export function getOrCreatePublicScope(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    const existing = window.localStorage.getItem(PUBLIC_SCOPE_KEY)
+    if (existing && existing.length === 8) return existing
+    const arr = new Uint8Array(6)
+    window.crypto.getRandomValues(arr)
+    const scope = btoa(String.fromCharCode(...arr))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+      .slice(0, 8)
+    window.localStorage.setItem(PUBLIC_SCOPE_KEY, scope)
+    return scope
+  } catch {
+    // localStorage falla (incógnito / quota / deshabilitado) → efímero.
+    const arr = new Uint8Array(6)
+    window.crypto.getRandomValues(arr)
+    return btoa(String.fromCharCode(...arr))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+      .slice(0, 8)
   }
 }

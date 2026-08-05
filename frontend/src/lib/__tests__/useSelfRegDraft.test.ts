@@ -23,7 +23,9 @@ import { createRoot, type Root } from 'react-dom/client'
 
 import {
   DRAFT_SAVE_DEBOUNCE_MS,
+  PUBLIC_SCOPE_KEY,
   buildDraftKey,
+  getOrCreatePublicScope,
   saveDraft,
   type SelfRegDraft,
 } from '../self-reg-draft'
@@ -611,6 +613,92 @@ describe('useSelfRegDraft', () => {
       })
       expect(shim.removeItem).toHaveBeenCalledWith(key)
       handle.unmount()
+    })
+  })
+
+  describe('FIX-20260805-04-HOTFIX — PUBLIC cross-session', () => {
+    // Helper: añade crypto.getRandomValues al window stubeado por stubDom()
+    // (que es el que existe en este test file tras renderHook). Es idempotente
+    // y barato de llamar entre mounts.
+    function ensureWindow() {
+      const w = (globalThis as { window?: unknown }).window as
+        | {
+            crypto?: { getRandomValues: (a: Uint8Array) => Uint8Array }
+            localStorage?: Storage
+          }
+        | undefined
+      if (!w) return
+      // localStorage debe apuntar al shim de la suite (no al de stubDom,
+      // que no existe). getOrCreatePublicScope() usa `window.localStorage`.
+      w.localStorage = shim as unknown as Storage
+      w.crypto = {
+        getRandomValues(arr: Uint8Array) {
+          for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256)
+          return arr
+        },
+      }
+    }
+
+    it('mount 1 con PUBLIC crea scope persistido; mount 2 reusa scope y recupera draft (modal aparece)', () => {
+      // ── Mount 1: localStorage limpio. ──
+      // El componente monta con scope='' (todavía no resolvió vía useEffect).
+      // Simulamos lo que hace SelfRegistrationForm: en useEffect, si source=PUBLIC,
+      // llama getOrCreatePublicScope() y setea publicScope.
+      const handle1 = renderHook<Opts, UseSelfRegDraftResult>(
+        (p) => useSelfRegDraft(p),
+        { source: 'PUBLIC', scope: '', form: {}, uploads: null },
+      )
+      ensureWindow()
+      // Resolver scope igual que hace el useEffect del componente.
+      const scope1 = getOrCreatePublicScope()
+      expect(scope1).toMatch(/^[A-Za-z0-9_-]{8}$/)
+      // Debe haberse persistido bajo la clave canónica.
+      expect(shim.getItem(PUBLIC_SCOPE_KEY)).toBe(scope1)
+
+      // Re-render con scope resuelto y form con datos → autosave dispara tras 800ms.
+      handle1.rerender({
+        source: 'PUBLIC',
+        scope: scope1,
+        form: { razonSocial: 'Cross-Session SA' },
+        uploads: null,
+      })
+      act(() => {
+        vi.advanceTimersByTime(DRAFT_SAVE_DEBOUNCE_MS)
+      })
+      const key1 = buildDraftKey('PUBLIC', scope1)
+      expect(shim.setItem).toHaveBeenCalledWith(key1, expect.any(String))
+      handle1.unmount()
+
+      // ── Mount 2: "nueva sesión" — nuevo render del hook, mismo localStorage. ──
+      shim.setItem.mockClear()
+      const handle2 = renderHook<Opts, UseSelfRegDraftResult>(
+        (p) => useSelfRegDraft(p),
+        { source: 'PUBLIC', scope: '', form: {}, uploads: null },
+      )
+      ensureWindow()
+      // El nuevo mount parte con scope vacío (igual que el componente real).
+      expect(handle2.result.current!.savedDraft).toBeNull()
+
+      // Resolver scope vía getOrCreatePublicScope (useEffect del componente).
+      const scope2 = getOrCreatePublicScope()
+      // El scope debe ser IDÉNTICO al de mount 1 (cross-session persistence).
+      expect(scope2).toBe(scope1)
+
+      // Re-render con scope resuelto → el hook debe encontrar el draft guardado
+      // en mount 1 y exponerlo vía savedDraft (modal aparecería: savedDraft &&
+      // !isRestored).
+      handle2.rerender({
+        source: 'PUBLIC',
+        scope: scope2,
+        form: {},
+        uploads: null,
+      })
+      expect(handle2.result.current!.savedDraft).not.toBeNull()
+      expect(handle2.result.current!.savedDraft!.form).toEqual({ razonSocial: 'Cross-Session SA' })
+      expect(handle2.result.current!.savedDraft!.source).toBe('PUBLIC')
+      expect(handle2.result.current!.savedDraft!.scope).toBe(scope1)
+      expect(handle2.result.current!.isRestored).toBe(false)
+      handle2.unmount()
     })
   })
 })

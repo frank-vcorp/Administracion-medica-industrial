@@ -37,6 +37,7 @@ import {
 import { ALLOWED_DOCUMENT_EXTENSIONS, MAX_FILE_SIZE_2MB, MAX_FILE_SIZE_3MB, MAX_FILE_SIZE_4MB, MAX_FILE_SIZE_10MB, SAT_CFDI_USO_DESCRIPTIONS } from '@/lib/schemas/company-full-form'
 import { useSelfRegDraft } from '@/lib/hooks/useSelfRegDraft'
 import type { SelfRegDraft } from '@/lib/self-reg-draft'
+import { getOrCreatePublicScope } from '@/lib/self-reg-draft'
 import { DraftRestoreModal } from '@/components/companies/DraftRestoreModal'
 
 type SeccionDoc = 'constanciaFiscal' | 'identificacionRepLegal' | 'comprobanteDomicilio' | 'opinionSat' | 'actaConstitutiva' | 'otraDocumentacion'
@@ -227,21 +228,22 @@ function SelfRegistrationFormActive({
   })
 
   // IMPL-20260624-01: random8 estable para scope de storage público.
-  // FIX-20260805-04: se genera EAGER al mount (no perezoso) para que el draft
-  // autosave pueda usar scope desde el primer keystroke (caso borde #13 de
-  // SPEC_FIX-20260805-04). El scope solo existe en cliente, no crea entry en
-  // S3 hasta el primer upload. Mantener getPublicScope() para que handleUpload
-  // siga usando exactamente el mismo valor (consistencia de scope).
-  const [publicScope] = useState<string>(() => {
-    // 6 bytes → 8 chars base64url (compatible con el scope del server).
-    const arr = new Uint8Array(6)
-    crypto.getRandomValues(arr)
-    return btoa(String.fromCharCode(...arr))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '')
-      .slice(0, 8)
-  })
+  // FIX-20260805-04-HOTFIX: el scope PUBLIC se persiste en localStorage
+  // (clave `ami:selfreg:public-scope`) para que sea estable entre sesiones
+  // (abrir otra pestaña / cerrar y reabrir URL). Antes del fix se generaba
+  // con `crypto.getRandomValues` en el initializer del useState y era
+  // distinto en cada mount, lo que rompía la recuperación del draft
+  // cross-session en la ruta PUBLIC.
+  //
+  // NO se lee localStorage en el initializer (causaría hydration mismatch
+  // #418 — el SSR renderiza con window indefinido). Se resuelve en useEffect,
+  // mismo patrón que `tokenScope` más abajo.
+  const [publicScope, setPublicScope] = useState<string>('')
+  useEffect(() => {
+    if (source === 'PUBLIC') {
+      setPublicScope(getOrCreatePublicScope())
+    }
+  }, [source])
   function getPublicScope(): string {
     return publicScope
   }

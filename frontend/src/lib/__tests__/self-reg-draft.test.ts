@@ -14,8 +14,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DRAFT_SCHEMA_VERSION,
   DRAFT_TTL_MS,
+  PUBLIC_SCOPE_KEY,
   buildDraftKey,
   clearDraft,
+  getOrCreatePublicScope,
   loadDraft,
   saveDraft,
   type SelfRegDraft,
@@ -210,6 +212,76 @@ describe('self-reg-draft', () => {
       shim.setItem(key, JSON.stringify(d))
       expect(loadDraft(key)).toBeNull()
       expect(shim.removeItem).toHaveBeenCalledWith(key)
+    })
+  })
+
+  describe('getOrCreatePublicScope (FIX-20260805-04-HOTFIX)', () => {
+    // Helper: stub window.crypto con getRandomValues funcional (Vitest corre en
+    // node sin DOM, así que `window.crypto` no existe por defecto).
+    function stubWindowCrypto() {
+      const w = {
+        localStorage: shim as unknown as Storage,
+        crypto: {
+          getRandomValues(arr: Uint8Array) {
+            // Implementación determinística-mente aleatoria para tests: usa
+            // Math.random. Suficiente para validar longitud y formato del scope.
+            for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256)
+            return arr
+          },
+        },
+      }
+      vi.stubGlobal('window', w as unknown as Window & typeof globalThis)
+      return w
+    }
+
+    it('primera llamada (sin scope en localStorage) → genera random8 de 8 chars y lo guarda', () => {
+      stubWindowCrypto()
+      const scope = getOrCreatePublicScope()
+      expect(scope).toMatch(/^[A-Za-z0-9_-]{8}$/)
+      expect(shim.setItem).toHaveBeenCalledWith(PUBLIC_SCOPE_KEY, scope)
+      // El scope guardado en localStorage coincide con el retornado.
+      expect(shim.getItem(PUBLIC_SCOPE_KEY)).toBe(scope)
+    })
+
+    it('segunda llamada (con scope válido en localStorage) → reusa el mismo scope', () => {
+      stubWindowCrypto()
+      const first = getOrCreatePublicScope()
+      shim.setItem.mockClear()
+      const second = getOrCreatePublicScope()
+      expect(second).toBe(first)
+      // No debe reescribirse setItem (reutilización sin tocar storage).
+      expect(shim.setItem).not.toHaveBeenCalledWith(PUBLIC_SCOPE_KEY, expect.anything())
+    })
+
+    it('scope inválido en localStorage (longitud ≠ 8) → genera uno nuevo y lo reemplaza', () => {
+      stubWindowCrypto()
+      shim.setItem(PUBLIC_SCOPE_KEY, 'abc')
+      const scope = getOrCreatePublicScope()
+      expect(scope).toMatch(/^[A-Za-z0-9_-]{8}$/)
+      expect(scope).not.toBe('abc')
+      expect(shim.getItem(PUBLIC_SCOPE_KEY)).toBe(scope)
+    })
+
+    it('localStorage lanza (QuotaExceededError) → retorna random efímero y no rompe', () => {
+      stubWindowCrypto()
+      ;(globalThis as unknown as { __quota?: boolean }).__quota = true
+      let scope = ''
+      expect(() => {
+        scope = getOrCreatePublicScope()
+      }).not.toThrow()
+      expect(scope).toMatch(/^[A-Za-z0-9_-]{8}$/)
+      ;(globalThis as unknown as { __quota?: boolean }).__quota = false
+    })
+
+    it('typeof window === "undefined" → retorna "" (SSR-safe)', () => {
+      // window ya está stubeado en otros tests; aquí forzamos su ausencia.
+      const originalWindow = (globalThis as { window?: unknown }).window
+      delete (globalThis as { window?: unknown }).window
+      try {
+        expect(getOrCreatePublicScope()).toBe('')
+      } finally {
+        ;(globalThis as { window?: unknown }).window = originalWindow
+      }
     })
   })
 })
