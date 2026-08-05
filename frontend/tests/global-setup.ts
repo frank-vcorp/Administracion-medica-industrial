@@ -11,6 +11,10 @@ import { spawnSync } from 'node:child_process'
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 
+// FIX IMPL-20260804-06 R7: paths absolutos basados en __dirname para no depender
+// de process.cwd(). Permite ejecutar Playwright desde la raíz del repo.
+const FRONTEND_DIR = path.resolve(__dirname, '..')
+
 // Carga mínima de .env sin dependencias externas (parse KEY=VALUE).
 function loadEnvFile(filePath: string): void {
   if (!fs.existsSync(filePath)) return
@@ -36,10 +40,9 @@ function loadEnvFile(filePath: string): void {
 }
 
 export default async function globalSetup(): Promise<void> {
-  const cwd = process.cwd()
   // Prioridad: .env.local > .env
-  loadEnvFile(path.join(cwd, '.env.local'))
-  loadEnvFile(path.join(cwd, '.env'))
+  loadEnvFile(path.join(FRONTEND_DIR, '.env.local'))
+  loadEnvFile(path.join(FRONTEND_DIR, '.env'))
 
   if (!process.env.DATABASE_URL) {
     throw new Error(
@@ -48,8 +51,11 @@ export default async function globalSetup(): Promise<void> {
   }
 
   console.log('[global-setup] Ejecutando scripts/seed-e2e.ts…')
+  // cwd se fija explícitamente al directorio del frontend para que
+  // tsx resuelva correctamente la importación @prisma/client y la ruta
+  // relativa al schema.prisma.
   const result = spawnSync('npx', ['tsx', 'scripts/seed-e2e.ts'], {
-    cwd,
+    cwd: FRONTEND_DIR,
     env: process.env,
     stdio: 'inherit',
     encoding: 'utf8',

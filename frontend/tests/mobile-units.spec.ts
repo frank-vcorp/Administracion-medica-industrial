@@ -16,9 +16,23 @@
  * Asumen que el dev server está arriba en baseURL (NEXT_PUBLIC_BASE_URL o http://localhost:3000).
  */
 import { test, expect } from '@playwright/test'
+import { dynamicTestDate } from './helpers/dates'
 
 // Constante: base URL se puede parametrizar via env. Por defecto localhost.
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:3000'
+
+// IMPL-20260804-06 R6: fechas relativas para evitar time-bomb (antes 2026-08-01,
+// 2026-08-05, 2026-08-15 hardcodeadas). El offset se ancla a `Date.now()` UTC
+// vía helpers/dates.ts.
+//   - PROJECT_START_OFFSET, PROJECT_END_OFFSET: rango del proyecto bajo test.
+//   - TC4_MAINT_OFFSET: día del mantenimiento en TC-4 (sin conflicto previo).
+//   - TC7_MAINT_OFFSET / TC7_PROJECT_OFFSET: día del mantenimiento conflictivo
+//     y del proyecto que intenta pisarlo en TC-7. Mismo día por diseño (§7.2).
+const PROJECT_START_OFFSET = 7
+const PROJECT_END_OFFSET = 11
+const TC4_MAINT_OFFSET = 14
+const TC7_MAINT_OFFSET = 20
+const TC7_PROJECT_OFFSET = TC7_MAINT_OFFSET
 
 test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
   test.beforeEach(async ({ page }) => {
@@ -61,8 +75,8 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     await page.goto(`${BASE}/projects/new`)
     await page.getByLabel('Nombre *').fill('Proyecto E2E Mobile')
     await page.getByLabel('Empresa *').selectOption({ index: 1 })
-    await page.getByLabel('Inicio *').fill('2026-08-01')
-    await page.getByLabel('Fin *').fill('2026-08-05')
+    await page.getByLabel('Inicio *').fill(dynamicTestDate(PROJECT_START_OFFSET))
+    await page.getByLabel('Fin *').fill(dynamicTestDate(PROJECT_END_OFFSET))
     await expect(page.getByTestId('mobile-unit-selector')).toBeVisible()
     await page.getByTestId('mobile-unit-selector').selectOption({ index: 1 })
     await expect(page.getByTestId('unit-conflict')).not.toBeVisible({ timeout: 3000 })
@@ -84,7 +98,7 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     await page.waitForURL(/\/maintenance$/i)
 
     await page.getByTestId('schedule-button').click()
-    await page.getByTestId('schedule-date').fill('2026-08-01')
+    await page.getByTestId('schedule-date').fill(dynamicTestDate(TC4_MAINT_OFFSET))
     await page.getByLabel('Descripción').fill('Mantenimiento E2E test')
     await page.getByRole('button', { name: 'Verificar disponibilidad' }).click()
     // ARCH-20260804-04 §3.1: el botón "Programar" debe estar habilitado tras verificar
@@ -128,11 +142,14 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     // Botón "Eliminar unidad" en header del detalle (visible solo para ADMIN)
     await page.getByRole('button', { name: /Eliminar unidad/i }).click()
 
-    // Confirma (el componente entra en modo confirming — testid `delete-${uuid}`)
-    await page.locator('[data-testid^="delete-"]').first().click({ timeout: 5_000 }).catch(() => {})
+    // FIX IMPL-20260804-06 O4-ext: reemplaza .catch(() => {}) por asserts
+    // explícitos. Si el botón de confirmación no aparece, falla con snapshot.
+    const confirmDelete = page.locator('[data-testid^="delete-"]').first()
+    await expect(confirmDelete).toBeVisible({ timeout: 5_000 })
+    await confirmDelete.click()
 
-    // Tras éxito redirige a /admin/mobile-units
-    await page.waitForURL(/\/admin\/mobile-units$/, { timeout: 10_000 }).catch(() => {})
+    // Tras éxito redirige a /admin/mobile-units. Si no redirige, falla ruidosamente.
+    await page.waitForURL(/\/admin\/mobile-units$/, { timeout: 10_000 })
 
     // Caso B: unidad del seed con proyectos NO debe poder eliminarse (off-screen check).
     // Solo verificamos que el botón existe y dispara confirm() — el backend rechaza.
@@ -148,10 +165,11 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
 
   // ARCH-20260804-04 §7.2 — TC-7: bloqueo asimétrico proyecto→mantenimiento es rechazado.
   // Estrategia de aislamiento: crear un mantenimiento dedicado en Unidad Móvil 2 con
-  // fecha única (2026-08-15) vía UI de MaintenanceCalendar, luego intentar crear un
-  // proyecto sobre esa misma unidad + fecha. NO depende del estado residual de TC-4.
+  // fecha dinámica (TC7_MAINT_OFFSET) vía UI de MaintenanceCalendar, luego intentar
+  // crear un proyecto sobre esa misma unidad + fecha. NO depende del estado
+  // residual de TC-4.
   test('7. Bloqueo asimétrico: proyecto sobre mantenimiento es rechazado (§3.1, ARCH-20260804-04)', async ({ page }) => {
-    // ─── Setup: crear mantenimiento PROGRAMADO en Unidad Móvil 2 el 2026-08-15 ────
+    // ─── Setup: crear mantenimiento PROGRAMADO en Unidad Móvil 2 (TC7_MAINT_OFFSET) ───
     await page.goto(`${BASE}/admin/mobile-units`)
     await page
       .locator('div', { has: page.getByRole('heading', { name: 'Unidad Móvil 2', level: 3 }) })
@@ -163,7 +181,7 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     await page.waitForURL(/\/maintenance$/i)
 
     await page.getByTestId('schedule-button').click()
-    await page.getByTestId('schedule-date').fill('2026-08-15')
+    await page.getByTestId('schedule-date').fill(dynamicTestDate(TC7_MAINT_OFFSET))
     await page.getByLabel('Descripción').fill('Mantenimiento TC-7 setup')
     // FIX IMPL-20260804-05 O4: assert explícito en lugar de .catch(() => {}).
     // Si el botón no se habilita o el POST falla, Playwright reportará el error
@@ -177,8 +195,8 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     await page.goto(`${BASE}/projects/new`)
     await page.getByLabel('Nombre *').fill('Proyecto Bloqueo E2E')
     await page.getByLabel('Empresa *').selectOption({ index: 1 })
-    await page.getByLabel('Inicio *').fill('2026-08-15')
-    await page.getByLabel('Fin *').fill('2026-08-15')
+    await page.getByLabel('Inicio *').fill(dynamicTestDate(TC7_PROJECT_OFFSET))
+    await page.getByLabel('Fin *').fill(dynamicTestDate(TC7_PROJECT_OFFSET))
 
     // mobile-unit-selector: orden estable por `name asc` (ver mobile-unit.actions.ts:117).
     //   index 0 → "— Sin unidad asignada —"
