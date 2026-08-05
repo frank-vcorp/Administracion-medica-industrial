@@ -14,6 +14,7 @@ import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { ProjectStatus, Prisma } from '@prisma/client'
 import { createProjectReceptionEvent } from '@/actions/event.actions'
+import { summarizeConflicts } from '@/lib/calendar-utils'
 
 // ─── Schemas de validación ────────────────────────────────────────────────────
 
@@ -294,7 +295,14 @@ export async function createProject(data: {
   branchId?: string
   unitRef?: string
   notes?: string
-}): Promise<{ success: boolean; project?: { id: string; name: string }; error?: string }> {
+}): Promise<{
+  success: boolean
+  project?: { id: string; name: string }
+  error?: string
+  // ARCH-20260804-04 §4.1: campos aditivos (no rompen contrato).
+  errorCode?: 'PROJECT_BLOCKED_BY_MAINTENANCE' | 'PROJECT_BLOCKED_BY_PROJECT'
+  conflicts?: AvailabilityConflict[]
+}> {
   const session = await requireAdminOrReceptionist()
   if (!session) return { success: false, error: 'No autorizado' }
 
@@ -313,11 +321,27 @@ export async function createProject(data: {
       endDate
     )
     if (!availability.available) {
+      // ARCH-20260804-04 §2 / §3: clasificación de conflictos con precedencia.
+      // Si hay mantenimiento presente, gana (señal accionable). Si no, es proyecto.
+      const hasMaintenance = availability.conflicts.some((c) => c.type === 'maintenance')
+      const errorCode: 'PROJECT_BLOCKED_BY_MAINTENANCE' | 'PROJECT_BLOCKED_BY_PROJECT' = hasMaintenance
+        ? 'PROJECT_BLOCKED_BY_MAINTENANCE'
+        : 'PROJECT_BLOCKED_BY_PROJECT'
+      const verb = 'crear'
+      const summary = summarizeConflicts(availability.conflicts)
+      const sugg = availability.suggestions.map((s) => s.label).join(', ') || 'ninguna'
+      const reason = hasMaintenance
+        ? 'la unidad tiene mantenimiento programado en este rango'
+        : 'la unidad ya tiene otro proyecto en este rango'
+      const tail = hasMaintenance
+        ? ' Reprograme el mantenimiento o elija otra unidad/fechas.'
+        : ''
+      const message = `No se puede ${verb} el proyecto: ${reason}. ${summary}${tail} Alternativas: ${sugg}.`
       return {
         success: false,
-        error: `La unidad ya tiene ${availability.conflicts.length} asignación(es) en ese rango. Sugerencias: ${availability.suggestions
-          .map((s) => s.label)
-          .join(', ') || 'ninguna'}`,
+        error: message,
+        errorCode,
+        conflicts: availability.conflicts,
       }
     }
   }
@@ -358,7 +382,13 @@ export async function updateProject(
     unitRef?: string
     notes?: string
   }
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  success: boolean
+  error?: string
+  // ARCH-20260804-04 §4.1: campos aditivos (no rompen contrato).
+  errorCode?: 'PROJECT_BLOCKED_BY_MAINTENANCE' | 'PROJECT_BLOCKED_BY_PROJECT'
+  conflicts?: AvailabilityConflict[]
+}> {
   const session = await requireAdminOrReceptionist()
   if (!session) return { success: false, error: 'No autorizado' }
 
@@ -389,11 +419,27 @@ export async function updateProject(
         projectId
       )
       if (!availability.available) {
+        // ARCH-20260804-04 §2 / §3: clasificación con precedencia mantenimiento > proyecto.
+        // Si hay mantenimiento presente, gana (señal accionable). Si no, es proyecto.
+        const hasMaintenance = availability.conflicts.some((c) => c.type === 'maintenance')
+        const errorCode: 'PROJECT_BLOCKED_BY_MAINTENANCE' | 'PROJECT_BLOCKED_BY_PROJECT' = hasMaintenance
+          ? 'PROJECT_BLOCKED_BY_MAINTENANCE'
+          : 'PROJECT_BLOCKED_BY_PROJECT'
+        const verb = 'actualizar'
+        const summary = summarizeConflicts(availability.conflicts)
+        const sugg = availability.suggestions.map((s) => s.label).join(', ') || 'ninguna'
+        const reason = hasMaintenance
+          ? 'la unidad tiene mantenimiento programado en este rango'
+          : 'la unidad ya tiene otro proyecto en este rango'
+        const tail = hasMaintenance
+          ? ' Reprograme el mantenimiento o elija otra unidad/fechas.'
+          : ''
+        const message = `No se puede ${verb} el proyecto: ${reason}. ${summary}${tail} Alternativas: ${sugg}.`
         return {
           success: false,
-          error: `La unidad ya tiene ${availability.conflicts.length} asignación(es) en ese rango. Sugerencias: ${availability.suggestions
-            .map((s) => s.label)
-            .join(', ') || 'ninguna'}`,
+          error: message,
+          errorCode,
+          conflicts: availability.conflicts,
         }
       }
     }
@@ -463,6 +509,11 @@ export type AvailabilityConflict = {
   type: 'project' | 'maintenance'
   id: string
   name?: string | null
+  // ARCH-20260804-04 §4.2: campos opcionales para mensajes legibles (aditivo).
+  /** ISO date string (YYYY-MM-DD) para mantenimientos. */
+  dateISO?: string
+  /** Tipo textual del mantenimiento (ej. "PREVENTIVO", "CORRECTIVO"). */
+  maintenanceType?: string
 }
 
 export type AvailabilityResult = {
@@ -521,7 +572,14 @@ export async function validateUnitAvailability(
     conflicts.push({ type: 'project', id: p.id, name: p.name })
   }
   for (const m of conflictingMaintenances) {
-    conflicts.push({ type: 'maintenance', id: m.id, name: m.type })
+    conflicts.push({
+      type: 'maintenance',
+      id: m.id,
+      name: m.type,
+      // ARCH-20260804-04 §4.2: propagar fecha y tipo textual para mensajes legibles.
+      dateISO: m.scheduledDate.toISOString().slice(0, 10),
+      maintenanceType: m.type,
+    })
   }
 
   const available = conflicts.length === 0

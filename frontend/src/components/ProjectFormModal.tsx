@@ -11,6 +11,7 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react'
 import { createProject, updateProject } from '@/actions/project.actions'
+import type { AvailabilityConflict } from '@/actions/project.actions'
 
 interface CompanyOption {
   id: string
@@ -148,7 +149,14 @@ export default function ProjectFormModal({
     }
 
     startTransition(async () => {
-      let result: { success: boolean; error?: string; project?: { id: string; name: string } }
+      // ARCH-20260804-04 §4.1: extender anotación del result con errorCode y conflicts (aditivo).
+      let result: {
+        success: boolean
+        error?: string
+        project?: { id: string; name: string }
+        errorCode?: string
+        conflicts?: AvailabilityConflict[]
+      }
 
       if (isEditMode && projectToEdit) {
         result = await updateProject(projectToEdit.id, payload)
@@ -211,7 +219,12 @@ export default function ProjectFormModal({
             {/* Formulario */}
             <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
               {error && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+                // ARCH-20260804-04 §5.1: data-testid para contrato e2e (TC-3 happy path + TC-7 bloqueo).
+                <div
+                  data-testid="project-blocked-banner"
+                  className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700"
+                  role="alert"
+                >
                   {error}
                 </div>
               )}

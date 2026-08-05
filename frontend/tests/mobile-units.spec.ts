@@ -66,6 +66,8 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
     await expect(page.getByTestId('mobile-unit-selector')).toBeVisible()
     await page.getByTestId('mobile-unit-selector').selectOption({ index: 1 })
     await expect(page.getByTestId('unit-conflict')).not.toBeVisible({ timeout: 3000 })
+    // ARCH-20260804-04 §7.1: en happy path, el banner de bloqueo NO debe estar visible.
+    await expect(page.getByTestId('project-blocked-banner')).not.toBeVisible({ timeout: 3000 })
   })
 
   test('4. Detectar conflicto proyecto vs mantenimiento (§3.1)', async ({ page }) => {
@@ -135,5 +137,54 @@ test.describe.serial('Módulo Unidades Móviles (ARCH-20260711-01)', () => {
       .click()
     await page.waitForURL(/\/admin\/mobile-units\/[a-f0-9-]+/i)
     await expect(page.getByRole('button', { name: /Eliminar unidad/i })).toBeVisible()
+  })
+
+  // ARCH-20260804-04 §7.2 — TC-7: bloqueo asimétrico proyecto→mantenimiento es rechazado.
+  // Estrategia de aislamiento: crear un mantenimiento dedicado en Unidad Móvil 2 con
+  // fecha única (2026-08-15) vía UI de MaintenanceCalendar, luego intentar crear un
+  // proyecto sobre esa misma unidad + fecha. NO depende del estado residual de TC-4.
+  test('7. Bloqueo asimétrico: proyecto sobre mantenimiento es rechazado (§3.1, ARCH-20260804-04)', async ({ page }) => {
+    // ─── Setup: crear mantenimiento PROGRAMADO en Unidad Móvil 2 el 2026-08-15 ────
+    await page.goto(`${BASE}/admin/mobile-units`)
+    await page
+      .locator('div', { has: page.getByRole('heading', { name: 'Unidad Móvil 2', level: 3 }) })
+      .getByRole('link', { name: /Configurar/i })
+      .first()
+      .click()
+    await page.waitForURL(/\/admin\/mobile-units\/[a-f0-9-]+/i)
+    await page.getByTestId('calendar-link').click()
+    await page.waitForURL(/\/maintenance$/i)
+
+    await page.getByTestId('schedule-button').click()
+    await page.getByTestId('schedule-date').fill('2026-08-15')
+    await page.getByLabel('Descripción').fill('Mantenimiento TC-7 setup')
+    await page.getByRole('button', { name: 'Programar' }).click({ timeout: 5_000 }).catch(() => {})
+
+    // ─── Intento de crear proyecto sobre la misma unidad + fecha ─────────────────
+    await page.goto(`${BASE}/projects/new`)
+    await page.getByLabel('Nombre *').fill('Proyecto Bloqueo E2E')
+    await page.getByLabel('Empresa *').selectOption({ index: 1 })
+    await page.getByLabel('Inicio *').fill('2026-08-15')
+    await page.getByLabel('Fin *').fill('2026-08-15')
+
+    // mobile-unit-selector: orden estable por `name asc` (ver mobile-unit.actions.ts:117).
+    //   index 0 → "— Sin unidad asignada —"
+    //   index 1 → Unidad Móvil 1 (ABC-123)
+    //   index 2 → Unidad Móvil 2 (DEF-456)   ← objetivo
+    //   index 3..6 → Unidad Móvil 3..6
+    //   index 7 → Unidad Móvil Test E2E (si TC-6 no la borró)
+    // Estrategia elegida: `index: 2` (preferida por robustez). Evita acoplar al
+    // label exacto "Unidad Móvil 2 (DEF-456)" — el sufijo de placa rompe el match
+    // exacto, y un regex/partial no es estándar en `selectOption({ label })` de Playwright.
+    // Como `getMobileUnits` ordena por nombre, el índice 2 es estable incluso si
+    // TC-2 creó Test E2E o si TC-6 lo eliminó (nunca desplaza las unidades 1..6).
+    await page.getByTestId('mobile-unit-selector').selectOption({ index: 2 })
+
+    // Submit (localizar botón submit del ProjectFormModal)
+    await page.getByRole('button', { name: /Crear Proyecto/i }).click()
+
+    // ARCH-20260804-04 §7.2: banner visible + contiene "mantenimiento".
+    await expect(page.getByTestId('project-blocked-banner')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByTestId('project-blocked-banner')).toContainText(/mantenimiento/i)
   })
 })

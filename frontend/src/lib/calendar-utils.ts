@@ -2,6 +2,10 @@
  * Helpers compartidos entre calendarios (ProjectsCalendar / MaintenanceCalendar).
  * @id ARCH-20260804-03 — extraídos de ProjectsCalendar para reutilización en MaintenanceCalendar.
  */
+import type { ProjectStatus } from '@prisma/client'
+// ARCH-20260804-04 §4.3: `import type` (se borra en compilación) para evitar
+// cycle con `project.actions.ts` (que es `'use server'`).
+import type { AvailabilityConflict } from '@/actions/project.actions'
 
 export function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value)
@@ -87,7 +91,6 @@ export function isMaintenanceInProjectRange(
  * Constantes de badges para proyectos — paridad exacta con ProjectsCalendar.
  * Reutilizadas por MaintenanceCalendar para renderizar pills de proyecto superpuestas.
  */
-import type { ProjectStatus } from '@prisma/client'
 
 export const STATUS_LABELS: Record<ProjectStatus, string> = {
   DRAFT: 'Borrador',
@@ -103,4 +106,35 @@ export const STATUS_BADGES: Record<ProjectStatus, string> = {
   IN_PROGRESS: 'border-amber-200 bg-amber-50 text-amber-700',
   COMPLETED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   CANCELLED: 'border-red-200 bg-red-50 text-red-700',
+}
+
+// ─── ARCH-20260804-04 §4.3: helper para mensajes legibles de bloqueo ─────────
+
+/**
+ * Resumen legible en español de los conflictos de disponibilidad de unidad.
+ * Mezcla mantenimientos y proyectos en el orden en que vienen, trunca a
+ * un máximo de 3 elementos y añade "+N más" si excede.
+ *
+ * Formatos:
+ *  - Mantenimiento: "Mantenimiento {maintenanceType} el {dateISO}"
+ *  - Proyecto:      "Proyecto «{name}»"
+ *
+ * Devuelve "" si `conflicts` está vacío.
+ */
+export function summarizeConflicts(conflicts: AvailabilityConflict[]): string {
+  if (!conflicts || conflicts.length === 0) return ''
+  const MAX = 3
+  const parts = conflicts.slice(0, MAX).map((c) => {
+    if (c.type === 'maintenance') {
+      const type = c.maintenanceType ?? c.name ?? 'programado'
+      const date = c.dateISO ?? ''
+      return date ? `Mantenimiento ${type} el ${date}` : `Mantenimiento ${type}`
+    }
+    // type === 'project'
+    const name = c.name ?? 'sin nombre'
+    return `Proyecto «${name}»`
+  })
+  const overflow = conflicts.length - MAX
+  const suffix = overflow > 0 ? ` (+${overflow} más)` : ''
+  return parts.join('; ') + suffix
 }

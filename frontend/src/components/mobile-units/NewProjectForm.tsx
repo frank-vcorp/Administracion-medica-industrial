@@ -60,7 +60,18 @@ export default function NewProjectForm({
   return (
     <form onSubmit={onSubmit} className="p-6 space-y-4 max-w-3xl">
       <h1 className="text-2xl font-semibold">Nuevo Proyecto de Visita Médica</h1>
-      {error && <div className="border border-red-300 bg-red-50 text-red-800 rounded-md px-3 py-2 text-sm" role="alert">{error}</div>}
+      {/* ARCH-20260804-04 §5.1: data-testid para contrato e2e (TC-7 bloqueo asimétrico).
+          Preserva el estilo rojo vigente. type annotation aditiva del result (errorCode/conflicts)
+          ya fluye desde createProject (exporta tipos de retorno). */}
+      {error && (
+        <div
+          data-testid="project-blocked-banner"
+          className="border border-red-300 bg-red-50 text-red-800 rounded-md px-3 py-2 text-sm"
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
