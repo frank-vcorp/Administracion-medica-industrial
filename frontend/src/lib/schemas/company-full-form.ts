@@ -63,6 +63,46 @@ export const CFDI_USO_VALUES = [
   'P01', 'S01', 'CP01', 'CN01',
 ] as const
 
+/**
+ * FIX-20260805-03: Descripciones oficiales del catálogo SAT c_ClaveUso para
+ * mostrar en dropdowns (SelfRegistrationForm, CompanyEditForm).
+ * El value del <option> sigue siendo solo el código (compatibilidad con
+ * el enum Zod y con el SAT), pero el label visible es "CÓDIGO — Descripción".
+ * Fuente: SAT c_ClaveUso (catálogo público).
+ */
+export const SAT_CFDI_USO_DESCRIPTIONS: Record<(typeof CFDI_USO_VALUES)[number], string> = {
+  // Adquisiciones / Gastos generales
+  G01: 'Adquisición de mercancías',
+  G02: 'Devoluciones, descuentos o bonificaciones',
+  G03: 'Gastos en general',
+  // Bienes y servicios (subset operativo común)
+  B01: 'Adquisición de bienes y servicios',
+  B02: 'Adquisición de bienes para comercialización',
+  B03: 'Adquisición de servicios',
+  B04: 'Adquisición de bienes de inversión',
+  B05: 'Adquisición de servicios de inversión',
+  B06: 'Arrendamiento de bienes muebles',
+  B07: 'Arrendamiento de bienes inmuebles',
+  B08: 'Servicios de construcción',
+  B09: 'Servicios de publicidad y mercadotecnia',
+  B10: 'Servicios de comisión',
+  B11: 'Servicios de consultoría',
+  B12: 'Servicios de investigación y desarrollo',
+  B13: 'Servicios legales y contables',
+  B14: 'Servicios de apoyo administrativo',
+  B15: 'Servicios de vigilancia y seguridad',
+  B16: 'Servicios de transporte de carga',
+  B17: 'Servicios de transporte de pasajeros',
+  B18: 'Servicios de hospedaje y alimentación',
+  B19: 'Servicios de agua potable y drenaje',
+  B20: 'Servicios de energía eléctrica',
+  // Otros
+  P01: 'Por definir',
+  S01: 'Sin efectos fiscales',
+  CP01: 'Complemento de pagos',
+  CN01: 'Complemento de nómina',
+}
+
 /** Métodos de pago soportados. */
 export const METODO_PAGO_VALUES = ['PUE', 'PPD'] as const
 

@@ -18,6 +18,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateCompanyAction } from '@/actions/company.actions'
+import { SAT_CFDI_USO_DESCRIPTIONS } from '@/lib/schemas/company-full-form'
 
 interface CompanyEditFormProps {
   company: {
@@ -377,9 +378,10 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
               onChange={(e) => setFiscalForm({ ...fiscalForm, usoCFDI: e.target.value })}
               className={inputClass}
             >
+              {/* FIX-20260805-03: mismo formato que SelfRegistrationForm */}
               {catalogos.cfdiOptions.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {c} — {SAT_CFDI_USO_DESCRIPTIONS[c as keyof typeof SAT_CFDI_USO_DESCRIPTIONS] ?? c}
                 </option>
               ))}
             </select>

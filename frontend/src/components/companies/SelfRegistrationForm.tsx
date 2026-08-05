@@ -34,7 +34,7 @@ import {
   submitCompanySelfRegistrationAction,
   submitPublicCompanySelfRegistrationAction,
 } from '@/actions/company.actions'
-import { ALLOWED_DOCUMENT_EXTENSIONS, MAX_FILE_SIZE_2MB, MAX_FILE_SIZE_3MB, MAX_FILE_SIZE_4MB, MAX_FILE_SIZE_10MB } from '@/lib/schemas/company-full-form'
+import { ALLOWED_DOCUMENT_EXTENSIONS, MAX_FILE_SIZE_2MB, MAX_FILE_SIZE_3MB, MAX_FILE_SIZE_4MB, MAX_FILE_SIZE_10MB, SAT_CFDI_USO_DESCRIPTIONS } from '@/lib/schemas/company-full-form'
 
 type SeccionDoc = 'constanciaFiscal' | 'identificacionRepLegal' | 'comprobanteDomicilio' | 'opinionSat' | 'actaConstitutiva' | 'otraDocumentacion'
 
@@ -591,7 +591,14 @@ function SelfRegistrationFormActive({
         <div className="grid grid-cols-2 gap-3">
           <Field label="Uso de CFDI *">
             <select required value={form.usoCFDI} onChange={(e) => setField('usoCFDI', e.target.value)} className={inputClass}>
-              {cfdiOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              {/* FIX-20260805-03: Mostrar "CÓDIGO — Descripción" para que prospectos
+                  no fiscales entiendan qué clave SAT están eligiendo. El value
+                  sigue siendo solo el código (compatibilidad con Zod enum). */}
+              {cfdiOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c} — {SAT_CFDI_USO_DESCRIPTIONS[c as keyof typeof SAT_CFDI_USO_DESCRIPTIONS] ?? c}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label="Método de Pago *">
