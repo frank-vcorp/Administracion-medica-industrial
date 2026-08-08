@@ -18,6 +18,128 @@ interface AntecedentesFormProps {
 type ActiveTab = 'datos_personales' | 'historia_laboral' | 'heredofamiliares' | 'no_patologicos' | 'patologicos'
 
 /**
+ * Diccionarios de descripciones legibles para el trabajador.
+ * Castillano neutro, tono informativo, sin alarmismo.
+ * Cada entrada mapea un campo (state key) → etiqueta visible + ayuda en 1 línea.
+ * El objetivo es que el trabajador autollene el formulario sin necesidad de conocer la terminología médica.
+ */
+interface CampoDescripcion {
+  field: string
+  label: string
+  help: string
+}
+
+interface GrupoPatologicos {
+  endocrino: CampoDescripcion[]
+  cardiopulmonar: CampoDescripcion[]
+  neurologico: CampoDescripcion[]
+  digestivo: CampoDescripcion[]
+  otras: CampoDescripcion[]
+}
+
+const HEREDOFAMILIARES_DESCRIPCIONES: CampoDescripcion[] = [
+  { field: 'diabetes',      label: 'Diabetes',      help: 'Algún familiar con azúcar alta en sangre (diabetes).' },
+  { field: 'has',           label: 'Hipertensión',  help: 'Algún familiar con presión arterial alta diagnosticada.' },
+  { field: 'epilepsia',     label: 'Epilepsia',     help: 'Algún familiar con convulsiones o epilepsia diagnosticada.' },
+  { field: 'cardiopatia',   label: 'Cardiopatía',   help: 'Algún familiar con enfermedades del corazón (infartos, arritmias, soplos, etc.).' },
+  { field: 'renales',       label: 'Enfermedad renal', help: 'Algún familiar con problemas del riñón, diálisis o trasplante.' },
+  { field: 'asma',          label: 'Asma',          help: 'Algún familiar con asma o bronquitis crónica recurrente.' },
+  { field: 'cancer',        label: 'Cáncer',        help: 'Algún familiar con cáncer de cualquier tipo.' },
+  { field: 'mentales',      label: 'Trastornos mentales', help: 'Algún familiar con depresión, ansiedad, esquizofrenia u otros trastornos psiquiátricos.' },
+  { field: 'otras',         label: 'Otras',         help: 'Otra enfermedad hereditaria o frecuente en su familia. Anote brevemente.' },
+]
+
+const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
+  endocrino: [
+    { field: 'diabetes',       label: 'Diabetes',         help: 'Azúcar alta en sangre diagnosticada por un médico.' },
+    { field: 'endocrinopatias',label: 'Endocrinopatías',  help: 'Otras enfermedades de tiroides, suprarrenales u hormonales.' },
+    { field: 'asma',           label: 'Asma',             help: 'Asma persistente (crisis frecuentes, uso de inhalador).' },
+  ],
+  cardiopulmonar: [
+    { field: 'cardiopatias', label: 'Cardiopatías',         help: 'Enfermedades del corazón (infarto, soplo, arritmia, insuficiencia).' },
+    { field: 'bronquitis',   label: 'Bronquitis',           help: 'Bronquitis crónica o repetida (no la gripe común).' },
+    { field: 'neumonias',    label: 'Neumonías',            help: 'Neumonía (infección pulmonar) que requirió tratamiento médico.' },
+    { field: 'has',          label: 'Hipertensión Arterial',help: 'Presión arterial alta diagnosticada por un médico.' },
+  ],
+  neurologico: [
+    { field: 'epilepsia',              label: 'Epilepsia',              help: 'Convulsiones o epilepsia diagnosticada.' },
+    { field: 'migrana',                label: 'Migraña',                help: 'Dolores de cabeza fuertes y repetidos (jaqueca/migraña).' },
+    { field: 'desmayos',               label: 'Desmayos',               help: 'Pérdidas de conocimiento o desmayos frecuentes.' },
+    { field: 'traumatismos_craneales', label: 'Traumatismos craneales', help: 'Golpes fuertes en la cabeza con pérdida de conocimiento o atención médica.' },
+  ],
+  digestivo: [
+    { field: 'gastritis',    label: 'Gastritis',     help: 'Inflamación del estómago con ardor frecuente, diagnosticada por un médico.' },
+    { field: 'colitis',      label: 'Colitis',       help: 'Inflamación del colon (diarrea crónica, dolor abdominal recurrente).' },
+    { field: 'hemorroides',  label: 'Hemorroides',   help: 'Hemorroides (almorranas) que requirieron tratamiento.' },
+    { field: 'hernias',      label: 'Hernias',       help: 'Hernias inguinales, abdominales o discales (en la espalda) operadas o no.' },
+    { field: 'renales',      label: 'Enfermedades renales', help: 'Cálculos (piedras) en riñón, infecciones urinarias repetidas o enfermedad renal.' },
+  ],
+  otras: [
+    { field: 'alergias',     label: 'Alergias',      help: 'Alergias a medicamentos, alimentos, polen, polvo, etc.' },
+    { field: 'varices',      label: 'Varices',       help: 'Venas varicosas en piernas (venas dilatadas visibles).' },
+    { field: 'ginecologicos',label: 'Ginecológicos', help: 'Enfermedades ginecológicas tratadas (embarazos, quistes, etc.).' },
+    { field: 'dermatitis',   label: 'Dermatitis',    help: 'Enfermedades de piel crónicas (eccema, psoriasis, dermatitis atópica).' },
+    { field: 'psiquiatricas',label: 'Psiquiátricas', help: 'Trastornos mentales diagnosticados (depresión, ansiedad, esquizofrenia, etc.).' },
+  ],
+}
+
+interface NoPatologicoItem {
+  key: string
+  label: string
+  help: string
+  subs: [string, string][]
+}
+
+/**
+ * `subs` mantiene la estructura original [stateKey, labelVisible] usada por el JSX.
+ * Solo añadimos `key`, `label` y `help` para no romper el estado ni los handlers.
+ */
+const NO_PATOLOGICOS_DESCRIPCIONES: NoPatologicoItem[] = [
+  {
+    key: 'alcohol',
+    label: 'Alcohol',
+    help: 'Bebidas con alcohol (cerveza, vino, licor) consumidas con regularidad, no de forma ocasional.',
+    subs: [
+      ['alcohol_edad_comienzo', 'Edad inicio'],
+      ['alcohol_frecuencia', 'Frecuencia'],
+      ['alcohol_suspendido', 'Suspendido'],
+      ['alcohol_tiempo_suspendido', 'Tiempo suspendido'],
+    ],
+  },
+  {
+    key: 'tabaco',
+    label: 'Tabaco',
+    help: 'Cigarrillos, puros, pipa o vapeo. Incluye fumadores activos y ex-fumadores.',
+    subs: [
+      ['tabaco_edad_comienzo', 'Edad inicio'],
+      ['tabaco_frecuencia', 'Frecuencia'],
+      ['tabaco_cigarros_dia', 'Cigarros/día'],
+      ['tabaco_suspendido', 'Suspendido'],
+      ['tabaco_tiempo_suspendido', 'Tiempo suspendido'],
+    ],
+  },
+  {
+    key: 'drogas_estimulantes',
+    label: 'Drogas/Estimulantes',
+    help: 'Sustancias psicoactivas recreativas (marihuana, cocaína, estimulantes, etc.). Confidencial.',
+    subs: [
+      ['drogas_especifique', 'Especifique'],
+      ['drogas_frecuencia', 'Frecuencia'],
+      ['drogas_ultimo_consumo', 'Último consumo'],
+    ],
+  },
+  {
+    key: 'ejercicio',
+    label: 'Ejercicio',
+    help: 'Actividad física o deporte practicado con regularidad (caminar, correr, fútbol, gym, etc.).',
+    subs: [
+      ['ejercicio_especifique', 'Tipo'],
+      ['ejercicio_frecuencia', 'Frecuencia'],
+    ],
+  },
+]
+
+/**
  * ARCH-20260326-06
  * Editor Maestro Longitudinal: Datos Personales + Historia Laboral + Heredo-Familiares + No Patológicos + Patológicos
  */
@@ -315,7 +437,12 @@ export function AntecedentesForm({
           <div className="space-y-6">
             <p className="text-sm text-gray-600 mb-4">
               ℹ️ Por defecto, todos los campos están configurados como &quot;NEGADO&quot;. Cambiar solo si aplica.
+              <br />
+              <span className="text-gray-500">Auto: conteste lo que recuerde. No es necesario que sea un diagnóstico médico formal.</span>
             </p>
+
+            {/* Diccionario: término → descripción legible. Usado en los labels de Patológicos. */}
+            {/* Referencia: textos pensados para el trabajador; sin alarmismo ni consejo clínico. */}
 
             {/* Sección 1: Enfermedades Endocrino-Metabólicas */}
             <fieldset className="border border-gray-200 rounded-lg p-4">
@@ -323,14 +450,15 @@ export function AntecedentesForm({
                 Enfermedades Endocrino-Metabólicas
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {['diabetes', 'endocrinopatias', 'asma'].map(field => (
-                  <div key={field}>
+                {PATOLOGICOS_DESCRIPCIONES.endocrino.map((item) => (
+                  <div key={item.field}>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ')}
+                      {item.label}
                     </label>
+                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
                     <select
-                      value={patologicos[field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(field, e.target.value)}
+                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
+                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="NEGADO">NEGADO</option>
@@ -347,16 +475,15 @@ export function AntecedentesForm({
                 Sistema Cardiopulmonar
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {['cardiopatias', 'bronquitis', 'neumonias', 'has'].map(field => (
-                  <div key={field}>
+                {PATOLOGICOS_DESCRIPCIONES.cardiopulmonar.map((item) => (
+                  <div key={item.field}>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {field === 'has'
-                        ? 'Hipertensión Arterial'
-                        : field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ')}
+                      {item.label}
                     </label>
+                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
                     <select
-                      value={patologicos[field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(field, e.target.value)}
+                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
+                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="NEGADO">NEGADO</option>
@@ -373,14 +500,15 @@ export function AntecedentesForm({
                 Sistema Neurológico
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {['epilepsia', 'migrana', 'desmayos', 'traumatismos_craneales'].map(field => (
-                  <div key={field}>
+                {PATOLOGICOS_DESCRIPCIONES.neurologico.map((item) => (
+                  <div key={item.field}>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ')}
+                      {item.label}
                     </label>
+                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
                     <select
-                      value={patologicos[field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(field, e.target.value)}
+                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
+                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="NEGADO">NEGADO</option>
@@ -397,14 +525,15 @@ export function AntecedentesForm({
                 Sistema Digestivo y Genitourinario
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {['gastritis', 'colitis', 'hemorroides', 'hernias', 'renales'].map(field => (
-                  <div key={field}>
+                {PATOLOGICOS_DESCRIPCIONES.digestivo.map((item) => (
+                  <div key={item.field}>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ')}
+                      {item.label}
                     </label>
+                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
                     <select
-                      value={patologicos[field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(field, e.target.value)}
+                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
+                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="NEGADO">NEGADO</option>
@@ -421,14 +550,15 @@ export function AntecedentesForm({
                 Otras Condiciones
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {['alergias', 'varices', 'ginecologicos', 'dermatitis', 'psiquiatricas'].map(field => (
-                  <div key={field}>
+                {PATOLOGICOS_DESCRIPCIONES.otras.map((item) => (
+                  <div key={item.field}>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ')}
+                      {item.label}
                     </label>
+                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
                     <select
-                      value={patologicos[field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(field, e.target.value)}
+                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
+                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="NEGADO">NEGADO</option>
@@ -460,6 +590,8 @@ export function AntecedentesForm({
           <div className="space-y-6">
             <p className="text-sm text-gray-600 mb-4">
               ℹ️ Indique familiares con antecedentes de estas enfermedades (ej: &quot;PADRE&quot;, &quot;ABUELO&quot;, &quot;ABUELA MATERNA&quot;, etc.)
+              <br />
+              <span className="text-gray-500">Auto: si no recuerda el familiar exacto, deje el campo vacío. Solo anote lo que recuerde con seguridad.</span>
             </p>
 
             <fieldset className="border border-gray-200 rounded-lg p-4">
@@ -467,15 +599,16 @@ export function AntecedentesForm({
                 Antecedentes en Familia
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {Object.keys(heredofamiliares).map(field => (
-                  <div key={field}>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ')}
+                {HEREDOFAMILIARES_DESCRIPCIONES.map((item) => (
+                  <div key={item.field}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {item.label}
                     </label>
+                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
                     <input
                       type="text"
-                      value={heredofamiliares[field as keyof typeof heredofamiliares]}
-                      onChange={(e) => handleHeredofamiliaresChange(field, e.target.value)}
+                      value={heredofamiliares[item.field as keyof typeof heredofamiliares]}
+                      onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
                       placeholder="Relación familiar (ej: PADRE)"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -491,23 +624,20 @@ export function AntecedentesForm({
           <div className="space-y-6">
             <p className="text-sm text-gray-600">
               ℹ️ Indique SI o NEGADO para cada hábito. Si aplica, complete los detalles adicionales.
+              <br />
+              <span className="text-gray-500">Auto: conteste lo que recuerde. Aproxime las cantidades si no las sabe exactas (ej: &quot;3-4 por semana&quot;).</span>
             </p>
-            {([
-              ['alcohol',            'Alcohol',              [['alcohol_edad_comienzo', 'Edad inicio'], ['alcohol_frecuencia', 'Frecuencia'], ['alcohol_suspendido', 'Suspendido'], ['alcohol_tiempo_suspendido', 'Tiempo suspendido']]],
-              ['tabaco',             'Tabaco',               [['tabaco_edad_comienzo', 'Edad inicio'], ['tabaco_frecuencia', 'Frecuencia'], ['tabaco_cigarros_dia', 'Cigarros/día'], ['tabaco_suspendido', 'Suspendido'], ['tabaco_tiempo_suspendido', 'Tiempo suspendido']]],
-              ['drogas_estimulantes','Drogas/Estimulantes',  [['drogas_especifique', 'Especifique'], ['drogas_frecuencia', 'Frecuencia'], ['drogas_ultimo_consumo', 'Último consumo']]],
-              ['ejercicio',          'Ejercicio',            [['ejercicio_especifique', 'Tipo'], ['ejercicio_frecuencia', 'Frecuencia']]],
-            ] as [string, string, [string, string][]][]).map(([key, label, subs]) => (
-              <div key={key} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center gap-4 mb-2">
-                  <span className="text-sm font-medium text-gray-700 w-44">{label}</span>
+            {NO_PATOLOGICOS_DESCRIPCIONES.map((item) => (
+              <div key={item.key} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center gap-4 mb-1">
+                  <span className="text-sm font-medium text-gray-700 w-44">{item.label}</span>
                   <div className="flex gap-2">
                     {['NEGADO', 'SI'].map(opt => (
                       <button
                         key={opt} type="button"
-                        onClick={() => setNoPatologicos(p => ({ ...p, [key]: opt }))}
+                        onClick={() => setNoPatologicos(p => ({ ...p, [item.key]: opt }))}
                         className={`px-4 py-1.5 rounded-lg text-sm font-medium border-2 transition ${
-                          noPatologicos[key] === opt
+                          noPatologicos[item.key] === opt
                             ? opt === 'SI' ? 'bg-rose-100 border-rose-400 text-rose-700' : 'bg-green-50 border-green-300 text-green-700'
                             : 'bg-white border-gray-200 text-gray-500'
                         }`}
@@ -515,9 +645,10 @@ export function AntecedentesForm({
                     ))}
                   </div>
                 </div>
-                {noPatologicos[key] === 'SI' && (
+                <p className="text-xs text-gray-500 mb-2">{item.help}</p>
+                {noPatologicos[item.key] === 'SI' && (
                   <div className="grid grid-cols-2 gap-3 pl-4">
-                    {(subs as [string, string][]).map(([sk, sl]) => (
+                    {item.subs.map(([sk, sl]) => (
                       <div key={sk}>
                         <label className="block text-xs font-medium text-gray-500 mb-1">{sl}</label>
                         <input
@@ -535,6 +666,7 @@ export function AntecedentesForm({
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Alimentación</label>
+                <p className="text-xs text-gray-500 mb-1">¿Cómo considera su alimentación diaria? BUENA = balanceada · REGULAR = mejorable · MALA = muy desequilibrada.</p>
                 <select
                   value={noPatologicos.alimentacion ?? 'BUENA'}
                   onChange={e => setNoPatologicos(p => ({ ...p, alimentacion: e.target.value }))}
@@ -545,6 +677,7 @@ export function AntecedentesForm({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Grupo y RH</label>
+                <p className="text-xs text-gray-500 mb-1">Tipo de sangre, ej: O+, A-, B+. Si no lo sabe, deje DESCONOCE.</p>
                 <input
                   type="text"
                   value={noPatologicos.grupo_y_rh ?? ''}
@@ -555,6 +688,7 @@ export function AntecedentesForm({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tatuajes</label>
+                <p className="text-xs text-gray-500 mb-1">Indique si tiene tatuajes visibles o no. Algunos puestos lo requieren declarar.</p>
                 <div className="flex gap-2 mt-1">
                   {['NEGADO', 'SI'].map(opt => (
                     <button key={opt} type="button"
