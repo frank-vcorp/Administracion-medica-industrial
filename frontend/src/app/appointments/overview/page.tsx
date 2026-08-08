@@ -6,6 +6,7 @@
  * @id IMPL-20260318-09
  */
 import { useEffect, useState, useCallback } from 'react'
+import Image from 'next/image'
 import { getAppointmentsForOverview } from '@/actions/appointment.actions'
 import Link from 'next/link'
 
@@ -13,6 +14,9 @@ interface AppointmentOverview {
     id: string
     scheduledAt: Date | string
     status: string
+    expedientId: string | null
+    qrCode: string | null
+    qrOperativo: string | null
     worker: { firstName: string; lastName: string }
     company: { name: string } | null
     branch: { id: string; name: string; hourlyCapacity: number; openingTime: string; closingTime: string } | null
@@ -37,6 +41,7 @@ export default function AppointmentsOverviewPage() {
     const [appointments, setAppointments] = useState<AppointmentOverview[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [selectedApt, setSelectedApt] = useState<AppointmentOverview | null>(null)
     const [selectedDate, setSelectedDate] = useState<string>(() => {
         const now = new Date()
         const y = now.getFullYear()
@@ -172,65 +177,160 @@ export default function AppointmentsOverviewPage() {
                         })}
                     </div>
 
-                    {/* Columnas detalle */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {columns.map(col => {
-                            const dayApts = col.appointments
-                                .filter(a => isOnSelectedDate(a.scheduledAt))
-                                .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+            {/* Columnas detalle */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {columns.map(col => {
+                    const dayApts = col.appointments
+                        .filter(a => isOnSelectedDate(a.scheduledAt))
+                        .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
 
-                            return (
-                                <div key={col.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                                    <div className="bg-violet-600 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
-                                        <div>
-                                            <p className="font-black text-base">{col.name}</p>
-                                            <p className="text-violet-200 text-xs font-medium">
-                                                {dayApts.length} cita{dayApts.length !== 1 ? 's' : ''} del día
-                                            </p>
-                                        </div>
-                                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center font-black text-lg">
-                                            {dayApts.length}
+                    return (
+                        <div key={col.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                            <div className="bg-violet-600 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
+                                <div>
+                                    <p className="font-black text-base">{col.name}</p>
+                                    <p className="text-violet-200 text-xs font-medium">
+                                        {dayApts.length} cita{dayApts.length !== 1 ? 's' : ''} del día
+                                    </p>
+                                </div>
+                                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center font-black text-lg">
+                                    {dayApts.length}
+                                </div>
+                            </div>
+                            <div className="divide-y divide-slate-100 overflow-y-auto max-h-[55vh] flex-grow">
+                                {dayApts.length === 0 ? (
+                                    <div className="p-8 text-center">
+                                        <p className="text-slate-300 text-3xl mb-2">📭</p>
+                                        <p className="text-slate-400 text-sm font-medium">Sin citas para este día</p>
+                                    </div>
+                                ) : (
+                                    dayApts.map(apt => {
+                                        const scheduled = new Date(apt.scheduledAt)
+                                        const statusInfo = STATUS_MAP[apt.status] ?? STATUS_MAP.SCHEDULED
+                                        return (
+                                            <div key={apt.id} className="px-4 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
+                                                <div className="text-center w-12 flex-shrink-0">
+                                                    <p className="text-xs font-black text-slate-700 font-mono">
+                                                        {scheduled.getHours().toString().padStart(2, '0')}:
+                                                        {scheduled.getMinutes().toString().padStart(2, '0')}
+                                                    </p>
+                                                </div>
+                                                <div className="flex-grow min-w-0">
+                                                    <p className="text-sm font-bold text-slate-800 truncate">
+                                                        {apt.worker.firstName} {apt.worker.lastName}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500 truncate">
+                                                        {apt.company?.name || '—'}
+                                                    </p>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${statusInfo.bg} ${statusInfo.text}`}>
+                                                        {statusInfo.label}
+                                                    </span>
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={() => setSelectedApt(apt)}
+                                                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                            title="Ver Pase"
+                                                        >
+                                                            🎫
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })
+                                )}
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </>
+        )}
+
+            {/* TICKET / QR MODAL */}
+            {selectedApt && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+                        <div className="bg-blue-600 p-8 text-center text-white relative">
+                            <button
+                                onClick={() => setSelectedApt(null)}
+                                className="absolute top-6 right-6 text-white/50 hover:text-white"
+                            >
+                                ✕
+                            </button>
+                            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+                                🏢
+                            </div>
+                            <h2 className="text-xl font-black uppercase tracking-widest">Pase de Entrada</h2>
+                            <p className="text-blue-100 text-xs font-bold mt-1 opacity-80">{selectedApt.branch?.name || 'Clínica AMI'}</p>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="text-center space-y-1">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Expediente No.</p>
+                                <p className="text-2xl font-black text-slate-800 tracking-tight">{selectedApt.expedientId}</p>
+                            </div>
+                            <div className="flex justify-center py-4">
+                                <div className="p-4 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                                    <Image
+                                        src={selectedApt.qrCode || 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + selectedApt.expedientId}
+                                        alt="QR Code"
+                                        width={200}
+                                        height={200}
+                                        unoptimized
+                                        className="w-40 h-40 opacity-90"
+                                    />
+                                </div>
+                            </div>
+                            {selectedApt.qrOperativo && (
+                                <div className="border-t border-dashed border-slate-100 pt-4">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-2">QR Operativo · Recaptura en Estaciones</p>
+                                    <div className="flex justify-center">
+                                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                                            <Image
+                                                src={selectedApt.qrOperativo}
+                                                alt="QR Operativo"
+                                                width={112}
+                                                height={112}
+                                                unoptimized
+                                                className="w-28 h-28"
+                                            />
                                         </div>
                                     </div>
-                                    <div className="divide-y divide-slate-100 overflow-y-auto max-h-[55vh] flex-grow">
-                                        {dayApts.length === 0 ? (
-                                            <div className="p-8 text-center">
-                                                <p className="text-slate-300 text-3xl mb-2">📭</p>
-                                                <p className="text-slate-400 text-sm font-medium">Sin citas para este día</p>
-                                            </div>
-                                        ) : (
-                                            dayApts.map(apt => {
-                                                const scheduled = new Date(apt.scheduledAt)
-                                                const statusInfo = STATUS_MAP[apt.status] ?? STATUS_MAP.SCHEDULED
-                                                return (
-                                                    <div key={apt.id} className="px-4 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
-                                                        <div className="text-center w-12 flex-shrink-0">
-                                                            <p className="text-xs font-black text-slate-700 font-mono">
-                                                                {scheduled.getHours().toString().padStart(2, '0')}:
-                                                                {scheduled.getMinutes().toString().padStart(2, '0')}
-                                                            </p>
-                                                        </div>
-                                                        <div className="flex-grow min-w-0">
-                                                            <p className="text-sm font-bold text-slate-800 truncate">
-                                                                {apt.worker.firstName} {apt.worker.lastName}
-                                                            </p>
-                                                            <p className="text-xs text-slate-500 truncate">
-                                                                {apt.company?.name || '—'}
-                                                            </p>
-                                                        </div>
-                                                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg flex-shrink-0 ${statusInfo.bg} ${statusInfo.text}`}>
-                                                            {statusInfo.label}
-                                                        </span>
-                                                    </div>
-                                                )
-                                            })
-                                        )}
+                                    <p className="text-[8px] text-slate-400 text-center mt-1">
+                                        {selectedApt.worker.firstName} {selectedApt.worker.lastName}
+                                    </p>
+                                </div>
+                            )}
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <div>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Trabajador</p>
+                                        <p className="text-xs font-black text-slate-700">{selectedApt.worker?.firstName} {selectedApt.worker?.lastName}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Hora</p>
+                                        <p className="text-xs font-black text-slate-700">
+                                            {new Date(selectedApt.scheduledAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
                                     </div>
                                 </div>
-                            )
-                        })}
+                                <div className="border-t-2 border-dashed border-slate-100 pt-4 text-center">
+                                    <p className="text-[8px] text-slate-400 leading-relaxed max-w-[200px] mx-auto">
+                                        Este pase es personal e intransferible. Favor de presentarlo en recepción al llegar.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setSelectedApt(null)}
+                                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-2xl font-bold text-sm transition-all active:scale-95"
+                            >
+                                CERRAR PASE
+                            </button>
+                        </div>
                     </div>
-                </>
+                </div>
             )}
         </div>
     )
