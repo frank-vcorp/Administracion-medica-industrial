@@ -265,9 +265,23 @@ export default function WorkerSelectableGrid({
                       />
                     </td>
                   )}
-                  <td className="px-6 py-4 font-mono text-xs text-slate-500">{w.universalId}</td>
+                  <td className="px-6 py-4 font-mono text-xs text-slate-500">
+                    <Link
+                      href={`/workers/${w.id}`}
+                      className="hover:text-blue-700 hover:underline transition-colors"
+                      title={`Ver perfil de ${w.firstName} ${w.lastName}`}
+                    >
+                      {w.universalId}
+                    </Link>
+                  </td>
                   <td className="px-6 py-4 font-medium text-slate-900">
-                    {w.firstName} {w.lastName}
+                    <Link
+                      href={`/workers/${w.id}`}
+                      className="hover:text-blue-700 hover:underline transition-colors"
+                      title={`Ver perfil de ${w.firstName} ${w.lastName}`}
+                    >
+                      {w.firstName} {w.lastName}
+                    </Link>
                   </td>
                   {/* IMPL-20260808-04 (Opción A): celda de identificación con
                       carga perezosa. Tres estados:
@@ -306,9 +320,6 @@ export default function WorkerSelectableGrid({
                         {w.firstName[0]}{w.lastName[0]}
                       </div>
                     )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {w.firstName} {w.lastName}
                   </td>
                   <td className="px-6 py-4">
                     {w.company ? (
