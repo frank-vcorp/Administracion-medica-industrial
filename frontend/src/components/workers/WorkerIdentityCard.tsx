@@ -66,21 +66,21 @@ export default function WorkerIdentityCard({
 
         {hasEvidence ? (
           <div className="space-y-4">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-slate-500">Tipo</span>
-                <span className="text-slate-900 font-medium">{docTypeLabel ?? '—'}</span>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Tipo</p>
+                <p className="text-sm text-slate-900 font-medium mt-0.5">{docTypeLabel ?? '—'}</p>
               </div>
               {verifiedAtDate && (
-                <div className="flex justify-between border-b pb-2">
-                  <span className="text-slate-500">Verificada</span>
-                  <span className="text-slate-900">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Verificada</p>
+                  <p className="text-sm text-slate-900 font-medium mt-0.5">
                     {verifiedAtDate.toLocaleDateString('es-MX', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',
                     })}
-                  </span>
+                  </p>
                 </div>
               )}
             </div>

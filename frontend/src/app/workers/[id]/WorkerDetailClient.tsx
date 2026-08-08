@@ -204,17 +204,17 @@ export default function WorkerDetailClient({
                     <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xl shadow-slate-100">
                         <h3 className="font-semibold text-slate-900 mb-4">Información Personal</h3>
                         <div className="space-y-3 text-sm">
-                            <div className="flex justify-between border-b pb-2">
-                                <span className="text-slate-500">Email</span>
-                                <span className="text-slate-900">{worker.email || 'N/A'}</span>
+                            <div>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Email</p>
+                                <p className="text-sm text-slate-900 font-medium mt-0.5">{worker.email || 'N/A'}</p>
                             </div>
-                            <div className="flex justify-between border-b pb-2">
-                                <span className="text-slate-500">Teléfono</span>
-                                <span className="text-slate-900">{worker.phone || 'N/A'}</span>
+                            <div>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Teléfono</p>
+                                <p className="text-sm text-slate-900 font-medium mt-0.5">{worker.phone || 'N/A'}</p>
                             </div>
-                            <div className="flex justify-between border-b pb-2">
-                                <span className="text-slate-500">ID Nacional</span>
-                                <span className="text-slate-900">{worker.nationalId || 'N/A'}</span>
+                            <div>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">ID Nacional</p>
+                                <p className="text-sm text-slate-900 font-medium mt-0.5">{worker.nationalId || 'N/A'}</p>
                             </div>
                         </div>
                     </div>
