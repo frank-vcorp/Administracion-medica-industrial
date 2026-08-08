@@ -223,6 +223,15 @@ export default function WorkerSelectableGrid({
                       >
                         Editar
                       </button>
+                      {/* IMPL-20260808-03: acceso directo a agendar cita desde el listado de pacientes.
+                          Reaprovecha el flujo ?action=new-appointment&workerId=...&companyId=... ya existente en AppointmentFormModal. */}
+                      <Link
+                        href={`/appointments?action=new-appointment&workerId=${w.id}${w.companyId ? `&companyId=${w.companyId}` : ''}`}
+                        className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold hover:underline"
+                        title="Agendar cita para este paciente"
+                      >
+                        + Cita
+                      </Link>
                       <Link
                         href={`/history/${w.id}`}
                         className="text-blue-600 hover:underline text-xs"
