@@ -14,6 +14,7 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - **@DEBY**: QA e Infraestructura
 
 ## 📅 Diario de Cambios
+- **2026-08-05 (INTEGRA):** [IN_PROGRESS] **FIX-20260805-04 — Draft autosave (persistencia navegador) para SelfRegistrationForm.** Escalamiento de ATLAS M3 desde necesidad explícita de Frank: *"agrega persistencia al menos del navegador por si no completan los datos, cambia de venta, se les cierra, etc"*. El formulario público de auto-alta (`/solicitar-alta` y `/auto-alta/[token]`, componente `frontend/src/components/companies/SelfRegistrationForm.tsx`) NO persiste nada entre cierres. INTEGRA resolvió las 6 decisiones arquitectónicas abiertas (todas con confianza ≥85%, internas y reversibles, sin re-preguntar a Frank según §2): (1) Storage=localStorage (cubre "se les cierra"), (2) Alcance=Opción B (~350 líneas: uploads metadata + modal + TTL + versionado + keys separadas; NO cifrado AES, NO cleanup S3), (3) UX banner=modal bloqueante con preview, (4) TTL=30 días, (5) Multi-form=keys separadas por source+scope, (6) Uploads=solo metadatos, re-vincular al submit. SPEC firmada en `context/SPECs/SPEC_FIX-20260805-04-DRAFT-AUTOSAVE-SELF-REGISTRATION.md` (14 criterios verificables, 13 casos borde). 5 archivos: 4 nuevos (`self-reg-draft.ts`, `useSelfRegDraft.ts`, `DraftRestoreModal.tsx`, `__tests__/self-reg-draft.test.ts`) + 1 modificado (`SelfRegistrationForm.tsx` +~40 líneas). NO toca schema Prisma, backend, server actions ni server components. Delegado a SOFIA con handoff estructurado; GEMINI auditará tras implementación (Qodo sunset). Espera OK Frank para commit/push. (FIX-20260805-04)
 - **2026-07-30 (INTEGRA):** [✓] **IMPL-20260730-01 — Eliminación masiva de empresas (SUPERADMIN) operativo en producción.** Frank solicitó 2026-07-30 04:47 un modal para eliminar empresas con multi-select y rol superadmin. Decisión bloqueante resuelta con Frank: añadir `SUPERADMIN` al enum `UserRole`, multi-select con checkboxes + barra flotante, modal con checkbox de aceptación + botón rojo. SPEC firmada en `context/SPECs/SPEC_ARCH-20260730-01-DELETE-COMPANIES-SUPERADMIN.md`. Implementación SOFIA (retry de BLOCKED inicial): nueva migración `20260730000000_add_superadmin_role` con `ALTER TYPE UserRole ADD VALUE 'SUPERADMIN'` + `DROP NOT NULL` en `appointments.companyId` / `job_positions.companyId` / `projects.companyId` (preservar historia clínica); service `deleteCompanies` con transacción de 14 pasos en `prisma.$transaction` (nullify → delete → audit log); server action `deleteCompaniesAction` con guard `role === 'SUPERADMIN'` + validación Zod-like (no vacío, max 100); UI client-only `CompanySelectableGrid` + `DeleteCompaniesButton` + `CompanyBulkDeleteShell`; render condicional según rol en `/companies/page.tsx` (no rompe experiencia para ADMIN/VENDEDOR); 7 tests unitarios del service. **Ajustes defensivos en cascada** por la nulificación de FKs: `project.actions.ts`, `ProjectFormModal`, `ProjectsCalendar`, `ProjectsTable`, `JobPositionsPanel`, `WorkerFormModal`, `WorkersTable`, `company.service.test.ts` (mock de `prisma.user.findUnique` por FIX-20260730-01). **Gates verificados independientemente**: typecheck 0 errores, vitest 280/280 (+7 nuevos), lint 0 errores. **GEMINI auditoría: LISTO PARA FRANK** (0 bloqueadores, 1 observación informativa sobre paridad de schemas). **Commit + push realizados** tras OK explícito de Frank vía `ask-frank.sh` (opción A: "Sí commit+push ahora"). Push `6bb88fe..2e2aba4 main -> main` exitoso. **Migración aplicada + SUPERADMIN asignado** tras OK explícito de Frank (opción A) ejecutado 2026-07-30 05:43 vía script one-off Node conectado a Railway DB: SUPERADMIN añadido al enum, 3 FKs nullable, admin@sistema.com actualizado a SUPERADMIN (id `b2bdf4d7-6094-40c9-bfd6-8a63be0cbc67`). Frank debe refrescar `/companies` (logout + login si es necesario para refrescar JWT) y verá los checkboxes por tarjeta + barra flotante con botón Eliminar. (IMPL-20260730-01 operativo)
 - **2026-07-30 (INTEGRA):** [~] **FIX-20260730-01-LAB-TRIGGER implementado pero introduce regresión TC-07; estado final 10/12 + TC-11 FAIL esperado.** Bug raíz encontrado: `LAB_CATEGORY_ID = "64d3f863"` (string corto legacy) hardcoded en 6 lugares, mientras la categoría real en BD es UUID `16c16ef0-cf35-4fe5-9bef-311f6fc8674c`. Fix `72dc596` reemplazó el hardcode por UUID real pero **introdujo regresión en TC-07** (data loader de `events/[id]/page.tsx` lanza excepción capturada por `error.tsx` boundary con mensaje "Error al cargar el expediente"). Estado actual tras investigación: revert de `72dc596` (`ae8a2d7`) + reactivación de TC-11 (`12d0427`). E2E contra prod: **TC-01..TC-10 PASS (10/12), TC-11 FAIL por LAB_CATEGORY_ID mismatch (esperado), TC-12 NOT RUN**. SPEC de follow-up creada: `context/SPECs/SPEC_FIX-20260730-02-G-LAB-TRIGGER-02-REGRESION.md` cubre investigación de la regresión. **Pendiente decisión Frank**: (a) mantener estado actual 10/12 estable y abrir lote de investigación de la regresión, (b) intentar reaplicar `72dc596` + diagnosticar regresión con logs, (c) cerrar lote actual y abrir dos SPECs de follow-up separadas. Recomendación: opción (a) por estabilidad — 10/12 PASS sigue siendo progreso significativo vs iteración anterior. Historial de commits esta sesión: `72dc596` LAB fix → `90a6ec8` TC-11 reactivado → `132fed3` revert TC-11 → `ae8a2d7` revert 72dc596 → `12d0427` reaplica TC-11. (FIX-20260730-01 + regresión)
 - **2026-07-29 (INTEGRA):** [~] **Frank aprobó `FIX-20260729-03-G-XML-01-PARSER-XML.md`; se inicia lote.** Aprobación registrada 2026-07-29 07:53 CST. Alcance: detectar XML de audiometría antes del pipeline IA, invocar `audiometry_xml_parser.py` directo (<100 ms, 0 tokens), persistir `fileUrl`/snapshot compatible con `EventTest`, renderizar 16 mediciones + PTA por oído, disparar prediagnóstico posterior (DR7.ai) por separado. Se preserva contrato `1e7265d` (XML > PDF). Estimación ~4 h. Handoff a SOFIA incluye archivos candidatos: `frontend/src/actions/event-test.actions.ts`, `backend/app/services/event_service.py` (o `backend/app/api/v1/event_tests.py`), extractor V2 Gemini y `audiometry_xml_parser.py`. Reejecución de TC-09..TC-12 obligatoria para desbloquear suite. Gates verdes deben preservarse. (FIX-20260729-03-G-XML-01)
@@ -160,6 +161,36 @@ Sistema de Administración Médica Industrial (AMI) para gestión de empresas, t
 - **2026-03-25 (INTEGRA):** [✓] **Limpieza Operativa del Catálogo Legacy.** Se verificaron y ajustaron los servicios relacionados en `frontend/src/app/services/page.tsx` y `frontend/src/actions/admin.actions.ts`. Cambios documentados en `context/checkpoints/CHK_ARCH-20260325-02.md`. (ARCH-20260325-02)
 - **2026-03-25 (INTEGRA):** [✓] **Separación de Somatometría y Agudeza Visual como estudios independientes.** Se implementó la especificación `SPEC_ARCH-20260325-05-SEPARACION-SOMATOMETRIA-AGUDEZA-EXAMEN.md`, separando ambos estudios en el flujo de Examen Médico. Build del frontend validado con `pnpm build`. Checkpoint generado: `CHK_ARCH-20260325-05.md`. (ARCH-20260325-05)
 - **2026-03-26 (CRONISTA):** [✓] **Corte Clínico Consolidado: Historial Clínico Longitudinal y Fallback Inline.** Se completó la implementación del Historial Clínico como maestro longitudinal, reduciendo la recaptura del Examen Médico y agregando un fallback inline cuando no existe snapshot de portal. Validación y commit publicados en `18c340b` (origin/main). Sistema listo para operación. (ARCH-20260326-12)
+
+---
+
+## Cola de ejecución (canónica IDL §7)
+
+> **Nota INTEGRA 2026-08-05:** Esta sección se inicializa con FIX-20260805-04. Las entradas históricas del "Diario de Cambios" arriba usan términos no canónicos (`[✓]`/`[~]`/`[/]`, prohibidos por §15.2); su migración a estados canónicos queda como tarea de auditoría para CRONISTA.
+
+### BACKLOG
+
+### READY
+
+### IN_PROGRESS
+- **ID:** FIX-20260805-04 | Prioridad: P2 | Resultado: Draft autosave (persistencia navegador) para SelfRegistrationForm | SPEC: `context/SPECs/SPEC_FIX-20260805-04-DRAFT-AUTOSAVE-SELF-REGISTRATION.md` | Delegado a: SOFIA | Estado delegación: en curso | GEMINI: pendiente tras implementación (Qodo sunset)
+
+### VERIFYING
+
+### BLOCKED
+
+### DONE
+
+---
+
+## Definition of Ready
+SPEC activa con criterios verificables; dependencias disponibles; sin bloqueantes; validación detectable; alcance dentro de autorizaciones.
+
+## Definition of Done
+Criterios aceptados con evidencia; gates aplicables aprobados (typecheck, vitest, lint); revisión SOFIA; GEMINI si no trivial; PROYECTO.md con una sola representación.
+
+## Autorizaciones autónomas vigentes
+- **Ninguna** (sesión interactiva con Frank presente). Modo nocturno no activado. Acciones estándar permitidas: edición local, validación local, tests/docs, delegación entre agentes. NO permitido sin OK explícito: commit, push, PR, deploy, producción, datos irreversibles, secretos.
 
 
 

@@ -137,8 +137,8 @@ export default function CompanySelectableTable({
               <th className="px-3 py-3 hidden md:table-cell">RFC</th>
               <th className="px-3 py-3 hidden lg:table-cell">Contacto</th>
               <th className="px-3 py-3 hidden lg:table-cell">Email</th>
-              <th className="px-3 py-3 hidden xl:table-cell">Vendedor</th>
-              <th className="px-3 py-3 hidden xl:table-cell">Sucursal</th>
+              <th className="px-3 py-3 hidden lg:table-cell">Vendedor</th>
+              <th className="px-3 py-3 hidden lg:table-cell">Sucursal</th>
               <th className="px-3 py-3">Estado</th>
               <th className="px-3 py-3 text-right w-28">Acción</th>
             </tr>
@@ -186,10 +186,10 @@ export default function CompanySelectableTable({
                   <td className="px-3 py-2.5 hidden lg:table-cell text-slate-600 text-xs max-w-[180px] truncate">
                     {c.email || <span className="text-slate-400">—</span>}
                   </td>
-                  <td className="px-3 py-2.5 hidden xl:table-cell text-slate-700 text-xs">
+                  <td className="px-3 py-2.5 hidden lg:table-cell text-slate-700 text-xs">
                     {c.seller?.fullName || <span className="text-slate-400">—</span>}
                   </td>
-                  <td className="px-3 py-2.5 hidden xl:table-cell text-slate-700 text-xs">
+                  <td className="px-3 py-2.5 hidden lg:table-cell text-slate-700 text-xs">
                     {c.defaultBranch?.name || <span className="text-slate-400">—</span>}
                   </td>
                   <td className="px-3 py-2.5">
