@@ -8,6 +8,7 @@ import { getWorkerById } from '@/services/worker.service'
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import WorkerIdentityCard from '@/components/workers/WorkerIdentityCard'
 
 export default async function WorkerDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -119,6 +120,17 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
                             </div>
                         </div>
                     </div>
+
+                    {/* IMPL-20260808-04: card "Identificación" con miniatura
+                        ampliable de la última evidencia persistida. */}
+                    <WorkerIdentityCard
+                        firstName={worker.firstName}
+                        lastName={worker.lastName}
+                        lastIdentityDocumentType={worker.lastIdentityDocumentType}
+                        lastIdentityFrontFileUrl={worker.lastIdentityFrontFileUrl}
+                        lastIdentityBackFileUrl={worker.lastIdentityBackFileUrl}
+                        lastIdentityVerifiedAt={worker.lastIdentityVerifiedAt}
+                    />
 
                     <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden">
                         <div className="bg-blue-50 border-b border-blue-200 px-5 py-4">

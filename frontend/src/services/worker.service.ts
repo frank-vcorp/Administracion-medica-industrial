@@ -8,6 +8,13 @@ import { Prisma } from '@prisma/client'
 const DELETE_CHUNK_SIZE = 5
 
 export const getWorkerById = async (id: string) => {
+    // IMPL-20260808-04: los 4 campos de última identidad
+    // (lastIdentityDocumentType, lastIdentityFrontFileUrl,
+    // lastIdentityBackFileUrl, lastIdentityVerifiedAt) se devuelven
+    // automáticamente porque `findUnique` con `include` retorna
+    // todas las columnas escalares del Worker. Prisma 5.x no permite
+    // combinar `select` + `include` al mismo nivel, por eso usamos
+    // solo `include` aquí y dejamos la selección escalar implícita.
     return await prisma.worker.findUnique({
         where: { id },
         include: {

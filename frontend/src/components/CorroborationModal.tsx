@@ -21,6 +21,7 @@ import {
   closeReceptionCorroboration,
 } from '@/actions/appointment.actions'
 import { useRouter } from 'next/navigation'
+import IdentityLightbox from '@/components/IdentityLightbox'
 
 // ── Etiquetas de catálogos ──────────────────────────────────────────────────
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -109,6 +110,10 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
   const [exceptionReason, setExceptionReason] = useState<IdentityExceptionReason | ''>('')
   const [exceptionComment, setExceptionComment] = useState('')
 
+  // IMPL-20260808-04: lightbox para vista ampliada de la identificación
+  // previa (boton "Ver ampliado" en la referencia compacta).
+  const [priorIdentityLightboxOpen, setPriorIdentityLightboxOpen] = useState(false)
+
   const scheduled = new Date(appointment.scheduledAt)
   const hasLastEvidence = !!worker.lastIdentityFrontFileUrl
 
@@ -182,6 +187,53 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
         </div>
 
         <div className="overflow-y-auto flex-1 p-8 space-y-6">
+
+          {/* IMPL-20260808-04: referencia compacta de la identificación previa
+              del paciente. Siempre visible cuando hay evidencia registrada,
+              independientemente del modo elegido. Sirve de ayuda visual sin
+              reemplazar la sección completa del modo REUSED_PREVIOUS. */}
+          {hasLastEvidence && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center gap-3">
+              <div className="flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setPriorIdentityLightboxOpen(true)}
+                  className="block group"
+                  aria-label="Ver identificación previa del paciente"
+                  title="Click para ver la identificación completa"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- data URL base64 (no external); next/Image requiere hosts declarados. */}
+                  <img
+                    src={worker.lastIdentityFrontFileUrl!}
+                    alt="Identificación previa del paciente"
+                    className="w-12 h-12 rounded-lg object-cover border border-slate-200 group-hover:border-amber-400 cursor-zoom-in"
+                  />
+                </button>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Identificación previa del paciente
+                </p>
+                <p className="text-xs text-slate-700 truncate">
+                  {DOC_TYPE_LABELS[worker.lastIdentityDocumentType ?? ''] ?? worker.lastIdentityDocumentType ?? '—'}
+                  {worker.lastIdentityVerifiedAt && (
+                    <span className="text-slate-400">
+                      {' '}· verificada el {new Date(worker.lastIdentityVerifiedAt).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEvidenceMode('REUSED_PREVIOUS')}
+                disabled={evidenceMode === 'REUSED_PREVIOUS'}
+                className="flex-shrink-0 text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold px-3 py-1.5 rounded-full disabled:opacity-50 disabled:cursor-default transition-colors"
+                title="Reutilizar esta identificación para el ingreso de hoy"
+              >
+                ♻️ Reutilizar
+              </button>
+            </div>
+          )}
 
           {/* Datos del evento */}
           <section className="bg-slate-50 rounded-2xl p-5 space-y-3 border border-slate-100">
@@ -468,6 +520,22 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
           </button>
         </div>
       </div>
+
+      {/* IMPL-20260808-04: lightbox de la identificación previa. */}
+      <IdentityLightbox
+        open={priorIdentityLightboxOpen}
+        onClose={() => setPriorIdentityLightboxOpen(false)}
+        src={worker.lastIdentityFrontFileUrl}
+        backSrc={worker.lastIdentityBackFileUrl ?? null}
+        alt="Identificación previa del paciente"
+        backAlt="Reverso de la identificación previa"
+        title="Identificación previa del paciente"
+        subtitle={
+          worker.lastIdentityDocumentType
+            ? (DOC_TYPE_LABELS[worker.lastIdentityDocumentType] ?? worker.lastIdentityDocumentType)
+            : null
+        }
+      />
     </div>
   )
 }

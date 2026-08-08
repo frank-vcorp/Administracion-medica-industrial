@@ -15,9 +15,38 @@ import { authOptions } from '@/auth'
 
 // Get all workers with their company name and jobPosition (includes defaultProfileId for auto-selection)
 // @id IMPL-20260313-07
+// IMPL-20260808-04 (Opción A): se usa `select` explícito para EXCLUIR los
+// dataURL base64 de la INE (`lastIdentityFrontFileUrl`,
+// `lastIdentityBackFileUrl`, ≈ 1MB c/u). Sin esto, 50 pacientes ≈ 50-100MB
+// de payload RSC en /workers. Las imágenes se cargan on-demand vía
+// `getWorkerIdentityImage(workerId)`. `lastIdentityDocumentType` se conserva
+// para que el listado sepa si debe mostrar el placeholder "🪪 Ver INE".
+// Prisma 5.x no permite combinar `select` + `include` al mismo nivel; los
+// relations se incluyen como `select` anidados con sus propios campos.
 export async function getWorkers() {
     return await prisma.worker.findMany({
-        include: {
+        select: {
+            id: true,
+            universalId: true,
+            firstName: true,
+            lastName: true,
+            nationalId: true,
+            dob: true,
+            email: true,
+            phone: true,
+            companyId: true,
+            createdAt: true,
+            updatedAt: true,
+            branchId: true,
+            jobPositionId: true,
+            intakeSource: true,
+            // Identidad: solo el tipo (string pequeño) para decidir placeholder.
+            lastIdentityDocumentType: true,
+            lastIdentityVerifiedAt: true,
+            // ⚠️ EXCLUIDOS explícitamente por peso (dataURL base64 ≈ 1MB c/u):
+            //   - lastIdentityFrontFileUrl
+            //   - lastIdentityBackFileUrl
+            // Cargar bajo demanda con getWorkerIdentityImage(workerId).
             company: {
                 select: { name: true, defaultBranchId: true }
             },
@@ -27,6 +56,56 @@ export async function getWorkers() {
         },
         orderBy: { createdAt: 'desc' }
     })
+}
+
+// IMPL-20260808-04 (Opción A): carga perezosa de la imagen de identidad.
+// El listado NO trae los dataURL (≈1MB c/u) para no inflar el RSC de
+// /workers. Cuando el usuario hace click en el placeholder "🪪 Ver INE"
+// del grid, el componente cliente invoca esta server action que retorna
+// SOLO los 4 campos de identidad del worker seleccionado.
+export async function getWorkerIdentityImage(workerId: string) {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+        return { success: false, error: 'No autorizado' }
+    }
+
+    if (!workerId || typeof workerId !== 'string') {
+        return { success: false, error: 'ID de trabajador requerido' }
+    }
+
+    try {
+        const worker = await prisma.worker.findUnique({
+            where: { id: workerId },
+            select: {
+                lastIdentityDocumentType: true,
+                lastIdentityFrontFileUrl: true,
+                lastIdentityBackFileUrl: true,
+                lastIdentityVerifiedAt: true,
+            },
+        })
+
+        // Atajo: si no hay imagen registrada, no devolvemos un payload vacío.
+        if (!worker || !worker.lastIdentityFrontFileUrl) {
+            return { success: false, error: 'No hay identificación registrada para este paciente' }
+        }
+
+        return {
+            success: true,
+            data: {
+                frontFileUrl: worker.lastIdentityFrontFileUrl,
+                backFileUrl: worker.lastIdentityBackFileUrl,
+                documentType: worker.lastIdentityDocumentType,
+                verifiedAt: worker.lastIdentityVerifiedAt,
+            },
+        }
+    } catch (e: unknown) {
+        const error = e as Error
+        console.error('[getWorkerIdentityImage]', error)
+        return {
+            success: false,
+            error: error.message || 'Error al obtener la identificación',
+        }
+    }
 }
 
 /**
