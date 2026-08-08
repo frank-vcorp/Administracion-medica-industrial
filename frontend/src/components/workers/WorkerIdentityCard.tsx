@@ -99,7 +99,7 @@ export default function WorkerIdentityCard({
                 <img
                   src={lastIdentityFrontFileUrl!}
                   alt={`Identificación (frente) de ${fullName}`}
-                  className="w-full h-32 object-cover rounded-lg border border-slate-200 group-hover:border-amber-400 transition-colors cursor-zoom-in"
+                  className="w-full h-32 object-cover rounded-lg border border-slate-200 group-hover:border-blue-400 transition-colors cursor-zoom-in"
                 />
               </button>
             </div>
@@ -119,7 +119,7 @@ export default function WorkerIdentityCard({
                   <img
                     src={lastIdentityBackFileUrl}
                     alt={`Identificación (reverso) de ${fullName}`}
-                    className="w-full h-32 object-cover rounded-lg border border-slate-200 group-hover:border-amber-400 transition-colors cursor-zoom-in"
+                    className="w-full h-32 object-cover rounded-lg border border-slate-200 group-hover:border-blue-400 transition-colors cursor-zoom-in"
                   />
                 </button>
               </div>

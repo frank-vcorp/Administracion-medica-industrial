@@ -20,6 +20,11 @@ export const getWorkerById = async (id: string) => {
         include: {
             company: true,
             medicalHistory: {
+                // ARCH-20260808-05: include.branch para resolver el TODO
+                // `Sucursal: branch-matriz (TODO: Populate)` en
+                // workers/[id]/page.tsx. No rompe contrato: `event.branchId`
+                // sigue disponible; ahora además `event.branch?.name`.
+                include: { branch: { select: { id: true, name: true } } },
                 orderBy: { createdAt: 'desc' }
             }
         }
