@@ -42,10 +42,18 @@ import type { UpdateCompanyInput } from '@/lib/schemas/company-update'
 //  exponga los símbolos esperados por los wrappers de compatibilidad).
 // --------------------------------------------------------------------------
 
-/** Lista empresas con sucursal predeterminada y sucursales permitidas. */
+/**
+ * Lista empresas con sucursal predeterminada, sucursales permitidas y vendedor.
+ *
+ * FIX-20260808-02 (DIAG-20260808-02): Se añade `seller` al include. Antes
+ * sólo lo traía `listCompaniesWithFilters`, lo que provocaba que en el
+ * listado /companies sin filtros la columna VENDEDOR apareciera siempre
+ * como `—` aunque la empresa tuviera `sellerId` poblado en BD.
+ */
 export async function getCompanies() {
   return prisma.company.findMany({
     include: {
+      seller: { select: { id: true, fullName: true, email: true } },
       defaultBranch: true,
       allowedBranches: { select: { id: true, name: true } },
     },
@@ -764,6 +772,10 @@ export async function listCompaniesWithFilters(filters: ListCompaniesFilters = {
     include: {
       seller: { select: { id: true, fullName: true, email: true } },
       defaultBranch: { select: { id: true, name: true } },
+      // FIX-20260808-02 (DIAG-20260808-02): añadidos para consistencia con
+      // getCompanies() y para soportar el fallback de Sucursal en la UI
+      // (defaultBranch?.name ?? allowedBranches?.[0]?.name ?? '—').
+      allowedBranches: { select: { id: true, name: true } },
     },
     orderBy: { updatedAt: 'desc' },
   })

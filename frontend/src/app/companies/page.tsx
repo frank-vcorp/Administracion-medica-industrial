@@ -82,6 +82,8 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
   ])
 
   // Saneamos la lista al shape que esperan los componentes cliente.
+  // FIX-20260808-02 (DIAG-20260808-02): también propagamos `allowedBranches`
+  // para soportar el fallback de la columna Sucursal cuando defaultBranch es null.
   const selectableCompanies: SelectableCompany[] = companies.map((c) => ({
     id: c.id,
     name: c.name,
@@ -91,6 +93,10 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
     defaultBranch: c.defaultBranch
       ? { id: c.defaultBranch.id, name: c.defaultBranch.name }
       : null,
+    allowedBranches:
+      'allowedBranches' in c && Array.isArray(c.allowedBranches)
+        ? c.allowedBranches.map((b) => ({ id: b.id, name: b.name }))
+        : [],
     estado: (c.estado ?? 'HABILITADO') as CompanyStatus,
     origen: (c.origen ?? 'MANUAL') as CompanyOrigin,
     seller:

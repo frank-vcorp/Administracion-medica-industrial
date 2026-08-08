@@ -2,6 +2,8 @@
  * @file CompanySelectableTable — Tabla densa de Empresas con selección multi-fila.
  * @id IMPL-20260731-02 (Opción A vista Companies)
  * @fix  FIX-FRANK-20260731-05 — vista densa para SUPERADMIN (cards ocupaban mucho espacio vertical).
+ * @fix  FIX-20260808-02 (DIAG-20260808-02) — fallback Sucursal a allowedBranches[0]
+ *       cuando defaultBranchId es null (flujo auto-alta no asigna defaultBranchId).
  *
  * Reemplaza al grid anterior `CompanySelectableGrid`. Mismas props y mismo
  * callback de selección para que el padre (`CompanyBulkDeleteShell`) funcione
@@ -36,6 +38,13 @@ export interface SelectableCompany {
   contactName: string | null
   email: string | null
   defaultBranch: { id: string; name: string } | null
+  /**
+   * FIX-20260808-02 (DIAG-20260808-02): lista de sucursales permitidas (M2M).
+   * Se usa como fallback en la columna Sucursal cuando `defaultBranch` es null
+   * (típico de empresas auto-registradas cuyo defaultBranchId no se asigna).
+   * Opcional para mantener compat con callers que aún no la propaguen.
+   */
+  allowedBranches?: Array<{ id: string; name: string }>
   estado: import('@prisma/client').CompanyStatus
   origen: import('@prisma/client').CompanyOrigin
   seller?: { fullName?: string } | null
@@ -190,7 +199,9 @@ export default function CompanySelectableTable({
                     {c.seller?.fullName || <span className="text-slate-400">—</span>}
                   </td>
                   <td className="px-3 py-2.5 hidden lg:table-cell text-slate-700 text-xs">
-                    {c.defaultBranch?.name || <span className="text-slate-400">—</span>}
+                    {c.defaultBranch?.name
+                      ?? c.allowedBranches?.[0]?.name
+                      ?? <span className="text-slate-400">—</span>}
                   </td>
                   <td className="px-3 py-2.5">
                     <CompanyStatusBadge estado={c.estado} origen={c.origen} size="sm" />
