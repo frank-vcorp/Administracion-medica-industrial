@@ -177,6 +177,8 @@ export async function fetchEventPageData(input: {
     datos_personales?: PrefillSection
     historia_laboral?: PrefillSection
     heredo_familiares?: PrefillSection
+    no_patologicos?: PrefillSection
+    patologicos?: PrefillSection
   }
 
   const histData = historyRes.success
@@ -185,7 +187,13 @@ export async function fetchEventPageData(input: {
   const rootDP = histData?.datos_personales as PrefillSection | undefined
   const rootHL = histData?.historia_laboral as PrefillSection | undefined
   const rootHF = histData?.heredo_familiares as PrefillSection | undefined
-  const hasRootLongitudinal = !!(rootDP || rootHL || rootHF)
+  // IMPL-20260809-01 (ARCH-20260809-01): el helper loader antes solo exponía
+  // 3 de las 5 secciones declarativas — faltaban `no_patologicos` y `patologicos`.
+  // Ahora las 5 viajan en `longitudinalData` para que la nueva outer-tab
+  // "Antecedentes" del Examen Médico pueda prefillar desde el historial maestro.
+  const rootNP = histData?.no_patologicos as PrefillSection | undefined
+  const rootPT = histData?.patologicos as PrefillSection | undefined
+  const hasRootLongitudinal = !!(rootDP || rootHL || rootHF || rootNP || rootPT)
   const legacyBase = !hasRootLongitudinal
     ? (histData?.prefill_base as PrefillBase | null | undefined)
     : null
@@ -195,6 +203,8 @@ export async function fetchEventPageData(input: {
         ...(rootDP ? { datos_personales: rootDP } : {}),
         ...(rootHL ? { historia_laboral: rootHL } : {}),
         ...(rootHF ? { heredo_familiares: rootHF } : {}),
+        ...(rootNP ? { no_patologicos: rootNP } : {}),
+        ...(rootPT ? { patologicos: rootPT } : {}),
       }
     : legacyBase
 

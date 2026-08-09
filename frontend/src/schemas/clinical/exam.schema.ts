@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ClinicalHistoryDataSchema } from './history.schema';
 
 const cleanString = z.string().trim().max(1000).optional();
 const cleanNum = z.coerce.number().nonnegative().optional();
@@ -117,11 +118,40 @@ export const ImpresiónAptitudSchema = z.object({
 // 11. MÓDULO MÉDICO COMPLETO (Exploración + Impresión — IMPL-20260325-01)
 //     Se persiste en physicalExamData del MedicalExam.
 //     Incluye Módulo 1 capturado in-studio sin depender del portal público (ARCH-20260325-09).
+//     A partir de ARCH-20260809-01 incluye también `antecedentes_captured`
+//     (snapshot por cita de las 5 secciones declarativas del paciente —
+//     no sobrescribe el historial maestro longitudinal).
 // ----------------------------------------------------------------------
+
+/**
+ * Snapshot por cita de los antecedentes declarativos del paciente.
+ * Reusa `ClinicalHistoryDataSchema` (las 5 secciones canónicas) y añade
+ * `_provenance` opcional para trazabilidad de la fuente (portal / longitudinal
+ * / captura directa del médico / mixto).
+ * @id IMPL-20260809-01
+ * @spec ARCH-20260809-01 — outer-tab "Antecedentes" en Examen Médico
+ */
+export const AntecedentesCapturaSchema = ClinicalHistoryDataSchema.extend({
+  _provenance: z
+    .object({
+      source: z.enum(['portal', 'longitudinal', 'captured', 'mixed']),
+      updatedAt: z.string().datetime().optional(),
+      capturedBy: z.string().optional(),
+    })
+    .optional(),
+})
+
+export type AntecedentesCaptura = z.infer<typeof AntecedentesCapturaSchema>
+
 export const ExamenMedicoCompletoSchema = ExploracionFisicaSchema
   .merge(ImpresiónAptitudSchema)
   .extend({
     antecedentes_medico: cleanString,
     /** Módulo 1 — cuestionario del paciente capturado en sala (ARCH-20260325-09) */
     modulo1: z.record(z.string(), z.any()).optional(),
+    /**
+     * Snapshot por cita de los antecedentes — ARCH-20260809-01.
+     * Opcional: exámenes existentes sin este campo siguen parseando OK.
+     */
+    antecedentes_captured: AntecedentesCapturaSchema.optional(),
   });

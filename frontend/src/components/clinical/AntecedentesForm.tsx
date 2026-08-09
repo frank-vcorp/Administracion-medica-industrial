@@ -7,6 +7,16 @@
  */
 import React, { useState, useEffect } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
+import {
+  DATOS_PERSONALES_CAMPOS,
+  HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
+  HISTORIA_LABORAL_EXPOSICIONES,
+  HEREDOFAMILIARES_DESCRIPCIONES,
+  NO_PATOLOGICOS_DESCRIPCIONES,
+  PATOLOGICOS_DESCRIPCIONES,
+  TURNO_OPTIONS,
+  ESTADO_CIVIL_OPTIONS,
+} from '@/lib/antecedentes-fields'
 
 interface AntecedentesFormProps {
   workerId: string
@@ -16,128 +26,6 @@ interface AntecedentesFormProps {
 }
 
 type ActiveTab = 'datos_personales' | 'historia_laboral' | 'heredofamiliares' | 'no_patologicos' | 'patologicos'
-
-/**
- * Diccionarios de descripciones legibles para el trabajador.
- * Castillano neutro, tono informativo, sin alarmismo.
- * Cada entrada mapea un campo (state key) → etiqueta visible + ayuda en 1 línea.
- * El objetivo es que el trabajador autollene el formulario sin necesidad de conocer la terminología médica.
- */
-interface CampoDescripcion {
-  field: string
-  label: string
-  help: string
-}
-
-interface GrupoPatologicos {
-  endocrino: CampoDescripcion[]
-  cardiopulmonar: CampoDescripcion[]
-  neurologico: CampoDescripcion[]
-  digestivo: CampoDescripcion[]
-  otras: CampoDescripcion[]
-}
-
-const HEREDOFAMILIARES_DESCRIPCIONES: CampoDescripcion[] = [
-  { field: 'diabetes',      label: 'Diabetes',      help: 'Algún familiar con azúcar alta en sangre (diabetes).' },
-  { field: 'has',           label: 'Hipertensión',  help: 'Algún familiar con presión arterial alta diagnosticada.' },
-  { field: 'epilepsia',     label: 'Epilepsia',     help: 'Algún familiar con convulsiones o epilepsia diagnosticada.' },
-  { field: 'cardiopatia',   label: 'Cardiopatía',   help: 'Algún familiar con enfermedades del corazón (infartos, arritmias, soplos, etc.).' },
-  { field: 'renales',       label: 'Enfermedad renal', help: 'Algún familiar con problemas del riñón, diálisis o trasplante.' },
-  { field: 'asma',          label: 'Asma',          help: 'Algún familiar con asma o bronquitis crónica recurrente.' },
-  { field: 'cancer',        label: 'Cáncer',        help: 'Algún familiar con cáncer de cualquier tipo.' },
-  { field: 'mentales',      label: 'Trastornos mentales', help: 'Algún familiar con depresión, ansiedad, esquizofrenia u otros trastornos psiquiátricos.' },
-  { field: 'otras',         label: 'Otras',         help: 'Otra enfermedad hereditaria o frecuente en su familia. Anote brevemente.' },
-]
-
-const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
-  endocrino: [
-    { field: 'diabetes',       label: 'Diabetes',         help: 'Azúcar alta en sangre diagnosticada por un médico.' },
-    { field: 'endocrinopatias',label: 'Endocrinopatías',  help: 'Otras enfermedades de tiroides, suprarrenales u hormonales.' },
-    { field: 'asma',           label: 'Asma',             help: 'Asma persistente (crisis frecuentes, uso de inhalador).' },
-  ],
-  cardiopulmonar: [
-    { field: 'cardiopatias', label: 'Cardiopatías',         help: 'Enfermedades del corazón (infarto, soplo, arritmia, insuficiencia).' },
-    { field: 'bronquitis',   label: 'Bronquitis',           help: 'Bronquitis crónica o repetida (no la gripe común).' },
-    { field: 'neumonias',    label: 'Neumonías',            help: 'Neumonía (infección pulmonar) que requirió tratamiento médico.' },
-    { field: 'has',          label: 'Hipertensión Arterial',help: 'Presión arterial alta diagnosticada por un médico.' },
-  ],
-  neurologico: [
-    { field: 'epilepsia',              label: 'Epilepsia',              help: 'Convulsiones o epilepsia diagnosticada.' },
-    { field: 'migrana',                label: 'Migraña',                help: 'Dolores de cabeza fuertes y repetidos (jaqueca/migraña).' },
-    { field: 'desmayos',               label: 'Desmayos',               help: 'Pérdidas de conocimiento o desmayos frecuentes.' },
-    { field: 'traumatismos_craneales', label: 'Traumatismos craneales', help: 'Golpes fuertes en la cabeza con pérdida de conocimiento o atención médica.' },
-  ],
-  digestivo: [
-    { field: 'gastritis',    label: 'Gastritis',     help: 'Inflamación del estómago con ardor frecuente, diagnosticada por un médico.' },
-    { field: 'colitis',      label: 'Colitis',       help: 'Inflamación del colon (diarrea crónica, dolor abdominal recurrente).' },
-    { field: 'hemorroides',  label: 'Hemorroides',   help: 'Hemorroides (almorranas) que requirieron tratamiento.' },
-    { field: 'hernias',      label: 'Hernias',       help: 'Hernias inguinales, abdominales o discales (en la espalda) operadas o no.' },
-    { field: 'renales',      label: 'Enfermedades renales', help: 'Cálculos (piedras) en riñón, infecciones urinarias repetidas o enfermedad renal.' },
-  ],
-  otras: [
-    { field: 'alergias',     label: 'Alergias',      help: 'Alergias a medicamentos, alimentos, polen, polvo, etc.' },
-    { field: 'varices',      label: 'Varices',       help: 'Venas varicosas en piernas (venas dilatadas visibles).' },
-    { field: 'ginecologicos',label: 'Ginecológicos', help: 'Enfermedades ginecológicas tratadas (embarazos, quistes, etc.).' },
-    { field: 'dermatitis',   label: 'Dermatitis',    help: 'Enfermedades de piel crónicas (eccema, psoriasis, dermatitis atópica).' },
-    { field: 'psiquiatricas',label: 'Psiquiátricas', help: 'Trastornos mentales diagnosticados (depresión, ansiedad, esquizofrenia, etc.).' },
-  ],
-}
-
-interface NoPatologicoItem {
-  key: string
-  label: string
-  help: string
-  subs: [string, string][]
-}
-
-/**
- * `subs` mantiene la estructura original [stateKey, labelVisible] usada por el JSX.
- * Solo añadimos `key`, `label` y `help` para no romper el estado ni los handlers.
- */
-const NO_PATOLOGICOS_DESCRIPCIONES: NoPatologicoItem[] = [
-  {
-    key: 'alcohol',
-    label: 'Alcohol',
-    help: 'Bebidas con alcohol (cerveza, vino, licor) consumidas con regularidad, no de forma ocasional.',
-    subs: [
-      ['alcohol_edad_comienzo', 'Edad inicio'],
-      ['alcohol_frecuencia', 'Frecuencia'],
-      ['alcohol_suspendido', 'Suspendido'],
-      ['alcohol_tiempo_suspendido', 'Tiempo suspendido'],
-    ],
-  },
-  {
-    key: 'tabaco',
-    label: 'Tabaco',
-    help: 'Cigarrillos, puros, pipa o vapeo. Incluye fumadores activos y ex-fumadores.',
-    subs: [
-      ['tabaco_edad_comienzo', 'Edad inicio'],
-      ['tabaco_frecuencia', 'Frecuencia'],
-      ['tabaco_cigarros_dia', 'Cigarros/día'],
-      ['tabaco_suspendido', 'Suspendido'],
-      ['tabaco_tiempo_suspendido', 'Tiempo suspendido'],
-    ],
-  },
-  {
-    key: 'drogas_estimulantes',
-    label: 'Drogas/Estimulantes',
-    help: 'Sustancias psicoactivas recreativas (marihuana, cocaína, estimulantes, etc.). Confidencial.',
-    subs: [
-      ['drogas_especifique', 'Especifique'],
-      ['drogas_frecuencia', 'Frecuencia'],
-      ['drogas_ultimo_consumo', 'Último consumo'],
-    ],
-  },
-  {
-    key: 'ejercicio',
-    label: 'Ejercicio',
-    help: 'Actividad física o deporte practicado con regularidad (caminar, correr, fútbol, gym, etc.).',
-    subs: [
-      ['ejercicio_especifique', 'Tipo'],
-      ['ejercicio_frecuencia', 'Frecuencia'],
-    ],
-  },
-]
 
 /**
  * ARCH-20260326-06
@@ -324,20 +212,13 @@ export function AntecedentesForm({
               ℹ️ Datos declarativos del trabajador — sirven como base longitudinal reutilizable entre citas.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {([
-                ['puesto_actual',      'Puesto Actual',        'text'],
-                ['area_departamento',  'Área / Departamento',  'text'],
-                ['escolaridad',        'Escolaridad',          'text'],
-                ['antiguedad_anios',   'Antigüedad (años)',    'number'],
-                ['antiguedad_meses',   'Antigüedad (meses)',   'number'],
-                ['numero_hijos',       'Número de Hijos',      'number'],
-              ] as [string, string, string][]).map(([field, label, type]) => (
-                <div key={field}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+              {DATOS_PERSONALES_CAMPOS.filter(c => c.kind === 'text' || c.kind === 'number').map(campo => (
+                <div key={campo.field}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{campo.label}</label>
                   <input
-                    type={type}
-                    value={String(datosPersonales[field] ?? '')}
-                    onChange={e => setDatosPersonales(p => ({ ...p, [field]: e.target.value }))}
+                    type={campo.kind}
+                    value={String(datosPersonales[campo.field] ?? '')}
+                    onChange={e => setDatosPersonales(p => ({ ...p, [campo.field]: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                   />
                 </div>
@@ -350,7 +231,7 @@ export function AntecedentesForm({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 >
                   <option value="">— Seleccionar —</option>
-                  {['MATUTINO', 'VESPERTINO', 'NOCTURNO', 'MIXTO'].map(o => <option key={o}>{o}</option>)}
+                  {TURNO_OPTIONS.map(o => <option key={o}>{o}</option>)}
                 </select>
               </div>
               <div>
@@ -361,7 +242,7 @@ export function AntecedentesForm({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 >
                   <option value="">— Seleccionar —</option>
-                  {['SOLTERO', 'CASADO', 'UNION_LIBRE', 'DIVORCIADO', 'VIUDO', 'OTRO'].map(o => <option key={o}>{o}</option>)}
+                  {ESTADO_CIVIL_OPTIONS.map(o => <option key={o}>{o}</option>)}
                 </select>
               </div>
             </div>
@@ -376,21 +257,19 @@ export function AntecedentesForm({
               <div className="space-y-4 mt-3">
                 {(['1', '2'] as const).map(n => (
                   <div key={n} className="grid grid-cols-3 gap-3">
-                    {([
-                      [`empresa_anterior_${n}`, `Empresa ${n}`],
-                      [`puesto_anterior_${n}`,  `Puesto ${n}`],
-                      [`tiempo_anterior_${n}`,  `Tiempo ${n}`],
-                    ] as [string, string][]).map(([field, label]) => (
-                      <div key={field}>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                        <input
-                          type="text"
-                          value={String(historiaLaboral[field] ?? '')}
-                          onChange={e => setHistoriaLaboral(p => ({ ...p, [field]: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    ))}
+                    {HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS
+                      .filter(([field]) => field.endsWith(`_${n}`))
+                      .map(([field, label]) => (
+                        <div key={field}>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                          <input
+                            type="text"
+                            value={String(historiaLaboral[field] ?? '')}
+                            onChange={e => setHistoriaLaboral(p => ({ ...p, [field]: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      ))}
                   </div>
                 ))}
               </div>
@@ -398,14 +277,7 @@ export function AntecedentesForm({
             <fieldset className="border border-gray-200 rounded-lg p-4">
               <legend className="text-base font-semibold text-gray-900 px-2">Exposición a Riesgos y Antecedentes</legend>
               <div className="space-y-3 mt-3">
-                {([
-                  ['exposicion_quimica',    'Química',                'exposicion_quimica_especifique'],
-                  ['exposicion_fisica',     'Física',                 'exposicion_fisica_especifique'],
-                  ['exposicion_biologica',  'Biológica',              'exposicion_biologica_especifique'],
-                  ['exposicion_ergonomica', 'Ergonómica',             'exposicion_ergonomica_especifique'],
-                  ['accidentes_trabajo',    'Accidente de Trabajo',   'accidentes_descripcion'],
-                  ['enfermedades_trabajo',  'Enfermedad de Trabajo',  'enfermedades_descripcion'],
-                ] as [string, string, string][]).map(([key, label, descKey]) => (
+                {HISTORIA_LABORAL_EXPOSICIONES.map(({ key, label, descKey }) => (
                   <div key={key} className="flex items-center gap-3">
                     <label className="flex items-center gap-2 cursor-pointer shrink-0">
                       <input

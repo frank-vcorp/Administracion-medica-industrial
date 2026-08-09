@@ -5,11 +5,14 @@ import { revalidatePath } from "next/cache"
 import { triggerStructuredStudyAIPrediagnosis } from "./ai-prediagnosis.actions"
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import { writeTimelineEntry } from "@/lib/timeline.service"
-import { 
-  SomatometriaVitalesSchema, 
-  AgudezaVisualSchema, 
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/auth"
+import {
+  SomatometriaVitalesSchema,
+  AgudezaVisualSchema,
   ExploracionFisicaSchema,
   ExamenMedicoCompletoSchema,
+  AntecedentesCapturaSchema,
 } from "@/schemas/clinical/exam.schema"
 
 /**
@@ -236,5 +239,96 @@ export async function saveExamenMedicoPapeleta(
   } catch (error: unknown) {
     console.error("Error saving examen médico papeleta:", error)
     return { success: false, error: "Error al guardar Examen Médico" }
+  }
+}
+
+/**
+ * Guarda el snapshot por cita de los Antecedentes del paciente dentro de la
+ * outer-tab "Antecedentes" del Examen Médico.
+ *
+ * **Persistencia:** merge (read-modify-write) sobre `physicalExamData` —
+ * preserva Exploración, Impresión, Módulo 1 y `antecedentes_medico` existentes.
+ *
+ * **Restricciones (ADR-20260809-01):**
+ * - NO sobrescribe el historial maestro (`WorkerClinicalHistory`).
+ * - NO dispara IA prediagnóstico.
+ * - NO cambia `EventTest.status`.
+ * - NO añade entrada de cronograma (es captura puntual).
+ *
+ * @id IMPL-20260809-01
+ * @spec ARCH-20260809-01
+ */
+export async function saveAntecedentesCaptura(
+  eventId: string,
+  rawData: unknown,
+): Promise<{ success: boolean; error?: string }> {
+  if (!eventId) {
+    return { success: false, error: 'eventId es obligatorio' }
+  }
+
+  // Auth: la página /events/[id] ya aplica el control de acceso por rol/estado
+  // (ver page.tsx:186). Aquí exigimos sesión como mínimo indispensable.
+  const session = await getServerSession(authOptions)
+  if (!session?.user) {
+    return { success: false, error: 'No autorizado' }
+  }
+
+  try {
+    // 1) Validación Zod server-side (obligatoria — AGENTS.md §3).
+    const parsed = AntecedentesCapturaSchema.parse(rawData)
+
+    // 2) Ownership check: el evento debe existir. Si no, abortamos para no
+    //    crear un MedicalExam huérfano al upsert.
+    const event = await prisma.medicalEvent.findUnique({
+      where: { id: eventId },
+      select: { id: true, workerId: true },
+    })
+    if (!event) {
+      return { success: false, error: 'Evento no encontrado' }
+    }
+
+    // 3) Read-modify-write merge sobre physicalExamData.
+    const existingExam = await prisma.medicalExam.findUnique({
+      where: { eventId },
+      select: { physicalExamData: true },
+    })
+    const existingData =
+      existingExam?.physicalExamData &&
+      typeof existingExam.physicalExamData === 'object' &&
+      !Array.isArray(existingExam.physicalExamData)
+        ? (existingExam.physicalExamData as Record<string, unknown>)
+        : {}
+
+    // Inyectamos source='captured' + timestamp ISO; cualquier dato del portal o
+    // longitudinal debe haber sido fusionado por el cliente antes de llamar
+    // al action (la UI trae los campos planos en `parsed`).
+    const nextProvenance = {
+      source: 'captured' as const,
+      updatedAt: new Date().toISOString(),
+      capturedBy: session.user.id ?? undefined,
+    }
+
+    const merged = {
+      ...existingData,
+      antecedentes_captured: {
+        ...parsed,
+        _provenance: nextProvenance,
+      },
+    }
+
+    await prisma.medicalExam.upsert({
+      where: { eventId },
+      update: { physicalExamData: merged },
+      create: { eventId, physicalExamData: merged },
+    })
+
+    revalidatePath(`/events/${eventId}`)
+
+    return { success: true }
+  } catch (error: unknown) {
+    // Errores de validación Zod se reportan de forma genérica para no
+    // filtrar estructura interna; los detalles quedan en logs server-side.
+    console.error('Error saving antecedentes captura:', error)
+    return { success: false, error: 'Datos de antecedentes inválidos o error de servidor' }
   }
 }

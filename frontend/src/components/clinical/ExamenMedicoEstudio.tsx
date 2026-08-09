@@ -12,6 +12,8 @@
 import { useState, useTransition } from "react"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
+// IMPL-20260809-01: Nueva outer-tab "Antecedentes" (snapshot por cita).
+import { AntecedentesCaptura } from "@/components/clinical/AntecedentesCaptura"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -21,8 +23,10 @@ type ExamData = {
   eyeAcuityData?: Record<string, unknown> | null
 } | null
 
-/** Pestañas externas de Examen Médico — ARCH-20260506-06 */
-type OuterTab = 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'examen_medico'
+/** Pestañas externas de Examen Médico — ARCH-20260506-06 + IMPL-20260809-01.
+ *  La outer-tab 'antecedentes' se añadió entre agudeza_visual y examen_medico
+ *  para captura snapshot por cita de las 5 secciones declarativas del paciente. */
+type OuterTab = 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'antecedentes' | 'examen_medico'
 /** Sub-pestañas del Examen Médico clínico (pestaña 4) */
 type InnerTab = 'declarativa' | 'exploracion' | 'impresion'
 type M1Tab = 'gine' | 'inmuno'
@@ -70,6 +74,11 @@ const LONGITUDINAL_SECTIONS: [string, string][] = [
   ['datos_personales', 'Datos Personales'],
   ['historia_laboral', 'Historia Laboral'],
   ['heredo_familiares', 'Heredo-Familiares'],
+  // IMPL-20260809-01 (ARCH-20260809-01): las 2 secciones que el loader antes
+  // omitía en `longitudinalData`. Ahora se exponen para que el `<details>`
+  // readonly del Módulo 1 muestre las 5 secciones declarativas completas.
+  ['no_patologicos', 'No Patológicos'],
+  ['patologicos', 'Patológicos'],
 ]
 const GINE_FIELDS: [string, string][] = [
   ['m1_gine_menarca', 'Menarca'], ['m1_gine_fum', 'FUM'], ['m1_gine_ivs', 'IVS'],
@@ -155,11 +164,20 @@ export default function ExamenMedicoEstudio({
   const initEyeAcuityData = (examData?.eyeAcuityData ?? {}) as Record<string, unknown>
 
   // ── Estado Examen Médico (pestaña 4 — existente) ──────────────────────────
-  const [form, setForm] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      Object.entries(physicalExamData).map(([k, v]) => [k, String(v ?? '')])
+  // IMPL-20260809-01 rework (QA-20260809-01 I-1): excluir del `form` plano
+  // cualquier clave cuyo valor persistido sea un objeto/array (no primitivo),
+  // en concreto `antecedentes_captured` (snapshot por cita) y `modulo1`
+  // (sub-objeto Módulo 1). Sin este filtro, `String({...})` produce
+  // `"[object Object]"` y revienta la validación Zod en `ExamenMedicoCompletoSchema`.
+  const [form, setForm] = useState<Record<string, string>>(() => {
+    const isPrimitive = (v: unknown) =>
+      v === null || v === undefined || typeof v === 'string' ||
+      typeof v === 'number' || typeof v === 'boolean'
+    return Object.fromEntries(
+      Object.entries(physicalExamData).filter(([, v]) => isPrimitive(v))
+        .map(([k, v]) => [k, String(v ?? '')])
     )
-  )
+  })
   const [aptitud, setAptitud] = useState<string>(
     (physicalExamData.aptitud as string) ?? ''
   )
@@ -249,6 +267,29 @@ export default function ExamenMedicoEstudio({
     ? 'Snapshot del portal disponible abajo.'
     : 'Resumen longitudinal maestro disponible abajo.'
 
+  // IMPL-20260809-01 (ARCH-20260809-01): indicador de completitud para la
+  // outer-tab "Antecedentes" — true si hay al menos un campo no vacío en
+  // el snapshot `antecedentes_captured` previamente persistido.
+  const capturedAntecedentes = physicalExamData.antecedentes_captured as
+    | Record<string, unknown>
+    | undefined
+  const hasAntecedentes = (() => {
+    if (!capturedAntecedentes || typeof capturedAntecedentes !== 'object') return false
+    const sections = [
+      'datos_personales', 'historia_laboral', 'heredo_familiares',
+      'no_patologicos', 'patologicos',
+    ] as const
+    for (const sec of sections) {
+      const s = capturedAntecedentes[sec]
+      if (s && typeof s === 'object' && !Array.isArray(s)) {
+        for (const v of Object.values(s as Record<string, unknown>)) {
+          if (v !== null && v !== '' && v !== undefined && v !== 'NEGADO') return true
+        }
+      }
+    }
+    return false
+  })()
+
   const innerTabs: { id: InnerTab; label: string; icon: string; done: boolean }[] = [
     { id: 'declarativa', label: 'Módulo 1', icon: '📋', done: hasM1 },
     { id: 'exploracion', label: 'Exploración Física', icon: '🩺', done: hasPhysicalExam },
@@ -263,7 +304,14 @@ export default function ExamenMedicoEstudio({
     setForm(prev => ({ ...prev, [name]: value }))
   }
   function buildPayload() {
-    return { ...form, aptitud: aptitud || undefined, modulo1 }
+    // IMPL-20260809-01 rework (QA-20260809-01 I-1): defensivamente excluimos
+    // `antecedentes_captured` del payload por si quedara residual en `form`
+    // (sería serializado como `"[object Object]"`). El snapshot real se
+    // persiste vía `saveAntecedentesCaptura` (action independiente), no
+    // aquí. Mismo patrón defensivo que `modulo1`, que sí va en el payload.
+    const { antecedentes_captured: _antecedentesCaptured, ...rest } = form
+    void _antecedentesCaptured
+    return { ...rest, aptitud: aptitud || undefined, modulo1 }
   }
 
   async function handleSaveSoma(markComplete: boolean) {
@@ -353,11 +401,15 @@ export default function ExamenMedicoEstudio({
   }
 
   // ── Pestañas externas ─────────────────────────────────────────────────────
+  // IMPL-20260809-01 (ARCH-20260809-01): 'antecedentes' se inserta entre
+  // agudeza_visual y examen_medico. **locked: false SIEMPRE** (no es
+  // prerrequisito del Examen Médico — decisión Frank Opción A).
   const outerTabs: { id: OuterTab; label: string; icon: string; done: boolean; locked: boolean }[] = [
     { id: 'somatometria', label: 'Somatometría', icon: '⚖️', done: somaCompleted, locked: false },
     { id: 'signos_vitales', label: 'Signos Vitales', icon: '💓', done: vitalsCompleted, locked: false },
     { id: 'agudeza_visual', label: 'Agudeza Visual', icon: '👁️', done: agudezaCompleted, locked: false },
-    { id: 'examen_medico', label: 'Examen Médico', icon: '📋', done: hasAptitud, locked: !canAccessExamen },
+    { id: 'antecedentes', label: 'Antecedentes', icon: '📋', done: hasAntecedentes, locked: false },
+    { id: 'examen_medico', label: 'Examen Médico', icon: '🩺', done: hasAptitud, locked: !canAccessExamen },
   ]
   const modulo1Tabs: [M1Tab, string, string][] = [
     ...(modulo1['m1_sexo'] === 'Femenino' ? [['gine', '♀️', 'Ginecológicos'] as [M1Tab, string, string]] : []),
@@ -395,8 +447,12 @@ export default function ExamenMedicoEstudio({
         ))}
       </div>
 
-      {/* Banner de bloqueo visible cuando el médico intenta ir a Examen Médico sin completar prereqs */}
-      {outerTab !== 'examen_medico' && !canAccessExamen && (
+      {/* Banner de bloqueo visible cuando el médico intenta ir a Examen Médico sin completar prereqs.
+          IMPL-20260809-01 rework (QA-20260809-01 I-4): se excluye también
+          la tab 'antecedentes' (independiente por diseño, no participa en
+          `canAccessExamen`). El banner solo debe aparecer en las pestañas
+          1-3 (Somatometría, Signos Vitales, Agudeza Visual). */}
+      {outerTab !== 'examen_medico' && outerTab !== 'antecedentes' && !canAccessExamen && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-start gap-2">
           <span className="text-amber-500 text-sm mt-0.5">🔒</span>
           <p className="text-xs text-amber-800">
@@ -671,7 +727,28 @@ export default function ExamenMedicoEstudio({
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/* PESTAÑA 4: EXAMEN MÉDICO (bloqueada si no completan 1-3)      */}
+      {/* PESTAÑA 4: ANTECEDENTES (snapshot por cita — IMPL-20260809-01) */}
+      {/* Libre desde el inicio (NO participa en canAccessExamen).      */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {outerTab === 'antecedentes' && (
+        <AntecedentesCaptura
+          eventId={eventId}
+          workerId={workerId}
+          initialData={
+            (physicalExamData.antecedentes_captured as
+              | Parameters<typeof AntecedentesCaptura>[0]['initialData']
+              | undefined) ?? null
+          }
+          fallbackLongitudinal={
+            (longitudinalData as Parameters<typeof AntecedentesCaptura>[0]['fallbackLongitudinal']) ?? null
+          }
+          prefilledData={prefilledData ?? null}
+          readonly={readonly}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* PESTAÑA 5: EXAMEN MÉDICO (bloqueada si no completan 1-3)      */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {outerTab === 'examen_medico' && !canAccessExamen && (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6 text-center space-y-3">

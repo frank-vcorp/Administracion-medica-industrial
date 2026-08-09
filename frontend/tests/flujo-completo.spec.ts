@@ -499,6 +499,50 @@ test.describe('Flujo End-to-End Completo', () => {
     await expect(authenticatedPage.getByText(/agudeza visual completada/i)).toBeVisible({ timeout: 15000 });
   });
 
+  // IMPL-20260809-01 (ARCH-20260809-01): regresión de la nueva outer-tab
+  // "Antecedentes" del Examen Médico. Debe ser navegable SIN completar
+  // somatometría/vitales/visual, permitir edición y guardar snapshot.
+  test('TC-08b: Nueva outer-tab Antecedentes — navegar, editar y guardar', async () => {
+    test.setTimeout(60000);
+    test.skip(!eventId, 'Sin papeleta creada');
+
+    await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
+    await authenticatedPage.waitForLoadState('networkidle');
+
+    // Abrir Examen Médico. La outer-tab 5 es "Antecedentes".
+    await authenticatedPage.locator('button').filter({ hasText: /EXAMEN MEDICO/i }).first().click();
+
+    // 1. La tab aparece y NO está bloqueada (accesible sin prereqs).
+    const antecedentesTab = authenticatedPage.getByRole('button', { name: /antecedentes/i }).first();
+    await expect(antecedentesTab).toBeVisible({ timeout: 15000 });
+    await expect(antecedentesTab).toBeEnabled();
+
+    // 2. Click navega a la outer-tab — debe aparecer el header del componente.
+    await antecedentesTab.click();
+    await expect(
+      authenticatedPage.getByText(/Antecedentes — Captura por cita/i).first(),
+    ).toBeVisible({ timeout: 10000 });
+
+    // 3. Los inputs de Datos Personales son editables. Buscamos por label
+    //    "Puesto Actual" dentro del fieldset Datos Personales.
+    const puestoInput = authenticatedPage.locator('label', { hasText: 'Puesto Actual' })
+      .locator('xpath=following-sibling::input[1]');
+    await expect(puestoInput).toBeVisible({ timeout: 5000 });
+    await puestoInput.fill('Soldador E2E');
+
+    // 4. CTA al historial maestro debe existir como link /history/{workerId}.
+    const ctaLink = authenticatedPage.getByRole('link', { name: /historial longitudinal maestro/i }).first();
+    await expect(ctaLink).toBeVisible();
+    const ctaHref = await ctaLink.getAttribute('href');
+    expect(ctaHref).toMatch(/\/history\/[a-f0-9-]+/);
+
+    // 5. Guardar snapshot → el botón "💾 Guardar antecedentes" llama al action.
+    await authenticatedPage.getByRole('button', { name: /guardar antecedentes/i }).click();
+    await expect(
+      authenticatedPage.getByText(/Antecedentes guardados para esta cita/i),
+    ).toBeVisible({ timeout: 15000 });
+  });
+
   // Fase 7: Upload audiometría XML
   test('TC-09: Subir audiometría XML y verificar prediagnóstico', async () => {
     test.setTimeout(120000);
