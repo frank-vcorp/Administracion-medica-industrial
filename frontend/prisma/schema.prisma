@@ -74,6 +74,8 @@ model User {
   createdMaintenances       MaintenanceRecord[]       @relation("MaintenanceCreator")
   // IMPL-20260730-02 (ARCH-20260730-01): Sucursales que este usuario desactivó (soft-disable) (PR-1)
   disabledBranches          Branch[]                  @relation("BranchDisabledBy")
+  // IMPL-20260809-06: API keys IA gestionadas vía UI (ARCH-20260809-03). updatedBy FK opcional.
+  updatedAIProviderKeys     AIProviderKey[]           @relation("AIProviderKeyUpdater")
 
   @@map("users")
 }
@@ -528,6 +530,27 @@ model AuditLog {
   user      User?    @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
+}
+
+// IMPL-20260809-06 — ARCH-20260809-03: Gestión runtime de API Keys IA vía UI.
+// Cifrado AES-256-GCM (keyCiphertext+keyNonce+keyTag). Single row por proveedor
+// canónico ("m3" | "gemini" | "dr7"). updatedBy nullable: si el user se borra
+// la fila sigue trazable pero updatedBy queda NULL.
+model AIProviderKey {
+  id            String   @id @default(uuid())
+  provider      String   @unique
+  keyCiphertext Bytes
+  keyNonce      Bytes
+  keyTag        Bytes
+  baseUrl       String?
+  defaultModel  String?
+  enabled       Boolean  @default(true)
+  updatedBy     String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  user          User?    @relation("AIProviderKeyUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("ai_provider_keys")
 }
 
 model ProfileServices {

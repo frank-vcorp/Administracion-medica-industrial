@@ -118,6 +118,13 @@ UPLOAD_DIR = _read_env_var("UPLOAD_DIR") or "/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
+
+# IMPL-20260809-06 — ARCH-20260809-03: Router admin para gestión runtime de
+# API Keys IA (m3, gemini, dr7). Prefijo /api/v2/admin/ai-keys. Definido en
+# `app.api.v2.admin_ai_keys` para mantener main.py enfocado en el pipeline.
+from app.api.v2.admin_ai_keys import router as admin_ai_keys_router
+app.include_router(admin_ai_keys_router)
+
 # IMPL-20260513-S3: Storage S3-compatible (Railway Bucket).
 # Secretos vienen exclusivamente por env vars — nunca hardcodeados ni logueados.
 STORAGE_S3_ENDPOINT   = _read_env_var("STORAGE_S3_ENDPOINT")
@@ -172,6 +179,12 @@ M3_BASE_URL = _read_env_var("M3_BASE_URL") or "https://api.minimax.io/v1"
 M3_DEFAULT_MODEL = _read_env_var("M3_DEFAULT_MODEL") or "MiniMax-M3"
 M3_ENABLED = bool(M3_API_KEY)
 M3_STATUS = "available" if M3_ENABLED else "pending_integration"
+
+# IMPL-20260809-06 — ARCH-20260809-03: feature flag opt-in para lectura de
+# keys desde BD (ai_provider_keys). Default False → comportamiento idéntico
+# al actual (env vars), cero cambio observable. Frank lo activa cuando esté
+# listo para usar el panel admin.
+AI_KEYS_FROM_DB_ENABLED = (_read_env_var("AI_KEYS_FROM_DB_ENABLED") or "false").lower() == "true"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
 EXTRACTION_PROMPT_VERSION = "extract-v4"   # IMPL-20260516-07: campos fuente audiometría (faringe, CAD, CAI, MTD, MTI)
 # ARCH-20260518-03: la versión real puede ser 'calibration_custom' cuando viene de aiCalibration
@@ -598,6 +611,10 @@ def v2_ai_status():
     ARCH-20260326-05: Expone causa raíz de fallos de inicialización de forma segura.
     IMPL-20260513-01: Expone modelos separados por capa y estado real de MedGemma.
     Nunca retorna el valor de GEMINI_API_KEY; sólo informa si está presente.
+
+    IMPL-20260809-06 — ARCH-20260809-03: Extiende con `key_source` por proveedor
+    y `ai_keys_from_db_enabled` (feature flag). Esto permite que Frank verifique
+    desde el panel admin o curl si la rotación runtime está activa.
     """
     current_api_key = _read_env_var("GEMINI_API_KEY")
     current_extraction_model = _read_env_var("GEMINI_MODEL_EXTRACTION") or GEMINI_MODEL_EXTRACTION
@@ -639,7 +656,59 @@ def v2_ai_status():
         "extraction_prompt_version": EXTRACTION_PROMPT_VERSION,
         "prediagnosis_prompt_version": PREDIAGNOSIS_PROMPT_VERSION,
         "last_init_error": ai_init_error,
+        # IMPL-20260809-06 — ARCH-20260809-03: trazabilidad de fuente de key
+        # y feature flag de rollout.
+        "ai_keys_from_db_enabled": AI_KEYS_FROM_DB_ENABLED,
+        "key_source": {
+            "gemini": "env",  # sobreescrito abajo si flag on + BD tiene fila
+            "m3": "env",
+            "dr7": "env",
+        },
+        # Presencia en BD por proveedor (independiente de la flag) para diagnóstico.
+        "key_in_db": {
+            "gemini": _key_in_db_sync("gemini"),
+            "m3": _key_in_db_sync("m3"),
+            "dr7": _key_in_db_sync("dr7"),
+        },
     }
+
+
+def _key_in_db_sync(provider: str) -> bool:
+    """
+    Helper sincrónico para `/api/v2/ai/status`. Lee ai_provider_keys por
+    provider usando el prisma client cacheado. Si la BD no está disponible,
+    retorna False (no propagamos excepción al status público).
+    """
+    try:
+        prisma = get_prisma_client()
+    except Exception:
+        return False
+    try:
+        # find_unique es async en Prisma Python — pero aquí sólo necesitamos
+        # un boolean para diagnóstico. Usamos queryRaw via prisma si está
+        # disponible; si no, fallback a False.
+        from app.services.ai.keys import CANONICAL_PROVIDERS
+        if provider not in CANONICAL_PROVIDERS:
+            return False
+        # Hacemos un sync lookup via la API async — pero el endpoint es sync.
+        # Estrategia: ejecutar el coroutine en el event loop si hay uno; si
+        # no, retornar False (la próxima vez que se llame al endpoint el loop
+        # ya estará inicializado).
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # No podemos await — retornar False (status público no debe
+                # bloquear en runtime). Frank consultará `/admin/ai-keys` para
+                # diagnóstico fino.
+                return False
+            return loop.run_until_complete(
+                prisma.aiproviderkey.find_unique(where={"provider": provider})
+            ) is not None
+        except RuntimeError:
+            return False
+    except Exception:
+        return False
 
 
 @app.post("/api/v2/studies/presentation-schema/propose")

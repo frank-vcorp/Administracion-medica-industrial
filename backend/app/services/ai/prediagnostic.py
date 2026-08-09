@@ -29,16 +29,102 @@ MEDGEMMA (IMPL-20260513-01 / IMPL-20260603-01):
 
 import json
 import os
+import asyncio
 from typing import Dict, Any, Optional
 from .base import GeminiBase
+from .keys import key_resolver, is_ai_keys_from_db_enabled
 from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation, PrediagnosisInputDebug
 
 
-# IMPL-20260513-01: Estado de MedGemma — leer del entorno para que sea honesto
+def _medgemma_enabled() -> bool:
+    """
+    IMPL-20260809-06: Lee MEDGEMMA_ENABLED fresco del entorno.
+    SPEC §5.3 — las constants de módulo se convierten a lecturas por llamada
+    para que cambios del flag sin redeploy surtan efecto inmediato.
+
+    Compatibilidad con tests: si el flag de proceso está apagado, considera
+    la constante de módulo (que los tests parchean vía mock.patch).
+    """
+    env_raw = os.environ.get("MEDGEMMA_ENABLED", "")
+    if env_raw.strip():
+        return env_raw.strip().lower() == "true"
+    return bool(MEDGEMMA_ENABLED)
+
+
+def _resolve_dr7_config() -> Dict[str, Any]:
+    """
+    IMPL-20260809-06: Resuelve la config clínica DR7 (api_key, base_url, model,
+    key_source, warning). Si AI_KEYS_FROM_DB_ENABLED está activo, consulta
+    el resolver singleton (con caché TTL + invalidación). Si no, cae a env vars
+    (con fallback a las constantes de módulo — preserva tests legacy que las
+    parchean con `unittest.mock.patch`).
+
+    Como `generate_prediagnosis` corre en un loop FastAPI sync (vía threadpool),
+    usamos `asyncio.run` para invocar el resolver async. La caché TTL 60s + la
+    invalidación explícita en PUT/DELETE minimizan el coste a 1 hit de BD cada
+    60s (o cero si la caché está caliente).
+    """
+    # Defaults leídos: preferimos env var (fresco), cayendo a constantes de
+    # módulo (legacy compat: tests las parchean vía mock.patch). En runtime
+    # real, las constantes son snapshots al import del process.
+    default_api_key = (
+        os.environ.get("DR7_API_KEY", "").strip() or DR7_API_KEY
+    )
+    default_base_url = (
+        os.environ.get("DR7_BASE_URL", "").strip()
+        or DR7_BASE_URL
+        or "https://dr7.ai/api/v1/medical/chat/completions"
+    )
+    default_model = (
+        os.environ.get("DR7_MODEL", "").strip()
+        or DR7_MODEL
+        or "medgemma-4b-it"
+    )
+
+    if not is_ai_keys_from_db_enabled():
+        # Fallback env-var-only (comportamiento legacy idéntico al actual).
+        return {
+            "api_key": default_api_key,
+            "base_url": default_base_url,
+            "model": default_model,
+            "key_source": "env",
+            "warning": "flag_off",
+        }
+
+    try:
+        try:
+            loop = asyncio.get_running_loop()
+            resolution = asyncio.run_coroutine_threadsafe(
+                key_resolver.resolve("dr7"), loop
+            ).result(timeout=5)
+        except RuntimeError:
+            resolution = asyncio.run(key_resolver.resolve("dr7"))
+        return {
+            "api_key": resolution.api_key or default_api_key,
+            "base_url": resolution.base_url or default_base_url,
+            "model": resolution.default_model or default_model,
+            "key_source": resolution.source,
+            "warning": resolution.warning,
+        }
+    except Exception as e:
+        # Fail-safe a defaults con warning explícito.
+        return {
+            "api_key": default_api_key,
+            "base_url": default_base_url,
+            "model": default_model,
+            "key_source": "env",
+            "warning": f"resolve_error:{type(e).__name__}",
+        }
+
+
+# IMPL-20260513-01: Estado de MedGemma — retrocompat. La lectura fresca se hace
+# ahora vía `_medgemma_enabled()`. Esta constante sigue exportada para código
+# legacy que la importe (ej. tests) — evalúa una vez al import (legacy pattern).
 MEDGEMMA_ENABLED = (os.environ.get("MEDGEMMA_ENABLED", "false").strip().lower() == "true")
 
-# IMPL-20260603-01: Configuración DR7/MedGemma vía endpoint médico HTTP.
-# Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md
+# IMPL-20260603-01: Retrocompat — config DR7/MedGemma vía endpoint médico HTTP.
+# Las lecturas runtime se hacen ahora vía `_resolve_dr7_config()`; estas
+# constantes reflejan el snapshot al import (legacy pattern preservado).
 DR7_API_KEY  = os.environ.get("DR7_API_KEY", "").strip()
 DR7_BASE_URL = os.environ.get("DR7_BASE_URL", "https://dr7.ai/api/v1/medical/chat/completions").strip()
 DR7_MODEL    = os.environ.get("DR7_MODEL", "medgemma-4b-it").strip()
@@ -577,8 +663,18 @@ Responde en JSON con esta estructura exacta:
         # La capa clínica usa exclusivamente MedGemma vía DR7.ai.
         # Gemini queda reservado a la extracción multimodal, nunca al prediagnóstico.
         clinical_provider = "dr7"
-        clinical_model_used = DR7_MODEL
-        clinical_provider_available = bool(MEDGEMMA_ENABLED and DR7_API_KEY)
+
+        # IMPL-20260809-06: Resolución fresca de la config DR7 vía key_resolver.
+        # Permite rotación runtime sin reinicio cuando AI_KEYS_FROM_DB_ENABLED=true.
+        # Con flag off (default), cae transparentemente a env vars (comportamiento actual).
+        _dr7_cfg = _resolve_dr7_config()
+        clinical_model_used = _dr7_cfg["model"]
+        _dr7_api_key = _dr7_cfg["api_key"]
+        _dr7_base_url = _dr7_cfg["base_url"]
+        # Trazabilidad de fuente de key (se propaga al result para auditoría clínica).
+        self._last_key_source = _dr7_cfg["key_source"]
+        self._last_key_warning = _dr7_cfg["warning"]
+        clinical_provider_available = bool(_medgemma_enabled() and _dr7_api_key)
 
         # IMPL-20260603-01. Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md.
         # Mantiene compatibilidad con el Literal legado del schema (gemini|featherless)
@@ -731,7 +827,8 @@ Responde en JSON con esta estructura exacta:
         # IMPL-20260326-03: degradar a AI_NON_CONCLUSIVE en lugar de propagar excepción
         # No existe fallback clínico a Featherless ni a Gemini.
         try:
-            raw_result = self._call_dr7_medical_chat(prompt)
+            # IMPL-20260809-06: pasar la config ya resuelta para evitar 2ª lookup.
+            raw_result = self._call_dr7_medical_chat(prompt, dr7_cfg=_dr7_cfg)
         except Exception as e:
             err_str = str(e)
             if err_str.startswith("DR7_HTTP:"):
@@ -835,10 +932,14 @@ Responde en JSON con esta estructura exacta:
                 prompt_version=_clinical_prompt_version,
             )
 
-    def _call_dr7_medical_chat(self, prompt: str) -> Dict[str, Any]:
+    def _call_dr7_medical_chat(self, prompt: str, dr7_cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         IMPL-20260603-01. Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md.
         Llama a MedGemma vía DR7.ai usando el endpoint médico HTTP directo.
+
+        IMPL-20260809-06: Acepta `dr7_cfg` (dict con api_key/base_url/model
+        ya resueltos por `_resolve_dr7_config()`) para no reconsultar el
+        resolver. Si no se pasa, resuelve fresh (compat con tests legacy).
 
         Contrato estricto:
           - NO envía PDF ni imagen. Solo prompt textual/JSON estructurado.
@@ -847,8 +948,23 @@ Responde en JSON con esta estructura exacta:
         """
         import requests
 
+        if dr7_cfg is None:
+            dr7_cfg = _resolve_dr7_config()
+
+        _dr7_api_key = dr7_cfg.get("api_key") or ""
+        _dr7_base_url = dr7_cfg.get("base_url") or os.environ.get(
+            "DR7_BASE_URL",
+            "https://dr7.ai/api/v1/medical/chat/completions",
+        )
+        _dr7_model = dr7_cfg.get("model") or os.environ.get("DR7_MODEL", "medgemma-4b-it")
+
+        if not _dr7_api_key:
+            raise RuntimeError(
+                "DR7_HTTP:0:DR7_API_KEY ausente (ni env var ni BD)"
+            )
+
         payload = {
-            "model": DR7_MODEL,
+            "model": _dr7_model,
             "messages": [
                 {
                     "role": "system",
@@ -874,9 +990,9 @@ Responde en JSON con esta estructura exacta:
         }
 
         response = requests.post(
-            DR7_BASE_URL,
+            _dr7_base_url,
             headers={
-                "Authorization": f"Bearer {DR7_API_KEY}",
+                "Authorization": f"Bearer {_dr7_api_key}",
                 "Content-Type": "application/json",
             },
             json=payload,

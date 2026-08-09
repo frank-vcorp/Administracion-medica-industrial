@@ -609,6 +609,26 @@ class AIAuditMetadata(BaseModel):
             "Valores: 'm3_5xx', 'm3_timeout', 'm3_4xx_persistent', 'm3_not_configured'."
         ),
     )
+    # IMPL-20260809-06 — ARCH-20260809-03: trazabilidad de fuente de key.
+    # Permite depurar "¿de dónde se tomó la key de este proveedor en esta corrida?".
+    # Capa extractiva exclusivamente (la capa clínica ya expone su propio campo
+    # equivalente dentro de AIPrediagnosisResult si Frank lo requiere en el futuro).
+    key_source: Optional[Literal["env", "db"]] = Field(
+        default=None,
+        description=(
+            "Fuente efectiva de la API key en esta corrida: 'env' (env var) o 'db' (AIProviderKey). "
+            "Null si el caller no propagó la info (ej. tests legacy)."
+        ),
+    )
+    key_resolution_warning: Optional[str] = Field(
+        default=None,
+        description=(
+            "Warning del KeyResolver si hubo fallback dentro de la corrida: "
+            "'flag_off' | 'db_unavailable' | 'decrypt_error' | 'row_missing' | "
+            "'row_disabled' | 'encryption_key_missing' | 'unknown_provider' | "
+            "'refresh_error:<ClassName>' | None."
+        ),
+    )
 
 
 class ExtractionSnapshotPayload(BaseModel):

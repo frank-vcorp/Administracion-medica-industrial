@@ -10,8 +10,11 @@ import io
 import mimetypes
 import json
 import re
-from typing import Dict, Any
+import asyncio
+from typing import Dict, Any, Optional
 from pdf2image import convert_from_path
+
+from .keys import key_resolver, KeyResolution, CANONICAL_PROVIDERS
 
 
 def _read_env_var(key: str) -> str | None:
@@ -25,6 +28,16 @@ def _read_env_var(key: str) -> str | None:
             return env_value.strip()
 
     return None
+
+
+async def _resolve_key_for(provider: str) -> KeyResolution:
+    """
+    IMPL-20260809-06 — Resuelve la key de un proveedor vía key_resolver singleton.
+    Si la flag AI_KEYS_FROM_DB_ENABLED está off (default), el resolver cae
+    transparentemente a env vars y retorna source='env' (comportamiento idéntico
+    al actual — sin cambio observable).
+    """
+    return await key_resolver.resolve(provider)
 
 
 class GeminiBase:
@@ -109,10 +122,59 @@ class GeminiBase:
         raise ValueError(f"Respuesta del modelo no es JSON parseable: {text[:300]!r}")
     
     def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash"):
-        self.api_key = api_key or _read_env_var("GEMINI_API_KEY")
+        # IMPL-20260809-06 — ARCH-20260809-03:
+        # Mantenemos el patrón legacy (api_key=... or env var) en __init__ para
+        # no romper callers existentes y tests. La rotación real ocurre en
+        # `_refresh_keys()` al inicio de cada call_* (si la flag está activa).
+        # Cuando AI_KEYS_FROM_DB_ENABLED=false (default), este __init__ ya
+        # tiene la key válida de env var y `_refresh_keys` no la cambia.
+        self.api_key = api_key or _read_env_var("GEMINI_API_KEY") or ""
         self.model = model
+        self.key_source: str = "env"
+        self.key_resolution_warning: Optional[str] = None
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY no configurada")
+
+    def _refresh_keys(self) -> None:
+        """
+        IMPL-20260809-06 — Si el flag AI_KEYS_FROM_DB_ENABLED está activo,
+        llama al resolver singleton para releer la key de BD (con caché TTL).
+        Con flag off (default), no hace nada — comportamiento idéntico al actual.
+
+        Estrategia cero-regresión: si la flag está off, esta función es no-op y
+        `self.api_key` conserva el valor cacheado por `__init__`.
+        """
+        from .keys import is_ai_keys_from_db_enabled
+        if not is_ai_keys_from_db_enabled():
+            # flag off: el resolver devolvería source='env', warning='flag_off'.
+            # Evitamos el asyncio.run() en el hot path.
+            self.key_source = "env"
+            self.key_resolution_warning = "flag_off"
+            return
+
+        # Flag on: resolver vía singleton (soporta bucle async ya en curso o
+        # bucle nuevo si el caller es sync — asyncio.run es caro, pero la
+        # caché TTL 60s + invalidación minimizan invocaciones).
+        try:
+            try:
+                loop = asyncio.get_running_loop()
+                # Si ya hay loop corriendo, se delega a una tarea.
+                # El caller sync no debería llegar aquí, pero nos protegemos.
+                resolution = asyncio.run_coroutine_threadsafe(
+                    key_resolver.resolve("gemini"), loop
+                ).result(timeout=5)
+            except RuntimeError:
+                # No hay loop corriendo (caso típico sync).
+                resolution = asyncio.run(key_resolver.resolve("gemini"))
+            self.api_key = resolution.api_key
+            self.model = resolution.default_model or self.model
+            self.key_source = resolution.source
+            self.key_resolution_warning = resolution.warning
+        except Exception as e:
+            # Fallar suave a env var: preservar `self.api_key` del __init__,
+            # marcar warning para trazabilidad.
+            self.key_source = "env"
+            self.key_resolution_warning = f"refresh_error:{type(e).__name__}"
     
     def get_b64_content(self, file_path: str) -> str:
         """
@@ -140,7 +202,11 @@ class GeminiBase:
     def call_gemini(self, local_path: str, prompt: str) -> Dict[str, Any]:
         """
         Llama a Gemini API con imagen y retorna JSON parseado.
+
+        IMPL-20260809-06: invoca `_refresh_keys()` al inicio para que la rotación
+        de keys en BD tome efecto sin reinicio (cuando AI_KEYS_FROM_DB_ENABLED=true).
         """
+        self._refresh_keys()
         import requests
         
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
@@ -246,6 +312,10 @@ class FeatherlessVisionBase:
                       para permitir instancias de test con mocks.
             base_url: Base URL API Featherless (compatible OpenAI).
             model:    Modelo visual a invocar.
+
+        IMPL-20260809-06: Misma estrategia que GeminiBase — `__init__` mantiene
+        comportamiento legacy; `_refresh_keys()` consulta el resolver en cada
+        call_* cuando el flag está activo.
         """
         self.api_key = api_key or _read_env_var("FEATHERLESS_API_KEY") or ""
         self.base_url = (
@@ -258,6 +328,40 @@ class FeatherlessVisionBase:
             or _read_env_var("FEATHERLESS_EXTRACTION_MODEL")
             or "Qwen/Qwen3-VL-30B-A3B-Instruct"
         )
+        self.key_source: str = "env"
+        self.key_resolution_warning: Optional[str] = None
+
+    def _refresh_keys(self) -> None:
+        """
+        IMPL-20260809-06 — Mismo patrón que GeminiBase. No-op si flag off.
+        Featherless NO está habilitado actualmente (ARCH-20260519-15 rollback);
+        la fila BD nunca existirá para provider='featherless', pero la lógica es
+        simétrica para futuro revival.
+        """
+        from .keys import is_ai_keys_from_db_enabled
+        if not is_ai_keys_from_db_enabled():
+            self.key_source = "env"
+            self.key_resolution_warning = "flag_off"
+            return
+        try:
+            try:
+                loop = asyncio.get_running_loop()
+                resolution = asyncio.run_coroutine_threadsafe(
+                    key_resolver.resolve("featherless"), loop
+                ).result(timeout=5)
+            except RuntimeError:
+                resolution = asyncio.run(key_resolver.resolve("featherless"))
+            if resolution.api_key:
+                self.api_key = resolution.api_key
+            if resolution.base_url:
+                self.base_url = resolution.base_url
+            if resolution.default_model:
+                self.model = resolution.default_model
+            self.key_source = resolution.source
+            self.key_resolution_warning = resolution.warning
+        except Exception as e:
+            self.key_source = "env"
+            self.key_resolution_warning = f"refresh_error:{type(e).__name__}"
 
     def get_b64_jpeg(self, file_path: str) -> str:
         """
@@ -286,6 +390,8 @@ class FeatherlessVisionBase:
         Llama a Featherless con imagen + prompt y retorna JSON parseado.
         ARCH-20260519-13: único punto de entrada al proveedor extractivo visual.
 
+        IMPL-20260809-06: refresca keys vía resolver al inicio.
+
         Protocolo:
           - Convierte el archivo a base64 JPEG.
           - Llama al modelo con content multimodal (texto + image_url base64).
@@ -295,6 +401,7 @@ class FeatherlessVisionBase:
             RuntimeError: Si openai SDK no está instalado.
             Exception:    Si Featherless devuelve error HTTP o la respuesta no es JSON.
         """
+        self._refresh_keys()
         try:
             from openai import OpenAI
         except ImportError as exc:
@@ -402,6 +509,10 @@ class M3VisionBase:
                       para permitir instancias de test con mocks.
             base_url: Base URL API M3 (compatible OpenAI).
             model:    Modelo visual a invocar.
+
+        IMPL-20260809-06: Misma estrategia que GeminiBase/FeatherlessVisionBase.
+        `__init__` mantiene el patrón legacy (api_key=... or env var). La rotación
+        runtime ocurre en `_refresh_keys()` cuando AI_KEYS_FROM_DB_ENABLED=true.
         """
         self.api_key = api_key or _read_env_var("M3_API_KEY") or ""
         self.base_url = (
@@ -414,6 +525,37 @@ class M3VisionBase:
             or _read_env_var("M3_DEFAULT_MODEL")
             or "MiniMax-M3"
         )
+        self.key_source: str = "env"
+        self.key_resolution_warning: Optional[str] = None
+
+    def _refresh_keys(self) -> None:
+        """
+        IMPL-20260809-06 — Refresca keys vía resolver. No-op si flag off.
+        """
+        from .keys import is_ai_keys_from_db_enabled
+        if not is_ai_keys_from_db_enabled():
+            self.key_source = "env"
+            self.key_resolution_warning = "flag_off"
+            return
+        try:
+            try:
+                loop = asyncio.get_running_loop()
+                resolution = asyncio.run_coroutine_threadsafe(
+                    key_resolver.resolve("m3"), loop
+                ).result(timeout=5)
+            except RuntimeError:
+                resolution = asyncio.run(key_resolver.resolve("m3"))
+            if resolution.api_key:
+                self.api_key = resolution.api_key
+            if resolution.base_url:
+                self.base_url = resolution.base_url
+            if resolution.default_model:
+                self.model = resolution.default_model
+            self.key_source = resolution.source
+            self.key_resolution_warning = resolution.warning
+        except Exception as e:
+            self.key_source = "env"
+            self.key_resolution_warning = f"refresh_error:{type(e).__name__}"
 
     def get_b64_jpeg(self, file_path: str) -> str:
         """
@@ -443,6 +585,8 @@ class M3VisionBase:
         Llama a MiniMax M3 con imagen + prompt y retorna JSON parseado.
         ARCH-20260809-02: único punto de entrada al proveedor M3.
 
+        IMPL-20260809-06: refresca keys vía resolver al inicio.
+
         Protocolo:
           - Convierte el archivo a base64 JPEG.
           - Llama al modelo con content multimodal (texto + image_url base64).
@@ -454,6 +598,7 @@ class M3VisionBase:
             No devuelve dict vacío ante fallo — propaga la excepción para que
             el dispatcher de ExtractorService decida si dispara fallback a Gemini.
         """
+        self._refresh_keys()
         try:
             from openai import OpenAI
         except ImportError as exc:

@@ -323,6 +323,10 @@ notas de calidad y gráficas.
         ARCH-20260809-02: Ejecuta la llamada al proveedor resolviendo fallback
         M3→Gemini según los triggers del SPEC §7.
 
+        IMPL-20260809-06: stashes `key_source` y `key_resolution_warning` del
+        proveedor que efectivamente respondió en `self._last_call_key_source`
+        (dict por provider) para que `extract_by_type` los propague al audit.
+
         Returns:
             (extracted_dict, provider_used, fallback_reason)
             - extracted_dict: resultado parseado (dict).
@@ -335,16 +339,29 @@ notas de calidad y gráficas.
             ExtractionAuthError: Si M3 responde 401/403 (sin fallback).
             Exception: Si provider='gemini' falla (sin fallback por contrato).
         """
+        # Inicializa el stash por-provider para trazabilidad de key.
+        if not hasattr(self, "_last_call_key_source"):
+            self._last_call_key_source = {}
+
         # Caso especial: provider=m3 sin M3_API_KEY → fallback inmediato.
         if provider == "m3" and self._is_m3_unavailable(provider):
             print("⚠️ [ARCH-20260809-02] M3 no configurado → fallback a Gemini")
             result = self.call_gemini(file_path, prompt)
+            self._last_call_key_source["gemini"] = (
+                getattr(self, "key_source", None),
+                getattr(self, "key_resolution_warning", None),
+            )
             return result, "gemini", "m3_not_configured"
 
         if provider == "m3":
             try:
                 m3_client = M3VisionBase(model=model)
                 result = m3_client.call_m3(file_path, prompt)
+                # Tras call_m3, m3_client tiene key_source actualizado.
+                self._last_call_key_source["m3"] = (
+                    getattr(m3_client, "key_source", None),
+                    getattr(m3_client, "key_resolution_warning", None),
+                )
                 return result, "m3", None
             except Exception as e:
                 # Detectar tipo de error para clasificar el fallback.
@@ -364,10 +381,18 @@ notas de calidad y gráficas.
                     "→ fallback a Gemini"
                 )
                 result = self.call_gemini(file_path, prompt)
+                self._last_call_key_source["gemini"] = (
+                    getattr(self, "key_source", None),
+                    getattr(self, "key_resolution_warning", None),
+                )
                 return result, "gemini", fallback_reason
 
         # provider == "gemini": sin fallback por contrato.
         result = self.call_gemini(file_path, prompt)
+        self._last_call_key_source["gemini"] = (
+            getattr(self, "key_source", None),
+            getattr(self, "key_resolution_warning", None),
+        )
         return result, "gemini", None
 
     def extract_by_type(
@@ -463,12 +488,24 @@ notas de calidad y gráficas.
             raise
 
         duration = time.time() - start_time
+        # IMPL-20260809-06 — key_source del proveedor que efectivamente respondió.
+        # `_call_with_dispatch` stasha el par (key_source, key_warning) por
+        # provider en `self._last_call_key_source`. Priorizamos el provider final.
+        used_key_source = None
+        used_key_warning = None
+        stash = getattr(self, "_last_call_key_source", {}) or {}
+        used = stash.get(provider_used)
+        if used:
+            used_key_source, used_key_warning = used
+
         # Stash trazabilidad en la instancia para que main.py la recupere.
         self.last_extraction_audit = {
             "extraction_provider_requested": provider,
             "extraction_provider_used": provider_used,
             "extraction_model_used": model if provider_used == provider else self._default_model_for(provider_used),
             "extraction_fallback_reason": fallback_reason,
+            "key_source": used_key_source,
+            "key_resolution_warning": used_key_warning,
         }
         if fallback_reason:
             print(

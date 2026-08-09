@@ -21,7 +21,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { ReactNode } from 'react'
-import { isAdminLike } from '@/lib/auth/roles'
+import { isAdminLike, isSuperAdmin } from '@/lib/auth/roles'
 
 function NavItem({ href, icon, label, secondary, collapsed }: { href: string; icon: string; label: string; secondary?: boolean; collapsed?: boolean }) {
   return (
@@ -181,6 +181,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <NavItem href="/admin/profiles" icon="🩻" label="Perfiles Médicos" collapsed={isEventWorkspace} />
               {/* IMPL-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES: el catálogo de unidades se accede desde /operations/mobile-units (NavItem único arriba). Mantenemos acceso admin directo por si hay deep-links o atajos. */}
               <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" collapsed={isEventWorkspace} />
+              {/* IMPL-20260809-06 — ARCH-20260809-03: gestión runtime de API Keys IA.
+                  Visible solo para SUPERADMIN (FRANK rota keys sin redeploys).
+                  ADMIN no ve el enlace (aunque puede llegar por URL, el gate
+                  client+server de la página lo contiene). */}
+              {isSuperAdmin(role) && (
+                <NavItem href="/admin/ai-keys" icon="🔑" label="API Keys IA" collapsed={isEventWorkspace} />
+              )}
             </>
           )}
 
