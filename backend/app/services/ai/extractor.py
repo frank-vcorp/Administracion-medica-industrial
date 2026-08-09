@@ -15,8 +15,9 @@ ARCH-20260519-15: ROLLBACK — Featherless/Qwen-VL desactivado del runtime extra
 """
 
 import time
-from typing import Dict, Any, Union, Optional
-from .base import GeminiBase
+import os
+from typing import Dict, Any, Union, Optional, Tuple
+from .base import GeminiBase, M3VisionBase
 from app.schemas.medical import (
     AudiometriaData,
     LaboratorioData,
@@ -27,6 +28,65 @@ from app.schemas.medical import (
     RiesgoCardiovascularData,
     DocumentClassification,
 )
+
+# ARCH-20260809-02: Proveedores de extracción soportados por el dispatcher.
+EXTRACTION_PROVIDERS = frozenset({"gemini", "m3"})
+
+
+# ARCH-20260809-02: Excepciones de control del dispatcher (no son errores de upstream;
+# el caller las trata de forma específica para devolver trazabilidad y status code).
+class ExtractionProviderUnknownError(ValueError):
+    """Proveedor pedido no reconocido (no es 'gemini' ni 'm3'). No hay fallback."""
+
+
+class ExtractionAuthError(ValueError):
+    """Credenciales M3 inválidas (HTTP 401/403). No hay fallback — error explícito."""
+
+
+def _classify_m3_failure(error: Exception) -> Optional[str]:
+    """
+    ARCH-20260809-02: Clasifica una excepción del cliente M3 según los
+    triggers del SPEC §7. Retorna None si NO es trigger de fallback (ej.
+    JSON no parseable — debe propagarse como ValueError sin enmascarar).
+
+    Returns:
+        - 'm3_5xx'        → HTTP 5xx del upstream.
+        - 'm3_timeout'    → Timeout de lectura >60s.
+        - 'm3_4xx_persistent' → HTTP 4xx (distinto de 401/403) tras 1 reintento.
+        - 'm3_auth'       → HTTP 401/403 (credenciales inválidas; sin fallback).
+        - None            → No clasificado como trigger de fallback (se propaga).
+    """
+    # openai SDK expone atributos en la excepción cuando viene del upstream.
+    status = getattr(error, "status_code", None) or getattr(error, "status", None)
+    body = (getattr(error, "body", None) or {}) if hasattr(error, "body") else {}
+    code = body.get("code") if isinstance(body, dict) else None
+
+    if status == 401 or status == 403:
+        return "m3_auth"
+
+    # Timeout detection: openai expone APITimeoutError / TimeoutError.
+    # Chequeamos por nombre de clase para no requerir import de openai
+    # (puede no estar instalado en el entorno de tests).
+    err_name = type(error).__name__
+    if (
+        err_name in ("APITimeoutError", "Timeout", "TimeoutError", "ReadTimeoutError")
+        or isinstance(error, TimeoutError)
+    ):
+        return "m3_timeout"
+
+    if isinstance(status, int) and 500 <= status < 600:
+        return "m3_5xx"
+
+    if isinstance(status, int) and 400 <= status < 500:
+        # SPEC §7: 4xx persistente (excluyendo 401/403).
+        return "m3_4xx_persistent"
+
+    # openai.APIError sin status_code explícito; algunos tipos cuentan como 5xx
+    if err_name in ("APIConnectionError", "InternalServerError", "ServiceUnavailableError"):
+        return "m3_5xx"
+
+    # Si llegamos aquí, no es un trigger conocido — propagar sin fallback.
+    return None
 
 
 # ARCH-20260518-17 | respaldo: context/interconsultas/PROMPTS_DOC-20260518-02-AUDIOMETRIA.md
@@ -181,11 +241,142 @@ notas de calidad y gráficas.
 
         return result
 
+    def _default_model_for(self, provider: str) -> str:
+        """
+        ARCH-20260809-02: Devuelve el modelo default de proceso para un proveedor.
+        La precedencia de selección completa vive en `_resolve_provider`.
+        """
+        if provider == "m3":
+            return os.environ.get("M3_DEFAULT_MODEL", "minimax-m3")
+        return os.environ.get("GEMINI_MODEL_EXTRACTION", "gemini-2.5-flash")
+
+    def _resolve_provider(
+        self,
+        calibration: Optional[Dict[str, Any]],
+        override_provider: Optional[str] = None,
+        override_model: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """
+        ARCH-20260809-02: Resuelve (provider, model) efectivos con la precedencia
+        del SPEC §3:
+          1. override por payload (gana si presente)
+          2. aiCalibration.extraction.provider + .model
+          3. default de proceso: gemini + GEMINI_MODEL_EXTRACTION
+
+        El campo `override_model` se aplica siempre que esté presente, incluso
+        si `override_provider` es None (CB-06: cambiar solo modelo de la calibración
+        vigente sin tocar el proveedor).
+
+        Returns:
+            (provider, model) tupla resuelta.
+
+        Raises:
+            ExtractionProviderUnknownError: Si override o calibración declaran
+                un proveedor que no es 'gemini' ni 'm3' (sin fallback silencioso).
+        """
+        # 1. Override por payload (provider explícito).
+        if override_provider:
+            if override_provider not in EXTRACTION_PROVIDERS:
+                raise ExtractionProviderUnknownError(
+                    f"EXTRACTION_PROVIDER_UNKNOWN: proveedor '{override_provider}' "
+                    "no soportado. Usa 'gemini' o 'm3'."
+                )
+            return override_provider, override_model or self._default_model_for(override_provider)
+
+        # 2. aiCalibration.extraction
+        extraction_cfg = (calibration or {}).get("extraction") or {}
+        cfg_provider = extraction_cfg.get("provider")
+        if cfg_provider:
+            if cfg_provider not in EXTRACTION_PROVIDERS:
+                raise ExtractionProviderUnknownError(
+                    f"EXTRACTION_PROVIDER_UNKNOWN: aiCalibration.extraction.provider "
+                    f"'{cfg_provider}' no soportado. Usa 'gemini' o 'm3'."
+                )
+            cfg_model = (
+                override_model
+                or extraction_cfg.get("model")
+                or self._default_model_for(cfg_provider)
+            )
+            return cfg_provider, cfg_model
+
+        # 3. Default de proceso (también acepta override_model solo)
+        return "gemini", override_model or self._default_model_for("gemini")
+
+    def _is_m3_unavailable(self, provider: str) -> bool:
+        """
+        ARCH-20260809-02: Caso especial 'm3_not_configured' (SPEC §7).
+        Si el provider pedido es M3 pero M3_API_KEY no está configurada,
+        retorna True para que el dispatcher falle a Gemini sin intentar M3.
+        """
+        if provider != "m3":
+            return False
+        return not bool(os.environ.get("M3_API_KEY"))
+
+    def _call_with_dispatch(
+        self,
+        file_path: str,
+        prompt: str,
+        provider: str,
+        model: str,
+    ) -> Tuple[Dict[str, Any], str, Optional[str]]:
+        """
+        ARCH-20260809-02: Ejecuta la llamada al proveedor resolviendo fallback
+        M3→Gemini según los triggers del SPEC §7.
+
+        Returns:
+            (extracted_dict, provider_used, fallback_reason)
+            - extracted_dict: resultado parseado (dict).
+            - provider_used: 'gemini' o 'm3' (el que efectivamente respondió).
+            - fallback_reason: None o uno de ('m3_5xx', 'm3_timeout',
+              'm3_4xx_persistent', 'm3_not_configured').
+
+        Raises:
+            ExtractionProviderUnknownError: Si provider no reconocido.
+            ExtractionAuthError: Si M3 responde 401/403 (sin fallback).
+            Exception: Si provider='gemini' falla (sin fallback por contrato).
+        """
+        # Caso especial: provider=m3 sin M3_API_KEY → fallback inmediato.
+        if provider == "m3" and self._is_m3_unavailable(provider):
+            print("⚠️ [ARCH-20260809-02] M3 no configurado → fallback a Gemini")
+            result = self.call_gemini(file_path, prompt)
+            return result, "gemini", "m3_not_configured"
+
+        if provider == "m3":
+            try:
+                m3_client = M3VisionBase(model=model)
+                result = m3_client.call_m3(file_path, prompt)
+                return result, "m3", None
+            except Exception as e:
+                # Detectar tipo de error para clasificar el fallback.
+                fallback_reason = _classify_m3_failure(e)
+                if fallback_reason is None:
+                    # Es un error que NO es trigger de fallback
+                    # (ej. JSON no parseable → propagar).
+                    raise
+                # M3_AUTH_ERROR (401/403): error explícito, sin fallback.
+                if fallback_reason == "m3_auth":
+                    raise ExtractionAuthError(
+                        f"M3_AUTH_ERROR: credenciales M3 inválidas o sin permisos "
+                        f"({type(e).__name__}). Verifica M3_API_KEY y permisos del plan Pro."
+                    ) from e
+                print(
+                    f"⚠️ [ARCH-20260809-02] M3 falló ({fallback_reason}) "
+                    "→ fallback a Gemini"
+                )
+                result = self.call_gemini(file_path, prompt)
+                return result, "gemini", fallback_reason
+
+        # provider == "gemini": sin fallback por contrato.
+        result = self.call_gemini(file_path, prompt)
+        return result, "gemini", None
+
     def extract_by_type(
         self,
         file_path: str,
         doc_type: str,
         ai_calibration: Optional[Dict[str, Any]] = None,
+        extraction_provider_override: Optional[str] = None,
+        extraction_model_override: Optional[str] = None,
     ) -> Union[AudiometriaData, LaboratorioData, EspirometriaData, RayosXData, Dict]:
         """
         Extrae datos estructurados según el tipo de documento.
@@ -194,19 +385,29 @@ notas de calidad y gráficas.
         Si no está configurado, la corrida falla explícitamente con EXTRACTION_PROMPT_NOT_CONFIGURED.
         No existe fallback de extracción en el backend.
 
+        ARCH-20260809-02: Selector multi-proveedor con override por payload.
+        Precedencia: override > aiCalibration.extraction > default 'gemini'.
+        Política de fallback unidireccional M3 → Gemini (triggers en _call_with_dispatch).
+
         Args:
-            file_path:      Ruta del archivo
-            doc_type:       Tipo de documento (Audiometria, Laboratorio, etc.)
-            ai_calibration: Dict con aiCalibration de la prueba. Debe contener
-                            ai_calibration["extraction"]["prompt"] para que la
-                            extracción proceda.
+            file_path:                  Ruta del archivo
+            doc_type:                   Tipo de documento (Audiometria, Laboratorio, etc.)
+            ai_calibration:             Dict con aiCalibration de la prueba. Debe contener
+                                        ai_calibration["extraction"]["prompt"] para que la
+                                        extracción proceda.
+            extraction_provider_override: Si presente, sobreescribe aiCalibration.extraction.provider.
+            extraction_model_override:   Si presente, sobreescribe aiCalibration.extraction.model.
 
         Returns:
-            Objeto Pydantic del tipo correspondiente o Dict genérico.
+            Tupla (extracted_object, audit_metadata) o, por compat con el contrato
+            histórico del pipeline, el objeto Pydántico/dict directo. La metadata
+            de auditoría extractiva (provider requested/used, model_used, fallback_reason)
+            se devuelve vía el parámetro de salida opcional `extraction_audit_out`.
 
         Raises:
-            ValueError: EXTRACTION_PROMPT_NOT_CONFIGURED si falta prompt de extracción
-                        en aiCalibration.
+            ValueError: EXTRACTION_PROMPT_NOT_CONFIGURED si falta prompt.
+            ExtractionProviderUnknownError: proveedor inválido (no fallback).
+            ExtractionAuthError: M3 respondió 401/403 (no fallback).
         """
         # ARCH-20260518-03: resolver prompt únicamente desde aiCalibration
         extraction_cfg = (ai_calibration or {}).get("extraction") or {}
@@ -226,18 +427,56 @@ notas de calidad y gráficas.
         else:
             prompt = self._build_extraction_prompt(prompt)
 
+        # ARCH-20260809-02: resolver provider/model efectivo con precedencia.
+        provider, model = self._resolve_provider(
+            calibration=ai_calibration,
+            override_provider=extraction_provider_override,
+            override_model=extraction_model_override,
+        )
+
         _extraction_prompt_version = extraction_cfg.get("version", "calibration_custom")
         print(
             f"✅ [ARCH-20260518-03] Prompt de extracción resuelto desde aiCalibration "
             f"(v={_extraction_prompt_version}) para {doc_type}"
         )
-        print(f"🧠 Extrayendo datos para tipo: {doc_type}")
-        
+        print(
+            f"🧠 [ARCH-20260809-02] Extracción solicitada con provider='{provider}' "
+            f"model='{model}' para tipo: {doc_type}"
+        )
+
         start_time = time.time()
-        result = self.call_gemini(file_path, prompt)
+        try:
+            result, provider_used, fallback_reason = self._call_with_dispatch(
+                file_path=file_path,
+                prompt=prompt,
+                provider=provider,
+                model=model,
+            )
+        except ExtractionAuthError as auth_err:
+            # Adjuntar trazabilidad mínima al error para que main.py la propague.
+            self.last_extraction_audit = {
+                "extraction_provider_requested": provider,
+                "extraction_provider_used": None,
+                "extraction_model_used": model,
+                "extraction_fallback_reason": "m3_auth",
+            }
+            raise
+
         duration = time.time() - start_time
-        
-        print(f"✅ Extracción completada en {duration:.2f}s")
+        # Stash trazabilidad en la instancia para que main.py la recupere.
+        self.last_extraction_audit = {
+            "extraction_provider_requested": provider,
+            "extraction_provider_used": provider_used,
+            "extraction_model_used": model if provider_used == provider else self._default_model_for(provider_used),
+            "extraction_fallback_reason": fallback_reason,
+        }
+        if fallback_reason:
+            print(
+                f"⚠️ [ARCH-20260809-02] Extracción completada vía fallback "
+                f"({fallback_reason}) en {duration:.2f}s"
+            )
+        else:
+            print(f"✅ Extracción completada en {duration:.2f}s con provider={provider_used}")
         
         # Parsear según el tipo
         # IMPL-20260326-16: los schemas ya no tienen diagnostico_ia/interpretacion

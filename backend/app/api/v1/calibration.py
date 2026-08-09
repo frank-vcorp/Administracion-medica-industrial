@@ -11,6 +11,11 @@ Propósito: permitir subir un PDF de prueba desde el módulo de calibración,
 procesarlo con el pipeline de extracción/prediagnóstico y retornar los
 resultados SIN crear EventTest real ni persistir en DB.
 
+ARCH-20260809-02: Integración con selector multi-proveedor de extracción
+(Gemini + MiniMax M3). El endpoint retorna `extraction_provider_used`,
+`extraction_provider_requested` y `extraction_fallback_reason` además de
+los campos legacy.
+
 Notas arquitectónicas (desviación respecto al SPEC):
   - El proyecto no usa `backend/app/api/v1/router.py` ni `endpoints/`.
     Los routers son archivos planos en `backend/app/api/v1/` (mismo patrón
@@ -34,6 +39,10 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.services.ai import ExtractorService, PrediagnosticService
+from app.services.ai.extractor import (
+    ExtractionAuthError,
+    ExtractionProviderUnknownError,
+)
 from app.services.prisma_client import get_prisma_client
 
 
@@ -122,6 +131,8 @@ async def upload_calibration_test(
     file: UploadFile = File(...),
     test_id: str = Form(...),
     test_type: str = Form(...),
+    extraction_provider_override: Optional[str] = Form(default=None),
+    extraction_model_override: Optional[str] = Form(default=None),
 ):
     """
     Sube y procesa un archivo de prueba (PDF o XML) para calibración.
@@ -129,6 +140,11 @@ async def upload_calibration_test(
     ARCH-20260715-06: Soporte para XML de audiómetro DD65 V2.
     Si el archivo es XML, se usa parser directo sin IA.
     Si es PDF, se usa el pipeline de extracción con IA.
+
+    ARCH-20260809-02: Acepta `extraction_provider_override` y
+    `extraction_model_override` opcionales para A/B sin redeploys.
+    Retorna `extraction_provider_used`, `extraction_provider_requested`
+    y `extraction_fallback_reason` en `extraction.*`.
 
     NO persiste en DB, NO crea EventTest real. Solo ejecuta el pipeline
     de extracción + prediagnóstico usando la `aiCalibration` vigente de
@@ -245,6 +261,10 @@ async def upload_calibration_test(
                     "model_used": "xml_parser",
                     "prompt_version": "xml_direct_v1",
                     "duration_seconds": extraction_seconds,
+                    # ARCH-20260809-02: trazabilidad multi-proveedor (XML directo = sin IA extractiva).
+                    "extraction_provider_used": "xml_parser",
+                    "extraction_provider_requested": "xml_parser",
+                    "extraction_fallback_reason": None,
                 },
                 "prediagnosis": {
                     "result": prediagnosis_payload,
@@ -292,13 +312,26 @@ async def upload_calibration_test(
         # ARCH-20260518-03: extract_by_type requiere ai_calibration con
         # extraction.prompt configurado. Si falta, devuelve error explícito
         # que propagamos tal cual al cliente (400 con error_code conocido).
+        # ARCH-20260809-02: selector multi-proveedor con override por payload.
         extraction_start = time.time()
         try:
             extraction_result = extractor.extract_by_type(
                 file_path=tmp_path,
                 doc_type=canonical_study_type,
                 ai_calibration=ai_calibration,
+                extraction_provider_override=extraction_provider_override,
+                extraction_model_override=extraction_model_override,
             )
+        except ExtractionProviderUnknownError as prov_err:
+            raise HTTPException(
+                status_code=400,
+                detail=str(prov_err),
+            ) from prov_err
+        except ExtractionAuthError as auth_err:
+            raise HTTPException(
+                status_code=400,
+                detail=str(auth_err),
+            ) from auth_err
         except ValueError as ve:
             err_msg = str(ve)
             if "EXTRACTION_PROMPT_NOT_CONFIGURED" in err_msg:
@@ -308,6 +341,11 @@ async def upload_calibration_test(
                 ) from ve
             raise
         extraction_seconds = round(time.time() - extraction_start, 2)
+
+        # ARCH-20260809-02: trazabilidad extractiva del dispatcher.
+        extraction_audit_dispatcher: Dict[str, Any] = (
+            getattr(extractor, "last_extraction_audit", {}) or {}
+        )
 
         extraction_dict = _serialize_extraction_result(extraction_result)
 
@@ -346,6 +384,25 @@ async def upload_calibration_test(
             "duration_seconds": predx_seconds,
         }
 
+        # ARCH-20260809-02: trazabilidad del proveedor extractivo resuelto.
+        # Fallback robusto para clientes que aún no propaguen el audit del dispatcher.
+        extraction_provider_used = extraction_audit_dispatcher.get(
+            "extraction_provider_used"
+        ) or "gemini"
+        extraction_provider_requested = extraction_audit_dispatcher.get(
+            "extraction_provider_requested"
+        ) or (
+            extraction_provider_override
+            or (ai_calibration or {}).get("extraction", {}).get("provider")
+            or "gemini"
+        )
+        extraction_fallback_reason = extraction_audit_dispatcher.get(
+            "extraction_fallback_reason"
+        )
+        extraction_model_used_effective = extraction_audit_dispatcher.get(
+            "extraction_model_used"
+        ) or extraction_audit["model_name"]
+
         response_payload = {
             "success": True,
             "test_id": f"calibration_test_{test_id[:8]}",
@@ -353,9 +410,13 @@ async def upload_calibration_test(
             "extraction": {
                 "structured_data": extraction_dict,
                 "raw_payload": extraction_dict,
-                "model_used": extraction_audit["model_name"],
+                "model_used": extraction_model_used_effective,
                 "prompt_version": extraction_audit["prompt_version"],
                 "duration_seconds": extraction_seconds,
+                # ARCH-20260809-02: trazabilidad extractiva multi-proveedor.
+                "extraction_provider_used": extraction_provider_used,
+                "extraction_provider_requested": extraction_provider_requested,
+                "extraction_fallback_reason": extraction_fallback_reason,
             },
             "prediagnosis": {
                 "result": prediagnosis_payload,

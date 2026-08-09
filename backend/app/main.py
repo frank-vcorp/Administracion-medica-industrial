@@ -162,6 +162,16 @@ DR7_API_KEY  = _read_env_var("DR7_API_KEY") or ""
 DR7_BASE_URL = _read_env_var("DR7_BASE_URL") or "https://dr7.ai/api/v1/medical/chat/completions"
 DR7_MODEL    = _read_env_var("DR7_MODEL") or "medgemma-4b-it"
 MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and DR7_API_KEY) else "pending_integration"
+
+# ARCH-20260809-02: Selector de extracción multi-proveedor (Gemini + MiniMax M3).
+# Configuración runtime del proveedor M3 (OpenAI-compatible). Solo afecta la
+# capa de extracción documental — la capa clínica (MedGemma/DR7) sigue intacta.
+# Respaldo: context/SPECs/SPEC_ARCH-20260809-02-SELECTOR-EXTRACCION-MULTI-PROVEEDOR.md
+M3_API_KEY = _read_env_var("M3_API_KEY") or ""
+M3_BASE_URL = _read_env_var("M3_BASE_URL") or "https://api.minimaxi.io/v1"
+M3_DEFAULT_MODEL = _read_env_var("M3_DEFAULT_MODEL") or "minimax-m3"
+M3_ENABLED = bool(M3_API_KEY)
+M3_STATUS = "available" if M3_ENABLED else "pending_integration"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
 EXTRACTION_PROMPT_VERSION = "extract-v4"   # IMPL-20260516-07: campos fuente audiometría (faringe, CAD, CAI, MTD, MTI)
 # ARCH-20260518-03: la versión real puede ser 'calibration_custom' cuando viene de aiCalibration
@@ -611,6 +621,14 @@ def v2_ai_status():
         # ARCH-20260519-15: trazabilidad del proveedor extractivo activo
         "extraction_provider_active": "gemini",
         "extraction_model_active": current_extraction_model,
+        # ARCH-20260809-02: selector runtime de extracción (Gemini + MiniMax M3).
+        # Nunca exponer secretos — solo flags *_key_present booleanos.
+        "m3_enabled": M3_ENABLED,
+        "m3_status": M3_STATUS,
+        "m3_base_url": M3_BASE_URL,
+        "m3_default_model": M3_DEFAULT_MODEL,
+        "m3_key_present": bool(M3_API_KEY),
+        "extraction_default_provider_configurable": True,
         # IMPL-20260603-01: trazabilidad del proveedor clínico activo (DR7)
         "clinical_provider_active": active_clinical_provider,
         "dr7_key_present": dr7_key_present,
@@ -1088,12 +1106,17 @@ async def v2_upload_and_analyze(
     study_type: Optional[str] = None,
     triggered_by_user_id: Optional[str] = None,
     ai_calibration_json: Optional[str] = Form(default=None),
+    extraction_provider_override: Optional[str] = Form(default=None),
+    extraction_model_override: Optional[str] = Form(default=None),
 ):
     """
     V2 Pipeline completo — upload, extracción pura y prediagnóstico en capas separadas.
     IMPL-20260326-16: ARCH-20260326-16.
     IMPL-20260518-03: Requiere ai_calibration_json con extraction.prompt configurado.
         La extracción falla explícitamente si falta el prompt de extracción (ARCH-20260518-03).
+
+    ARCH-20260809-02: Acepta `extraction_provider_override` y `extraction_model_override`
+    opcionales para A/B sin redeploys (selector multi-proveedor Gemini + MiniMax M3).
 
     Retorna:
       - classification: tipo y confianza de clasificación
@@ -1118,6 +1141,12 @@ async def v2_upload_and_analyze(
                 "error": f"ai_calibration_json inválido: {parse_err}",
                 "error_code": "AI_CALIBRATION_JSON_INVALID",
             }
+
+    # ARCH-20260809-02: import lazy para evitar import circular.
+    from app.services.ai.extractor import (
+        ExtractionAuthError,
+        ExtractionProviderUnknownError,
+    )
 
     filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
     local_path = os.path.join(UPLOAD_DIR, filename)
@@ -1154,9 +1183,32 @@ async def v2_upload_and_analyze(
         # PASO 2: EXTRACCIÓN PURA (sin interpretación clínica)
         # ARCH-20260518-03: prompt de extracción resuelto únicamente desde aiCalibration;
         # si falta, falla explícitamente (sin fallback backend).
+        # ARCH-20260809-02: selector multi-proveedor con override por payload.
         extraction_start = time.time()
         try:
-            extracted_raw = extractor.extract_by_type(local_path, detected_type, ai_calibration=ai_calibration)
+            extracted_raw = extractor.extract_by_type(
+                local_path,
+                detected_type,
+                ai_calibration=ai_calibration,
+                extraction_provider_override=extraction_provider_override,
+                extraction_model_override=extraction_model_override,
+            )
+        except ExtractionProviderUnknownError as prov_err:
+            print(f"❌ [ARCH-20260809-02] {prov_err}")
+            return {
+                "status": "error",
+                "error": str(prov_err),
+                "error_code": "EXTRACTION_PROVIDER_UNKNOWN",
+                "file": filename,
+            }
+        except ExtractionAuthError as auth_err:
+            print(f"❌ [ARCH-20260809-02] {auth_err}")
+            return {
+                "status": "error",
+                "error": str(auth_err),
+                "error_code": "M3_AUTH_ERROR",
+                "file": filename,
+            }
         except ValueError as ve:
             err_msg = str(ve)
             if "EXTRACTION_PROMPT_NOT_CONFIGURED" in err_msg:
@@ -1168,12 +1220,18 @@ async def v2_upload_and_analyze(
                     "file": filename,
                 }
             raise
+        # ARCH-20260809-02: capturar trazabilidad extractiva del dispatcher.
+        extraction_audit: Dict[str, Any] = getattr(extractor, "last_extraction_audit", {}) or {}
         extraction_dict = extracted_raw if isinstance(extracted_raw, dict) else extracted_raw.model_dump()
         extraction_seconds = round(time.time() - extraction_start, 2)
         # ARCH-20260518-03: extracción solo llega aquí si aiCalibration.extraction.prompt fue válido
         _extraction_prompt_source = "ai_calibration"
         _extraction_prompt_version = (ai_calibration or {}).get("extraction", {}).get("version", "calibration_custom")
-        print(f"   ✓ Extracción en {extraction_seconds}s | prompt_source={_extraction_prompt_source}")
+        print(
+            f"   ✓ Extracción en {extraction_seconds}s | prompt_source={_extraction_prompt_source} "
+            f"| provider_used={extraction_audit.get('extraction_provider_used')} "
+            f"| fallback={extraction_audit.get('extraction_fallback_reason')}"
+        )
 
         # PASO 3: PREDIAGNÓSTICO IA (capa separada)
         predx_start = time.time()
@@ -1203,10 +1261,33 @@ async def v2_upload_and_analyze(
                 "study_type": detected_type,
                 "extracted_data": extraction_dict,
                 "audit": {
-                    # ARCH-20260519-15: trazabilidad honesta del proveedor/modelo extractivo activo
-                    "extraction_provider": "gemini",
-                    "extraction_model_used": GEMINI_MODEL_EXTRACTION,
-                    "model_name": GEMINI_MODEL_EXTRACTION,
+                    # ARCH-20260809-02: trazabilidad extractiva dinámica (provider/model/override/fallback).
+                    # Sustituye al antiguo `extraction_provider: "gemini"` hardcodeado.
+                    "extraction_provider_used": extraction_audit.get(
+                        "extraction_provider_used"
+                    ) or "gemini",
+                    "extraction_provider_requested": extraction_audit.get(
+                        "extraction_provider_requested"
+                    ) or (
+                        extraction_provider_override
+                        or (ai_calibration or {}).get("extraction", {}).get("provider")
+                        or "gemini"
+                    ),
+                    "extraction_model_used": extraction_audit.get(
+                        "extraction_model_used"
+                    ) or (
+                        extraction_model_override
+                        or (ai_calibration or {}).get("extraction", {}).get("model")
+                        or GEMINI_MODEL_EXTRACTION
+                    ),
+                    "extraction_fallback_reason": extraction_audit.get(
+                        "extraction_fallback_reason"
+                    ),
+                    # Nota de compat: mantener `model_name` poblado con el mismo valor
+                    # que `extraction_model_used` para no romper consumidores legacy.
+                    "model_name": extraction_audit.get(
+                        "extraction_model_used"
+                    ) or GEMINI_MODEL_EXTRACTION,
                     "prompt_version": _extraction_prompt_version,
                     "prompt_source": _extraction_prompt_source,
                     "pipeline_version": PIPELINE_VERSION,

@@ -343,3 +343,163 @@ class FeatherlessVisionBase:
         except ValueError as e:
             print(f"❌ Error parseando JSON de Featherless: {raw_text[:300]!r}")
             raise ValueError(f"Respuesta de Featherless no es JSON válido: {e}") from e
+
+
+# ---------------------------------------------------------------------------
+# ARCH-20260809-02: M3VisionBase — frente extractivo MiniMax M3 (OpenAI-compatible)
+#
+# Sigue el patrón de FeatherlessVisionBase: cliente OpenAI SDK, content
+# multimodal con image_url base64, temperature=0.1, max_tokens=4096, y
+# reutilización de los helpers de GeminiBase para parseo tolerante.
+# Solo se invoca desde el dispatcher de ExtractorService (con fallback a
+# Gemini ante 5xx/timeout/4xx-persistente). No reemplaza la firma pública
+# de call_featherless_vision ni call_gemini.
+#
+# Respaldo: context/SPECs/SPEC_ARCH-20260809-02-SELECTOR-EXTRACCION-MULTI-PROVEEDOR.md
+# ---------------------------------------------------------------------------
+
+class M3VisionBase:
+    """
+    Base para el frente extractivo visual de MiniMax M3 (OpenAI-compatible).
+    ARCH-20260809-02: cliente paralelo a FeatherlessVisionBase para el
+    segundo proveedor de extracción. La capa clínica sigue con MedGemma/DR7.
+
+    Variables de entorno consumidas (NO mezclar con la capa clínica):
+      M3_API_KEY        — token del plan Pro para MiniMax M3.
+      M3_BASE_URL       — endpoint OpenAI-compatible (default: https://api.minimaxi.io/v1).
+      M3_DEFAULT_MODEL  — modelo default (default sugerido: minimax-m3).
+    """
+
+    @staticmethod
+    def _tolerant_json_parse(text: str) -> Dict[str, Any]:
+        """Parseo tolerante de JSON. Estrategia idéntica a GeminiBase/FeatherlessVisionBase."""
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError:
+                pass
+
+        raise ValueError(
+            f"Respuesta de M3 no es JSON parseable: {text[:300]!r}"
+        )
+
+    def __init__(
+        self,
+        api_key: str = None,
+        base_url: str = None,
+        model: str = None,
+    ):
+        """
+        Args:
+            api_key:  M3_API_KEY. Si None, lee de env. Sin validación estricta
+                      para permitir instancias de test con mocks.
+            base_url: Base URL API M3 (compatible OpenAI).
+            model:    Modelo visual a invocar.
+        """
+        self.api_key = api_key or _read_env_var("M3_API_KEY") or ""
+        self.base_url = (
+            base_url
+            or _read_env_var("M3_BASE_URL")
+            or "https://api.minimaxi.io/v1"
+        )
+        self.model = (
+            model
+            or _read_env_var("M3_DEFAULT_MODEL")
+            or "minimax-m3"
+        )
+
+    def get_b64_jpeg(self, file_path: str) -> str:
+        """
+        Convierte un archivo (imagen o PDF) a base64 JPEG.
+        Los PDFs se convierten a JPEG de primera página antes de codificar.
+        Reutiliza exactamente la misma estrategia que FeatherlessVisionBase.
+        """
+        mime_type, _ = mimetypes.guess_type(file_path)
+
+        if mime_type == "application/pdf" or file_path.lower().endswith(".pdf"):
+            try:
+                print(f"📄 Convirtiendo PDF a imagen: {file_path}")
+                pages = convert_from_path(file_path, first_page=1, last_page=1)
+                if pages:
+                    img_byte_arr = io.BytesIO()
+                    pages[0].save(img_byte_arr, format="JPEG")
+                    return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+            except Exception as e:
+                print(f"⚠️ PDF conversion error: {e}")
+                raise
+
+        with open(file_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode("utf-8")
+
+    def call_m3(self, file_path: str, prompt: str) -> Dict[str, Any]:
+        """
+        Llama a MiniMax M3 con imagen + prompt y retorna JSON parseado.
+        ARCH-20260809-02: único punto de entrada al proveedor M3.
+
+        Protocolo:
+          - Convierte el archivo a base64 JPEG.
+          - Llama al modelo con content multimodal (texto + image_url base64).
+          - Parsea la respuesta como JSON con tolerancia a texto extra.
+
+        Raises:
+            RuntimeError: Si openai SDK no está instalado.
+            Exception:    Si M3 devuelve error HTTP o la respuesta no es JSON.
+            No devuelve dict vacío ante fallo — propaga la excepción para que
+            el dispatcher de ExtractorService decida si dispara fallback a Gemini.
+        """
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "openai SDK no instalado. Ejecuta: pip install openai>=1.0"
+            ) from exc
+
+        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        b64_data = self.get_b64_jpeg(file_path)
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{b64_data}"
+                                },
+                            },
+                        ],
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=4096,
+            )
+        except Exception as e:
+            # IMPL-20260809-04 PRIVACIDAD: nunca loguear M3_API_KEY ni tokens.
+            print(f"❌ M3 Vision Error: {type(e).__name__}")
+            raise
+
+        # Reutiliza los helpers de GeminiBase (mismo formato OpenAI-compatible).
+        raw_text = GeminiBase._sanitize_model_json_text(
+            GeminiBase._extract_openai_choice_text(
+                response.choices[0] if response.choices else None
+            )
+        )
+        if not raw_text:
+            raise ValueError("Respuesta M3 vacía o sin bloques de texto recuperables")
+
+        try:
+            return M3VisionBase._tolerant_json_parse(raw_text)
+        except ValueError as e:
+            print(f"❌ Error parseando JSON de M3: {raw_text[:300]!r}")
+            raise ValueError(f"Respuesta de M3 no es JSON válido: {e}") from e

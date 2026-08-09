@@ -591,6 +591,24 @@ class AIAuditMetadata(BaseModel):
     triggered_by_user_id: Optional[str] = None
     trigger_reason: Literal["initial_upload", "manual_regeneration"] = "initial_upload"
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    # ARCH-20260809-02: trazabilidad del selector multi-proveedor (Gemini + MiniMax M3).
+    # Capa extractiva exclusivamente — la capa clínica mantiene sus propios campos
+    # (`clinical_provider`, `clinical_model_used`) en AIPrediagnosisResult.
+    extraction_provider_requested: Optional[str] = Field(
+        default=None,
+        description="Proveedor extractivo pedido tras resolver precedencia (override > calibración > default).",
+    )
+    extraction_provider_used: Optional[str] = Field(
+        default=None,
+        description="Proveedor extractivo que efectivamente respondió (puede diferir tras fallback).",
+    )
+    extraction_fallback_reason: Optional[str] = Field(
+        default=None,
+        description=(
+            "Razón de fallback M3→Gemini si ocurrió. Null si no hubo fallback. "
+            "Valores: 'm3_5xx', 'm3_timeout', 'm3_4xx_persistent', 'm3_not_configured'."
+        ),
+    )
 
 
 class ExtractionSnapshotPayload(BaseModel):

@@ -1602,3 +1602,364 @@ class TestRollbackGeminiARCH20260519_15:
         svc = ExtractorService(api_key="test-key", model="gemini-2.5-flash")
         with pytest.raises(ValueError, match="EXTRACTION_PROMPT_NOT_CONFIGURED"):
             svc.extract_by_type("/fake/audio.pdf", "Audiometria", ai_calibration=None)
+
+
+# ---------------------------------------------------------------------------
+# ARCH-20260809-02 — Selector de extracción multi-proveedor (Gemini + MiniMax M3).
+# Respaldo: context/SPECs/SPEC_ARCH-20260809-02-SELECTOR-EXTRACCION-MULTI-PROVEEDOR.md
+# Cubre: cliente M3, fallback M3→Gemini, casos borde, override por payload,
+# migración legacy, errores de autenticación.
+# ---------------------------------------------------------------------------
+
+class TestMultiProviderExtractionARCH20260809_02:
+    """
+    Tests del selector de extracción multi-proveedor (ARCH-20260809-02).
+    Validan CA-01..CA-15 de la SPEC §14.
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-gemini-key", model="gemini-2.5-flash")
+
+    @pytest.fixture
+    def base_calibration(self):
+        return {
+            "extraction": {
+                "prompt": "Extrae todos los parámetros visibles del documento médico.",
+                "version": "test_v1",
+            }
+        }
+
+    # ── Resolución de provider (CA-04, CA-05, CA-06) ──────────────────────────
+
+    def test_resolve_provider_default_sin_calibration_es_gemini(self, extractor):
+        """Sin aiCalibration ni override → default gemini (migración legacy)."""
+        provider, model = extractor._resolve_provider(calibration=None)
+        assert provider == "gemini"
+        assert model == "gemini-2.5-flash"
+
+    def test_resolve_provider_calibracion_legacy_sin_provider_es_gemini(self, extractor, base_calibration):
+        """CA-04: calibración sin `extraction.provider` → gemini (default legacy)."""
+        provider, model = extractor._resolve_provider(calibration=base_calibration)
+        assert provider == "gemini"
+        assert model == "gemini-2.5-flash"
+
+    def test_resolve_provider_calibracion_con_provider_m3(self, extractor):
+        """aiCalibration.extraction.provider='m3' + .model='custom-m3'."""
+        cal = {"extraction": {"prompt": "x", "provider": "m3", "model": "custom-m3"}}
+        provider, model = extractor._resolve_provider(calibration=cal)
+        assert provider == "m3"
+        assert model == "custom-m3"
+
+    def test_resolve_provider_override_toma_precedencia(self, extractor):
+        """CA-05: override por payload gana sobre calibración."""
+        cal = {"extraction": {"prompt": "x", "provider": "gemini", "model": "gemini-2.5-pro"}}
+        provider, model = extractor._resolve_provider(
+            calibration=cal, override_provider="m3", override_model="minimax-m3"
+        )
+        assert provider == "m3"
+        assert model == "minimax-m3"
+
+    def test_resolve_provider_override_model_solo(self, extractor):
+        """CB-06: override solo de modelo conserva provider de calibración."""
+        cal = {"extraction": {"prompt": "x", "provider": "gemini"}}
+        provider, model = extractor._resolve_provider(
+            calibration=cal, override_provider=None, override_model="gemini-2.5-pro"
+        )
+        assert provider == "gemini"
+        assert model == "gemini-2.5-pro"
+
+    def test_resolve_provider_invalido_levanta_excepcion(self, extractor):
+        """CB-02: proveedor desconocido → ExtractionProviderUnknownError, sin fallback."""
+        from app.services.ai.extractor import ExtractionProviderUnknownError
+        with pytest.raises(ExtractionProviderUnknownError):
+            extractor._resolve_provider(calibration=None, override_provider="foo")
+
+    def test_resolve_provider_invalido_en_calibracion_levanta_excepcion(self, extractor):
+        from app.services.ai.extractor import ExtractionProviderUnknownError
+        with pytest.raises(ExtractionProviderUnknownError):
+            extractor._resolve_provider(
+                calibration={"extraction": {"prompt": "x", "provider": "openai"}}
+            )
+
+    # ── Cliente M3 (CA-01) ────────────────────────────────────────────────────
+
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_m3_client_success_retorna_dict_parseado(self, mock_call_m3, extractor, base_calibration):
+        """Cliente M3 retorna dict parseado cuando la respuesta es válida."""
+        mock_call_m3.return_value = {
+            "paciente": "Test M3",
+            "fecha_estudio": "2026-08-09",
+            "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "oido_izquierdo": {"500": 12, "1000": 18, "2000": 22, "4000": 28, "6000": 32, "8000": 38},
+            "completitud_documental": "suficiente",
+        }
+        with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+            cal = {**base_calibration, "extraction": {**base_calibration["extraction"], "provider": "m3"}}
+            result = extractor.extract_by_type(
+                "/fake/audio.pdf", "Audiometria", ai_calibration=cal
+            )
+        assert isinstance(result, AudiometriaData)
+        assert mock_call_m3.called
+        assert extractor.last_extraction_audit["extraction_provider_used"] == "m3"
+        assert extractor.last_extraction_audit["extraction_fallback_reason"] is None
+
+    @patch("app.services.ai.base.GeminiBase.call_gemini")
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_m3_client_fallback_to_gemini_on_5xx(
+        self, mock_call_m3, mock_call_gemini, extractor, base_calibration
+    ):
+        """CA-06: M3 → 5xx → fallback a Gemini + trazabilidad correcta."""
+        # Simular error 5xx de M3 (openai SDK expone status_code en la excepción).
+        m3_error = Exception("M3 upstream failed")
+        m3_error.status_code = 503
+        mock_call_m3.side_effect = m3_error
+        mock_call_gemini.return_value = {
+            "paciente": "Test Fallback",
+            "fecha_estudio": "2026-08-09",
+            "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "oido_izquierdo": {"500": 12, "1000": 18, "2000": 22, "4000": 28, "6000": 32, "8000": 38},
+            "completitud_documental": "suficiente",
+        }
+        with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+            cal = {**base_calibration, "extraction": {**base_calibration["extraction"], "provider": "m3"}}
+            result = extractor.extract_by_type(
+                "/fake/audio.pdf", "Audiometria", ai_calibration=cal
+            )
+        assert isinstance(result, AudiometriaData)
+        assert mock_call_gemini.called
+        audit = extractor.last_extraction_audit
+        assert audit["extraction_provider_requested"] == "m3"
+        assert audit["extraction_provider_used"] == "gemini"
+        assert audit["extraction_fallback_reason"] == "m3_5xx"
+
+    @patch("app.services.ai.base.GeminiBase.call_gemini")
+    def test_m3_fallback_inmediato_si_api_key_ausente(
+        self, mock_call_gemini, extractor, base_calibration
+    ):
+        """CA-07: M3_API_KEY ausente con provider='m3' → fallback inmediato a Gemini."""
+        mock_call_gemini.return_value = {
+            "paciente": "Test Fallback NoConfig",
+            "fecha_estudio": "2026-08-09",
+            "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "oido_izquierdo": {"500": 12, "1000": 18, "2000": 22, "4000": 28, "6000": 32, "8000": 38},
+            "completitud_documental": "suficiente",
+        }
+        # Garantizar M3_API_KEY ausente
+        env = {k: v for k, v in os.environ.items() if k != "M3_API_KEY"}
+        with patch.dict(os.environ, env, clear=True):
+            cal = {**base_calibration, "extraction": {**base_calibration["extraction"], "provider": "m3"}}
+            result = extractor.extract_by_type(
+                "/fake/audio.pdf", "Audiometria", ai_calibration=cal
+            )
+        assert isinstance(result, AudiometriaData)
+        assert mock_call_gemini.called
+        audit = extractor.last_extraction_audit
+        assert audit["extraction_provider_used"] == "gemini"
+        assert audit["extraction_fallback_reason"] == "m3_not_configured"
+
+    @patch("app.services.ai.base.GeminiBase.call_gemini")
+    def test_no_fallback_para_gemini_si_gemini_falla(
+        self, mock_call_gemini, extractor, base_calibration
+    ):
+        """CA-08: provider='gemini' y Gemini falla → error explícito, sin fallback a M3."""
+        mock_call_gemini.side_effect = Exception("Gemini downstream failed")
+        with pytest.raises(Exception, match="Gemini downstream"):
+            extractor.extract_by_type(
+                "/fake/audio.pdf", "Audiometria", ai_calibration=base_calibration
+            )
+
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_m3_auth_error_sin_fallback(
+        self, mock_call_m3, extractor, base_calibration
+    ):
+        """CA-09: M3 → 401 → ExtractionAuthError, NO fallback silencioso."""
+        from app.services.ai.extractor import ExtractionAuthError
+        m3_error = Exception("Unauthorized")
+        m3_error.status_code = 401
+        mock_call_m3.side_effect = m3_error
+        with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+            cal = {**base_calibration, "extraction": {**base_calibration["extraction"], "provider": "m3"}}
+            with pytest.raises(ExtractionAuthError, match="M3_AUTH_ERROR"):
+                extractor.extract_by_type(
+                    "/fake/audio.pdf", "Audiometria", ai_calibration=cal
+                )
+
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_m3_timeout_dispara_fallback_a_gemini(
+        self, mock_call_m3, extractor, base_calibration
+    ):
+        """CA-06 + CB-05: timeout → m3_timeout → fallback a Gemini."""
+        # Simular excepción con nombre APITimeoutError (puede o no estar importable
+        # según el entorno; el clasificador se basa en el nombre del tipo).
+        timeout_exc = type("APITimeoutError", (Exception,), {})("Read timeout")
+        mock_call_m3.side_effect = timeout_exc
+        with patch("app.services.ai.base.GeminiBase.call_gemini") as mock_gemini:
+            mock_gemini.return_value = {
+                "paciente": "Test Timeout",
+                "fecha_estudio": "2026-08-09",
+                "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "4000": 25, "6000": 30, "8000": 35},
+                "oido_izquierdo": {"500": 12, "1000": 18, "2000": 22, "4000": 28, "6000": 32, "8000": 38},
+                "completitud_documental": "suficiente",
+            }
+            with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+                cal = {**base_calibration, "extraction": {**base_calibration["extraction"], "provider": "m3"}}
+                result = extractor.extract_by_type(
+                    "/fake/audio.pdf", "Audiometria", ai_calibration=cal
+                )
+        assert isinstance(result, AudiometriaData)
+        audit = extractor.last_extraction_audit
+        assert audit["extraction_provider_used"] == "gemini"
+        assert audit["extraction_fallback_reason"] == "m3_timeout"
+
+    @patch("app.services.ai.base.GeminiBase.call_gemini")
+    def test_legacy_calibration_sin_provider_tratada_como_gemini(
+        self, mock_call_gemini, extractor, base_calibration
+    ):
+        """CA-04: calibración legacy sin provider → gemini, sin fallback."""
+        mock_call_gemini.return_value = {
+            "paciente": "Test Legacy",
+            "fecha_estudio": "2026-08-09",
+            "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "oido_izquierdo": {"500": 12, "1000": 18, "2000": 22, "4000": 28, "6000": 32, "8000": 38},
+            "completitud_documental": "suficiente",
+        }
+        result = extractor.extract_by_type(
+            "/fake/audio.pdf", "Audiometria", ai_calibration=base_calibration
+        )
+        assert isinstance(result, AudiometriaData)
+        audit = extractor.last_extraction_audit
+        assert audit["extraction_provider_requested"] == "gemini"
+        assert audit["extraction_provider_used"] == "gemini"
+        assert audit["extraction_fallback_reason"] is None
+
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_override_payload_toma_precedencia_sobre_calibracion(
+        self, mock_call_m3, extractor
+    ):
+        """CA-05: override por payload con provider distinto al de calibración."""
+        mock_call_m3.return_value = {
+            "paciente": "Test Override",
+            "fecha_estudio": "2026-08-09",
+            "oido_derecho": {"500": 10, "1000": 15, "2000": 20, "4000": 25, "6000": 30, "8000": 35},
+            "oido_izquierdo": {"500": 12, "1000": 18, "2000": 22, "4000": 28, "6000": 32, "8000": 38},
+            "completitud_documental": "suficiente",
+        }
+        with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+            cal = {
+                "extraction": {
+                    "prompt": "Extrae los datos visibles.",
+                    "provider": "gemini",  # calibración dice gemini
+                }
+            }
+            result = extractor.extract_by_type(
+                "/fake/audio.pdf",
+                "Audiometria",
+                ai_calibration=cal,
+                extraction_provider_override="m3",  # pero override pide m3
+            )
+        assert isinstance(result, AudiometriaData)
+        audit = extractor.last_extraction_audit
+        assert audit["extraction_provider_requested"] == "m3"
+        assert audit["extraction_provider_used"] == "m3"
+        assert audit["extraction_fallback_reason"] is None
+
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_m3_json_no_parseable_no_es_fallback(
+        self, mock_call_m3, extractor, base_calibration
+    ):
+        """CB-03: JSON corrupto no es trigger de fallback; propaga ValueError."""
+        mock_call_m3.side_effect = ValueError("Respuesta de M3 no es JSON válido: garbage")
+        with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+            cal = {**base_calibration, "extraction": {**base_calibration["extraction"], "provider": "m3"}}
+            with pytest.raises(ValueError, match="no es JSON válido"):
+                extractor.extract_by_type(
+                    "/fake/audio.pdf", "Audiometria", ai_calibration=cal
+                )
+
+    # ── M3VisionBase unit tests ───────────────────────────────────────────────
+
+    def test_m3_vision_base_levanta_si_openai_no_instalado(self):
+        """CA-01: si openai SDK no está disponible, M3VisionBase.call_m3 lo indica."""
+        import builtins
+        from app.services.ai.base import M3VisionBase
+
+        # Forzar ImportError cuando intente importar openai.
+        original_import = builtins.__import__
+
+        def _fake_import(name, *args, **kwargs):
+            if name == "openai" or name.startswith("openai."):
+                raise ImportError("Simulated: openai not installed")
+            return original_import(name, *args, **kwargs)
+
+        client = M3VisionBase(api_key="test-key", model="minimax-m3")
+        with patch("builtins.__import__", side_effect=_fake_import):
+            with pytest.raises(RuntimeError, match="openai"):
+                client.call_m3("/fake/audio.pdf", "test prompt")
+
+    def test_m3_vision_base_dict_basico(self):
+        """Smoke test: M3VisionBase se puede instanciar con kwargs sin fallar."""
+        from app.services.ai.base import M3VisionBase
+        client = M3VisionBase(api_key="test-key", model="minimax-m3", base_url="https://example.com")
+        assert client.api_key == "test-key"
+        assert client.model == "minimax-m3"
+        assert client.base_url == "https://example.com"
+
+    def test_m3_vision_base_constructor_default_model(self):
+        """Default model = minimax-m3 si no se especifica."""
+        from app.services.ai.base import M3VisionBase
+        with patch.dict(os.environ, {"M3_DEFAULT_MODEL": ""}, clear=False):
+            client = M3VisionBase(api_key="test-key")
+            assert client.model == "minimax-m3"
+
+    def test_m3_vision_base_constructor_default_base_url(self):
+        """Default base_url = https://api.minimaxi.io/v1 si no se especifica."""
+        from app.services.ai.base import M3VisionBase
+        with patch.dict(os.environ, {"M3_BASE_URL": ""}, clear=False):
+            client = M3VisionBase(api_key="test-key")
+            assert client.base_url == "https://api.minimaxi.io/v1"
+
+    # ── Schema y status endpoint ───────────────────────────────────────────────
+
+    def test_aiauditmetadata_acepta_trazabilidad_m3(self):
+        """CA-02: AIAuditMetadata acepta nuevos campos de trazabilidad extractiva."""
+        from app.schemas.medical import AIAuditMetadata
+        audit = AIAuditMetadata(
+            model_name="minimax-m3",
+            prompt_version="test_v1",
+            extraction_provider_requested="m3",
+            extraction_provider_used="gemini",
+            extraction_fallback_reason="m3_5xx",
+        )
+        assert audit.extraction_provider_requested == "m3"
+        assert audit.extraction_provider_used == "gemini"
+        assert audit.extraction_fallback_reason == "m3_5xx"
+
+    def test_aiauditmetadata_campos_m3_opcionales_default_none(self):
+        """AIAuditMetadata con campos de trazabilidad M3 opcionales (default None)."""
+        from app.schemas.medical import AIAuditMetadata
+        audit = AIAuditMetadata(model_name="gemini-2.5-flash", prompt_version="v1")
+        assert audit.extraction_provider_requested is None
+        assert audit.extraction_provider_used is None
+        assert audit.extraction_fallback_reason is None
+
+    def test_main_declara_env_vars_m3_en_source(self):
+        """CA-01: backend/app/main.py declara M3_API_KEY, M3_BASE_URL, M3_DEFAULT_MODEL.
+
+        Lee directamente del source para evitar dependencias de runtime
+        (main.py tiene imports que requieren el contexto del servidor).
+        """
+        main_path = Path(__file__).parent.parent / "app" / "main.py"
+        source = main_path.read_text(encoding="utf-8")
+        assert "M3_API_KEY" in source
+        assert "M3_BASE_URL" in source
+        assert "M3_DEFAULT_MODEL" in source
+        assert "M3_ENABLED" in source
+        assert "M3_STATUS" in source
+        # Defaults explícitos en source
+        assert "https://api.minimaxi.io/v1" in source
+        assert "minimax-m3" in source
+        # /ai/status incluye los campos
+        assert "m3_enabled" in source
+        assert "m3_status" in source
+        assert "extraction_default_provider_configurable" in source

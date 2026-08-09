@@ -134,6 +134,11 @@ export interface AICalibrationV2 {
     version?: string
     schemaVersion?: string
     targetFields?: string[]
+    // ARCH-20260809-02: selector runtime de proveedor extractivo.
+    // `provider` ausente se trata como "gemini" (migración legacy implícita).
+    provider?: "gemini" | "m3"
+    /** Modelo explícito del proveedor; si ausente se usa default de proceso. */
+    model?: string
   }
   diagnosis?: {
     enabled: boolean
@@ -163,6 +168,10 @@ export interface CalibrationTestExtractionResult {
   model_used: string
   prompt_version: string
   duration_seconds: number
+  // ARCH-20260809-02: trazabilidad del selector multi-proveedor (Gemini + MiniMax M3).
+  extraction_provider_used?: "gemini" | "m3" | "xml_parser"
+  extraction_provider_requested?: "gemini" | "m3" | "xml_parser"
+  extraction_fallback_reason?: string | null
 }
 
 export interface CalibrationTestPrediagnosisResult {

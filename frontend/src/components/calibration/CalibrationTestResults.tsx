@@ -84,6 +84,9 @@ function MetricPill({
 }
 
 function MetricsRow({ results }: { results: CalibrationTestResults }) {
+  // ARCH-20260809-02: trazabilidad multi-proveedor (Gemini + MiniMax M3).
+  const extractionProviderUsed = results.extraction.extraction_provider_used ?? "gemini"
+  const extractionFallbackReason = results.extraction.extraction_fallback_reason ?? null
   return (
     <div className="flex flex-wrap gap-2">
       <MetricPill label="Test ID" value={results.test_id} tone="violet" />
@@ -91,6 +94,14 @@ function MetricsRow({ results }: { results: CalibrationTestResults }) {
         <MetricPill label="Tipo" value={results.canonical_study_type} tone="teal" />
       )}
       <MetricPill label="Extracción" value={results.extraction.model_used} tone="slate" />
+      <MetricPill label="Proveedor" value={extractionProviderUsed} tone="teal" />
+      {extractionFallbackReason && (
+        <MetricPill
+          label="Fallback"
+          value={extractionFallbackReason}
+          tone="violet"
+        />
+      )}
       <MetricPill label="Prompt v" value={results.extraction.prompt_version} tone="slate" />
       <MetricPill label="Extr. ⏱" value={formatDuration(results.extraction.duration_seconds)} />
       <MetricPill label="Predx" value={results.prediagnosis.model_used} tone="slate" />

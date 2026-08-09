@@ -86,6 +86,17 @@ function getNested(obj: Record<string, unknown> | null, key: string): Record<str
     : null
 }
 
+// ARCH-20260809-02: tipos y defaults para el selector de proveedor extractivo.
+type ExtractionProvider = "gemini" | "m3"
+const EXTRACTION_PROVIDERS: ExtractionProvider[] = ["gemini", "m3"]
+const EXTRACTION_MODEL_PLACEHOLDERS: Record<ExtractionProvider, string> = {
+  gemini: "gemini-2.5-flash",
+  m3: "minimax-m3",
+}
+function isExtractionProvider(value: unknown): value is ExtractionProvider {
+  return value === "gemini" || value === "m3"
+}
+
 function looksLikePromptContent(value: string): boolean {
   const normalized = value.trim()
   if (!normalized) return false
@@ -109,6 +120,14 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
   const initialDiagPrompt = rawDiagPrompt || (looksLikePromptContent(rawDiagVersion) ? rawDiagVersion : "")
   const initialDiagVersion = looksLikePromptContent(rawDiagVersion) ? "" : rawDiagVersion
 
+  // ARCH-20260809-02: estado del selector de proveedor extractivo.
+  // Default "gemini" si ausente (migración legacy implícita).
+  const rawExtractProvider = extraction?.provider
+  const initialExtractProvider: ExtractionProvider = isExtractionProvider(rawExtractProvider)
+    ? rawExtractProvider
+    : "gemini"
+  const initialExtractModel = getStr(extraction, "model")
+
   // ── Estado del formulario ──────────────────────────────────────────────────
   const [enabled, setEnabled] = useState(getBool(initial, "enabled"))
   const [canonicalStudyType, setCanonicalStudyType] = useState(getStr(initial, "canonicalStudyType"))
@@ -116,6 +135,9 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
   // Extracción: se lee schemaVersion por compatibilidad con configs previas
   const [extractPromptVersion, setExtractPromptVersion] = useState(initialExtractVersion)
   const [extractPrompt, setExtractPrompt] = useState(initialExtractPrompt)
+  // ARCH-20260809-02: provider + model editables para el selector multi-proveedor.
+  const [extractProvider, setExtractProvider] = useState<ExtractionProvider>(initialExtractProvider)
+  const [extractModel, setExtractModel] = useState(initialExtractModel)
   // Diagnóstico clínico
   const [diagPromptVersion, setDiagPromptVersion] = useState(initialDiagVersion)
   const [diagPrompt, setDiagPrompt] = useState(initialDiagPrompt)
@@ -144,6 +166,10 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
         prompt: normalizedExtractPrompt || null,
         version: normalizedExtractVersion || null,
         schemaVersion: normalizedExtractVersion || null,
+        // ARCH-20260809-02: persistir selección de proveedor/modelo extractivo.
+        // Merge con `...(extraction ?? {})` preserva campos legacy y no rompe consumidores.
+        provider: extractProvider,
+        model: extractModel.trim() || null,
       },
       diagnosis: {
         ...(diagnosis ?? {}),
@@ -230,15 +256,60 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
         </div>
       </div>
 
-      {/* ── Extracción documental — Gemini ────────────────────────────────── */}
+      {/* ── Extracción documental — Gemini / MiniMax M3 ────────────────────── */}
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Extracción documental</p>
-          <span className="text-xs font-medium px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200">Gemini</span>
+          {/*
+            ARCH-20260809-02: badge dinámico según el proveedor seleccionado.
+            Si es M3, mostramos "M3" con la misma paleta para mantener coherencia visual.
+          */}
+          <span
+            className="text-xs font-medium px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200"
+            data-testid="extraction-provider-badge"
+          >
+            {extractProvider === "m3" ? "M3 (MiniMax)" : "Gemini"}
+          </span>
         </div>
         <p className="text-xs text-blue-600">
           El backend ya aporta una base universal fija de extracción médica. Aquí captura solo el bloque específico del estudio.
         </p>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <label className="block text-xs text-slate-600 mb-1" htmlFor="extract-provider">
+              Proveedor de extracción
+            </label>
+            <select
+              id="extract-provider"
+              value={extractProvider}
+              onChange={(e) => {
+                const next = e.target.value as ExtractionProvider
+                if (isExtractionProvider(next)) setExtractProvider(next)
+              }}
+              className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            >
+              {EXTRACTION_PROVIDERS.map((p) => (
+                <option key={p} value={p}>
+                  {p === "m3" ? "M3 (MiniMax)" : "Gemini"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-600 mb-1" htmlFor="extract-model">
+              Modelo de extracción
+            </label>
+            <input
+              id="extract-model"
+              type="text"
+              value={extractModel}
+              onChange={(e) => setExtractModel(e.target.value)}
+              placeholder={EXTRACTION_MODEL_PLACEHOLDERS[extractProvider]}
+              className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+        </div>
 
         <div>
           <label className="block text-xs text-slate-600 mb-1" htmlFor="extract-prompt-version">
