@@ -499,25 +499,31 @@ test.describe('Flujo End-to-End Completo', () => {
     await expect(authenticatedPage.getByText(/agudeza visual completada/i)).toBeVisible({ timeout: 15000 });
   });
 
-  // IMPL-20260809-01 (ARCH-20260809-01): regresión de la nueva outer-tab
-  // "Antecedentes" del Examen Médico. Debe ser navegable SIN completar
-  // somatometría/vitales/visual, permitir edición y guardar snapshot.
-  test('TC-08b: Nueva outer-tab Antecedentes — navegar, editar y guardar', async () => {
+  // IMPL-20260809-02 (ARCH-20260809-01 v2): regresión. "Antecedentes" pasa de
+  // 5ª outer-tab (v1) a PRIMERA sub-pestaña dentro de "Examen Médico". Debe
+  // ser navegable SIN completar somatometría/vitales/visual (los prereqs del
+  // Examen Médico siguen siendo los mismos), permitir edición y persistir el
+  // snapshot junto con el examen completo vía `saveExamenMedicoPapeleta`.
+  test('TC-08b: Sub-pestaña Antecedentes dentro de Examen Médico — navegar, editar y guardar', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
 
     await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
     await authenticatedPage.waitForLoadState('networkidle');
 
-    // Abrir Examen Médico. La outer-tab 5 es "Antecedentes".
+    // Abrir Examen Médico. TC-08 ya habrá completado los prereqs (soma/vitales/
+    // visual) en runs previos; este test funciona en cualquier caso siempre que
+    // se llegue a la pestaña 4. Tras IMPL-20260809-02 la pestaña 4 expone 4
+    // sub-pestañas: Antecedentes | Módulo 1 | Exploración | Impresión.
     await authenticatedPage.locator('button').filter({ hasText: /EXAMEN MEDICO/i }).first().click();
 
-    // 1. La tab aparece y NO está bloqueada (accesible sin prereqs).
+    // 1. La sub-pestaña "Antecedentes" es la PRIMERA de las 4 inner-tabs.
+    //    Aparece por defecto al entrar a "Examen Médico".
     const antecedentesTab = authenticatedPage.getByRole('button', { name: /antecedentes/i }).first();
     await expect(antecedentesTab).toBeVisible({ timeout: 15000 });
     await expect(antecedentesTab).toBeEnabled();
 
-    // 2. Click navega a la outer-tab — debe aparecer el header del componente.
+    // 2. Click navega a la sub-pestaña — debe aparecer el header del componente.
     await antecedentesTab.click();
     await expect(
       authenticatedPage.getByText(/Antecedentes — Captura por cita/i).first(),
@@ -536,10 +542,15 @@ test.describe('Flujo End-to-End Completo', () => {
     const ctaHref = await ctaLink.getAttribute('href');
     expect(ctaHref).toMatch(/\/history\/[a-f0-9-]+/);
 
-    // 5. Guardar snapshot → el botón "💾 Guardar antecedentes" llama al action.
-    await authenticatedPage.getByRole('button', { name: /guardar antecedentes/i }).click();
+    // 5. Persistencia integrada: el snapshot se guarda junto con el examen
+    //    completo vía `saveExamenMedicoPapeleta` (no hay botón propio en
+    //    Antecedentes). Navegamos a Impresión/Aptitud y usamos el botón
+    //    "Guardar borrador" del examen completo.
+    await authenticatedPage.getByRole('button', { name: /impresión y aptitud|impresi.n diagn.stica y aptitud|impresi.n \/ aptitud/i }).first().click();
+    await authenticatedPage.getByRole('button', { name: /guardar borrador/i }).first().click();
+    // Tras guardar borrador debe aparecer un mensaje de éxito del examen.
     await expect(
-      authenticatedPage.getByText(/Antecedentes guardados para esta cita/i),
+      authenticatedPage.getByText(/borrador guardado|examen m.dico completado/i).first(),
     ).toBeVisible({ timeout: 15000 });
   });
 

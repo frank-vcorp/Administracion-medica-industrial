@@ -1,18 +1,22 @@
 /**
  * @fileoverview Formulario real del estudio "Examen Médico" dentro de la Papeleta de Estudios.
- * Implementa 4 pestañas: Somatometría, Signos Vitales, Agudeza Visual y Examen Médico.
- * Las pestañas 1-3 son prerrequisito para acceder a la pestaña 4 (Examen Médico).
- * @id IMPL-20260506-10
- * @spec ARCH-20260506-06
- * @backup context/checkpoints/CHK_IMPL-20260506-10.md
- * @intervention ARCH-20260325-05, ARCH-20260326-07, ARCH-20260326-10
+ * Implementa 4 outer-tabs: Somatometría, Signos Vitales, Agudeza Visual y Examen Médico.
+ * Las outer-tabs 1-3 son prerrequisito para acceder a la outer-tab 4 (Examen Médico),
+ * que contiene 4 inner-tabs: Antecedentes, Módulo 1, Exploración Física e Impresión/Aptitud.
+ * IMPL-20260809-02 (ARCH-20260809-01 v2): 'Antecedentes' es la PRIMERA inner-tab dentro
+ * de "Examen Médico" (snapshot por cita en `physicalExamData.antecedentes_captured`,
+ * persistido vía `saveExamenMedicoPapeleta`).
+ * @id IMPL-20260809-02
+ * @spec ARCH-20260809-01 (v2)
+ * @intervention ARCH-20260506-06, ARCH-20260325-05, ARCH-20260326-07, ARCH-20260326-10
  */
 "use client"
 
 import { useState, useTransition } from "react"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
-// IMPL-20260809-01: Nueva outer-tab "Antecedentes" (snapshot por cita).
+// IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
+// PRIMERA sub-pestaña dentro de "Examen Médico" (componente controlado).
 import { AntecedentesCaptura } from "@/components/clinical/AntecedentesCaptura"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -23,12 +27,12 @@ type ExamData = {
   eyeAcuityData?: Record<string, unknown> | null
 } | null
 
-/** Pestañas externas de Examen Médico — ARCH-20260506-06 + IMPL-20260809-01.
- *  La outer-tab 'antecedentes' se añadió entre agudeza_visual y examen_medico
- *  para captura snapshot por cita de las 5 secciones declarativas del paciente. */
-type OuterTab = 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'antecedentes' | 'examen_medico'
-/** Sub-pestañas del Examen Médico clínico (pestaña 4) */
-type InnerTab = 'declarativa' | 'exploracion' | 'impresion'
+/** Pestañas externas de Examen Médico — ARCH-20260506-06 (4 valores, IMPL-20260809-02
+ *  revirtió la 5ª outer-tab 'antecedentes' que IMPL-20260809-01 había añadido). */
+type OuterTab = 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'examen_medico'
+/** Sub-pestañas del Examen Médico clínico (pestaña 4) — IMPL-20260809-02: 'antecedentes'
+ *  se añade como PRIMERA inner-tab dentro de "Examen Médico" (sub-pestaña, no outer-tab). */
+type InnerTab = 'antecedentes' | 'declarativa' | 'exploracion' | 'impresion'
 type M1Tab = 'gine' | 'inmuno'
 
 const VISUAL_FIELDS_NAMES = [
@@ -181,7 +185,9 @@ export default function ExamenMedicoEstudio({
   const [aptitud, setAptitud] = useState<string>(
     (physicalExamData.aptitud as string) ?? ''
   )
-  const [activeInnerTab, setActiveInnerTab] = useState<InnerTab>('declarativa')
+  // IMPL-20260809-02: default 'antecedentes' (era 'declarativa' en v1) — la primera
+  // sub-pestaña visible al abrir Examen Médico es Antecedentes.
+  const [activeInnerTab, setActiveInnerTab] = useState<InnerTab>('antecedentes')
   const [isPending, startTransition] = useTransition()
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -199,6 +205,18 @@ export default function ExamenMedicoEstudio({
     )
   })
   const [m1Tab, setM1Tab] = useState<M1Tab>('inmuno')
+
+  // IMPL-20260809-02 (ARCH-20260809-01 v2): estado levantado de `antecedentes_captured`.
+  // Mismo patrón que `modulo1`: se inicializa desde `physicalExamData.antecedentes_captured`
+  // (snapshot persistido) con fallback a `{}` cuando aún no hay captura. Se incluye en
+  // `buildPayload()` para persistir junto con el resto del examen vía
+  // `saveExamenMedicoPapeleta`.
+  const [antecedentesCaptured, setAntecedentesCaptured] = useState<Record<string, unknown>>(() => {
+    const existing = physicalExamData.antecedentes_captured
+    return existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? (existing as Record<string, unknown>)
+      : {}
+  })
 
   // ── Estado Somatometría (pestaña 1) ───────────────────────────────────────
   const [somaForm, setSomaForm] = useState<Record<string, string>>(() =>
@@ -290,9 +308,13 @@ export default function ExamenMedicoEstudio({
     return false
   })()
 
+  // IMPL-20260809-02 (ARCH-20260809-01 v2): inner-tabs reordenadas — 'antecedentes' es
+  // la PRIMERA sub-pestaña dentro de "Examen Médico", seguida de Módulo 1, Exploración
+  // Física e Impresión/Aptitud.
   const innerTabs: { id: InnerTab; label: string; icon: string; done: boolean }[] = [
+    { id: 'antecedentes', label: 'Antecedentes', icon: '🩺', done: hasAntecedentes },
     { id: 'declarativa', label: 'Módulo 1', icon: '📋', done: hasM1 },
-    { id: 'exploracion', label: 'Exploración Física', icon: '🩺', done: hasPhysicalExam },
+    { id: 'exploracion', label: 'Exploración Física', icon: '🩻', done: hasPhysicalExam },
     { id: 'impresion', label: 'Impresión y Aptitud', icon: '✅', done: hasAptitud },
   ]
 
@@ -304,14 +326,18 @@ export default function ExamenMedicoEstudio({
     setForm(prev => ({ ...prev, [name]: value }))
   }
   function buildPayload() {
-    // IMPL-20260809-01 rework (QA-20260809-01 I-1): defensivamente excluimos
-    // `antecedentes_captured` del payload por si quedara residual en `form`
-    // (sería serializado como `"[object Object]"`). El snapshot real se
-    // persiste vía `saveAntecedentesCaptura` (action independiente), no
-    // aquí. Mismo patrón defensivo que `modulo1`, que sí va en el payload.
-    const { antecedentes_captured: _antecedentesCaptured, ...rest } = form
-    void _antecedentesCaptured
-    return { ...rest, aptitud: aptitud || undefined, modulo1 }
+    // IMPL-20260809-02 (ARCH-20260809-01 v2): revert I-1. `antecedentes_captured`
+    // ahora es estado levantado al padre y SE INCLUYE en el payload (objeto, no
+    // string). La persistencia es vía `saveExamenMedicoPapeleta` (full-replace),
+    // igual que `modulo1`. El estado `form` plano sigue filtrando no-primitivos
+    // (defensa contra `String({...})` = `"[object Object]"`); `antecedentesCaptured`
+    // vive en estado separado y se inyecta directamente.
+    return {
+      ...form,
+      aptitud: aptitud || undefined,
+      modulo1,
+      antecedentes_captured: antecedentesCaptured,
+    }
   }
 
   async function handleSaveSoma(markComplete: boolean) {
@@ -401,14 +427,13 @@ export default function ExamenMedicoEstudio({
   }
 
   // ── Pestañas externas ─────────────────────────────────────────────────────
-  // IMPL-20260809-01 (ARCH-20260809-01): 'antecedentes' se inserta entre
-  // agudeza_visual y examen_medico. **locked: false SIEMPRE** (no es
-  // prerrequisito del Examen Médico — decisión Frank Opción A).
+  // IMPL-20260809-02 (ARCH-20260809-01 v2): revert. outerTabs vuelve a 4 entradas
+  // (estado pre-v1). 'antecedentes' ahora vive como sub-pestaña dentro de
+  // "Examen Médico" (innerTabs, no outerTabs).
   const outerTabs: { id: OuterTab; label: string; icon: string; done: boolean; locked: boolean }[] = [
     { id: 'somatometria', label: 'Somatometría', icon: '⚖️', done: somaCompleted, locked: false },
     { id: 'signos_vitales', label: 'Signos Vitales', icon: '💓', done: vitalsCompleted, locked: false },
     { id: 'agudeza_visual', label: 'Agudeza Visual', icon: '👁️', done: agudezaCompleted, locked: false },
-    { id: 'antecedentes', label: 'Antecedentes', icon: '📋', done: hasAntecedentes, locked: false },
     { id: 'examen_medico', label: 'Examen Médico', icon: '🩺', done: hasAptitud, locked: !canAccessExamen },
   ]
   const modulo1Tabs: [M1Tab, string, string][] = [
@@ -448,11 +473,9 @@ export default function ExamenMedicoEstudio({
       </div>
 
       {/* Banner de bloqueo visible cuando el médico intenta ir a Examen Médico sin completar prereqs.
-          IMPL-20260809-01 rework (QA-20260809-01 I-4): se excluye también
-          la tab 'antecedentes' (independiente por diseño, no participa en
-          `canAccessExamen`). El banner solo debe aparecer en las pestañas
-          1-3 (Somatometría, Signos Vitales, Agudeza Visual). */}
-      {outerTab !== 'examen_medico' && outerTab !== 'antecedentes' && !canAccessExamen && (
+          IMPL-20260809-02 (ARCH-20260809-01 v2): revert I-4. La condición vuelve
+          a la original — ya no hay outer-tab 'antecedentes' que excluir. */}
+      {outerTab !== 'examen_medico' && !canAccessExamen && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-start gap-2">
           <span className="text-amber-500 text-sm mt-0.5">🔒</span>
           <p className="text-xs text-amber-800">
@@ -727,28 +750,9 @@ export default function ExamenMedicoEstudio({
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/* PESTAÑA 4: ANTECEDENTES (snapshot por cita — IMPL-20260809-01) */}
-      {/* Libre desde el inicio (NO participa en canAccessExamen).      */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {outerTab === 'antecedentes' && (
-        <AntecedentesCaptura
-          eventId={eventId}
-          workerId={workerId}
-          initialData={
-            (physicalExamData.antecedentes_captured as
-              | Parameters<typeof AntecedentesCaptura>[0]['initialData']
-              | undefined) ?? null
-          }
-          fallbackLongitudinal={
-            (longitudinalData as Parameters<typeof AntecedentesCaptura>[0]['fallbackLongitudinal']) ?? null
-          }
-          prefilledData={prefilledData ?? null}
-          readonly={readonly}
-        />
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* PESTAÑA 5: EXAMEN MÉDICO (bloqueada si no completan 1-3)      */}
+      {/* PESTAÑA 4: EXAMEN MÉDICO (bloqueada si no completan 1-3)      */}
+      {/* IMPL-20260809-02 (ARCH-20260809-01 v2): 'antecedentes' ya no es */}
+      {/* outer-tab; ahora es primera inner-tab dentro de esta pestaña.   */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {outerTab === 'examen_medico' && !canAccessExamen && (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6 text-center space-y-3">
@@ -804,7 +808,27 @@ export default function ExamenMedicoEstudio({
             ))}
           </div>
 
-          {/* ── Sub-tab 1: Módulo 1 — Cuestionario del Paciente ── */}
+          {/* ── Sub-tab 1: Antecedentes (snapshot por cita — IMPL-20260809-02) ── */}
+          {activeInnerTab === 'antecedentes' && (
+            <AntecedentesCaptura
+              value={antecedentesCaptured}
+              onChange={setAntecedentesCaptured}
+              initialProvenance={
+                (physicalExamData.antecedentes_captured as
+                  | { _provenance?: Record<string, unknown> }
+                  | undefined)?._provenance as
+                  | Parameters<typeof AntecedentesCaptura>[0]['initialProvenance']
+                  | undefined
+              }
+              workerId={workerId}
+              readonly={readonly}
+              // IMPL-20260809-03 — affordance UX: saltar a Módulo 1
+              // (SPEC ARCH-20260809-01 v2 §6.9)
+              onContinue={() => setActiveInnerTab('declarativa')}
+            />
+          )}
+
+          {/* ── Sub-tab 2: Módulo 1 — Cuestionario del Paciente ── */}
           {activeInnerTab === 'declarativa' && (
         <div className="space-y-3">
           {/* Banner info */}
@@ -985,7 +1009,7 @@ export default function ExamenMedicoEstudio({
         </div>
       )}
 
-      {/* ── Tab 2: Exploración Física ──────────────────────────────── */}
+      {/* ── Sub-tab 3: Exploración Física ──────────────────────────────── */}
           {activeInnerTab === 'exploracion' && (
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -1039,7 +1063,7 @@ export default function ExamenMedicoEstudio({
         </div>
       )}
 
-      {/* ── Tab 3: Impresión Diagnóstica y Aptitud ────────────────── */}
+      {/* ── Sub-tab 4: Impresión Diagnóstica y Aptitud ────────────────── */}
           {activeInnerTab === 'impresion' && (
         <div className="space-y-4">
           {/* Selección de Aptitud */}

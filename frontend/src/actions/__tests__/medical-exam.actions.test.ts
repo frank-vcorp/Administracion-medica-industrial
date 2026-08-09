@@ -1,207 +1,146 @@
 /**
- * @file Tests para saveAntecedentesCaptura — IMPL-20260809-01.
- * Cubre: validación Zod, auth, ownership check, merge no destructivo sobre
- * physicalExamData y manejo de `physicalExamData` nulo.
- * @id IMPL-20260809-01
- * @spec context/SPECs/SPEC_ARCH-20260809-01-ANTECEDENTES-OUTER-TAB-EXAMEN-MEDICO.md
+ * @file Tests para `saveExamenMedicoPapeleta` — IMPL-20260809-02.
+ *
+ * Cubre:
+ * - Regresión CP-7 (SPEC v2 §11): schemas (`ExamenMedicoCompletoSchema` y
+ *   `AntecedentesCapturaSchema`/`DatosPersonalesModulo1Schema`) siguen
+ *   aceptando/rechazando correctamente `antecedentes_captured`.
+ * - CP-6 (SPEC v2 §11): `saveExamenMedicoPapeleta` persiste el snapshot
+ *   `antecedentes_captured` en `physicalExamData` (full-replace incluye
+ *   el campo) junto con `modulo1` y resto del examen.
+ *
+ * IMPL-20260809-02 (ARCH-20260809-01 v2): los 13 tests originales de
+ * `saveAntecedentesCaptura` se eliminaron — esa action ya no existe
+ * (la persistencia de antecedentes se integra en `saveExamenMedicoPapeleta`).
+ * Se conservan los 5 tests de schemas y se añaden los de `saveExamenMedicoPapeleta`
+ * con `antecedentes_captured` en el payload.
+ *
+ * @id IMPL-20260809-02
+ * @spec context/SPECs/SPEC_ARCH-20260809-01-ANTECEDENTES-SUB-PESTANA-EXAMEN-MEDICO.md
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ExamenMedicoCompletoSchema, AntecedentesCapturaSchema } from '@/schemas/clinical/exam.schema'
 import { DatosPersonalesModulo1Schema } from '@/schemas/clinical/history.schema'
 
-const mockEventFindUnique = vi.fn()
-const mockMedicalExamFindUnique = vi.fn()
+// ─── Mock state (declarados ANTES de vi.mock para evitar TDZ) ──────────────
 const mockMedicalExamUpsert = vi.fn()
+const mockEventTestUpdate = vi.fn()
+const mockTriggerAI = vi.fn()
 const mockRevalidatePath = vi.fn()
 
-vi.mock('next-auth/next', () => ({
-  getServerSession: vi.fn(),
-}))
-vi.mock('@/auth', () => ({
-  authOptions: {},
-}))
 vi.mock('next/cache', () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }))
 vi.mock('@/lib/prisma', () => ({
   default: {
-    medicalEvent: {
-      findUnique: (...args: unknown[]) => mockEventFindUnique(...args),
-    },
     medicalExam: {
-      findUnique: (...args: unknown[]) => mockMedicalExamFindUnique(...args),
       upsert: (...args: unknown[]) => mockMedicalExamUpsert(...args),
+    },
+    eventTest: {
+      update: (...args: unknown[]) => mockEventTestUpdate(...args),
     },
   },
 }))
+vi.mock('@/lib/timeline.service', () => ({
+  writeTimelineEntry: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('./ai-prediagnosis.actions', () => ({
+  triggerStructuredStudyAIPrediagnosis: (...args: unknown[]) => mockTriggerAI(...args),
+}))
 
-import { getServerSession } from 'next-auth/next'
-import { saveAntecedentesCaptura } from '@/actions/medical-exam.actions'
+import { saveExamenMedicoPapeleta } from '@/actions/medical-exam.actions'
 
-const VALID_SESSION = {
-  user: { id: 'doc-1', role: 'DOCTOR_GENERAL', email: 'd@x', name: 'Doc' },
-  expires: '2099-12-31',
-}
-
-const baseAntecedentes = {
-  datos_personales: { puesto_actual: 'Soldador' },
-  historia_laboral: { empresa_anterior_1: 'Acme' },
-  heredo_familiares: { diabetes: 'PADRE' },
-  no_patologicos: { alcohol: 'NEGADO' as const, tabaco: 'NEGADO' as const },
-  patologicos: { diabetes: 'NEGADO' as const },
-}
-
-describe('medical-exam.actions saveAntecedentesCaptura', () => {
+describe('medical-exam.actions saveExamenMedicoPapeleta (IMPL-20260809-02)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getServerSession).mockResolvedValue(
-      VALID_SESSION as unknown as Awaited<ReturnType<typeof getServerSession>>,
-    )
-    mockEventFindUnique.mockResolvedValue({ id: 'evt-1', workerId: 'w-1' })
-    mockMedicalExamFindUnique.mockResolvedValue(null) // physicalExamData null
     mockMedicalExamUpsert.mockResolvedValue({ id: 'me-1', eventId: 'evt-1' })
+    mockTriggerAI.mockResolvedValue({ success: true, summary: 'ok', clinicalState: 'AI_PENDING_REVIEW' })
+    mockEventTestUpdate.mockResolvedValue({ id: 'et-1' })
   })
 
-  it('1. eventId vacío → error sin llamar a Prisma', async () => {
-    const res = await saveAntecedentesCaptura('', baseAntecedentes)
-    expect(res.success).toBe(false)
-    expect(res.error).toBe('eventId es obligatorio')
-    expect(mockEventFindUnique).not.toHaveBeenCalled()
-    expect(mockMedicalExamUpsert).not.toHaveBeenCalled()
-  })
-
-  it('2. sin sesión → error "No autorizado"', async () => {
-    vi.mocked(getServerSession).mockResolvedValue(null)
-    const res = await saveAntecedentesCaptura('evt-1', baseAntecedentes)
-    expect(res.success).toBe(false)
-    expect(res.error).toBe('No autorizado')
-    expect(mockEventFindUnique).not.toHaveBeenCalled()
-  })
-
-  it('3. evento no existe → error "Evento no encontrado" (ownership check)', async () => {
-    mockEventFindUnique.mockResolvedValue(null)
-    const res = await saveAntecedentesCaptura('evt-bad', baseAntecedentes)
-    expect(res.success).toBe(false)
-    expect(res.error).toBe('Evento no encontrado')
-    expect(mockMedicalExamUpsert).not.toHaveBeenCalled()
-  })
-
-  it('4. payload vacío (sin secciones) → Zod acepta y crea snapshot', async () => {
-    const res = await saveAntecedentesCaptura('evt-1', {})
+  // ─── CP-6: antecedentes_captured persiste via full-replace ────────────────
+  it('1. payload con antecedentes_captured → persiste en physicalExamData (full-replace)', async () => {
+    const payload = {
+      neurologico: 'normal',
+      antecedentes_medico: 'nota previa',
+      modulo1: { m1_sexo: 'Femenino' },
+      antecedentes_captured: {
+        datos_personales: { puesto_actual: 'Soldador', turno: 'MATUTINO' as const },
+        historia_laboral: { empresa_anterior_1: 'Acme' },
+        heredo_familiares: { diabetes: 'PADRE' },
+        no_patologicos: { alcohol: 'NEGADO' as const, tabaco: 'NEGADO' as const },
+        patologicos: { diabetes: 'NEGADO' as const },
+      },
+    }
+    const res = await saveExamenMedicoPapeleta('evt-1', 'et-1', payload, false)
     expect(res.success).toBe(true)
     expect(mockMedicalExamUpsert).toHaveBeenCalledTimes(1)
     const upsertArg = mockMedicalExamUpsert.mock.calls[0][0]
+    // Full-replace de physicalExamData (incluye modulo1 + antecedentes_captured)
     expect(upsertArg.where).toEqual({ eventId: 'evt-1' })
-    expect(upsertArg.create.physicalExamData.antecedentes_captured).toBeDefined()
-    expect(upsertArg.create.physicalExamData.antecedentes_captured._provenance.source).toBe('captured')
+    expect(upsertArg.update.physicalExamData.antecedentes_medico).toBe('nota previa')
+    expect(upsertArg.update.physicalExamData.modulo1).toEqual({ m1_sexo: 'Femenino' })
+    expect(
+      upsertArg.update.physicalExamData.antecedentes_captured.datos_personales.puesto_actual,
+    ).toBe('Soldador')
+    expect(
+      upsertArg.update.physicalExamData.antecedentes_captured.datos_personales.turno,
+    ).toBe('MATUTINO')
   })
 
-  it('5. payload inválido (enum NEGADO fuera de spec) → Zod rechaza', async () => {
-    const bad = {
-      patologicos: { diabetes: 'TALVEZ' }, // valor no permitido
+  it('2. payload SIN antecedentes_captured → merge funciona (compat retroactiva)', async () => {
+    const legacyPayload = { neurologico: 'normal', aptitud: 'APTO' }
+    const res = await saveExamenMedicoPapeleta('evt-1', 'et-1', legacyPayload, false)
+    expect(res.success).toBe(true)
+    const upsertArg = mockMedicalExamUpsert.mock.calls[0][0]
+    expect(upsertArg.update.physicalExamData.aptitud).toBe('APTO')
+    expect(upsertArg.update.physicalExamData.antecedentes_captured).toBeUndefined()
+  })
+
+  it('3. markComplete=false → status RESULT_REGISTERED', async () => {
+    await saveExamenMedicoPapeleta(
+      'evt-1',
+      'et-1',
+      { neurologico: 'normal', antecedentes_captured: {} },
+      false,
+    )
+    expect(mockEventTestUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'et-1' }, data: { status: 'RESULT_REGISTERED' } }),
+    )
+  })
+
+  it('4. markComplete=true → status COMPLETED', async () => {
+    await saveExamenMedicoPapeleta(
+      'evt-1',
+      'et-1',
+      { neurologico: 'normal', antecedentes_captured: {} },
+      true,
+    )
+    expect(mockEventTestUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'et-1' }, data: { status: 'COMPLETED' } }),
+    )
+  })
+
+  it('5. antecedentes_captured serializado como string "[object Object]" → schema rechaza', async () => {
+    // Defensa: si buildPayload() filtrara antecedentes_captured como string,
+    // el schema debe rechazarlo (regresión I-1 conservada). El action
+    // captura el ZodError en su try/catch y devuelve { success: false }
+    // sin llamar a Prisma.
+    const buggyPayload = {
+      neurologico: 'normal',
+      antecedentes_captured: '[object Object]' as unknown as Record<string, unknown>,
     }
-    const res = await saveAntecedentesCaptura('evt-1', bad)
+    const res = await saveExamenMedicoPapeleta('evt-1', 'et-1', buggyPayload, false)
     expect(res.success).toBe(false)
-    expect(res.error).toMatch(/inválidos|error de servidor/)
+    expect(res.error).toMatch(/error/i)
     expect(mockMedicalExamUpsert).not.toHaveBeenCalled()
   })
+})
 
-  it('6. physicalExamData existente → MERGE no destructivo (preserva otros campos)', async () => {
-    const existingPhysical = {
-      antecedentes_medico: 'nota del médico previa',
-      aptitud: 'APTO',
-      modulo1: { m1_sexo: 'Femenino' },
-    }
-    mockMedicalExamFindUnique.mockResolvedValue({
-      physicalExamData: existingPhysical,
-    })
+// ─── Regresión: schemas siguen siendo válidos (conservados de IMPL-20260809-01) ───
 
-    const res = await saveAntecedentesCaptura('evt-1', baseAntecedentes)
-    expect(res.success).toBe(true)
-
-    const upsertArg = mockMedicalExamUpsert.mock.calls[0][0]
-    const merged = upsertArg.update.physicalExamData
-
-    // Merge no destructivo: los campos previos deben persistir
-    expect(merged.antecedentes_medico).toBe('nota del médico previa')
-    expect(merged.aptitud).toBe('APTO')
-    expect(merged.modulo1).toEqual({ m1_sexo: 'Femenino' })
-
-    // El nuevo snapshot debe estar presente
-    expect(merged.antecedentes_captured).toBeDefined()
-    expect(merged.antecedentes_captured.datos_personales.puesto_actual).toBe('Soldador')
-    expect(merged.antecedentes_captured._provenance.source).toBe('captured')
-    expect(typeof merged.antecedentes_captured._provenance.updatedAt).toBe('string')
-  })
-
-  it('7. physicalExamData null → crea snapshot nuevo sin perder otros datos', async () => {
-    mockMedicalExamFindUnique.mockResolvedValue(null)
-
-    const res = await saveAntecedentesCaptura('evt-1', baseAntecedentes)
-    expect(res.success).toBe(true)
-
-    const upsertArg = mockMedicalExamUpsert.mock.calls[0][0]
-    const merged = upsertArg.update.physicalExamData
-
-    // Sin physicalExamData previo, solo debe estar antecedentes_captured
-    expect(merged.antecedentes_captured.datos_personales.puesto_actual).toBe('Soldador')
-    expect(merged.antecedentes_captured._provenance.capturedBy).toBe('doc-1')
-  })
-
-  it('8. physicalExamData es array (caso degenerado) → fallback a {}', async () => {
-    mockMedicalExamFindUnique.mockResolvedValue({
-      physicalExamData: ['no-es-objeto'] as unknown as object,
-    })
-    const res = await saveAntecedentesCaptura('evt-1', baseAntecedentes)
-    expect(res.success).toBe(true)
-
-    const upsertArg = mockMedicalExamUpsert.mock.calls[0][0]
-    // El array NO se mezcla; se reemplaza por { antecedentes_captured: ... }
-    expect(Array.isArray(upsertArg.update.physicalExamData)).toBe(false)
-    expect(upsertArg.update.physicalExamData.antecedentes_captured).toBeDefined()
-  })
-
-  it('9. llama a revalidatePath("/events/evt-1") tras guardado exitoso', async () => {
-    await saveAntecedentesCaptura('evt-1', baseAntecedentes)
-    expect(mockRevalidatePath).toHaveBeenCalledWith('/events/evt-1')
-  })
-
-  it('10. Prisma throw → captura y devuelve error genérico', async () => {
-    mockMedicalExamUpsert.mockRejectedValue(new Error('DB connection lost'))
-    const res = await saveAntecedentesCaptura('evt-1', baseAntecedentes)
-    expect(res.success).toBe(false)
-    expect(res.error).toMatch(/inválidos|error de servidor/)
-  })
-
-  it('11. compat retroactiva: payload sin _provenance → action inyecta proveniencia', async () => {
-    const withoutProvenance = { datos_personales: { puesto_actual: 'X' } }
-    const res = await saveAntecedentesCaptura('evt-1', withoutProvenance)
-    expect(res.success).toBe(true)
-    const upsertArg = mockMedicalExamUpsert.mock.calls[0][0]
-    // El action siempre inyecta _provenance en el merge
-    expect(upsertArg.update.physicalExamData.antecedentes_captured._provenance.source).toBe('captured')
-  })
-
-  it('12. payload permite campos de exposición booleanos', async () => {
-    const withBooleans = {
-      historia_laboral: {
-        exposicion_quimica: true,
-        exposicion_quimica_especifique: 'plomo',
-        empresa_anterior_1: 'X',
-      },
-    }
-    const res = await saveAntecedentesCaptura('evt-1', withBooleans)
-    expect(res.success).toBe(true)
-    const upsertArg = mockMedicalExamUpsert.mock.calls[0][0]
-    expect(upsertArg.update.physicalExamData.antecedentes_captured.historia_laboral.exposicion_quimica).toBe(true)
-  })
-
-  // ─── IMPL-20260809-01 rework (QA-20260809-01 I-1): regresión ──────────────
-  // El bug original: `buildPayload()` serializaba `antecedentes_captured`
-  // (objeto) como `String({...})` = "[object Object]" y rompía Zod.
-  // Defensa en profundidad: el schema debe aceptar el objeto válido Y
-  // rechazar cualquier serialización incorrecta.
-  it('13. (I-1) ExamenMedicoCompletoSchema acepta antecedentes_captured como objeto válido', () => {
+describe('schemas IMPL-20260809-02 (regresión I-1 / I-2)', () => {
+  it('6. (I-1) ExamenMedicoCompletoSchema acepta antecedentes_captured como objeto válido', () => {
     const validPayload = {
       neurologico: 'normal',
       antecedentes_captured: {
@@ -219,47 +158,28 @@ describe('medical-exam.actions saveAntecedentesCaptura', () => {
     expect(dp?.turno).toBe('MATUTINO')
   })
 
-  it('14. (I-1) ExamenMedicoCompletoSchema RECHAZA antecedentes_captured serializado como string', () => {
-    // Defensa en profundidad: si por algún motivo buildPayload() filtrara
-    // antecedentes_captured como string, el schema debe rechazarlo.
-    const buggyPayload = {
-      antecedentes_captured: '[object Object]' as unknown as Record<string, unknown>,
-    }
-    expect(() => ExamenMedicoCompletoSchema.parse(buggyPayload)).toThrow()
-  })
-
-  it('15. (I-1) ExamenMedicoCompletoSchema acepta payload sin antecedentes_captured (compat retroactiva)', () => {
-    // Exámenes médicos pre-ARCH-20260809-01 NO tienen `antecedentes_captured`.
+  it('7. (I-1) ExamenMedicoCompletoSchema acepta payload sin antecedentes_captured (compat retroactiva)', () => {
     const legacyPayload = { neurologico: 'normal', aptitud: 'APTO' }
     expect(() => ExamenMedicoCompletoSchema.parse(legacyPayload)).not.toThrow()
   })
 
-  // ─── IMPL-20260809-01 rework (QA-20260809-01 I-2): edge case ──────────────
-  // El bug original: el cliente mandaba `turno: ''` y `estado_civil: ''` al
-  // action cuando el paciente no había llenado nada. `DatosPersonalesModulo1Schema`
-  // define esos campos como `z.enum(...).optional()` (solo `undefined` o
-  // literal del enum). Fix: el cliente filtra `''` antes de enviar.
-  it('16. (I-2) AntecedentesCapturaSchema acepta turno/estado_civil = undefined (post-normalización cliente)', () => {
+  it('8. (I-2) AntecedentesCapturaSchema acepta turno/estado_civil = undefined', () => {
     const normalized = {
       datos_personales: { puesto_actual: 'Soldador', turno: undefined, estado_civil: undefined },
     }
     expect(() => AntecedentesCapturaSchema.parse(normalized)).not.toThrow()
-    // También a nivel del sub-schema DatosPersonalesModulo1Schema:
     expect(() =>
       DatosPersonalesModulo1Schema.parse({ turno: undefined, estado_civil: undefined }),
     ).not.toThrow()
   })
 
-  it('17. (I-2) defensa en profundidad: schema RECHAZA turno: "" si llegara al action', () => {
-    // Si el cliente no normalizara, el server-side debe rechazar.
+  it('9. (I-2) defensa en profundidad: schema RECHAZA turno: "" y estado_civil: ""', () => {
     expect(() => DatosPersonalesModulo1Schema.parse({ turno: '' })).toThrow()
     expect(() => DatosPersonalesModulo1Schema.parse({ estado_civil: '' })).toThrow()
-    // Y a nivel de AntecedentesCapturaSchema:
     expect(() => AntecedentesCapturaSchema.parse({ datos_personales: { turno: '' } })).toThrow()
   })
 
-  it('18. (I-2) action saveAntecedentesCaptura acepta payload con turno/estado_civil = undefined', async () => {
-    // Simula el caso "post-normalización cliente" del fix I-2.
+  it('10. (I-2) AntecedentesCapturaSchema acepta payload normalizado (sin turno/estado_civil vacíos)', () => {
     const normalizedPayload = {
       datos_personales: { puesto_actual: 'Soldador', turno: undefined, estado_civil: undefined },
       historia_laboral: {},
@@ -267,12 +187,10 @@ describe('medical-exam.actions saveAntecedentesCaptura', () => {
       no_patologicos: { alcohol: 'NEGADO' as const, tabaco: 'NEGADO' as const },
       patologicos: { diabetes: 'NEGADO' as const },
     }
-    const res = await saveAntecedentesCaptura('evt-1', normalizedPayload)
-    expect(res.success).toBe(true)
-    const upsertArg = mockMedicalExamUpsert.mock.calls[0][0]
-    expect(upsertArg.update.physicalExamData.antecedentes_captured.datos_personales.puesto_actual).toBe('Soldador')
-    // turno y estado_civil deben haber sido omitidos (no "").
-    expect(upsertArg.update.physicalExamData.antecedentes_captured.datos_personales.turno).toBeUndefined()
-    expect(upsertArg.update.physicalExamData.antecedentes_captured.datos_personales.estado_civil).toBeUndefined()
+    expect(() => AntecedentesCapturaSchema.parse(normalizedPayload)).not.toThrow()
+    const parsed = AntecedentesCapturaSchema.parse(normalizedPayload)
+    expect(parsed.datos_personales?.puesto_actual).toBe('Soldador')
+    expect(parsed.datos_personales?.turno).toBeUndefined()
+    expect(parsed.datos_personales?.estado_civil).toBeUndefined()
   })
 })

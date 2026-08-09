@@ -1,10 +1,10 @@
 # ADR-20260809-01: Antecedentes como snapshot por cita en Examen Médico
 
-**Estado:** Activo
+**Estado:** Activo (con revisión SPEC v2 — ver §"Revisión SPEC v2" abajo)
 **Fecha:** 2026-08-09
 **Decisor:** INTEGA
 **Especifica/Concreta:** `ARCH-20260326-04` (Historial Maestro + Examen Snapshot)
-**SPEC companion:** `context/SPECs/SPEC_ARCH-20260809-01-ANTECEDENTES-OUTER-TAB-EXAMEN-MEDICO.md`
+**SPEC companion vigente:** `context/SPECs/SPEC_ARCH-20260809-01-ANTECEDENTES-SUB-PESTANA-EXAMEN-MEDICO.md` (v2 — sustituye a la v1 outer-tab)
 
 ## Contexto
 
@@ -44,3 +44,21 @@ Frank aprobó la **Opción A**: nueva outer-tab "Antecedentes", editable, que pr
 
 - **No es una decisión nueva.** Aplica `ARCH-20260326-04` al componente `ExamenMedicoEstudio`. Si `ARCH-20260326-04` se revierte, esta SPEC debe revisarse.
 - Padre de SPECs futuras que toquen antecedentes en cita.
+
+---
+
+## Revisión SPEC v2 (2026-08-09)
+
+**Contexto:** la SPEC v1 (`...-OUTER-TAB-...`) fue implementada en `IMPL-20260809-01` (commit `a1b2f44`) y **rechazada por Frank tras ver el resultado en producción**. Frank aprobó mover "Antecedentes" de outer-tab separada a **primera sub-pestaña dentro de Examen Médico**.
+
+**SPEC vigente:** `context/SPECs/SPEC_ARCH-20260809-01-ANTECEDENTES-SUB-PESTANA-EXAMEN-MEDICO.md` (v2).
+
+**Qué se MANTIENE de este ADR (decisión de datos, sin cambios):**
+- Puntos 1, 2, 3, 5, 6: snapshot por cita en `physicalExamData.antecedentes_captured`, precarga en cascada, CTA al maestro, sin migración, visibilidad/readonly heredados. **Vigentes.**
+
+**Qué se REVISA de este ADR (decisión de UI/persistencia):**
+- **Punto 4 ("Action backend autónoma... sin IA... sin status change"): SUPERSEDED por SPEC v2 §3.3 y §8.** En v2, `saveAntecedentesCaptura` se **elimina** y antecedentes persiste vía `saveExamenMedicoPapeleta` (mismo action que Módulo 1/Exploración/Impresión). Esto **sí** dispara IA prediagnóstico y **sí** cambia `EventTest.status` a `RESULT_REGISTERED` (en draft). Es **aceptable** porque antecedentes ahora es parte del flujo del examen (sub-pestaña), no una outer-tab independiente. La justificación original ("la outer-tab es confirmación puntual, no reemplaza la autoridad del maestro") se preserva: el snapshot sigue sin sobrescribir el historial maestro; solo cambió el action que lo escribe.
+
+**Alternativa (A) reconsiderada:** en v1 §"Alternativas consideradas", la opción (A) "Meter las 5 secciones dentro de la inner-tab Módulo 1" fue descartada. En v2, Frank aprueba una variante: Antecedentes como **inner-tab propia** (no dentro de Módulo 1, sino paralela a Módulo 1 dentro de Examen Médico). Esto preserva la separación visual (no mezcla con gine/inmuno) que motivó descartar (A) en v1, pero la coloca **dentro** del flujo del examen en lugar de como outer-tab independiente.
+
+**Conclusión:** la decisión de **datos** (snapshot por cita) del ADR se mantiene. Solo la decisión de **UI/persistencia** (punto 4 + ubicación outer-tab) se revisa en SPEC v2. Precedencia §1: SPEC v2 explícita prevalece sobre el punto 4 del ADR donde haya conflicto.

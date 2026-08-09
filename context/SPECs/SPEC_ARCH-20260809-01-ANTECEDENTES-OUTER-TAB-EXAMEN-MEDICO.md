@@ -1,8 +1,16 @@
+> ## ⚠️ SUPERSEDED — Esta SPEC (v1) fue REEMPLAZADA por v2.
+>
+> **SPEC vigente:** `context/SPECs/SPEC_ARCH-20260809-01-ANTECEDENTES-SUB-PESTANA-EXAMEN-MEDICO.md` (v2).
+> **Motivo:** Frank rechazó la decisión de UX "outer-tab separada" tras ver `IMPL-20260809-01` (commit `a1b2f44`) en producción. v2 mueve Antecedentes a la **primera sub-pestaña dentro de Examen Médico** e integra la persistencia en `saveExamenMedicoPapeleta` (elimina `saveAntecedentesCaptura`).
+> **Valor histórico:** esta v1 queda como registro de la decisión rechazada. **No implementar contra v1.** Toda implementación nueva va contra v2 (`IMPL-20260809-02`).
+
+---
+
 # SPEC: Outer-tab "Antecedentes" editable en Examen Médico (snapshot por cita)
 
-**ID:** `ARCH-20260809-01`
+**ID:** `ARCH-20260809-01` (v1 — SUPERSEDED)
 **Padre:** `ARCH-20260326-04` (Historial Maestro + Examen Snapshot), `ARCH-20260324-04` (Examen Médico), `ARCH-20260326-06` (Historial Maestro Longitudinal)
-**Estado:** READY (cumple DoR)
+**Estado:** SUPERSEDED por v2 (ver banner superior)
 **Prioridad:** P1
 **Modelo:** INTEGA Spark 1.1 (Spec) → SOFIA M3 (implementación) → GEMINI (auditoría)
 **Fecha:** 2026-08-09

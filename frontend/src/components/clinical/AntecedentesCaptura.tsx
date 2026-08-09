@@ -1,28 +1,31 @@
 'use client'
 
 /**
- * @file AntecedentesCaptura — Editor snapshot por cita de los Antecedentes
- * declarativos del paciente, dentro de la outer-tab "Antecedentes" del
- * estudio "Examen Médico".
+ * @file AntecedentesCaptura — Editor CONTROLADO de los Antecedentes declarativos
+ * del paciente, usado como PRIMERA sub-pestaña dentro del estudio "Examen Médico"
+ * (inner-tab `antecedentes` de `ExamenMedicoEstudio`).
  *
- * **Responsabilidad:** persistir en `physicalExamData.antecedentes_captured`
- * (MedicalExam) — snapshot local de la cita — sin sobrescribir el historial
- * maestro longitudinal (`WorkerClinicalHistory`).
+ * **Responsabilidad:** editar las 5 secciones declarativas del paciente
+ * (`datos_personales`, `historia_laboral`, `heredo_familiares`, `no_patologicos`,
+ * `patologicos`) y emitir cada cambio al padre (`ExamenMedicoEstudio`) vía
+ * `onChange`. El padre acumula el estado y lo persiste junto con el resto del
+ * examen vía `saveExamenMedicoPapeleta` (snapshot por cita en
+ * `physicalExamData.antecedentes_captured`).
  *
  * **Diferencia con AntecedentesForm.tsx:**
- * - `AntecedentesForm` edita el historial maestro (via `upsertWorkerClinicalHistory`).
- * - `AntecedentesCaptura` edita el snapshot de la cita (via `saveAntecedentesCaptura`).
+ * - `AntecedentesForm` edita el historial maestro longitudinal (via
+ *   `upsertWorkerClinicalHistory`).
+ * - `AntecedentesCaptura` edita el snapshot por cita (sub-pestaña del Examen
+ *   Médico, persistido por el padre).
  *
- * **Precarga en cascada:** (a) snapshot previo de la cita si existe →
- * (b) `prefilledData` del portal → (c) `fallbackLongitudinal` del historial maestro.
+ * **Precarga:** la hace el padre (`ExamenMedicoEstudio`) en cascada
+ * (snapshot → portal → historial maestro) y la pasa resuelta como `value`.
  *
- * @id IMPL-20260809-01
- * @spec ARCH-20260809-01 — outer-tab "Antecedentes" en Examen Médico
- * @ref SPEC §7
+ * @id IMPL-20260809-02
+ * @spec ARCH-20260809-01 v2 — sub-pestaña "Antecedentes" dentro de Examen Médico
  */
 
-import { useEffect, useMemo, useState } from 'react'
-import { saveAntecedentesCaptura } from '@/actions/medical-exam.actions'
+import { useEffect, useState } from 'react'
 import {
   DATOS_PERSONALES_CAMPOS,
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
@@ -37,26 +40,36 @@ import {
   getPatologicosAllFields,
 } from '@/lib/antecedentes-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
-import type { ClinicalHistoryData } from '@/schemas/clinical/history.schema'
 
 interface AntecedentesCapturaProps {
-  eventId: string
+  /** Estado actual del snapshot (resuelto por el padre). Componente controlado. */
+  value: Record<string, unknown>
+  /** Callback que el padre usa para actualizar el estado al cambiar un campo. */
+  onChange: (next: AntecedentesCaptura) => void
+  /** Proveniencia del snapshot persistido (para badge global). Opcional. */
+  initialProvenance?: {
+    source?: 'portal' | 'longitudinal' | 'captured' | 'mixed'
+    updatedAt?: string
+    capturedBy?: string
+  }
+  /** ID del trabajador para CTA hacia Historial Clínico maestro. */
   workerId?: string
-  initialData?: AntecedentesCaptura | null
-  fallbackLongitudinal?: ClinicalHistoryData | null
-  prefilledData?: Record<string, unknown> | null
+  /** Readonly cuando el evento está cerrado (currentStep > 3). */
   readonly?: boolean
+  /** Callback para navegar a la siguiente sub-pestaña ("Módulo 1") desde el pie.
+   *  IMPL-20260809-03 — affordance UX al pie de Antecedentes (SPEC v2 §6.9). */
+  onContinue?: () => void
 }
 
 type SectionKey = 'datos_personales' | 'historia_laboral' | 'heredo_familiares' | 'no_patologicos' | 'patologicos'
 
 /**
- * IMPL-20260809-01 rework (QA-20260809-01 I-2): claves declaradas como
+ * IMPL-20260809-01 (v1, conservado en v2): claves declaradas como
  * `z.enum(...).optional()` en `DatosPersonalesModulo1Schema`
  * (`history.schema.ts:13,16`). Aceptan `undefined` (clave omitida) o un
- * literal del enum, pero NO la cadena vacía. Si el médico deja el select
- * en "—" (que mapea a `''` en el form), el cliente debe filtrar la clave
- * antes de enviar al action.
+ * literal del enum, pero NO la cadena vacía. Antes de emitir `onChange`,
+ * eliminamos las claves vacías de esos campos para que Zod no rechace con
+ * `expected enum, received string`.
  */
 const DP_ENUM_KEYS = ['turno', 'estado_civil'] as const
 
@@ -92,19 +105,14 @@ function stripEmptyEnumKeys<T extends Record<string, string>>(
   return result
 }
 
-function isPlainRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object' && !Array.isArray(v)
-}
-
-/** Estados iniciales (vacíos pero con defaults coherentes con el historial maestro). */
-function buildInitialState(longitudinal: ClinicalHistoryData | null | undefined): {
+/** Construye un estado interno vacío a partir de los shapes conocidos. */
+function buildEmptySections(): {
   datos_personales: Record<string, string>
   historia_laboral: Record<string, string>
   heredo_familiares: Record<string, string>
   no_patologicos: Record<string, string>
   patologicos: Record<string, string>
 } {
-  // Defaults lógicos: Patológicos → NEGADO, No Patológicos → NEGADO, etc.
   const dp: Record<string, string> = {
     puesto_actual: '', area_departamento: '', turno: '',
     antiguedad_anios: '', antiguedad_meses: '', estado_civil: '',
@@ -139,40 +147,6 @@ function buildInitialState(longitudinal: ClinicalHistoryData | null | undefined)
   for (const f of getPatologicosAllFields()) pt[f] = 'NEGADO'
   pt.otras = ''
   pt.especifique = ''
-
-  // Si llega longitudinal, prefillar SOLO strings no vacíos (preservar defaults lógicos).
-  const ldp = isPlainRecord(longitudinal?.datos_personales) ? longitudinal!.datos_personales as Record<string, unknown> : {}
-  for (const k of Object.keys(dp)) {
-    const v = ldp[k]
-    if (typeof v === 'string' && v !== '') dp[k] = v
-    else if (typeof v === 'number') dp[k] = String(v)
-  }
-  const lhl = isPlainRecord(longitudinal?.historia_laboral) ? longitudinal!.historia_laboral as Record<string, unknown> : {}
-  for (const k of Object.keys(hl)) {
-    const v = lhl[k]
-    if (typeof v === 'string' && v !== '') hl[k] = v
-  }
-  // Booleans de exposición → guardar como 'true'/'false' para serialización
-  for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
-    const v = lhl[exp.key]
-    hl[exp.key] = v ? 'true' : 'false'
-  }
-  const lhf = isPlainRecord(longitudinal?.heredo_familiares) ? longitudinal!.heredo_familiares as Record<string, unknown> : {}
-  for (const k of Object.keys(hf)) {
-    const v = lhf[k]
-    if (typeof v === 'string' && v !== '') hf[k] = v
-  }
-  const lnp = isPlainRecord(longitudinal?.no_patologicos) ? longitudinal!.no_patologicos as Record<string, unknown> : {}
-  for (const k of Object.keys(np)) {
-    const v = lnp[k]
-    if (typeof v === 'string' && v !== '') np[k] = v
-  }
-  const lpt = isPlainRecord(longitudinal?.patologicos) ? longitudinal!.patologicos as Record<string, unknown> : {}
-  for (const k of Object.keys(pt)) {
-    const v = lpt[k]
-    if (typeof v === 'string' && v !== '') pt[k] = v
-  }
-
   return {
     datos_personales: dp,
     historia_laboral: hl,
@@ -182,53 +156,50 @@ function buildInitialState(longitudinal: ClinicalHistoryData | null | undefined)
   }
 }
 
-/**
- * Selecciona la fuente de prefill en orden de precedencia:
- * 1. `initialData` (snapshot previo de la cita, ya persistido)
- * 2. `prefilledData` (snapshot del portal)
- * 3. `fallbackLongitudinal` (historial maestro)
- * Devuelve también la proveniencia detectada para mostrar el badge.
- */
-function pickPrefill(
-  initialData: AntecedentesCaptura | null | undefined,
-  prefilledData: Record<string, unknown> | null | undefined,
-  fallbackLongitudinal: ClinicalHistoryData | null | undefined,
-): { source: 'snapshot' | 'portal' | 'longitudinal' | 'none'; data: ClinicalHistoryData | null } {
-  if (initialData && typeof initialData === 'object') {
-    return { source: 'snapshot', data: initialData as ClinicalHistoryData }
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v)
+}
+
+/** Inicializa el estado local de edición desde `value` (objeto resolvido por el padre). */
+function sectionsFromValue(value: Record<string, unknown>): {
+  datos_personales: Record<string, string>
+  historia_laboral: Record<string, string>
+  heredo_familiares: Record<string, string>
+  no_patologicos: Record<string, string>
+  patologicos: Record<string, string>
+} {
+  const empty = buildEmptySections()
+  for (const key of Object.keys(empty) as SectionKey[]) {
+    const section = value[key]
+    if (!isPlainRecord(section)) continue
+    for (const [k, v] of Object.entries(section)) {
+      if (typeof v === 'string') empty[key][k] = v
+      else if (typeof v === 'boolean') empty[key][k] = v ? 'true' : 'false'
+      else if (v === null || v === undefined) empty[key][k] = ''
+    }
   }
-  if (prefilledData && typeof prefilledData === 'object') {
-    return { source: 'portal', data: prefilledData as ClinicalHistoryData }
-  }
-  if (fallbackLongitudinal && typeof fallbackLongitudinal === 'object') {
-    return { source: 'longitudinal', data: fallbackLongitudinal }
-  }
-  return { source: 'none', data: null }
+  return empty
 }
 
 export function AntecedentesCaptura({
-  eventId,
+  value,
+  onChange,
+  initialProvenance,
   workerId,
-  initialData,
-  fallbackLongitudinal,
-  prefilledData,
   readonly = false,
+  onContinue,
 }: AntecedentesCapturaProps) {
-  const { source: prefillSource, data: prefillData } = useMemo(
-    () => pickPrefill(initialData, prefilledData, fallbackLongitudinal),
-    [initialData, prefilledData, fallbackLongitudinal],
-  )
-
-  const [form, setForm] = useState(() => buildInitialState(prefillData))
+  // Estado local de edición — espejo del `value` controlado que pasa el padre.
+  const [form, setForm] = useState(() => sectionsFromValue(value))
   const [modified, setModified] = useState<Set<string>>(new Set())
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  // Rehidratación intencional al cambiar initialData/prefill (ver pickPrefill).
+  // Re-hidratar cuando el padre propaga un nuevo `value` (p. ej. tras un refresh
+  // del servidor, o cuando cambia el cascade snapshot→portal→longitudinal).
   useEffect(() => {
-    setForm(buildInitialState(prefillData))
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm(sectionsFromValue(value))
     setModified(new Set())
-  }, [prefillData])
+  }, [value])
 
   function markModified(key: string) {
     setModified(prev => {
@@ -239,66 +210,56 @@ export function AntecedentesCaptura({
     })
   }
 
-  function setField(section: SectionKey, field: string, value: string) {
-    setForm(prev => ({ ...prev, [section]: { ...prev[section], [field]: value } }))
-    markModified(`${section}.${field}`)
-  }
-
-  async function handleSave() {
-    setIsSaving(true)
-    setSaveMsg(null)
-    try {
-      // Construir payload respetando el shape esperado por el schema.
-      // Para Patológicos: pasar strings SI/NEGADO. Para Historia Laboral: convertir
-      // los booleanos 'true'/'false' de vuelta a booleanos.
-      // El tipo `AntecedentesCaptura` (inferred de Zod) es muy estricto en los
-      // literales SI/NEGADO; casteamos a `Record<string, unknown>` y dejamos que
-      // la validación Zod del action haga el enforcement final.
-      // IMPL-20260809-01 rework (QA-20260809-01 I-2): los schemas de
-      // `history.schema.ts` definen varios campos como `z.enum(...).optional()`,
-      // que solo admiten `undefined` (no `''`). Antes de enviar, eliminamos
-      // del payload cualquier clave vacía en esos campos para que Zod no
-      // rechace con `expected one of ... received string`.
-      const payload: Record<string, unknown> = {
-        datos_personales: stripEmptyEnumKeys(form.datos_personales, DP_ENUM_KEYS),
-        historia_laboral: { ...form.historia_laboral },
-        heredo_familiares: { ...form.heredo_familiares },
-        no_patologicos: stripEmptyEnumKeys(form.no_patologicos, NP_ENUM_KEYS),
-        patologicos: { ...form.patologicos },
-      }
-      // Reconvertir booleanos de exposición al tipo real (el schema espera booleanos).
-      for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
-        const v = form.historia_laboral[exp.key]
-        ;(payload.historia_laboral as Record<string, unknown>)[exp.key] = v === 'true' || v === 'SI'
-      }
-      const res = await saveAntecedentesCaptura(eventId, payload)
-      if (res.success) {
-        setSaveMsg({ type: 'success', text: 'Antecedentes guardados para esta cita.' })
-      } else {
-        setSaveMsg({ type: 'error', text: res.error ?? 'Error al guardar' })
-      }
-    } catch (err: unknown) {
-      setSaveMsg({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Error desconocido',
-      })
-    } finally {
-      setIsSaving(false)
+  function setField(section: SectionKey, field: string, rawValue: string) {
+    const valueToStore = rawValue
+    // Historia Laboral: checkboxes exponen 'true'/'false' (almacenamos como string
+    // para el form plano); al emitir onChange, los reconvertimos a booleanos.
+    const nextForm = {
+      ...form,
+      [section]: { ...form[section], [field]: valueToStore },
     }
+    setForm(nextForm)
+    markModified(`${section}.${field}`)
+    // Construir el payload final respetando el shape de Zod:
+    // - DP: stripEmptyEnumKeys sobre turno/estado_civil
+    // - HL: convertir 'true'/'false' de vuelta a booleanos (excepto los campos
+    //   *_especifique, que son string)
+    // - NP: stripEmptyEnumKeys sobre enums SI/NEGADO
+    // - P: copiar tal cual (los campos son string SI/NEGADO)
+    // El tipo `AntecedentesCaptura` (inferred de Zod) es muy estricto en los
+    // literales SI/NEGADO. Construimos el payload como `Record<string, unknown>`
+    // y dejamos que la validación Zod del action (`ExamenMedicoCompletoSchema`)
+    // haga el enforcement final — mismo patrón que IMPL-20260809-01 v1.
+    const payload: AntecedentesCaptura = {
+      datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
+      historia_laboral: { ...nextForm.historia_laboral },
+      heredo_familiares: { ...nextForm.heredo_familiares },
+      no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
+      patologicos: { ...nextForm.patologicos },
+    } as unknown as AntecedentesCaptura
+    for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
+      const v = nextForm.historia_laboral[exp.key]
+      ;(payload.historia_laboral as Record<string, unknown>)[exp.key] =
+        v === 'true' || v === 'SI'
+    }
+    onChange(payload)
   }
 
-  const provenanceBadge = useMemo(() => {
-    switch (prefillSource) {
-      case 'snapshot':
+  const provenanceSource = initialProvenance?.source ?? 'none'
+  const provenanceBadge = (() => {
+    switch (provenanceSource) {
+      case 'captured':
         return { label: '✏️ Capturado en consulta', color: 'bg-amber-50 text-amber-700 border-amber-200' }
       case 'portal':
         return { label: '📋 Del portal', color: 'bg-blue-50 text-blue-700 border-blue-200' }
       case 'longitudinal':
         return { label: '📋 Historial maestro', color: 'bg-blue-50 text-blue-700 border-blue-200' }
+      case 'mixed':
+        return { label: '📋 Mixto (portal + consulta)', color: 'bg-blue-50 text-blue-700 border-blue-200' }
       default:
         return { label: '🆕 Sin datos previos', color: 'bg-slate-50 text-slate-600 border-slate-200' }
     }
-  }, [prefillSource])
+  })()
 
   return (
     <div className="space-y-4">
@@ -310,6 +271,7 @@ export function AntecedentesCaptura({
             <p className="text-xs font-bold text-teal-800">Antecedentes — Captura por cita</p>
             <p className="text-[10px] text-teal-600 mt-0.5">
               Snapshot local del paciente para esta cita. No modifica el historial maestro longitudinal.
+              Se guarda junto con el resto del Examen Médico.
             </p>
           </div>
         </div>
@@ -606,34 +568,32 @@ export function AntecedentesCaptura({
         </div>
       </fieldset>
 
-      {/* ── Footer: mensajes + botón guardar + banner readonly ──────────── */}
-      {saveMsg && (
-        <div
-          className={`p-3 rounded-xl text-xs font-medium ${
-            saveMsg.type === 'success'
-              ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-              : 'bg-red-50 border border-red-200 text-red-700'
-          }`}
-        >
-          {saveMsg.type === 'success' ? '✅ ' : '❌ '}{saveMsg.text}
-        </div>
-      )}
+      {/* ── Footer: sin botón guardar propio — persistencia integrada ─── */}
       {readonly ? (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-400 text-center">
           Vista de solo lectura — expediente cerrado.
         </div>
       ) : (
-        <div className="flex justify-end pt-2 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving}
-            className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-6 py-2.5 rounded-xl transition-colors disabled:opacity-50"
-          >
-            {isSaving ? 'Guardando...' : '💾 Guardar antecedentes'}
-          </button>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700">
+          💾 Los cambios se guardan junto con el Examen Médico (botón
+          &ldquo;Guardar borrador&rdquo; de Módulo 1, Exploración o Impresión/Aptitud).
         </div>
       )}
+
+      {/* ── Navegación a la siguiente sub-pestaña ────────────────────────
+          IMPL-20260809-03 — affordance UX al pie de Antecedentes
+          (SPEC ARCH-20260809-01 v2 §6.9). El botón salta a Módulo 1
+          (inner-tab 'declarativa'); se deshabilita en modo readonly. */}
+      <div className="flex justify-end pt-1">
+        <button
+          type="button"
+          onClick={onContinue}
+          disabled={readonly}
+          className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+        >
+          Continuar → Módulo 1
+        </button>
+      </div>
     </div>
   )
 }
