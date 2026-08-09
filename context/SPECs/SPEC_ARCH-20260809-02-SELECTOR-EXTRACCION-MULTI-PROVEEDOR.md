@@ -68,7 +68,7 @@ aiCalibration.extraction = {
 
 - `provider` ausente o `null` → se trata como `"gemini"` (migración legacy implícita).
 - `provider="gemini"` + `model` ausente → usar `GEMINI_MODEL_EXTRACTION` (env, default `gemini-2.5-flash`).
-- `provider="m3"` + `model` ausente → usar `M3_DEFAULT_MODEL` (env, default `minimax-m3`).
+- `provider="m3"` + `model` ausente → usar `M3_DEFAULT_MODEL` (env, default `MiniMax-M3`).
 - `provider="m3"` + `M3_API_KEY` ausente → fallback a Gemini con `extraction_fallback_reason="m3_not_configured"`.
 - `provider` con valor no reconocido (no `gemini` ni `m3`) → error explícito `EXTRACTION_PROVIDER_UNKNOWN` (no fallback silencioso).
 
@@ -88,8 +88,8 @@ Si el override es inválido (proveedor no reconocido) → error explícito, no f
 Agregar en `backend/app/main.py` junto al bloque existente (líneas 151-164), sin alterar las existentes:
 
 - `M3_API_KEY` — token del plan Pro de tokens de Frank para MiniMax M3. Default `""` (vacío = no configurado).
-- `M3_BASE_URL` — endpoint OpenAI-compatible de M3. Default a confirmar por SOFIA contra la documentación del plan Pro (valor sugerido inicial: `https://api.minimaxi.io/v1`, **verificar**).
-- `M3_DEFAULT_MODEL` — modelo default de M3 para extracción. Default `minimax-m3`. **SOlIA debe verificar el nombre exacto** del modelo en el plan Pro (puede ser `MiniMax-M3` o variante); el valor es ajustable vía env sin tocar código.
+- `M3_BASE_URL` — endpoint OpenAI-compatible de M3. **Confirmado contra docs oficiales**: `https://api.minimax.io/v1` (alternativa Anthropic-compatible: `https://api.minimax.io/anthropic`).
+- `M3_DEFAULT_MODEL` — modelo default de M3 para extracción. **Confirmado contra docs oficiales**: `MiniMax-M3` (case-sensitive, con mayúsculas en M3). Soporta texto + imagen + video multimodal vía `image_url` / `video_url` content parts, 1M context window.
 
 **Estado runtime de M3** (análogo a `MEDGEMMA_STATUS`):
 - `M3_ENABLED` = `bool(M3_API_KEY)` (derivado, no env).
@@ -250,7 +250,7 @@ Modificar `frontend/src/components/calibration/AICalibrationEditor.tsx` (ver lí
 2. Agregar un `<select>` con opciones `gemini` | `m3` (default `gemini` si `initial.extraction.provider` ausente).
 3. Agregar un `<input>` para `model` con `placeholder` dinámico según provider:
    - `gemini` → `gemini-2.5-flash`
-   - `m3` → `minimax-m3`
+   - `m3` → `MiniMax-M3`
 4. Guardar ambos en `data.extraction.provider` y `data.extraction.model` al submit (ver bloque `data.extraction = {...}` líneas 142-147).
 5. Preservar el merge con `...(extraction ?? {})` para no perder campos existentes.
 

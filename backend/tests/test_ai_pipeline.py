@@ -1655,10 +1655,10 @@ class TestMultiProviderExtractionARCH20260809_02:
         """CA-05: override por payload gana sobre calibración."""
         cal = {"extraction": {"prompt": "x", "provider": "gemini", "model": "gemini-2.5-pro"}}
         provider, model = extractor._resolve_provider(
-            calibration=cal, override_provider="m3", override_model="minimax-m3"
+            calibration=cal, override_provider="m3", override_model="MiniMax-M3"
         )
         assert provider == "m3"
-        assert model == "minimax-m3"
+        assert model == "MiniMax-M3"
 
     def test_resolve_provider_override_model_solo(self, extractor):
         """CB-06: override solo de modelo conserva provider de calibración."""
@@ -1892,7 +1892,7 @@ class TestMultiProviderExtractionARCH20260809_02:
                 raise ImportError("Simulated: openai not installed")
             return original_import(name, *args, **kwargs)
 
-        client = M3VisionBase(api_key="test-key", model="minimax-m3")
+        client = M3VisionBase(api_key="test-key", model="MiniMax-M3")
         with patch("builtins.__import__", side_effect=_fake_import):
             with pytest.raises(RuntimeError, match="openai"):
                 client.call_m3("/fake/audio.pdf", "test prompt")
@@ -1900,24 +1900,24 @@ class TestMultiProviderExtractionARCH20260809_02:
     def test_m3_vision_base_dict_basico(self):
         """Smoke test: M3VisionBase se puede instanciar con kwargs sin fallar."""
         from app.services.ai.base import M3VisionBase
-        client = M3VisionBase(api_key="test-key", model="minimax-m3", base_url="https://example.com")
+        client = M3VisionBase(api_key="test-key", model="MiniMax-M3", base_url="https://example.com")
         assert client.api_key == "test-key"
-        assert client.model == "minimax-m3"
+        assert client.model == "MiniMax-M3"
         assert client.base_url == "https://example.com"
 
     def test_m3_vision_base_constructor_default_model(self):
-        """Default model = minimax-m3 si no se especifica."""
+        """Default model = MiniMax-M3 si no se especifica."""
         from app.services.ai.base import M3VisionBase
         with patch.dict(os.environ, {"M3_DEFAULT_MODEL": ""}, clear=False):
             client = M3VisionBase(api_key="test-key")
-            assert client.model == "minimax-m3"
+            assert client.model == "MiniMax-M3"
 
     def test_m3_vision_base_constructor_default_base_url(self):
-        """Default base_url = https://api.minimaxi.io/v1 si no se especifica."""
+        """Default base_url = https://api.minimax.io/v1 si no se especifica."""
         from app.services.ai.base import M3VisionBase
         with patch.dict(os.environ, {"M3_BASE_URL": ""}, clear=False):
             client = M3VisionBase(api_key="test-key")
-            assert client.base_url == "https://api.minimaxi.io/v1"
+            assert client.base_url == "https://api.minimax.io/v1"
 
     # ── Schema y status endpoint ───────────────────────────────────────────────
 
@@ -1925,7 +1925,7 @@ class TestMultiProviderExtractionARCH20260809_02:
         """CA-02: AIAuditMetadata acepta nuevos campos de trazabilidad extractiva."""
         from app.schemas.medical import AIAuditMetadata
         audit = AIAuditMetadata(
-            model_name="minimax-m3",
+            model_name="MiniMax-M3",
             prompt_version="test_v1",
             extraction_provider_requested="m3",
             extraction_provider_used="gemini",
@@ -1957,8 +1957,8 @@ class TestMultiProviderExtractionARCH20260809_02:
         assert "M3_ENABLED" in source
         assert "M3_STATUS" in source
         # Defaults explícitos en source
-        assert "https://api.minimaxi.io/v1" in source
-        assert "minimax-m3" in source
+        assert "https://api.minimax.io/v1" in source
+        assert "MiniMax-M3" in source
         # /ai/status incluye los campos
         assert "m3_enabled" in source
         assert "m3_status" in source

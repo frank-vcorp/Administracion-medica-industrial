@@ -91,7 +91,7 @@ Resolución de la ambigüedad que ATLAS escaló ("¿override por documento o sol
 - **Riesgos:**
   - Trazabilidad inconsistente si quedan referencias residuales a `gemini_model` sin poblarse con el proveedor real — mitigado por criterios de aceptación de la SPEC.
   - Estados híbridos difíciles de depurar si el fallback no es completo — mitigado por trazabilidad `requested/used/reason`.
-  - Nombre exacto del modelo M3 a confirmar contra la API del plan Pro de Frank — mitigado dejándolo como env var `M3_DEFAULT_MODEL` ajustable, default sugerido `minimax-m3`.
+  - Nombre del modelo M3 confirmado contra docs oficiales: `MiniMax-M3` (case-sensitive). Mitigado por env var `M3_DEFAULT_MODEL` ajustable.
 - **Neutralidades preservadas:** capa clínica intacta (MedGemma/DR7); patrón "extracción sin fallback de prompt" intacto (si falta `aiCalibration.extraction.prompt`, la corrida sigue fallando explícitamente con `EXTRACTION_PROMPT_NOT_CONFIGURED`).
 
 ## 7. No incluido en este corte

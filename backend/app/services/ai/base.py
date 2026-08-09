@@ -366,8 +366,8 @@ class M3VisionBase:
 
     Variables de entorno consumidas (NO mezclar con la capa clínica):
       M3_API_KEY        — token del plan Pro para MiniMax M3.
-      M3_BASE_URL       — endpoint OpenAI-compatible (default: https://api.minimaxi.io/v1).
-      M3_DEFAULT_MODEL  — modelo default (default sugerido: minimax-m3).
+      M3_BASE_URL       — endpoint OpenAI-compatible (default: https://api.minimax.io/v1).
+      M3_DEFAULT_MODEL  — modelo default (default: MiniMax-M3).
     """
 
     @staticmethod
@@ -407,12 +407,12 @@ class M3VisionBase:
         self.base_url = (
             base_url
             or _read_env_var("M3_BASE_URL")
-            or "https://api.minimaxi.io/v1"
+            or "https://api.minimax.io/v1"
         )
         self.model = (
             model
             or _read_env_var("M3_DEFAULT_MODEL")
-            or "minimax-m3"
+            or "MiniMax-M3"
         )
 
     def get_b64_jpeg(self, file_path: str) -> str:

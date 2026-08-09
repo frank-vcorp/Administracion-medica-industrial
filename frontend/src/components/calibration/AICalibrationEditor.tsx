@@ -91,7 +91,7 @@ type ExtractionProvider = "gemini" | "m3"
 const EXTRACTION_PROVIDERS: ExtractionProvider[] = ["gemini", "m3"]
 const EXTRACTION_MODEL_PLACEHOLDERS: Record<ExtractionProvider, string> = {
   gemini: "gemini-2.5-flash",
-  m3: "minimax-m3",
+  m3: "MiniMax-M3",
 }
 function isExtractionProvider(value: unknown): value is ExtractionProvider {
   return value === "gemini" || value === "m3"

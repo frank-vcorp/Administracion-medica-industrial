@@ -247,7 +247,7 @@ notas de calidad y gráficas.
         La precedencia de selección completa vive en `_resolve_provider`.
         """
         if provider == "m3":
-            return os.environ.get("M3_DEFAULT_MODEL", "minimax-m3")
+            return os.environ.get("M3_DEFAULT_MODEL", "MiniMax-M3")
         return os.environ.get("GEMINI_MODEL_EXTRACTION", "gemini-2.5-flash")
 
     def _resolve_provider(

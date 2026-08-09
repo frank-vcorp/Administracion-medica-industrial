@@ -41,7 +41,7 @@ Implementar un selector runtime de proveedor (`gemini` | `m3`) + modelo para la 
 - **`backend/app/services/ai/base.py`**: nueva clase `M3VisionBase` siguiendo el patrón de `FeatherlessVisionBase` (OpenAI SDK, `get_b64_jpeg` reutilizable, content multimodal, `temperature=0.1`, `max_tokens=4096`, reutilización de `GeminiBase._sanitize_model_json_text` + `_extract_openai_choice_text` + parseo tolerante). **Alternativa permitida:** factorizar un `OpenAICompatibleVisionBase` base del que hereden `FeatherlessVisionBase` y `M3VisionBase`, **siempre que** no rompas la firma pública de `FeatherlessVisionBase.call_featherless_vision` ni de `GeminiBase.call_gemini`.
 - **`backend/app/services/ai/extractor.py`**: dispatcher de provider en `extract_by_type`. Resuelve `provider`/`model` con precedencia (override payload > `aiCalibration.extraction.*` > default `gemini`+`GEMINI_MODEL_EXTRACTION`). Selecciona cliente (`call_gemini` o `M3VisionBase`). Aplica fallback M3→Gemini con `extraction_fallback_reason` según triggers del §7 de la SPEC. Devuelve resultado parseado al schema por `doc_type` (lógica existente **sin cambios**).
 - **`backend/app/main.py`**: 
-  - Env vars `M3_API_KEY`, `M3_BASE_URL` (default a confirmar — ver §7 más abajo), `M3_DEFAULT_MODEL` (default `minimax-m3`, **verifica el nombre exacto** contra la API del plan Pro de Frank).
+  - Env vars `M3_API_KEY`, `M3_BASE_URL` (default confirmado: `https://api.minimax.io/v1`), `M3_DEFAULT_MODEL` (default confirmado: `MiniMax-M3`).
   - `M3_ENABLED`, `M3_STATUS` derivados.
   - Extensión de `/api/v2/ai/status` con `m3_enabled`, `m3_status`, `m3_base_url`, `m3_default_model`, `m3_key_present`, `extraction_default_provider_configurable`. `extraction_provider_active` sigue `"gemini"` (no cambies el default global de proceso).
   - Extensión de `/api/v2/studies/upload-and-analyze`: aceptar `extraction_provider_override` y `extraction_model_override` (opcionales en el `Form`); poblar `extraction_snapshot.audit` con `extraction_provider_requested`, `extraction_provider_used`, `extraction_model_used`, `extraction_fallback_reason`. Mantener `model_name` legacy por compat (= `extraction_model_used`). Eliminar/reinterpretar el hardcodeo `"extraction_provider": "gemini"` (línea 1207).
@@ -50,7 +50,7 @@ Implementar un selector runtime de proveedor (`gemini` | `m3`) + modelo para la 
 - **`backend/tests/test_ai_pipeline.py`**: tests nuevos (ver §6).
 
 ### Frontend
-- **`frontend/src/components/calibration/AICalibrationEditor.tsx`**: en la sección "Extracción documental" (233-290), reemplazar badge hardcodeado "Gemini" (237) por badge dinámico; añadir `<select>` provider (`gemini`|`m3`, default `gemini`) + `<input>` model con `placeholder` dinámico (`gemini-2.5-flash` / `minimax-m3`); persistir en `data.extraction.provider` y `data.extraction.model` preservando el merge `...(extraction ?? {})`. Mantener accesibilidad.
+- **`frontend/src/components/calibration/AICalibrationEditor.tsx`**: en la sección "Extracción documental" (233-290), reemplazar badge hardcodeado "Gemini" (237) por badge dinámico; añadir `<select>` provider (`gemini`|`m3`, default `gemini`) + `<input>` model con `placeholder` dinámico (`gemini-2.5-flash` / `MiniMax-M3`); persistir en `data.extraction.provider` y `data.extraction.model` preservando el merge `...(extraction ?? {})`. Mantener accesibilidad.
 - **`frontend/src/types/calibration.ts`**: extender `AICalibrationV2.extraction` (131-137) con `provider?: "gemini" | "m3"` y `model?: string`. Extender `CalibrationTestExtractionResult` (160-166) con `provider_used`, `provider_requested`, `fallback_reason`.
 - **`frontend/src/lib/calibration-schema.ts`**: si existe schema Zod de validación, añadir `provider` y `model` opcionales (enum `["gemini","m3"]` + string libre).
 - **`frontend/src/components/calibration/CalibrationTestResults.tsx`**: mostrar `provider_used` y `fallback_reason` cuando aplique.
@@ -94,8 +94,8 @@ Ejecuta y reporta el resultado de:
 
 ## 7. Incógnitas a resolver durante la implementación
 
-1. **`M3_BASE_URL` default exacto:** la API de MiniMax M3 es OpenAI-compatible, pero la URL base oficial debe confirmarse contra la documentación del plan Pro de Frank. Valor sugerido inicial: `https://api.minimaxi.io/v1`. **Verifica antes de hardcodear; si no la encuentras, deja el env var sin default y documenta que Frank debe poblarlo.**
-2. **`M3_DEFAULT_MODEL` exacto:** default sugerido `minimax-m3`, pero el nombre exacto del modelo en el plan Pro puede ser `MiniMax-M3` o variante. Si no puedes confirmarlo, deja `minimax-m3` como default y nota en el reporte que Frank debe ajustar el env var al nombre real.
+1. **`M3_BASE_URL`** confirmado contra docs oficiales de MiniMax: `https://api.minimax.io/v1` (OpenAI-compatible). Alternativa Anthropic: `https://api.minimax.io/anthropic`.
+2. **`M3_DEFAULT_MODEL`** confirmado contra docs oficiales: `MiniMax-M3` (case-sensitive, soporta multimodal texto+imagen+video, 1M context).
 3. **Gestor de paquetes frontend:** el `package.json` del proyecto indica si es npm o pnpm. PROYECTO.md históricamente usa `npm run`. ATLAS mencionó `pnpm`. **Verifica y usa el que aplique.** Reporta cuál usaste.
 
 Estas son decisiones internas reversibles (env vars ajustables sin redeploy). Confianza ≥80%: procede sin preguntar, documenta en el reporte final.

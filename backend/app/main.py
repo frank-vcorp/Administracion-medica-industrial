@@ -168,8 +168,8 @@ MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and DR7_API_KEY) else "pendin
 # capa de extracción documental — la capa clínica (MedGemma/DR7) sigue intacta.
 # Respaldo: context/SPECs/SPEC_ARCH-20260809-02-SELECTOR-EXTRACCION-MULTI-PROVEEDOR.md
 M3_API_KEY = _read_env_var("M3_API_KEY") or ""
-M3_BASE_URL = _read_env_var("M3_BASE_URL") or "https://api.minimaxi.io/v1"
-M3_DEFAULT_MODEL = _read_env_var("M3_DEFAULT_MODEL") or "minimax-m3"
+M3_BASE_URL = _read_env_var("M3_BASE_URL") or "https://api.minimax.io/v1"
+M3_DEFAULT_MODEL = _read_env_var("M3_DEFAULT_MODEL") or "MiniMax-M3"
 M3_ENABLED = bool(M3_API_KEY)
 M3_STATUS = "available" if M3_ENABLED else "pending_integration"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
