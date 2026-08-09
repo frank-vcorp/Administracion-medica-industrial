@@ -82,13 +82,12 @@ def _make_prisma_mock() -> MagicMock:
             if data is None:
                 data = kwargs
             provider = data["provider"]
-            # IMPL-20260809-07: Prisma Python espera base64 strings para BYTEA.
-            # Almacenamos los strings tal cual llegan (ya b64-encoded por el endpoint).
+            # IMPL-20260809-08: admin_ai_keys.py almacena ciphertext crudo (bytes).
             self.store[provider] = {
                 "provider": provider,
-                "keyCiphertext": data["keyCiphertext"],
-                "keyNonce": data["keyNonce"],
-                "keyTag": data["keyTag"],
+                "keyCiphertext": bytes(data["keyCiphertext"]),
+                "keyNonce": bytes(data["keyNonce"]),
+                "keyTag": bytes(data["keyTag"]),
                 "baseUrl": data.get("baseUrl"),
                 "defaultModel": data.get("defaultModel"),
                 "enabled": data.get("enabled", True),
@@ -105,9 +104,9 @@ def _make_prisma_mock() -> MagicMock:
             provider = where["provider"]
             existing = self.store.get(provider, {})
             existing.update({
-                "keyCiphertext": data["keyCiphertext"],
-                "keyNonce": data["keyNonce"],
-                "keyTag": data["keyTag"],
+                "keyCiphertext": bytes(data["keyCiphertext"]),
+                "keyNonce": bytes(data["keyNonce"]),
+                "keyTag": bytes(data["keyTag"]),
                 "baseUrl": data.get("baseUrl", existing.get("baseUrl")),
                 "defaultModel": data.get("defaultModel", existing.get("defaultModel")),
                 "enabled": data.get("enabled", True),
@@ -321,12 +320,10 @@ def test_put_invalidate_cache(client, prisma_mock, monkeypatch):
     # Insertar fila directamente con key inicial.
     mk = base64.b64decode(os.environ["ENCRYPTION_KEY"])
     ct, n, t = encrypt_key("sk-initial-key", mk)
-    # IMPL-20260809-07: Prisma Python devuelve BYTEA como base64 strings.
+    # IMPL-20260809-08: almacenar ciphertext crudo (bytes).
     prisma_mock._store["gemini"] = {
         "provider": "gemini",
-        "keyCiphertext": base64.b64encode(ct).decode("ascii"),
-        "keyNonce": base64.b64encode(n).decode("ascii"),
-        "keyTag": base64.b64encode(t).decode("ascii"),
+        "keyCiphertext": ct, "keyNonce": n, "keyTag": t,
         "baseUrl": None, "defaultModel": None, "enabled": True,
         "updatedBy": None, "updatedAt": None,
     }

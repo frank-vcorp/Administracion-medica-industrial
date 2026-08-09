@@ -75,12 +75,11 @@ def _key_suffix_from_row(row: Any) -> Optional[str]:
     try:
         from app.services.ai.keys import _load_encryption_key
         mk = _load_encryption_key()
-        # IMPL-20260809-07: Prisma Python devuelve BYTEA como base64 strings.
-        import base64 as _b64_suffix
+        # IMPL-20260809-08: BYTEA almacena ciphertext crudo (bytes), no base64.
         plaintext = decrypt_key(
-            _b64_suffix.b64decode(row.keyCiphertext),
-            _b64_suffix.b64decode(row.keyNonce),
-            _b64_suffix.b64decode(row.keyTag),
+            bytes(row.keyCiphertext),
+            bytes(row.keyNonce),
+            bytes(row.keyTag),
             mk,
         )
         return plaintext[-4:] if len(plaintext) >= 4 else plaintext
@@ -248,20 +247,14 @@ async def upsert_ai_key(
     # 4. Cifrar + 5. Upsert.
     ciphertext, nonce, tag = encrypt_key(api_key, master_key)
     key_suffix = api_key[-4:] if len(api_key) >= 4 else api_key
-    # IMPL-20260809-07 (fix): Prisma Python no serializa bytes crudos para BYTEA.
-    # Convertimos a base64 string; el resolver hace la conversión inversa.
-    import base64
-    ciphertext_b64 = base64.b64encode(ciphertext).decode("ascii")
-    nonce_b64 = base64.b64encode(nonce).decode("ascii")
-    tag_b64 = base64.b64encode(tag).decode("ascii")
 
     fields_changed: List[str] = []
     if existing is None:
         await prisma.aiproviderkey.create({
             "provider": provider,
-            "keyCiphertext": ciphertext_b64,
-            "keyNonce": nonce_b64,
-            "keyTag": tag_b64,
+            "keyCiphertext": ciphertext,
+            "keyNonce": nonce,
+            "keyTag": tag,
             "baseUrl": base_url,
             "defaultModel": default_model,
             "enabled": True,
@@ -270,9 +263,9 @@ async def upsert_ai_key(
         fields_changed = ["apiKey", "baseUrl", "defaultModel"]
     else:
         update_data = {
-            "keyCiphertext": ciphertext_b64,
-            "keyNonce": nonce_b64,
-            "keyTag": tag_b64,
+            "keyCiphertext": ciphertext,
+            "keyNonce": nonce,
+            "keyTag": tag,
             "baseUrl": base_url,
             "defaultModel": default_model,
             "enabled": True,
