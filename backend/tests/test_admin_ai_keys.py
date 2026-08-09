@@ -82,11 +82,13 @@ def _make_prisma_mock() -> MagicMock:
             if data is None:
                 data = kwargs
             provider = data["provider"]
+            # IMPL-20260809-07: Prisma Python espera base64 strings para BYTEA.
+            # Almacenamos los strings tal cual llegan (ya b64-encoded por el endpoint).
             self.store[provider] = {
                 "provider": provider,
-                "keyCiphertext": bytes(data["keyCiphertext"]),
-                "keyNonce": bytes(data["keyNonce"]),
-                "keyTag": bytes(data["keyTag"]),
+                "keyCiphertext": data["keyCiphertext"],
+                "keyNonce": data["keyNonce"],
+                "keyTag": data["keyTag"],
                 "baseUrl": data.get("baseUrl"),
                 "defaultModel": data.get("defaultModel"),
                 "enabled": data.get("enabled", True),
@@ -103,9 +105,9 @@ def _make_prisma_mock() -> MagicMock:
             provider = where["provider"]
             existing = self.store.get(provider, {})
             existing.update({
-                "keyCiphertext": bytes(data["keyCiphertext"]),
-                "keyNonce": bytes(data["keyNonce"]),
-                "keyTag": bytes(data["keyTag"]),
+                "keyCiphertext": data["keyCiphertext"],
+                "keyNonce": data["keyNonce"],
+                "keyTag": data["keyTag"],
                 "baseUrl": data.get("baseUrl", existing.get("baseUrl")),
                 "defaultModel": data.get("defaultModel", existing.get("defaultModel")),
                 "enabled": data.get("enabled", True),
@@ -319,9 +321,12 @@ def test_put_invalidate_cache(client, prisma_mock, monkeypatch):
     # Insertar fila directamente con key inicial.
     mk = base64.b64decode(os.environ["ENCRYPTION_KEY"])
     ct, n, t = encrypt_key("sk-initial-key", mk)
+    # IMPL-20260809-07: Prisma Python devuelve BYTEA como base64 strings.
     prisma_mock._store["gemini"] = {
         "provider": "gemini",
-        "keyCiphertext": ct, "keyNonce": n, "keyTag": t,
+        "keyCiphertext": base64.b64encode(ct).decode("ascii"),
+        "keyNonce": base64.b64encode(n).decode("ascii"),
+        "keyTag": base64.b64encode(t).decode("ascii"),
         "baseUrl": None, "defaultModel": None, "enabled": True,
         "updatedBy": None, "updatedAt": None,
     }

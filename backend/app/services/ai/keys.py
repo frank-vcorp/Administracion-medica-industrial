@@ -316,10 +316,13 @@ class KeyResolver:
                 return resolution
 
             try:
+                # IMPL-20260809-07 (fix): Prisma Python devuelve los campos BYTEA
+                # como base64 strings (no bytes crudos). Decodificar antes de pasar a decrypt_key.
+                import base64 as _b64
                 api_key = decrypt_key(
-                    bytes(row.keyCiphertext),
-                    bytes(row.keyNonce),
-                    bytes(row.keyTag),
+                    _b64.b64decode(row.keyCiphertext),
+                    _b64.b64decode(row.keyNonce),
+                    _b64.b64decode(row.keyTag),
                     master_key,
                 )
             except Exception as e:

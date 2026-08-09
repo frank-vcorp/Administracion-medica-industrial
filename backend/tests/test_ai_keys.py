@@ -77,11 +77,14 @@ def _make_db_row(provider="m3", api_key="sk-from-db-9f3a", enabled=True,
     explícito para tests que necesitan cifrar antes de mutar env vars."""
     mk = master_key if master_key is not None else _load_encryption_key()
     ct, n, t = encrypt_key(api_key, mk)
+    # IMPL-20260809-07: Prisma Python devuelve BYTEA como base64 strings.
+    # El resolver hace b64decode internamente, así que los mocks deben usar base64.
+    import base64 as _b64_test
     row = MagicMock()
     row.provider = provider
-    row.keyCiphertext = ct
-    row.keyNonce = n
-    row.keyTag = t
+    row.keyCiphertext = _b64_test.b64encode(ct).decode("ascii")
+    row.keyNonce = _b64_test.b64encode(n).decode("ascii")
+    row.keyTag = _b64_test.b64encode(t).decode("ascii")
     row.baseUrl = base_url
     row.defaultModel = default_model
     row.enabled = enabled
@@ -285,8 +288,11 @@ def test_resolve_db_corrupt_ciphertext_falls_back_to_env_with_warning_decrypt_er
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
     monkeypatch.setenv("M3_API_KEY", "env-m3-fallback")
     row = _make_db_row(provider="m3", api_key="sk-original")
-    # Corromper el ciphertext
-    row.keyCiphertext = bytes(b ^ 0xFF for b in bytes(row.keyCiphertext))
+    # Corromper el ciphertext: XOR cada byte del base64-decoded ciphertext, re-encode.
+    import base64 as _b64_corrupt
+    ct_raw = _b64_corrupt.b64decode(row.keyCiphertext)
+    ct_corrupt = bytes(b ^ 0xFF for b in ct_raw)
+    row.keyCiphertext = _b64_corrupt.b64encode(ct_corrupt).decode("ascii")
     prisma = _mock_prisma(row=row)
     from app.services import prisma_client
     prisma_client.set_prisma_client(prisma)
