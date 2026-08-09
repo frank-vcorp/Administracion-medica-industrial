@@ -58,6 +58,18 @@ async def lifespan(app: FastAPI):
         # FIX-20260706-14: connect() es async. Hacer await antes de inyectar
         # para que el cliente esté realmente conectado al motor de queries.
         await connect_prisma_client()
+        # IMPL-20260810-01 (fix B† ARCH-20260809-06 §7.4-W): warmup del default
+        # de extracción al startup para curar "restart → primera extracción".
+        # Best-effort: si falla (BD no lista, tabla ausente, etc.) cae a fallback
+        # "gemini" sin romper el arranque.
+        try:
+            from app.services.ai.app_config import get_extraction_default_provider
+            await get_extraction_default_provider()
+        except Exception as warmup_err:
+            import logging
+            logging.getLogger(__name__).warning(
+                "AppConfig warmup failed: %s", type(warmup_err).__name__
+            )
         # Inyecta en reports (router con set_prisma_client propio)
         try:
             from app.api.reports import set_prisma_client as _set_reports
@@ -124,6 +136,16 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # `app.api.v2.admin_ai_keys` para mantener main.py enfocado en el pipeline.
 from app.api.v2.admin_ai_keys import router as admin_ai_keys_router
 app.include_router(admin_ai_keys_router)
+
+# ARCH-20260809-05: Router admin para "Probar conexión" por proveedor.
+# Prefijo /api/v2/admin/ai-keys/{provider}/probe. Solo SUPERADMIN.
+from app.api.v2.admin_ai_keys_probe import router as admin_ai_keys_probe_router
+app.include_router(admin_ai_keys_probe_router)
+
+# ARCH-20260809-05: Router admin para AppConfig runtime (extraction_default_provider).
+# Prefijo /api/v2/admin/app-config. ADMIN/SUPERADMIN GET, SUPERADMIN PUT.
+from app.api.v2.admin_app_config import router as admin_app_config_router
+app.include_router(admin_app_config_router)
 
 # IMPL-20260513-S3: Storage S3-compatible (Railway Bucket).
 # Secretos vienen exclusivamente por env vars — nunca hardcodeados ni logueados.
@@ -625,6 +647,13 @@ def v2_ai_status():
     # ARCH-20260519-15: rollback extractivo — Gemini es siempre el proveedor activo
     # de clasificación documental y extracción estructurada en este corte.
     # Featherless/Qwen-VL desactivado del runtime extractivo hasta nueva decisión arquitectónica.
+    # ARCH-20260809-05: extraction_provider_active es DINÁMICO = extraction_default_provider
+    # (fuente única de verdad; viene del AppConfig con caché TTL 60s).
+    from app.services.ai.app_config import (
+        EXTRACTION_DEFAULT_PROVIDER_FALLBACK,
+        get_extraction_default_provider_sync,
+    )
+    _extraction_default_provider, _extraction_default_source = get_extraction_default_provider_sync()
     return {
         "overall_status": "ok" if all([classifier, extractor, prediagnostic_svc]) else "degraded",
         "classifier": classifier is not None,
@@ -635,8 +664,10 @@ def v2_ai_status():
         "model_clinical": current_clinical_model,
         "medgemma_enabled": MEDGEMMA_ENABLED,
         "medgemma_status": MEDGEMMA_STATUS,
-        # ARCH-20260519-15: trazabilidad del proveedor extractivo activo
-        "extraction_provider_active": "gemini",
+        # ARCH-20260809-05: trazabilidad del proveedor extractivo activo (DINÁMICO).
+        "extraction_provider_active": _extraction_default_provider,
+        "extraction_default_provider": _extraction_default_provider,
+        "extraction_default_provider_source": _extraction_default_source,
         "extraction_model_active": current_extraction_model,
         # ARCH-20260809-02: selector runtime de extracción (Gemini + MiniMax M3).
         # Nunca exponer secretos — solo flags *_key_present booleanos.

@@ -26,6 +26,9 @@ import {
   listAIProviderKeys,
   updateAIProviderKey,
   deleteAIProviderKey,
+  probeAIProviderKey,
+  getExtractionDefaultProvider,
+  setExtractionDefaultProvider,
 } from '@/actions/ai-keys.actions'
 import { getServerSession } from 'next-auth/next'
 
@@ -210,5 +213,239 @@ describe('deleteAIProviderKey', () => {
     setSession('SUPERADMIN')
     const result = await deleteAIProviderKey('openai' as never)
     expect(result.ok).toBe(false)
+  })
+})
+
+// ===========================================================================
+// IMPL-20260809-09 — ARCH-20260809-05
+// Tests para probeAIProviderKey, getExtractionDefaultProvider,
+// setExtractionDefaultProvider.
+// ===========================================================================
+
+describe('probeAIProviderKey', () => {
+  it('returns not-authenticated error when no session', async () => {
+    setSession(null)
+    const result = await probeAIProviderKey({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.provider).toBe('m3')
+      expect(result.errorKind).toBe('unknown')
+      expect(result.message).toMatch(/No autenticado/)
+    }
+  })
+
+  it('returns error for ADMIN role (only SUPERADMIN allowed)', async () => {
+    setSession('ADMIN')
+    const result = await probeAIProviderKey({ provider: 'gemini' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errorKind).toBe('unknown')
+      expect(result.message).toMatch(/SUPERADMIN/)
+    }
+  })
+
+  it('returns error when BACKEND_URL missing', async () => {
+    setSession('SUPERADMIN')
+    setBackendUrl(undefined)
+    const result = await probeAIProviderKey({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errorKind).toBe('unknown')
+      expect(result.message).toMatch(/Backend/)
+    }
+  })
+
+  it('maps 403 from backend to errorKind=unknown with SUPERADMIN message', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(403, { detail: 'forbidden' })
+    const result = await probeAIProviderKey({ provider: 'dr7' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errorKind).toBe('unknown')
+      expect(result.message).toMatch(/SUPERADMIN/)
+    }
+  })
+
+  it('maps 429 from backend to errorKind=rate_limited with retryAfterSec', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(429, { retryAfterSec: 17 })
+    const result = await probeAIProviderKey({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errorKind).toBe('rate_limited')
+      expect(result.rateLimited).toBe(true)
+      expect(result.retryAfterSec).toBe(17)
+    }
+  })
+
+  it('maps 503 from backend to errorKind=not_configured', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(503, { detail: { code: 'not_configured', message: 'Sin API key' } })
+    const result = await probeAIProviderKey({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errorKind).toBe('not_configured')
+      expect(result.message).toMatch(/Sin API key/)
+    }
+  })
+
+  it('returns ok:true on 200 with provider response', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(200, {
+      ok: true,
+      provider: 'm3',
+      latencyMs: 234,
+      httpStatus: 200,
+      message: 'Hola!!',
+    })
+    const result = await probeAIProviderKey({ provider: 'm3' })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.provider).toBe('m3')
+      expect(result.latencyMs).toBe(234)
+      expect(result.message).toBe('Hola!!')
+    }
+  })
+
+  it('returns ok:false with errorKind=auth on 401', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(200, {
+      ok: false,
+      provider: 'm3',
+      errorKind: 'auth',
+      httpStatus: 401,
+      message: 'No autorizado (401)',
+    })
+    const result = await probeAIProviderKey({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errorKind).toBe('auth')
+      expect(result.httpStatus).toBe(401)
+    }
+  })
+
+  it('rejects when response body contains apiKey (defense-in-depth)', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(200, {
+      ok: true,
+      provider: 'm3',
+      latencyMs: 100,
+      httpStatus: 200,
+      message: 'Hola',
+      apiKey: 'sk-leaked-key',
+    })
+    const result = await probeAIProviderKey({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    expect(result.message).toMatch(/filtrada/)
+  })
+})
+
+describe('getExtractionDefaultProvider', () => {
+  it('returns not-authenticated error when no session', async () => {
+    setSession(null)
+    const result = await getExtractionDefaultProvider()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/No autenticado/)
+    }
+  })
+
+  it('returns error for DOCTOR role', async () => {
+    setSession('DOCTOR_GENERAL')
+    const result = await getExtractionDefaultProvider()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/ADMIN/)
+    }
+  })
+
+  it('returns provider for ADMIN', async () => {
+    setSession('ADMIN')
+    setFetchResponse(200, { provider: 'gemini', source: 'default', updatedAt: null })
+    const result = await getExtractionDefaultProvider()
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.provider).toBe('gemini')
+      expect(result.source).toBe('default')
+    }
+  })
+
+  it('returns provider for SUPERADMIN', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(200, { provider: 'm3', source: 'db', updatedAt: '2026-08-09T12:00:00Z' })
+    const result = await getExtractionDefaultProvider()
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.provider).toBe('m3')
+      expect(result.source).toBe('db')
+      expect(result.updatedAt).toBe('2026-08-09T12:00:00Z')
+    }
+  })
+
+  it('rejects when backend returns invalid provider (defense-in-depth)', async () => {
+    setSession('ADMIN')
+    setFetchResponse(200, { provider: 'dr7', source: 'db', updatedAt: null })
+    const result = await getExtractionDefaultProvider()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/provider inválido/)
+    }
+  })
+})
+
+describe('setExtractionDefaultProvider', () => {
+  it('returns not-authenticated error when no session', async () => {
+    setSession(null)
+    const result = await setExtractionDefaultProvider({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/No autenticado/)
+    }
+  })
+
+  it('returns error for ADMIN role (only SUPERADMIN allowed)', async () => {
+    setSession('ADMIN')
+    const result = await setExtractionDefaultProvider({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/SUPERADMIN/)
+    }
+  })
+
+  it('rejects invalid provider via Zod', async () => {
+    setSession('SUPERADMIN')
+    // Bypass Zod type check via `as never`.
+    const result = await setExtractionDefaultProvider({ provider: 'dr7' as never })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/input inválido/)
+    }
+  })
+
+  it('maps 409 to conflict error message', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(409, {
+      detail: { code: 'conflict', message: 'conflicto', currentUpdatedAt: 'x' },
+    })
+    const result = await setExtractionDefaultProvider({ provider: 'm3' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/Conflicto/)
+    }
+  })
+
+  it('returns ok on successful set', async () => {
+    setSession('SUPERADMIN')
+    setFetchResponse(200, {
+      provider: 'm3',
+      source: 'db',
+      updatedAt: '2026-08-09T13:00:00Z',
+    })
+    const result = await setExtractionDefaultProvider({ provider: 'm3' })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.provider).toBe('m3')
+      expect(result.updatedAt).toBe('2026-08-09T13:00:00Z')
+    }
   })
 })

@@ -1682,6 +1682,89 @@ class TestMultiProviderExtractionARCH20260809_02:
                 calibration={"extraction": {"prompt": "x", "provider": "openai"}}
             )
 
+    # ── ARCH-20260809-05: paso 3 lee de AppConfig con caché TTL ───────────
+
+    def test_resolve_provider_default_sin_calibration_y_sin_appconfig_es_gemini(self, extractor):
+        """ARCH-20260809-05: sin override, sin calibración, AppConfig ausente
+        → fallback 'gemini' (cero regresión respecto al comportamiento previo)."""
+        from app.services.ai.app_config import (
+            EXTRACTION_DEFAULT_PROVIDER_KEY,
+            get_app_config_store,
+        )
+        get_app_config_store().invalidate_all()
+        provider, model = extractor._resolve_provider(calibration=None)
+        assert provider == "gemini"
+        assert model == "gemini-2.5-flash"
+
+    def test_resolve_provider_default_desde_appconfig_persistente(self, extractor):
+        """ARCH-20260809-05: AppConfig con {provider:'m3'} → m3 + M3_DEFAULT_MODEL."""
+        from app.services.ai.app_config import (
+            EXTRACTION_DEFAULT_PROVIDER_KEY,
+            get_app_config_store,
+        )
+        import time as _t
+        get_app_config_store().invalidate_all()
+        # Pre-poblar caché directamente con valor "m3".
+        get_app_config_store()._cache[EXTRACTION_DEFAULT_PROVIDER_KEY] = (
+            _t.monotonic(),
+            {"provider": "m3"},
+        )
+        provider, model = extractor._resolve_provider(calibration=None)
+        assert provider == "m3"
+        assert model == "MiniMax-M3"  # _default_model_for("m3")
+        # Cleanup
+        get_app_config_store().invalidate_all()
+
+    def test_resolve_provider_default_override_model_solo(self, extractor):
+        """ARCH-20260809-05: AppConfig default=m3 + override_model='custom-m3'."""
+        from app.services.ai.app_config import (
+            EXTRACTION_DEFAULT_PROVIDER_KEY,
+            get_app_config_store,
+        )
+        import time as _t
+        get_app_config_store().invalidate_all()
+        get_app_config_store()._cache[EXTRACTION_DEFAULT_PROVIDER_KEY] = (
+            _t.monotonic(),
+            {"provider": "m3"},
+        )
+        provider, model = extractor._resolve_provider(
+            calibration=None, override_model="custom-m3"
+        )
+        assert provider == "m3"
+        assert model == "custom-m3"
+        get_app_config_store().invalidate_all()
+
+    def test_put_m3_then_extract_uses_m3_sync(self, extractor):
+        """
+        IMPL-20260810-01 — fix B† ARCH-20260809-06 §7.4 (AC-7 integración):
+        Simula el flujo "cambio por UI → siguiente extracción inmediata" sin
+        tocar la variante async entre medias. Tras primar la caché con
+        {provider:"m3"}, `extractor._resolve_provider(calibration=None)` retorna
+        ("m3","MiniMax-M3") directamente desde la sync cache-only.
+
+        Este test cierra AC-7 con cobertura integración completa: la priming en
+        PUT + el path sync-only del extractor funcionan juntos.
+        """
+        from app.services.ai.app_config import (
+            EXTRACTION_DEFAULT_PROVIDER_KEY,
+            get_app_config_store,
+        )
+        import time as _t
+        get_app_config_store().invalidate_all()
+
+        # Simular el priming que haría `put_extraction_default` tras un PUT.
+        get_app_config_store().prime(
+            EXTRACTION_DEFAULT_PROVIDER_KEY, {"provider": "m3"}
+        )
+
+        # Sin override ni calibración → paso 3 del _resolve_provider lee del cache.
+        provider, model = extractor._resolve_provider(calibration=None)
+        assert provider == "m3"
+        assert model == "MiniMax-M3"  # _default_model_for("m3")
+
+        # Cleanup
+        get_app_config_store().invalidate_all()
+
     # ── Cliente M3 (CA-01) ────────────────────────────────────────────────────
 
     @patch("app.services.ai.base.M3VisionBase.call_m3")

@@ -76,6 +76,8 @@ model User {
   disabledBranches          Branch[]                  @relation("BranchDisabledBy")
   // IMPL-20260809-06: API keys IA gestionadas vía UI (ARCH-20260809-03). updatedBy FK opcional.
   updatedAIProviderKeys     AIProviderKey[]           @relation("AIProviderKeyUpdater")
+  // ARCH-20260809-05: Configuración runtime editable por UI (extraction_default_provider, etc.).
+  appConfigUpdated          AppConfig[]               @relation("AppConfigUpdater")
 
   @@map("users")
 }
@@ -551,6 +553,21 @@ model AIProviderKey {
   user          User?    @relation("AIProviderKeyUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@map("ai_provider_keys")
+}
+
+// ARCH-20260809-05: Configuración runtime editable por UI (sin redeploy).
+// Tabla KV genérica — extensible para futuras settings (timeouts, defaults por capa, etc.).
+// Una fila por clave. value es Json para soportar estructuras complejas.
+// NUNCA almacenar secretos aquí (usar AIProviderKey para cifrar keys de proveedor).
+model AppConfig {
+  key        String   @id              // ej. "extraction_default_provider"
+  value      Json                       // ej. {"provider":"gemini"}
+  updatedBy  String?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  user       User?    @relation("AppConfigUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("app_config")
 }
 
 model ProfileServices {

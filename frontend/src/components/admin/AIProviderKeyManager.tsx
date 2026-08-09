@@ -13,16 +13,25 @@
  */
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import {
   AI_PROVIDER_LABELS,
+  EXTRACTION_PROVIDER_LABELS,
+  EXTRACTION_PROVIDERS,
   type AIProvider,
   type AIKeyPublic,
+  type ExtractionProvider,
+  type GetDefaultResult,
+  type SetDefaultResult,
+  type ProbeResult,
 } from '@/types/ai-keys'
 import {
   listAIProviderKeys,
   updateAIProviderKey,
   deleteAIProviderKey,
+  probeAIProviderKey,
+  getExtractionDefaultProvider,
+  setExtractionDefaultProvider,
 } from '@/actions/ai-keys.actions'
 
 // IMPL-20260809-09: Modelos sugeridos por provider para el selector de extracción.
@@ -60,6 +69,30 @@ export default function AIProviderKeyManager({ canEdit }: AIProviderKeyManagerPr
   const [error, setError] = useState<string | null>(null)
   const [editingProvider, setEditingProvider] = useState<AIProvider | null>(null)
   const [deletingProvider, setDeletingProvider] = useState<AIProvider | null>(null)
+  // IMPL-20260809-09 — ARCH-20260809-05: probe + extraction default state.
+  const [probeStates, setProbeStates] = useState<Record<AIProvider, ProbeResult | null>>({
+    gemini: null,
+    m3: null,
+    dr7: null,
+  })
+  const [probeLoading, setProbeLoading] = useState<AIProvider | null>(null)
+  // Cooldown 30s client-side (espejo del rate limit backend).
+  const [cooldownUntil, setCooldownUntil] = useState<Record<AIProvider, number>>({
+    gemini: 0,
+    m3: 0,
+    dr7: 0,
+  })
+  const [now, setNow] = useState<number>(() => Date.now())
+  // Extraction default state
+  const [extractionDefault, setExtractionDefault] = useState<{
+    provider: ExtractionProvider
+    source: 'db' | 'default'
+    updatedAt: string | null
+  } | null>(null)
+  const [extractionDefaultError, setExtractionDefaultError] = useState<string | null>(null)
+  const [extractionDefaultLoading, setExtractionDefaultLoading] = useState(true)
+  const [extractionDefaultSaving, setExtractionDefaultSaving] = useState(false)
+  const [extractionDefaultSaved, setExtractionDefaultSaved] = useState(false)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -72,9 +105,87 @@ export default function AIProviderKeyManager({ canEdit }: AIProviderKeyManagerPr
     setProviders(result.providers)
   }, [])
 
+  const reloadExtractionDefault = useCallback(async () => {
+    setExtractionDefaultLoading(true)
+    setExtractionDefaultError(null)
+    const r: GetDefaultResult = await getExtractionDefaultProvider()
+    setExtractionDefaultLoading(false)
+    if (r.ok) {
+      setExtractionDefault({
+        provider: r.provider,
+        source: r.source,
+        updatedAt: r.updatedAt,
+      })
+    } else {
+      setExtractionDefaultError(r.error)
+    }
+  }, [])
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional initial load
     void reload()
-  }, [reload])
+    reloadExtractionDefault()
+  }, [reload, reloadExtractionDefault])
+
+  // Tick para countdown del cooldown.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Auto-clear "Guardado" badge después de 3s.
+  useEffect(() => {
+    if (!extractionDefaultSaved) return
+    const t = setTimeout(() => setExtractionDefaultSaved(false), 3000)
+    return () => clearTimeout(t)
+  }, [extractionDefaultSaved])
+
+  const handleProbe = useCallback(
+    async (provider: AIProvider) => {
+      setProbeLoading(provider)
+      setProbeStates((s) => ({ ...s, [provider]: null }))
+      const result = await probeAIProviderKey({ provider })
+      setProbeLoading(null)
+      setProbeStates((s) => ({ ...s, [provider]: result }))
+      // Si vino rate_limited con retryAfterSec, setear cooldown.
+      if (!result.ok && result.errorKind === 'rate_limited' && result.retryAfterSec) {
+        setCooldownUntil((c) => ({
+          ...c,
+          [provider]: Date.now() + result.retryAfterSec! * 1000,
+        }))
+      } else if (!result.ok) {
+        // Cooldown ligero también en error (evita doble-click).
+        setCooldownUntil((c) => ({ ...c, [provider]: Date.now() + 5_000 }))
+      } else {
+        // OK: limpiar cooldown.
+        setCooldownUntil((c) => ({ ...c, [provider]: 0 }))
+      }
+    },
+    [],
+  )
+
+  const handleSaveExtractionDefault = useCallback(
+    async (provider: ExtractionProvider) => {
+      setExtractionDefaultSaving(true)
+      setExtractionDefaultError(null)
+      const r: SetDefaultResult = await setExtractionDefaultProvider({
+        provider,
+        expectedUpdatedAt: extractionDefault?.updatedAt ?? null,
+      })
+      setExtractionDefaultSaving(false)
+      if (!r.ok) {
+        setExtractionDefaultError(r.error)
+        return
+      }
+      setExtractionDefault({
+        provider: r.provider,
+        source: 'db',
+        updatedAt: r.updatedAt,
+      })
+      setExtractionDefaultSaved(true)
+    },
+    [extractionDefault?.updatedAt],
+  )
 
   return (
     <div className="space-y-4">
@@ -87,15 +198,23 @@ export default function AIProviderKeyManager({ canEdit }: AIProviderKeyManagerPr
       {providers === null ? (
         <p className="text-sm text-gray-500">Cargando…</p>
       ) : (
-        providers.map((p) => (
-          <ProviderCard
-            key={p.provider}
-            info={p}
-            canEdit={canEdit}
-            onEdit={() => setEditingProvider(p.provider)}
-            onDelete={() => setDeletingProvider(p.provider)}
-          />
-        ))
+        providers.map((p) => {
+          const cooldownMs = Math.max(0, cooldownUntil[p.provider] - now)
+          const cooldownSec = Math.ceil(cooldownMs / 1000)
+          return (
+            <ProviderCard
+              key={p.provider}
+              info={p}
+              canEdit={canEdit}
+              probeState={probeStates[p.provider] ?? null}
+              probeLoading={probeLoading === p.provider}
+              cooldownSec={cooldownSec}
+              onEdit={() => setEditingProvider(p.provider)}
+              onDelete={() => setDeletingProvider(p.provider)}
+              onProbe={() => handleProbe(p.provider)}
+            />
+          )
+        })
       )}
 
       {editingProvider && (
@@ -120,6 +239,18 @@ export default function AIProviderKeyManager({ canEdit }: AIProviderKeyManagerPr
           }}
         />
       )}
+
+      {/* IMPL-20260809-09 — ARCH-20260809-05: sección selector de proveedor
+          de extracción predeterminado. */}
+      <ExtractionDefaultSection
+        current={extractionDefault}
+        error={extractionDefaultError}
+        loading={extractionDefaultLoading}
+        saving={extractionDefaultSaving}
+        saved={extractionDefaultSaved}
+        canEdit={canEdit}
+        onSave={handleSaveExtractionDefault}
+      />
     </div>
   )
 }
@@ -130,14 +261,34 @@ export default function AIProviderKeyManager({ canEdit }: AIProviderKeyManagerPr
 function ProviderCard(props: {
   info: AIKeyPublic
   canEdit: boolean
+  probeState: ProbeResult | null
+  probeLoading: boolean
+  cooldownSec: number
   onEdit: () => void
   onDelete: () => void
+  onProbe: () => void
 }) {
-  const { info, canEdit, onEdit, onDelete } = props
+  const {
+    info,
+    canEdit,
+    probeState,
+    probeLoading,
+    cooldownSec,
+    onEdit,
+    onDelete,
+    onProbe,
+  } = props
   const masked = info.keySuffix
     ? `••••••••${info.keySuffix}`
     : '(sin clave en BD)'
   const sourceLabel = info.source === 'db' ? 'BD' : 'env var'
+
+  const probeDisabled = probeLoading || cooldownSec > 0
+  const probeButtonLabel = probeLoading
+    ? 'Probando…'
+    : cooldownSec > 0
+      ? `Reintentar en ${cooldownSec}s`
+      : 'Probar conexión'
 
   return (
     <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
@@ -193,10 +344,38 @@ function ProviderCard(props: {
                 : '—'}
             </dd>
           </dl>
+
+          {/* IMPL-20260809-09 — ARCH-20260809-05: resultado del probe */}
+          {probeState && (
+            <div
+              className="mt-3"
+              role="status"
+              aria-live="polite"
+            >
+              {probeState.ok ? (
+                <div className="inline-flex items-center gap-2 px-2 py-1 text-xs rounded bg-green-50 border border-green-200 text-green-800">
+                  <span aria-hidden="true">✓</span>
+                  <span>
+                    OK · {probeState.latencyMs}ms · {probeState.message}
+                  </span>
+                </div>
+              ) : (
+                <div
+                  className="inline-flex items-center gap-2 px-2 py-1 text-xs rounded bg-red-50 border border-red-200 text-red-800"
+                  title={probeState.message}
+                >
+                  <span aria-hidden="true">✗</span>
+                  <span>
+                    {probeState.errorKind} · {probeState.message.slice(0, 80)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {canEdit && (
-          <div className="flex flex-col gap-2 min-w-[120px]">
+          <div className="flex flex-col gap-2 min-w-[140px]">
             <button
               type="button"
               className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
@@ -213,10 +392,188 @@ function ProviderCard(props: {
                 Eliminar
               </button>
             )}
+            <button
+              type="button"
+              className="px-3 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={onProbe}
+              disabled={probeDisabled}
+              aria-label={`Probar conexión del proveedor ${AI_PROVIDER_LABELS[info.provider]}`}
+            >
+              {probeLoading ? (
+                <span className="inline-flex items-center gap-1">
+                  <span
+                    className="inline-block h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin"
+                    aria-hidden="true"
+                  />
+                  Probando…
+                </span>
+              ) : (
+                probeButtonLabel
+              )}
+            </button>
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ExtractionDefaultSection — IMPL-20260809-09 — ARCH-20260809-05
+// ---------------------------------------------------------------------------
+function ExtractionDefaultSection(props: {
+  current: {
+    provider: ExtractionProvider
+    source: 'db' | 'default'
+    updatedAt: string | null
+  } | null
+  error: string | null
+  loading: boolean
+  saving: boolean
+  saved: boolean
+  canEdit: boolean
+  onSave: (provider: ExtractionProvider) => void
+}) {
+  const { current, error, loading, saving, saved, canEdit, onSave } = props
+  // Inicializar `selected` desde `current` lazy; evita setState en effect.
+  const [selected, setSelected] = useState<ExtractionProvider | null>(
+    () => current?.provider ?? null,
+  )
+  // Track si el usuario tocó la selección (no resynceamos automáticamente).
+  const userTouchedRef = useRef(false)
+
+  // Resync SOLO si el usuario no ha tocado todavía y `current` cambia.
+  useEffect(() => {
+    if (
+      !userTouchedRef.current &&
+      current &&
+      selected !== current.provider
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resync only when untouched
+      setSelected(current.provider)
+    }
+  }, [current, selected])
+
+  if (loading) {
+    return (
+      <section className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
+        <h2 className="font-semibold text-base mb-2">
+          Proveedor de extracción predeterminado
+        </h2>
+        <p className="text-sm text-gray-500">Cargando valor actual…</p>
+      </section>
+    )
+  }
+
+  const currentProvider = current?.provider ?? 'gemini'
+  const currentSource = current?.source ?? 'default'
+  const selectedChanged = selected !== null && selected !== currentProvider
+  const saveDisabled = !canEdit || saving || !selectedChanged || selected === null
+
+  return (
+    <section
+      className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm"
+      aria-labelledby="extraction-default-heading"
+    >
+      <h2
+        id="extraction-default-heading"
+        className="font-semibold text-base mb-2"
+      >
+        Proveedor de extracción predeterminado
+      </h2>
+      <p
+        id="extraction-default-description"
+        className="text-xs text-gray-500 mb-3"
+      >
+        DR7/MedGemma es clínico, no aplica como proveedor de extracción.
+      </p>
+
+      {error && (
+        <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-900">
+          {error}
+        </div>
+      )}
+
+      {saved && (
+        <div
+          className="mb-3 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-900"
+          role="status"
+          aria-live="polite"
+        >
+          Guardado
+        </div>
+      )}
+
+      <fieldset className="space-y-2">
+        <legend className="sr-only">Proveedor de extracción</legend>
+        {EXTRACTION_PROVIDERS.map((p) => (
+          <label
+            key={p}
+            className="flex items-start gap-2 text-sm cursor-pointer"
+          >
+            <input
+              type="radio"
+              name="extraction-default-provider"
+              value={p}
+              className="mt-1"
+              checked={selected === p}
+              onChange={() => {
+                userTouchedRef.current = true
+                setSelected(p)
+              }}
+              disabled={!canEdit || saving}
+              aria-describedby="extraction-default-description"
+            />
+            <span>
+              <span className="font-medium">{EXTRACTION_PROVIDER_LABELS[p]}</span>
+              <span className="text-xs text-gray-500 font-mono ml-1">({p})</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+
+      <div className="mt-3 flex items-center gap-3 text-xs text-gray-600">
+        <span>
+          Actual:{' '}
+          <span className="font-medium">
+            {EXTRACTION_PROVIDER_LABELS[currentProvider]}
+          </span>{' '}
+          <span className="font-mono">({currentProvider})</span>
+        </span>
+        <span
+          className={
+            currentSource === 'db'
+              ? 'inline-block px-2 py-0.5 rounded bg-blue-100 text-blue-800'
+              : 'inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700'
+          }
+        >
+          {currentSource === 'db' ? 'BD' : 'default'}
+        </span>
+        {current?.updatedAt && (
+          <span>
+            Actualizado: {new Date(current.updatedAt).toLocaleString()}
+          </span>
+        )}
+      </div>
+
+      {canEdit && (
+        <div className="mt-4">
+          <button
+            type="button"
+            className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => selected && onSave(selected)}
+            disabled={saveDisabled}
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+          {!canEdit && (
+            <span className="ml-2 text-xs text-gray-500">
+              Solo SUPERADMIN puede cambiar el default.
+            </span>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 

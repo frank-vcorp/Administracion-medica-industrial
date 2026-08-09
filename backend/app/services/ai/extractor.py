@@ -257,11 +257,13 @@ notas de calidad y gráficas.
         override_model: Optional[str] = None,
     ) -> Tuple[str, str]:
         """
-        ARCH-20260809-02: Resuelve (provider, model) efectivos con la precedencia
-        del SPEC §3:
+        ARCH-20260809-02 + ARCH-20260809-05: Resuelve (provider, model) efectivos
+        con la precedencia del SPEC §3:
           1. override por payload (gana si presente)
           2. aiCalibration.extraction.provider + .model
-          3. default de proceso: gemini + GEMINI_MODEL_EXTRACTION
+          3. default global persistido en AppConfig (caché TTL 60s).
+             Si AppConfig ausente / inválido / BD caída → fallback "gemini"
+             (cero regresión respecto al comportamiento previo).
 
         El campo `override_model` se aplica siempre que esté presente, incluso
         si `override_provider` es None (CB-06: cambiar solo modelo de la calibración
@@ -299,8 +301,23 @@ notas de calidad y gráficas.
             )
             return cfg_provider, cfg_model
 
-        # 3. Default de proceso (también acepta override_model solo)
-        return "gemini", override_model or self._default_model_for("gemini")
+        # 3. Default global persistido en AppConfig (ARCH-20260809-05).
+        # Si AppConfig no existe / valor inválido / BD caída → fallback "gemini"
+        # (cero regresión respecto al comportamiento previo).
+        # Usamos variante sincrónica que retorna desde caché TTL 60s o fallback;
+        # _resolve_provider se llama dentro del event loop, podemos intentar la
+        # versión async si hay loop corriendo, si no fallback.
+        from app.services.ai.app_config import (
+            EXTRACTION_DEFAULT_PROVIDER_FALLBACK,
+            get_extraction_default_provider_sync,
+        )
+        try:
+            default_provider, _src = get_extraction_default_provider_sync()
+        except Exception:
+            default_provider = EXTRACTION_DEFAULT_PROVIDER_FALLBACK
+        if default_provider not in EXTRACTION_PROVIDERS:
+            default_provider = EXTRACTION_DEFAULT_PROVIDER_FALLBACK
+        return default_provider, override_model or self._default_model_for(default_provider)
 
     def _is_m3_unavailable(self, provider: str) -> bool:
         """
