@@ -316,16 +316,16 @@ class KeyResolver:
                 return resolution
 
             try:
-                # FIX-20260810-02: prisma-client-py 0.15 expone columnas Bytes
-                # como base64 str (no bytes crudos). El engine Prisma decodifica
-                # internamente al escribir a BYTEA; la API devuelve base64 al
-                # leer. Decodificamos aquí antes de pasar a decrypt_key.
-                # Verificable: pasar bytes a b64decode funciona (tolerante) y
-                # mantener la simetría con admin_ai_keys.py:80-82.
+                # FIX-20260810-03: prisma-client-py 0.15 expone columnas Bytes
+                # como objetos `fields.Base64` (wrapper, NO str/bytes). Su
+                # método `.decode()` devuelve los bytes originales (no es base64
+                # de los bytes: es los bytes ya decodificados desde BYTEA).
+                # b64decode(Base64) lanza TypeError. Por eso FIX-20260810-02
+                # nunca funcionó: asumía str/bytes.
                 api_key = decrypt_key(
-                    base64.b64decode(row.keyCiphertext),
-                    base64.b64decode(row.keyNonce),
-                    base64.b64decode(row.keyTag),
+                    row.keyCiphertext.decode(),
+                    row.keyNonce.decode(),
+                    row.keyTag.decode(),
                     master_key,
                 )
             except Exception as e:

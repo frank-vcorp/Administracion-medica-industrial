@@ -86,9 +86,14 @@ def _make_db_row(provider="m3", api_key="sk-from-db-9f3a", enabled=True,
     ct, n, t = encrypt_key(api_key, mk)
     row = MagicMock()
     row.provider = provider
-    row.keyCiphertext = base64.b64encode(ct).decode("ascii")
-    row.keyNonce = base64.b64encode(n).decode("ascii")
-    row.keyTag = base64.b64encode(t).decode("ascii")
+    # FIX-20260810-03: prisma-client-py 0.15 expone columnas Bytes como
+    # objetos `fields.Base64` (wrapper, NO str/bytes). Su método `.decode()`
+    # devuelve los bytes originales desde BYTEA. FIX-20260810-02 asumió str
+    # y aplicaba base64.b64decode, lo que lanzaba TypeError en producción.
+    from prisma._fields import Base64 as PrismaBase64
+    row.keyCiphertext = PrismaBase64(ct)
+    row.keyNonce = PrismaBase64(n)
+    row.keyTag = PrismaBase64(t)
     row.baseUrl = base_url
     row.defaultModel = default_model
     row.enabled = enabled
@@ -290,17 +295,17 @@ def test_resolve_db_corrupt_ciphertext_falls_back_to_env_with_warning_decrypt_er
 ):
     """CB-1: ciphertext/tag alterado en BD → resolver cae a env var.
 
-    FIX-20260810-02: el row ahora viene con campos base64 str; corrompemos
-    el ciphertext tras decodificar, XOR a un byte, y re-codificamos para que
-    el resolver vea un base64 str pero con bytes subyacentes alterados.
+    FIX-20260810-03: ahora row.keyCiphertext es un objeto Base64 (wrapper).
+    Para corromper, lo decodificamos con .decode() (que devuelve los bytes
+    originales), XOR, y re-envolvemos con Base64(bytes).
     """
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
     monkeypatch.setenv("M3_API_KEY", "env-m3-fallback")
     row = _make_db_row(provider="m3", api_key="sk-original")
-    # Decodificar base64, XOR a cada byte, re-codificar base64.
-    raw_ct = base64.b64decode(row.keyCiphertext)
+    from prisma._fields import Base64 as PrismaBase64
+    raw_ct = row.keyCiphertext.decode()
     tampered = bytes(b ^ 0xFF for b in raw_ct)
-    row.keyCiphertext = base64.b64encode(tampered).decode("ascii")
+    row.keyCiphertext = PrismaBase64(tampered)
     prisma = _mock_prisma(row=row)
     from app.services import prisma_client
     prisma_client.set_prisma_client(prisma)
@@ -314,15 +319,16 @@ def test_resolve_db_corrupt_ciphertext_falls_back_to_env_with_warning_decrypt_er
 def test_resolve_db_corrupt_single_byte_in_ciphertext_decrypt_error(
     monkeypatch, master_key_env, resolver
 ):
-    """FIX-20260810-02 (test #3 del plan): corromper UN solo byte del
+    """FIX-20260810-03 (test #3 del plan): corromper UN solo byte del
     ciphertext (XOR) → resolver cae a env var con warning decrypt_error.
     Replica el escenario 'dato alterado en BD / corrupción de página'."""
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
     monkeypatch.setenv("DR7_API_KEY", "env-dr7-fallback")
     row = _make_db_row(provider="dr7", api_key="sk-corrupt-test-1byte")
-    raw_ct = bytearray(base64.b64decode(row.keyCiphertext))
+    from prisma._fields import Base64 as PrismaBase64
+    raw_ct = bytearray(row.keyCiphertext.decode())
     raw_ct[0] ^= 0x01  # flip 1 bit del primer byte
-    row.keyCiphertext = base64.b64encode(bytes(raw_ct)).decode("ascii")
+    row.keyCiphertext = PrismaBase64(bytes(raw_ct))
     prisma = _mock_prisma(row=row)
     from app.services import prisma_client
     prisma_client.set_prisma_client(prisma)
@@ -336,15 +342,16 @@ def test_resolve_db_corrupt_single_byte_in_ciphertext_decrypt_error(
 def test_resolve_db_corrupt_tag_only_decrypt_error(
     monkeypatch, master_key_env, resolver
 ):
-    """FIX-20260810-02: tag alterado solo (sin tocar ciphertext) también
+    """FIX-20260810-03: tag alterado solo (sin tocar ciphertext) también
     debe detectarse vía InvalidTag. AES-GCM verifica integridad de TODO
     el bloque ciphertext+tag."""
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
     monkeypatch.setenv("GEMINI_API_KEY", "env-gemini-fallback")
     row = _make_db_row(provider="gemini", api_key="sk-tag-corrupt")
-    raw_tag = bytearray(base64.b64decode(row.keyTag))
+    from prisma._fields import Base64 as PrismaBase64
+    raw_tag = bytearray(row.keyTag.decode())
     raw_tag[-1] ^= 0x80  # flip MSB del último byte
-    row.keyTag = base64.b64encode(bytes(raw_tag)).decode("ascii")
+    row.keyTag = PrismaBase64(bytes(raw_tag))
     prisma = _mock_prisma(row=row)
     from app.services import prisma_client
     prisma_client.set_prisma_client(prisma)

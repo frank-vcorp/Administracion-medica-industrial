@@ -85,6 +85,8 @@ def _make_prisma_mock() -> MagicMock:
     # AsyncMock en Python 3.14 pasa el mock como self al side_effect cuando se
     # accede como atributo de otro mock. Usamos clases para que self explícito
     # funcione.
+    from prisma._fields import Base64 as PrismaBase64
+
     class _RepoMock:
         def __init__(self, store):
             self.store = store
@@ -93,10 +95,35 @@ def _make_prisma_mock() -> MagicMock:
             row = self.store.get(where["provider"])
             if row is None:
                 return None
-            return MagicMock(**row)
+            # FIX-20260810-03: prisma-client-py 0.15 expone columnas Bytes como
+            # objetos `Base64` (wrapper con .decode()). Envolvemos los campos
+            # Bytes para reproducir el contrato real.
+            row_copy = dict(row)
+            for f in ("keyCiphertext", "keyNonce", "keyTag"):
+                if f in row_copy and not isinstance(row_copy[f], PrismaBase64):
+                    val = row_copy[f]
+                    if isinstance(val, str):
+                        # El store guarda str base64 (lo que admin_ai_keys.py
+                        # escribe); Base64.fromb64 acepta str.
+                        row_copy[f] = PrismaBase64.fromb64(val)
+                    elif isinstance(val, (bytes, bytearray)):
+                        # Para tests que guardan bytes raw directamente.
+                        row_copy[f] = PrismaBase64(bytes(val))
+            return MagicMock(**row_copy)
 
         async def find_many(self):
-            return [MagicMock(**r) for r in self.store.values()]
+            out = []
+            for r in self.store.values():
+                row_copy = dict(r)
+                for f in ("keyCiphertext", "keyNonce", "keyTag"):
+                    if f in row_copy and not isinstance(row_copy[f], PrismaBase64):
+                        val = row_copy[f]
+                        if isinstance(val, str):
+                            row_copy[f] = PrismaBase64.fromb64(val)
+                        elif isinstance(val, (bytes, bytearray)):
+                            row_copy[f] = PrismaBase64(bytes(val))
+                out.append(MagicMock(**row_copy))
+            return out
 
         async def create(self, data=None, **kwargs):
             if data is None:

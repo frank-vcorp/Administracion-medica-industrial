@@ -76,13 +76,12 @@ def _key_suffix_from_row(row: Any) -> Optional[str]:
     try:
         from app.services.ai.keys import _load_encryption_key
         mk = _load_encryption_key()
-        # FIX-20260810-02: prisma-client-py 0.15 devuelve BYTEA como base64 str
-        # en el cliente; el engine decodifica a BYTEA al almacenar y la API
-        # expone el base64. Decodificamos antes de pasar a decrypt_key.
+        # FIX-20260810-03: row.keyCiphertext/etc son objetos `fields.Base64`
+        # (wrapper). Su método `.decode()` devuelve los bytes originales.
         plaintext = decrypt_key(
-            base64.b64decode(row.keyCiphertext),
-            base64.b64decode(row.keyNonce),
-            base64.b64decode(row.keyTag),
+            row.keyCiphertext.decode(),
+            row.keyNonce.decode(),
+            row.keyTag.decode(),
             mk,
         )
         return plaintext[-4:] if len(plaintext) >= 4 else plaintext
