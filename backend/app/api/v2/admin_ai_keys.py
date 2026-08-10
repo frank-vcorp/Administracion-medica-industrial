@@ -14,6 +14,7 @@ NextAuth del frontend (`listAIProviderKeys`, `updateAIProviderKey`,
 """
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -75,11 +76,13 @@ def _key_suffix_from_row(row: Any) -> Optional[str]:
     try:
         from app.services.ai.keys import _load_encryption_key
         mk = _load_encryption_key()
-        # IMPL-20260809-08: BYTEA almacena ciphertext crudo (bytes), no base64.
+        # FIX-20260810-02: prisma-client-py 0.15 devuelve BYTEA como base64 str
+        # en el cliente; el engine decodifica a BYTEA al almacenar y la API
+        # expone el base64. Decodificamos antes de pasar a decrypt_key.
         plaintext = decrypt_key(
-            bytes(row.keyCiphertext),
-            bytes(row.keyNonce),
-            bytes(row.keyTag),
+            base64.b64decode(row.keyCiphertext),
+            base64.b64decode(row.keyNonce),
+            base64.b64decode(row.keyTag),
             mk,
         )
         return plaintext[-4:] if len(plaintext) >= 4 else plaintext
@@ -247,6 +250,14 @@ async def upsert_ai_key(
     # 4. Cifrar + 5. Upsert.
     ciphertext, nonce, tag = encrypt_key(api_key, master_key)
     key_suffix = api_key[-4:] if len(api_key) >= 4 else api_key
+    # FIX-20260810-02: prisma-client-py 0.15 NO serializa `bytes` para columnas
+    # Bytes (BYTEA) — su serializer JSON lanza TypeError. El cliente espera
+    # base64 str; el engine decodifica a bytes reales al almacenar.
+    # Reasignamos in-place para que los dicts create/update (líneas abajo)
+    # reciban los strings base64 sin tocar su estructura.
+    ciphertext = base64.b64encode(ciphertext).decode("ascii")
+    nonce = base64.b64encode(nonce).decode("ascii")
+    tag = base64.b64encode(tag).decode("ascii")
 
     fields_changed: List[str] = []
     if existing is None:

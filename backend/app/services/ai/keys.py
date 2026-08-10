@@ -316,12 +316,16 @@ class KeyResolver:
                 return resolution
 
             try:
-                # IMPL-20260809-08 (fix): Prisma Python devuelve BYTEA como bytes crudos.
-                # admin_ai_keys.py ahora pasa los bytes de ciphertext directamente (sin b64).
+                # FIX-20260810-02: prisma-client-py 0.15 expone columnas Bytes
+                # como base64 str (no bytes crudos). El engine Prisma decodifica
+                # internamente al escribir a BYTEA; la API devuelve base64 al
+                # leer. Decodificamos aquí antes de pasar a decrypt_key.
+                # Verificable: pasar bytes a b64decode funciona (tolerante) y
+                # mantener la simetría con admin_ai_keys.py:80-82.
                 api_key = decrypt_key(
-                    bytes(row.keyCiphertext),
-                    bytes(row.keyNonce),
-                    bytes(row.keyTag),
+                    base64.b64decode(row.keyCiphertext),
+                    base64.b64decode(row.keyNonce),
+                    base64.b64decode(row.keyTag),
                     master_key,
                 )
             except Exception as e:

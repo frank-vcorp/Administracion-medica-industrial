@@ -18,6 +18,7 @@ Cubre SPEC §6.1-§6.3 + AC-4 / AC-5 / AC-8 / AC-9 / AC-11:
 """
 import os
 import sys
+import asyncio
 import base64
 import json
 from pathlib import Path
@@ -54,9 +55,28 @@ def _make_prisma_mock() -> MagicMock:
     """
     Mock Prisma con tabla 'aiproviderkey' in-memory.
     Persiste writes para que GET tras PUT refleje el cambio.
+
+    FIX-20260810-02: fiel al contrato de prisma-client-py 0.15 para columnas
+    Bytes. El serializer JSON real NO acepta `bytes` (lanza TypeError). El
+    cliente envía/recibe `str` base64; el engine decodifica a BYTEA al
+    almacenar. El guard `_assert_bytea_str` reproduce ese error para que
+    cualquier regresión que vuelva a pasar `bytes` al create/update se
+    manifieste con el MISMO error que en producción.
     """
     store: Dict[str, Dict[str, Any]] = {}
     auditlog: List[Dict[str, Any]] = []
+
+    BYTEA_FIELDS = ("keyCiphertext", "keyNonce", "keyTag")
+
+    def _assert_bytea_str(payload: Dict[str, Any]) -> None:
+        """Replica el TypeError de prisma_client._builder.py:826 si llega bytes
+        en una columna Bytes. Es la regresión que produjo el 500 en Railway."""
+        for f in BYTEA_FIELDS:
+            v = payload.get(f)
+            if isinstance(v, (bytes, bytearray)):
+                raise TypeError(
+                    f"Object of type {type(v).__name__} is not JSON serializable"
+                )
 
     prisma = MagicMock()
     pk = MagicMock()
@@ -81,13 +101,14 @@ def _make_prisma_mock() -> MagicMock:
         async def create(self, data=None, **kwargs):
             if data is None:
                 data = kwargs
+            _assert_bytea_str(data)  # FIX-20260810-02
             provider = data["provider"]
-            # IMPL-20260809-08: admin_ai_keys.py almacena ciphertext crudo (bytes).
+            # FIX-20260810-02: admin_ai_keys.py envía base64 str (no bytes).
             self.store[provider] = {
                 "provider": provider,
-                "keyCiphertext": bytes(data["keyCiphertext"]),
-                "keyNonce": bytes(data["keyNonce"]),
-                "keyTag": bytes(data["keyTag"]),
+                "keyCiphertext": data["keyCiphertext"],
+                "keyNonce": data["keyNonce"],
+                "keyTag": data["keyTag"],
                 "baseUrl": data.get("baseUrl"),
                 "defaultModel": data.get("defaultModel"),
                 "enabled": data.get("enabled", True),
@@ -101,12 +122,13 @@ def _make_prisma_mock() -> MagicMock:
                 # Soporte para `update(where={...}, data={...})` (kwargs).
                 if "data" in kwargs:
                     data = kwargs["data"]
+            _assert_bytea_str(data)  # FIX-20260810-02
             provider = where["provider"]
             existing = self.store.get(provider, {})
             existing.update({
-                "keyCiphertext": bytes(data["keyCiphertext"]),
-                "keyNonce": bytes(data["keyNonce"]),
-                "keyTag": bytes(data["keyTag"]),
+                "keyCiphertext": data["keyCiphertext"],
+                "keyNonce": data["keyNonce"],
+                "keyTag": data["keyTag"],
                 "baseUrl": data.get("baseUrl", existing.get("baseUrl")),
                 "defaultModel": data.get("defaultModel", existing.get("defaultModel")),
                 "enabled": data.get("enabled", True),
@@ -320,15 +342,17 @@ def test_put_invalidate_cache(client, prisma_mock, monkeypatch):
     # Insertar fila directamente con key inicial.
     mk = base64.b64decode(os.environ["ENCRYPTION_KEY"])
     ct, n, t = encrypt_key("sk-initial-key", mk)
-    # IMPL-20260809-08: almacenar ciphertext crudo (bytes).
+    # FIX-20260810-02: el store en memoria debe parecerse al resultado del
+    # prisma client real, que expone Bytes como base64 str.
     prisma_mock._store["gemini"] = {
         "provider": "gemini",
-        "keyCiphertext": ct, "keyNonce": n, "keyTag": t,
+        "keyCiphertext": base64.b64encode(ct).decode("ascii"),
+        "keyNonce": base64.b64encode(n).decode("ascii"),
+        "keyTag": base64.b64encode(t).decode("ascii"),
         "baseUrl": None, "defaultModel": None, "enabled": True,
         "updatedBy": None, "updatedAt": None,
     }
     # Cargar caché con valor inicial.
-    import asyncio
     resolver = get_key_resolver()
     resolver._master_key = None  # reset lazy cache para que relea env
     resolver.invalidate_all()
@@ -393,7 +417,6 @@ def test_delete_invalidate_cache(client, prisma_mock, monkeypatch):
         json={"apiKey": api_key},
     )
 
-    import asyncio
     resolver = get_key_resolver()
     resolver._master_key = None
     resolver.invalidate_all()
@@ -411,3 +434,165 @@ def test_delete_invalidate_cache(client, prisma_mock, monkeypatch):
     post = asyncio.run(resolver.resolve("m3"))
     assert post.source == "env"
     assert post.warning == "row_missing"
+
+
+# ---------------------------------------------------------------------------
+# FIX-20260810-02 — Contrato de serialización Bytes <-> base64 str
+# ---------------------------------------------------------------------------
+def test_put_stores_base64_str_not_bytes(client, prisma_mock):
+    """El endpoint DEBE serializar las columnas BYTEA como str base64 (no
+    bytes). Es la regresión exacta del 500 de Railway: el serializer JSON de
+    prisma-client-py 0.15 no acepta bytes para columnas Bytes.
+    El guard en _RepoMock.create reproduce ese error si vuelve a pasarse bytes.
+    """
+    r = client.put(
+        "/api/v2/admin/ai-keys/m3",
+        headers=_headers("SUPERADMIN"),
+        json={"apiKey": "sk-base64-contract-7777"},
+    )
+    assert r.status_code == 200
+
+    stored = prisma_mock._store["m3"]
+    # Los 3 campos BYTEA deben ser str (no bytes/bytearray).
+    for f in ("keyCiphertext", "keyNonce", "keyTag"):
+        v = stored[f]
+        assert isinstance(v, str), (
+            f"FIX-20260810-02: campo BYTEA '{f}' debe ser base64 str; "
+            f"recibido {type(v).__name__}"
+        )
+        # Y deben ser base64 ASCII válido (decodifican a bytes).
+        decoded = base64.b64decode(v, validate=True)
+        if f == "keyNonce":
+            assert len(decoded) == 12
+        elif f == "keyTag":
+            assert len(decoded) == 16
+
+
+def test_put_roundtrip_resolve_recovers_original_key(
+    client, prisma_mock, monkeypatch
+):
+    """FIX-20260810-02 — roundtrip end-to-end: PUT cifra y guarda (base64 str)
+    → resolver consulta BD → descifra → devuelve la key original con
+    source='db' y sin warning. Es la prueba de que el fix unifica escritura
+    y lectura contra el mismo contrato Prisma."""
+    monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+    monkeypatch.setenv("M3_API_KEY", "env-m3-should-not-be-used")
+
+    api_key = "sk-roundtrip-FIX2026081002-ABCD"
+    r = client.put(
+        "/api/v2/admin/ai-keys/m3",
+        headers=_headers("SUPERADMIN"),
+        json={"apiKey": api_key},
+    )
+    assert r.status_code == 200
+
+    # Lo que el writer dejó en BD es base64 str; el reader debe poder
+    # decodificarlo y obtener la key original.
+    resolver = get_key_resolver()
+    resolver._master_key = None
+    resolver.invalidate_all()
+    resolution = asyncio.run(resolver.resolve("m3"))
+    assert resolution.api_key == api_key
+    assert resolution.source == "db"
+    assert resolution.warning is None
+
+
+def test_put_rejects_bytes_payload_via_mock_guard(client, prisma_mock):
+    """Si alguien revierte el fix y vuelve a pasar bytes, el mock fiel al
+    contrato Prisma debe lanzar TypeError. Esto es la regresión de producción
+    en pytest (no necesita Railway para detectarla)."""
+    # Bypass el endpoint: simulamos un caller que aún pasa bytes (p.ej. código
+    # legacy que no migró). El guard de _RepoMock.create debe proteger.
+    bad_data = {
+        "provider": "m3",
+        "keyCiphertext": b"\x00" * 16,  # bytes crudo, no base64
+        "keyNonce": b"\x00" * 12,
+        "keyTag": b"\x00" * 16,
+        "baseUrl": None,
+        "defaultModel": None,
+        "enabled": True,
+        "updatedBy": None,
+    }
+    with pytest.raises(TypeError, match="not JSON serializable"):
+        asyncio.run(prisma_mock.aiproviderkey.create(data=bad_data))
+
+
+# ---------------------------------------------------------------------------
+# FIX-20260810-02 — Contrato de serialización Bytes <-> base64 str
+# ---------------------------------------------------------------------------
+def test_put_stores_base64_str_not_bytes(client, prisma_mock):
+    """El endpoint DEBE serializar las columnas BYTEA como str base64 (no
+    bytes). Es la regresión exacta del 500 de Railway: el serializer JSON de
+    prisma-client-py 0.15 no acepta bytes para columnas Bytes.
+    El guard en _RepoMock.create reproduce ese error si vuelve a pasarse bytes.
+    """
+    r = client.put(
+        "/api/v2/admin/ai-keys/m3",
+        headers=_headers("SUPERADMIN"),
+        json={"apiKey": "sk-base64-contract-7777"},
+    )
+    assert r.status_code == 200
+
+    stored = prisma_mock._store["m3"]
+    # Los 3 campos BYTEA deben ser str (no bytes/bytearray).
+    for f in ("keyCiphertext", "keyNonce", "keyTag"):
+        v = stored[f]
+        assert isinstance(v, str), (
+            f"FIX-20260810-02: campo BYTEA '{f}' debe ser base64 str; "
+            f"recibido {type(v).__name__}"
+        )
+        # Y deben ser base64 ASCII válido (decodifican a bytes).
+        decoded = base64.b64decode(v, validate=True)
+        if f == "keyNonce":
+            assert len(decoded) == 12
+        elif f == "keyTag":
+            assert len(decoded) == 16
+
+
+def test_put_roundtrip_resolve_recovers_original_key(
+    client, prisma_mock, monkeypatch
+):
+    """FIX-20260810-02 — roundtrip end-to-end: PUT cifra y guarda (base64 str)
+    → resolver consulta BD → descifra → devuelve la key original con
+    source='db' y sin warning. Es la prueba de que el fix unifica escritura
+    y lectura contra el mismo contrato Prisma."""
+    monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+    monkeypatch.setenv("M3_API_KEY", "env-m3-should-not-be-used")
+
+    api_key = "sk-roundtrip-FIX2026081002-ABCD"
+    r = client.put(
+        "/api/v2/admin/ai-keys/m3",
+        headers=_headers("SUPERADMIN"),
+        json={"apiKey": api_key},
+    )
+    assert r.status_code == 200
+
+    # Lo que el writer dejó en BD es base64 str; el reader debe poder
+    # decodificarlo y obtener la key original.
+    resolver = get_key_resolver()
+    resolver._master_key = None
+    resolver.invalidate_all()
+    resolution = asyncio.run(resolver.resolve("m3"))
+    assert resolution.api_key == api_key
+    assert resolution.source == "db"
+    assert resolution.warning is None
+
+
+def test_put_rejects_bytes_payload_via_mock_guard(client, prisma_mock):
+    """Si alguien revierte el fix y vuelve a pasar bytes, el mock fiel al
+    contrato Prisma debe lanzar TypeError. Esto es la regresión de producción
+    en pytest (no necesita Railway para detectarla)."""
+    # Bypass el endpoint: simulamos un caller que aún pasa bytes (p.ej. código
+    # legacy que no migró). El guard de _RepoMock.create debe proteger.
+    bad_data = {
+        "provider": "m3",
+        "keyCiphertext": b"\x00" * 16,  # bytes crudo, no base64
+        "keyNonce": b"\x00" * 12,
+        "keyTag": b"\x00" * 16,
+        "baseUrl": None,
+        "defaultModel": None,
+        "enabled": True,
+        "updatedBy": None,
+    }
+    with pytest.raises(TypeError, match="not JSON serializable"):
+        asyncio.run(prisma_mock.aiproviderkey.create(data=bad_data))
