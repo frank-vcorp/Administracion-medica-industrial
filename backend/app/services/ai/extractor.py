@@ -16,6 +16,7 @@ ARCH-20260519-15: ROLLBACK — Featherless/Qwen-VL desactivado del runtime extra
 
 import time
 import os
+import asyncio
 from typing import Dict, Any, Union, Optional, Tuple
 from .base import GeminiBase, M3VisionBase
 from app.schemas.medical import (
@@ -40,7 +41,29 @@ class ExtractionProviderUnknownError(ValueError):
 
 
 class ExtractionAuthError(ValueError):
-    """Credenciales M3 inválidas (HTTP 401/403). No hay fallback — error explícito."""
+    """
+    Credenciales del proveedor de extracción inválidas (HTTP 401/403).
+    No hay fallback — error explícito.
+
+    FIX-20260810-05: factorizada para soportar tanto M3 (default retrocompatible)
+    como Gemini. El campo `provider` permite a la capa HTTP responder con
+    `error_code` accionable (GEMINI_API_KEY_EXPIRED vs M3_API_KEY_EXPIRED).
+    `__str__` preserva el `message` original para retrocompat con callers
+    que sólo hacen `str(err)` (calibration.py imprimía el mensaje completo).
+    """
+
+    def __init__(self, message: str, provider: str = "m3") -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.message = message
+
+    def __str__(self) -> str:  # noqa: D401 — override para incluir provider
+        return f"[{self.provider.upper()}] {self.message}"
+
+
+# Mapa estable provider → error_code (FIX-20260810-05). Usado por calibration.py
+# y main.py para responder 503 con `error_code` accionable.
+_EXTRACTION_AUTH_ERROR_CODES: dict = {"m3": "M3_API_KEY_EXPIRED", "gemini": "GEMINI_API_KEY_EXPIRED"}
 
 
 def _classify_m3_failure(error: Exception) -> Optional[str]:
@@ -119,7 +142,27 @@ class ExtractorService(GeminiBase):
     Servicio que extrae parámetros canónicos según el tipo de documento.
     GUARDRAIL: Los prompts NO deben pedir diagnóstico, interpretación clínica final
     ni recomendaciones de aptitud. Esas capas pertenecen a PrediagnosticService.
+
+    FIX-20260810-05: acepta `key_resolver` opcional para inyección en tests
+    y para evitar recálculo del resolver cuando el caller ya lo tiene. Si es
+    None, usa el singleton global `key_resolver` (vía import lazy).
     """
+
+    def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash", key_resolver=None):
+        super().__init__(api_key=api_key, model=model)
+        # FIX-20260810-05: resolver inyectable. Si es None, lazy-load del singleton
+        # global en primer uso (evita import circular en tests).
+        self._key_resolver = key_resolver
+        # Stash de errores transitorios del resolver (trazabilidad).
+        self._m3_resolve_error: Optional[str] = None
+
+    @property
+    def key_resolver(self):
+        """FIX-20260810-05: acceso lazy al singleton si no fue inyectado."""
+        if self._key_resolver is None:
+            from .keys import key_resolver as _singleton
+            self._key_resolver = _singleton
+        return self._key_resolver
 
     # ARCH-20260518-03: Prompts de extracción ELIMINADOS del backend.
     # El prompt de extracción se resuelve ÚNICAMENTE desde aiCalibration.extraction.prompt.
@@ -324,9 +367,46 @@ notas de calidad y gráficas.
         ARCH-20260809-02: Caso especial 'm3_not_configured' (SPEC §7).
         Si el provider pedido es M3 pero M3_API_KEY no está configurada,
         retorna True para que el dispatcher falle a Gemini sin intentar M3.
+
+        FIX-20260810-05: si AI_KEYS_FROM_DB_ENABLED=true, la key puede vivir
+        en BD (sin env var). En ese caso usamos `key_resolver.resolve("m3")`
+        con el patrón thread-safe/asyncio-safe ya probado en base.py:540-547
+        (`asyncio.run_coroutine_threadsafe(...).result(timeout=5)` con fallback
+        `asyncio.run`). Si la flag está off, comportamiento idéntico al
+        previo (sólo env var) — cero regresión.
         """
         if provider != "m3":
             return False
+
+        # FIX-20260810-05: si flag on, resolver desde BD con caché TTL.
+        from .keys import is_ai_keys_from_db_enabled
+        if is_ai_keys_from_db_enabled():
+            # FIX-20260810-05: usar el resolver inyectado (testable) o el
+            # singleton global. La property `key_resolver` carga el singleton
+            # lazy si no fue inyectado en __init__.
+            resolver = self.key_resolver
+            try:
+                try:
+                    loop = asyncio.get_running_loop()
+                    resolution = asyncio.run_coroutine_threadsafe(
+                        resolver.resolve("m3"), loop
+                    ).result(timeout=5)
+                except RuntimeError:
+                    # No hay loop corriendo (caso test sync): crea uno efímero.
+                    resolution = asyncio.run(resolver.resolve("m3"))
+                if resolution.api_key:
+                    # M3 disponible vía BD (o env var como fallback del resolver).
+                    return False
+                # api_key ausente → mantener fallback a Gemini.
+                return True
+            except Exception as e:
+                # Fallar suave: si el resolver falla, NO propagar (rompería
+                # el contrato `_is_m3_unavailable -> bool`) y preservar el
+                # fallback a Gemini. Stash warning análogo a base.py:556-558.
+                self._m3_resolve_error = f"m3_resolve_error:{type(e).__name__}"
+                return True
+
+        # Retrocompat estricta: sin flag, sólo env var.
         return not bool(os.environ.get("M3_API_KEY"))
 
     def _call_with_dispatch(
@@ -405,7 +485,30 @@ notas de calidad y gráficas.
                 return result, "gemini", fallback_reason
 
         # provider == "gemini": sin fallback por contrato.
-        result = self.call_gemini(file_path, prompt)
+        # FIX-20260810-05: si Gemini responde 401/403, envolver en
+        # ExtractionAuthError(provider="gemini") para que la capa HTTP
+        # boundary (calibration.py) responda 503 con error_code accionable
+        # (`GEMINI_API_KEY_EXPIRED`) en lugar del 500 opaco previo.
+        try:
+            result = self.call_gemini(file_path, prompt)
+        except Exception as gemini_err:
+            status_code = getattr(gemini_err, "response", None)
+            status_code = getattr(status_code, "status_code", None) if status_code is not None else None
+            if status_code is None:
+                # Algunas libs (urllib3) exponen `.status` en el error.
+                status_code = getattr(gemini_err, "status", None)
+            if status_code in (401, 403):
+                # Sanitizar: NO incluir `str(gemini_err)` porque la URL de
+                # Gemini contiene la key como query param (?key=AIzaSy...).
+                # Sólo exponer tipo + status (B-6).
+                raise ExtractionAuthError(
+                    message=(
+                        f"GEMINI_API_KEY_REVOKED: Gemini respondió HTTP {status_code}. "
+                        "Rota la key en /admin/ai-keys o cambia el proveedor de extracción."
+                    ),
+                    provider="gemini",
+                ) from gemini_err
+            raise
         self._last_call_key_source["gemini"] = (
             getattr(self, "key_source", None),
             getattr(self, "key_resolution_warning", None),

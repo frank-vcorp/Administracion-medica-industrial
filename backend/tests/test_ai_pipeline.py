@@ -2046,3 +2046,298 @@ class TestMultiProviderExtractionARCH20260809_02:
         assert "m3_enabled" in source
         assert "m3_status" in source
         assert "extraction_default_provider_configurable" in source
+
+
+# ---------------------------------------------------------------------------
+# FIX-20260810-05: M3 DB-resolver en dispatcher + 503 accionable para Gemini.
+# SPEC: context/SPECs/SPEC_FIX-20260810-05-M3-DB-RESOLVER-DISPATCHER-FALLBACK.md
+# Cubre criterios 1-8 de la SPEC.
+# ---------------------------------------------------------------------------
+
+class TestFix20260810_05_M3DbResolverAndGemini503:
+    """
+    FIX-20260810-05:
+      - 3.3.a: AI_KEYS_FROM_DB_ENABLED=true + M3 key en BD (sin env var) →
+                _is_m3_unavailable("m3") retorna False.
+      - 3.3.b: Gemini HTTPError 403 → ExtractionAuthError(provider="gemini").
+      - 3.3.c: upload_calibration_test ante ExtractionAuthError(provider="gemini")
+                → HTTP 503 con detail conteniendo GEMINI_API_KEY_EXPIRED.
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-gemini-key", model="gemini-2.5-flash")
+
+    # ── 3.3.a: _is_m3_unavailable usa key_resolver cuando flag está on ─────
+
+    def test_m3_unavailable_uses_db_key_when_ai_keys_from_db_enabled(
+        self, monkeypatch, extractor
+    ):
+        """
+        FIX-20260810-05 §3.3.a: con AI_KEYS_FROM_DB_ENABLED=true y M3 en BD
+        (env var ausente), _is_m3_unavailable("m3") retorna False.
+        """
+        # Forzar flag on y limpiar env var M3_API_KEY.
+        monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+
+        # Mockear key_resolver.resolve("m3") → devuelve api_key de BD.
+        from app.services.ai import keys as keys_mod
+        from app.services.ai.keys import KeyResolution
+
+        async def fake_resolve_m3(provider: str) -> KeyResolution:
+            return KeyResolution(
+                provider="m3",
+                api_key="m3-key-from-db",
+                base_url="https://api.minimax.io/v1",
+                default_model="MiniMax-M3",
+                source="db",
+                warning=None,
+            )
+
+        # Inyectar resolver en el extractor y monkeyparchear el singleton.
+        from app.services.ai import extractor as extractor_mod
+        fake_resolver = MagicMock()
+        fake_resolver.resolve = fake_resolve_m3  # coroutine reusable (es await)
+        # el resolver async: necesitamos un AsyncMock explícito
+        import asyncio
+
+        async def _resolve(provider):
+            return await fake_resolve_m3(provider)
+
+        fake_resolver.resolve = _resolve
+        extractor._key_resolver = fake_resolver
+
+        # El método es síncrono, usa asyncio internamente.
+        # Como NO hay loop corriendo, entra en la rama `asyncio.run`.
+        unavailable = extractor._is_m3_unavailable("m3")
+        assert unavailable is False, (
+            "Con M3 key en BD vía resolver, _is_m3_unavailable debe retornar False"
+        )
+
+    def test_m3_unavailable_flag_off_solo_env_var(self, monkeypatch, extractor):
+        """
+        FIX-20260810-05 (regresión cero): flag off → comportamiento legacy
+        idéntico (env var only).
+        """
+        monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "false")
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+        # Sin M3_API_KEY → no disponible.
+        assert extractor._is_m3_unavailable("m3") is True
+        # Con M3_API_KEY → disponible.
+        monkeypatch.setenv("M3_API_KEY", "fake-m3-from-env")
+        assert extractor._is_m3_unavailable("m3") is False
+
+    def test_m3_unavailable_resolver_raises_falls_back_to_gemini(
+        self, monkeypatch, extractor
+    ):
+        """
+        FIX-20260810-05 B-1: si el resolver lanza excepción, _is_m3_unavailable
+        retorna True (preserva fallback Gemini) y stashea warning.
+        """
+        monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+
+        import asyncio
+
+        async def _fail(_provider):
+            raise RuntimeError("BD caída")
+
+        fake_resolver = MagicMock()
+        fake_resolver.resolve = _fail
+        extractor._key_resolver = fake_resolver
+
+        unavailable = extractor._is_m3_unavailable("m3")
+        assert unavailable is True
+        # Warning stasheado para trazabilidad.
+        assert getattr(extractor, "_m3_resolve_error", "").startswith(
+            "m3_resolve_error:"
+        )
+
+    # ── 3.3.b: Gemini 401/403 → ExtractionAuthError(provider="gemini") ──────
+
+    @patch("app.services.ai.base.GeminiBase.call_gemini")
+    def test_gemini_403_returns_extraction_auth_error_gemini(self, mock_gemini, extractor):
+        """
+        FIX-20260810-05 §3.3.b: Gemini HTTPError 403 → ExtractionAuthError
+        con provider='gemini'.
+        """
+        # Simular HTTPError 403 con `response.status_code` (requests.HTTPError).
+        from requests import HTTPError
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_gemini.side_effect = HTTPError(
+            "403 Client Error: Forbidden for url: https://generativelanguage.googleapis.com/..."
+        )
+        mock_gemini.side_effect.response = mock_response
+
+        # Capturar el call_gemini success para stashear (no llega aquí).
+        with pytest.raises(Exception) as exc_info:
+            extractor._call_with_dispatch(
+                file_path="/fake/path.pdf",
+                prompt="extrae datos",
+                provider="gemini",
+                model="gemini-2.5-flash",
+            )
+        # Debe ser ExtractionAuthError provider=gemini.
+        from app.services.ai.extractor import ExtractionAuthError
+        assert isinstance(exc_info.value, ExtractionAuthError)
+        assert exc_info.value.provider == "gemini"
+        # El message NO debe contener la URL con la key (B-6).
+        assert "?" not in exc_info.value.message
+        assert "AIza" not in exc_info.value.message
+
+    # ── 3.3.c: upload_calibration_test → 503 con GEMINI_API_KEY_EXPIRED ────
+
+    def test_upload_calibration_test_returns_503_on_gemini_auth_error(self, monkeypatch, tmp_path):
+        """
+        FIX-20260810-05 §3.3.c: upload_calibration_test ante ExtractionAuthError
+        (provider=gemini) responde **HTTP 503** (no 500) con `detail` que contiene
+        `GEMINI_API_KEY_EXPIRED` y NO expone la key ni el stack crudo.
+        """
+        from fastapi.testclient import TestClient
+        from app.api.v1.calibration import router
+        from app.services.ai.extractor import ExtractionAuthError
+
+        # Construir una app FastAPI mínima con el router de calibration.
+        from fastapi import FastAPI
+        app = FastAPI()
+        app.include_router(router)
+
+        # Mockear prisma_client vía set_prisma_client (patrón oficial).
+        from app.services import prisma_client
+
+        class FakeMedicalTest:
+            id = "test-001"
+            options = {"aiCalibration": _TEST_AI_CALIBRATION_EXTRACTION}
+
+        class FakePrisma:
+            class _MedicaltestModel:
+                async def find_unique(self, where):
+                    return FakeMedicalTest()
+            medicaltest = _MedicaltestModel()
+
+        prisma_client.set_prisma_client(FakePrisma())
+
+        # Mockear _build_services para que retorne un extractor que levanta
+        # ExtractionAuthError(provider="gemini") en extract_by_type.
+        from app.api.v1 import calibration as cal_mod
+
+        class FakeExtractor:
+            def extract_by_type(self, **kwargs):
+                raise ExtractionAuthError(
+                    message="Gemini respondió HTTP 403",
+                    provider="gemini",
+                )
+
+        # Prediagnostic dummy (no se llega a llamar — extractor falla primero).
+        class FakePrediag:
+            pass
+
+        monkeypatch.setattr(
+            cal_mod, "_build_services",
+            lambda: (FakeExtractor(), FakePrediag()),
+        )
+
+        # Subir un PDF mínimo (usar tmp_path propio, no /tmp global).
+        client = TestClient(app)
+        tmp_pdf = tmp_path / "calibration_test_unit.pdf"
+        tmp_pdf.write_bytes(b"%PDF-1.4 fake pdf")
+
+        with open(tmp_pdf, "rb") as f:
+            response = client.post(
+                "/api/v1/calibration/upload",
+                files={"file": ("test.pdf", f, "application/pdf")},
+                data={"test_id": "test-001", "test_type": "Audiometria"},
+            )
+
+        # Debe ser 503, no 500.
+        assert response.status_code == 503, (
+            f"Esperaba 503, obtuvo {response.status_code}: {response.text}"
+        )
+        detail = response.json().get("detail", "")
+        assert "GEMINI_API_KEY_EXPIRED" in detail, (
+            f"detail debe contener GEMINI_API_KEY_EXPIRED, got: {detail!r}"
+        )
+        # NO debe exponer la key ni el stack crudo.
+        assert "AIza" not in detail
+        assert "Traceback" not in detail
+        # Debe ser accionable.
+        assert "Rota la key" in detail or "rotar" in detail.lower()
+
+    def test_upload_calibration_test_returns_503_on_m3_auth_error(self, monkeypatch, tmp_path):
+        """
+        FIX-20260810-05: upload_calibration_test ante ExtractionAuthError
+        (provider=m3) responde 503 con `detail` conteniendo M3_API_KEY_EXPIRED.
+        """
+        from fastapi.testclient import TestClient
+        from app.api.v1.calibration import router
+        from app.services.ai.extractor import ExtractionAuthError
+
+        from fastapi import FastAPI
+        app = FastAPI()
+        app.include_router(router)
+
+        from app.services import prisma_client
+
+        class FakeMedicalTest:
+            id = "test-002"
+            options = {"aiCalibration": _TEST_AI_CALIBRATION_EXTRACTION}
+
+        class FakePrisma:
+            class _MedicaltestModel:
+                async def find_unique(self, where):
+                    return FakeMedicalTest()
+            medicaltest = _MedicaltestModel()
+
+        prisma_client.set_prisma_client(FakePrisma())
+
+        from app.api.v1 import calibration as cal_mod
+
+        class FakeExtractor:
+            def extract_by_type(self, **kwargs):
+                raise ExtractionAuthError(
+                    message="M3_AUTH_ERROR: credenciales inválidas",
+                    provider="m3",
+                )
+
+        class FakePrediag:
+            pass
+
+        monkeypatch.setattr(
+            cal_mod, "_build_services",
+            lambda: (FakeExtractor(), FakePrediag()),
+        )
+
+        client = TestClient(app)
+        tmp_pdf = tmp_path / "calibration_test_unit_m3.pdf"
+        tmp_pdf.write_bytes(b"%PDF-1.4 fake pdf")
+
+        with open(tmp_pdf, "rb") as f:
+            response = client.post(
+                "/api/v1/calibration/upload",
+                files={"file": ("test.pdf", f, "application/pdf")},
+                data={"test_id": "test-002", "test_type": "Audiometria"},
+            )
+
+        assert response.status_code == 503
+        detail = response.json().get("detail", "")
+        assert "M3_API_KEY_EXPIRED" in detail
+        assert "M3" in detail
+
+    # ── Retrocompat: raise ExtractionAuthError("msg") legacy sigue OK ─────
+
+    def test_extraction_auth_error_legacy_caller_retrocompat(self):
+        """
+        FIX-20260810-05 §2.2: raise ExtractionAuthError("msg") (sin provider)
+        sigue funcionando con provider="m3" default. Cero regresión.
+        """
+        from app.services.ai.extractor import ExtractionAuthError
+        err = ExtractionAuthError("M3_AUTH_ERROR: legacy")
+        assert err.provider == "m3"
+        # __str__ incluye provider
+        assert "m3" in str(err).lower() or "M3" in str(err)
+        # Mapping estable
+        from app.services.ai.extractor import _EXTRACTION_AUTH_ERROR_CODES
+        assert _EXTRACTION_AUTH_ERROR_CODES["m3"] == "M3_API_KEY_EXPIRED"
+        assert _EXTRACTION_AUTH_ERROR_CODES["gemini"] == "GEMINI_API_KEY_EXPIRED"

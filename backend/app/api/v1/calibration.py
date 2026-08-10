@@ -91,12 +91,26 @@ def _resolve_test_ai_calibration(test_row: Any) -> Optional[Dict[str, Any]]:
 
 
 def _build_services() -> tuple[Optional[ExtractorService], Optional[PrediagnosticService]]:
-    """Crea instancias de los servicios IA reusando env vars (mismo patrón que main.py)."""
+    """
+    Crea instancias de los servicios IA reusando env vars (mismo patrón que main.py).
+
+    FIX-20260810-05: si AI_KEYS_FROM_DB_ENABLED=true, pasa el `key_resolver`
+    singleton al ExtractorService para que `_is_m3_unavailable` consulte la
+    BD cuando M3_API_KEY no está en env. Si la flag está off, no pasamos
+    resolver (singleton es None dentro del service) — firma intacta.
+    """
     gemini_api_key = os.getenv("GEMINI_API_KEY")
     extraction_model = os.getenv("GEMINI_MODEL_EXTRACTION") or os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
     clinical_model = os.getenv("GEMINI_MODEL_CLINICAL") or os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
+    # FIX-20260810-05: inyectar resolver cuando la flag está activa.
+    from app.services.ai.keys import is_ai_keys_from_db_enabled, key_resolver
+    resolver_to_pass = key_resolver if is_ai_keys_from_db_enabled() else None
     try:
-        extractor = ExtractorService(api_key=gemini_api_key, model=extraction_model)
+        extractor = ExtractorService(
+            api_key=gemini_api_key,
+            model=extraction_model,
+            key_resolver=resolver_to_pass,
+        )
         prediagnostic_svc = PrediagnosticService(api_key=gemini_api_key, model=clinical_model)
         return extractor, prediagnostic_svc
     except Exception:
@@ -313,6 +327,9 @@ async def upload_calibration_test(
         # extraction.prompt configurado. Si falta, devuelve error explícito
         # que propagamos tal cual al cliente (400 con error_code conocido).
         # ARCH-20260809-02: selector multi-proveedor con override por payload.
+        # FIX-20260810-05: ExtractionAuthError → 503 con error_code accionable
+        # (M3_API_KEY_EXPIRED / GEMINI_API_KEY_EXPIRED) según el provider.
+        # Antes era 400 opaco (`str(auth_err)`).
         extraction_start = time.time()
         try:
             extraction_result = extractor.extract_by_type(
@@ -328,9 +345,22 @@ async def upload_calibration_test(
                 detail=str(prov_err),
             ) from prov_err
         except ExtractionAuthError as auth_err:
+            # FIX-20260810-05: 503 accionable. NO exponer la key ni el stack
+            # crudo (B-6 / SPEC §6 restricciones). `error_code` se deriva del
+            # provider vía mapping estable (`_EXTRACTION_AUTH_ERROR_CODES`).
+            from app.services.ai.extractor import _EXTRACTION_AUTH_ERROR_CODES
+            error_code = _EXTRACTION_AUTH_ERROR_CODES.get(
+                auth_err.provider, "EXTRACTION_AUTH_ERROR"
+            )
+            provider_label = (
+                "Gemini" if auth_err.provider == "gemini" else "M3"
+            )
             raise HTTPException(
-                status_code=400,
-                detail=str(auth_err),
+                status_code=503,
+                detail=(
+                    f"{error_code}: {provider_label} key inválida o revocada. "
+                    "Rota la key en /admin/ai-keys o cambia el proveedor de extracción."
+                ),
             ) from auth_err
         except ValueError as ve:
             err_msg = str(ve)
