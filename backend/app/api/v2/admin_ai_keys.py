@@ -288,12 +288,14 @@ async def upsert_ai_key(
 
     # 6. AuditLog (sin key completa ni ciphertext).
     try:
+        # FIX-20260810-04: `details` es columna Json/JSONB → requiere wrapper.
+        from prisma._fields import Json as PrismaJson
         await prisma.auditlog.create({
             "userId": user["id"] or None,
             "action": "ai_key_updated",
             "entity": "AIProviderKey",
             "entityId": provider,
-            "details": {
+            "details": PrismaJson({
                 "provider": provider,
                 "updatedBy": user["id"],
                 "maskedKeySuffix": key_suffix,
@@ -302,7 +304,7 @@ async def upsert_ai_key(
                 "previousUpdatedAt": (
                     existing.updatedAt.isoformat() if existing else None
                 ),
-            },
+            }),
             "ipAddress": (
                 request.client.host if request.client else None
             ),
@@ -361,16 +363,18 @@ async def delete_ai_key(provider: str, request: Request) -> Dict[str, Any]:
 
     # AuditLog
     try:
+        # FIX-20260810-04: `details` es columna Json/JSONB → requiere wrapper.
+        from prisma._fields import Json as PrismaJson
         await prisma.auditlog.create({
             "userId": user["id"] or None,
             "action": "ai_key_deleted",
             "entity": "AIProviderKey",
             "entityId": provider,
-            "details": {
+            "details": PrismaJson({
                 "provider": provider,
                 "updatedBy": user["id"],
                 "source": "ui",
-            },
+            }),
             "ipAddress": (
                 request.client.host if request.client else None
             ),

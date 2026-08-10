@@ -27,6 +27,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
+from prisma._fields import Json as PrismaJson
+
 from app.schemas.pending_orders import LAB_CATEGORY_ID
 
 
@@ -464,7 +466,8 @@ async def auto_generate_lab_order_from_event(
                     "action": "AUTO_GENERATE_LAB_ORDER_FROM_EVENT",
                     "entity": "LabOrder",
                     "entityId": order_id,
-                    "details": {
+                    # FIX-20260810-04: details es columna Json → requiere wrapper.
+                    "details": PrismaJson({
                         "before": None,
                         "after": {
                             "id": order_id,
@@ -472,7 +475,7 @@ async def auto_generate_lab_order_from_event(
                             "medicalEventId": medical_event_id,
                             "itemsCount": items_count,
                         },
-                    },
+                    }),
                 }
             )
     except Exception:
@@ -559,10 +562,11 @@ async def mark_event_test_sample_taken(
                     "action": "MARK_SAMPLE_TAKEN",
                     "entity": "EventTest",
                     "entityId": event_test_id,
-                    "details": {
+                    # FIX-20260810-04: details es columna Json → requiere wrapper.
+                    "details": PrismaJson({
                         "before": {"status": current_status},
                         "after": {"status": "SAMPLE_TAKEN"},
-                    },
+                    }),
                 }
             )
     except Exception:

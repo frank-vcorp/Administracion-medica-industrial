@@ -183,8 +183,13 @@ async def put_extraction_default(
                 )
 
     # 2. Upsert.
+    # FIX-20260810-04: prisma-client-py 0.15 requiere `Json` wrapper para
+    # columnas `Json`/`JSONB`. Pasar dict crudo genera DataError
+    # "Invalid argument type. `value` should be of any of the following types:
+    # `JsonNullValueInput`, `Json`".
+    from prisma._fields import Json as PrismaJson
     data = {
-        "value": {"provider": provider},
+        "value": PrismaJson({"provider": provider}),
         "updatedBy": user["id"] or None,
     }
     if existing is None:
@@ -200,17 +205,19 @@ async def put_extraction_default(
 
     # 3. AuditLog (sin secretos — este endpoint no toca keys).
     try:
+        # FIX-20260810-04: `details` es columna Json/JSONB → requiere wrapper.
+        from prisma._fields import Json as PrismaJson
         await prisma.auditlog.create({
             "userId": user["id"] or None,
             "action": "extraction_default_provider_updated",
             "entity": "AppConfig",
             "entityId": EXTRACTION_DEFAULT_PROVIDER_KEY,
-            "details": {
+            "details": PrismaJson({
                 "previous": previous_provider,
                 "current": provider,
                 "updatedBy": user["id"],
                 "source": "ui",
-            },
+            }),
             "ipAddress": (
                 request.client.host if request.client else None
             ),
