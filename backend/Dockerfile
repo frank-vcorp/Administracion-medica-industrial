@@ -13,6 +13,8 @@ RUN mkdir -p /uploads /app/certs /app/reports
 
 COPY . .
 
+# FIX-20260810-09: re-generar cliente Prisma para incluir CalibrationSnapshot.
+# Touch timestamp 2026-08-11: forzar rebuild de Railway para regenerar cliente con modelo nuevo.
 # IMPL-20260701-06: Generar el cliente Prisma Python desde el schema espejo
 # backend/prisma/schema.prisma (NO se usa frontend/prisma/ porque el contexto
 # de build de Railway es backend/, no la raíz del repo). El cliente generado
