@@ -16,7 +16,6 @@ ARCH-20260519-15: ROLLBACK — Featherless/Qwen-VL desactivado del runtime extra
 
 import time
 import os
-import asyncio
 from typing import Dict, Any, Union, Optional, Tuple
 from .base import GeminiBase, M3VisionBase
 from app.schemas.medical import (
@@ -369,11 +368,19 @@ notas de calidad y gráficas.
         retorna True para que el dispatcher falle a Gemini sin intentar M3.
 
         FIX-20260810-05: si AI_KEYS_FROM_DB_ENABLED=true, la key puede vivir
-        en BD (sin env var). En ese caso usamos `key_resolver.resolve("m3")`
-        con el patrón thread-safe/asyncio-safe ya probado en base.py:540-547
-        (`asyncio.run_coroutine_threadsafe(...).result(timeout=5)` con fallback
-        `asyncio.run`). Si la flag está off, comportamiento idéntico al
-        previo (sólo env var) — cero regresión.
+        en BD (sin env var).
+        FIX-20260810-06: la resolución se hace vía lectura sincrónica de la
+        caché TTL del resolver (`resolve_sync_cached`), pre-calentada en la
+        frontera async (calibration.py / main.py hacen `await resolve("m3")`
+        antes de entrar al pipeline sync). El patrón anterior
+        (`run_coroutine_threadsafe(...).result()` contra el loop corriente)
+        DEADLOCKeaba cuando este método corría en el hilo del event loop
+        (handler async → extract_by_type): el loop no puede ejecutar la
+        corrutina mientras este hilo la espera; tras 5s el TimeoutError era
+        tragado por `except Exception` → retornaba SIEMPRE True → fallback
+        erróneo a Gemini (causa raíz del 500 post FIX-20260810-05).
+        Si la flag está off, comportamiento idéntico al previo (sólo env
+        var) — cero regresión.
         """
         if provider != "m3":
             return False
@@ -381,30 +388,19 @@ notas de calidad y gráficas.
         # FIX-20260810-05: si flag on, resolver desde BD con caché TTL.
         from .keys import is_ai_keys_from_db_enabled
         if is_ai_keys_from_db_enabled():
-            # FIX-20260810-05: usar el resolver inyectado (testable) o el
+            # FIX-20260810-06: usar el resolver inyectado (testable) o el
             # singleton global. La property `key_resolver` carga el singleton
-            # lazy si no fue inyectado en __init__.
-            resolver = self.key_resolver
-            try:
-                try:
-                    loop = asyncio.get_running_loop()
-                    resolution = asyncio.run_coroutine_threadsafe(
-                        resolver.resolve("m3"), loop
-                    ).result(timeout=5)
-                except RuntimeError:
-                    # No hay loop corriendo (caso test sync): crea uno efímero.
-                    resolution = asyncio.run(resolver.resolve("m3"))
-                if resolution.api_key:
-                    # M3 disponible vía BD (o env var como fallback del resolver).
-                    return False
-                # api_key ausente → mantener fallback a Gemini.
-                return True
-            except Exception as e:
-                # Fallar suave: si el resolver falla, NO propagar (rompería
-                # el contrato `_is_m3_unavailable -> bool`) y preservar el
-                # fallback a Gemini. Stash warning análogo a base.py:556-558.
-                self._m3_resolve_error = f"m3_resolve_error:{type(e).__name__}"
-                return True
+            # lazy si no fue inyectado en __init__. Lectura sync de la caché
+            # TTL — nunca bloquear el event loop (ver docstring).
+            resolution = self.key_resolver.resolve_sync_cached("m3")
+            if resolution is not None:
+                # Caché caliente: M3 disponible si hay api_key (BD o el
+                # fallback env del resolver).
+                return not bool(resolution.api_key)
+            # Caché fría (frontera async no pre-calentó, o TTL vencido en
+            # un request de >60s): degradar a env var (comportamiento legacy).
+            self._m3_resolve_error = "m3_cache_cold"
+            return not bool(os.environ.get("M3_API_KEY"))
 
         # Retrocompat estricta: sin flag, sólo env var.
         return not bool(os.environ.get("M3_API_KEY"))

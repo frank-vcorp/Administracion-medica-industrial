@@ -352,6 +352,35 @@ class KeyResolver:
             self._cache[provider] = (now, resolution)
             return resolution
 
+    # -- FIX-20260810-06: lectura sincrónica no bloqueante ------------------
+    def resolve_sync_cached(self, provider: str) -> Optional[KeyResolution]:
+        """
+        FIX-20260810-06: Lectura sincrónica de la caché TTL, sin bloquear.
+
+        Para código sync que corre en el hilo del event loop (handlers
+        `async def` de FastAPI → pipeline sync extract_by_type/call_m3).
+        En ese contexto NO se puede `await resolve()` ni bloquear con
+        `run_coroutine_threadsafe(...).result()` contra el mismo loop:
+        el loop no puede ejecutar la corrutina mientras el hilo está
+        bloqueado esperándola (deadlock → TimeoutError tras el timeout →
+        fallback erróneo). Ver DICTAMEN_FIX-20260810-06.
+
+        Contrato: la caché debe pre-calentarse en la frontera async
+        (`await key_resolver.resolve(provider)` en el handler, antes de
+        entrar al pipeline sync). Retorna None si no hay entrada fresca;
+        el caller degrada a env var (comportamiento legacy).
+
+        Nota: lectura sin lock — es un dict read bajo GIL y la caché es
+        diagnóstica/perf; una lectura levemente stale es aceptable.
+        """
+        cached = self._cache.get(provider)
+        if cached is None:
+            return None
+        ts, value = cached
+        if time.monotonic() - ts >= self.ttl:
+            return None
+        return value
+
     # -- invalidación -------------------------------------------------------
     def invalidate(self, provider: str) -> None:
         """Elimina la entrada de caché para forzar re-lookup en próxima resolve.

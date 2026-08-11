@@ -138,43 +138,37 @@ class GeminiBase:
     def _refresh_keys(self) -> None:
         """
         IMPL-20260809-06 — Si el flag AI_KEYS_FROM_DB_ENABLED está activo,
-        llama al resolver singleton para releer la key de BD (con caché TTL).
-        Con flag off (default), no hace nada — comportamiento idéntico al actual.
+        relee la key vía resolver singleton (caché TTL). Con flag off,
+        no-op — comportamiento idéntico al actual.
 
-        Estrategia cero-regresión: si la flag está off, esta función es no-op y
-        `self.api_key` conserva el valor cacheado por `__init__`.
+        FIX-20260810-06: lectura sincrónica de la caché TTL
+        (`resolve_sync_cached`). El patrón anterior
+        (`run_coroutine_threadsafe(...).result()` contra el loop corriente)
+        DEADLOCKeaba cuando call_gemini corría en el hilo del event loop
+        (handler async → pipeline sync): 5s de bloqueo + TimeoutError tragado
+        → siempre env var. La caché se pre-calienta en la frontera async
+        (`await key_resolver.resolve(...)` en el handler). Ver
+        DICTAMEN_FIX-20260810-06.
         """
         from .keys import is_ai_keys_from_db_enabled
         if not is_ai_keys_from_db_enabled():
             # flag off: el resolver devolvería source='env', warning='flag_off'.
-            # Evitamos el asyncio.run() en el hot path.
             self.key_source = "env"
             self.key_resolution_warning = "flag_off"
             return
 
-        # Flag on: resolver vía singleton (soporta bucle async ya en curso o
-        # bucle nuevo si el caller es sync — asyncio.run es caro, pero la
-        # caché TTL 60s + invalidación minimizan invocaciones).
-        try:
-            try:
-                loop = asyncio.get_running_loop()
-                # Si ya hay loop corriendo, se delega a una tarea.
-                # El caller sync no debería llegar aquí, pero nos protegemos.
-                resolution = asyncio.run_coroutine_threadsafe(
-                    key_resolver.resolve("gemini"), loop
-                ).result(timeout=5)
-            except RuntimeError:
-                # No hay loop corriendo (caso típico sync).
-                resolution = asyncio.run(key_resolver.resolve("gemini"))
-            self.api_key = resolution.api_key
-            self.model = resolution.default_model or self.model
-            self.key_source = resolution.source
-            self.key_resolution_warning = resolution.warning
-        except Exception as e:
-            # Fallar suave a env var: preservar `self.api_key` del __init__,
-            # marcar warning para trazabilidad.
+        # Flag on: lectura sync de la caché TTL (nunca bloquear el loop).
+        resolution = key_resolver.resolve_sync_cached("gemini")
+        if resolution is None:
+            # Caché fría (la frontera async no pre-calentó): conservar la
+            # key de env var del __init__ (comportamiento legacy).
             self.key_source = "env"
-            self.key_resolution_warning = f"refresh_error:{type(e).__name__}"
+            self.key_resolution_warning = "cache_cold"
+            return
+        self.api_key = resolution.api_key
+        self.model = resolution.default_model or self.model
+        self.key_source = resolution.source
+        self.key_resolution_warning = resolution.warning
     
     def get_b64_content(self, file_path: str) -> str:
         """
@@ -531,31 +525,35 @@ class M3VisionBase:
     def _refresh_keys(self) -> None:
         """
         IMPL-20260809-06 — Refresca keys vía resolver. No-op si flag off.
+
+        FIX-20260810-06: lectura sincrónica de la caché TTL
+        (`resolve_sync_cached`). El patrón anterior
+        (`run_coroutine_threadsafe(...).result()` contra el loop corriente)
+        DEADLOCKeaba cuando call_m3 corría en el hilo del event loop
+        (handler async → dispatcher sync): 5s de bloqueo + TimeoutError
+        tragado → siempre env var (vacía en prod con key en BD). La caché
+        se pre-calienta en la frontera async. Ver DICTAMEN_FIX-20260810-06.
         """
         from .keys import is_ai_keys_from_db_enabled
         if not is_ai_keys_from_db_enabled():
             self.key_source = "env"
             self.key_resolution_warning = "flag_off"
             return
-        try:
-            try:
-                loop = asyncio.get_running_loop()
-                resolution = asyncio.run_coroutine_threadsafe(
-                    key_resolver.resolve("m3"), loop
-                ).result(timeout=5)
-            except RuntimeError:
-                resolution = asyncio.run(key_resolver.resolve("m3"))
-            if resolution.api_key:
-                self.api_key = resolution.api_key
-            if resolution.base_url:
-                self.base_url = resolution.base_url
-            if resolution.default_model:
-                self.model = resolution.default_model
-            self.key_source = resolution.source
-            self.key_resolution_warning = resolution.warning
-        except Exception as e:
+        resolution = key_resolver.resolve_sync_cached("m3")
+        if resolution is None:
+            # Caché fría (la frontera async no pre-calentó): conservar
+            # valores de env var del __init__ (comportamiento legacy).
             self.key_source = "env"
-            self.key_resolution_warning = f"refresh_error:{type(e).__name__}"
+            self.key_resolution_warning = "cache_cold"
+            return
+        if resolution.api_key:
+            self.api_key = resolution.api_key
+        if resolution.base_url:
+            self.base_url = resolution.base_url
+        if resolution.default_model:
+            self.model = resolution.default_model
+        self.key_source = resolution.source
+        self.key_resolution_warning = resolution.warning
 
     def get_b64_jpeg(self, file_path: str) -> str:
         """

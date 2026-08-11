@@ -467,7 +467,14 @@ def test_m3base_refresh_keys_with_flag_off_is_noop(monkeypatch):
 
 
 def test_geminibase_refresh_keys_with_flag_on_fetches_db(monkeypatch, master_key_env):
-    """Con flag on, refresh consulta BD y sobrescribe api_key."""
+    """Con flag on, refresh lee la caché TTL del resolver (pre-calentada)
+    y sobrescribe api_key.
+
+    FIX-20260810-06: el lado sync ya NO awaitea `resolve()` (deadlock en
+    hilo del event loop); lee la caché vía `resolve_sync_cached`. El test
+    pre-calienta la caché primero, simulando la frontera async
+    (`await key_resolver.resolve(...)` en el handler).
+    """
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
     monkeypatch.setenv("GEMINI_API_KEY", "env-gemini")
     row = _make_db_row(provider="gemini", api_key="sk-DB-rotated")
@@ -475,12 +482,18 @@ def test_geminibase_refresh_keys_with_flag_on_fetches_db(monkeypatch, master_key
     from app.services import prisma_client
     prisma_client.set_prisma_client(prisma)
 
+    # FIX-20260810-06: pre-calentar caché (simula frontera async).
+    from app.services.ai.keys import key_resolver
+    key_resolver.invalidate_all()
+    _arun(key_resolver.resolve("gemini"))
+
     from app.services.ai.base import GeminiBase
     g = GeminiBase(api_key="env-gemini")
     g._refresh_keys()
     assert g.key_source == "db"
     assert g.api_key == "sk-DB-rotated"
     assert g.key_resolution_warning is None
+    key_resolver.invalidate_all()
 
 
 # ---------------------------------------------------------------------------

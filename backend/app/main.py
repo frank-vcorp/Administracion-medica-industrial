@@ -1248,6 +1248,23 @@ async def v2_upload_and_analyze(
         ExtractionProviderUnknownError,
     )
 
+    # FIX-20260810-06: pre-calentar la caché TTL del key_resolver en contexto
+    # async (await nativo) antes de entrar al pipeline sync (extract_by_type /
+    # generate_prediagnosis corren en el hilo del event loop y no pueden
+    # awaitear; leen la caché vía `resolve_sync_cached`). Sin warmup, caché
+    # fría → pipeline degrada a env vars. Fallo suave: el pipeline sync
+    # degrada a env (comportamiento legacy). Ver DICTAMEN_FIX-20260810-06.
+    from app.services.ai.keys import (
+        is_ai_keys_from_db_enabled as _ai_keys_db_enabled,
+        key_resolver as _key_resolver_singleton,
+    )
+    if _ai_keys_db_enabled():
+        for _prov in ("m3", "gemini", "dr7"):
+            try:
+                await _key_resolver_singleton.resolve(_prov)
+            except Exception:
+                pass
+
     filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
     local_path = os.path.join(UPLOAD_DIR, filename)
 

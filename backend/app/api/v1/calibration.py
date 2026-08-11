@@ -310,6 +310,25 @@ async def upload_calibration_test(
                     pass
     
     # ── Flujo PDF (existente) ──────────────────────────────────────────────
+    # FIX-20260810-06: pre-calentar la caché TTL del key_resolver en contexto
+    # async (await nativo). El pipeline sync (extract_by_type →
+    # _is_m3_unavailable / M3VisionBase._refresh_keys, y generate_prediagnosis
+    # → _resolve_dr7_config) corre en el hilo del event loop y NO puede
+    # awaitear; lee la caché vía `resolve_sync_cached`. Sin este warmup, la
+    # caché estaría fría y el pipeline degradaría a env vars (M3 sin key en
+    # env → fallback erróneo a Gemini → 500). Fallo suave: si el resolver
+    # falla, el pipeline sync degrada a env (comportamiento legacy).
+    from app.services.ai.keys import (
+        is_ai_keys_from_db_enabled as _ai_keys_db_enabled,
+        key_resolver as _key_resolver_singleton,
+    )
+    if _ai_keys_db_enabled():
+        for _prov in ("m3", "gemini", "dr7"):
+            try:
+                await _key_resolver_singleton.resolve(_prov)
+            except Exception:
+                pass
+
     extractor, prediagnostic_svc = _build_services()
     if extractor is None or prediagnostic_svc is None:
         if os.path.exists(tmp_path):

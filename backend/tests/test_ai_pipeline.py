@@ -2074,46 +2074,36 @@ class TestFix20260810_05_M3DbResolverAndGemini503:
         self, monkeypatch, extractor
     ):
         """
-        FIX-20260810-05 §3.3.a: con AI_KEYS_FROM_DB_ENABLED=true y M3 en BD
-        (env var ausente), _is_m3_unavailable("m3") retorna False.
+        FIX-20260810-05 §3.3.a (actualizado por FIX-20260810-06): con
+        AI_KEYS_FROM_DB_ENABLED=true y caché del resolver caliente con key
+        de BD (env var ausente), _is_m3_unavailable("m3") retorna False.
+
+        FIX-20260810-06: el lado sync ya NO awaitea `resolve()`; lee la
+        caché TTL vía `resolve_sync_cached` (la frontera async pre-calienta).
         """
         # Forzar flag on y limpiar env var M3_API_KEY.
         monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
         monkeypatch.delenv("M3_API_KEY", raising=False)
 
-        # Mockear key_resolver.resolve("m3") → devuelve api_key de BD.
-        from app.services.ai import keys as keys_mod
         from app.services.ai.keys import KeyResolution
 
-        async def fake_resolve_m3(provider: str) -> KeyResolution:
-            return KeyResolution(
-                provider="m3",
-                api_key="m3-key-from-db",
-                base_url="https://api.minimax.io/v1",
-                default_model="MiniMax-M3",
-                source="db",
-                warning=None,
-            )
-
-        # Inyectar resolver en el extractor y monkeyparchear el singleton.
-        from app.services.ai import extractor as extractor_mod
+        resolution_db = KeyResolution(
+            provider="m3",
+            api_key="m3-key-from-db",
+            base_url="https://api.minimax.io/v1",
+            default_model="MiniMax-M3",
+            source="db",
+            warning=None,
+        )
         fake_resolver = MagicMock()
-        fake_resolver.resolve = fake_resolve_m3  # coroutine reusable (es await)
-        # el resolver async: necesitamos un AsyncMock explícito
-        import asyncio
-
-        async def _resolve(provider):
-            return await fake_resolve_m3(provider)
-
-        fake_resolver.resolve = _resolve
+        fake_resolver.resolve_sync_cached = MagicMock(return_value=resolution_db)
         extractor._key_resolver = fake_resolver
 
-        # El método es síncrono, usa asyncio internamente.
-        # Como NO hay loop corriendo, entra en la rama `asyncio.run`.
         unavailable = extractor._is_m3_unavailable("m3")
         assert unavailable is False, (
-            "Con M3 key en BD vía resolver, _is_m3_unavailable debe retornar False"
+            "Con M3 key en BD (caché caliente), _is_m3_unavailable debe retornar False"
         )
+        fake_resolver.resolve_sync_cached.assert_called_once_with("m3")
 
     def test_m3_unavailable_flag_off_solo_env_var(self, monkeypatch, extractor):
         """
@@ -2128,30 +2118,73 @@ class TestFix20260810_05_M3DbResolverAndGemini503:
         monkeypatch.setenv("M3_API_KEY", "fake-m3-from-env")
         assert extractor._is_m3_unavailable("m3") is False
 
-    def test_m3_unavailable_resolver_raises_falls_back_to_gemini(
+    def test_m3_unavailable_cache_cold_degrada_a_env_var(
         self, monkeypatch, extractor
     ):
         """
-        FIX-20260810-05 B-1: si el resolver lanza excepción, _is_m3_unavailable
-        retorna True (preserva fallback Gemini) y stashea warning.
+        FIX-20260810-06 (reemplaza B-1 de FIX-20260810-05): con flag on y
+        caché FRÍA (resolve_sync_cached → None, ej. frontera async no
+        pre-calentó), _is_m3_unavailable degrada a env var:
+        - sin M3_API_KEY → True (fallback Gemini preservado) + stash
+          'm3_cache_cold' para trazabilidad;
+        - con M3_API_KEY → False.
         """
         monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
         monkeypatch.delenv("M3_API_KEY", raising=False)
 
-        import asyncio
-
-        async def _fail(_provider):
-            raise RuntimeError("BD caída")
-
         fake_resolver = MagicMock()
-        fake_resolver.resolve = _fail
+        fake_resolver.resolve_sync_cached = MagicMock(return_value=None)
         extractor._key_resolver = fake_resolver
 
         unavailable = extractor._is_m3_unavailable("m3")
         assert unavailable is True
-        # Warning stasheado para trazabilidad.
-        assert getattr(extractor, "_m3_resolve_error", "").startswith(
-            "m3_resolve_error:"
+        assert getattr(extractor, "_m3_resolve_error", "") == "m3_cache_cold"
+
+        # Con env var presente, caché fría igual dispone de M3 (legacy).
+        monkeypatch.setenv("M3_API_KEY", "fake-m3-from-env")
+        assert extractor._is_m3_unavailable("m3") is False
+
+    def test_m3_unavailable_en_contexto_async_no_deadlock(
+        self, monkeypatch, extractor
+    ):
+        """
+        FIX-20260810-06 (REGRESIÓN FORENSE): reproduce el escenario de
+        producción — `_is_m3_unavailable` invocado DESDE el hilo del event
+        loop (handler `async def` → extract_by_type sync).
+
+        Pre-fix (FIX-20260810-05): `run_coroutine_threadsafe(...).result()`
+        contra el mismo loop deadlocked 5s → TimeoutError tragado → retornaba
+        SIEMPRE True → "M3 no configurado" erróneo → fallback Gemini → 500.
+        Post-fix: lectura sync de caché caliente → False, sin bloquear.
+        """
+        import asyncio
+
+        monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+
+        from app.services.ai.keys import KeyResolution
+
+        resolution_db = KeyResolution(
+            provider="m3",
+            api_key="m3-key-from-db",
+            base_url="https://api.minimax.io/v1",
+            default_model="MiniMax-M3",
+            source="db",
+            warning=None,
+        )
+        fake_resolver = MagicMock()
+        fake_resolver.resolve_sync_cached = MagicMock(return_value=resolution_db)
+        extractor._key_resolver = fake_resolver
+
+        async def _run_inside_loop():
+            # Estamos en el hilo del event loop — exactamente el contexto
+            # de upload_calibration_test. Debe resolver sin bloquear.
+            return extractor._is_m3_unavailable("m3")
+
+        unavailable = asyncio.run(asyncio.wait_for(_run_inside_loop(), timeout=2))
+        assert unavailable is False, (
+            "En contexto async con caché caliente, _is_m3_unavailable debe "
+            "retornar False sin deadlock (FIX-20260810-06)"
         )
 
     # ── 3.3.b: Gemini 401/403 → ExtractionAuthError(provider="gemini") ──────

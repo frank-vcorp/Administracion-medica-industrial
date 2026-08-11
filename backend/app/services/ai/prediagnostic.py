@@ -29,7 +29,6 @@ MEDGEMMA (IMPL-20260513-01 / IMPL-20260603-01):
 
 import json
 import os
-import asyncio
 from typing import Dict, Any, Optional
 from .base import GeminiBase
 from .keys import key_resolver, is_ai_keys_from_db_enabled
@@ -59,10 +58,12 @@ def _resolve_dr7_config() -> Dict[str, Any]:
     (con fallback a las constantes de módulo — preserva tests legacy que las
     parchean con `unittest.mock.patch`).
 
-    Como `generate_prediagnosis` corre en un loop FastAPI sync (vía threadpool),
-    usamos `asyncio.run` para invocar el resolver async. La caché TTL 60s + la
-    invalidación explícita en PUT/DELETE minimizan el coste a 1 hit de BD cada
-    60s (o cero si la caché está caliente).
+    FIX-20260810-06: `generate_prediagnosis` se invoca desde handlers
+    `async def` (calibration.py, main.py) sobre el hilo del event loop, por
+    lo que NO se puede awaitear ni bloquear el loop con el resolver async.
+    Se usa `key_resolver.resolve_sync_cached("dr7")` (lectura sync de la
+    caché TTL); la caché se pre-calienta en la frontera async con
+    `await key_resolver.resolve("dr7")`. Ver DICTAMEN_FIX-20260810-06.
     """
     # Defaults leídos: preferimos env var (fresco), cayendo a constantes de
     # módulo (legacy compat: tests las parchean vía mock.patch). En runtime
@@ -91,30 +92,31 @@ def _resolve_dr7_config() -> Dict[str, Any]:
             "warning": "flag_off",
         }
 
-    try:
-        try:
-            loop = asyncio.get_running_loop()
-            resolution = asyncio.run_coroutine_threadsafe(
-                key_resolver.resolve("dr7"), loop
-            ).result(timeout=5)
-        except RuntimeError:
-            resolution = asyncio.run(key_resolver.resolve("dr7"))
-        return {
-            "api_key": resolution.api_key or default_api_key,
-            "base_url": resolution.base_url or default_base_url,
-            "model": resolution.default_model or default_model,
-            "key_source": resolution.source,
-            "warning": resolution.warning,
-        }
-    except Exception as e:
-        # Fail-safe a defaults con warning explícito.
+    # FIX-20260810-06: lectura sincrónica de la caché TTL del resolver.
+    # El patrón anterior (run_coroutine_threadsafe + .result() contra el loop
+    # corriente) DEADLOCKeaba cuando generate_prediagnosis corría en el hilo
+    # del event loop (handler async calibration.py/main.py → pipeline sync):
+    # 5s de bloqueo por request + TimeoutError tragado → siempre env var.
+    # La caché se pre-calienta en la frontera async (`await resolve("dr7")`).
+    # Ver DICTAMEN_FIX-20260810-06.
+    resolution = key_resolver.resolve_sync_cached("dr7")
+    if resolution is None:
+        # Caché fría (frontera async no pre-calentó, o TTL vencido):
+        # degradar a defaults env (comportamiento legacy).
         return {
             "api_key": default_api_key,
             "base_url": default_base_url,
             "model": default_model,
             "key_source": "env",
-            "warning": f"resolve_error:{type(e).__name__}",
+            "warning": "cache_cold",
         }
+    return {
+        "api_key": resolution.api_key or default_api_key,
+        "base_url": resolution.base_url or default_base_url,
+        "model": resolution.default_model or default_model,
+        "key_source": resolution.source,
+        "warning": resolution.warning,
+    }
 
 
 # IMPL-20260513-01: Estado de MedGemma — retrocompat. La lectura fresca se hace
