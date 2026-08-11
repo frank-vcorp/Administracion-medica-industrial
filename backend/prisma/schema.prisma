@@ -247,6 +247,10 @@ model MedicalTest {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   eventTests       EventTest[]
+  // FIX-20260810-08: snapshots de calibración IA por MedicalTest (tabla dedicada,
+  // no reutiliza EventTest/StudyExtractionSnapshot porque el flujo de calibración
+  // no tiene MedicalEvent/trabajador asociado).
+  calibrationSnapshots CalibrationSnapshot[]
   category         TestCategory      @relation(fields: [categoryId], references: [id])
   profiles         ProfileTest[]
   // IMPL-20260630-06: Slice A NOVA absorción (ARCH-20260630-02) — campos LIS
@@ -264,6 +268,33 @@ model MedicalTest {
   labOrderItems    LabOrderItem[]
 
   @@map("medical_tests")
+}
+
+// FIX-20260810-08: Snapshot de calibración IA. Tabla dedicada al flujo de
+// calibración (NO clínico). Persiste el resultado del pipeline de extracción
+// + prediagnóstico tras un upload en /admin/services/[id]/calibration (tab
+// Pruebas) para que la tab Presentación pueda renderizar el snapshot.
+//
+// Política:
+//   - Append-only: nunca se sobrescribe; nueva corrida crea nueva fila.
+//   - Sin FK a EventTest/MedicalEvent (no aplica al flujo de calibración).
+//   - clinicalState default DRAFT_EXTRACTED (sin revisión médica real).
+model CalibrationSnapshot {
+  id              String      @id @default(uuid())
+  medicalTestId   String
+  studyType       String // Audiometria | Laboratorio | Espirometria | Rayos_X | Otro
+  sourceFileName  String?
+  sourceFileUrl   String? // null en MVP (archivo se borra tras extracción)
+  structuredData  Json
+  modelName       String      @default("gemini-2.5-flash")
+  promptVersion   String      @default("extract-v2")
+  clinicalState   String      @default("DRAFT_EXTRACTED")
+  createdAt       DateTime    @default(now())
+
+  medicalTest     MedicalTest @relation(fields: [medicalTestId], references: [id], onDelete: Cascade)
+
+  @@index([medicalTestId, createdAt(sort: Desc)])
+  @@map("calibration_snapshots")
 }
 
 model MedicalProfile {

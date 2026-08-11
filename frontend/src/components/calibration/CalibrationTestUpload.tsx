@@ -4,12 +4,17 @@
  *   muestra progreso y errores, y propaga los resultados al workspace padre.
  * @id IMPL-20260715-04
  * @updated ARCH-20260715-06: Soporte para XML de audiómetro DD65 V2
+ * @updated FIX-20260810-08: Tras upload exitoso, llama `router.refresh()` para
+ *   que el server component padre re-lea snapshots persistidos (antes solo
+ *   vivía en memoria). La tab Presentación ya puede mostrar el snapshot
+ *   recién creado sin recargar manualmente.
  * @backup context/SPECs/SPEC_ARCH-20260715-04-UPLOAD-PDFS-CALIBRACION.md
  * @backup context/SPECs/SPEC_ARCH-20260715-06-EXTRACCION-DIRECTA-XML-AUDIOMETRO.md
+ * @backup context/SPECs/SPEC_FIX-20260810-08-CALIBRACION-SNAPSHOT-PERSISTENCIA.md
  *
- * NO persiste en DB, NO crea EventTest real — solo ejecuta el pipeline IA
- * en runtime para que el equipo de calibración valide prompts antes de
- * promover cambios.
+ * FIX-20260810-08: YA persiste en tabla `calibration_snapshots`. El cache en
+ * memoria del backend sigue funcionando como fallback defensivo si la
+ * persistencia falla.
  *
  * ARCH-20260715-06: Si se sube un XML de audiometría, el backend usa parser
  * directo (valores exactos, sin IA). Si es PDF, usa IA con prompt calibrado.
@@ -17,6 +22,7 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import type { CalibrationTestResults } from "@/types/calibration"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,6 +74,9 @@ export default function CalibrationTestUpload({
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const uploadStartedAtRef = useRef<number | null>(null)
+  // FIX-20260810-08: tras upload exitoso, refrescar el server component padre
+  // para que re-lea la lista de snapshots persistidos.
+  const router = useRouter()
 
   const resetState = useCallback(() => {
     setState({ status: "idle", fileName: null, errorMessage: null, durationSeconds: null })
@@ -131,6 +140,11 @@ export default function CalibrationTestUpload({
           durationSeconds: elapsed,
         })
         onResults(payload as CalibrationTestResults)
+        // FIX-20260810-08: re-leer snapshots persistidos desde el server component.
+        // Si snapshot_id es null (fallback defensivo: persistencia falló), el
+        // refresh de todas formas refresca estado pero no agregará snapshot
+        // nuevo — el cache en memoria del tab Pruebas sigue mostrando el resultado.
+        router.refresh()
       } catch (err) {
         const message = err instanceof Error ? err.message : "Error de red desconocido"
         setState({

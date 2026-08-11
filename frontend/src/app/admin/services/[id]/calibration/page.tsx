@@ -6,13 +6,20 @@
  *   - Versionado automático de aiCalibration
  *   - Panel de curaduría de campos candidatos
  *   - Historial de versiones visible
+ *
+ * FIX-20260810-08: `getCalibrationSnapshots` ahora vive en `@/actions/calibration`
+ *   (antes en `@/actions/medical-profiles`). Lee snapshots persistidos en la
+ *   tabla `calibration_snapshots` (no en eventTests/event_snapshots) porque
+ *   el flujo de calibración no tiene MedicalEvent. Mantiene shape legacy
+ *   `EventTestEntry[]` para no romper CalibrationWorkspaceClient.
  * @id IMPL-20260327-19
  * @backup context/SPECs/SPEC_ARCH-20260327-19-CALIBRACION-IA-ASISTIDA-VERSIONADO-AUTOMATICO.md
  */
 
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { getMedicalTestById, getCalibrationSnapshots } from "@/actions/medical-profiles"
+import { getMedicalTestById } from "@/actions/medical-profiles"
+import { getCalibrationSnapshots } from "@/actions/calibration"
 import CalibrationWorkspaceClient from "@/components/calibration/CalibrationWorkspaceClient"
 import { deriveSchemaFromSnapshots } from "@/lib/calibration-schema"
 import type { AICalibrationV2 } from "@/types/calibration"
@@ -60,26 +67,16 @@ export default async function CalibrationPage({
   const candidateFields = deriveSchemaFromSnapshots(allSnapshots)
 
   // ── Métricas de resumen ─────────────────────────────────────────────────
+  // FIX-20260810-08: en el flujo de calibración NO hay prediagnósticos IA
+  // ni revisiones médicas (aiPrediagnoses=[] en cada snapshot sintético).
+  // totalPredx y totalReviews son siempre 0 — las métricas reflejan el
+  // flujo real, no se mezclan con snapshots clínicos.
   const totalExtractionSnapshots = eventTests.reduce(
     (acc, et) => acc + et.extractionSnapshots.length,
     0
   )
-  const totalPredx = eventTests.reduce(
-    (acc, et) =>
-      acc +
-      et.extractionSnapshots.reduce((a, snap) => a + snap.aiPrediagnoses.length, 0),
-    0
-  )
-  const totalReviews = eventTests.reduce(
-    (acc, et) =>
-      acc +
-      et.extractionSnapshots.reduce(
-        (a, snap) =>
-          a + snap.aiPrediagnoses.reduce((b, p) => b + p.doctorReviews.length, 0),
-        0
-      ),
-    0
-  )
+  const totalPredx = 0
+  const totalReviews = 0
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 

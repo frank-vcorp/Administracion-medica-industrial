@@ -455,11 +455,13 @@ export default function CalibrationWorkspaceClient({
           {activeTab === "pruebas" && (
             <div className="space-y-4">
               <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700 space-y-1">
-                <p className="font-semibold">Modo de prueba — sin persistencia</p>
+                <p className="font-semibold">Modo de prueba — FIX-20260810-08: persiste snapshots</p>
                 <p>
-                  Sube un PDF directamente para validar la calibración actual
-                  (extracción + prediagnóstico). Los resultados viven solo en
-                  memoria del backend durante esta sesión y no crean EventTest.
+                  Sube un PDF/XML para validar la calibración actual
+                  (extracción + prediagnóstico). Cada corrida exitosa crea un
+                  snapshot en la tabla <code className="font-mono">calibration_snapshots</code>{" "}
+                  que aparece automáticamente en las tabs Presentación y Snapshots.
+                  NO crea EventTest real (no hay paciente/trabajador asociado).
                 </p>
               </div>
               <CalibrationTestUpload

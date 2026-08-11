@@ -6,10 +6,17 @@ SPEC: context/SPECs/SPEC_ARCH-20260715-04-UPLOAD-PDFS-CALIBRACION.md
 Rutas REST:
   - POST /api/v1/calibration/upload
   - GET  /api/v1/calibration/test/{test_id}/results
+  - GET  /api/v1/calibration/snapshots?test_id=...
 
 Propósito: permitir subir un PDF de prueba desde el módulo de calibración,
 procesarlo con el pipeline de extracción/prediagnóstico y retornar los
 resultados SIN crear EventTest real ni persistir en DB.
+
+FIX-20260810-08: Persistencia defensiva de snapshots en tabla
+`calibration_snapshots` (modelo CalibrationSnapshot). Solo se persiste
+si la extracción/prediagnóstico fue exitoso. Si la persistencia falla,
+se log warning y se devuelve `snapshot_id=null` (la respuesta HTTP sigue
+siendo 200 con el cache en memoria como fallback para el tab Pruebas).
 
 ARCH-20260809-02: Integración con selector multi-proveedor de extracción
 (Gemini + MiniMax M3). El endpoint retorna `extraction_provider_used`,
@@ -135,6 +142,81 @@ def _serialize_extraction_result(extraction_result: Any) -> Dict[str, Any]:
             pass
     # Fallback defensivo
     return {"value": str(extraction_result)}
+
+
+async def _persist_calibration_snapshot(
+    *,
+    prisma: Any,
+    medical_test_id: str,
+    study_type: str,
+    source_file_name: Optional[str],
+    source_file_url: Optional[str],
+    structured_data: Dict[str, Any],
+    model_name: str,
+    prompt_version: str,
+) -> Optional[str]:
+    """
+    FIX-20260810-08: Persiste un CalibrationSnapshot en BD. Defensivo:
+    si la inserción falla (Prisma down, FK inválida, etc.) se log
+    warning y retorna None — el endpoint sigue devolviendo 200 con
+    el resultado del pipeline IA en cache de memoria.
+
+    Política:
+      - Append-only (nunca UPDATE ni UPSERT).
+      - JSON wrapper safe para structuredData (deep copy + JSON round-trip
+        para evitar referencias circulares / tipos no serializables).
+      - clinicalState fijo en 'DRAFT_EXTRACTED' (no hay revisión médica
+        real en el flujo de calibración).
+    """
+    try:
+        import json as _json
+        safe_structured = _json.loads(_json.dumps(structured_data, default=str))
+        created = await prisma.calibrationsnapshot.create(
+            data={
+                "medicalTestId": medical_test_id,
+                "studyType": study_type,
+                "sourceFileName": source_file_name,
+                "sourceFileUrl": source_file_url,
+                "structuredData": safe_structured,
+                "modelName": model_name,
+                "promptVersion": prompt_version,
+                "clinicalState": "DRAFT_EXTRACTED",
+            }
+        )
+        return _attr(created, "id")
+    except Exception as persist_err:
+        # Defensivo: NO fallar el response. La extracción IA sigue siendo
+        # válida en cache de memoria; el snapshot solo se usará para el
+        # tab Presentación.
+        print(
+            f"⚠️ [FIX-20260810-08] No se pudo persistir CalibrationSnapshot "
+            f"para test_id={medical_test_id[:8]}: {type(persist_err).__name__}: {persist_err}"
+        )
+        return None
+
+
+def _serialize_calibration_snapshot(row: Any) -> Dict[str, Any]:
+    """Normaliza una fila de CalibrationSnapshot a dict JSON-serializable
+    para el endpoint GET /snapshots. Convierte datetime → ISO string."""
+    structured = _attr(row, "structuredData")
+    if structured is None:
+        structured = {}
+    created_at = _attr(row, "createdAt")
+    created_at_iso = (
+        created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+    )
+    return {
+        "id": _attr(row, "id"),
+        "medicalTestId": _attr(row, "medicalTestId"),
+        "studyType": _attr(row, "studyType"),
+        "sourceFileName": _attr(row, "sourceFileName"),
+        "sourceFileUrl": _attr(row, "sourceFileUrl"),
+        "structuredData": structured,
+        "modelName": _attr(row, "modelName"),
+        "promptVersion": _attr(row, "promptVersion"),
+        "clinicalState": _attr(row, "clinicalState"),
+        "createdAt": created_at_iso,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +373,23 @@ async def upload_calibration_test(
                 },
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
-            
+
+            # FIX-20260810-08: persistencia defensiva del snapshot (XML directo).
+            snapshot_id = await _persist_calibration_snapshot(
+                prisma=prisma,
+                medical_test_id=test_id,
+                study_type=canonical_study_type,
+                source_file_name=file.filename,
+                source_file_url=None,
+                structured_data={
+                    "extraction": response_payload["extraction"],
+                    "prediagnosis": response_payload["prediagnosis"],
+                },
+                model_name="xml_parser",
+                prompt_version="xml_direct_v1",
+            )
+            response_payload["snapshot_id"] = snapshot_id
+
             _TEST_RESULTS_CACHE[response_payload["test_id"]] = response_payload
             return response_payload
             
@@ -476,6 +574,22 @@ async def upload_calibration_test(
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
+        # FIX-20260810-08: persistencia defensiva del snapshot (PDF).
+        snapshot_id = await _persist_calibration_snapshot(
+            prisma=prisma,
+            medical_test_id=test_id,
+            study_type=canonical_study_type,
+            source_file_name=file.filename,
+            source_file_url=None,
+            structured_data={
+                "extraction": response_payload["extraction"],
+                "prediagnosis": response_payload["prediagnosis"],
+            },
+            model_name=extraction_audit["model_name"],
+            prompt_version=extraction_audit["prompt_version"],
+        )
+        response_payload["snapshot_id"] = snapshot_id
+
         # Cache en memoria para que GET /test/{id}/results pueda responder
         # aunque el frontend pierda la respuesta del POST.
         _TEST_RESULTS_CACHE[response_payload["test_id"]] = response_payload
@@ -520,3 +634,49 @@ async def get_calibration_test_results(test_id: str):
             "Vuelve a subir el PDF para regenerar.",
         )
     return cached
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/calibration/snapshots?test_id=<medical_test_id>
+# FIX-20260810-08: Lista snapshots persistidos de una MedicalTest para que
+# la tab Presentación pueda renderizarlos. Orden: más reciente primero.
+# ---------------------------------------------------------------------------
+@router.get("/snapshots")
+async def list_calibration_snapshots(test_id: str):
+    """
+    Lista los CalibrationSnapshot persistidos para una MedicalTest.
+
+    Args:
+      test_id: ID de MedicalTest (string UUID).
+
+    Returns:
+      { "snapshots": [<calibration_snapshot>, ...] }
+
+    Errores:
+      - 400: falta test_id
+      - 503: Prisma no inicializado
+      - 500: error de BD
+    """
+    if not test_id or not test_id.strip():
+        raise HTTPException(status_code=400, detail="test_id es obligatorio")
+
+    prisma = get_prisma_client()
+    if prisma is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Prisma no inicializado. Reintenta en unos segundos.",
+        )
+
+    try:
+        rows = await prisma.calibrationsnapshot.find_many(
+            where={"medicalTestId": test_id},
+            order={"createdAt": "desc"},
+        )
+    except Exception as e:
+        print(f"❌ [FIX-20260810-08] Error listando snapshots: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error consultando CalibrationSnapshot: {type(e).__name__}",
+        )
+
+    return {"snapshots": [_serialize_calibration_snapshot(r) for r in rows]}
