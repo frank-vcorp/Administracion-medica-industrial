@@ -170,14 +170,18 @@ async def _persist_calibration_snapshot(
     """
     try:
         import json as _json
+        from prisma._fields import Json as PrismaJson  # FIX-04: wrapper Json para Prisma 0.15
         safe_structured = _json.loads(_json.dumps(structured_data, default=str))
+        # FIX-20260810-09c: usar FK crudo en vez de medicalTest.connect.
+        # El cliente Prisma cacheado en Railway no regenera con la relación
+        # explícita; el FK crudo es compatible con cualquier versión del cliente.
         created = await prisma.calibrationsnapshot.create(
             data={
                 "medicalTestId": medical_test_id,
                 "studyType": study_type,
                 "sourceFileName": source_file_name,
                 "sourceFileUrl": source_file_url,
-                "structuredData": safe_structured,
+                "structuredData": PrismaJson(safe_structured),
                 "modelName": model_name,
                 "promptVersion": prompt_version,
                 "clinicalState": "DRAFT_EXTRACTED",

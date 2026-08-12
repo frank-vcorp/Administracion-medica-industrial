@@ -291,7 +291,10 @@ model CalibrationSnapshot {
   clinicalState   String      @default("DRAFT_EXTRACTED")
   createdAt       DateTime    @default(now())
 
-  medicalTest     MedicalTest @relation(fields: [medicalTestId], references: [id], onDelete: Cascade)
+  // FIX-20260810-09c: Sin relación explícita con MedicalTest. La FK cruda
+  // `medicalTestId` permite insert directo sin necesidad de regenerar el
+  // cliente Prisma (que Railway cachea a nivel de layer). La FK existe en
+  // la migración SQL con CASCADE.
 
   @@index([medicalTestId, createdAt(sort: Desc)])
   @@map("calibration_snapshots")
