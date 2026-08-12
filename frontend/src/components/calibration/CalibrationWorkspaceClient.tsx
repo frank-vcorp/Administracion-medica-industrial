@@ -438,14 +438,14 @@ export default function CalibrationWorkspaceClient({
           {/* ── Tab: Presentación ── */}
           {activeTab === "presentacion" && (
             <PresentationSchemaPanel
-              testId={testId}
-              aiCalibration={aiCalibration}
               selectedSnapshot={
                 selectedSnapshotEntry
                   ? {
                       id: selectedSnapshotEntry.snap.id,
                       studyType: selectedSnapshotEntry.snap.studyType,
                       extractedData: selectedExtractedData,
+                      sourceFileName: selectedSnapshotEntry.snap.sourceFileName,
+                      createdAt: selectedSnapshotEntry.snap.createdAt,
                     }
                   : null
               }
