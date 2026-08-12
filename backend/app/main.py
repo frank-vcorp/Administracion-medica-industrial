@@ -988,9 +988,23 @@ async def v2_upload_and_analyze(
         key_resolver as _key_resolver_singleton,
     )
     if _ai_keys_db_enabled():
+        # FIX-20260812-18-debug: identidad del singleton que calienta la caché
+        # (comparar con resolver_id de resolve() y con el que lee _refresh_keys).
+        print(
+            f"🔍 [FIX-20260812-18] warmup genérico START "
+            f"resolver_id={id(_key_resolver_singleton)}"
+        )
         for _prov in ("m3", "gemini", "dr7"):
             try:
-                await _key_resolver_singleton.resolve(_prov)
+                _res = await _key_resolver_singleton.resolve(_prov)
+                # FIX-20260812-18-debug: estado de la resolución cacheada por el
+                # warmup (sin secretos: sólo len/source/warning).
+                print(
+                    f"🔍 [FIX-20260812-18] warmup provider={_prov} "
+                    f"api_key_len={len(_res.api_key) if _res and _res.api_key else 0} "
+                    f"source={_res.source if _res else None} "
+                    f"warning={_res.warning if _res else None}"
+                )
             except Exception as warmup_err:
                 # FIX-20260812-14: el warmup pre-calienta la caché TTL del
                 # resolver para que el pipeline sync (extract_by_type /
@@ -1008,6 +1022,15 @@ async def v2_upload_and_analyze(
                     f"pipeline degradará a env var / error tipado si la key "
                     f"no queda disponible."
                 )
+    else:
+        # FIX-20260812-18-debug: Hipótesis D — la flag no se lee 'true' en
+        # runtime aunque esté configurada. Si esta línea aparece en Railway,
+        # el warmup NUNCA se ejecutó y _refresh_keys cae a flag_off/env.
+        print(
+            "🔍 [FIX-20260812-18] warmup genérico SKIP: "
+            "is_ai_keys_from_db_enabled()=False en runtime "
+            "(AI_KEYS_FROM_DB_ENABLED no visible para este proceso)"
+        )
 
     filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
     local_path = os.path.join(UPLOAD_DIR, filename)
@@ -1121,17 +1144,37 @@ async def v2_upload_and_analyze(
         # La fix es resolver SÍNCRONAMENTE (await) el provider que vamos a usar.
         if extraction_provider_override:
             _target_provider = extraction_provider_override
+            # FIX-20260812-18-debug: origen del provider objetivo del warmup.
+            _target_provider_origin = "form_override"
         else:
             from app.services.ai.app_config import (
                 get_extraction_default_provider_sync as _get_def_provider_sync,
             )
             try:
                 _target_provider, _ = _get_def_provider_sync()
+                _target_provider_origin = "app_config_default"
             except Exception:
                 _target_provider = "m3"
+                _target_provider_origin = "fallback_m3"
+        # FIX-20260812-18-debug: si el provider que luego usa el extractor
+        # (vía aiCalibration) difiere de _target_provider, el warmup específico
+        # calentó OTRO provider (el genérico arriba debe cubrir la diferencia).
+        print(
+            f"🔍 [FIX-20260812-18] warmup específico provider={_target_provider} "
+            f"origin={_target_provider_origin} "
+            f"calibration_provider={(ai_calibration or {}).get('extraction', {}).get('provider') if isinstance(ai_calibration, dict) else None}"
+        )
         if _ai_keys_db_enabled():
             try:
-                await _key_resolver_singleton.resolve(_target_provider)
+                _res17 = await _key_resolver_singleton.resolve(_target_provider)
+                # FIX-20260812-18-debug: resultado del warmup específico.
+                print(
+                    f"🔍 [FIX-20260812-18] warmup específico result "
+                    f"provider={_target_provider} "
+                    f"api_key_len={len(_res17.api_key) if _res17 and _res17.api_key else 0} "
+                    f"source={_res17.source if _res17 else None} "
+                    f"warning={_res17.warning if _res17 else None}"
+                )
             except Exception as _target_warmup_err:
                 print(
                     f"⚠️ [FIX-20260812-17] Warmup específico para provider="

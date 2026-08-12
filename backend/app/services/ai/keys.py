@@ -256,7 +256,15 @@ class KeyResolver:
             raise
         try:
             # Prisma Python model name follows snake_case from @@map → 'aiproviderkey'.
-            return await prisma.aiproviderkey.find_unique(where={"provider": provider})
+            row = await prisma.aiproviderkey.find_unique(where={"provider": provider})
+            # FIX-20260812-18-debug: trazabilidad del lookup BD (sin secretos:
+            # sólo presencia de fila, flag enabled e identidad del cliente).
+            print(
+                f"🔍 [FIX-20260812-18] _lookup_db provider={provider} "
+                f"prisma_id={id(prisma)} row_found={row is not None} "
+                f"row_enabled={getattr(row, 'enabled', None) if row is not None else None}"
+            )
+            return row
         except Exception as e:
             logger.warning(
                 "KeyResolver: BD caída consultando %s (%s) — fallback a env var",
@@ -273,6 +281,12 @@ class KeyResolver:
 
         # 1. Flag off → env var (comportamiento idéntico al actual).
         if not is_ai_keys_from_db_enabled():
+            # FIX-20260812-18-debug: si esto aparece en prod con la flag
+            # supuestamente on, confirma Hipótesis D (flag no leída en runtime).
+            print(
+                f"🔍 [FIX-20260812-18] resolve provider={provider} → flag_off "
+                f"(AI_KEYS_FROM_DB_ENABLED no se lee 'true' en runtime)"
+            )
             return self._env_resolution(provider, warning="flag_off")
 
         # 2-4. Caché + BD con lock para evitar stampede en concurrencia.
@@ -282,13 +296,26 @@ class KeyResolver:
             if cached is not None:
                 ts, value = cached
                 if now - ts < self.ttl:
+                    # FIX-20260812-18-debug: cache hit — el warmup NO re-consulta
+                    # BD; hereda lo que haya en caché (Hipótesis C).
+                    print(
+                        f"🔍 [FIX-20260812-18] resolve provider={provider} → CACHE_HIT "
+                        f"age={now - ts:.1f}s source={value.source} "
+                        f"warning={value.warning} api_key_len={len(value.api_key)} "
+                        f"resolver_id={id(self)}"
+                    )
                     return value
 
             # 3. Lookup BD
             row = None
             try:
                 row = await self._lookup_db(provider)
-            except Exception:
+            except Exception as _lookup_err:
+                # FIX-20260812-18-debug: tipo de excepción del lookup (Hipótesis A/B).
+                print(
+                    f"🔍 [FIX-20260812-18] resolve provider={provider} → lookup EXC "
+                    f"{type(_lookup_err).__name__} → cacheando warning=db_unavailable"
+                )
                 resolution = self._env_resolution(
                     provider, warning="db_unavailable"
                 )
@@ -296,6 +323,12 @@ class KeyResolver:
                 return resolution
 
             if row is None:
+                # FIX-20260812-18-debug: fila ausente según ESTE cliente Prisma
+                # (Hipótesis A: visibilidad/transacción; el probe puede ver la fila).
+                print(
+                    f"🔍 [FIX-20260812-18] resolve provider={provider} row=None "
+                    f"→ cacheando con warning=row_missing"
+                )
                 resolution = self._env_resolution(
                     provider, warning="row_missing"
                 )
@@ -303,6 +336,10 @@ class KeyResolver:
                 return resolution
 
             if not getattr(row, "enabled", True):
+                print(
+                    f"🔍 [FIX-20260812-18] resolve provider={provider} row.enabled=False "
+                    f"→ cacheando con warning=row_disabled"
+                )
                 resolution = self._env_resolution(
                     provider, warning="row_disabled"
                 )
@@ -312,6 +349,11 @@ class KeyResolver:
             master_key = self._get_master_key()
             if master_key is None:
                 # ENCRYPTION_KEY ausente — degradar a env var con warning claro.
+                print(
+                    f"🔍 [FIX-20260812-18] resolve provider={provider} "
+                    f"ENCRYPTION_KEY ausente ({self._master_key_error!r}) "
+                    f"→ cacheando warning=encryption_key_missing"
+                )
                 logger.warning(
                     "KeyResolver: ENCRYPTION_KEY ausente; no se puede descifrar "
                     "row de %s — fallback a env var",
@@ -338,6 +380,11 @@ class KeyResolver:
                 )
             except Exception as e:
                 # CB-1: tag alterado / ciphertext corrupto.
+                # FIX-20260812-18-debug: tipo de excepción de descifrado.
+                print(
+                    f"🔍 [FIX-20260812-18] resolve provider={provider} descifrado FAIL "
+                    f"exc={type(e).__name__} → cacheando warning=decrypt_error"
+                )
                 logger.warning(
                     "KeyResolver: descifrado de %s falló (%s) — fallback a env var",
                     provider,
@@ -358,6 +405,11 @@ class KeyResolver:
                 warning=None,
             )
             self._cache[provider] = (now, resolution)
+            # FIX-20260812-18-debug: descifrado OK desde BD (sin la key en claro).
+            print(
+                f"🔍 [FIX-20260812-18] resolve provider={provider} descifrado OK "
+                f"source=db api_key_len={len(api_key)} resolver_id={id(self)}"
+            )
             return resolution
 
     # -- FIX-20260810-06: lectura sincrónica no bloqueante ------------------
@@ -456,6 +508,12 @@ def _resolve_sync_cold(provider: str) -> Optional["KeyResolution"]:
                 # La caché TTL se pre-calienta en la frontera async (warmup en
                 # `v2_upload_and_analyze`); si el warmup falla, ahora se loguea.
                 # Ver context/diagnostics/FIX-20260812-14-m3-missing-credentials.md.
+                # FIX-20260812-18-debug: confirma que el cold-load NO puede
+                # operar dentro del event loop (path esperado en FastAPI).
+                print(
+                    f"🔍 [FIX-20260812-18] _resolve_sync_cold provider={provider} "
+                    f"loop RUNNING → return None (cold-load imposible en hilo del loop)"
+                )
                 return None
         except RuntimeError:
             # No hay loop; usar asyncio.run

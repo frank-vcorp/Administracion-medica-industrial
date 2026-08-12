@@ -575,6 +575,21 @@ notas de calidad y gráficas.
         from .keys import is_ai_keys_from_db_enabled, key_resolver as _kr_singleton
         if is_ai_keys_from_db_enabled():
             _db_resolution = _kr_singleton.resolve_sync_cached(provider)
+            # FIX-20260812-18-debug: qué ve el pipeline sync al leer la caché
+            # que el warmup async debió poblar (sin secretos: len/source/warning).
+            if _db_resolution is not None:
+                print(
+                    f"🔍 [FIX-20260812-18] extract_by_type provider={provider} "
+                    f"cache_resolution api_key_len={len(_db_resolution.api_key)} "
+                    f"source={_db_resolution.source} warning={_db_resolution.warning} "
+                    f"resolver_id={id(_kr_singleton)}"
+                )
+            else:
+                print(
+                    f"🔍 [FIX-20260812-18] extract_by_type provider={provider} "
+                    f"cache_resolution=None (caché TTL FRÍA en el pipeline sync) "
+                    f"resolver_id={id(_kr_singleton)}"
+                )
             if _db_resolution is None:
                 # La frontera async no pre-calentó la caché TTL para este
                 # provider. El pipeline degradará a env var (cache_cold).

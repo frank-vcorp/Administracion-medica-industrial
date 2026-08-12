@@ -578,10 +578,29 @@ class M3VisionBase:
         """
         from .keys import is_ai_keys_from_db_enabled
         if not is_ai_keys_from_db_enabled():
+            # FIX-20260812-18-debug: Hipótesis D vista desde el cliente M3.
+            print(
+                "🔍 [FIX-20260812-18] M3VisionBase._refresh_keys flag_off en runtime; "
+                f"api_key_len actual={len(self.api_key)} (se mantiene)"
+            )
             self.key_source = "env"
             self.key_resolution_warning = "flag_off"
             return
         resolution = key_resolver.resolve_sync_cached("m3")
+        # FIX-20260812-18-debug: qué recibe _refresh_keys de la caché del
+        # resolver (sin secretos: len/source/warning + identidad del singleton).
+        if resolution is not None:
+            print(
+                f"🔍 [FIX-20260812-18] M3VisionBase._refresh_keys "
+                f"resolve_sync_cached api_key_len={len(resolution.api_key)} "
+                f"source={resolution.source} warning={resolution.warning} "
+                f"resolver_id={id(key_resolver)}"
+            )
+        else:
+            print(
+                f"🔍 [FIX-20260812-18] M3VisionBase._refresh_keys "
+                f"resolve_sync_cached=None (caché fría) resolver_id={id(key_resolver)}"
+            )
         if resolution is None:
             # FIX-20260812-13: caché fría + flag on + AI_KEYS_FROM_DB_ENABLED.
             # Antes degradaba a env var vacía (sin key M3 disponible). Ahora
@@ -622,6 +641,15 @@ class M3VisionBase:
         # El model lo decide el selector (override > calibración > AppConfig).
         if resolution.api_key:
             self.api_key = resolution.api_key
+        else:
+            # FIX-20260812-18-debug: CASO CRÍTICO — la caché tiene resolución
+            # pero con api_key vacía (fallback env con warning). self.api_key
+            # NO se toca y sigue "" → call_m3 lanzará M3CredentialsUnavailableError.
+            print(
+                f"🔍 [FIX-20260812-18] M3VisionBase._refresh_keys resolución "
+                f"NO-USABLE: api_key vacía en caché (source={resolution.source} "
+                f"warning={resolution.warning}); self.api_key queda vacía"
+            )
         if resolution.base_url:
             self.base_url = resolution.base_url
         self.key_source = resolution.source
@@ -683,6 +711,13 @@ class M3VisionBase:
         # degradaban a "": (1) flag off + M3_API_KEY ausente, (2) flag on +
         # caché fría sin fila en BD (incluye el cold-loader que deadlockea).
         if not self.api_key:
+            # FIX-20260812-18-debug: estado final del cliente M3 al lanzar el
+            # error tipado (identifica qué branch de _refresh_keys quedó activo).
+            print(
+                f"🔍 [FIX-20260812-18] call_m3 → M3CredentialsUnavailableError; "
+                f"key_source={self.key_source} "
+                f"key_resolution_warning={self.key_resolution_warning}"
+            )
             raise M3CredentialsUnavailableError()
         try:
             from openai import OpenAI
