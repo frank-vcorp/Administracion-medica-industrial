@@ -29,10 +29,20 @@ from app.services.prisma_client import (
     get_prisma_client,
 )
 
-from services.ai import DocumentClassifierService, ExtractorService, PrediagnosticService
-from services.ai.base import GeminiBase
-from services.pdf import SignerService, ReportService
-from schemas import DocumentClassification, ExtractedDataUnion
+# FIX REFERENCE: FIX-20260812-18 — Causa raíz de la desconexión warmup ↔ probe M3.
+# `PYTHONPATH="/app/app"` (Dockerfile:24) hacía que ESTOS imports sin prefijo
+# cargaran los módulos BAJO DOS NOMBRES DISTINTOS: `services.ai.*`/`schemas`
+# (vía PYTHONPATH) y `app.services.ai.*`/`app.schemas` (vía cwd). Cada nombre
+# crea su propio módulo → su propio singleton `key_resolver = KeyResolver()`.
+# Evidencia en prod (logs FIX-20260812-18-debug): el warmup y el probe usaban
+# la instancia A (resolver_id=...936, caché poblada con key DB api_key_len=125)
+# mientras `extract_by_type`/`M3VisionBase._refresh_keys` leían la instancia B
+# (resolver_id=...160, caché SIEMPRE fría) → M3CredentialsUnavailableError.
+# Unificar al namespace canónico `app.*` deja UN solo key_resolver en el proceso.
+from app.services.ai import DocumentClassifierService, ExtractorService, PrediagnosticService
+from app.services.ai.base import GeminiBase
+from app.services.pdf import SignerService, ReportService
+from app.schemas import DocumentClassification, ExtractedDataUnion
 
 
 def _read_env_var(key: str) -> Optional[str]:
