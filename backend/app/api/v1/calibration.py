@@ -171,7 +171,23 @@ async def _persist_calibration_snapshot(
     try:
         import json as _json
         from prisma._fields import Json as PrismaJson  # FIX-04: wrapper Json para Prisma 0.15
-        safe_structured = _json.loads(_json.dumps(structured_data, default=str))
+
+        # FIX-20260810-09e: convertir keys numéricas a strings ANTES del Json
+        # wrapper. Prisma 0.15 + GraphQL no acepta keys numéricos en JSON
+        # (ej. {"125": null}) — las interpreta como IntValue no quoted.
+        def _stringify_numeric_keys(obj):
+            if isinstance(obj, dict):
+                return {_str(k): _stringify_numeric_keys(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_stringify_numeric_keys(x) for x in obj]
+            return obj
+
+        def _str(k):
+            return str(k) if isinstance(k, (int, float)) else k
+
+        safe_structured = _stringify_numeric_keys(structured_data)
+        safe_structured = _json.loads(_json.dumps(safe_structured, default=str))
+
         # FIX-20260810-09c: usar FK crudo en vez de medicalTest.connect.
         # El cliente Prisma cacheado en Railway no regenera con la relación
         # explícita; el FK crudo es compatible con cualquier versión del cliente.
