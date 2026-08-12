@@ -115,10 +115,40 @@ function _flattenStructuredData(rawStructuredData: unknown): Record<string, unkn
     (extraction?.structured_data as Record<string, unknown> | undefined) ??
     (extraction?.raw_payload as Record<string, unknown> | undefined)
 
-  const extractedData =
-    (innerStructuredData?.extracted_data as Record<string, unknown> | undefined) ?? {}
-  const missingFields =
-    (innerStructuredData?.missing_fields as unknown[] | undefined) ?? []
+  // FIX-20260812-06: en CalibrationSnapshot, `extraction.structured_data` ya
+  // ES el payload del paciente (ej. { oido_derecho, notas_calidad, ... }),
+  // NO contiene campos legacy `extracted_data` / `missing_fields` (eso era del
+  // StudyExtractionSnapshot del flujo clínico tradicional).
+  //
+  // Intentar primero la forma legacy `innerStructuredData.extracted_data`
+  // y si no existe, tratar el bloque entero como los datos extraídos.
+  const legacyInner = innerStructuredData?.extracted_data as
+    | Record<string, unknown>
+    | undefined
+  const innerMissing = innerStructuredData?.missing_fields as unknown[] | undefined
+
+  let extractedData: Record<string, unknown>
+  let missingFields: unknown[]
+
+  if (legacyInner && typeof legacyInner === 'object' && Object.keys(legacyInner).length > 0) {
+    // Forma legacy: nested bajo extraction.structured_data.extracted_data
+    extractedData = legacyInner
+    missingFields = innerMissing ?? []
+  } else if (innerStructuredData && typeof innerStructuredData === 'object') {
+    // FIX-20260812-06: shape CalibrationSnapshot actual — el propio
+    // innerStructuredData ES los datos extraídos.
+    const { extracted_data: _ignore1, missing_fields: _ignore2, audit, ...rest } =
+      innerStructuredData as Record<string, unknown> & {
+        extracted_data?: unknown
+        missing_fields?: unknown[]
+        audit?: unknown
+      }
+    extractedData = rest
+    missingFields = innerMissing ?? []
+  } else {
+    extractedData = {}
+    missingFields = []
+  }
 
   // Preservar el payload IA crudo bajo claves con prefijo `_raw_` para
   // diagnóstico/debug del panel (SnapshotsTab puede mostrarlo bajo

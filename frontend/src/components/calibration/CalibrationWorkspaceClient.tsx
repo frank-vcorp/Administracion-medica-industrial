@@ -312,39 +312,45 @@ export default function CalibrationWorkspaceClient({
 
   const selectedSnapshotEntry =
     allSnapshots.find(({ snap }) => snap.id === selectedSnapshotId) ?? allSnapshots[0] ?? null
-  // FIX-20260812-01: navegar correctamente la estructura del snapshot persistido.
-  // La forma real que llega del backend es:
-  //   { extraction: { structured_data: {...}, raw_payload: {...}, ... }, prediagnosis: {...} }
-  // El código previo buscaba `structuredData.extracted_data` (que no existe) y por eso
-  // `selectedExtractedData` quedaba `null`, el preview `{}` vacío y el endpoint
-  // `/api/v2/studies/presentation-schema/propose` devolvía 400.
+  // FIX-20260812-06: dos formas coexisten según la capa que armó el snapshot:
+  //   (A) Server action `getCalibrationSnapshots` en @/actions/calibration pasa por
+  //       `_flattenStructuredData()` y deja el shape legacy a raíz:
+  //       { extracted_data: {...}, missing_fields: [...], _raw_extraction, ... }
+  //   (B) Cuando el componente recibe `snap.structuredData` desde otra fuente
+  //       sin flatten previo, llega crudo del backend con shape nuevo:
+  //       { extraction: { structured_data: {...}, raw_payload: {...} }, prediagnosis: {...} }
+  // Aceptamos ambas con fallback chain.
   const selectedExtractedData = (() => {
     const snap = selectedSnapshotEntry?.snap
     const sd = snap?.structuredData
     if (!sd || typeof sd !== "object" || Array.isArray(sd)) return null
     const obj = sd as Record<string, unknown>
-    // 1) Forma nueva: { extraction: { structured_data: {...} } }
+
+    // Forma A (legacy/flattened): { extracted_data: {...} } a raíz
+    const flatExtracted = obj.extracted_data
+    if (
+      flatExtracted &&
+      typeof flatExtracted === "object" &&
+      !Array.isArray(flatExtracted) &&
+      Object.keys(flatExtracted).length > 0
+    ) {
+      return flatExtracted as Record<string, unknown>
+    }
+
+    // Forma B (raw desde backend): { extraction: { structured_data: {...} } }
     const extraction = obj.extraction
     if (extraction && typeof extraction === "object" && !Array.isArray(extraction)) {
-      const extracted = (extraction as Record<string, unknown>).structured_data
-      if (extracted && typeof extracted === "object" && !Array.isArray(extracted)) {
-        return extracted as Record<string, unknown>
+      const inner = extraction as Record<string, unknown>
+      const structured = inner.structured_data
+      if (structured && typeof structured === "object" && !Array.isArray(structured)) {
+        return structured as Record<string, unknown>
       }
-      // Fallback dentro de extraction: raw_payload
-      const rawPayload = (extraction as Record<string, unknown>).raw_payload
+      const rawPayload = inner.raw_payload
       if (rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)) {
         return rawPayload as Record<string, unknown>
       }
     }
-    // 2) Forma legacy: { extracted_data: {...} }
-    const legacy = obj.extracted_data
-    if (legacy && typeof legacy === "object" && !Array.isArray(legacy)) {
-      return legacy as Record<string, unknown>
-    }
-    // 3) Fallback final: si sd mismo parece un mapa de campos (no envuelto)
-    if (Object.keys(obj).length > 0) {
-      return obj
-    }
+
     return null
   })()
 
