@@ -1277,58 +1277,20 @@ function StudyPanel({
 
             {/* IMPL-20260518-13: Renderer clínico estructurado — reemplaza panel azul genérico */}
             {/*
-              FIX-20260812-19: Layout side-by-side para Extracción clínica +
-              Prediagnóstico IA en pantallas >=lg. Ambos paneles comparten la
-              misma fila cuando ambos están presentes, evitando el layout
-              vertical que dejaba el Prediagnóstico IA "cargado al lado
-              izquierdo" cuando la extracción era alta. En móvil (<lg)
-              mantienen el apilamiento vertical original.
+              FIX-20260812-19: Extracción clínica vive en la COLUMNA IZQUIERDA
+              del grid (junto con dropzone, trazabilidad, acciones). El panel de
+              Prediagnóstico IA vive en la COLUMNA DERECHA, debajo del archivo
+              vinculado (StudyDocumentViewer). Layout vertical por columna,
+              no side-by-side.
             */}
-            {test.extractionSnapshot && isAIEligible && test.aiSnapshot ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-                <div>
-                  <ClinicalExtractionRenderer
-                    extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
-                    missingFields={test.extractionSnapshot.missingFields as string[] | null}
-                    version={test.extractionSnapshot.version}
-                    studyType={getCanonicalAIStudyType(test)}
-                    presentationSchema={getPersistedPresentationSchema(test)}
-                  />
-                </div>
-                <div>
-                  <StudyAIPrediagnosisPanel
-                    prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
-                    snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
-                    reviewerUserId={reviewerUserId}
-                    eventId={eventId}
-                    existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
-                    readonly={readonly}
-                  />
-                </div>
-              </div>
-            ) : (
-              <>
-                {test.extractionSnapshot && (
-                  <ClinicalExtractionRenderer
-                    extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
-                    missingFields={test.extractionSnapshot.missingFields as string[] | null}
-                    version={test.extractionSnapshot.version}
-                    studyType={getCanonicalAIStudyType(test)}
-                    presentationSchema={getPersistedPresentationSchema(test)}
-                  />
-                )}
-
-                {isAIEligible && test.aiSnapshot && (
-                  <StudyAIPrediagnosisPanel
-                    prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
-                    snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
-                    reviewerUserId={reviewerUserId}
-                    eventId={eventId}
-                    existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
-                    readonly={readonly}
-                  />
-                )}
-              </>
+            {test.extractionSnapshot && (
+              <ClinicalExtractionRenderer
+                extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
+                missingFields={test.extractionSnapshot.missingFields as string[] | null}
+                version={test.extractionSnapshot.version}
+                studyType={getCanonicalAIStudyType(test)}
+                presentationSchema={getPersistedPresentationSchema(test)}
+              />
             )}
 
             {/* Acciones de estado */}
@@ -1389,7 +1351,7 @@ function StudyPanel({
             )}
           </div>
 
-          {/* ===== COLUMNA DERECHA: EVIDENCIA DOCUMENTAL ===== */}
+          {/* ===== COLUMNA DERECHA: EVIDENCIA DOCUMENTAL + Prediagnóstico IA ===== */}
           <div className="space-y-3 lg:sticky lg:top-4 self-start">
 
             {/* Archivo vinculado + visor embebido */}
@@ -1407,6 +1369,22 @@ function StudyPanel({
                 <p className="text-sm text-slate-400 font-medium">Sin archivo vinculado</p>
                 <p className="text-xs text-slate-400 mt-1">Sube el resultado para visualizarlo aquí.</p>
               </div>
+            )}
+
+            {/* Panel de Prediagnóstico IA — debajo del archivo vinculado, en la columna derecha.
+                FIX-20260812-19: movido desde la columna izquierda para alinear
+                con el archivo vinculado (mismo eje visual: evidencia documental
+                arriba, análisis IA abajo). El médico ve primero el PDF/PNG
+                original, luego la sugerencia IA, luego decide. */}
+            {isAIEligible && test.aiSnapshot && (
+              <StudyAIPrediagnosisPanel
+                prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
+                snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
+                reviewerUserId={reviewerUserId}
+                eventId={eventId}
+                existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
+                readonly={readonly}
+              />
             )}
           </div>
         </div>
