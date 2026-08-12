@@ -1276,26 +1276,59 @@ function StudyPanel({
             )}
 
             {/* IMPL-20260518-13: Renderer clínico estructurado — reemplaza panel azul genérico */}
-            {test.extractionSnapshot && (
-              <ClinicalExtractionRenderer
-                extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
-                missingFields={test.extractionSnapshot.missingFields as string[] | null}
-                version={test.extractionSnapshot.version}
-                studyType={getCanonicalAIStudyType(test)}
-                presentationSchema={getPersistedPresentationSchema(test)}
-              />
-            )}
+            {/*
+              FIX-20260812-19: Layout side-by-side para Extracción clínica +
+              Prediagnóstico IA en pantallas >=lg. Ambos paneles comparten la
+              misma fila cuando ambos están presentes, evitando el layout
+              vertical que dejaba el Prediagnóstico IA "cargado al lado
+              izquierdo" cuando la extracción era alta. En móvil (<lg)
+              mantienen el apilamiento vertical original.
+            */}
+            {test.extractionSnapshot && isAIEligible && test.aiSnapshot ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                <div>
+                  <ClinicalExtractionRenderer
+                    extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
+                    missingFields={test.extractionSnapshot.missingFields as string[] | null}
+                    version={test.extractionSnapshot.version}
+                    studyType={getCanonicalAIStudyType(test)}
+                    presentationSchema={getPersistedPresentationSchema(test)}
+                  />
+                </div>
+                <div>
+                  <StudyAIPrediagnosisPanel
+                    prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
+                    snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
+                    reviewerUserId={reviewerUserId}
+                    eventId={eventId}
+                    existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
+                    readonly={readonly}
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                {test.extractionSnapshot && (
+                  <ClinicalExtractionRenderer
+                    extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
+                    missingFields={test.extractionSnapshot.missingFields as string[] | null}
+                    version={test.extractionSnapshot.version}
+                    studyType={getCanonicalAIStudyType(test)}
+                    presentationSchema={getPersistedPresentationSchema(test)}
+                  />
+                )}
 
-            {/* Panel de Prediagnóstico IA — separado visualmente del raw */}
-            {isAIEligible && test.aiSnapshot && (
-              <StudyAIPrediagnosisPanel
-                prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
-                snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
-                reviewerUserId={reviewerUserId}
-                eventId={eventId}
-                existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
-                readonly={readonly}
-              />
+                {isAIEligible && test.aiSnapshot && (
+                  <StudyAIPrediagnosisPanel
+                    prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
+                    snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
+                    reviewerUserId={reviewerUserId}
+                    eventId={eventId}
+                    existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
+                    readonly={readonly}
+                  />
+                )}
+              </>
             )}
 
             {/* Acciones de estado */}
