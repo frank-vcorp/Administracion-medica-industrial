@@ -575,6 +575,39 @@ notas de calidad y gráficas.
             override_model=extraction_model_override,
         )
 
+        # IMPL-20260812-05 — Single source of truth tras `_resolve_provider`.
+        # Trazabilidad explícita: la selección final (provider, model) es la
+        # que se usará en la llamada HTTP, sin sobrescrituras posteriores
+        # por `_refresh_keys()` (FIX-1 ya blindó ese camino).
+        # Si la flag BD está activa pero el resolver no tiene key para el
+        # provider seleccionado, se hace warning explícito (sin substituir
+        # el model — sólo aceptamos env var para la key).
+        from .keys import is_ai_keys_from_db_enabled, key_resolver as _kr_singleton
+        if is_ai_keys_from_db_enabled():
+            _db_resolution = _kr_singleton.resolve_sync_cached(provider)
+            if _db_resolution is None:
+                # La frontera async no pre-calentó la caché TTL para este
+                # provider. El pipeline degradará a env var (cache_cold).
+                print(
+                    f"⚠️ [IMPL-20260812-05] AI_KEYS_FROM_DB_ENABLED=true pero "
+                    f"caché TTL fría para provider='{provider}'. El pipeline "
+                    f"usará env var para la key. Model selector='{model}' se "
+                    f"respeta."
+                )
+            elif _db_resolution.source == "env" and _db_resolution.warning in (
+                "row_missing",
+                "row_disabled",
+                "decrypt_error",
+                "db_unavailable",
+                "encryption_key_missing",
+            ):
+                print(
+                    f"⚠️ [IMPL-20260812-05] provider='{provider}' no tiene key "
+                    f"usable en BD (warning={_db_resolution.warning}). "
+                    f"Flujo continúa con env var. Model selector='{model}' "
+                    f"se respeta."
+                )
+
         _extraction_prompt_version = extraction_cfg.get("version", "calibration_custom")
         print(
             f"✅ [ARCH-20260518-03] Prompt de extracción resuelto desde aiCalibration "

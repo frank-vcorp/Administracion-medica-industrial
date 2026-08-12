@@ -149,6 +149,14 @@ class GeminiBase:
         → siempre env var. La caché se pre-calienta en la frontera async
         (`await key_resolver.resolve(...)` en el handler). Ver
         DICTAMEN_FIX-20260810-06.
+
+        IMPL-20260812-05 — Fix de fuente única de verdad: la rotación BD
+        actualiza SOLO la API key. `self.model` queda intacto porque fue
+        resuelto por `_resolve_provider()` (selector UI: override >
+        aiCalibration > AppConfig > env default). Antes este método
+        sobreescribía `self.model` con `default_model` de la fila BD,
+        causando que el selector fuera ignorado (ej. UI："m3" → HTTP:
+        "gemini-2.5-pro" con la key revocada de la BD).
         """
         from .keys import is_ai_keys_from_db_enabled
         if not is_ai_keys_from_db_enabled():
@@ -164,11 +172,19 @@ class GeminiBase:
             # key de env var del __init__ (comportamiento legacy).
             self.key_source = "env"
             self.key_resolution_warning = "cache_cold"
+            print(
+                f"🔁 [AI_KEYS] gemini key_resolver.cache_cold; "
+                f"manteniendo env var, model mantenido='{self.model}'"
+            )
             return
+        # IMPL-20260812-05: SOLO refrescar api_key. NO tocar self.model.
         self.api_key = resolution.api_key
-        self.model = resolution.default_model or self.model
         self.key_source = resolution.source
         self.key_resolution_warning = resolution.warning
+        print(
+            f"🔁 [AI_KEYS] gemini key refrescada desde {resolution.source}; "
+            f"model mantenido='{self.model}'"
+        )
     
     def get_b64_content(self, file_path: str) -> str:
         """
@@ -349,8 +365,7 @@ class FeatherlessVisionBase:
                 self.api_key = resolution.api_key
             if resolution.base_url:
                 self.base_url = resolution.base_url
-            if resolution.default_model:
-                self.model = resolution.default_model
+            # IMPL-20260812-05: NO sobrescribir self.model (lo decide el selector).
             self.key_source = resolution.source
             self.key_resolution_warning = resolution.warning
         except Exception as e:
@@ -545,15 +560,23 @@ class M3VisionBase:
             # valores de env var del __init__ (comportamiento legacy).
             self.key_source = "env"
             self.key_resolution_warning = "cache_cold"
+            print(
+                f"🔁 [AI_KEYS] m3 key_resolver.cache_cold; "
+                f"manteniendo env var, model mantenido='{self.model}'"
+            )
             return
+        # IMPL-20260812-05: refrescar api_key (+ base_url) pero NO el model.
+        # El model lo decide el selector (override > calibración > AppConfig).
         if resolution.api_key:
             self.api_key = resolution.api_key
         if resolution.base_url:
             self.base_url = resolution.base_url
-        if resolution.default_model:
-            self.model = resolution.default_model
         self.key_source = resolution.source
         self.key_resolution_warning = resolution.warning
+        print(
+            f"🔁 [AI_KEYS] m3 key refrescada desde {resolution.source}; "
+            f"model mantenido='{self.model}'"
+        )
 
     def get_b64_jpeg(self, file_path: str) -> str:
         """

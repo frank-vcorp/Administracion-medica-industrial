@@ -188,20 +188,28 @@ class KeyResolver:
         """
         Lee env vars para un proveedor. Retorna (api_key, base_url, default_model).
 
+        IMPL-20260812-05 — Single source of truth: para Gemini, el
+        `default_model` lo decide el selector (override > aiCalibration >
+        AppConfig > env), no el key resolver. El resolver expone SOLO la
+        API key (rotación runtime). Para M3 y DR7 conservamos el env
+        default porque la capa clínica (prediagnóstico) aún inicia
+        instancias sin selector explícito.
+
         Mapeo:
-          - gemini: GEMINI_API_KEY + GEMINI_BASE_URL (no aplica) + GEMINI_MODEL_EXTRACTION
+          - gemini: GEMINI_API_KEY (model=null: lo decide el caller)
           - m3:     M3_API_KEY + M3_BASE_URL + M3_DEFAULT_MODEL
           - dr7:    DR7_API_KEY + DR7_BASE_URL + DR7_MODEL
         """
         if provider == "gemini":
             api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
             base_url = None  # Gemini v1beta URL no se overridea en runtime
-            default_model = (
-                os.environ.get("GEMINI_MODEL_EXTRACTION")
-                or os.environ.get("GEMINI_MODEL")
-                or "gemini-2.5-flash"
-            )
-            return api_key, base_url, default_model
+            # IMPL-20260812-05: NO retornar default_model acá. El selector
+            # (override > aiCalibration > AppConfig > env) es la única fuente
+            # de verdad para el modelo. Si retornáramos GEMINI_MODEL_EXTRACTION
+            # acá, contaminaría la fila KeyResolution.default_model y un
+            # `_refresh_keys()` mal escrito lo preferiría sobre el model del
+            # selector, ignorándolo (causa raíz del bug "UI=m3 pero HTTP=gemini-2.5-pro").
+            return api_key, base_url, None
         if provider == "m3":
             api_key = (os.environ.get("M3_API_KEY") or "").strip()
             base_url = (
