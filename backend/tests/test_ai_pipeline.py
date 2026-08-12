@@ -2543,3 +2543,164 @@ class TestFix20260812_14_M3MissingCredentials:
         assert "inválida o revocada" not in detail
         # No expone stack ni key.
         assert "Traceback" not in detail
+
+
+class TestFix20260812_18_M3WarmupCacheCoherence:
+    """
+    FIX-20260812-18 — Regresión del contrato warmup ↔ caché TTL ↔ _refresh_keys.
+
+    Bug en producción: probe M3 OK (descifra desde BD) pero upload-and-analyze
+    retorna M3_CREDENTIALS_UNAVAILABLE. El mecanismo proximal es que
+    `M3VisionBase._refresh_keys` lee de la caché TTL una resolución NO-USABLE
+    (api_key vacía) o nada, y `self.api_key` queda "" → guard de call_m3 lanza.
+
+    Estos tests fijan el contrato entre el warmup async (frontera FastAPI) y la
+    lectura sync del pipeline, SIN importar prisma (evita el hang de import de
+    prisma/types.py bajo Python 3.14 — problema ambiental local, no de este código):
+
+      - CA-1: caché caliente con resolución DB válida → _refresh_keys popula
+        self.api_key (el warmup alcanza al cliente M3).
+      - CA-2: caché con resolución NO-USABLE (api_key="", warning=row_missing)
+        → self.api_key NO se popula (documenta el mecanismo proximal del bug).
+      - CA-3: warmup async (resolve con lookup BD fake) puebla caché legible por
+        resolve_sync_cached y por _refresh_keys (coherencia end-to-end sin prisma).
+    """
+
+    def _fresh_resolver_with_cached(self, resolution, age_seconds=0.0):
+        """KeyResolver nuevo con una entrada de caché inyectada directamente."""
+        import time as _time
+        from app.services.ai.keys import KeyResolver
+
+        r = KeyResolver()
+        r.invalidate_all()
+        r._cache["m3"] = (_time.monotonic() - age_seconds, resolution)
+        return r
+
+    def test_refresh_keys_popula_api_key_desde_cache_caliente_db(self, monkeypatch):
+        """CA-1: warmup pobló caché con key DB → _refresh_keys la aplica al cliente."""
+        import time as _time
+        from app.services.ai.keys import KeyResolution
+        from app.services.ai.base import M3VisionBase
+
+        monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+
+        resolution = KeyResolution(
+            provider="m3",
+            api_key="sk-db-rotated-xyz",
+            base_url="https://db.example.com/v1",
+            default_model="MiniMax-DB",
+            source="db",
+            warning=None,
+        )
+        resolver = self._fresh_resolver_with_cached(resolution)
+        # base.py importa `key_resolver` por nombre → patchear en SU namespace.
+        monkeypatch.setattr("app.services.ai.base.key_resolver", resolver)
+
+        client = M3VisionBase()  # env ausente → api_key inicial ""
+        assert client.api_key == "", "Precondición: sin env, api_key arranca vacía"
+
+        client._refresh_keys()
+
+        assert client.api_key == "sk-db-rotated-xyz", (
+            "FIX-20260812-18: la caché caliente del warmup DEBE alimentar _refresh_keys"
+        )
+        assert client.key_source == "db"
+        assert client.key_resolution_warning is None
+        # IMPL-20260812-05: el model del selector NO se sobreescribe.
+        assert client.model != "MiniMax-DB" or client.model == os.environ.get(
+            "M3_DEFAULT_MODEL", "MiniMax-M3"
+        )
+
+    def test_refresh_keys_no_popula_api_key_si_resolucion_inutil(self, monkeypatch):
+        """CA-2: caché con fallback env (api_key="", warning=row_missing) →
+        self.api_key queda vacía. Este es el mecanismo proximal del bug de prod:
+        el warmup cacheó una resolución NO-USABLE y el pipeline la hereda."""
+        from app.services.ai.keys import KeyResolution
+        from app.services.ai.base import M3VisionBase
+
+        monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+
+        resolution = KeyResolution(
+            provider="m3",
+            api_key="",  # fallback env con M3_API_KEY ausente
+            base_url="https://api.minimax.io/v1",
+            default_model="MiniMax-M3",
+            source="env",
+            warning="row_missing",
+        )
+        resolver = self._fresh_resolver_with_cached(resolution)
+        monkeypatch.setattr("app.services.ai.base.key_resolver", resolver)
+
+        client = M3VisionBase()
+        client._refresh_keys()
+
+        assert client.api_key == "", (
+            "Resolución NO-USABLE no debe inventar key"
+        )
+        assert client.key_source == "env"
+        assert client.key_resolution_warning == "row_missing"
+
+    def test_warmup_async_puebla_cache_legible_por_refresh_keys(self, monkeypatch):
+        """CA-3: coherencia end-to-end warmup→caché→cliente SIN prisma.
+        resolve() con _lookup_db fake (async def plano) descifra la key DB y la
+        cachea; resolve_sync_cached la ve; _refresh_keys la aplica."""
+        import asyncio
+        import base64 as _b64
+        from app.services.ai.keys import KeyResolver, encrypt_key
+        from app.services.ai.base import M3VisionBase
+
+        monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+        master = b"\x42" * 32
+        monkeypatch.setenv("ENCRYPTION_KEY", _b64.b64encode(master).decode())
+
+        ct, nonce, tag = encrypt_key("sk-db-warmup-e2e", master)
+
+        class _FakeBase64Field:
+            """Imita fields.Base64 de prisma-client-py 0.15 (FIX-20260810-03)."""
+
+            def __init__(self, raw: bytes):
+                self._raw = raw
+
+            def decode(self) -> bytes:
+                return self._raw
+
+        class _FakeRow:
+            provider = "m3"
+            enabled = True
+            baseUrl = "https://db.example.com/v1"
+            defaultModel = "MiniMax-DB"
+            keyCiphertext = _FakeBase64Field(ct)
+            keyNonce = _FakeBase64Field(nonce)
+            keyTag = _FakeBase64Field(tag)
+
+        resolver = KeyResolver()
+        resolver.invalidate_all()
+
+        async def _fake_lookup_db(provider):
+            assert provider == "m3"
+            return _FakeRow()
+
+        monkeypatch.setattr(resolver, "_lookup_db", _fake_lookup_db)
+        monkeypatch.setattr("app.services.ai.base.key_resolver", resolver)
+
+        # 1. Warmup async (lo que hace v2_upload_and_analyze en la frontera).
+        warm = asyncio.run(resolver.resolve("m3"))
+        assert warm.source == "db"
+        assert warm.api_key == "sk-db-warmup-e2e"
+        assert warm.warning is None
+
+        # 2. Lectura sync del pipeline (resolve_sync_cached) ve la misma caché.
+        cached = resolver.resolve_sync_cached("m3")
+        assert cached is not None, (
+            "FIX-20260812-18: el warmup DEBE dejar caché legible por el pipeline sync"
+        )
+        assert cached.api_key == "sk-db-warmup-e2e"
+
+        # 3. El cliente M3 aplica la key desde la caché.
+        client = M3VisionBase()
+        client._refresh_keys()
+        assert client.api_key == "sk-db-warmup-e2e"
+        assert client.key_source == "db"
