@@ -178,12 +178,25 @@ Resultado: `16 passed` (FIX-18 + FIX-14 + test_ai_keys no-async).
 5. `/tmp` de la máquina de dev está al límite de quota por `/tmp/sync_hermes_backup`
    (9.1G, tmpfs). No afecta a este FIX pero bloquea operaciones locales que escriban a /tmp.
 
-## 7. Validación post-deploy (pendiente de confirmación final)
+## 7. Validación post-deploy — COMPLETADA (2026-08-12 ~18:15 CEST)
 
-Plan: tras el redeploy de `0fd2fce`, repetir la reproducción:
-1. `POST /api/v2/admin/ai-keys/m3/probe` → debe seguir OK.
-2. `POST /api/v2/studies/upload-and-analyze` con calibration m3 → NO debe retornar
-   `M3_CREDENTIALS_UNAVAILABLE`. Con el PDF de prueba (456 bytes, contenido no médico)
-   es esperable un error de EXTRACCIÓN (JSON no parseable de M3) — eso CONFIRMA que la
-   credencial ya se resuelve (el request llega hasta la llamada HTTP real a M3).
-3. Los logs deben mostrar `extract_by_type ... resolver_id` IGUAL al del warmup.
+Reproducción DEBY contra producción tras el redeploy de `0fd2fce`:
+
+1. **Probe M3:** HTTP 200, `ok=true`, latencyMs=1447 ✅
+2. **Upload provider=m3:** `status=success`, `extraction_provider_used=m3`,
+   `extraction_model_used=MiniMax-M3`, extracción en 9.13s ✅. M3 respondió
+   correctamente sobre el PDF de prueba (456 bytes, visualmente vacío):
+   "El documento proporcionado está visualmente en blanco..." — comportamiento
+   correcto del pipeline completo (extracción M3 + prediagnóstico DR7 →
+   `AI_NON_CONCLUSIVE` con guardrails). **CERO `M3_CREDENTIALS_UNAVAILABLE`.**
+3. **Logs:** todos los componentes comparten AHORA el mismo singleton:
+
+```text
+🔍 warmup genérico START resolver_id=140296773974480
+🔍 resolve provider=m3 descifrado OK source=db api_key_len=125 resolver_id=140296773974480
+🔍 extract_by_type provider=m3 cache_resolution api_key_len=125 source=db warning=None resolver_id=140296773974480
+🔍 M3VisionBase._refresh_keys resolve_sync_cached api_key_len=125 source=db warning=None resolver_id=140296773974480
+```
+
+Antes del fix: `extract_by_type`/`_refresh_keys` mostraban `resolver_id` DISTINTO y
+`cache_resolution=None`. Después: mismo id, key DB visible en todo el pipeline.

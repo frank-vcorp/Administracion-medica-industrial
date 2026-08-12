@@ -63,13 +63,16 @@ con evidencia de producción) → quick-fix directo con FIX REFERENCE watermark.
   `services.ai.base.key_resolver is not app.services.ai.keys.key_resolver` → True.
 - Tests: `TestFix20260812_18_M3WarmupCacheCoherence` (3 nuevos) + FIX-14 + test_ai_keys
   sync → **16 passed**.
-- Verificación en producción post-redeploy: pendiente (se ejecuta a continuación).
+- **Verificación en producción (post-redeploy `0fd2fce`):** probe HTTP 200 ✅; upload
+  provider=m3 → `status=success`, `extraction_provider_used=m3`, 9.13s, CERO
+  `M3_CREDENTIALS_UNAVAILABLE` ✅; logs muestran warmup/extract/_refresh_keys con el
+  MISMO `resolver_id=140296773974480` y `api_key_len=125 source=db` ✅.
 
 ### C. Instrucciones de Handoff para INTEGRA
 
-1. **Verificar en producción** (DEBY lo hace en esta sesión): tras el redeploy de
-   `0fd2fce`, repetir probe + upload de prueba y confirmar que NO hay
-   `M3_CREDENTIALS_UNAVAILABLE` y que los `resolver_id` coinciden en los logs.
+1. **Verificado en producción por DEBY** (esta sesión): probe OK + upload m3
+   `status=success` con el mismo `resolver_id` en warmup/extract/_refresh_keys.
+   El bug está resuelto en producción.
 2. **Decisión pendiente (requiere OK de Frank):** eliminar `ENV PYTHONPATH="/app/app"`
    del `backend/Dockerfile` para fail-fast contra futuros imports sin prefijo. Es
    cambio de infra de deploy → DEBY no lo aplica sin aprobación.
