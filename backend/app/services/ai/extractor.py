@@ -17,7 +17,7 @@ ARCH-20260519-15: ROLLBACK — Featherless/Qwen-VL desactivado del runtime extra
 import time
 import os
 from typing import Dict, Any, Union, Optional, Tuple
-from .base import GeminiBase, M3VisionBase
+from .base import GeminiBase, M3VisionBase, M3CredentialsUnavailableError
 from app.schemas.medical import (
     AudiometriaData,
     LaboratorioData,
@@ -51,10 +51,15 @@ class ExtractionAuthError(ValueError):
     que sólo hacen `str(err)` (calibration.py imprimía el mensaje completo).
     """
 
-    def __init__(self, message: str, provider: str = "m3") -> None:
+    def __init__(self, message: str, provider: str = "m3", reason: str = "auth_error") -> None:
         super().__init__(message)
         self.provider = provider
         self.message = message
+        # FIX-20260812-14: distingue "auth_error" (HTTP 401/403 — key inválida
+        # o revocada) de "credentials_unavailable" (key ausente tras
+        # `_refresh_keys`). La capa HTTP (main.py / calibration.py) usa
+        # `reason` para elegir el mensaje y `error_code` accionables.
+        self.reason = reason
 
     def __str__(self) -> str:  # noqa: D401 — override para incluir provider
         return f"[{self.provider.upper()}] {self.message}"
@@ -424,6 +429,23 @@ notas de calidad y gráficas.
                     getattr(m3_client, "key_resolution_warning", None),
                 )
                 return result, "m3", None
+            except M3CredentialsUnavailableError as creds_err:
+                # FIX-20260812-14: M3 sin key tras `_refresh_keys` (env ausente
+                # y BD sin fila válida, o cold-loader que ya no deadlockea).
+                # NO degradar a Gemini (FIX-20260812-12). Propagar como
+                # `ExtractionAuthError(reason="credentials_unavailable")` para
+                # que la capa HTTP responda con `error_code` accionable
+                # (M3_CREDENTIALS_UNAVAILABLE) y mensaje user-friendly, en
+                # lugar del "Missing credentials..." opaco del SDK OpenAI.
+                raise ExtractionAuthError(
+                    message=(
+                        "M3_CREDENTIALS_UNAVAILABLE: El servicio de análisis "
+                        "IA (M3) no está configurado. Define M3_API_KEY o "
+                        "configura la fila en /admin/ai-keys."
+                    ),
+                    provider="m3",
+                    reason="credentials_unavailable",
+                ) from creds_err
             except Exception as e:
                 # Detectar tipo de error para clasificar el fallback.
                 fallback_reason = _classify_m3_failure(e)

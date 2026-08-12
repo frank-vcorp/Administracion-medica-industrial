@@ -474,6 +474,33 @@ class FeatherlessVisionBase:
 # Respaldo: context/SPECs/SPEC_ARCH-20260809-02-SELECTOR-EXTRACCION-MULTI-PROVEEDOR.md
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# FIX-20260812-14: Excepción tipada para credenciales M3 ausentes.
+#
+# El SDK `openai` levanta "Missing credentials. Please pass an `api_key`..."
+# cuando se instancia `OpenAI(api_key="", base_url=...)` o al hacer la primera
+# petición. Ese mensaje es del SDK (opaco al usuario final) y filtra detalles
+# internos del cliente. `M3VisionBase.call_m3` ahora comprueba `self.api_key`
+# ANTES de instanciar el cliente OpenAI y lanza esta excepción tipada con un
+# mensaje accionable. El dispatcher (`ExtractorService._call_with_dispatch`)
+# la convierte en `ExtractionAuthError(provider="m3",
+# reason="credentials_unavailable")` para que la capa HTTP responda con
+# `error_code` y mensaje claros, sin fallback a Gemini (FIX-20260812-12).
+# Respaldo: context/diagnostics/FIX-20260812-14-m3-missing-credentials.md
+# ---------------------------------------------------------------------------
+class M3CredentialsUnavailableError(RuntimeError):
+    """M3 API key no disponible tras `_refresh_keys()` (env ausente y BD sin fila válida)."""
+
+    def __init__(self, message: str | None = None) -> None:
+        super().__init__(
+            message
+            or (
+                "M3_CREDENTIALS_UNAVAILABLE: El servicio de análisis IA (M3) no está "
+                "configurado. Define M3_API_KEY o configura la fila en /admin/ai-keys."
+            )
+        )
+
+
 class M3VisionBase:
     """
     Base para el frente extractivo visual de MiniMax M3 (OpenAI-compatible).
@@ -560,22 +587,11 @@ class M3VisionBase:
             # Antes degradaba a env var vacía (sin key M3 disponible). Ahora
             # intenta carga lazy directa desde BD. Si BD tiene fila válida,
             # lee la key; si BD no tiene fila o falla, mantiene env var legacy.
-            try:
-                from .keys import resolve as _resolve_async
-                import asyncio
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # Sync lookup via thread pool: fallback síncrono
-                        # simple. Si Prisma está inicializado, consultamos
-                        # directamente el row de m3 sin descifrar (el
-                        # resolver proper lo hará luego).
-                        # IMPLEMENTACIÓN DIRECTA:
-                        pass
-                except RuntimeError:
-                    pass
-            except Exception:
-                pass
+            # FIX-20260812-14: eliminado bloque try/except muerto (tenía un
+            # `pass` literal dentro de `if loop.is_running()` que no computaba
+            # nada — herencia de un intento de sync lookup vía thread pool que
+            # nunca se materializó). El cold-load real ocurre en
+            # `_resolve_sync_cold` justo abajo.
             # FIX-20260812-13: usar helper sync del resolver que consulta BD
             # sincrónicamente y descifra la key. Si encuentra, setea api_key.
             from .keys import _resolve_sync_cold
@@ -657,6 +673,17 @@ class M3VisionBase:
             el dispatcher de ExtractorService decida si dispara fallback a Gemini.
         """
         self._refresh_keys()
+        # FIX-20260812-14: si tras `_refresh_keys()` la key sigue vacía, NO
+        # instanciar el cliente OpenAI. Antes, `OpenAI(api_key="", base_url=...)`
+        # hacía que el SDK lanzara "Missing credentials. Please pass an
+        # `api_key`..." — un mensaje opaco del SDK que llegaba crudo al usuario
+        # final. Ahora lanzamos `M3CredentialsUnavailableError` con mensaje
+        # accionable. El dispatcher la convierte en `ExtractionAuthError` (sin
+        # fallback a Gemini por FIX-20260812-12). Esto cubre los dos paths que
+        # degradaban a "": (1) flag off + M3_API_KEY ausente, (2) flag on +
+        # caché fría sin fila en BD (incluye el cold-loader que deadlockea).
+        if not self.api_key:
+            raise M3CredentialsUnavailableError()
         try:
             from openai import OpenAI
         except ImportError as exc:

@@ -2374,3 +2374,172 @@ class TestFix20260810_05_M3DbResolverAndGemini503:
         from app.services.ai.extractor import _EXTRACTION_AUTH_ERROR_CODES
         assert _EXTRACTION_AUTH_ERROR_CODES["m3"] == "M3_API_KEY_EXPIRED"
         assert _EXTRACTION_AUTH_ERROR_CODES["gemini"] == "GEMINI_API_KEY_EXPIRED"
+
+
+# ---------------------------------------------------------------------------
+# FIX-20260812-14: "Missing credentials" del SDK OpenAI en M3VisionBase.call_m3
+# cuando self.api_key queda vacío tras _refresh_keys.
+# Respaldo: context/diagnostics/FIX-20260812-14-m3-missing-credentials.md
+# ---------------------------------------------------------------------------
+class TestFix20260812_14_M3MissingCredentials:
+    """
+    FIX-20260812-14 — Causa raíz: M3VisionBase.call_m3 instanciaba
+    `OpenAI(api_key="", base_url=...)` cuando la key quedaba vacía (env
+    ausente + BD sin fila válida + cold-loader que deadlockeaba), y el SDK
+    lanzaba "Missing credentials. Please pass an `api_key`..." — un mensaje
+    opaco que llegaba crudo al usuario final.
+
+    Cobertura:
+      - CA-1: call_m3 con api_key vacía → M3CredentialsUnavailableError (NO
+        el mensaje del SDK). El guard corre ANTES del `from openai import
+        OpenAI`, así que el test NO requiere openai instalado.
+      - CA-3: _call_with_dispatch convierte M3CredentialsUnavailableError en
+        ExtractionAuthError(provider='m3', reason='credentials_unavailable'),
+        SIN fallback a Gemini (FIX-20260812-12).
+      - CA-4: calibration.py responde 503 con error_code
+        M3_CREDENTIALS_UNAVAILABLE y mensaje 'no está configurado' (distinto
+        del 'key inválida o revocada' del path 401/403).
+
+    Nota: CA-2 (guard no dispara con api_key presente) queda cubierto por el
+    test existente `test_m3_vision_base_levanta_si_openai_no_instalado`:
+    si el guard disparara con key presente, ese test esperaría RuntimeError
+    pero obtendría M3CredentialsUnavailableError y fallaría.
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(
+            api_key="test-gemini-key", model="gemini-2.5-flash"
+        )
+
+    def test_call_m3_levanta_m3credentials_unavailable_si_api_key_vacia(
+        self, monkeypatch
+    ):
+        """CA-1: api_key vacía tras _refresh_keys → M3CredentialsUnavailableError
+        (NO el 'Missing credentials' del SDK). El guard corre antes del import
+        de openai, así que el test NO requiere openai instalado."""
+        from app.services.ai.base import (
+            M3VisionBase,
+            M3CredentialsUnavailableError,
+        )
+
+        # Garantizar M3_API_KEY ausente y flag off (path legacy que degrada a "").
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+        monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "false")
+
+        client = M3VisionBase()  # __init__ deja self.api_key = "" (sin env var)
+        assert client.api_key == "", "Precondición: api_key debe quedar vacía"
+
+        with pytest.raises(
+            M3CredentialsUnavailableError, match="M3_CREDENTIALS_UNAVAILABLE"
+        ):
+            client.call_m3("/fake/audio.pdf", "prompt de extracción")
+
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_dispatcher_convierte_credentials_unavailable_sin_fallback_a_gemini(
+        self, mock_call_m3, extractor
+    ):
+        """CA-3: M3VisionBase.call_m3 levanta M3CredentialsUnavailableError →
+        _call_with_dispatch la convierte en ExtractionAuthError(provider='m3',
+        reason='credentials_unavailable'). NO hay fallback a Gemini
+        (FIX-20260812-12). call_gemini jamás se invoca."""
+        from app.services.ai.base import M3CredentialsUnavailableError
+        from app.services.ai.extractor import ExtractionAuthError
+
+        mock_call_m3.side_effect = M3CredentialsUnavailableError(
+            "M3_CREDENTIALS_UNAVAILABLE: key vacía"
+        )
+
+        with patch("app.services.ai.base.GeminiBase.call_gemini") as mock_gemini:
+            mock_gemini.return_value = {"paciente": "no-deberia-usarse"}
+            with pytest.raises(ExtractionAuthError) as exc_info:
+                extractor._call_with_dispatch(
+                    file_path="/fake/audio.pdf",
+                    prompt="prompt de extracción",
+                    provider="m3",
+                    model="MiniMax-M3",
+                )
+        # reason y provider correctos.
+        assert exc_info.value.provider == "m3"
+        assert exc_info.value.reason == "credentials_unavailable"
+        # Mensaje accionable, NO el del SDK.
+        assert "M3_CREDENTIALS_UNAVAILABLE" in str(exc_info.value)
+        assert "Missing credentials" not in str(exc_info.value)
+        # FIX-20260812-12: NUNCA se llama a Gemini (sin plan B).
+        assert mock_gemini.called is False, (
+            "FIX-20260812-12: credenciales M3 ausentes NO deben degradar a Gemini"
+        )
+
+    def test_calibration_returns_503_with_credentials_unavailable_for_m3(
+        self, monkeypatch, tmp_path
+    ):
+        """CA-4: upload_calibration_test ante
+        ExtractionAuthError(provider='m3', reason='credentials_unavailable')
+        responde HTTP 503 con detail conteniendo M3_CREDENTIALS_UNAVAILABLE y
+        'no está configurado' (NO 'key inválida o revocada' — ese es el
+        mensaje del path 401/403)."""
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        from app.api.v1.calibration import router
+        from app.services.ai.extractor import ExtractionAuthError
+        from app.services import prisma_client
+
+        app = FastAPI()
+        app.include_router(router)
+
+        class FakeMedicalTest:
+            id = "test-cred-m3"
+            options = {"aiCalibration": _TEST_AI_CALIBRATION_EXTRACTION}
+
+        class FakePrisma:
+            class _MedicaltestModel:
+                async def find_unique(self, where):
+                    return FakeMedicalTest()
+
+            medicaltest = _MedicaltestModel()
+
+        prisma_client.set_prisma_client(FakePrisma())
+
+        from app.api.v1 import calibration as cal_mod
+
+        class FakeExtractor:
+            def extract_by_type(self, **kwargs):
+                raise ExtractionAuthError(
+                    message=(
+                        "M3_CREDENTIALS_UNAVAILABLE: El servicio de análisis "
+                        "IA (M3) no está configurado."
+                    ),
+                    provider="m3",
+                    reason="credentials_unavailable",
+                )
+
+        class FakePrediag:
+            pass
+
+        monkeypatch.setattr(
+            cal_mod,
+            "_build_services",
+            lambda: (FakeExtractor(), FakePrediag()),
+        )
+
+        client = TestClient(app)
+        tmp_pdf = tmp_path / "calib_credentials_m3.pdf"
+        tmp_pdf.write_bytes(b"%PDF-1.4 fake pdf")
+
+        with open(tmp_pdf, "rb") as f:
+            response = client.post(
+                "/api/v1/calibration/upload",
+                files={"file": ("test.pdf", f, "application/pdf")},
+                data={"test_id": "test-cred-m3", "test_type": "Audiometria"},
+            )
+
+        assert response.status_code == 503, (
+            f"Esperaba 503, obtuvo {response.status_code}: {response.text}"
+        )
+        detail = response.json().get("detail", "")
+        assert "M3_CREDENTIALS_UNAVAILABLE" in detail
+        assert "no está configurado" in detail
+        # NO debe usar el mensaje del path 401/403.
+        assert "inválida o revocada" not in detail
+        # No expone stack ni key.
+        assert "Traceback" not in detail

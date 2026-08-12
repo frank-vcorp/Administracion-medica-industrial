@@ -978,8 +978,23 @@ async def v2_upload_and_analyze(
         for _prov in ("m3", "gemini", "dr7"):
             try:
                 await _key_resolver_singleton.resolve(_prov)
-            except Exception:
-                pass
+            except Exception as warmup_err:
+                # FIX-20260812-14: el warmup pre-calienta la caché TTL del
+                # resolver para que el pipeline sync (extract_by_type /
+                # call_m3, que corren en el hilo del event loop y no pueden
+                # awaitear) lea la key vía `resolve_sync_cached`. Antes, el
+                # error se tragaba con `pass` → caché fría silenciosa → el
+                # cold-loader deadlockeaba 3s → key vacía → "Missing
+                # credentials" del SDK. Ahora se loguea explícito; si la key
+                # sigue sin quedar disponible, el guard en
+                # `M3VisionBase.call_m3` lanza `M3CredentialsUnavailableError`
+                # con mensaje accionable.
+                print(
+                    f"⚠️ [FIX-20260812-14] Warmup key_resolver para "
+                    f"'{_prov}' falló ({type(warmup_err).__name__}); el "
+                    f"pipeline degradará a env var / error tipado si la key "
+                    f"no queda disponible."
+                )
 
     filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
     local_path = os.path.join(UPLOAD_DIR, filename)
@@ -1101,10 +1116,22 @@ async def v2_upload_and_analyze(
             }
         except ExtractionAuthError as auth_err:
             print(f"❌ [ARCH-20260809-02] {auth_err}")
+            # FIX-20260812-14: error_code específico para credenciales ausentes
+            # (reason="credentials_unavailable") — distinto del 401/403
+            # (reason="auth_error"). El mensaje `str(auth_err)` ya es
+            # user-friendly ("El servicio de análisis IA (M3) no está
+            # configurado...") y llega limpio al frontend vía `result.error`
+            # (el frontend maneja `status !== 'success'` mostrando `error`).
+            _err_code = (
+                "M3_CREDENTIALS_UNAVAILABLE"
+                if getattr(auth_err, "reason", "auth_error")
+                == "credentials_unavailable"
+                else "M3_AUTH_ERROR"
+            )
             return {
                 "status": "error",
                 "error": str(auth_err),
-                "error_code": "M3_AUTH_ERROR",
+                "error_code": _err_code,
                 "file": filename,
             }
         except ValueError as ve:

@@ -441,21 +441,22 @@ def _resolve_sync_cold(provider: str) -> Optional["KeyResolution"]:
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # Loop corriendo (caso normal bajo FastAPI). Usamos
-                # `run_coroutine_threadsafe` para una sola consulta.
-                from app.services.ai.keys import key_resolver as _resolver
-
-                async def _cold_resolve():
-                    return await _resolver.resolve(provider)
-
-                future = asyncio.run_coroutine_threadsafe(_cold_resolve(), loop)
-                try:
-                    resolution = future.result(timeout=3.0)
-                    if resolution and resolution.api_key:
-                        return resolution
-                    return None
-                except Exception:
-                    return None
+                # FIX-20260812-14: el loop corre en ESTE hilo (handler async
+                # de FastAPI → pipeline sync `extract_by_type`/`call_m3`).
+                # `run_coroutine_threadsafe(coro, loop).result(timeout=3.0)`
+                # contra el mismo loop deadloqueaba: el hilo queda bloqueado
+                # esperando una corrutina que el loop no puede ejecutar hasta
+                # que el hilo libere — tras 3s, TimeoutError → return None.
+                # Es decir, este cold-loader NUNCA cargó la key desde BD bajo
+                # FastAPI; sólo añadía 3s de hang silencioso. Devolver None
+                # inmediatamente y dejar que el caller (`M3VisionBase._refresh_keys`)
+                # degrade a env var; si esa también está vacía, el guard en
+                # `M3VisionBase.call_m3` lanza `M3CredentialsUnavailableError`
+                # con mensaje accionable (no el "Missing credentials" del SDK).
+                # La caché TTL se pre-calienta en la frontera async (warmup en
+                # `v2_upload_and_analyze`); si el warmup falla, ahora se loguea.
+                # Ver context/diagnostics/FIX-20260812-14-m3-missing-credentials.md.
+                return None
         except RuntimeError:
             # No hay loop; usar asyncio.run
             async def _cold_resolve():

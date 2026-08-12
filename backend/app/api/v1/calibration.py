@@ -525,7 +525,27 @@ async def upload_calibration_test(
             # FIX-20260810-05: 503 accionable. NO exponer la key ni el stack
             # crudo (B-6 / SPEC §6 restricciones). `error_code` se deriva del
             # provider vía mapping estable (`_EXTRACTION_AUTH_ERROR_CODES`).
+            #
+            # FIX-20260812-14: distinguir reason="credentials_unavailable"
+            # (key ausente tras _refresh_keys — no revocada) de "auth_error"
+            # (HTTP 401/403 — key inválida). El mensaje "key inválida o
+            # revocada" era engañoso para credenciales ausentes; ahora se
+            # responde con error_code `M3_CREDENTIALS_UNAVAILABLE` y mensaje
+            # "no está configurado".
             from app.services.ai.extractor import _EXTRACTION_AUTH_ERROR_CODES
+            reason = getattr(auth_err, "reason", "auth_error")
+            if reason == "credentials_unavailable":
+                error_code = "M3_CREDENTIALS_UNAVAILABLE"
+                provider_label = (
+                    "Gemini" if auth_err.provider == "gemini" else "M3"
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        f"{error_code}: {provider_label} no está configurado. "
+                        "Define la env var o configura la key en /admin/ai-keys."
+                    ),
+                ) from auth_err
             error_code = _EXTRACTION_AUTH_ERROR_CODES.get(
                 auth_err.provider, "EXTRACTION_AUTH_ERROR"
             )
