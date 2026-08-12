@@ -1110,6 +1110,35 @@ async def v2_upload_and_analyze(
         # ARCH-20260518-03: prompt de extracción resuelto únicamente desde aiCalibration;
         # si falta, falla explícitamente (sin fallback backend).
         # ARCH-20260809-02: selector multi-proveedor con override por payload.
+        # FIX-20260812-17: resolver la key del provider que el selector eligió
+        # ANTES de invocar al extractor sync. El selector decide el provider
+        # globalmente (m3 vs gemini); pre-calentar la caché con el provider
+        # correcto garantiza que `M3VisionBase._refresh_keys` encuentre la
+        # key real cuando el extractor sync se ejecute. Sin esto, si el
+        # warmup genérico (`m3, gemini, dr7`) falla silenciosamente para
+        # `m3`, el extractor M3 vería caché fría → `_resolve_sync_cold`
+        # retorna None (loop corriendo) → key vacía → M3CredentialsUnavailableError.
+        # La fix es resolver SÍNCRONAMENTE (await) el provider que vamos a usar.
+        if extraction_provider_override:
+            _target_provider = extraction_provider_override
+        else:
+            from app.services.admin.app_config_service import (
+                get_extraction_default_provider_sync as _get_def_provider_sync,
+            )
+            try:
+                _target_provider, _ = _get_def_provider_sync()
+            except Exception:
+                _target_provider = "m3"
+        if _ai_keys_db_enabled():
+            try:
+                await _key_resolver_singleton.resolve(_target_provider)
+            except Exception as _target_warmup_err:
+                print(
+                    f"⚠️ [FIX-20260812-17] Warmup específico para provider="
+                    f"'{_target_provider}' falló ({type(_target_warmup_err).__name__}); "
+                    f"el pipeline sync degradará a env var / error tipado."
+                )
+
         extraction_start = time.time()
         try:
             extracted_raw = extractor.extract_by_type(
