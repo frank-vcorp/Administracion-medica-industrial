@@ -28,7 +28,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 EXTRACTION_DEFAULT_PROVIDER_KEY = "extraction_default_provider"
 EXTRACTION_DEFAULT_PROVIDER_VALID = {"gemini", "m3"}
-EXTRACTION_DEFAULT_PROVIDER_FALLBACK = "gemini"
+# FIX-20260812-10: el fallback hardcoded cambió a "m3" porque la env var
+# GEMINI_API_KEY está reportada como leaked por Google (403 PERMISSION_DENIED)
+# y el resolver DB retornaba una fila leaked. Con fallback "m3", cualquier
+# cache miss o BD caída cae al proveedor funcional. Si en el futuro se rota
+# la key Gemini y se reactiva Gemini como default, basta con cambiar aquí o
+# persistir el valor en AppConfig (key `extraction_default_provider`).
+EXTRACTION_DEFAULT_PROVIDER_FALLBACK = "m3"
 
 
 # ---------------------------------------------------------------------------
