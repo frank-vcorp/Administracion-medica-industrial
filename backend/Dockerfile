@@ -17,9 +17,14 @@ COPY . .
 # Prisma cuando schema.prisma cambia. Sin esto, Railway puede usar el cliente
 # cacheado del layer anterior (sin CalibrationSnapshot) y los inserts fallan
 # con DataError: GraphQL parse error.
-ARG PRISMA_GENERATE_BUST=20260811-2
+ARG PRISMA_GENERATE_BUST=20260811-3
+# FIX-20260810-09c: eliminar cliente Prisma previo antes de regenerar para
+# garantizar que la regeneración incluya CalibrationSnapshot.
 RUN echo "Cache bust: $PRISMA_GENERATE_BUST" && \
-    prisma generate --schema=prisma/schema.prisma --generator pyclient 2>&1 | tail -20
+    rm -rf /usr/local/lib/python3.11/site-packages/prisma/client/*.pyc && \
+    find / -name "*.pyc" -path "*prisma*" -delete 2>/dev/null; \
+    prisma generate --schema=prisma/schema.prisma --generator pyclient 2>&1 | tail -20 && \
+    python3 -c "from prisma import Prisma; p = Prisma(); print('Cliente OK:', sorted([m for m in dir(p) if 'calibration' in m.lower()]))"
 
 # PYTHONPATH: los módulos services/ y schemas/ viven dentro de /app/app/
 ENV PYTHONPATH="/app/app"
