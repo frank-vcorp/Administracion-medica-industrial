@@ -993,7 +993,7 @@ async def v2_upload_and_analyze(
             if (_s3_enabled and _upload_file_to_s3(contents, filename))
             else f"/uploads/{filename}"
         )
-        print(f"\n🚀 V2 Upload+Analyze: {filename} ({len(contents)} bytes) → {_v2_file_url}")
+        print(f"\n🚀 V2 Upload+Analyze: {filename} ({len(contents)} bytes) → {_v2_file_url}; study_type={study_type!r}")
         pipeline_start = time.time()
 
         # PASO 1: CLASIFICACIÓN (si no se provee study_type)
