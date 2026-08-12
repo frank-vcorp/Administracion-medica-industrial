@@ -133,9 +133,20 @@ function ExtractionSnapshotDetail({
   apiUrl: string
 }) {
   const structured = snapshot.structuredData as Record<string, unknown> | null
-  const extracted = structured?.extracted_data
-  const missing = structured?.missing_fields as string[] | undefined
-  const qualityNotes = structured?.quality_notes
+  // FIX-20260812-01: navegar la forma real { extraction: { structured_data, raw_payload, ... }, prediagnosis }
+  // en lugar de la forma legacy { extracted_data, missing_fields, ... }
+  const extraction = structured?.extraction as Record<string, unknown> | undefined
+  const extracted =
+    (extraction?.structured_data as Record<string, unknown> | undefined) ??
+    (extraction?.raw_payload as Record<string, unknown> | undefined) ??
+    (structured?.extracted_data as Record<string, unknown> | undefined) ??
+    null
+  const missing =
+    (extraction?.missing_fields as string[] | undefined) ??
+    (structured?.missing_fields as string[] | undefined)
+  const qualityNotes =
+    (extraction?.quality_notes as Record<string, unknown> | undefined) ??
+    (structured?.quality_notes as Record<string, unknown> | undefined)
 
   // Documento fuente: preferir sourceFileUrl del snapshot; fallback al fileUrl del EventTest
   const rawFileUrl = snapshot.sourceFileUrl ?? eventFileUrl
