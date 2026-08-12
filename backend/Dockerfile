@@ -13,16 +13,13 @@ RUN mkdir -p /uploads /app/certs /app/reports
 
 COPY . .
 
-# FIX-20260810-09: re-generar cliente Prisma para incluir CalibrationSnapshot.
-# Touch timestamp 2026-08-11: forzar rebuild de Railway para regenerar cliente con modelo nuevo.
-# IMPL-20260701-06: Generar el cliente Prisma Python desde el schema espejo
-# backend/prisma/schema.prisma (NO se usa frontend/prisma/ porque el contexto
-# de build de Railway es backend/, no la raíz del repo). El cliente generado
-# se escribe DENTRO del paquete prisma instalado en site-packages, lo cual
-# es el comportamiento por defecto de prisma-client-py.
-# --generator pyclient: solo genera el cliente Python (no intenta usar el
-# CLI de Node, que tampoco está instalado en la imagen slim).
-RUN prisma generate --schema=prisma/schema.prisma --generator pyclient
+# FIX-20260810-09: bumpear cache de Docker para forzar re-generación de cliente
+# Prisma cuando schema.prisma cambia. Sin esto, Railway puede usar el cliente
+# cacheado del layer anterior (sin CalibrationSnapshot) y los inserts fallan
+# con DataError: GraphQL parse error.
+ARG PRISMA_GENERATE_BUST=20260811-2
+RUN echo "Cache bust: $PRISMA_GENERATE_BUST" && \
+    prisma generate --schema=prisma/schema.prisma --generator pyclient 2>&1 | tail -20
 
 # PYTHONPATH: los módulos services/ y schemas/ viven dentro de /app/app/
 ENV PYTHONPATH="/app/app"
