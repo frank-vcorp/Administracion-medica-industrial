@@ -200,14 +200,27 @@ MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and DR7_API_KEY) else "pendin
 M3_API_KEY = _read_env_var("M3_API_KEY") or ""
 M3_BASE_URL = _read_env_var("M3_BASE_URL") or "https://api.minimax.io/v1"
 M3_DEFAULT_MODEL = _read_env_var("M3_DEFAULT_MODEL") or "MiniMax-M3"
-M3_ENABLED = bool(M3_API_KEY)
-M3_STATUS = "available" if M3_ENABLED else "pending_integration"
-
 # IMPL-20260809-06 — ARCH-20260809-03: feature flag opt-in para lectura de
 # keys desde BD (ai_provider_keys). Default False → comportamiento idéntico
 # al actual (env vars), cero cambio observable. Frank lo activa cuando esté
 # listo para usar el panel admin.
 AI_KEYS_FROM_DB_ENABLED = (_read_env_var("AI_KEYS_FROM_DB_ENABLED") or "false").lower() == "true"
+# FIX-20260812-15: M3_ENABLED ahora considera también `AI_KEYS_FROM_DB_ENABLED`.
+# Antes, si M3_API_KEY no estaba en env vars, M3_ENABLED=False aunque la fila
+# M3 existiera en BD y `AI_KEYS_FROM_DB_ENABLED=true` (caso de Frank con rollout
+# BD-first vía panel admin). Esto provocaba dos síntomas:
+#   1. `/api/v2/ai/status` reportaba `m3_enabled=false` aunque el probe
+#      (`/admin/ai-keys/m3/probe`) sí funcionaba contra BD.
+#   2. El status público daba la falsa impresión de "M3 no configurado"
+#      cuando en realidad el resolver leía BD correctamente vía warmup
+#      async en `v2_upload_and_analyze`.
+# Solución conservadora: si AI_KEYS_FROM_DB_ENABLED=true, asumimos que la
+# disponibilidad real la decide el resolver en runtime (cacheada por warmup).
+# Esto NO rompe el contrato: `M3VisionBase` se sigue instanciando lazy
+# (`extractor.py:424`) y `_refresh_keys()` lee la caché TTL. El cambio solo
+# afecta el campo informativo `m3_enabled` del status público.
+M3_ENABLED = bool(M3_API_KEY) or AI_KEYS_FROM_DB_ENABLED
+M3_STATUS = "available" if M3_ENABLED else "pending_integration"
 PIPELINE_VERSION = "ai-pipeline-2026-03"
 EXTRACTION_PROMPT_VERSION = "extract-v4"   # IMPL-20260516-07: campos fuente audiometría (faringe, CAD, CAI, MTD, MTI)
 # ARCH-20260518-03: la versión real puede ser 'calibration_custom' cuando viene de aiCalibration
