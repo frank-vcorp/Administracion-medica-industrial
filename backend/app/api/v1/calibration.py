@@ -329,6 +329,46 @@ async def upload_calibration_test(
                 pass
         raise HTTPException(status_code=500, detail="No se pudo persistir el archivo temporal")
 
+    # ── FIX-20260812-02: persistir copia durable del PDF en UPLOAD_DIR para que
+    # el panel lateral (visor de documentos) pueda renderizarlo. El tmp se
+    # borra en finally; necesitamos esta copia FUERA de /tmp para que sobreviva
+    # hasta el próximo request. Solo PDF (XML no requiere visor).
+    persistent_url: Optional[str] = None
+    if not is_xml:
+        try:
+            from app.main import UPLOAD_DIR as _UPLOAD_DIR  # type: ignore
+            from app.main import _s3_enabled as _S3_ENABLED  # type: ignore
+            from app.main import _upload_file_to_s3 as _UPLOAD_S3  # type: ignore
+        except Exception:
+            _UPLOAD_DIR = "/uploads"
+            _S3_ENABLED = False
+            _UPLOAD_S3 = None
+
+        # Convención: calibration/<test_id>/<timestamp>-<safe_filename>
+        safe_name = file.filename.replace(" ", "_").replace("/", "_")
+        target_key = f"calibration/{test_id}/{int(time.time())}-{safe_name}"
+
+        try:
+            if _S3_ENABLED and _UPLOAD_S3 and _UPLOAD_S3(contents, target_key):
+                persistent_url = f"/api/files/{target_key}"
+                print(f"📁 Calibration upload (S3): {target_key} ({len(contents)} bytes)")
+            else:
+                # Fallback: filesystem local en UPLOAD_DIR
+                local_target = os.path.join(_UPLOAD_DIR, target_key)
+                os.makedirs(os.path.dirname(local_target), exist_ok=True)
+                with open(local_target, "wb") as fp:
+                    fp.write(contents)
+                persistent_url = f"/api/files/{target_key}"
+                print(f"📁 Calibration upload (local): {local_target} ({len(contents)} bytes)")
+        except Exception as persist_err:
+            # Defensivo: no romper el flujo si el filesystem falla.
+            # El snapshot se persiste igual, solo que sin URL visible en el visor.
+            print(
+                f"⚠️ [FIX-20260812-02] No se pudo persistir PDF durable "
+                f"para test_id={test_id[:8]}: {type(persist_err).__name__}: {persist_err}"
+            )
+            persistent_url = None
+
     # ── Pipeline de extracción + prediagnóstico ───────────────────────────
     # ARCH-20260715-06: Si es XML de audiometría, usar parser directo sin IA
     if is_xml and canonical_study_type == "Audiometria":
@@ -400,7 +440,7 @@ async def upload_calibration_test(
                 medical_test_id=test_id,
                 study_type=canonical_study_type,
                 source_file_name=file.filename,
-                source_file_url=None,
+                source_file_url=persistent_url,  # FIX-20260812-02: null para XML, URL para PDF
                 structured_data={
                     "extraction": response_payload["extraction"],
                     "prediagnosis": response_payload["prediagnosis"],
@@ -600,7 +640,7 @@ async def upload_calibration_test(
             medical_test_id=test_id,
             study_type=canonical_study_type,
             source_file_name=file.filename,
-            source_file_url=None,
+            source_file_url=persistent_url,  # FIX-20260812-02: URL persistente del PDF o None si falló
             structured_data={
                 "extraction": response_payload["extraction"],
                 "prediagnosis": response_payload["prediagnosis"],
