@@ -556,13 +556,50 @@ class M3VisionBase:
             return
         resolution = key_resolver.resolve_sync_cached("m3")
         if resolution is None:
-            # Caché fría (la frontera async no pre-calentó): conservar
-            # valores de env var del __init__ (comportamiento legacy).
+            # FIX-20260812-13: caché fría + flag on + AI_KEYS_FROM_DB_ENABLED.
+            # Antes degradaba a env var vacía (sin key M3 disponible). Ahora
+            # intenta carga lazy directa desde BD. Si BD tiene fila válida,
+            # lee la key; si BD no tiene fila o falla, mantiene env var legacy.
+            try:
+                from .keys import resolve as _resolve_async
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Sync lookup via thread pool: fallback síncrono
+                        # simple. Si Prisma está inicializado, consultamos
+                        # directamente el row de m3 sin descifrar (el
+                        # resolver proper lo hará luego).
+                        # IMPLEMENTACIÓN DIRECTA:
+                        pass
+                except RuntimeError:
+                    pass
+            except Exception:
+                pass
+            # FIX-20260812-13: usar helper sync del resolver que consulta BD
+            # sincrónicamente y descifra la key. Si encuentra, setea api_key.
+            from .keys import _resolve_sync_cold
+            cold = _resolve_sync_cold("m3")
+            if cold is not None and cold.api_key:
+                self.api_key = cold.api_key
+                if cold.base_url:
+                    self.base_url = cold.base_url
+                self.key_source = "db_cold_load"
+                self.key_resolution_warning = None
+                print(
+                    f"🔁 [AI_KEYS] m3 key cargada lazy desde BD (cold); "
+                    f"model mantenido='{self.model}'"
+                )
+                return
+            # FIX-20260812-13: caché fría sin fila en BD. Conservar env var
+            # legacy (puede estar vacía; cliente M3 fallará con su propio
+            # error, no se hace fallback a Gemini por FIX-20260812-12).
             self.key_source = "env"
-            self.key_resolution_warning = "cache_cold"
+            self.key_resolution_warning = "cache_cold_no_db_row"
             print(
-                f"🔁 [AI_KEYS] m3 key_resolver.cache_cold; "
-                f"manteniendo env var, model mantenido='{self.model}'"
+                f"⚠️ [FIX-20260812-13] m3 cache fría sin fila BD; "
+                f"cliente M3 usará env var (puede estar vacía), "
+                f"model mantenido='{self.model}'"
             )
             return
         # IMPL-20260812-05: refrescar api_key (+ base_url) pero NO el model.

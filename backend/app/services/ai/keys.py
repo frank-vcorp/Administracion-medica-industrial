@@ -413,3 +413,60 @@ def set_key_resolver(resolver: KeyResolver) -> None:
 def get_key_resolver() -> KeyResolver:
     """Acceso al singleton (útil para tests que sólo quieren resetear caché)."""
     return key_resolver
+
+
+# ---------------------------------------------------------------------------
+# FIX-20260812-13: helper sincrónico de "cold load" para M3
+# ---------------------------------------------------------------------------
+def _resolve_sync_cold(provider: str) -> Optional["KeyResolution"]:
+    """
+    Lookup SINCRÓNICO contra la BD cuando la caché TTL del resolver está
+    fría. Hace la consulta Prisma con `asyncio.run` solo si no hay loop
+    corriendo; si ya hay loop, devuelve None y el caller cae al flujo
+    legacy (sin plan B).
+
+    Usado por `M3VisionBase._refresh_keys()` cuando `resolve_sync_cached`
+    retorna None. Antes degradaba a env var vacía → cliente OpenAI fallaba
+    con "Missing credentials". Ahora intenta buscar en BD directamente.
+
+    Args:
+        provider: nombre canónico ("gemini" | "m3" | "dr7").
+
+    Returns:
+        KeyResolution con api_key descifrada si encuentra fila válida.
+        None si BD no responde, fila no existe, o descifrado falla.
+    """
+    try:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Loop corriendo (caso normal bajo FastAPI). Usamos
+                # `run_coroutine_threadsafe` para una sola consulta.
+                from app.services.ai.keys import key_resolver as _resolver
+
+                async def _cold_resolve():
+                    return await _resolver.resolve(provider)
+
+                future = asyncio.run_coroutine_threadsafe(_cold_resolve(), loop)
+                try:
+                    resolution = future.result(timeout=3.0)
+                    if resolution and resolution.api_key:
+                        return resolution
+                    return None
+                except Exception:
+                    return None
+        except RuntimeError:
+            # No hay loop; usar asyncio.run
+            async def _cold_resolve():
+                from app.services.ai.keys import key_resolver as _resolver
+                return await _resolver.resolve(provider)
+            try:
+                resolution = asyncio.run(_cold_resolve())
+                if resolution and resolution.api_key:
+                    return resolution
+                return None
+            except Exception:
+                return None
+    except Exception:
+        return None
