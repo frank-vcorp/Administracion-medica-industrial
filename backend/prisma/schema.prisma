@@ -247,10 +247,9 @@ model MedicalTest {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   eventTests       EventTest[]
-  // FIX-20260810-08: snapshots de calibración IA por MedicalTest (tabla dedicada,
-  // no reutiliza EventTest/StudyExtractionSnapshot porque el flujo de calibración
-  // no tiene MedicalEvent/trabajador asociado).
-  calibrationSnapshots CalibrationSnapshot[]
+  // FIX-20260810-09i: sin relación inversa `calibrationSnapshots` para evitar
+  // dependencia bidireccional que rompe la regeneración del cliente Prisma en
+  // Railway (caching de capas). El FK crudo `medicalTestId` es suficiente.
   category         TestCategory      @relation(fields: [categoryId], references: [id])
   profiles         ProfileTest[]
   // IMPL-20260630-06: Slice A NOVA absorción (ARCH-20260630-02) — campos LIS
