@@ -363,47 +363,15 @@ notas de calidad y gráficas.
 
     def _is_m3_unavailable(self, provider: str) -> bool:
         """
-        ARCH-20260809-02: Caso especial 'm3_not_configured' (SPEC §7).
-        Si el provider pedido es M3 pero M3_API_KEY no está configurada,
-        retorna True para que el dispatcher falle a Gemini sin intentar M3.
-
-        FIX-20260810-05: si AI_KEYS_FROM_DB_ENABLED=true, la key puede vivir
-        en BD (sin env var).
-        FIX-20260810-06: la resolución se hace vía lectura sincrónica de la
-        caché TTL del resolver (`resolve_sync_cached`), pre-calentada en la
-        frontera async (calibration.py / main.py hacen `await resolve("m3")`
-        antes de entrar al pipeline sync). El patrón anterior
-        (`run_coroutine_threadsafe(...).result()` contra el loop corriente)
-        DEADLOCKeaba cuando este método corría en el hilo del event loop
-        (handler async → extract_by_type): el loop no puede ejecutar la
-        corrutina mientras este hilo la espera; tras 5s el TimeoutError era
-        tragado por `except Exception` → retornaba SIEMPRE True → fallback
-        erróneo a Gemini (causa raíz del 500 post FIX-20260810-05).
-        Si la flag está off, comportamiento idéntico al previo (sólo env
-        var) — cero regresión.
+        FIX-20260812-12: Frank decidió retirar Gemini del flujo. Sin plan B.
+        Si el selector dice M3, M3 se usa SIEMPRE. Esta función ya no decide
+        disponibilidad: deja que el cliente M3 falle con su propio error
+        si la key no funciona. Sin fallback a Gemini.
         """
         if provider != "m3":
             return False
-
-        # FIX-20260810-05: si flag on, resolver desde BD con caché TTL.
-        from .keys import is_ai_keys_from_db_enabled
-        if is_ai_keys_from_db_enabled():
-            # FIX-20260810-06: usar el resolver inyectado (testable) o el
-            # singleton global. La property `key_resolver` carga el singleton
-            # lazy si no fue inyectado en __init__. Lectura sync de la caché
-            # TTL — nunca bloquear el event loop (ver docstring).
-            resolution = self.key_resolver.resolve_sync_cached("m3")
-            if resolution is not None:
-                # Caché caliente: M3 disponible si hay api_key (BD o el
-                # fallback env del resolver).
-                return not bool(resolution.api_key)
-            # Caché fría (frontera async no pre-calentó, o TTL vencido en
-            # un request de >60s): degradar a env var (comportamiento legacy).
-            self._m3_resolve_error = "m3_cache_cold"
-            return not bool(os.environ.get("M3_API_KEY"))
-
-        # Retrocompat estricta: sin flag, sólo env var.
-        return not bool(os.environ.get("M3_API_KEY"))
+        # FIX-20260812-12: NO bloqueamos M3. Que el cliente lo intente.
+        return False
 
     def _call_with_dispatch(
         self,
