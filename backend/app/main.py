@@ -1122,7 +1122,7 @@ async def v2_upload_and_analyze(
         if extraction_provider_override:
             _target_provider = extraction_provider_override
         else:
-            from app.services.admin.app_config_service import (
+            from app.services.ai.app_config import (
                 get_extraction_default_provider_sync as _get_def_provider_sync,
             )
             try:
