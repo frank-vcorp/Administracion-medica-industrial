@@ -624,6 +624,21 @@ export async function uploadEventTestFile(formData: FormData) {
         if (canonicalType) {
           formData.set('study_type', canonicalType)
           canonicalTypeForXml = canonicalType
+        } else {
+          // FIX-20260812-11 Cambio #5: el EventTest es AI-eligible pero su
+          // test no tiene mapping canónico en study-ai.ts → el FormData
+          // viaja sin study_type. El backend (FIX-20260812-11 Cambios #1+#2)
+          // ya cubre esto defensivamente: skip del classifier Gemini y
+          // detected_type='unknown' cuando default provider=m3. Log explícito
+          // para diagnóstico de mappings faltantes (BACKLOG TKT-20260812-11-01).
+          console.warn(
+            '[FIX-20260812-11] EventTest AI-eligible pero sin mapping canónico; el backend caerá a classifier o a detected_type=unknown',
+            {
+              eventTestId,
+              testCode: eventTest?.test?.code,
+              categoryName: eventTest?.test?.category?.name,
+            }
+          )
         }
       }
     }

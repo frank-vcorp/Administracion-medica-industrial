@@ -997,17 +997,82 @@ async def v2_upload_and_analyze(
         pipeline_start = time.time()
 
         # PASO 1: CLASIFICACIÓN (si no se provee study_type)
+        # FIX-20260812-11 Cambios #1+#2: skip defensivo del clasificador Gemini
+        # hardcoded cuando el default provider no es gemini (típicamente m3 tras
+        # FIX-20260812-10) y fallback controlado a detected_type='unknown' si el
+        # classifier revienta con auth_error (HTTP 401/403). El extractor recibe
+        # detected_type='unknown' y delega al selector de proveedor
+        # (ARCH-20260809-02). Ver SPEC §2.1, §2.2.
+        from app.services.ai.app_config import (
+            get_extraction_default_provider_sync as _get_default_provider_sync,
+        )
         if study_type:
             detected_type = study_type
             classification_dict = {"detected_type": study_type, "confidence": 1.0, "reason": "provided_by_caller"}
         else:
-            classification = classifier.classify(local_path)
-            detected_type = classification.tipo
-            classification_dict = {
-                "detected_type": classification.tipo,
-                "confidence": classification.confianza,
-                "reason": classification.razon,
-            }
+            # Cambio #1: resolución defensiva antes de invocar al classifier.
+            default_provider, default_source = _get_default_provider_sync()
+            if default_provider == "gemini":
+                # Legacy path preservado (AC-4): classifier Gemini se invoca.
+                try:
+                    classification = classifier.classify(local_path)
+                    detected_type = classification.tipo
+                    classification_dict = {
+                        "detected_type": classification.tipo,
+                        "confidence": classification.confianza,
+                        "reason": classification.razon,
+                    }
+                except Exception as classify_err:
+                    # Cambio #2: fallback a 'unknown' sólo en auth_error
+                    # (HTTP 401/403). Otros errores (timeout, JSON malformado,
+                    # 5xx) se propagan para no enmascarar fallos reales.
+                    status_code = getattr(classify_err, "status_code", None)
+                    if status_code is None:
+                        _resp = getattr(classify_err, "response", None)
+                        if _resp is not None:
+                            status_code = getattr(_resp, "status_code", None)
+                    if status_code is None:
+                        status_code = getattr(classify_err, "status", None)
+                    if status_code in (401, 403):
+                        detected_type = "unknown"
+                        classification_dict = {
+                            "detected_type": "unknown",
+                            "confidence": 0.0,
+                            "reason": "classifier_403_skipping",
+                        }
+                        print(
+                            f"⚠️ [FIX-20260812-11] Classifier Gemini falló "
+                            f"(HTTP {status_code}) → saltando a detected_type='unknown' "
+                            f"para que el extractor use el selector"
+                        )
+                    else:
+                        raise
+            elif default_provider == "m3":
+                # Skip classifier: M3 no tiene prompt de clasificación definido
+                # (SPEC §2.1 nota). El extractor decide con selector M3.
+                detected_type = "unknown"
+                classification_dict = {
+                    "detected_type": "unknown",
+                    "confidence": 0.0,
+                    "reason": "skipped_classifier_no_study_type",
+                }
+                print(
+                    f"ℹ️ [FIX-20260812-11] study_type ausente; saltando "
+                    f"clasificador Gemini (default provider=<{default_provider}>; "
+                    f"source={default_source})"
+                )
+            else:
+                # Default provider no determinable (defensivo; sync siempre
+                # retorna fallback, pero blindamos contra evoluciones futuras).
+                return {
+                    "status": "error",
+                    "error": (
+                        "extraction_default_provider no determinable; "
+                        "configura /api/v2/admin/app-config o revisa AI_KEYS_FROM_DB_ENABLED."
+                    ),
+                    "error_code": "EXTRACTION_PROMPT_NOT_CONFIGURED",
+                    "file": filename,
+                }
         print(f"   ✓ Tipo: {detected_type}")
 
         # PASO 2: EXTRACCIÓN PURA (sin interpretación clínica)
