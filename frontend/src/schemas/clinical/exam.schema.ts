@@ -4,6 +4,85 @@ import { ClinicalHistoryDataSchema } from './history.schema';
 const cleanString = z.string().trim().max(1000).optional();
 const cleanNum = z.coerce.number().nonnegative().optional();
 
+// ────────────────────────────────────────────────────────────────────────────
+// AGUDEZA VISUAL — Catálogos ZIN (ARCH-20260817-01 / DA-1)
+// Adoptados del sistema ZIN legacy para reducir errores de dedo del médico.
+// DA-1 (Opción A): schema tolerante — acepta valores del catálogo + cualquier
+// string legacy. NO se migran datos. Ver SPEC §2.1 y ADR-20260817-01.
+// @id IMPL-20260817-01-C1
+// @spec SPEC_ARCH-20260817-01 §4.1
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Escala Snellen de agudeza visual (10 valores canónicos ZIN). */
+export const VISION_SNELLEN_VALUES = [
+  '20/200',
+  '20/100',
+  '20/70',
+  '20/50',
+  '20/40',
+  '20/30',
+  '20/25',
+  '20/20',
+  '20/15',
+  '20/10',
+] as const
+
+export type VisionSnellenValue = (typeof VISION_SNELLEN_VALUES)[number]
+
+/** Reflejos pupilares — 4 opciones (default `PRESENTES Y NORMOREFLECTICOS`). */
+export const REFLEJOS_VALUES = [
+  'PRESENTES Y NORMOREFLECTICOS',
+  'DISMINUIDOS',
+  'AUSENTES',
+  'NO APLICA',
+] as const
+
+export type ReflejosValue = (typeof REFLEJOS_VALUES)[number]
+
+/** Campimetría — 4 opciones (default `CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES`). */
+export const CAMPIMETRIA_VALUES = [
+  'CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES',
+  'ALTERADOS',
+  'NO APLICA',
+  'VER ESTUDIO ANEXO',
+] as const
+
+export type CampimetriaValue = (typeof CAMPIMETRIA_VALUES)[number]
+
+/** Test de Ishihara — 3 opciones (default `NORMAL (LEE 12,8,6,29,57,45)`). */
+export const TEST_ISHIHARA_VALUES = [
+  'NORMAL (LEE 12,8,6,29,57,45)',
+  'ALTERADO',
+  'NO APLICA',
+] as const
+
+export type TestIshiharaValue = (typeof TEST_ISHIHARA_VALUES)[number]
+
+/**
+ * Schema Zod tolerante para campo ZIN (DA-1, Opción A).
+ *
+ * Acepta:
+ *   - Valores del catálogo `enumValues` (captura nueva via UI <select>).
+ *   - Cualquier string no-vacío (registros legacy en BD — sin migración).
+ *   - String vacío (compatibilidad con campos opcionales: `campimetria`,
+ *     `test_ishihara` que permitían blank en captura legacy).
+ *
+ * Rechaza únicamente `undefined`/`null` puros (lo cubre el wrapper).
+ *
+ * Justificación del `.refine()` siempre-permisivo: sirve como marcador
+ * contractual para endurecer en una SPEC futura cuando se decida migrar
+ * datos legacy (DA-1 → DA-?).
+ *
+ * @id IMPL-20260817-01-C1
+ * @spec SPEC_ARCH-20260817-01 §2.1
+ */
+function tolerantZinEnum(enumValues: readonly string[]) {
+  return z.string().refine(
+    (v) => v === '' || enumValues.includes(v) || v.length > 0,
+    { message: 'Valor fuera del catálogo ZIN; aceptado como legacy.' }
+  )
+}
+
 // ----------------------------------------------------------------------
 // 6. ANTECEDENTES REPRODUCTIVOS e INMUNIZACIONES (Imágenes 4 y 5)
 // ----------------------------------------------------------------------
@@ -41,19 +120,22 @@ export const SomatometriaVitalesSchema = z.object({
 
 // ----------------------------------------------------------------------
 // 8. AGUDEZA VISUAL (Imagen 7)
+// IMPL-20260817-01-C1: 11 campos con catálogo ZIN + refine tolerante (DA-1).
+// 8 visión (Snellen 10 valores) + reflejos (4) + test_ishihara (3) +
+// campimetria (4). UI usa <select>; schema preserva registros legacy.
 // ----------------------------------------------------------------------
 export const AgudezaVisualSchema = z.object({
-  vision_lejana_od: z.string().default('NO APLICA'),
-  vision_lejana_oi: z.string().default('NO APLICA'),
-  vision_cercana_od: z.string().default('NO APLICA'),
-  vision_cercana_oi: z.string().default('NO APLICA'),
-  lejana_corregida_od: z.string().default('NO APLICA'),
-  lejana_corregida_oi: z.string().default('NO APLICA'),
-  cercana_corregida_od: z.string().default('NO APLICA'),
-  cercana_corregida_oi: z.string().default('NO APLICA'),
-  reflejos: z.string().default('PRESENTES Y NORMOREFLECTICOS'),
-  test_ishihara: cleanString,
-  campimetria: cleanString
+  vision_lejana_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  vision_lejana_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  vision_cercana_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  vision_cercana_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  lejana_corregida_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  lejana_corregida_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  cercana_corregida_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  cercana_corregida_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  reflejos: tolerantZinEnum(REFLEJOS_VALUES).default('PRESENTES Y NORMOREFLECTICOS'),
+  test_ishihara: tolerantZinEnum(TEST_ISHIHARA_VALUES).optional(),
+  campimetria: tolerantZinEnum(CAMPIMETRIA_VALUES).optional(),
 });
 
 // ----------------------------------------------------------------------
