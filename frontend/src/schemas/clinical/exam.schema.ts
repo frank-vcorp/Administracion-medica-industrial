@@ -83,6 +83,181 @@ function tolerantZinEnum(enumValues: readonly string[]) {
   )
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// EXPLORACIÓN FÍSICA + HEREDO-FAMILIARES — Catálogos ZIN (ARCH-20260817-01 / DA-1)
+// IMPL-20260817-01-C2 — Corte 2.
+// Heredo-familiares (9 campos) + Exploración Física (9 combos) + 16 plantillas
+// ZIN literales (fuente: `NOTA MEDICA EJEMPLO.pdf`, §B del análisis ZIN).
+// DA-1 (Opción A): schema tolerante — acepta enum + cualquier string legacy.
+// Ver SPEC §4.2, §4.3, §4.4.
+// @id IMPL-20260817-01-C2
+// @spec SPEC_ARCH-20260817-01 §4.2-§4.4
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Heredo-Familiares — 7 campos con catálogo ZIN canónico (NEGADOS/OTROS). */
+export const HEREDOFAMILIARES_VALUES = [
+  'NEGADOS',
+  'PADRE',
+  'MADRE',
+  'AMBOS',
+  'HERMANOS',
+  'AB PATERNO',
+  'AB MATERNO',
+  'OTROS',
+] as const
+
+export type HeredofamiliaresValue = (typeof HEREDOFAMILIARES_VALUES)[number]
+
+/** Heredo-Familiares — campo `mentales` con 3 opciones (NEGADO/SI/NO APLICA). */
+export const HEREDOFAMILIARES_MENTALES_VALUES = ['NEGADO', 'SI', 'NO APLICA'] as const
+
+export type HeredofamiliaresMentalesValue =
+  (typeof HEREDOFAMILIARES_MENTALES_VALUES)[number]
+
+/** Exploración Física — Arco de Movilidad (3 opciones). */
+export const ARCO_MOVILIDAD_VALUES = [
+  'PRESENTES Y NORMALES',
+  'LIMITADOS',
+  'AUSENTES',
+] as const
+
+export type ArcoMovilidadValue = (typeof ARCO_MOVILIDAD_VALUES)[number]
+
+/** Exploración Física — Tono Muscular (3 opciones). */
+export const TONO_MUSCULAR_VALUES = ['NORMAL', 'HIPERTROFIA', 'HIPOTROFIA'] as const
+
+export type TonoMuscularValue = (typeof TONO_MUSCULAR_VALUES)[number]
+
+/** Exploración Física — Coordinación (2 opciones). */
+export const COORDINACION_VALUES = ['NORMAL', 'ALTERADA'] as const
+
+export type CoordinacionValue = (typeof COORDINACION_VALUES)[number]
+
+/** Exploración Física — Test de Adam (escoliosis) (2 opciones). */
+export const TEST_ADAM_VALUES = ['NEGATIVO', 'POSITIVO'] as const
+
+export type TestAdamValue = (typeof TEST_ADAM_VALUES)[number]
+
+/** Exploración Física — Presencia Quiste Sinovial (4 opciones). */
+export const PRESENCIA_QUISTE_SINOVIAL_VALUES = [
+  'NORMAL',
+  'DISMINUIDA',
+  'DISMINUIDA CORREGIDA',
+  'AUSENTE',
+] as const
+
+export type PresenciaQuisteSinovialValue =
+  (typeof PRESENCIA_QUISTE_SINOVIAL_VALUES)[number]
+
+/** Exploración Física — Test Romberg (4 opciones). */
+export const TEST_ROMBERG_VALUES = [
+  'NEGATIVO',
+  'POSITIVO BILATERAL',
+  'POSITIVO DERECHO',
+  'POSITIVO IZQUIERDO',
+] as const
+
+export type TestRombergValue = (typeof TEST_ROMBERG_VALUES)[number]
+
+/** Exploración Física — Signo Bragard (2 opciones). */
+export const SIGNO_BRAGARD_VALUES = ['NEGATIVO', 'POSITIVO'] as const
+
+export type SignoBragardValue = (typeof SIGNO_BRAGARD_VALUES)[number]
+
+/** Exploración Física — Signo Tinel (4 opciones). */
+export const SIGNO_TINEL_VALUES = [
+  'NEGATIVO',
+  'POSITIVO BILATERAL',
+  'POSITIVO DERECHO',
+  'POSITIVO IZQUIERDO',
+] as const
+
+export type SignoTinelValue = (typeof SIGNO_TINEL_VALUES)[number]
+
+/** Exploración Física — Pruebas Finkelstein/Phanel/Lasegue (4 opciones). */
+export const PRUEBA_LATERALIDAD_VALUES = [
+  'NEGATIVO',
+  'POSITIVO BILATERAL',
+  'POSITIVO DERECHO',
+  'POSITIVO IZQUIERDO',
+] as const
+
+export type PruebaLateralidadValue = (typeof PRUEBA_LATERALIDAD_VALUES)[number]
+
+/** Exploración Física — Circulación Venosa (CEAP — 7 opciones). */
+export const CIRCULACION_VENOSA_VALUES = [
+  'C0: SIN SIGNOS VISIBLES NI PALPABLES',
+  'C1: TELANGIECTASIAS O VENAS RETICULARES',
+  'C2: VARICES',
+  'C3: EDEMA',
+  'C4: TRASTORNOS TRÓFICOS',
+  'C5: ULCERA CURADA',
+  'C6: ULCERA ACTIVA',
+] as const
+
+export type CirculacionVenosaValue = (typeof CIRCULACION_VENOSA_VALUES)[number]
+
+/** Exploración Física — Salud Bucal (4 opciones). */
+export const SALUD_BUCAL_VALUES = ['CARIES', 'SARRO', 'CARIES Y SARRO', 'SIN DATOS'] as const
+
+export type SaludBucalValue = (typeof SALUD_BUCAL_VALUES)[number]
+
+/** Estado Nutricional (Resumen Clínico — ImpresiónAptitudSchema) — 6 opciones. */
+export const ESTADO_NUTRICIONAL_VALUES = [
+  'BAJO PESO',
+  'NORMAL',
+  'SOBREPESO',
+  'OBESIDAD G1',
+  'OBESIDAD G2',
+  'OBESIDAD G3',
+] as const
+
+export type EstadoNutricionalValue = (typeof ESTADO_NUTRICIONAL_VALUES)[number]
+
+/**
+ * Patrones Sí/No/No aplica para acordeones "Especifique" (D-5).
+ * Aplica a: `txtHLPEspecificar` (factor de riesgo laboral), `txtAPTDrogasEspec`,
+ * `txtAPTEjercicioEsp`, `txtAPTTatuajesEsp`, `txtAPEspecificacion` (patológico),
+ * y a `estado_nutricional`/`salud_bucal` en el resumen clínico.
+ */
+export const SI_NO_NA_VALUES = ['NEGADO', 'SI', 'NO APLICA'] as const
+
+export type SiNoNaValue = (typeof SI_NO_NA_VALUES)[number]
+
+/**
+ * Plantillas ZIN literales — Exploración Física (16 textos).
+ * Extraídas verbatim del `NOTA MEDICA EJEMPLO.pdf` (ver análisis ZIN §B).
+ * Frank: "Lo copia igualito que el ZIN" → sin paráfrasis, sin normalización.
+ *
+ * Se usan como `defaultValue` en `<input>` (el médico puede editar caso
+ * a caso). El schema Zod sigue siendo `cleanString` (string libre) — el
+ * plan es **mostrar** la plantilla por defecto, no **forzar** el valor.
+ *
+ * @id IMPL-20260817-01-C2
+ * @spec SPEC_ARCH-20260817-01 §4.3
+ */
+export const PLANTILLAS_EF = {
+  neurologico: 'Alerta, orientado en tiempo, lugar y persona. Cooperador.',
+  cabeza: 'Cráneo normocéfalo, sin hundimientos ni exostosis.',
+  piel_y_faneras: 'Sin datos de palidez, ictericia o cianosis.',
+  oidos_cad: 'Permeable, MT íntegra, cono luminoso permeable.',
+  oidos_cai: 'Permeable, MT íntegra, cono luminoso permeable.',
+  ojos: 'Pupilas isocóricas, normorrefléxicas.',
+  nariz: 'Alineada, septum alineado.',
+  faringe: 'Sin datos patológicos.',
+  cuello: 'Cilíndrico, tráquea central.',
+  torax: 'Mesomórfico, movimientos de amplexión y amplexación normales.',
+  corazon: 'Ruidos cardíacos rítmicos, sin soplos.',
+  campos_pulmonares: 'Bien ventilados, sin ruidos agregados.',
+  abdomen: 'Globoso, blando, depresible, sin dolor.',
+  genitourinario: 'Giordano negativo bilateral.',
+  columna_vertebral: 'Clínicamente alineada.',
+  ms_superiores: 'Íntegros, fuerza y sensibilidad conservada.',
+  ms_inferiores: 'Íntegros, sensibilidad conservada.',
+} as const
+
+export type PlantillaEfKey = keyof typeof PLANTILLAS_EF
+
 // ----------------------------------------------------------------------
 // 6. ANTECEDENTES REPRODUCTIVOS e INMUNIZACIONES (Imágenes 4 y 5)
 // ----------------------------------------------------------------------
@@ -140,6 +315,10 @@ export const AgudezaVisualSchema = z.object({
 
 // ----------------------------------------------------------------------
 // 9. EXPLORACIÓN FÍSICA GENERAL (Imagen 8)
+// IMPL-20260817-01-C2: 9 campos con catálogo ZIN vía `tolerantZinEnum`
+// (DA-1). Los 16 campos con plantilla ZIN (`neurologico`, `cabeza`, etc.)
+// siguen como `cleanString` (texto libre editable, default = PLANTILLAS_EF).
+// Ver SPEC §4.2 (combos) + §4.3 (plantillas).
 // ----------------------------------------------------------------------
 export const ExploracionFisicaSchema = z.object({
   neurologico: cleanString,
@@ -148,7 +327,7 @@ export const ExploracionFisicaSchema = z.object({
   oidos_cad: cleanString,
   oidos_cai: cleanString,
   ojos: cleanString,
-  boca_estado: cleanString,
+  boca_estado: tolerantZinEnum(SALUD_BUCAL_VALUES),
   boca_alineacion: cleanString,
   nariz: cleanString,
   faringe: cleanString,
@@ -159,28 +338,30 @@ export const ExploracionFisicaSchema = z.object({
   abdomen: cleanString,
   genitourinario: cleanString,
   columna_vertebral: cleanString,
-  test_adam: cleanString,
+  test_adam: tolerantZinEnum(TEST_ADAM_VALUES),
   ms_superiores: cleanString,
   fuerza_muscular_daniels_sup: cleanString,
   ms_inferiores: cleanString,
   fuerza_muscular_daniels_inf: cleanString,
-  circulacion_venosa: cleanString,
-  arco_de_movilidad: cleanString,
-  tono_muscular: cleanString,
-  coordinacion: cleanString,
-  test_romberg: cleanString,
-  signo_bragard: cleanString,
-  prueba_finkelstein: cleanString,
-  signo_tinel: cleanString,
-  prueba_phanel: cleanString,
-  prueba_lasegue: cleanString,
-  presencia_quiste_sinovial: cleanString,
+  circulacion_venosa: tolerantZinEnum(CIRCULACION_VENOSA_VALUES),
+  arco_de_movilidad: tolerantZinEnum(ARCO_MOVILIDAD_VALUES),
+  tono_muscular: tolerantZinEnum(TONO_MUSCULAR_VALUES),
+  coordinacion: tolerantZinEnum(COORDINACION_VALUES),
+  test_romberg: tolerantZinEnum(TEST_ROMBERG_VALUES),
+  signo_bragard: tolerantZinEnum(SIGNO_BRAGARD_VALUES),
+  prueba_finkelstein: tolerantZinEnum(PRUEBA_LATERALIDAD_VALUES),
+  signo_tinel: tolerantZinEnum(SIGNO_TINEL_VALUES),
+  prueba_phanel: tolerantZinEnum(PRUEBA_LATERALIDAD_VALUES),
+  prueba_lasegue: tolerantZinEnum(PRUEBA_LATERALIDAD_VALUES),
+  presencia_quiste_sinovial: tolerantZinEnum(PRESENCIA_QUISTE_SINOVIAL_VALUES),
   especificar_quiste: cleanString
 });
 
 // ----------------------------------------------------------------------
 // 10. IMPRESIÓN DIAGNÓSTICA Y APTITUD (sección médico — IMPL-20260325-01)
 // Campos ampliados segun Esquema Examen Medico Dividido — ARCH-20260325-09
+// IMPL-20260817-01-C2: `estado_nutricional` y `salud_bucal` migran a
+// `tolerantZinEnum` (ZIN combos — DA-1). Ver SPEC §4.2.
 // ----------------------------------------------------------------------
 export const ImpresiónAptitudSchema = z.object({
   aptitud: z.enum(['APTO', 'APTO CON RESTRICCIONES', 'NO APTO', 'PENDIENTE DE RESULTADOS']).optional(),
@@ -189,8 +370,8 @@ export const ImpresiónAptitudSchema = z.object({
   observaciones_finales: cleanString,
   medico_evaluador: cleanString,
   // Campos faltantes identificados en ARCH-20260325-09
-  estado_nutricional: cleanString,
-  salud_bucal: cleanString,
+  estado_nutricional: tolerantZinEnum(ESTADO_NUTRICIONAL_VALUES),
+  salud_bucal: tolerantZinEnum(SALUD_BUCAL_VALUES),
   agudeza_visual_resumen: cleanString,
   presion_arterial_resumen: cleanString,
   medico_revisor: cleanString,
