@@ -1195,6 +1195,124 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert result.es_interpretable is True
         assert result.completitud_documental == "suficiente"
 
+    # --- FIX-20260812-20: Guardrails backend + normalizador de Espirometría ---
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_espirometria_usa_prompt_con_guardrails_backend_FIX_20260812_20(
+        self, mock_gemini, extractor
+    ):
+        """
+        FIX-20260812-20: extract_by_type(..., "Espirometria") debe construir el
+        prompt con _build_espirometria_extraction_prompt (que inyecta
+        _ESPIROMETRIA_BACKEND_GUARDRAILS), NO caer al prompt genérico ni al de
+        Audiometría. Se usa extraction_provider_override="gemini" para que el
+        mock de call_gemini capture el prompt real independientemente del
+        provider por defecto del entorno (evita la fragilidad M3-sin-key).
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            "paciente": "Peña Patricio Marbella",
+            "fecha_estudio": "18/03/2025",
+            "fev1": 3.45,
+            "fvc": 4.12,
+            "es_interpretable": True,
+            "completitud_documental": "suficiente",
+        }
+        result = extractor.extract_by_type(
+            "/fake/espirometria_sibelmed.pdf",
+            "Espirometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
+            extraction_provider_override="gemini",
+        )
+        assert isinstance(result, EspirometriaData)
+        # El prompt enviado al proveedor es el 2º argumento posicional.
+        sent_prompt = mock_gemini.call_args[0][1]
+        # Guardrails de espirometría presentes.
+        assert "GUARDRAILS ESPECÍFICOS PARA ESPIROMETRÍA" in sent_prompt
+        assert "INFORME DE FVC" in sent_prompt
+        # No se filtraron los guardrails de Audiometría (dispatch correcto).
+        assert "GUARDRAILS ESPECÍFICOS PARA AUDIOMETRÍA" not in sent_prompt
+        # El bloque de calibración (aiCalibration) sigue presente.
+        assert "Extrae todos los datos relevantes" in sent_prompt
+
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_espirometria_json_exhaustivo_valida_schemas_y_normalizer_FIX_20260812_20(
+        self, mock_gemini, extractor
+    ):
+        """
+        FIX-20260812-20: un JSON exhaustivo con 11 filas de parámetros (escala
+        real del PDF Sibelmed W20s) valida contra los schemas Pydantic tras
+        pasar por _normalize_espirometria_result. Se verifica:
+          - todas las filas se parsean como EspirometriaParamRow;
+          - completitud_documental (raíz + bloque calidad) se deriva a
+            "suficiente" (≥6 parámetros principales con valores de maniobra);
+          - es_interpretable (legacy) se deriva a True (fev1_l + fvc_l con m1);
+          - una fila con key no canónico se conserva y se anota como
+            SOSPECHA_MAPEO en notas_calidad (raíz + bloque calidad).
+        """
+        from app.schemas.medical import (
+            EspirometriaData, EspirometriaParamRow,
+        )
+        mock_gemini.return_value = {
+            "paciente": "Peña Patricio Marbella",
+            "fecha_estudio": "18/03/2025",
+            # Legacy y derivables dejados en None para ejercitar el normalizador.
+            "fev1": None,
+            "fvc": None,
+            "es_interpretable": None,
+            "completitud_documental": None,
+            "notas_calidad": None,
+            "calidad": {
+                "repetibilidad_ats_ers_fvc": "Aceptable",
+                "repetibilidad_ats_ers_fev1": "Aceptable",
+                "es_interpretable": None,
+                "completitud_documental": None,
+                "notas_calidad": None,
+            },
+            "parametros": [
+                {"label": "FVC", "key": "fvc_l", "unidad": "L", "m1": 4.12, "m1_pct_ref": 79.4, "ref": 5.19, "lln": 4.14},
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L", "m1": 3.45, "m1_pct_ref": 84.1, "ref": 4.10, "lln": 3.27},
+                {"label": "FEV1/FVC", "key": "fev1_fvc_pct", "unidad": "%", "m1": 83.8, "ref": 79.0, "lln": 70.0},
+                {"label": "FEF25-75", "key": "fef25_75_l_s", "unidad": "L/s", "m1": 3.12, "m1_pct_ref": 69.3, "ref": 4.50, "lln": 2.20},
+                {"label": "FEF25", "key": "fef25_l_s", "unidad": "L/s", "m1": 7.8, "ref": 9.5},
+                {"label": "FEF50", "key": "fef50_l_s", "unidad": "L/s", "m1": 5.6, "ref": 6.1},
+                {"label": "FEF75", "key": "fef75_l_s", "unidad": "L/s", "m1": 2.1, "ref": 2.8},
+                {"label": "FET100", "key": "fet100_s", "unidad": "s", "m1": 6.2, "ref": 5.9},
+                {"label": "Vext", "key": "vext_l", "unidad": "L", "m1": 0.15, "ref": 0.12},
+                {"label": "Edad pulmonar", "key": "edad_pulmon_anios", "unidad": "años", "m1": 52.0, "ref": 40.0},
+                # Fila NO canónica: debe conservarse y anotarse como sospecha de mapeo.
+                {"label": "Índice personalizado", "key": "indice_xyz", "unidad": "L", "m1": 1.5},
+            ],
+        }
+        result = extractor.extract_by_type(
+            "/fake/espirometria_sibelmed_exhaustivo.pdf",
+            "Espirometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
+            extraction_provider_override="gemini",
+        )
+        assert isinstance(result, EspirometriaData)
+        # 11 filas parseadas como EspirometriaParamRow.
+        assert result.parametros is not None
+        assert len(result.parametros) == 11
+        assert all(isinstance(r, EspirometriaParamRow) for r in result.parametros)
+        # Coerción numérica: FVC m1 == 4.12 (float).
+        fvc_row = next(r for r in result.parametros if r.key == "fvc_l")
+        assert fvc_row.m1 == 4.12
+        assert fvc_row.lln == 4.14
+        # Derivación de completitud (≥6 parámetros principales con valores).
+        assert result.completitud_documental == "suficiente"
+        assert result.calidad is not None
+        assert result.calidad.completitud_documental == "suficiente"
+        # Derivación de es_interpretable (legacy): True porque fev1_l y fvc_l con m1.
+        assert result.es_interpretable is True
+        # Fila no canónica conservada.
+        assert any(r.key == "indice_xyz" for r in result.parametros)
+        # Sospecha de mapeo anotada en raíz y bloque calidad.
+        assert result.notas_calidad is not None
+        assert "SOSPECHA_MAPEO" in result.notas_calidad
+        assert result.calidad.notas_calidad is not None
+        assert "SOSPECHA_MAPEO" in result.calidad.notas_calidad
+
     # --- Prediagnóstico: caso conflictivo FVC reducida + ratio conservado ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)

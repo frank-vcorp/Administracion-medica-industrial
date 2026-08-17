@@ -141,6 +141,46 @@ GUARDRAILS ESPECÍFICOS PARA AUDIOMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBRA
 """.strip()
 
 
+# FIX-20260812-20 | ARCH-20260518-17: Espirometría — análogo de audiometría.
+# El extractor caía al prompt genérico porque nunca recibió guardrails backend
+# específicos (mismo gap que tenía Audiometría antes de ARCH-20260518-17).
+# Claves canónicas a las que debe mapear el `key` de cada fila del cuadro FVC.
+# Se incluyen variantes ortográficas válidas (fef2575_l_s / fef25_75_l_s) para
+# no flagar falsos positivos cuando el LLM usa una grafía equivalente.
+_ESPIROMETRIA_CANONICAL_KEYS: frozenset = frozenset({
+    "mejor_fvc_l", "mejor_fev1_l", "fef2575_l_s", "fef25_75_l_s",
+    "fvc_l", "fev1_l", "fev1_fvc_pct", "fef25_l_s", "fef50_l_s",
+    "fef75_l_s", "fet100_s", "vext_l", "edad_pulmon_anios",
+    "repetibilidad_fvc", "repetibilidad_fev1",
+})
+
+# Guardrails backend inyectados antes del bloque de calibración para reforzar
+# la extracción tabular FVC/FEV1/M1/M2/M3/REF/LLN sin depender de ediciones
+# en la configuración de DB. Espejo de _AUDIOMETRIA_BACKEND_GUARDRAILS.
+_ESPIROMETRIA_BACKEND_GUARDRAILS = """
+GUARDRAILS ESPECÍFICOS PARA ESPIROMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBRACIÓN)
+1. La tabla INFORME DE FVC es la fuente primaria de datos numéricos.
+   Cada fila contiene: Parámetro | M1 | %REF | M2 | %REF | M3 | %REF | REF | LLN.
+   M1/M2/M3 son las 3 maniobras. REF es el valor predicho. LLN es el límite inferior normal.
+2. Cada CELDA de la tabla corresponde a UN campo específico (ej: M1 de Mejor FVC = 2.33).
+   Si una celda está vacía, usa null — NUNCA desplaces valores entre celdas para "completar".
+3. Bloques canónicos a extraer (estructura exhaustiva):
+   - paciente_detalle: nombre_completo, sexo, edad_anios, talla_cm, peso_kg, imc, fuma, motivo, procedencia
+   - estudio: referencia, fecha_estudio, hora_estudio, equipo_modelo, version_software
+   - condiciones: temperatura_c, presion_mmhg, humedad_pct, tecnico, transductor, referencia_ecuacion, factor_etnico, factor_btps
+   - parametros: Lista de filas con {label, key, unidad, m1, m1_pct_ref, m2, m2_pct_ref, m3, m3_pct_ref, ref, lln}
+     El `key` debe mapear a uno de los canónicos si la fila es interpretable.
+   - calidad: repetibilidad_ats_ers_fvc, repetibilidad_ats_ers_fev1, es_interpretable, completitud_documental, notas_calidad
+   - graficas: curva_flujo_volumen_presente, curva_volumen_tiempo_presente, maniobras_graficadas, observaciones_grafica
+4. Si una fila no se puede mapear a `key` canónico, conserva el `label` literal y los valores.
+5. NO confundas este documento con Audiometría (no busca umbrales por frecuencia).
+6. `completitud_documental` (calcula):
+   - "suficiente"     → ≥6 parámetros principales con valores M1+M2+M3
+   - "parcial"        → 3-5 parámetros
+   - "no_concluyente" → <3 parámetros
+""".strip()
+
+
 class ExtractorService(GeminiBase):
     """
     Servicio que extrae parámetros canónicos según el tipo de documento.
@@ -225,6 +265,21 @@ notas de calidad y gráficas.
             f"{study_specific_prompt.strip()}"
         )
 
+    def _build_espirometria_extraction_prompt(self, study_specific_prompt: str) -> str:
+        """
+        FIX-20260812-20 | ARCH-20260518-17: Variante de _build_extraction_prompt
+        que inyecta los guardrails backend de Espirometría entre la base universal
+        y el bloque de calibración, reforzando la fiabilidad tabular del cuadro
+        FVC/FEV1/M1/M2/M3/REF/LLN sin tocar la DB. Espejo del flujo de Audiometría.
+        """
+        return (
+            f"{self.BASE_EXTRACTION_PROMPT}\n\n"
+            f"{_ESPIROMETRIA_BACKEND_GUARDRAILS}\n\n"
+            "BLOQUE ESPECIFICO DEL ESTUDIO\n"
+            "El siguiente bloque complementa la base universal con reglas particulares del estudio actual.\n\n"
+            f"{study_specific_prompt.strip()}"
+        )
+
     def _normalize_audiometria_result(self, result: dict) -> dict:
         """
         ARCH-20260518-17: Post-procesamiento del dict extraído para Audiometría.
@@ -285,6 +340,116 @@ notas de calidad y gráficas.
             result["notas_calidad"] = (
                 f"{existing} | {warning}" if existing else warning
             )
+
+        return result
+
+    def _normalize_espirometria_result(self, result: dict) -> dict:
+        """
+        FIX-20260812-20 | ARCH-20260518-17: Post-procesamiento del dict extraído
+        para Espirometría. Espejo de _normalize_audiometria_result.
+
+        Acciones:
+        1. Normaliza `parametros` (lista de dicts): coerce valores numéricos a
+           float, conserva label/unidad/key como str, omite entradas no-dict.
+        2. Deriva `completitud_documental` (legacy raíz + bloque calidad) desde
+           el conteo de parámetros principales con valores de maniobra si quedó null.
+        3. Deriva `es_interpretable` (legacy raíz) si quedó null: True solo si hay
+           filas fev1_l y fvc_l con al menos un valor de maniobra.
+        4. Anota filas con `key` no canónico en `notas_calidad` (raíz + bloque
+           calidad) como sospecha de mapeo label→key incorrecto.
+        """
+        parametros = result.get("parametros")
+        if not isinstance(parametros, list):
+            # Sin tabla de parámetros (snapshot legacy o extracción mínima):
+            # no hay nada que normalizar — se devuelve tal cual para que el
+            # schema EspirometriaData aplique sus defaults opcionales.
+            return result
+
+        def _to_float(v):
+            if v is None:
+                return None
+            if isinstance(v, (int, float)):
+                return float(v)
+            try:
+                return float(str(v).replace(",", "."))
+            except (ValueError, TypeError):
+                return None
+
+        normalized_rows = []
+        non_canonical_labels = []
+        principales_con_valores = 0
+        for row in parametros:
+            if not isinstance(row, dict):
+                continue
+            label = str(row.get("label") or "").strip()
+            key = row.get("key")
+            key = str(key).strip() if key is not None else None
+            unidad = row.get("unidad")
+            unidad = str(unidad).strip() if unidad is not None else None
+            normalized = {
+                "label": label,
+                "key": key,
+                "unidad": unidad,
+            }
+            for f in ("m1", "m1_pct_ref", "m2", "m2_pct_ref",
+                      "m3", "m3_pct_ref", "ref", "lln"):
+                normalized[f] = _to_float(row.get(f))
+            normalized_rows.append(normalized)
+            # Conteo de parámetros principales con al menos un valor de maniobra.
+            if key in _ESPIROMETRIA_CANONICAL_KEYS and any(
+                normalized.get(f) is not None for f in ("m1", "m2", "m3")
+            ):
+                principales_con_valores += 1
+            if key and key not in _ESPIROMETRIA_CANONICAL_KEYS:
+                non_canonical_labels.append(label or key)
+
+        result["parametros"] = normalized_rows
+
+        # 2. Derivar completitud_documental si quedó null (raíz + bloque calidad).
+        if principales_con_valores >= 6:
+            _derived = "suficiente"
+        elif principales_con_valores >= 3:
+            _derived = "parcial"
+        else:
+            _derived = "no_concluyente"
+
+        if result.get("completitud_documental") is None:
+            result["completitud_documental"] = _derived
+
+        calidad = result.get("calidad")
+        if isinstance(calidad, dict):
+            if calidad.get("completitud_documental") is None:
+                calidad["completitud_documental"] = _derived
+                result["calidad"] = calidad
+
+        # 3. Derivar es_interpretable (legacy) si quedó null.
+        if result.get("es_interpretable") is None:
+            fev1_ok = any(
+                r.get("key") == "fev1_l" and r.get("m1") is not None
+                for r in normalized_rows
+            )
+            fvc_ok = any(
+                r.get("key") == "fvc_l" and r.get("m1") is not None
+                for r in normalized_rows
+            )
+            result["es_interpretable"] = bool(fev1_ok and fvc_ok)
+
+        # 4. Anotar keys no canónicos como sospecha de mapeo incorrecto.
+        if non_canonical_labels:
+            warning = (
+                "SOSPECHA_MAPEO: parámetros con key no canónico: "
+                f"{non_canonical_labels}. Verifique mapeo label→key."
+            )
+            existing = result.get("notas_calidad") or ""
+            result["notas_calidad"] = (
+                f"{existing} | {warning}" if existing else warning
+            )
+            if isinstance(calidad, dict):
+                cn = calidad.get("notas_calidad") or ""
+                calidad["notas_calidad"] = (
+                    f"{cn} | {warning}" if cn else warning
+                )
+                result["calidad"] = calidad
 
         return result
 
@@ -553,8 +718,12 @@ notas de calidad y gráficas.
             )
 
         # ARCH-20260518-17: Audiometría usa prompt enriquecido con guardrails backend.
+        # FIX-20260812-20: Espirometría usa prompt enriquecido con guardrails backend
+        # análogos (cuadro FVC/FEV1/M1/M2/M3/REF/LLN). El resto cae al genérico.
         if doc_type == "Audiometria":
             prompt = self._build_audiometria_extraction_prompt(prompt)
+        elif doc_type == "Espirometria":
+            prompt = self._build_espirometria_extraction_prompt(prompt)
         else:
             prompt = self._build_extraction_prompt(prompt)
 
@@ -691,6 +860,9 @@ notas de calidad y gráficas.
             elif doc_type == "Espirometria":
                 for legacy_field in ("diagnostico_ia", "recomendaciones"):
                     result.pop(legacy_field, None)
+                # FIX-20260812-20 | ARCH-20260518-17: normalización + guardrails
+                # post-extracción (completitud, es_interpretable, mapeo canónico).
+                result = self._normalize_espirometria_result(result)
                 return EspirometriaData(**result)
 
             elif doc_type == "Rayos_X":
