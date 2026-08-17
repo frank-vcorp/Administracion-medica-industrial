@@ -40,6 +40,10 @@ import {
   getPatologicosAllFields,
 } from '@/lib/antecedentes-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
+import {
+  HEREDOFAMILIARES_VALUES,
+  HEREDOFAMILIARES_MENTALES_VALUES,
+} from '@/schemas/clinical/exam.schema'
 
 interface AntecedentesCapturaProps {
   /** Estado actual del snapshot (resuelto por el padre). Componente controlado. */
@@ -408,23 +412,45 @@ export function AntecedentesCaptura({
             Heredo-Familiares
           </legend>
           <div className="space-y-3 mt-2">
-            {HEREDOFAMILIARES_DESCRIPCIONES.map(item => (
-              <FieldRow
-                key={item.field}
-                label={item.label}
-                help={item.help}
-                modified={modified.has(`heredo_familiares.${item.field}`)}
-              >
-                <input
-                  type="text"
-                  value={form.heredo_familiares[item.field] ?? ''}
-                  onChange={e => setField('heredo_familiares', item.field, e.target.value)}
-                  disabled={readonly}
-                  placeholder="Relación familiar (ej: PADRE)"
-                  className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                />
-              </FieldRow>
-            ))}
+            {HEREDOFAMILIARES_DESCRIPCIONES.map(item => {
+              // IMPL-20260817-01-C2: 7 campos con HEREDOFAMILIARES_VALUES (8 opciones),
+              // `mentales` con HEREDOFAMILIARES_MENTALES_VALUES (3 opciones),
+              // `otras` con combo + input "Especifique" condicional. DA-6 espejo AntecedentesForm.
+              const isMentales = item.field === 'mentales'
+              const isOtras = item.field === 'otras'
+              const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
+              const currentValue = form.heredo_familiares[item.field] ?? ''
+              return (
+                <FieldRow
+                  key={item.field}
+                  label={item.label}
+                  help={item.help}
+                  modified={modified.has(`heredo_familiares.${item.field}`)}
+                >
+                  <select
+                    value={currentValue}
+                    onChange={e => setField('heredo_familiares', item.field, e.target.value)}
+                    disabled={readonly}
+                    className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                  >
+                    <option value="">—</option>
+                    {zinValues.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                  {isOtras && currentValue === 'OTROS' && (
+                    <input
+                      type="text"
+                      value={currentValue}
+                      onChange={e => setField('heredo_familiares', item.field, e.target.value)}
+                      disabled={readonly}
+                      placeholder="Especifique (ej: TÍO PATERNO)"
+                      className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    />
+                  )}
+                </FieldRow>
+              )
+            })}
           </div>
         </fieldset>
       </div>
