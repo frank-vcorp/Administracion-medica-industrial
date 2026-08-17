@@ -19,7 +19,15 @@
  * @spec context/SPECs/SPEC_ARCH-20260809-01-ANTECEDENTES-SUB-PESTANA-EXAMEN-MEDICO.md
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { ExamenMedicoCompletoSchema, AntecedentesCapturaSchema } from '@/schemas/clinical/exam.schema'
+import {
+  ExamenMedicoCompletoSchema,
+  AntecedentesCapturaSchema,
+  AgudezaVisualSchema,
+  VISION_SNELLEN_VALUES,
+  REFLEJOS_VALUES,
+  CAMPIMETRIA_VALUES,
+  TEST_ISHIHARA_VALUES,
+} from '@/schemas/clinical/exam.schema'
 import { DatosPersonalesModulo1Schema } from '@/schemas/clinical/history.schema'
 
 // ─── Mock state (declarados ANTES de vi.mock para evitar TDZ) ──────────────
@@ -192,5 +200,73 @@ describe('schemas IMPL-20260809-02 (regresión I-1 / I-2)', () => {
     expect(parsed.datos_personales?.puesto_actual).toBe('Soldador')
     expect(parsed.datos_personales?.turno).toBeUndefined()
     expect(parsed.datos_personales?.estado_civil).toBeUndefined()
+  })
+})
+
+// ─── IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1) ──────────────────────────
+// Regresión DA-1: `AgudezaVisualSchema` usa catálogos ZIN vía
+// `z.string().refine()` tolerante (acepta enum + legacy). Ver SPEC §2.1.
+describe('AgudezaVisualSchema IMPL-20260817-01-C1 (ZIN combos tolerancia legacy)', () => {
+  it('11. acepta los 10 valores Snellen del catálogo ZIN en los 8 campos de visión', () => {
+    const payload = {
+      vision_lejana_od: '20/200',
+      vision_lejana_oi: '20/100',
+      vision_cercana_od: '20/70',
+      vision_cercana_oi: '20/50',
+      lejana_corregida_od: '20/40',
+      lejana_corregida_oi: '20/30',
+      cercana_corregida_od: '20/25',
+      cercana_corregida_oi: '20/20',
+      reflejos: 'PRESENTES Y NORMOREFLECTICOS',
+      test_ishihara: 'NORMAL (LEE 12,8,6,29,57,45)',
+      campimetria: 'CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES',
+    }
+    const parsed = AgudezaVisualSchema.parse(payload)
+    expect(parsed.vision_lejana_od).toBe('20/200')
+    expect(parsed.reflejos).toBe('PRESENTES Y NORMOREFLECTICOS')
+    expect(parsed.campimetria).toBe('CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES')
+  })
+
+  it('12. acepta strings NO-Snellen como legacy (sin migración de datos — DA-1)', () => {
+    // Registros históricos con valores arbitrarios en BD cargan sin error.
+    // SPEC §2.1 Opción A: el schema NO rechaza legacy text.
+    const legacyPayload = {
+      vision_lejana_od: '20/30 corregida',
+      vision_lejana_oi: 'AV 20/25',
+      vision_cercana_od: 'N/A',
+      campimetria: 'ver estudio anexo (oftalmología 2024)',
+    }
+    expect(() => AgudezaVisualSchema.parse(legacyPayload)).not.toThrow()
+    const parsed = AgudezaVisualSchema.parse(legacyPayload)
+    expect(parsed.vision_lejana_od).toBe('20/30 corregida')
+    expect(parsed.campimetria).toBe('ver estudio anexo (oftalmología 2024)')
+  })
+
+  it('13. aplica defaults "NO APLICA" (8 visión) y "PRESENTES Y NORMOREFLECTICOS" (reflejos) cuando el campo falta', () => {
+    const parsed = AgudezaVisualSchema.parse({})
+    expect(parsed.vision_lejana_od).toBe('NO APLICA')
+    expect(parsed.vision_lejana_oi).toBe('NO APLICA')
+    expect(parsed.vision_cercana_od).toBe('NO APLICA')
+    expect(parsed.vision_cercana_oi).toBe('NO APLICA')
+    expect(parsed.lejana_corregida_od).toBe('NO APLICA')
+    expect(parsed.lejana_corregida_oi).toBe('NO APLICA')
+    expect(parsed.cercana_corregida_od).toBe('NO APLICA')
+    expect(parsed.cercana_corregida_oi).toBe('NO APLICA')
+    expect(parsed.reflejos).toBe('PRESENTES Y NORMOREFLECTICOS')
+    // test_ishihara y campimetria son opcionales → undefined
+    expect(parsed.test_ishihara).toBeUndefined()
+    expect(parsed.campimetria).toBeUndefined()
+  })
+
+  it('14. expone constantes VISION_SNELLEN_VALUES (10) + REFLEJOS_VALUES (4) + CAMPIMETRIA_VALUES (4) + TEST_ISHIHARA_VALUES (3)', () => {
+    expect(VISION_SNELLEN_VALUES).toHaveLength(10)
+    expect(VISION_SNELLEN_VALUES[0]).toBe('20/200')
+    expect(VISION_SNELLEN_VALUES[9]).toBe('20/10')
+    expect(REFLEJOS_VALUES).toHaveLength(4)
+    expect(REFLEJOS_VALUES[0]).toBe('PRESENTES Y NORMOREFLECTICOS')
+    expect(CAMPIMETRIA_VALUES).toHaveLength(4)
+    expect(CAMPIMETRIA_VALUES[0]).toBe('CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES')
+    expect(TEST_ISHIHARA_VALUES).toHaveLength(3)
+    expect(TEST_ISHIHARA_VALUES[0]).toBe('NORMAL (LEE 12,8,6,29,57,45)')
   })
 })
