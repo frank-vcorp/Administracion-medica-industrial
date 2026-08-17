@@ -18,9 +18,15 @@ import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
 // PRIMERA sub-pestaña dentro de "Examen Médico" (componente controlado).
 import { AntecedentesCaptura } from "@/components/clinical/AntecedentesCaptura"
-// IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): catálogo Snellen ZIN para
-// los 8 campos de visión en la pestaña 3 "Agudeza Visual".
-import { VISION_SNELLEN_VALUES } from "@/schemas/clinical/exam.schema"
+// IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): catálogos ZIN para los
+// 8 campos de visión + 3 pruebas complementarias en pestaña 3 "Agudeza
+// Visual". Ver SPEC §4.1.
+import {
+  VISION_SNELLEN_VALUES,
+  REFLEJOS_VALUES,
+  CAMPIMETRIA_VALUES,
+  TEST_ISHIHARA_VALUES,
+} from "@/schemas/clinical/exam.schema"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -713,19 +719,23 @@ export default function ExamenMedicoEstudio({
             <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Pruebas Complementarias</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {([
-                ['campimetria', 'Campimetría'],
-                ['test_ishihara', 'Test Ishihara'],
-                ['reflejos', 'Reflejos'],
-              ] as [string, string][]).map(([name, label]) => (
+                { name: 'campimetria', label: 'Campimetría', options: CAMPIMETRIA_VALUES, placeholder: true },
+                { name: 'test_ishihara', label: 'Test Ishihara', options: TEST_ISHIHARA_VALUES, placeholder: true },
+                { name: 'reflejos', label: 'Reflejos', options: REFLEJOS_VALUES, placeholder: false },
+              ] as { name: string; label: string; options: readonly string[]; placeholder: boolean }[]).map(({ name, label, options, placeholder }) => (
                 <div key={name}>
                   <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{label}</label>
-                  <input
-                    type="text"
-                    value={agudezaForm[name] || ''}
+                  <select
+                    value={agudezaForm[name] || (placeholder ? '' : options[0])}
                     onChange={e => setAgudezaForm(prev => ({ ...prev, [name]: e.target.value }))}
                     disabled={readonly}
                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm disabled:opacity-60"
-                  />
+                  >
+                    {placeholder && <option value="">SELECCIONAR</option>}
+                    {options.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
                 </div>
               ))}
             </div>

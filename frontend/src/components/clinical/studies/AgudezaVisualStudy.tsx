@@ -12,8 +12,14 @@ import { useState } from "react"
 import { updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): se adopta el catálogo ZIN
-// para los 8 campos de visión (Snellen 10 valores). Ver SPEC §4.1.
-import { VISION_SNELLEN_VALUES } from "@/schemas/clinical/exam.schema"
+// para los 8 campos de visión (Snellen) + 3 pruebas complementarias.
+// Ver SPEC §4.1.
+import {
+  VISION_SNELLEN_VALUES,
+  REFLEJOS_VALUES,
+  CAMPIMETRIA_VALUES,
+  TEST_ISHIHARA_VALUES,
+} from "@/schemas/clinical/exam.schema"
 
 const VISUAL_FIELDS = [
   { name: 'vision_lejana_od', label: 'Visión Lejana OD' },
@@ -113,33 +119,44 @@ export default function AgudezaVisualStudy({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Campimetría</label>
-            <input
-              type="text"
+            <select
               value={formData.campimetria || ''}
               onChange={e => handleChange('campimetria', e.target.value)}
               disabled={readonly}
               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
-            />
+            >
+              <option value="">SELECCIONAR</option>
+              {CAMPIMETRIA_VALUES.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Test Ishihara</label>
-            <input
-              type="text"
+            <select
               value={formData.test_ishihara || ''}
               onChange={e => handleChange('test_ishihara', e.target.value)}
               disabled={readonly}
               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
-            />
+            >
+              <option value="">SELECCIONAR</option>
+              {TEST_ISHIHARA_VALUES.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Reflejos</label>
-            <input
-              type="text"
-              value={formData.reflejos || ''}
+            <select
+              value={formData.reflejos || 'PRESENTES Y NORMOREFLECTICOS'}
               onChange={e => handleChange('reflejos', e.target.value)}
               disabled={readonly}
               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
-            />
+            >
+              {REFLEJOS_VALUES.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
