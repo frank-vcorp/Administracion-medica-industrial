@@ -21,12 +21,29 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   ExamenMedicoCompletoSchema,
+  ExploracionFisicaSchema,
+  ImpresiónAptitudSchema,
   AntecedentesCapturaSchema,
   AgudezaVisualSchema,
   VISION_SNELLEN_VALUES,
   REFLEJOS_VALUES,
   CAMPIMETRIA_VALUES,
   TEST_ISHIHARA_VALUES,
+  HEREDOFAMILIARES_VALUES,
+  HEREDOFAMILIARES_MENTALES_VALUES,
+  ARCO_MOVILIDAD_VALUES,
+  TONO_MUSCULAR_VALUES,
+  COORDINACION_VALUES,
+  TEST_ADAM_VALUES,
+  PRESENCIA_QUISTE_SINOVIAL_VALUES,
+  TEST_ROMBERG_VALUES,
+  SIGNO_BRAGARD_VALUES,
+  SIGNO_TINEL_VALUES,
+  PRUEBA_LATERALIDAD_VALUES,
+  CIRCULACION_VENOSA_VALUES,
+  SALUD_BUCAL_VALUES,
+  ESTADO_NUTRICIONAL_VALUES,
+  PLANTILLAS_EF,
 } from '@/schemas/clinical/exam.schema'
 import { DatosPersonalesModulo1Schema } from '@/schemas/clinical/history.schema'
 
@@ -268,5 +285,217 @@ describe('AgudezaVisualSchema IMPL-20260817-01-C1 (ZIN combos tolerancia legacy)
     expect(CAMPIMETRIA_VALUES[0]).toBe('CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES')
     expect(TEST_ISHIHARA_VALUES).toHaveLength(3)
     expect(TEST_ISHIHARA_VALUES[0]).toBe('NORMAL (LEE 12,8,6,29,57,45)')
+  })
+})
+
+// ─── IMPL-20260817-01-C2 (ARCH-20260817-01 corte 2) ──────────────────────────
+// Regresión DA-1: ExploracionFisicaSchema + ImpresiónAptitudSchema usan
+// catálogos ZIN vía `tolerantZinEnum` (acepta enum + legacy). Ver SPEC §4.2,
+// §4.3, §4.4. Las 17 plantillas ZIN se verifican verbatim vs §4.3.
+describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla literals)', () => {
+  it('15. ExploracionFisicaSchema acepta los 13 combos ZIN canónicos', () => {
+    const payload = {
+      test_adam: 'NEGATIVO',
+      boca_estado: 'CARIES',
+      circulacion_venosa: 'C0: SIN SIGNOS VISIBLES NI PALPABLES',
+      arco_de_movilidad: 'PRESENTES Y NORMALES',
+      tono_muscular: 'NORMAL',
+      coordinacion: 'NORMAL',
+      test_romberg: 'NEGATIVO',
+      signo_bragard: 'NEGATIVO',
+      prueba_finkelstein: 'NEGATIVO',
+      signo_tinel: 'NEGATIVO',
+      prueba_phanel: 'NEGATIVO',
+      prueba_lasegue: 'NEGATIVO',
+      presencia_quiste_sinovial: 'NORMAL',
+      // 17 campos con plantilla (texto libre, default sugerido en UI)
+      neurologico: 'Alerta, orientado en tiempo, lugar y persona. Cooperador.',
+      cabeza: 'Cráneo normocéfalo, sin hundimientos ni exostosis.',
+      piel_y_faneras: 'Sin datos de palidez, ictericia o cianosis.',
+      oidos_cad: 'Permeable, MT íntegra, cono luminoso permeable.',
+      oidos_cai: 'Permeable, MT íntegra, cono luminoso permeable.',
+      ojos: 'Pupilas isocóricas, normorrefléxicas.',
+      nariz: 'Alineada, septum alineado.',
+      faringe: 'Sin datos patológicos.',
+      cuello: 'Cilíndrico, tráquea central.',
+      torax: 'Mesomórfico, movimientos de amplexión y amplexación normales.',
+      corazon: 'Ruidos cardíacos rítmicos, sin soplos.',
+      campos_pulmonares: 'Bien ventilados, sin ruidos agregados.',
+      abdomen: 'Globoso, blando, depresible, sin dolor.',
+      genitourinario: 'Giordano negativo bilateral.',
+      columna_vertebral: 'Clínicamente alineada.',
+      ms_superiores: 'Íntegros, fuerza y sensibilidad conservada.',
+      ms_inferiores: 'Íntegros, sensibilidad conservada.',
+    }
+    const parsed = ExploracionFisicaSchema.parse(payload)
+    expect(parsed.test_adam).toBe('NEGATIVO')
+    expect(parsed.boca_estado).toBe('CARIES')
+    expect(parsed.circulacion_venosa).toBe('C0: SIN SIGNOS VISIBLES NI PALPABLES')
+    expect(parsed.arco_de_movilidad).toBe('PRESENTES Y NORMALES')
+    expect(parsed.neurologico).toBe('Alerta, orientado en tiempo, lugar y persona. Cooperador.')
+  })
+
+  it('16. ExploracionFisicaSchema acepta strings legacy como DA-1 (no rechaza)', () => {
+    // Registros legacy con valores arbitrarios en BD cargan sin error.
+    const legacyPayload = {
+      test_adam: 'positivo bilateral',
+      boca_estado: 'caries múltiples',
+      arco_de_movilidad: 'movilidad reducida',
+      tono_muscular: 'eutrófico',
+    }
+    expect(() => ExploracionFisicaSchema.parse(legacyPayload)).not.toThrow()
+    const parsed = ExploracionFisicaSchema.parse(legacyPayload)
+    expect(parsed.test_adam).toBe('positivo bilateral')
+    expect(parsed.boca_estado).toBe('caries múltiples')
+  })
+
+  it('17. ExploracionFisicaSchema acepta especifique_positivos opcional (acordeón EF)', () => {
+    // IMPL-20260817-01-C2: cuando hay hallazgos POSITIVO, el acordeón
+    // txtEFEspecificar se expande con este campo opcional.
+    const payload = {
+      test_adam: 'POSITIVO',
+      especifique_positivos: 'Giba dorsal derecha a nivel T8-T10, asimetría escapular.',
+    }
+    expect(() => ExploracionFisicaSchema.parse(payload)).not.toThrow()
+    const parsed = ExploracionFisicaSchema.parse(payload)
+    expect(parsed.especifique_positivos).toBe('Giba dorsal derecha a nivel T8-T10, asimetría escapular.')
+  })
+
+  it('18. PLANTILLAS_EF expone los 17 literales verbatim del NOTA MEDICA EJEMPLO.pdf', () => {
+    // DA-3: plantillas copiadas exactas, sin paráfrasis. SPEC §4.3.
+    expect(Object.keys(PLANTILLAS_EF)).toHaveLength(17)
+    expect(PLANTILLAS_EF.neurologico).toBe('Alerta, orientado en tiempo, lugar y persona. Cooperador.')
+    expect(PLANTILLAS_EF.cabeza).toBe('Cráneo normocéfalo, sin hundimientos ni exostosis.')
+    expect(PLANTILLAS_EF.piel_y_faneras).toBe('Sin datos de palidez, ictericia o cianosis.')
+    expect(PLANTILLAS_EF.oidos_cad).toBe('Permeable, MT íntegra, cono luminoso permeable.')
+    expect(PLANTILLAS_EF.oidos_cai).toBe('Permeable, MT íntegra, cono luminoso permeable.')
+    expect(PLANTILLAS_EF.ojos).toBe('Pupilas isocóricas, normorrefléxicas.')
+    expect(PLANTILLAS_EF.nariz).toBe('Alineada, septum alineado.')
+    expect(PLANTILLAS_EF.faringe).toBe('Sin datos patológicos.')
+    expect(PLANTILLAS_EF.cuello).toBe('Cilíndrico, tráquea central.')
+    expect(PLANTILLAS_EF.torax).toBe('Mesomórfico, movimientos de amplexión y amplexación normales.')
+    expect(PLANTILLAS_EF.corazon).toBe('Ruidos cardíacos rítmicos, sin soplos.')
+    expect(PLANTILLAS_EF.campos_pulmonares).toBe('Bien ventilados, sin ruidos agregados.')
+    expect(PLANTILLAS_EF.abdomen).toBe('Globoso, blando, depresible, sin dolor.')
+    expect(PLANTILLAS_EF.genitourinario).toBe('Giordano negativo bilateral.')
+    expect(PLANTILLAS_EF.columna_vertebral).toBe('Clínicamente alineada.')
+    expect(PLANTILLAS_EF.ms_superiores).toBe('Íntegros, fuerza y sensibilidad conservada.')
+    expect(PLANTILLAS_EF.ms_inferiores).toBe('Íntegros, sensibilidad conservada.')
+  })
+
+  it('19. ImpresiónAptitudSchema acepta estado_nutricional + salud_bucal con ZIN enum', () => {
+    const payload = {
+      estado_nutricional: 'NORMAL',
+      salud_bucal: 'CARIES Y SARRO',
+      aptitud: 'APTO' as const,
+    }
+    const parsed = ImpresiónAptitudSchema.parse(payload)
+    expect(parsed.estado_nutricional).toBe('NORMAL')
+    expect(parsed.salud_bucal).toBe('CARIES Y SARRO')
+    expect(parsed.aptitud).toBe('APTO')
+  })
+
+  it('20. ImpresiónAptitudSchema acepta legacy libre en estado_nutricional + salud_bucal (DA-1)', () => {
+    const legacy = {
+      estado_nutricional: 'Desnutrición leve',
+      salud_bucal: 'mala higiene',
+    }
+    expect(() => ImpresiónAptitudSchema.parse(legacy)).not.toThrow()
+    const parsed = ImpresiónAptitudSchema.parse(legacy)
+    expect(parsed.estado_nutricional).toBe('Desnutrición leve')
+    expect(parsed.salud_bucal).toBe('mala higiene')
+  })
+
+  it('21. HEREDOFAMILIARES_VALUES expone 8 valores canónicos ZIN', () => {
+    // SPEC §4.4: 7 campos canónicos (diabetes, has, epilepsia, cardiopatia,
+    // renales, asma, cancer) usan este catálogo.
+    expect(HEREDOFAMILIARES_VALUES).toHaveLength(8)
+    expect(HEREDOFAMILIARES_VALUES).toContain('NEGADOS')
+    expect(HEREDOFAMILIARES_VALUES).toContain('PADRE')
+    expect(HEREDOFAMILIARES_VALUES).toContain('MADRE')
+    expect(HEREDOFAMILIARES_VALUES).toContain('AMBOS')
+    expect(HEREDOFAMILIARES_VALUES).toContain('HERMANOS')
+    expect(HEREDOFAMILIARES_VALUES).toContain('AB PATERNO')
+    expect(HEREDOFAMILIARES_VALUES).toContain('AB MATERNO')
+    expect(HEREDOFAMILIARES_VALUES).toContain('OTROS')
+  })
+
+  it('22. HEREDOFAMILIARES_MENTALES_VALUES expone 3 valores canónicos ZIN', () => {
+    // SPEC §4.4: campo `mentales` usa catálogo dedicado.
+    expect(HEREDOFAMILIARES_MENTALES_VALUES).toHaveLength(3)
+    expect(HEREDOFAMILIARES_MENTALES_VALUES).toContain('NEGADO')
+    expect(HEREDOFAMILIARES_MENTALES_VALUES).toContain('SI')
+    expect(HEREDOFAMILIARES_MENTALES_VALUES).toContain('NO APLICA')
+  })
+
+  it('23. ExamenMedicoCompletoSchema acepta payload Corte 2 completo (exploración + resumen)', () => {
+    // Cobertura de extremo a extremo: la captura del médico con todos los
+    // nuevos enums ZIN parsea OK.
+    const payload = {
+      neurologico: 'Alerta, orientado en tiempo, lugar y persona. Cooperador.',
+      test_adam: 'NEGATIVO',
+      arco_de_movilidad: 'PRESENTES Y NORMALES',
+      tono_muscular: 'NORMAL',
+      coordinacion: 'NORMAL',
+      boca_estado: 'CARIES',
+      estado_nutricional: 'NORMAL',
+      salud_bucal: 'CARIES Y SARRO',
+      antecedentes_captured: {
+        datos_personales: { puesto_actual: 'Soldador', turno: 'MATUTINO' as const },
+        historia_laboral: {},
+        heredo_familiares: { diabetes: 'PADRE', mentales: 'NEGADO' },
+        no_patologicos: { alcohol: 'NEGADO' as const, tabaco: 'NEGADO' as const },
+        patologicos: { diabetes: 'NEGADO' as const },
+      },
+    }
+    expect(() => ExamenMedicoCompletoSchema.parse(payload)).not.toThrow()
+    const parsed = ExamenMedicoCompletoSchema.parse(payload)
+    expect(parsed.test_adam).toBe('NEGATIVO')
+    expect(parsed.estado_nutricional).toBe('NORMAL')
+    expect(parsed.antecedentes_captured?.heredo_familiares?.diabetes).toBe('PADRE')
+  })
+
+  it('24. ExamenMedicoCompletoSchema acepta legacy mixto (Corte 1 + Corte 2 ligibles)', () => {
+    // Regresión DA-1: integración de datos legacy con strings arbitrarios
+    // en los nuevos campos Corte 2.
+    const payload = {
+      test_adam: 'positivo bilateral',
+      estado_nutricional: 'sobrepeso II',
+      salud_bucal: 'mala higiene',
+      antecedentes_captured: {
+        datos_personales: { puesto_actual: 'Soldador' },
+        historia_laboral: {},
+        heredo_familiares: { diabetes: 'ABUELO MATERNO' }, // texto libre legacy
+        no_patologicos: {},
+        patologicos: {},
+      },
+    }
+    expect(() => ExamenMedicoCompletoSchema.parse(payload)).not.toThrow()
+    const parsed = ExamenMedicoCompletoSchema.parse(payload)
+    expect(parsed.test_adam).toBe('positivo bilateral')
+    expect(parsed.antecedentes_captured?.heredo_familiares?.diabetes).toBe('ABUELO MATERNO')
+  })
+
+  it('25. expone constantes completas de exploración física (13 catálogos ZIN)', () => {
+    // Cobertura de tamaño/primer valor de cada catálogo.
+    expect(ARCO_MOVILIDAD_VALUES).toHaveLength(3)
+    expect(ARCO_MOVILIDAD_VALUES[0]).toBe('PRESENTES Y NORMALES')
+    expect(TONO_MUSCULAR_VALUES).toHaveLength(3)
+    expect(TONO_MUSCULAR_VALUES).toContain('NORMAL')
+    expect(COORDINACION_VALUES).toHaveLength(2)
+    expect(TEST_ADAM_VALUES).toHaveLength(2)
+    expect(TEST_ADAM_VALUES).toContain('NEGATIVO')
+    expect(PRESENCIA_QUISTE_SINOVIAL_VALUES).toHaveLength(4)
+    expect(TEST_ROMBERG_VALUES).toHaveLength(4)
+    expect(SIGNO_BRAGARD_VALUES).toHaveLength(2)
+    expect(SIGNO_TINEL_VALUES).toHaveLength(4)
+    expect(PRUEBA_LATERALIDAD_VALUES).toHaveLength(4)
+    expect(CIRCULACION_VENOSA_VALUES).toHaveLength(7)
+    expect(CIRCULACION_VENOSA_VALUES[0]).toBe('C0: SIN SIGNOS VISIBLES NI PALPABLES')
+    expect(CIRCULACION_VENOSA_VALUES[6]).toBe('C6: ULCERA ACTIVA')
+    expect(SALUD_BUCAL_VALUES).toHaveLength(4)
+    expect(ESTADO_NUTRICIONAL_VALUES).toHaveLength(6)
+    expect(ESTADO_NUTRICIONAL_VALUES).toContain('BAJO PESO')
+    expect(ESTADO_NUTRICIONAL_VALUES).toContain('OBESIDAD G3')
   })
 })
