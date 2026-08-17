@@ -18,6 +18,9 @@ import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
 // PRIMERA sub-pestaña dentro de "Examen Médico" (componente controlado).
 import { AntecedentesCaptura } from "@/components/clinical/AntecedentesCaptura"
+// IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): catálogo Snellen ZIN para
+// los 8 campos de visión en la pestaña 3 "Agudeza Visual".
+import { VISION_SNELLEN_VALUES } from "@/schemas/clinical/exam.schema"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -690,13 +693,16 @@ export default function ExamenMedicoEstudio({
               {VISUAL_FIELDS.map(f => (
                 <div key={f.name}>
                   <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{f.label}</label>
-                  <input
-                    type="text"
-                    value={agudezaForm[f.name] || ''}
+                  <select
+                    value={agudezaForm[f.name] || NO_APLICA}
                     onChange={e => setAgudezaForm(prev => ({ ...prev, [f.name]: e.target.value }))}
                     disabled={readonly}
                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-sm disabled:opacity-60"
-                  />
+                  >
+                    {VISION_SNELLEN_VALUES.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
                 </div>
               ))}
             </div>
