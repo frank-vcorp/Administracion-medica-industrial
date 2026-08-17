@@ -10,6 +10,11 @@
  * `mentales`). El campo `otras` muestra un input "Especifique" condicional
  * cuando value === 'OTROS'. DA-1: schema sigue tolerante — legacy libre
  * parsea sin error (ver SPEC §4.4).
+ *
+ * IMPL-20260817-02 (FIX L2 QA-20260817-01-C2): el input "Especifique" del
+ * campo `otras` ahora lee/escribe el state key INDEPENDIENTE
+ * `heredofamiliares.otras_especifique` (antes compartía `otras` con el
+ * select, causando auto-destrucción al primer carácter tipeado).
  */
 import React, { useState, useEffect } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
@@ -71,9 +76,14 @@ export function AntecedentesForm({
   })
 
   // ── Estado: Heredo-Familiares ───────────────────────────────────────────────
+  // IMPL-20260817-02 (FIX L2 QA-20260817-01-C2): `otras_especifique` es un state
+  // key INDEPENDIENTE del select `otras`. Antes compartían state y al primer
+  // carácter tipeado en el input, `otras` cambiaba de 'OTROS' al texto y el
+  // input se auto-destruía (ver commit fix).
   const [heredofamiliares, setHeredofamiliares] = useState<Record<string, string>>({
     diabetes: '', has: '', epilepsia: '', cardiopatia: '',
-    renales: '', asma: '', cancer: '', mentales: '', otras: '',
+    renales: '', asma: '', cancer: '', mentales: '',
+    otras: '', otras_especifique: '',
   })
 
   // ── Estado: No Patológicos ────────────────────────────────────────────────
@@ -507,10 +517,14 @@ export function AntecedentesForm({
                         ))}
                       </select>
                       {isOtras && currentValue === 'OTROS' && (
+                        // IMPL-20260817-02 (FIX L2): el input lee/escribe
+                        // `otras_especifique` (state key independiente del
+                        // select). Antes compartía `item.field` y se
+                        // auto-destruía al tipear.
                         <input
                           type="text"
-                          value={currentValue}
-                          onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
+                          value={heredofamiliares.otras_especifique ?? ''}
+                          onChange={(e) => handleHeredofamiliaresChange('otras_especifique', e.target.value)}
                           placeholder="Especifique (ej: TÍO PATERNO)"
                           className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                         />

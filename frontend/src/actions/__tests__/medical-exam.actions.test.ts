@@ -45,7 +45,7 @@ import {
   ESTADO_NUTRICIONAL_VALUES,
   PLANTILLAS_EF,
 } from '@/schemas/clinical/exam.schema'
-import { DatosPersonalesModulo1Schema } from '@/schemas/clinical/history.schema'
+import { DatosPersonalesModulo1Schema, HeredoFamiliaresSchema } from '@/schemas/clinical/history.schema'
 
 // ─── Mock state (declarados ANTES de vi.mock para evitar TDZ) ──────────────
 const mockMedicalExamUpsert = vi.fn()
@@ -497,5 +497,63 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
     expect(ESTADO_NUTRICIONAL_VALUES).toHaveLength(6)
     expect(ESTADO_NUTRICIONAL_VALUES).toContain('BAJO PESO')
     expect(ESTADO_NUTRICIONAL_VALUES).toContain('OBESIDAD G3')
+  })
+})
+
+// ─── IMPL-20260817-02 (FIX L2 QA-20260817-01-C2) ─────────────────────────────
+// Bug L2: el input "Especifique" del campo `otras` (Heredo-Familiares)
+// compartía state con el select → al primer carácter tipeado, el input se
+// auto-destruía (porque `otras` cambiaba de 'OTROS' al texto tipeado y la
+// condición que mostraba el input dejaba de cumplirse).
+//
+// Fix: separar en 2 state keys independientes (`otras` para el select,
+// `otras_especifique` para el texto libre). El schema Zod gana un campo
+// `otras_especifique` (max 250 chars, default '') que DA-1 tolera como
+// opcional — registros legacy sin este campo siguen parseando OK.
+// @id IMPL-20260817-02
+describe('FIX L2 IMPL-20260817-02 (heredo-familiares: otras_especifique separado de otras)', () => {
+  it('26. HeredoFamiliaresSchema: input Especifique NO destruye `otras` al tipear', () => {
+    // Antes: tipear 'T' cambiaba `otras` a 'T' → condición se perdía → input
+    // desaparecía. Ahora: `otras` y `otras_especifique` son keys independientes.
+    const initial = HeredoFamiliaresSchema.parse({
+      otras: 'OTROS',
+      otras_especifique: '',
+    })
+    expect(initial.otras).toBe('OTROS')
+    expect(initial.otras_especifique).toBe('')
+
+    // Tipear 'T' en otras_especifique — el campo `otras` NO debe cambiar.
+    const afterTyping = HeredoFamiliaresSchema.parse({
+      otras: 'OTROS',
+      otras_especifique: 'TÍO PATERNO',
+    })
+    expect(afterTyping.otras).toBe('OTROS')
+    expect(afterTyping.otras_especifique).toBe('TÍO PATERNO')
+  })
+
+  it('27. HeredoFamiliaresSchema: otras_especifique acepta hasta 250 chars', () => {
+    const exactly250 = 'a'.repeat(250)
+    expect(() =>
+      HeredoFamiliaresSchema.parse({ otras: 'OTROS', otras_especifique: exactly250 }),
+    ).not.toThrow()
+
+    const tooLong = 'a'.repeat(251)
+    const result = HeredoFamiliaresSchema.safeParse({
+      otras: 'OTROS',
+      otras_especifique: tooLong,
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('28. HeredoFamiliaresSchema: otras_especifique es opcional (default "")', () => {
+    // DA-1: campo nuevo con default '' → registros legacy sin este campo
+    // parsean OK. Verifica además que NO contamina otros campos.
+    const minimal = HeredoFamiliaresSchema.parse({ otras: 'OTROS' })
+    expect(minimal.otras_especifique).toBe('')
+
+    const legacyOnly = HeredoFamiliaresSchema.parse({ diabetes: 'PADRE' })
+    expect(legacyOnly.otras).toBeUndefined()
+    expect(legacyOnly.otras_especifique).toBe('')
+    expect(legacyOnly.diabetes).toBe('PADRE')
   })
 })
