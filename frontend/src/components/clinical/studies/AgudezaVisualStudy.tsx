@@ -11,6 +11,9 @@
 import { useState } from "react"
 import { updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
+// IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): se adopta el catálogo ZIN
+// para los 8 campos de visión (Snellen 10 valores). Ver SPEC §4.1.
+import { VISION_SNELLEN_VALUES } from "@/schemas/clinical/exam.schema"
 
 const VISUAL_FIELDS = [
   { name: 'vision_lejana_od', label: 'Visión Lejana OD' },
@@ -89,13 +92,16 @@ export default function AgudezaVisualStudy({
           {VISUAL_FIELDS.map(f => (
             <div key={f.name}>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{f.label}</label>
-              <input
-                type="text"
-                value={formData[f.name] || ''}
+              <select
+                value={formData[f.name] || NO_APLICA}
                 onChange={e => handleChange(f.name, e.target.value)}
                 disabled={readonly}
                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:opacity-60"
-              />
+              >
+                {VISION_SNELLEN_VALUES.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
             </div>
           ))}
         </div>
