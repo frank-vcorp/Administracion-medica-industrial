@@ -49,6 +49,15 @@ export type HistoriaLaboral = z.infer<typeof HistoriaLaboralSchema>;
 
 // ----------------------------------------------------------------------
 // 3. ANTECEDENTES HEREDO-FAMILIARES (Imagen 1)
+// @id IMPL-20260817-02
+// FIX L2 (QA-20260817-01-C2 observación): campo `otras` se separa en dos
+// state keys independientes — `otras` (catálogo ZIN: NEGADOS/PADRE/.../OTROS)
+// y `otras_especifique` (texto libre condicional cuando `otras === 'OTROS'`).
+// Antes el input "Especifique" compartía state con el select, causando que al
+// primer carácter tipeado el input se auto-destruyera (`otras` cambiaba de
+// 'OTROS' al texto tipeado, perdiendo la condición que lo mostraba).
+// DA-1 (tolerancia legacy): campo nuevo con default '', registros legacy sin
+// este campo parsean sin error.
 // ----------------------------------------------------------------------
 export const HeredoFamiliaresSchema = z.object({
   diabetes: z.string().trim().max(500).optional(),     // ej: "AB MA", "PADRE", etc.
@@ -59,7 +68,8 @@ export const HeredoFamiliaresSchema = z.object({
   asma: z.string().trim().max(500).optional(),
   cancer: z.string().trim().max(500).optional(),
   mentales: z.string().trim().max(500).optional(),
-  otras: z.string().trim().max(1000).optional()         // Texto libre
+  otras: z.string().trim().max(1000).optional(),       // Catálogo ZIN (HEREDOFAMILIARES_VALUES)
+  otras_especifique: z.string().trim().max(250).default('')  // Texto libre condicional (FIX L2)
 });
 
 // ----------------------------------------------------------------------

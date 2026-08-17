@@ -21,11 +21,28 @@ import { AntecedentesCaptura } from "@/components/clinical/AntecedentesCaptura"
 // IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): catálogos ZIN para los
 // 8 campos de visión + 3 pruebas complementarias en pestaña 3 "Agudeza
 // Visual". Ver SPEC §4.1.
+// IMPL-20260817-01-C2 (ARCH-20260817-01 corte 2): catálogos ZIN para 13
+// combos de Exploración Física + 17 plantillas prellenadas + estado
+// nutricional/salud bucal en Resumen Clínico. Ver SPEC §4.2, §4.3.
 import {
   VISION_SNELLEN_VALUES,
   REFLEJOS_VALUES,
   CAMPIMETRIA_VALUES,
   TEST_ISHIHARA_VALUES,
+  ARCO_MOVILIDAD_VALUES,
+  TONO_MUSCULAR_VALUES,
+  COORDINACION_VALUES,
+  TEST_ADAM_VALUES,
+  PRESENCIA_QUISTE_SINOVIAL_VALUES,
+  TEST_ROMBERG_VALUES,
+  SIGNO_BRAGARD_VALUES,
+  SIGNO_TINEL_VALUES,
+  PRUEBA_LATERALIDAD_VALUES,
+  CIRCULACION_VENOSA_VALUES,
+  SALUD_BUCAL_VALUES,
+  ESTADO_NUTRICIONAL_VALUES,
+  PLANTILLAS_EF,
+  type PlantillaEfKey,
 } from "@/schemas/clinical/exam.schema"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -113,42 +130,56 @@ const RESUMEN_CLINICO_FIELDS: [string, string][] = [
 ]
 
 // ─── Campos de Exploración Física (de ExploracionFisicaSchema) ───────────────
+// IMPL-20260817-01-C2: cada campo declara su `kind` para el render correcto.
+// - `select` → combo con valores ZIN (13 campos).
+// - `plantilla` → input text con defaultValue = PLANTILLAS_EF[name] (17 campos).
+// - `text` → input text libre (4 campos: fuerza_muscular_daniels_sup/inf,
+//   boca_alineacion, especificar_quiste). Ver SPEC §4.2, §4.3.
+type ExplKind = 'select' | 'plantilla' | 'text'
 
-const EXPLORACION_FIELDS: { name: string; label: string }[] = [
-  { name: "neurologico", label: "Neurológico" },
-  { name: "cabeza", label: "Cabeza" },
-  { name: "piel_y_faneras", label: "Piel y Faneras" },
-  { name: "oidos_cad", label: "Oídos CAD" },
-  { name: "oidos_cai", label: "Oídos CAI" },
-  { name: "ojos", label: "Ojos" },
-  { name: "boca_estado", label: "Boca (Estado)" },
-  { name: "boca_alineacion", label: "Boca (Alineación)" },
-  { name: "nariz", label: "Nariz" },
-  { name: "faringe", label: "Faringe" },
-  { name: "cuello", label: "Cuello" },
-  { name: "torax", label: "Tórax" },
-  { name: "corazon", label: "Corazón" },
-  { name: "campos_pulmonares", label: "Campos Pulmonares" },
-  { name: "abdomen", label: "Abdomen" },
-  { name: "genitourinario", label: "Genitourinario" },
-  { name: "columna_vertebral", label: "Columna Vertebral" },
-  { name: "test_adam", label: "Test Adam" },
-  { name: "ms_superiores", label: "MMSS" },
-  { name: "fuerza_muscular_daniels_sup", label: "Fuerza (Daniels Sup)" },
-  { name: "ms_inferiores", label: "MMII" },
-  { name: "fuerza_muscular_daniels_inf", label: "Fuerza (Daniels Inf)" },
-  { name: "circulacion_venosa", label: "Circulación Venosa" },
-  { name: "arco_de_movilidad", label: "Arco de Movilidad" },
-  { name: "tono_muscular", label: "Tono Muscular" },
-  { name: "coordinacion", label: "Coordinación" },
-  { name: "test_romberg", label: "Test Romberg" },
-  { name: "signo_bragard", label: "Signo Bragard" },
-  { name: "prueba_finkelstein", label: "Prueba Finkelstein" },
-  { name: "signo_tinel", label: "Signo Tinel" },
-  { name: "prueba_phanel", label: "Prueba Phanel" },
-  { name: "prueba_lasegue", label: "Prueba Lasegue" },
-  { name: "presencia_quiste_sinovial", label: "Quiste Sinovial" },
-  { name: "especificar_quiste", label: "Especificar Quiste" },
+type ExplField = {
+  name: string
+  label: string
+  kind: ExplKind
+  /** Catálogo ZIN cuando kind === 'select'. */
+  values?: readonly string[]
+}
+
+const EXPLORACION_FIELDS: ExplField[] = [
+  { name: "neurologico", label: "Neurológico", kind: "plantilla" },
+  { name: "cabeza", label: "Cabeza", kind: "plantilla" },
+  { name: "piel_y_faneras", label: "Piel y Faneras", kind: "plantilla" },
+  { name: "oidos_cad", label: "Oídos CAD", kind: "plantilla" },
+  { name: "oidos_cai", label: "Oídos CAI", kind: "plantilla" },
+  { name: "ojos", label: "Ojos", kind: "plantilla" },
+  { name: "boca_estado", label: "Boca (Estado)", kind: "select", values: SALUD_BUCAL_VALUES },
+  { name: "boca_alineacion", label: "Boca (Alineación)", kind: "text" },
+  { name: "nariz", label: "Nariz", kind: "plantilla" },
+  { name: "faringe", label: "Faringe", kind: "plantilla" },
+  { name: "cuello", label: "Cuello", kind: "plantilla" },
+  { name: "torax", label: "Tórax", kind: "plantilla" },
+  { name: "corazon", label: "Corazón", kind: "plantilla" },
+  { name: "campos_pulmonares", label: "Campos Pulmonares", kind: "plantilla" },
+  { name: "abdomen", label: "Abdomen", kind: "plantilla" },
+  { name: "genitourinario", label: "Genitourinario", kind: "plantilla" },
+  { name: "columna_vertebral", label: "Columna Vertebral", kind: "plantilla" },
+  { name: "test_adam", label: "Test Adam", kind: "select", values: TEST_ADAM_VALUES },
+  { name: "ms_superiores", label: "MMSS", kind: "plantilla" },
+  { name: "fuerza_muscular_daniels_sup", label: "Fuerza (Daniels Sup)", kind: "text" },
+  { name: "ms_inferiores", label: "MMII", kind: "plantilla" },
+  { name: "fuerza_muscular_daniels_inf", label: "Fuerza (Daniels Inf)", kind: "text" },
+  { name: "circulacion_venosa", label: "Circulación Venosa", kind: "select", values: CIRCULACION_VENOSA_VALUES },
+  { name: "arco_de_movilidad", label: "Arco de Movilidad", kind: "select", values: ARCO_MOVILIDAD_VALUES },
+  { name: "tono_muscular", label: "Tono Muscular", kind: "select", values: TONO_MUSCULAR_VALUES },
+  { name: "coordinacion", label: "Coordinación", kind: "select", values: COORDINACION_VALUES },
+  { name: "test_romberg", label: "Test Romberg", kind: "select", values: TEST_ROMBERG_VALUES },
+  { name: "signo_bragard", label: "Signo Bragard", kind: "select", values: SIGNO_BRAGARD_VALUES },
+  { name: "prueba_finkelstein", label: "Prueba Finkelstein", kind: "select", values: PRUEBA_LATERALIDAD_VALUES },
+  { name: "signo_tinel", label: "Signo Tinel", kind: "select", values: SIGNO_TINEL_VALUES },
+  { name: "prueba_phanel", label: "Prueba Phanel", kind: "select", values: PRUEBA_LATERALIDAD_VALUES },
+  { name: "prueba_lasegue", label: "Prueba Lasegue", kind: "select", values: PRUEBA_LATERALIDAD_VALUES },
+  { name: "presencia_quiste_sinovial", label: "Quiste Sinovial", kind: "select", values: PRESENCIA_QUISTE_SINOVIAL_VALUES },
+  { name: "especificar_quiste", label: "Especificar Quiste", kind: "text" },
 ]
 
 const APTITUD_OPTIONS = [
@@ -288,6 +319,19 @@ export default function ExamenMedicoEstudio({
   const hasPhysicalExam = Object.keys(physicalExamData).some(k => physicalExamData[k] !== null && physicalExamData[k] !== '')
   const hasAptitud = !!physicalExamData.aptitud || !!physicalExamData.impresion_diagnostica
   const hasM1 = Object.entries(modulo1).some(([, v]) => v && v.trim() !== '' && v !== 'NEGADO' && v !== 'NO')
+
+  // IMPL-20260817-01-C2: ¿algún campo de exploración física tiene valor POSITIVO?
+  // Habilita el acordeón "Especifique hallazgos positivos" (txtEFEspecificar).
+  // Ver SPEC §4.5 + análisis ZIN §B.
+  const POSITIVE_EF_FIELDS = [
+    'test_adam', 'test_romberg', 'signo_bragard',
+    'prueba_finkelstein', 'signo_tinel', 'prueba_phanel', 'prueba_lasegue',
+  ] as const
+  const hasPositiveEF = POSITIVE_EF_FIELDS.some(f => {
+    const v = form[f]
+    return typeof v === 'string' && v.toUpperCase().includes('POSITIVO')
+  })
+
   const longitudinalReference = prefilledData ?? longitudinalData ?? null
   const hasLongitudinalReference = !!longitudinalReference && Object.keys(longitudinalReference).length > 0
   const longitudinalReferenceLabel = prefilledData
@@ -511,7 +555,7 @@ export default function ExamenMedicoEstudio({
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Peso (KG)</label>
               <input
-                type="number" step="0.1"
+                type="number" step="0.1" min={0} max={500}
                 value={somaForm.peso_kg || ''}
                 onChange={e => setSomaForm(prev => ({ ...prev, peso_kg: e.target.value }))}
                 disabled={readonly}
@@ -522,7 +566,7 @@ export default function ExamenMedicoEstudio({
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (Metros)</label>
               <input
-                type="number" step="0.01"
+                type="number" step="0.01" min={0} max={3}
                 value={somaForm.talla_m || ''}
                 onChange={e => setSomaForm(prev => ({ ...prev, talla_m: e.target.value }))}
                 disabled={readonly}
@@ -583,7 +627,7 @@ export default function ExamenMedicoEstudio({
               <label className="block text-xs font-bold text-slate-500 mb-2">TENSIÓN ARTERIAL (Sist / Diast)</label>
               <div className="flex items-center gap-2">
                 <input
-                  type="number"
+                  type="number" min={0} max={300}
                   value={vitalsForm.ta_sistolica || ''}
                   onChange={e => setVitalsForm(prev => ({ ...prev, ta_sistolica: e.target.value }))}
                   disabled={readonly}
@@ -592,7 +636,7 @@ export default function ExamenMedicoEstudio({
                 />
                 <span className="text-slate-400 font-bold text-xl">/</span>
                 <input
-                  type="number"
+                  type="number" min={0} max={200}
                   value={vitalsForm.ta_diastolica || ''}
                   onChange={e => setVitalsForm(prev => ({ ...prev, ta_diastolica: e.target.value }))}
                   disabled={readonly}
@@ -604,7 +648,7 @@ export default function ExamenMedicoEstudio({
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Cardiaca</label>
               <input
-                type="number"
+                type="number" min={0} max={300}
                 value={vitalsForm.fc_min || ''}
                 onChange={e => setVitalsForm(prev => ({ ...prev, fc_min: e.target.value }))}
                 disabled={readonly}
@@ -615,7 +659,7 @@ export default function ExamenMedicoEstudio({
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Temperatura</label>
               <input
-                type="number" step="0.1"
+                type="number" step="0.1" min={30} max={45}
                 value={vitalsForm.temperatura || ''}
                 onChange={e => setVitalsForm(prev => ({ ...prev, temperatura: e.target.value }))}
                 disabled={readonly}
@@ -626,7 +670,7 @@ export default function ExamenMedicoEstudio({
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Respiratoria</label>
               <input
-                type="number"
+                type="number" min={0} max={80}
                 value={vitalsForm.fr_min || ''}
                 onChange={e => setVitalsForm(prev => ({ ...prev, fr_min: e.target.value }))}
                 disabled={readonly}
@@ -637,7 +681,7 @@ export default function ExamenMedicoEstudio({
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Cintura (cm)</label>
               <input
-                type="number" step="0.1"
+                type="number" step="0.1" min={0} max={300}
                 value={vitalsForm.perimetro_cintura || ''}
                 onChange={e => setVitalsForm(prev => ({ ...prev, perimetro_cintura: e.target.value }))}
                 disabled={readonly}
@@ -648,7 +692,7 @@ export default function ExamenMedicoEstudio({
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Cadera (cm)</label>
               <input
-                type="number" step="0.1"
+                type="number" step="0.1" min={0} max={300}
                 value={vitalsForm.perimetro_cadera || ''}
                 onChange={e => setVitalsForm(prev => ({ ...prev, perimetro_cadera: e.target.value }))}
                 disabled={readonly}
@@ -1033,23 +1077,84 @@ export default function ExamenMedicoEstudio({
               Hallazgos por aparato y sistema
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {EXPLORACION_FIELDS.map(field => (
-                <div key={field.name}>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                    {field.label}
-                  </label>
-                  <input
-                    type="text"
-                    value={form[field.name] ?? ''}
-                    onChange={e => handleField(field.name, e.target.value)}
-                    disabled={readonly}
-                    placeholder="Normal"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                  />
-                </div>
-              ))}
+              {EXPLORACION_FIELDS.map(field => {
+                // IMPL-20260817-01-C2: render condicional por `kind`.
+                // - `select` → <select> con valores ZIN (DA-1).
+                // - `plantilla` → <input> con defaultValue = PLANTILLAS_EF[name],
+                //   texto libre editable (Frank: "lo copia igualito").
+                // - `text` → <input> libre (casos especiales).
+                const currentValue = form[field.name] ?? ''
+                if (field.kind === 'select' && field.values) {
+                  return (
+                    <div key={field.name}>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        {field.label}
+                      </label>
+                      <select
+                        value={currentValue}
+                        onChange={e => handleField(field.name, e.target.value)}
+                        disabled={readonly}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                      >
+                        <option value="">— Seleccionar —</option>
+                        {field.values.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                }
+                // `plantilla` o `text` → input text.
+                const isPlantilla = field.kind === 'plantilla'
+                const plantilla = isPlantilla
+                  ? PLANTILLAS_EF[field.name as PlantillaEfKey]
+                  : undefined
+                return (
+                  <div key={field.name}>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                      {field.label}
+                    </label>
+                    <input
+                      type="text"
+                      value={currentValue}
+                      onChange={e => handleField(field.name, e.target.value)}
+                      disabled={readonly}
+                      placeholder={isPlantilla ? (plantilla ?? 'Normal') : 'Normal'}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                    />
+                  </div>
+                )
+              })}
             </div>
           </div>
+
+          {/* IMPL-20260817-01-C2: acordeón EF-Especificar (txtEFEspecificar).
+              Aparece cuando alguna prueba de exploración física tiene valor POSITIVO
+              (test_adam, test_romberg, signo_bragard, prueba_finkelstein, signo_tinel,
+              prueba_phanel, prueba_lasegue). Ver SPEC §4.5 + análisis ZIN §B. */}
+          {hasPositiveEF && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <label className="block">
+                <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                  ⚠️ Especifique hallazgos positivos
+                </span>
+                <p className="text-[10px] text-amber-700 mt-0.5 mb-2">
+                  Detalle los hallazgos positivos en <code>test_adam</code>,{' '}
+                  <code>test_romberg</code>, <code>signo_bragard</code>,{' '}
+                  <code>prueba_finkelstein</code>, <code>signo_tinel</code>,{' '}
+                  <code>prueba_phanel</code>, <code>prueba_lasegue</code>.
+                </p>
+                <textarea
+                  rows={3}
+                  value={form.especifique_positivos ?? ''}
+                  onChange={e => handleField('especifique_positivos', e.target.value)}
+                  disabled={readonly}
+                  placeholder="Detalle los hallazgos positivos observados..."
+                  className="w-full bg-white border border-amber-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-amber-500 outline-none disabled:opacity-60"
+                />
+              </label>
+            </div>
+          )}
 
           {/* Guardar borrador desde exploración */}
           {!readonly && (
@@ -1109,13 +1214,43 @@ export default function ExamenMedicoEstudio({
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Resumen Clínico por Sistema</p>
             <div className="grid grid-cols-2 gap-3">
-                {RESUMEN_CLINICO_FIELDS.map(([field, label]) => (
-                <div key={field}>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
-                  <input type="text" value={form[field] ?? ''} onChange={e => handleField(field, e.target.value)} disabled={readonly}
-                    className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60" />
-                </div>
-              ))}
+                {RESUMEN_CLINICO_FIELDS.map(([field, label]) => {
+                  // IMPL-20260817-01-C2: estado_nutricional + salud_bucal
+                  // son ZIN combos (DA-1). Los otros 2 campos siguen text.
+                  const isEstadoNutricional = field === 'estado_nutricional'
+                  const isSaludBucal = field === 'salud_bucal'
+                  const comboValues = isEstadoNutricional
+                    ? ESTADO_NUTRICIONAL_VALUES
+                    : isSaludBucal
+                    ? SALUD_BUCAL_VALUES
+                    : null
+                  return (
+                  <div key={field}>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
+                    {comboValues ? (
+                      <select
+                        value={form[field] ?? ''}
+                        onChange={e => handleField(field, e.target.value)}
+                        disabled={readonly}
+                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                      >
+                        <option value="">—</option>
+                        {comboValues.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={form[field] ?? ''}
+                        onChange={e => handleField(field, e.target.value)}
+                        disabled={readonly}
+                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                      />
+                    )}
+                  </div>
+                  )
+                })}
             </div>
           </div>
 

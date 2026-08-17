@@ -21,6 +21,11 @@
  * **Precarga:** la hace el padre (`ExamenMedicoEstudio`) en cascada
  * (snapshot → portal → historial maestro) y la pasa resuelta como `value`.
  *
+ * IMPL-20260817-02 (FIX L2 QA-20260817-01-C2): el input "Especifique" del
+ * campo `otras` (heredo-familiares) ahora lee/escribe el state key
+ * INDEPENDIENTE `heredo_familiares.otras_especifique`. Antes compartía
+ * `otras` con el select, causando auto-destrucción al primer carácter.
+ *
  * @id IMPL-20260809-02
  * @spec ARCH-20260809-01 v2 — sub-pestaña "Antecedentes" dentro de Examen Médico
  */
@@ -40,6 +45,10 @@ import {
   getPatologicosAllFields,
 } from '@/lib/antecedentes-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
+import {
+  HEREDOFAMILIARES_VALUES,
+  HEREDOFAMILIARES_MENTALES_VALUES,
+} from '@/schemas/clinical/exam.schema'
 
 interface AntecedentesCapturaProps {
   /** Estado actual del snapshot (resuelto por el padre). Componente controlado. */
@@ -130,7 +139,8 @@ function buildEmptySections(): {
   }
   const hf: Record<string, string> = {
     diabetes: '', has: '', epilepsia: '', cardiopatia: '',
-    renales: '', asma: '', cancer: '', mentales: '', otras: '',
+    renales: '', asma: '', cancer: '', mentales: '',
+    otras: '', otras_especifique: '',
   }
   const np: Record<string, string> = {
     alcohol: 'NEGADO', alcohol_edad_comienzo: '', alcohol_frecuencia: '',
@@ -408,23 +418,49 @@ export function AntecedentesCaptura({
             Heredo-Familiares
           </legend>
           <div className="space-y-3 mt-2">
-            {HEREDOFAMILIARES_DESCRIPCIONES.map(item => (
-              <FieldRow
-                key={item.field}
-                label={item.label}
-                help={item.help}
-                modified={modified.has(`heredo_familiares.${item.field}`)}
-              >
-                <input
-                  type="text"
-                  value={form.heredo_familiares[item.field] ?? ''}
-                  onChange={e => setField('heredo_familiares', item.field, e.target.value)}
-                  disabled={readonly}
-                  placeholder="Relación familiar (ej: PADRE)"
-                  className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                />
-              </FieldRow>
-            ))}
+            {HEREDOFAMILIARES_DESCRIPCIONES.map(item => {
+              // IMPL-20260817-01-C2: 7 campos con HEREDOFAMILIARES_VALUES (8 opciones),
+              // `mentales` con HEREDOFAMILIARES_MENTALES_VALUES (3 opciones),
+              // `otras` con combo + input "Especifique" condicional. DA-6 espejo AntecedentesForm.
+              const isMentales = item.field === 'mentales'
+              const isOtras = item.field === 'otras'
+              const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
+              const currentValue = form.heredo_familiares[item.field] ?? ''
+              return (
+                <FieldRow
+                  key={item.field}
+                  label={item.label}
+                  help={item.help}
+                  modified={modified.has(`heredo_familiares.${item.field}`)}
+                >
+                  <select
+                    value={currentValue}
+                    onChange={e => setField('heredo_familiares', item.field, e.target.value)}
+                    disabled={readonly}
+                    className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                  >
+                    <option value="">—</option>
+                    {zinValues.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                  {isOtras && currentValue === 'OTROS' && (
+                    // IMPL-20260817-02 (FIX L2): el input lee/escribe
+                    // `form.heredo_familiares.otras_especifique` (state key
+                    // independiente del select). Antes compartía `item.field`
+                    // y se auto-destruía al tipear.
+                    <input
+                      type="text"
+                      value={form.heredo_familiares.otras_especifique ?? ''}
+                      onChange={e => setField('heredo_familiares', 'otras_especifique', e.target.value)}
+                      disabled={readonly}
+                      placeholder="Especifique (ej: TÍO PATERNO)"
+                      className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    />
+                  )}
+                </FieldRow>
+              )
+            })}
           </div>
         </fieldset>
       </div>
