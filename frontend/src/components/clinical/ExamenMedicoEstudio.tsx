@@ -319,6 +319,19 @@ export default function ExamenMedicoEstudio({
   const hasPhysicalExam = Object.keys(physicalExamData).some(k => physicalExamData[k] !== null && physicalExamData[k] !== '')
   const hasAptitud = !!physicalExamData.aptitud || !!physicalExamData.impresion_diagnostica
   const hasM1 = Object.entries(modulo1).some(([, v]) => v && v.trim() !== '' && v !== 'NEGADO' && v !== 'NO')
+
+  // IMPL-20260817-01-C2: ¿algún campo de exploración física tiene valor POSITIVO?
+  // Habilita el acordeón "Especifique hallazgos positivos" (txtEFEspecificar).
+  // Ver SPEC §4.5 + análisis ZIN §B.
+  const POSITIVE_EF_FIELDS = [
+    'test_adam', 'test_romberg', 'signo_bragard',
+    'prueba_finkelstein', 'signo_tinel', 'prueba_phanel', 'prueba_lasegue',
+  ] as const
+  const hasPositiveEF = POSITIVE_EF_FIELDS.some(f => {
+    const v = form[f]
+    return typeof v === 'string' && v.toUpperCase().includes('POSITIVO')
+  })
+
   const longitudinalReference = prefilledData ?? longitudinalData ?? null
   const hasLongitudinalReference = !!longitudinalReference && Object.keys(longitudinalReference).length > 0
   const longitudinalReferenceLabel = prefilledData
@@ -1114,6 +1127,34 @@ export default function ExamenMedicoEstudio({
               })}
             </div>
           </div>
+
+          {/* IMPL-20260817-01-C2: acordeón EF-Especificar (txtEFEspecificar).
+              Aparece cuando alguna prueba de exploración física tiene valor POSITIVO
+              (test_adam, test_romberg, signo_bragard, prueba_finkelstein, signo_tinel,
+              prueba_phanel, prueba_lasegue). Ver SPEC §4.5 + análisis ZIN §B. */}
+          {hasPositiveEF && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <label className="block">
+                <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                  ⚠️ Especifique hallazgos positivos
+                </span>
+                <p className="text-[10px] text-amber-700 mt-0.5 mb-2">
+                  Detalle los hallazgos positivos en <code>test_adam</code>,{' '}
+                  <code>test_romberg</code>, <code>signo_bragard</code>,{' '}
+                  <code>prueba_finkelstein</code>, <code>signo_tinel</code>,{' '}
+                  <code>prueba_phanel</code>, <code>prueba_lasegue</code>.
+                </p>
+                <textarea
+                  rows={3}
+                  value={form.especifique_positivos ?? ''}
+                  onChange={e => handleField('especifique_positivos', e.target.value)}
+                  disabled={readonly}
+                  placeholder="Detalle los hallazgos positivos observados..."
+                  className="w-full bg-white border border-amber-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-amber-500 outline-none disabled:opacity-60"
+                />
+              </label>
+            </div>
+          )}
 
           {/* Guardar borrador desde exploración */}
           {!readonly && (

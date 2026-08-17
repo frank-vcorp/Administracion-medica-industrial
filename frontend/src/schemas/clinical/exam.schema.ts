@@ -354,7 +354,10 @@ export const ExploracionFisicaSchema = z.object({
   prueba_phanel: tolerantZinEnum(PRUEBA_LATERALIDAD_VALUES),
   prueba_lasegue: tolerantZinEnum(PRUEBA_LATERALIDAD_VALUES),
   presencia_quiste_sinovial: tolerantZinEnum(PRESENCIA_QUISTE_SINOVIAL_VALUES),
-  especificar_quiste: cleanString
+  especificar_quiste: cleanString,
+  // IMPL-20260817-01-C2: campo opcional para acordeón "Especifique hallazgos
+  // positivos" (ZIN: txtEFEspecificar). Aparece cuando alguna prueba = POSITIVO.
+  especifique_positivos: cleanString,
 });
 
 // ----------------------------------------------------------------------
