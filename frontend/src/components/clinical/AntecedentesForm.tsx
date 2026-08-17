@@ -4,6 +4,12 @@
  * ARCH-20260326-06 — Editor Maestro Longitudinal del Historial Clínico
  * Convierte el formulario parcial en el editor maestro longitudinal con 5 secciones.
  * @backup context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
+ *
+ * IMPL-20260817-01-C2 (ARCH-20260817-01 corte 2): heredo-familiares adoptan
+ * los catálogos ZIN (8 opciones para los 7 campos canónicos + 3 opciones para
+ * `mentales`). El campo `otras` muestra un input "Especifique" condicional
+ * cuando value === 'OTROS'. DA-1: schema sigue tolerante — legacy libre
+ * parsea sin error (ver SPEC §4.4).
  */
 import React, { useState, useEffect } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
@@ -17,6 +23,10 @@ import {
   TURNO_OPTIONS,
   ESTADO_CIVIL_OPTIONS,
 } from '@/lib/antecedentes-fields'
+import {
+  HEREDOFAMILIARES_VALUES,
+  HEREDOFAMILIARES_MENTALES_VALUES,
+} from '@/schemas/clinical/exam.schema'
 
 interface AntecedentesFormProps {
   workerId: string
@@ -463,7 +473,7 @@ export function AntecedentesForm({
             <p className="text-sm text-gray-600 mb-4">
               ℹ️ Indique familiares con antecedentes de estas enfermedades (ej: &quot;PADRE&quot;, &quot;ABUELO&quot;, &quot;ABUELA MATERNA&quot;, etc.)
               <br />
-              <span className="text-gray-500">Auto: si no recuerda el familiar exacto, deje el campo vacío. Solo anote lo que recuerde con seguridad.</span>
+              <span className="text-gray-500">Auto: si no recuerda el familiar exacto, deje el campo en blanco. Solo anote lo que recuerde con seguridad.</span>
             </p>
 
             <fieldset className="border border-gray-200 rounded-lg p-4">
@@ -471,21 +481,43 @@ export function AntecedentesForm({
                 Antecedentes en Familia
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {HEREDOFAMILIARES_DESCRIPCIONES.map((item) => (
-                  <div key={item.field}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {item.label}
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
-                    <input
-                      type="text"
-                      value={heredofamiliares[item.field as keyof typeof heredofamiliares]}
-                      onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
-                      placeholder="Relación familiar (ej: PADRE)"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                ))}
+                {HEREDOFAMILIARES_DESCRIPCIONES.map((item) => {
+                  // IMPL-20260817-01-C2: 7 campos con catálogo ZIN de 8 opciones
+                  // (NEGADOS/PADRE/MADRE/AMBOS/HERMANOS/AB PATERNO/AB MATERNO/OTROS),
+                  // `mentales` con SI/NO/NO APLICA, `otras` con combo + input "Especifique"
+                  // condicional cuando value === 'OTROS'. Ver SPEC §4.4.
+                  const isMentales = item.field === 'mentales'
+                  const isOtras = item.field === 'otras'
+                  const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
+                  const currentValue = heredofamiliares[item.field as keyof typeof heredofamiliares] ?? ''
+                  return (
+                    <div key={item.field}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {item.label}
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">{item.help}</p>
+                      <select
+                        value={currentValue}
+                        onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">— Seleccionar —</option>
+                        {zinValues.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                      {isOtras && currentValue === 'OTROS' && (
+                        <input
+                          type="text"
+                          value={currentValue}
+                          onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
+                          placeholder="Especifique (ej: TÍO PATERNO)"
+                          className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </fieldset>
           </div>
