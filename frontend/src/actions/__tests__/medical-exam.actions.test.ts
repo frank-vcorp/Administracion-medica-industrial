@@ -49,6 +49,9 @@ import {
   DatosPersonalesModulo1Schema,
   HeredoFamiliaresSchema,
   NoPatologicosSchema,
+  PatologicosSchema,
+  DetalleTripleSchema,
+  PatologiaConDetalleSchema,
   GRUPO_RH_VALUES,
 } from '@/schemas/clinical/history.schema'
 
@@ -598,5 +601,160 @@ describe('IMPL-20260817-03 grupo_y_rh (ZIN combo con 9 valores)', () => {
       const parsed = NoPatologicosSchema.parse({ grupo_y_rh: v })
       expect(parsed.grupo_y_rh).toBe(v)
     })
+  })
+})
+
+// ===========================================================================
+// IMPL-20260817-04 — Acordeón Sí/Negado/No Aplica + 3 campos por enfermedad
+// del `PatologicosSchema` (junta AMI 10/ago, Erika, línea 285).
+//
+// DA-1 (tolerancia legacy): registros persistidos como `{ diabetes: 'SI' }`
+// siguen parseando OK gracias al union+transform de
+// `PatologiaConDetalleSchema`.
+// ===========================================================================
+describe('IMPL-20260817-04 acordeón Sí/Negado/No Aplica + 3 campos (PatologicosSchema)', () => {
+  it('33. PatologicosSchema acepta estado legacy string simple ("SI") y normaliza a {estado, detalle}', () => {
+    const legacy = { diabetes: 'SI' as const }
+    const parsed = PatologicosSchema.parse(legacy)
+    expect(parsed.diabetes.estado).toBe('SI')
+    expect(parsed.diabetes.detalle).toBeUndefined()
+  })
+
+  it('34. PatologicosSchema acepta estado legacy "NEGADO" / "NO APLICA"', () => {
+    const r1 = PatologicosSchema.parse({ hernias: 'NEGADO' })
+    expect(r1.hernias.estado).toBe('NEGADO')
+    expect(r1.hernias.detalle).toBeUndefined()
+
+    const r2 = PatologicosSchema.parse({ alergias: 'NO APLICA' })
+    expect(r2.alergias.estado).toBe('NO APLICA')
+    expect(r2.alergias.detalle).toBeUndefined()
+  })
+
+  it('35. PatologicosSchema acepta estado nuevo con detalle completo', () => {
+    const nuevo = {
+      diabetes: {
+        estado: 'SI' as const,
+        detalle: {
+          desde_cuando: '15 años',
+          tratamiento: 'Metformina 500mg cada 24h',
+          observaciones: 'HbA1c 6.5%, sin complicaciones',
+        },
+      },
+    }
+    const parsed = PatologicosSchema.parse(nuevo)
+    expect(parsed.diabetes.estado).toBe('SI')
+    expect(parsed.diabetes.detalle?.desde_cuando).toBe('15 años')
+    expect(parsed.diabetes.detalle?.tratamiento).toBe('Metformina 500mg cada 24h')
+    expect(parsed.diabetes.detalle?.observaciones).toBe('HbA1c 6.5%, sin complicaciones')
+  })
+
+  it('36. PatologicosSchema: detalle es opcional cuando estado es NEGADO/NO APLICA', () => {
+    const r1 = PatologicosSchema.parse({ cardiopatias: { estado: 'NEGADO' } })
+    expect(r1.cardiopatias.detalle).toBeUndefined()
+
+    const r2 = PatologicosSchema.parse({ bronquitis: { estado: 'NO APLICA' } })
+    expect(r2.bronquitis.detalle).toBeUndefined()
+  })
+
+  it('37. PatologicosSchema: payload completo cubre las 31+1 enfermedades', () => {
+    // El schema declara 33 enfermedades (31 según handoff — la diferencia es
+    // histórica). Verificamos que el payload con todos los campos se acepta
+    // y conserva forma canónica.
+    const allKeys = [
+      'diabetes','hernias','epilepsia','alergias','cardiopatias','bronquitis',
+      'ginecologicos','varices','tuberculosis','endocrinopatias','colitis',
+      'tifoidea','has','hemorroides','vertigo','parotiditis','dermatitis',
+      'pat_c_vertebral','cirugias','hepatitis','exantematicas','gastritis',
+      'renales','asma','cancer','traumatismos_craneales','desmayos',
+      'fracturas','neumonias','enf_trans_sexual','transfusiones','psiquiatricas',
+      'migrana','otras',
+    ] as const
+
+    const payload: Record<string, unknown> = {}
+    for (const k of allKeys) payload[k] = 'NEGADO'
+
+    const parsed = PatologicosSchema.parse(payload)
+    expect(Object.keys(parsed).sort()).toEqual([...allKeys].sort())
+    for (const k of allKeys) {
+      expect(parsed[k as keyof typeof parsed].estado).toBe('NEGADO')
+    }
+  })
+
+  it('38. PatologicosSchema: payload mixto legacy + nuevo es coherente', () => {
+    const mixto = {
+      diabetes: 'SI',                                 // legacy
+      hernias: { estado: 'NEGADO' },                  // nuevo sin detalle
+      epilepsia: {                                     // nuevo con detalle
+        estado: 'SI',
+        detalle: { desde_cuando: '5 años', tratamiento: 'Carbamazepina' },
+      },
+      alergias: 'NO APLICA',                          // legacy
+    }
+    const parsed = PatologicosSchema.parse(mixto)
+    expect(parsed.diabetes.estado).toBe('SI')
+    expect(parsed.diabetes.detalle).toBeUndefined()
+    expect(parsed.hernias.estado).toBe('NEGADO')
+    expect(parsed.hernias.detalle).toBeUndefined()
+    expect(parsed.epilepsia.estado).toBe('SI')
+    expect(parsed.epilepsia.detalle?.desde_cuando).toBe('5 años')
+    expect(parsed.epilepsia.detalle?.tratamiento).toBe('Carbamazepina')
+    expect(parsed.epilepsia.detalle?.observaciones).toBe('') // default
+    expect(parsed.alergias.estado).toBe('NO APLICA')
+  })
+
+  it('39. DetalleTripleSchema: limites max 200/500/1500 chars', () => {
+    const ok = DetalleTripleSchema.parse({
+      desde_cuando:  'a'.repeat(200),
+      tratamiento:   'b'.repeat(500),
+      observaciones: 'c'.repeat(1500),
+    })
+    expect(ok.desde_cuando).toHaveLength(200)
+    expect(ok.tratamiento).toHaveLength(500)
+    expect(ok.observaciones).toHaveLength(1500)
+
+    expect(() => DetalleTripleSchema.parse({
+      desde_cuando:  'a'.repeat(201),
+      tratamiento:   'b'.repeat(500),
+      observaciones: 'c'.repeat(1500),
+    })).toThrow()
+
+    expect(() => DetalleTripleSchema.parse({
+      desde_cuando:  'a'.repeat(200),
+      tratamiento:   'b'.repeat(501),
+      observaciones: 'c'.repeat(1500),
+    })).toThrow()
+
+    expect(() => DetalleTripleSchema.parse({
+      desde_cuando:  'a'.repeat(200),
+      tratamiento:   'b'.repeat(500),
+      observaciones: 'c'.repeat(1501),
+    })).toThrow()
+  })
+
+  it('40. PatologiaConDetalleSchema: valor string arbitrario se preserva (DA-1 tolerancia legacy)', () => {
+    // El union acepta CUALQUIER string para mantener compat con BD legacy
+    // (puede haber strings no canónicos por typos pre-UI). El schema los
+    // acepta sin error — la responsabilidad de validar el catálogo es del
+    // UI (`<select>` con SNA_OPTIONS).
+    const parsed = PatologiaConDetalleSchema.parse('garbage')
+    expect(parsed.estado).toBe('garbage')
+    expect(parsed.detalle).toBeUndefined()
+  })
+
+  it('41. PatologicosSchema: el campo legacy "especifique" se eliminó del schema', () => {
+    // Verifica que el schema actual NO expone el campo legacy `especifique`.
+    // Si se reintroduce por error, este test fallará.
+    const payload = { diabetes: 'SI', especifique: 'algo' } as unknown
+    const parsed = PatologicosSchema.parse(payload) as Record<string, unknown>
+    // Zod .strip() elimina claves desconocidas; el campo legacy no sobrevive.
+    expect(parsed.especifique).toBeUndefined()
+    expect(parsed.diabetes).toEqual({ estado: 'SI', detalle: undefined })
+  })
+
+  it('42. SiNegado ampliado: NO APLICA es válido en NoPatologicosSchema (back-compat)', () => {
+    // La ampliación del enum `SiNegado` a `['NEGADO', 'SI', 'NO APLICA']` no
+    // rompe NoPatologicosSchema (donde `SiNegado` también se usa). DA-1.
+    const r = NoPatologicosSchema.parse({ tatuajes: 'NO APLICA' })
+    expect(r.tatuajes).toBe('NO APLICA')
   })
 })

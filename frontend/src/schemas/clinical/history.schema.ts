@@ -1,8 +1,50 @@
 import { z } from 'zod';
 import { tolerantZinEnum } from './zin.helper';
 
-const SiNegado = z.enum(['NEGADO', 'SI']).default('NEGADO');
+const SiNegado = z.enum(['NEGADO', 'SI', 'NO APLICA']).default('NEGADO');
 const cleanStr  = z.string().trim().max(500).optional();
+
+// ----------------------------------------------------------------------
+// IMPL-20260817-04 (junta AMI 10/ago, línea 285 — Erika): acordeón Sí/Negado/
+// No Aplica + 3 campos condicionales (desde_cuando / tratamiento /
+// observaciones) para cada enfermedad del PatologicosSchema.
+// DA-1 (tolerancia legacy): registros persistidos como `{ diabetes: 'SI' }`
+// siguen parseando OK gracias al union+transform que normaliza el string
+// a la nueva forma `{ estado, detalle }`.
+// ----------------------------------------------------------------------
+export const DetalleTripleSchema = z.object({
+  desde_cuando:  z.string().trim().max(200).optional().default(''),
+  tratamiento:   z.string().trim().max(500).optional().default(''),
+  observaciones: z.string().trim().max(1500).optional().default(''),
+})
+export type DetalleTriple = z.infer<typeof DetalleTripleSchema>
+
+/**
+ * Una enfermedad patológica con estado Sí/Negado/No Aplica + detalle
+ * condicional. Acepta el formato legacy (string suelto) Y el nuevo
+ * (objeto {estado, detalle}); el union+transform normaliza ambos al
+ * shape canónico.
+ *
+ * Default = `{ estado: 'NEGADO', detalle: undefined }` (regla de negocio
+ * "Prellenado en negado" del PatologicosSchema — IMPL-20260817-04).
+ * Los campos sin enviar (al persistir parcialmente o rehidratar legacy)
+ * caen al default en lugar de fallar la validación.
+ */
+export const PatologiaConDetalleSchema = z
+  .union([
+    z.string(),
+    z.object({
+      estado:  SiNegado,
+      detalle: DetalleTripleSchema.optional(),
+    }),
+  ])
+  .transform((v) =>
+    typeof v === 'string'
+      ? { estado: v as 'NEGADO' | 'SI' | 'NO APLICA', detalle: undefined }
+      : v
+  )
+  .default({ estado: 'NEGADO', detalle: undefined })
+export type PatologiaConDetalle = z.infer<typeof PatologiaConDetalleSchema>
 
 // ----------------------------------------------------------------------
 // IMPL-20260817-03 (ARCH-20260817-01 extensión puntual): catálogo ZIN para
@@ -123,47 +165,52 @@ export const NoPatologicosSchema = z.object({
 
 // ----------------------------------------------------------------------
 // 5. ANTECEDENTES PERSONALES PATOLÓGICOS (Imagen 3)
+// IMPL-20260817-04: acordeón Sí/Negado/No Aplica + 3 campos condicionales
+// (desde_cuando / tratamiento / observaciones). DA-1: el union+transform
+// de `PatologiaConDetalleSchema` acepta el formato legacy `{ diabetes: 'SI' }`
+// que actualmente está persistido en `physicalExamData`.
+// El campo legacy top-level `especifique` se elimina: su contenido se captura
+// ahora en `otras.detalle.observaciones`.
 // ----------------------------------------------------------------------
 // Todo prellenado en NEGADO por la regla: "Prellenado en negado"
 export const PatologicosSchema = z.object({
-  diabetes: SiNegado,
-  hernias: SiNegado,
-  epilepsia: SiNegado,
-  alergias: SiNegado,
-  cardiopatias: SiNegado,
-  bronquitis: SiNegado,
-  ginecologicos: SiNegado,
-  varices: SiNegado,
-  tuberculosis: SiNegado,
-  endocrinopatias: SiNegado,
-  colitis: SiNegado,
-  
-  tifoidea: SiNegado,
-  has: SiNegado, // Hipertensión
-  hemorroides: SiNegado,
-  vertigo: SiNegado,
-  parotiditis: SiNegado,
-  dermatitis: SiNegado,
-  pat_c_vertebral: SiNegado, // Patología Columna Vertebral
-  cirugias: SiNegado,
-  hepatitis: SiNegado,
-  exantematicas: SiNegado,
-  gastritis: SiNegado,
-  
-  renales: SiNegado,
-  asma: SiNegado,
-  cancer: SiNegado,
-  traumatismos_craneales: SiNegado,
-  desmayos: SiNegado,
-  fracturas: SiNegado,
-  neumonias: SiNegado,
-  enf_trans_sexual: SiNegado,
-  transfusiones: SiNegado,
-  psiquiatricas: SiNegado,
-  migrana: SiNegado,
+  diabetes:              PatologiaConDetalleSchema,
+  hernias:               PatologiaConDetalleSchema,
+  epilepsia:             PatologiaConDetalleSchema,
+  alergias:              PatologiaConDetalleSchema,
+  cardiopatias:          PatologiaConDetalleSchema,
+  bronquitis:            PatologiaConDetalleSchema,
+  ginecologicos:         PatologiaConDetalleSchema,
+  varices:               PatologiaConDetalleSchema,
+  tuberculosis:          PatologiaConDetalleSchema,
+  endocrinopatias:       PatologiaConDetalleSchema,
+  colitis:               PatologiaConDetalleSchema,
 
-  otras: z.string().trim().max(1000).optional(),
-  especifique: z.string().trim().max(1000).optional()
+  tifoidea:              PatologiaConDetalleSchema,
+  has:                   PatologiaConDetalleSchema, // Hipertensión
+  hemorroides:           PatologiaConDetalleSchema,
+  vertigo:               PatologiaConDetalleSchema,
+  parotiditis:           PatologiaConDetalleSchema,
+  dermatitis:            PatologiaConDetalleSchema,
+  pat_c_vertebral:       PatologiaConDetalleSchema, // Patología Columna Vertebral
+  cirugias:              PatologiaConDetalleSchema,
+  hepatitis:             PatologiaConDetalleSchema,
+  exantematicas:         PatologiaConDetalleSchema,
+  gastritis:             PatologiaConDetalleSchema,
+
+  renales:               PatologiaConDetalleSchema,
+  asma:                  PatologiaConDetalleSchema,
+  cancer:                PatologiaConDetalleSchema,
+  traumatismos_craneales:PatologiaConDetalleSchema,
+  desmayos:              PatologiaConDetalleSchema,
+  fracturas:             PatologiaConDetalleSchema,
+  neumonias:             PatologiaConDetalleSchema,
+  enf_trans_sexual:      PatologiaConDetalleSchema,
+  transfusiones:         PatologiaConDetalleSchema,
+  psiquiatricas:         PatologiaConDetalleSchema,
+  migrana:               PatologiaConDetalleSchema,
+
+  otras:                 PatologiaConDetalleSchema,
 });
 
 // ----------------------------------------------------------------------

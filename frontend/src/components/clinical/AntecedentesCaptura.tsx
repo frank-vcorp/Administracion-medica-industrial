@@ -26,6 +26,14 @@
  * INDEPENDIENTE `heredo_familiares.otras_especifique`. Antes compartía
  * `otras` con el select, causando auto-destrucción al primer carácter.
  *
+ * IMPL-20260817-04 (junta AMI 10/ago, Erika, línea 285): acordeón Sí/Negado/
+ * No Aplica + 3 campos condicionales (desde_cuando / tratamiento /
+ * observaciones) para cada enfermedad del `PatologicosSchema`. El campo
+ * legacy top-level `especifique` se elimina; su contenido se captura ahora
+ * en `otras.detalle.observaciones`. DA-1: la hidratación reconoce tanto el
+ * formato legacy (`{ diabetes: 'SI' }`) como el nuevo (`{ diabetes: { estado,
+ * detalle } }`).
+ *
  * @id IMPL-20260809-02
  * @spec ARCH-20260809-01 v2 — sub-pestaña "Antecedentes" dentro de Examen Médico
  */
@@ -49,7 +57,10 @@ import {
   HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
 } from '@/schemas/clinical/exam.schema'
-import { GRUPO_RH_VALUES } from '@/schemas/clinical/history.schema'
+import {
+  GRUPO_RH_VALUES,
+  type DetalleTriple,
+} from '@/schemas/clinical/history.schema'
 
 interface AntecedentesCapturaProps {
   /** Estado actual del snapshot (resuelto por el padre). Componente controlado. */
@@ -72,6 +83,24 @@ interface AntecedentesCapturaProps {
 }
 
 type SectionKey = 'datos_personales' | 'historia_laboral' | 'heredo_familiares' | 'no_patologicos' | 'patologicos'
+
+/**
+ * IMPL-20260817-04 — opciones del acordeón Sí/Negado/No Aplica para cada
+ * enfermedad del PatologicosSchema. Se mantienen como array de literales
+ * (no `as const`) para compatibilidad con el `<select>` controlado por
+ * strings (evita `.includes` con `unknown`).
+ */
+const SNA_OPTIONS = ['NEGADO', 'SI', 'NO APLICA'] as const
+type SnaValue = (typeof SNA_OPTIONS)[number]
+
+/** Estado local de una enfermedad patológica (acordeón). */
+type PatologiaEntry = {
+  estado: SnaValue
+  detalle: DetalleTriple | undefined
+}
+
+const emptyDetalle = (): DetalleTriple => ({ desde_cuando: '', tratamiento: '', observaciones: '' })
+const emptyPatologia = (): PatologiaEntry => ({ estado: 'NEGADO', detalle: undefined })
 
 /**
  * IMPL-20260809-01 (v1, conservado en v2): claves declaradas como
@@ -121,7 +150,11 @@ function buildEmptySections(): {
   historia_laboral: Record<string, string>
   heredo_familiares: Record<string, string>
   no_patologicos: Record<string, string>
-  patologicos: Record<string, string>
+  /** IMPL-20260817-04 — el section `patologicos` ahora usa objetos
+   * `{ estado, detalle }` por enfermedad (acordeón Sí/Negado/No Aplica +
+   * 3 campos). La forma legacy `{ diabetes: 'SI' }` se normaliza al cargar
+   * (ver `sectionsFromValue`). */
+  patologicos: Record<string, PatologiaEntry>
 } {
   const dp: Record<string, string> = {
     puesto_actual: '', area_departamento: '', turno: '',
@@ -154,10 +187,13 @@ function buildEmptySections(): {
     alimentacion: 'BUENA', grupo_y_rh: 'DESCONOCE',
     tatuajes: 'NEGADO', tatuajes_especifique: '',
   }
-  const pt: Record<string, string> = {}
-  for (const f of getPatologicosAllFields()) pt[f] = 'NEGADO'
-  pt.otras = ''
-  pt.especifique = ''
+  // IMPL-20260817-04: cada enfermedad (incl. `otras`) inicializa como
+  // acordeón colapsado `{ estado: 'NEGADO', detalle: undefined }`. El
+  // campo legacy top-level `especifique` se elimina: su contenido se
+  // captura ahora en `otras.detalle.observaciones`.
+  const pt: Record<string, PatologiaEntry> = {}
+  for (const f of getPatologicosAllFields()) pt[f] = emptyPatologia()
+  pt.otras = emptyPatologia()
   return {
     datos_personales: dp,
     historia_laboral: hl,
@@ -171,19 +207,58 @@ function isPlainRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v)
 }
 
+function isSnaValue(v: unknown): v is SnaValue {
+  return v === 'NEGADO' || v === 'SI' || v === 'NO APLICA'
+}
+
+/**
+ * Normaliza un valor desconocido de una enfermedad patológica al shape
+ * `PatologiaEntry`. Acepta:
+ *  - String legacy (`'SI'`, `'NEGADO'`, `'NO APLICA'`).
+ *  - Objeto nuevo (`{ estado, detalle }`) — `detalle` opcional.
+ *  - `null` / `undefined` → entrada vacía `{ estado: 'NEGADO', detalle: undefined }`.
+ */
+function coercePatologiaEntry(v: unknown): PatologiaEntry {
+  if (typeof v === 'string') {
+    const s = v.trim().toUpperCase()
+    if (isSnaValue(s)) return { estado: s, detalle: undefined }
+    // Strings legacy no canónicos (p.ej. typos): conservar como 'NEGADO' para
+    // no romper renders. El schema Zod puede quejarse, pero la UI debe
+    // seguir operativa.
+    return { estado: 'NEGADO', detalle: undefined }
+  }
+  if (isPlainRecord(v) && isSnaValue(v.estado)) {
+    const detalle = isPlainRecord(v.detalle)
+      ? {
+          desde_cuando:  typeof v.detalle.desde_cuando  === 'string' ? v.detalle.desde_cuando  : '',
+          tratamiento:   typeof v.detalle.tratamiento   === 'string' ? v.detalle.tratamiento   : '',
+          observaciones: typeof v.detalle.observaciones === 'string' ? v.detalle.observaciones : '',
+        }
+      : undefined
+    return { estado: v.estado, detalle }
+  }
+  return emptyPatologia()
+}
+
 /** Inicializa el estado local de edición desde `value` (objeto resolvido por el padre). */
 function sectionsFromValue(value: Record<string, unknown>): {
   datos_personales: Record<string, string>
   historia_laboral: Record<string, string>
   heredo_familiares: Record<string, string>
   no_patologicos: Record<string, string>
-  patologicos: Record<string, string>
+  patologicos: Record<string, PatologiaEntry>
 } {
   const empty = buildEmptySections()
   for (const key of Object.keys(empty) as SectionKey[]) {
     const section = value[key]
     if (!isPlainRecord(section)) continue
     for (const [k, v] of Object.entries(section)) {
+      if (key === 'patologicos') {
+        // IMPL-20260817-04 — el section patologicos maneja la forma objeto;
+        // `coercePatologiaEntry` acepta strings legacy o el nuevo objeto.
+        empty.patologicos[k] = coercePatologiaEntry(v)
+        continue
+      }
       if (typeof v === 'string') empty[key][k] = v
       else if (typeof v === 'boolean') empty[key][k] = v ? 'true' : 'false'
       else if (v === null || v === undefined) empty[key][k] = ''
@@ -219,6 +294,47 @@ export function AntecedentesCaptura({
       next.add(key)
       return next
     })
+  }
+
+  /**
+   * IMPL-20260817-04 — actualiza una enfermedad patológica (acordeón
+   * Sí/Negado/No Aplica + 3 campos). Si el nuevo estado es `SI`,
+   * materializa un `detalle` por defecto para que los inputs aparezcan
+   * ya visibles. Si pasa a `NEGADO` / `NO APLICA`, colapsa el detalle
+   * (lo deja en `undefined` para ahorrar payload).
+   */
+  function updatePatologia(field: string, patch: Partial<PatologiaEntry>) {
+    const current = form.patologicos[field] ?? emptyPatologia()
+    const next: PatologiaEntry = {
+      estado: patch.estado ?? current.estado,
+      detalle:
+        patch.estado !== undefined
+          ? patch.estado === 'SI'
+            ? (current.detalle ?? emptyDetalle())
+            : undefined
+          : patch.detalle !== undefined
+            ? patch.detalle
+            : current.detalle,
+    }
+    const nextForm = {
+      ...form,
+      patologicos: { ...form.patologicos, [field]: next },
+    }
+    setForm(nextForm)
+    markModified(`patologicos.${field}`)
+    const payload: AntecedentesCaptura = {
+      datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
+      historia_laboral: { ...nextForm.historia_laboral },
+      heredo_familiares: { ...nextForm.heredo_familiares },
+      no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
+      patologicos: { ...nextForm.patologicos },
+    } as unknown as AntecedentesCaptura
+    for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
+      const v = nextForm.historia_laboral[exp.key]
+      ;(payload.historia_laboral as Record<string, unknown>)[exp.key] =
+        v === 'true' || v === 'SI'
+    }
+    onChange(payload)
   }
 
   function setField(section: SectionKey, field: string, rawValue: string) {
@@ -565,6 +681,7 @@ export function AntecedentesCaptura({
         </legend>
         <p className="text-[10px] text-slate-500 mt-1 mb-3">
           Por defecto todos los campos están en NEGADO. Cambiar solo si aplica.
+          Al marcar <strong>SÍ</strong> aparecen 3 inputs: desde cuándo, tratamiento y observaciones.
         </p>
         {([
           ['endocrino',      'Enfermedades Endocrino-Metabólicas'],
@@ -575,37 +692,93 @@ export function AntecedentesCaptura({
         ] as const).map(([group, title]) => (
           <div key={group} className="mb-4 last:mb-0">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">{title}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-              {PATOLOGICOS_DESCRIPCIONES[group].map(item => (
-                <div key={item.field}>
-                  <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
-                  <p className="text-[9px] text-slate-400 mb-1">{item.help}</p>
-                  <select
-                    value={form.patologicos[item.field] || 'NEGADO'}
-                    onChange={e => setField('patologicos', item.field, e.target.value)}
-                    disabled={readonly}
-                    className="w-full text-xs px-2 py-1 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                  >
-                    <option value="NEGADO">NEGADO</option>
-                    <option value="SI">SÍ</option>
-                  </select>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {PATOLOGICOS_DESCRIPCIONES[group].map(item => {
+                // IMPL-20260817-04 — acordeón Sí/Negado/No Aplica + 3 campos
+                // condicionales (desde_cuando / tratamiento / observaciones).
+                // El campo legacy `especifique` se eliminó: se captura ahora
+                // en `otras.detalle.observaciones`.
+                const entry = form.patologicos[item.field] ?? emptyPatologia()
+                const showDetail = entry.estado === 'SI'
+                const detalle = entry.detalle ?? emptyDetalle()
+                return (
+                  <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
+                    <p className="text-[9px] text-slate-400 mb-1">{item.help}</p>
+                    <select
+                      value={entry.estado}
+                      onChange={e => updatePatologia(item.field, { estado: e.target.value as SnaValue })}
+                      disabled={readonly}
+                      className={`w-full text-xs px-2 py-1 border rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60 ${
+                        entry.estado === 'SI'
+                          ? 'border-rose-300 bg-rose-50 text-rose-800'
+                          : entry.estado === 'NO APLICA'
+                            ? 'border-slate-200 bg-slate-50 text-slate-500'
+                            : 'border-slate-200 bg-white text-slate-700'
+                      }`}
+                    >
+                      {SNA_OPTIONS.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                    {showDetail && (
+                      <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
+                        <div>
+                          <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                            Desde cuándo
+                          </label>
+                          <input
+                            type="text"
+                            value={detalle.desde_cuando}
+                            onChange={e => updatePatologia(item.field, {
+                              detalle: { ...detalle, desde_cuando: e.target.value },
+                            })}
+                            disabled={readonly}
+                            placeholder="ej: 15 años, 2019"
+                            maxLength={200}
+                            className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                            Tratamiento
+                          </label>
+                          <textarea
+                            value={detalle.tratamiento}
+                            onChange={e => updatePatologia(item.field, {
+                              detalle: { ...detalle, tratamiento: e.target.value },
+                            })}
+                            disabled={readonly}
+                            placeholder="ej: Metformina 500mg cada 24h"
+                            rows={2}
+                            maxLength={500}
+                            className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                            Observaciones
+                          </label>
+                          <textarea
+                            value={detalle.observaciones}
+                            onChange={e => updatePatologia(item.field, {
+                              detalle: { ...detalle, observaciones: e.target.value },
+                            })}
+                            disabled={readonly}
+                            placeholder="ej: HbA1c 6.5%, sin complicaciones"
+                            rows={3}
+                            maxLength={1500}
+                            className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         ))}
-        {/* Observaciones */}
-        <div className="pt-3 border-t border-slate-100">
-          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Observaciones adicionales</label>
-          <textarea
-            rows={2}
-            value={form.patologicos.otras ?? ''}
-            onChange={e => setField('patologicos', 'otras', e.target.value)}
-            disabled={readonly}
-            placeholder="Especificar otras enfermedades relevantes..."
-            className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
-          />
-        </div>
       </fieldset>
 
       {/* ── Footer: sin botón guardar propio — persistencia integrada ─── */}

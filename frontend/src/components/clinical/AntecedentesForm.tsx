@@ -15,6 +15,13 @@
  * campo `otras` ahora lee/escribe el state key INDEPENDIENTE
  * `heredofamiliares.otras_especifique` (antes compartía `otras` con el
  * select, causando auto-destrucción al primer carácter tipeado).
+ *
+ * IMPL-20260817-04 (junta AMI 10/ago, Erika, línea 285 — DA-6 espejo): acordeón
+ * Sí/Negado/No Aplica + 3 campos condicionales (desde_cuando / tratamiento /
+ * observaciones) para cada enfermedad del `PatologicosSchema`. El campo
+ * legacy top-level `especifique` se elimina; su contenido se captura en
+ * `otras.detalle.observaciones`. La hidratación acepta formato legacy
+ * (`{ diabetes: 'SI' }`) y nuevo (`{ diabetes: { estado, detalle } }`).
  */
 import React, { useState, useEffect } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
@@ -27,12 +34,16 @@ import {
   PATOLOGICOS_DESCRIPCIONES,
   TURNO_OPTIONS,
   ESTADO_CIVIL_OPTIONS,
+  getPatologicosAllFields,
 } from '@/lib/antecedentes-fields'
 import {
   HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
 } from '@/schemas/clinical/exam.schema'
-import { GRUPO_RH_VALUES } from '@/schemas/clinical/history.schema'
+import {
+  GRUPO_RH_VALUES,
+  type DetalleTriple,
+} from '@/schemas/clinical/history.schema'
 
 interface AntecedentesFormProps {
   workerId: string
@@ -42,6 +53,54 @@ interface AntecedentesFormProps {
 }
 
 type ActiveTab = 'datos_personales' | 'historia_laboral' | 'heredofamiliares' | 'no_patologicos' | 'patologicos'
+
+/**
+ * IMPL-20260817-04 — opciones Sí/Negado/No Aplica del acordeón patológico.
+ * Espejo de `AntecedentesCaptura` (DA-6).
+ */
+const SNA_OPTIONS = ['NEGADO', 'SI', 'NO APLICA'] as const
+type SnaValue = (typeof SNA_OPTIONS)[number]
+
+/** Estado local de una enfermedad patológica (acordeón). */
+type PatologiaEntry = {
+  estado: SnaValue
+  detalle: DetalleTriple | undefined
+}
+
+const emptyDetalle = (): DetalleTriple => ({ desde_cuando: '', tratamiento: '', observaciones: '' })
+const emptyPatologia = (): PatologiaEntry => ({ estado: 'NEGADO', detalle: undefined })
+
+function isSnaValue(v: unknown): v is SnaValue {
+  return v === 'NEGADO' || v === 'SI' || v === 'NO APLICA'
+}
+
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v)
+}
+
+/**
+ * Normaliza un valor desconocido de una enfermedad patológica al shape
+ * `PatologiaEntry`. Acepta string legacy o el nuevo objeto. Usado en la
+ * hidratación de `initialData` (DA-1).
+ */
+function coercePatologiaEntry(v: unknown): PatologiaEntry {
+  if (typeof v === 'string') {
+    const s = v.trim().toUpperCase()
+    if (isSnaValue(s)) return { estado: s, detalle: undefined }
+    return { estado: 'NEGADO', detalle: undefined }
+  }
+  if (isPlainRecord(v) && isSnaValue(v.estado)) {
+    const detalle = isPlainRecord(v.detalle)
+      ? {
+          desde_cuando:  typeof v.detalle.desde_cuando  === 'string' ? v.detalle.desde_cuando  : '',
+          tratamiento:   typeof v.detalle.tratamiento   === 'string' ? v.detalle.tratamiento   : '',
+          observaciones: typeof v.detalle.observaciones === 'string' ? v.detalle.observaciones : '',
+        }
+      : undefined
+    return { estado: v.estado, detalle }
+  }
+  return emptyPatologia()
+}
 
 /**
  * ARCH-20260326-06
@@ -101,30 +160,44 @@ export function AntecedentesForm({
   })
 
   // ── Estado: Patológicos ────────────────────────────────────────────────────
-  const [patologicos, setPatologicos] = useState<Record<string, string>>({
-    diabetes: 'NEGADO', hernias: 'NEGADO', epilepsia: 'NEGADO',
-    alergias: 'NEGADO', cardiopatias: 'NEGADO', bronquitis: 'NEGADO',
-    ginecologicos: 'NEGADO', varices: 'NEGADO', tuberculosis: 'NEGADO',
-    endocrinopatias: 'NEGADO', colitis: 'NEGADO', tifoidea: 'NEGADO',
-    has: 'NEGADO', hemorroides: 'NEGADO', vertigo: 'NEGADO',
-    parotiditis: 'NEGADO', dermatitis: 'NEGADO', pat_c_vertebral: 'NEGADO',
-    cirugias: 'NEGADO', hepatitis: 'NEGADO', exantematicas: 'NEGADO',
-    gastritis: 'NEGADO', renales: 'NEGADO', asma: 'NEGADO',
-    cancer: 'NEGADO', traumatismos_craneales: 'NEGADO', desmayos: 'NEGADO',
-    fracturas: 'NEGADO', neumonias: 'NEGADO', enf_trans_sexual: 'NEGADO',
-    transfusiones: 'NEGADO', psiquiatricas: 'NEGADO', migrana: 'NEGADO',
-    otras: '', especifique: '',
+  // IMPL-20260817-04 — acordeón Sí/Negado/No Aplica + 3 campos condicionales.
+  // DA-1: la hidratación (useEffect abajo) reconoce tanto el formato legacy
+  // `{ diabetes: 'SI' }` como el nuevo `{ diabetes: { estado, detalle } }`.
+  const [patologicos, setPatologicos] = useState<Record<string, PatologiaEntry>>(() => {
+    const out: Record<string, PatologiaEntry> = {}
+    for (const f of getPatologicosAllFields()) out[f] = emptyPatologia()
+    out.otras = emptyPatologia()
+    return out
   })
 
   // ── Inicialización desde datos guardados ──────────────────────────────────────
   /* eslint-disable react-hooks/set-state-in-effect -- hidratación intencional al montar / cuando cambia initialData (editor maestro longitudinal). */
   useEffect(() => {
-    const data = initialData as Record<string, Record<string, string>> | undefined
+    const data = initialData as
+      | {
+          datos_personales?: Record<string, string>
+          historia_laboral?: Record<string, string | boolean>
+          heredo_familiares?: Record<string, string>
+          no_patologicos?: Record<string, string>
+          patologicos?: Record<string, unknown>
+        }
+      | undefined
     if (data?.datos_personales)  setDatosPersonales(p => ({ ...p, ...data.datos_personales }))
     if (data?.historia_laboral)  setHistoriaLaboral(p => ({ ...p, ...data.historia_laboral }))
     if (data?.heredo_familiares) setHeredofamiliares(p => ({ ...p, ...data.heredo_familiares }))
     if (data?.no_patologicos)    setNoPatologicos(p => ({ ...p, ...data.no_patologicos }))
-    if (data?.patologicos)       setPatologicos(p => ({ ...p, ...data.patologicos }))
+    if (data?.patologicos) {
+      // IMPL-20260817-04 — normaliza cada valor al shape PatologiaEntry
+      // (acepta string legacy o el nuevo objeto).
+      const pat = data.patologicos
+      setPatologicos(prev => {
+        const next = { ...prev }
+        for (const [k, v] of Object.entries(pat)) {
+          next[k] = coercePatologiaEntry(v)
+        }
+        return next
+      })
+    }
   }, [initialData])
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -132,8 +205,27 @@ export function AntecedentesForm({
     setHeredofamiliares(prev => ({ ...prev, [field]: value }))
   }
 
-  const handlePatologicosChange = (field: string, value: string) => {
-    setPatologicos(prev => ({ ...prev, [field]: value }))
+  /**
+   * IMPL-20260817-04 — actualiza una enfermedad patológica con un patch
+   * parcial. Si el nuevo estado es `SI`, materializa un `detalle` por
+   * defecto. Si pasa a `NEGADO`/`NO APLICA`, colapsa el detalle.
+   */
+  const handlePatologiaPatch = (field: string, patch: Partial<PatologiaEntry>) => {
+    setPatologicos(prev => {
+      const current = prev[field] ?? emptyPatologia()
+      const next: PatologiaEntry = {
+        estado: patch.estado ?? current.estado,
+        detalle:
+          patch.estado !== undefined
+            ? patch.estado === 'SI'
+              ? (current.detalle ?? emptyDetalle())
+              : undefined
+            : patch.detalle !== undefined
+              ? patch.detalle
+              : current.detalle,
+      }
+      return { ...prev, [field]: next }
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -325,156 +417,107 @@ export function AntecedentesForm({
           </div>
         )}
 
-        {/* SECCIÓN: ANTECEDENTES PATOLÓGICOS */}
+        {/* SECCIÓN: ANTECEDENTES PATOLÓGICOS — IMPL-20260817-04 acordeón */}
         {activeTab === 'patologicos' && (
           <div className="space-y-6">
             <p className="text-sm text-gray-600 mb-4">
               ℹ️ Por defecto, todos los campos están configurados como &quot;NEGADO&quot;. Cambiar solo si aplica.
               <br />
               <span className="text-gray-500">Auto: conteste lo que recuerde. No es necesario que sea un diagnóstico médico formal.</span>
+              <br />
+              <span className="text-gray-500">Al marcar <strong>SÍ</strong> aparecen 3 campos: desde cuándo, tratamiento y observaciones.</span>
             </p>
 
-            {/* Diccionario: término → descripción legible. Usado en los labels de Patológicos. */}
-            {/* Referencia: textos pensados para el trabajador; sin alarmismo ni consejo clínico. */}
-
-            {/* Sección 1: Enfermedades Endocrino-Metabólicas */}
-            <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-lg font-semibold text-gray-900 px-2">
-                Enfermedades Endocrino-Metabólicas
-              </legend>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {PATOLOGICOS_DESCRIPCIONES.endocrino.map((item) => (
-                  <div key={item.field}>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {item.label}
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
-                    <select
-                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="NEGADO">NEGADO</option>
-                      <option value="SI">SÍ</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-
-            {/* Sección 2: Cardiopulmonar */}
-            <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-lg font-semibold text-gray-900 px-2">
-                Sistema Cardiopulmonar
-              </legend>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {PATOLOGICOS_DESCRIPCIONES.cardiopulmonar.map((item) => (
-                  <div key={item.field}>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {item.label}
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
-                    <select
-                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="NEGADO">NEGADO</option>
-                      <option value="SI">SÍ</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-
-            {/* Sección 3: Neurológico */}
-            <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-lg font-semibold text-gray-900 px-2">
-                Sistema Neurológico
-              </legend>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {PATOLOGICOS_DESCRIPCIONES.neurologico.map((item) => (
-                  <div key={item.field}>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {item.label}
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
-                    <select
-                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="NEGADO">NEGADO</option>
-                      <option value="SI">SÍ</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-
-            {/* Sección 4: Digestivo y Genitourinario */}
-            <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-lg font-semibold text-gray-900 px-2">
-                Sistema Digestivo y Genitourinario
-              </legend>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {PATOLOGICOS_DESCRIPCIONES.digestivo.map((item) => (
-                  <div key={item.field}>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {item.label}
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
-                    <select
-                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="NEGADO">NEGADO</option>
-                      <option value="SI">SÍ</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-
-            {/* Sección 5: Otras Condiciones */}
-            <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-lg font-semibold text-gray-900 px-2">
-                Otras Condiciones
-              </legend>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {PATOLOGICOS_DESCRIPCIONES.otras.map((item) => (
-                  <div key={item.field}>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {item.label}
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">{item.help}</p>
-                    <select
-                      value={patologicos[item.field as keyof typeof patologicos] || 'NEGADO'}
-                      onChange={(e) => handlePatologicosChange(item.field, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="NEGADO">NEGADO</option>
-                      <option value="SI">SÍ</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-
-            {/* Observaciones */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Observaciones Adicionales
-              </label>
-              <textarea
-                value={patologicos.otras}
-                onChange={(e) => handlePatologicosChange('otras', e.target.value)}
-                placeholder="Especificar otras enfermedades relevantes..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                rows={3}
-              />
-            </div>
+            {([
+              ['endocrino',      'Enfermedades Endocrino-Metabólicas'],
+              ['cardiopulmonar', 'Sistema Cardiopulmonar'],
+              ['neurologico',    'Sistema Neurológico'],
+              ['digestivo',      'Sistema Digestivo y Genitourinario'],
+              ['otras',          'Otras Condiciones'],
+            ] as const).map(([group, title]) => (
+              <fieldset key={group} className="border border-gray-200 rounded-lg p-4">
+                <legend className="text-lg font-semibold text-gray-900 px-2">{title}</legend>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {PATOLOGICOS_DESCRIPCIONES[group].map(item => {
+                    const entry = patologicos[item.field] ?? emptyPatologia()
+                    const showDetail = entry.estado === 'SI'
+                    const detalle = entry.detalle ?? emptyDetalle()
+                    return (
+                      <div key={item.field} className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {item.label}
+                        </label>
+                        <p className="text-xs text-gray-500 mb-2">{item.help}</p>
+                        <select
+                          value={entry.estado}
+                          onChange={e => handlePatologiaPatch(item.field, { estado: e.target.value as SnaValue })}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${
+                            entry.estado === 'SI'
+                              ? 'border-rose-300 bg-rose-50 focus:ring-rose-400'
+                              : entry.estado === 'NO APLICA'
+                                ? 'border-gray-300 bg-gray-100 focus:ring-gray-400'
+                                : 'border-gray-300 bg-white focus:ring-blue-500'
+                          }`}
+                        >
+                          {SNA_OPTIONS.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                        {showDetail && (
+                          <div className="mt-3 space-y-2 p-3 bg-white border border-gray-200 rounded-lg">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Desde cuándo
+                              </label>
+                              <input
+                                type="text"
+                                value={detalle.desde_cuando}
+                                onChange={e => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, desde_cuando: e.target.value },
+                                })}
+                                placeholder="ej: 15 años, 2019"
+                                maxLength={200}
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Tratamiento
+                              </label>
+                              <textarea
+                                value={detalle.tratamiento}
+                                onChange={e => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, tratamiento: e.target.value },
+                                })}
+                                placeholder="ej: Metformina 500mg cada 24h"
+                                rows={2}
+                                maxLength={500}
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Observaciones
+                              </label>
+                              <textarea
+                                value={detalle.observaciones}
+                                onChange={e => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, observaciones: e.target.value },
+                                })}
+                                placeholder="ej: HbA1c 6.5%, sin complicaciones"
+                                rows={3}
+                                maxLength={1500}
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </fieldset>
+            ))}
           </div>
         )}
 
