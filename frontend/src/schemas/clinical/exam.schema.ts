@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ClinicalHistoryDataSchema } from './history.schema';
+import { tolerantZinEnum } from './zin.helper';
 
 const cleanString = z.string().trim().max(1000).optional();
 const cleanNum = z.coerce.number().nonnegative().optional();
@@ -69,6 +70,9 @@ export type TestIshiharaValue = (typeof TEST_ISHIHARA_VALUES)[number]
  *
  * Rechaza únicamente `undefined`/`null` puros (lo cubre el wrapper).
  *
+ * IMPL-20260817-03: helper extraído a `./zin.helper.ts` para evitar ciclo
+ * de import `exam.schema ↔ history.schema`. Importar desde `./zin.helper`.
+ *
  * Justificación del `.refine()` siempre-permisivo: sirve como marcador
  * contractual para endurecer en una SPEC futura cuando se decida migrar
  * datos legacy (DA-1 → DA-?).
@@ -76,12 +80,6 @@ export type TestIshiharaValue = (typeof TEST_ISHIHARA_VALUES)[number]
  * @id IMPL-20260817-01-C1
  * @spec SPEC_ARCH-20260817-01 §2.1
  */
-function tolerantZinEnum(enumValues: readonly string[]) {
-  return z.string().refine(
-    (v) => v === '' || enumValues.includes(v) || v.length > 0,
-    { message: 'Valor fuera del catálogo ZIN; aceptado como legacy.' }
-  )
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // EXPLORACIÓN FÍSICA + HEREDO-FAMILIARES — Catálogos ZIN (ARCH-20260817-01 / DA-1)

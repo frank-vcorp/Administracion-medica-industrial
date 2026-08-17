@@ -49,6 +49,7 @@ import {
   HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
 } from '@/schemas/clinical/exam.schema'
+import { GRUPO_RH_VALUES } from '@/schemas/clinical/history.schema'
 
 interface AntecedentesCapturaProps {
   /** Estado actual del snapshot (resuelto por el padre). Componente controlado. */
@@ -527,14 +528,17 @@ export function AntecedentesCaptura({
           </div>
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Grupo y RH</label>
-            <input
-              type="text"
+            <select
               value={form.no_patologicos.grupo_y_rh ?? ''}
               onChange={e => setField('no_patologicos', 'grupo_y_rh', e.target.value)}
               disabled={readonly}
-              placeholder="Ej: O+"
               className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-            />
+            >
+              <option value="">— Seleccionar —</option>
+              {GRUPO_RH_VALUES.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tatuajes</label>

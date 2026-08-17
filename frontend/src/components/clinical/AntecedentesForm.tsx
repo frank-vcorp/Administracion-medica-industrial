@@ -32,6 +32,7 @@ import {
   HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
 } from '@/schemas/clinical/exam.schema'
+import { GRUPO_RH_VALUES } from '@/schemas/clinical/history.schema'
 
 interface AntecedentesFormProps {
   workerId: string
@@ -596,13 +597,16 @@ export function AntecedentesForm({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Grupo y RH</label>
                 <p className="text-xs text-gray-500 mb-1">Tipo de sangre, ej: O+, A-, B+. Si no lo sabe, deje DESCONOCE.</p>
-                <input
-                  type="text"
+                <select
                   value={noPatologicos.grupo_y_rh ?? ''}
                   onChange={e => setNoPatologicos(p => ({ ...p, grupo_y_rh: e.target.value }))}
-                  placeholder="Ej: O+"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                />
+                >
+                  <option value="">— Seleccionar —</option>
+                  {GRUPO_RH_VALUES.map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tatuajes</label>

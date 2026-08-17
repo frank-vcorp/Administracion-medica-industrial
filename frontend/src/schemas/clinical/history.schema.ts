@@ -1,7 +1,21 @@
 import { z } from 'zod';
+import { tolerantZinEnum } from './zin.helper';
 
 const SiNegado = z.enum(['NEGADO', 'SI']).default('NEGADO');
 const cleanStr  = z.string().trim().max(500).optional();
+
+// ----------------------------------------------------------------------
+// IMPL-20260817-03 (ARCH-20260817-01 extensión puntual): catálogo ZIN para
+// `grupo_y_rh` (Antecedentes Personales No Patológicos — Imagen 2).
+// Migración input libre → <select> con 9 opciones canónicas. DA-1
+// (tolerancia legacy): el schema sigue aceptando cualquier string no-vacío
+// heredado de BD sin error.
+// ----------------------------------------------------------------------
+export const GRUPO_RH_VALUES = [
+  'O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'DESCONOCE',
+] as const
+
+export type GrupoYRhValue = (typeof GRUPO_RH_VALUES)[number]
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. DATOS PERSONALES DECLARATIVOS (Módulo 1 / Portal / Historial)
@@ -99,7 +113,9 @@ export const NoPatologicosSchema = z.object({
   ejercicio_frecuencia: z.string().trim().max(200).optional(),
 
   alimentacion: z.enum(['BUENA', 'REGULAR', 'MALA']).default('BUENA'),
-  grupo_y_rh: z.string().default('DESCONOCE'),
+  // IMPL-20260817-03: ZIN combo con 9 valores canónicos (select en UI).
+  // DA-1: `tolerantZinEnum` sigue aceptando strings legacy no-vacíos.
+  grupo_y_rh: tolerantZinEnum(GRUPO_RH_VALUES).default('DESCONOCE'),
 
   tatuajes: SiNegado,
   tatuajes_especifique: z.string().trim().max(500).optional(),

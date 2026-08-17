@@ -45,7 +45,12 @@ import {
   ESTADO_NUTRICIONAL_VALUES,
   PLANTILLAS_EF,
 } from '@/schemas/clinical/exam.schema'
-import { DatosPersonalesModulo1Schema, HeredoFamiliaresSchema } from '@/schemas/clinical/history.schema'
+import {
+  DatosPersonalesModulo1Schema,
+  HeredoFamiliaresSchema,
+  NoPatologicosSchema,
+  GRUPO_RH_VALUES,
+} from '@/schemas/clinical/history.schema'
 
 // ─── Mock state (declarados ANTES de vi.mock para evitar TDZ) ──────────────
 const mockMedicalExamUpsert = vi.fn()
@@ -555,5 +560,43 @@ describe('FIX L2 IMPL-20260817-02 (heredo-familiares: otras_especifique separado
     expect(legacyOnly.otras).toBeUndefined()
     expect(legacyOnly.otras_especifique).toBe('')
     expect(legacyOnly.diabetes).toBe('PADRE')
+  })
+})
+
+// ─── IMPL-20260817-03 (ARCH-20260817-01 extensión puntual) ────────────────────
+// Migración input libre → <select> con catálogo ZIN canónico para el campo
+// `grupo_y_rh` (Antecedentes Personales No Patológicos — Imagen 2).
+// DA-1 (tolerancia legacy): el schema sigue aceptando cualquier string
+// no-vacío heredado de BD sin error.
+describe('IMPL-20260817-03 grupo_y_rh (ZIN combo con 9 valores)', () => {
+  it('29. GRUPO_RH_VALUES expone los 9 valores canónicos en orden', () => {
+    expect(GRUPO_RH_VALUES).toHaveLength(9)
+    expect(GRUPO_RH_VALUES).toEqual([
+      'O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'DESCONOCE',
+    ])
+  })
+
+  it('30. NoPatologicosSchema acepta los 9 valores del catálogo ZIN', () => {
+    GRUPO_RH_VALUES.forEach(v => {
+      const parsed = NoPatologicosSchema.parse({ grupo_y_rh: v })
+      expect(parsed.grupo_y_rh).toBe(v)
+    })
+  })
+
+  it('31. NoPatologicosSchema grupo_y_rh: default "DESCONOCE" si no se envía', () => {
+    const parsed = NoPatologicosSchema.parse({})
+    expect(parsed.grupo_y_rh).toBe('DESCONOCE')
+  })
+
+  it('32. NoPatologicosSchema grupo_y_rh: DA-1 tolera strings legacy no-vacíos', () => {
+    // Registros legacy pueden tener cualquier string raro (ej: 'Z+',
+    // 'O positivo', 'AB+ DU', 'no sabe' antes del select). DA-1 los acepta
+    // sin error para no romper lecturas de BD pre-migración.
+    const legacySamples = ['Z+', 'O positivo', 'AB+ DU', 'DESCONOCIDO', 'O+ ']
+    legacySamples.forEach(v => {
+      expect(() => NoPatologicosSchema.parse({ grupo_y_rh: v })).not.toThrow()
+      const parsed = NoPatologicosSchema.parse({ grupo_y_rh: v })
+      expect(parsed.grupo_y_rh).toBe(v)
+    })
   })
 })
