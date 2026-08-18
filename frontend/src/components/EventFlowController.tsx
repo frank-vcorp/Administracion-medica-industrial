@@ -1,10 +1,18 @@
 'use client'
 
-import { useState, useTransition, useRef } from 'react'
+import { useState, useTransition, useRef, useEffect } from 'react'
 import { updateEventStatus, saveVerdict } from '@/actions/medical-event.actions'
 import { signMedicalDictamPDF } from '@/actions/signature.actions'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+// IMPL-20260817-10-C2 (ARCH-20260817-02 Corte 3 — DA-2):
+// auto-poblamiento del dictamen desde el snapshot del examen.
+// Regla explicita de Frank (2026-08-17): el medico solo llena lo
+// estrictamente necesario — el textarea "Diagnostico Final" se
+// pre-rellena con aptitud + impresion + recomendaciones capturadas
+// en la pestana Impresion y Aptitud del ExamenMedicoEstudio.
+import { buildVerdictFromExam } from '@/lib/clinical/verdict.builder'
+import { buildRecommendationsFromExam } from '@/lib/clinical/recommendations'
 
 interface EventFlowControllerProps {
     eventId: string
@@ -13,12 +21,22 @@ interface EventFlowControllerProps {
         finalDiagnosis?: string
         recommendations?: string
     }
+    /**
+     * Snapshot del examen medico — fuente de datos para auto-poblar el
+     * dictamen (DA-2). Se extrae de `MedicalExam.physicalExamData` en
+     * `event-page-data.ts`. Opcional: si no se pasa, el medico llena
+     * manualmente (compat retroactiva).
+     */
+    examSummary?: {
+        physicalExamData: Record<string, unknown>
+    }
 }
 
 export default function EventFlowController({
     eventId,
     currentStatus,
-    verdictData
+    verdictData,
+    examSummary
 }: EventFlowControllerProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
@@ -27,12 +45,92 @@ export default function EventFlowController({
 
     const diagRef = useRef<HTMLTextAreaElement>(null)
     const recRef = useRef<HTMLTextAreaElement>(null)
+    // IMPL-20260817-10-C2 (DA-2): marca de auto-poblamiento para no
+    // pisar la edicion manual del medico. Una vez que el usuario toca
+    // un textarea, no se vuelve a sobrescribir.
+    const userTouchedDiagRef = useRef(false)
+    const userTouchedRecRef = useRef(false)
 
     // Status logic
     // MODIFICADO: Fase de carga solo debe aparecer si ya es estrictamente IN_PROGRESS para que no manche las demás etapas
     const isInProgress = currentStatus === 'IN_PROGRESS'
     const isValidating = currentStatus === 'VALIDATING'
     const isCompleted = currentStatus === 'COMPLETED'
+
+    // IMPL-20260817-10-C2 (ARCH-20260817-02 DA-2): auto-poblamiento del
+    // dictamen desde el snapshot del examen (DA-2). Solo aplica si:
+    // 1. Estamos en estado VALIDATING.
+    // 2. Hay `examSummary` con `physicalExamData` (no vino vacio).
+    // 3. El dictamen persistido (`verdictData`) NO tiene contenido previo
+    //    (es la primera vez que el medico llega a VALIDATING, o el server
+    //    devolvio un verdict vacio por algun motivo).
+    // 4. El usuario NO ha tocado los textareas manualmente.
+    // Cuando se cumplen, escribimos via `ref.current.value` (textareas
+    // son uncontrolled — preservamos el patron existente del componente).
+    // IMPORTANTE: useEffect va ANTES del early-return de IN_PROGRESS por
+    // regla de Hooks (mismo orden en cada render).
+    useEffect(() => {
+        if (!isValidating) return
+        if (!examSummary?.physicalExamData) return
+        if (verdictData?.finalDiagnosis || verdictData?.recommendations) return
+
+        const physicalExamData = examSummary.physicalExamData
+        const existingPartial = {
+            // Si el verdict persistido trae campos individuales, pasarlos
+            // a `existing` para preservarlos (DA-2: nunca pisar edicion
+            // humana).
+            ...(verdictData?.finalDiagnosis !== undefined
+                ? { impresionDiagnostica: verdictData.finalDiagnosis }
+                : {}),
+            ...(verdictData?.recommendations !== undefined
+                ? { recomendaciones: verdictData.recommendations }
+                : {}),
+        }
+        const hasExistingContent =
+            existingPartial.impresionDiagnostica !== undefined ||
+            existingPartial.recomendaciones !== undefined
+
+        const suggestion = buildVerdictFromExam(
+            physicalExamData,
+            hasExistingContent ? existingPartial : null,
+            {
+                medicoEvaluador: session?.user?.fullName ?? undefined,
+                fechaEmision: new Date(),
+            }
+        )
+
+        const recomendacionesAuto = buildRecommendationsFromExam(physicalExamData)
+
+        // Construir el texto del "Diagnostico Final" como concatenacion
+        // legible: aptitud + impresion diagnostica. Si el medico quiere
+        // ajustar, puede editar el textarea — `onChange` maracara `userTouched`.
+        const finalDiagnosisAuto = [
+            suggestion.aptitud && suggestion.aptitud !== 'PENDIENTE DE RESULTADOS'
+                ? suggestion.aptitud
+                : null,
+            suggestion.impresionDiagnostica,
+        ]
+            .filter(Boolean)
+            .join('. ')
+
+        if (!userTouchedDiagRef.current && diagRef.current) {
+            // Solo auto-poblar si el textarea esta vacio (defensa contra
+            // race conditions entre renders).
+            if (!diagRef.current.value) {
+                diagRef.current.value = finalDiagnosisAuto
+            }
+        }
+        if (!userTouchedRecRef.current && recRef.current) {
+            if (!recRef.current.value) {
+                recRef.current.value = recomendacionesAuto
+            }
+        }
+        // Solo queremos que esto corra UNA vez al montar en VALIDATING,
+        // o si cambia `physicalExamData` mientras seguimos en VALIDATING
+        // sin verdict previo. session puede cambiar; lo excluimos del
+        // array de dependencias para no re-disparar.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isValidating, examSummary, verdictData?.finalDiagnosis, verdictData?.recommendations])
 
     // El Paso 3 ya se resuelve dentro de la papeleta-workspace; este bloque no
     // debe renderizar ninguna UI para IN_PROGRESS aunque otro contenedor lo invoque.
@@ -110,6 +208,7 @@ export default function EventFlowController({
                                     className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none min-h-[100px]"
                                     placeholder="Ej: Apto para el puesto sin restricciones..."
                                     defaultValue={verdictData?.finalDiagnosis}
+                                    onChange={() => { userTouchedDiagRef.current = true }}
                                 ></textarea>
                             </div>
                             <div>
@@ -119,6 +218,7 @@ export default function EventFlowController({
                                     className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                                     placeholder="Ej: Uso de protección auditiva..."
                                     defaultValue={verdictData?.recommendations}
+                                    onChange={() => { userTouchedRecRef.current = true }}
                                 ></textarea>
                             </div>
                         </div>

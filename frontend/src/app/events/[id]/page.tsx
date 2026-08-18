@@ -52,6 +52,7 @@ function EventView({ data }: EventViewProps) {
     initialTimeline,
     receivedBy,
     canRegisterPayments,
+    examSummary,
   } = data
 
   return (
@@ -213,6 +214,7 @@ function EventView({ data }: EventViewProps) {
           eventId={serializedEventId}
           currentStatus={serializedStatus}
           verdictData={serializedVerdict as Parameters<typeof EventFlowController>[0]['verdictData']}
+          examSummary={examSummary ?? undefined}
         />
       )}
     </div>

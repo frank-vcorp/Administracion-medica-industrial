@@ -39,6 +39,13 @@ export type EventPageData = {
   serializedExam: unknown
   serializedEventTests: unknown[]
   serializedVerdict: unknown
+  /**
+   * IMPL-20260817-10-C2 (ARCH-20260817-02 DA-2): snapshot del examen
+   * para auto-poblar el dictamen en EventFlowController. `null` si
+   * el examen no tiene `physicalExamData` (caso legacy / examen sin
+   * captura).
+   */
+  examSummary: { physicalExamData: Record<string, unknown> } | null
   serializedEventId: string
   serializedStatus: string
   intakeSourceLabel: string
@@ -133,6 +140,18 @@ export async function fetchEventPageData(input: {
   )
 
   const serializedExam = JSON.parse(JSON.stringify(medicalExam || {}))
+
+  // IMPL-20260817-10-C2 (ARCH-20260817-02 Corte 3 — DA-2):
+  // extraer `physicalExamData` del examen para alimentar el
+  // auto-poblamiento del dictamen en `EventFlowController`. Solo
+  // pasamos el sub-arbol relevante (no todo `serializedExam` — eso
+  // incluye `somatometryData`, `eyeAcuityData`, etc. que no son
+  // fuente de aptitud). Defensivo: `physicalExamData` puede ser
+  // null si el examen no esta creado.
+  const physicalExamData =
+    (medicalExam?.physicalExamData as Record<string, unknown> | null | undefined) ?? null
+  const examSummary = physicalExamData ? { physicalExamData } : null
+
   const serializedVerdict = event.verdict
     ? JSON.parse(
         JSON.stringify({
@@ -305,6 +324,7 @@ export async function fetchEventPageData(input: {
     serializedExam,
     serializedEventTests,
     serializedVerdict,
+    examSummary,
     serializedEventId: event.id,
     serializedStatus: event.status,
     intakeSourceLabel,
