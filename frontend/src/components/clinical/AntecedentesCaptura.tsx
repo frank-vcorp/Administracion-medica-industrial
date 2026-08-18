@@ -34,6 +34,14 @@
  * formato legacy (`{ diabetes: 'SI' }`) como el nuevo (`{ diabetes: { estado,
  * detalle } }`).
  *
+ * IMPL-20260817-06 (junta AMI 10/ago, Erika, decisión Frank — solo opción 1):
+ * acordeón colapsable con resumen. Estado SÍ + 3 campos vacíos → inputs
+ * desplegados con placeholders. Estado SÍ + 3 campos con contenido →
+ * resumen colapsado (click para editar). Click en otra enfermedad colapsa
+ * la actual automáticamente (auto-colapso por `focusedField`). Estado
+ * NEGADO/NO APLICA → card pequeño sin campos. NO se incluye botón
+ * "Confirmar" (Frank lo descartó).
+ *
  * @id IMPL-20260809-02
  * @spec ARCH-20260809-01 v2 — sub-pestaña "Antecedentes" dentro de Examen Médico
  */
@@ -52,6 +60,7 @@ import {
   SI_NEGADO,
   getPatologicosAllFields,
 } from '@/lib/antecedentes-fields'
+import { hasDetalleContent } from '@/lib/patologicos-accordion'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
 import {
   HEREDOFAMILIARES_VALUES,
@@ -278,6 +287,11 @@ export function AntecedentesCaptura({
   // Estado local de edición — espejo del `value` controlado que pasa el padre.
   const [form, setForm] = useState(() => sectionsFromValue(value))
   const [modified, setModified] = useState<Set<string>>(new Set())
+  // IMPL-20260817-06 — field de la enfermedad patológica actualmente
+  // expandida para edición (acordeón). `null` = todas colapsadas (mostrar
+  // resumen cuando hay contenido, mostrar inputs cuando están vacíos).
+  // El colapso se decide por `hasDetalleContent` + `focusedField === field`.
+  const [focusedPatologiaField, setFocusedPatologiaField] = useState<string | null>(null)
 
   // IMPL-20260817-05 (fix bug acordeón Patologicos no colapsa al cambiar a NEGADO).
   // Frank reportó: al pasar de SÍ a NEGADO en una enfermedad, los 3 inputs
@@ -316,6 +330,12 @@ export function AntecedentesCaptura({
    * materializa un `detalle` por defecto para que los inputs aparezcan
    * ya visibles. Si pasa a `NEGADO` / `NO APLICA`, colapsa el detalle
    * (lo deja en `undefined` para ahorrar payload).
+   *
+   * IMPL-20260817-06 — al cambiar a `SI`, marca este field como focused
+   * (auto-expande los inputs). Al cambiar a `NEGADO`/`NO APLICA`, limpia
+   * el focus (el card pasa a modo pequeño). Al editar un detalle, NO
+   * toca el focus: el usuario puede seguir editando sin perder la
+   * selección.
    */
   function updatePatologia(field: string, patch: Partial<PatologiaEntry>) {
     const current = form.patologicos[field] ?? emptyPatologia()
@@ -329,6 +349,10 @@ export function AntecedentesCaptura({
           : patch.detalle !== undefined
             ? patch.detalle
             : current.detalle,
+    }
+    // Sincronizar focus con el cambio de estado (IMPL-20260817-06).
+    if (patch.estado !== undefined) {
+      setFocusedPatologiaField(patch.estado === 'SI' ? field : null)
     }
     const nextForm = {
       ...form,
@@ -712,9 +736,23 @@ export function AntecedentesCaptura({
                 // condicionales (desde_cuando / tratamiento / observaciones).
                 // El campo legacy `especifique` se eliminó: se captura ahora
                 // en `otras.detalle.observaciones`.
+                //
+                // IMPL-20260817-06 — variante UX aprobada por Frank en junta
+                // AMI 10/ago: acordeón colapsable con resumen.
+                //   - estado NEGADO / NO APLICA: card pequeño (solo select)
+                //   - estado SÍ + 3 campos vacíos: inputs desplegados
+                //   - estado SÍ + 3 campos con contenido: resumen colapsado
+                //     (click para editar — auto-focus)
+                //   - click en OTRA enfermedad: la actual colapsa
+                //     automáticamente (focusedPatologiaField cambia al nuevo)
                 const entry = form.patologicos[item.field] ?? emptyPatologia()
-                const showDetail = entry.estado === 'SI'
                 const detalle = entry.detalle ?? emptyDetalle()
+                const isFocused = focusedPatologiaField === item.field
+                // Mostrar inputs solo si: estado SÍ AND (focused OR vacío)
+                const showInputs = entry.estado === 'SI' && (isFocused || !hasDetalleContent(detalle))
+                // Mostrar resumen cuando estado SÍ pero NO mostramos inputs
+                // (tiene contenido y no está focused).
+                const showSummary = entry.estado === 'SI' && !showInputs
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
@@ -735,7 +773,33 @@ export function AntecedentesCaptura({
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
-                    {showDetail && (
+                    {showSummary && (
+                      // IMPL-20260817-06 — resumen colapsado (estado SÍ con
+                      // contenido). Click expande para editar.
+                      <button
+                        type="button"
+                        onClick={() => setFocusedPatologiaField(item.field)}
+                        className="w-full text-left mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs hover:bg-emerald-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-1 font-medium text-emerald-800 mb-1">
+                          <span>✓</span>
+                          <span>{item.label}</span>
+                          <span className="text-emerald-600 ml-auto text-[10px]">click para editar</span>
+                        </div>
+                        <div className="text-slate-600 space-y-0.5">
+                          {detalle.desde_cuando && (
+                            <p><span className="font-medium">Desde:</span> {detalle.desde_cuando}</p>
+                          )}
+                          {detalle.tratamiento && (
+                            <p><span className="font-medium">Tratamiento:</span> {detalle.tratamiento}</p>
+                          )}
+                          {detalle.observaciones && (
+                            <p><span className="font-medium">Observaciones:</span> {detalle.observaciones}</p>
+                          )}
+                        </div>
+                      </button>
+                    )}
+                    {showInputs && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
                         <div>
                           <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">

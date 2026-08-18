@@ -22,6 +22,12 @@
  * legacy top-level `especifique` se elimina; su contenido se captura en
  * `otras.detalle.observaciones`. La hidratación acepta formato legacy
  * (`{ diabetes: 'SI' }`) y nuevo (`{ diabetes: { estado, detalle } }`).
+ *
+ * IMPL-20260817-06 (DA-6 espejo de AntecedentesCaptura): acordeón colapsable
+ * con resumen. Estado SÍ + 3 campos vacíos → inputs desplegados. Estado
+ * SÍ + 3 campos con contenido → resumen colapsado (click para editar).
+ * Click en otra enfermedad colapsa la actual automáticamente. Estado
+ * NEGADO/NO APLICA → card pequeño sin campos. Sin botón "Confirmar".
  */
 import React, { useState, useEffect } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
@@ -36,6 +42,7 @@ import {
   ESTADO_CIVIL_OPTIONS,
   getPatologicosAllFields,
 } from '@/lib/antecedentes-fields'
+import { hasDetalleContent } from '@/lib/patologicos-accordion'
 import {
   HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
@@ -169,6 +176,10 @@ export function AntecedentesForm({
     out.otras = emptyPatologia()
     return out
   })
+  // IMPL-20260817-06 — field actualmente expandido del acordeón. `null`
+  // significa "ninguno" — la UI entonces muestra resumen si hay contenido
+  // o inputs si están vacíos.
+  const [focusedPatologiaField, setFocusedPatologiaField] = useState<string | null>(null)
 
   // ── Inicialización desde datos guardados ──────────────────────────────────────
   /* eslint-disable react-hooks/set-state-in-effect -- hidratación intencional al montar / cuando cambia initialData (editor maestro longitudinal). */
@@ -209,8 +220,14 @@ export function AntecedentesForm({
    * IMPL-20260817-04 — actualiza una enfermedad patológica con un patch
    * parcial. Si el nuevo estado es `SI`, materializa un `detalle` por
    * defecto. Si pasa a `NEGADO`/`NO APLICA`, colapsa el detalle.
+   *
+   * IMPL-20260817-06 — al cambiar a `SI`, auto-focus este field. Al
+   * cambiar a `NEGADO`/`NO APLICA`, limpia el focus.
    */
   const handlePatologiaPatch = (field: string, patch: Partial<PatologiaEntry>) => {
+    if (patch.estado !== undefined) {
+      setFocusedPatologiaField(patch.estado === 'SI' ? field : null)
+    }
     setPatologicos(prev => {
       const current = prev[field] ?? emptyPatologia()
       const next: PatologiaEntry = {
@@ -439,9 +456,14 @@ export function AntecedentesForm({
                 <legend className="text-lg font-semibold text-gray-900 px-2">{title}</legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                   {PATOLOGICOS_DESCRIPCIONES[group].map(item => {
+                    // IMPL-20260817-06 (DA-6 espejo AntecedentesCaptura) —
+                    // acordeón colapsable con resumen. Ver handoff §"Cambio
+                    // en AntecedentesForm.tsx".
                     const entry = patologicos[item.field] ?? emptyPatologia()
-                    const showDetail = entry.estado === 'SI'
                     const detalle = entry.detalle ?? emptyDetalle()
+                    const isFocused = focusedPatologiaField === item.field
+                    const showInputs = entry.estado === 'SI' && (isFocused || !hasDetalleContent(detalle))
+                    const showSummary = entry.estado === 'SI' && !showInputs
                     return (
                       <div key={item.field} className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -463,7 +485,32 @@ export function AntecedentesForm({
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
                         </select>
-                        {showDetail && (
+                        {showSummary && (
+                          // IMPL-20260817-06 — resumen colapsado, click expande.
+                          <button
+                            type="button"
+                            onClick={() => setFocusedPatologiaField(item.field)}
+                            className="w-full text-left mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm hover:bg-emerald-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-1 font-medium text-emerald-800 mb-1">
+                              <span>✓</span>
+                              <span>{item.label}</span>
+                              <span className="text-emerald-600 ml-auto text-xs">click para editar</span>
+                            </div>
+                            <div className="text-gray-600 space-y-0.5">
+                              {detalle.desde_cuando && (
+                                <p><span className="font-medium">Desde:</span> {detalle.desde_cuando}</p>
+                              )}
+                              {detalle.tratamiento && (
+                                <p><span className="font-medium">Tratamiento:</span> {detalle.tratamiento}</p>
+                              )}
+                              {detalle.observaciones && (
+                                <p><span className="font-medium">Observaciones:</span> {detalle.observaciones}</p>
+                              )}
+                            </div>
+                          </button>
+                        )}
+                        {showInputs && (
                           <div className="mt-3 space-y-2 p-3 bg-white border border-gray-200 rounded-lg">
                             <div>
                               <label className="block text-xs font-medium text-gray-600 mb-1">

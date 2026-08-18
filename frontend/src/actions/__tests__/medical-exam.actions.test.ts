@@ -809,3 +809,53 @@ describe('IMPL-20260817-05: acordeón Patologicos colapsa al cambiar a NEGADO', 
     ).not.toThrow()
   })
 })
+
+// IMPL-20260817-06 — acordeón Patologicos colapsable con resumen (handoff
+// Atlas junta AMI 10/ago, opción 1 aprobada por Frank). El helper
+// `hasDetalleContent` decide si mostrar inputs desplegados (vacío) o
+// resumen colapsado (con contenido). La transición SÍ + detalle ↔ SÍ sin
+// detalle es round-trip-safe en el schema.
+describe('IMPL-20260817-06: acordeón Patologicos colapsable con resumen', () => {
+  it('46. hasDetalleContent: detecta campos llenos / vacíos / whitespace', async () => {
+    const { hasDetalleContent } = await import('@/lib/patologicos-accordion')
+    // Vacío total → false (acordeón muestra inputs desplegados)
+    expect(hasDetalleContent({ desde_cuando: '', tratamiento: '', observaciones: '' })).toBe(false)
+    // Cualquier campo con texto significativo → true (acordeón muestra resumen)
+    expect(hasDetalleContent({ desde_cuando: '15 años', tratamiento: '', observaciones: '' })).toBe(true)
+    expect(hasDetalleContent({ desde_cuando: '', tratamiento: 'metformina', observaciones: '' })).toBe(true)
+    expect(hasDetalleContent({ desde_cuando: '', tratamiento: '', observaciones: 'HbA1c 6.5%' })).toBe(true)
+    // Whitespace-only no cuenta (Frank podría dejar la tecla espacio)
+    expect(hasDetalleContent({ desde_cuando: '   ', tratamiento: '', observaciones: '' })).toBe(false)
+    expect(hasDetalleContent({ desde_cuando: '', tratamiento: '\t\n', observaciones: '  ' })).toBe(false)
+    // undefined → false (caso NEGADO/NO APLICA donde detalle es undefined)
+    expect(hasDetalleContent(undefined)).toBe(false)
+  })
+
+  it('47. Schema: round-trip SÍ + detalle completo → SÍ sin detalle → SÍ con detalle', () => {
+    // 1) SÍ con detalle completo: schema acepta y preserva los 3 campos.
+    const filled = PatologicosSchema.parse({
+      diabetes: { estado: 'SI', detalle: { desde_cuando: '15 años', tratamiento: 'metformina', observaciones: 'HbA1c 6.5%' } },
+    })
+    expect(filled.diabetes.estado).toBe('SI')
+    expect(filled.diabetes.detalle?.desde_cuando).toBe('15 años')
+    expect(filled.diabetes.detalle?.tratamiento).toBe('metformina')
+    expect(filled.diabetes.detalle?.observaciones).toBe('HbA1c 6.5%')
+
+    // 2) SÍ con detalle undefined (Frank borra todo el contenido): schema acepta.
+    // Esta es la transición que dispara el auto-colapso del acordeón (el
+    // acordeón pasa de "resumen" a "inputs desplegados" cuando se vacía).
+    const emptied = PatologicosSchema.parse({
+      diabetes: { estado: 'SI', detalle: undefined },
+    })
+    expect(emptied.diabetes.estado).toBe('SI')
+    // detalle puede ser undefined o {} (DA-1 normaliza) — ambos son válidos para la UI.
+    expect(emptied.diabetes.detalle == null || Object.keys(emptied.diabetes.detalle ?? {}).length === 0).toBe(true)
+
+    // 3) SÍ con detalle lleno otra vez: schema acepta (Frank vuelve a editar).
+    const refilled = PatologicosSchema.parse({
+      diabetes: { estado: 'SI', detalle: { desde_cuando: '20 años', tratamiento: '', observaciones: '' } },
+    })
+    expect(refilled.diabetes.estado).toBe('SI')
+    expect(refilled.diabetes.detalle?.desde_cuando).toBe('20 años')
+  })
+})
