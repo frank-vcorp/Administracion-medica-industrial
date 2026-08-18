@@ -62,6 +62,10 @@ import {
 //   "Quiero que se autopoble. Quiero que el medico solo llene lo
 //   estrictamente necesario."
 import { buildExamSummary, EXAM_SUMMARY_LABELS } from "@/lib/clinical/exam-summary"
+// IMPL-20260817-09-C4 (ARCH-20260817-02 corte 2 DA-7): helper de
+// auto-poblamiento para las recomendaciones del dictamen (catalogo
+// hallazgo → recomendacion + edicion manual).
+import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -369,6 +373,19 @@ export default function ExamenMedicoEstudio({
   })
   const [aptitud, setAptitud] = useState<string>(
     (physicalExamData.aptitud as string) ?? ''
+  )
+  // IMPL-20260817-09-C4 (ARCH-20260817-02 DA-7): recomendaciones
+  // auto-pobladas desde hallazgos. Lazy init desde el snapshot persistido;
+  // el medico puede editar/sobrescribir libremente. Boton "Regenerar
+  // desde hallazgos" para volver al auto-poblado en cualquier momento.
+  const [recomendaciones, setRecomendaciones] = useState<string>(() =>
+    buildRecommendationsFromExam({
+      estado_nutricional: (physicalExamData.estado_nutricional as string) ?? null,
+      agudeza_visual_resumen: (physicalExamData.agudeza_visual_resumen as string) ?? null,
+      salud_bucal: (physicalExamData.salud_bucal as string) ?? null,
+      presion_arterial_resumen: (physicalExamData.presion_arterial_resumen as string) ?? null,
+      examen_medico_texto: (physicalExamData.impresion_diagnostica as string) ?? null,
+    })
   )
   // IMPL-20260809-02: default 'antecedentes' (era 'declarativa' en v1) — la primera
   // sub-pestaña visible al abrir Examen Médico es Antecedentes.
@@ -1614,6 +1631,58 @@ export default function ExamenMedicoEstudio({
                 className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
               />
             </label>
+
+            {/*
+              IMPL-20260817-09-C4 (ARCH-20260817-02 DA-7): Recomendaciones
+              auto-pobladas desde hallazgos. Regla explicita de Frank (2026-08-17):
+                "Quiero que se autopoble. Quiero que el medico solo llene lo
+                estrictamente necesario."
+
+              - Default: lista numerada auto-poblada por buildRecommendationsFromExam
+                (catalogo hallazgo → recomendacion, DA-7).
+              - Editable: el medico puede agregar/quitar/sobrescribir
+                recomendaciones libremente.
+              - DA-2: el auto-poblamiento es PROPUESTA INICIAL; una vez que el
+                medico edita, el estado local NO se sobreescribe.
+              - Boton "Regenerar desde hallazgos" para volver al auto-poblado
+                desde los hallazgos actuales del form.
+            */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Recomendaciones
+                </span>
+                {!readonly && (
+                  <button
+                    type="button"
+                    onClick={() => setRecomendaciones(buildRecommendationsFromExam({
+                      estado_nutricional: form.estado_nutricional ?? null,
+                      agudeza_visual_resumen: form.agudeza_visual_resumen ?? null,
+                      salud_bucal: form.salud_bucal ?? null,
+                      presion_arterial_resumen: form.presion_arterial_resumen ?? null,
+                      examen_medico_texto: form.impresion_diagnostica ?? null,
+                    }))}
+                    className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline"
+                    title="Reemplazar por la lista auto-poblada desde los hallazgos actuales"
+                  >
+                    ↻ Regenerar desde hallazgos
+                  </button>
+                )}
+              </div>
+              <textarea
+                rows={6}
+                value={recomendaciones}
+                onChange={e => setRecomendaciones(e.target.value)}
+                disabled={readonly}
+                placeholder="1.- Recomendación uno. 2.- Recomendación dos. (auto-poblado desde hallazgos)"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+              />
+              <p className="text-[10px] text-slate-400 italic">
+                Auto-poblado desde hallazgos del examen (caries, sobrepeso,
+                agudeza visual, presión arterial, etc). Puedes editar, agregar
+                o quitar recomendaciones.
+              </p>
+            </div>
 
             {/* Médicos firmantes — ARCH-20260325-09 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
