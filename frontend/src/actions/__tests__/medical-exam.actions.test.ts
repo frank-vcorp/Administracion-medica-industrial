@@ -758,3 +758,54 @@ describe('IMPL-20260817-04 acordeón Sí/Negado/No Aplica + 3 campos (Patologico
     expect(r.tatuajes).toBe('NO APLICA')
   })
 })
+
+// IMPL-20260817-05 — fix bug acordeón Patologicos colapsa correctamente al
+// cambiar a NEGADO (handoff Atlas). El bug era runtime (useEffect de
+// AntecedentesCaptura rehidrataba en cada cambio de la prop `value`); el
+// test schema-level garantiza que el payload que emite `updatePatologia`
+// tras el colapso (estado:NEGADO, detalle:undefined) es válido y el
+// schema es tolerante con payloads legacy con detalle residual.
+describe('IMPL-20260817-05: acordeón Patologicos colapsa al cambiar a NEGADO', () => {
+  it('43. Schema acepta el payload emitido por updatePatologia al colapsar (estado:NEGADO, detalle:undefined)', () => {
+    // AntecedentesCaptura.tsx updatePatologia (líneas ~306-338) emite
+    // EXACTAMENTE este shape tras el colapso: { estado: 'NEGADO', detalle: undefined }.
+    // El schema debe aceptarlo sin lanzar error (la UI lo envía al action saveExamenMedicoPapeleta).
+    const r = PatologicosSchema.parse({
+      diabetes: { estado: 'NEGADO', detalle: undefined },
+    })
+    expect(r.diabetes.estado).toBe('NEGADO')
+  })
+
+  it('44. Schema acepta estado "NO APLICA" como colapso válido (paralelo a NEGADO)', () => {
+    // Mismo contrato que el caso NEGADO pero para NO APLICA — el acordeón
+    // también colapsa en este caso (no hay detalle a mostrar).
+    const r = PatologicosSchema.parse({
+      hernias: { estado: 'NO APLICA', detalle: undefined },
+    })
+    expect(r.hernias.estado).toBe('NO APLICA')
+  })
+
+  it('45. Schema tolera payload legacy con detalle residual en NEGADO/NO APLICA (DA-1 back-compat)', () => {
+    // Si el padre re-renderiza con datos persistidos que aún tenían
+    // detalle de una sesión anterior (estado guardado = NEGADO, detalle
+    // residual con datos), el schema debe ACEPTAR sin error. La UI hace
+    // el colapso visible colapsando localmente (no depende del schema).
+    expect(() =>
+      PatologicosSchema.parse({
+        diabetes: {
+          estado: 'NEGADO',
+          detalle: { desde_cuando: '15 años', tratamiento: 'metformina' },
+        },
+      }),
+    ).not.toThrow()
+
+    expect(() =>
+      PatologicosSchema.parse({
+        hernias: {
+          estado: 'NO APLICA',
+          detalle: { desde_cuando: 'x', tratamiento: '', observaciones: '' },
+        },
+      }),
+    ).not.toThrow()
+  })
+})

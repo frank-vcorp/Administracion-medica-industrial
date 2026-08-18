@@ -279,13 +279,27 @@ export function AntecedentesCaptura({
   const [form, setForm] = useState(() => sectionsFromValue(value))
   const [modified, setModified] = useState<Set<string>>(new Set())
 
-  // Re-hidratar cuando el padre propaga un nuevo `value` (p. ej. tras un refresh
-  // del servidor, o cuando cambia el cascade snapshot→portal→longitudinal).
+  // IMPL-20260817-05 (fix bug acordeón Patologicos no colapsa al cambiar a NEGADO).
+  // Frank reportó: al pasar de SÍ a NEGADO en una enfermedad, los 3 inputs
+  // (desde_cuando / tratamiento / observaciones) quedaban visibles.
+  //
+  // Causa raíz: este useEffect se disparaba también cada vez que la prop `value`
+  // cambiaba por cualquier re-render del padre (nueva ref del mismo objeto),
+  // sobrescribiendo el state local con `sectionsFromValue(value)` y revirtiendo
+  // los cambios del usuario. En particular, si el servidor aún tenía `estado:'SI'`
+  // (Frank no había guardado), el state local se restauraba y los inputs
+  // reaparecían aunque Frank hubiera cambiado a NEGADO localmente.
+  //
+  // Fix: hidratar SOLO al montar (`[]`). El componente es snapshot por cita
+  // (ARCH-20260809-01): los cambios externos del servidor disparan REMOUNT
+  // (cambio de cita / refresh completo), no re-hidratación dentro del mismo
+  // ciclo de vida. Si se requiriera re-hidratación en caliente en el futuro,
+  // usar dirty-checking (ver handoff Atlas IMPL-20260817-05 §"Opción B").
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm(sectionsFromValue(value))
     setModified(new Set())
-  }, [value])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])  // IMPL-20260817-05: solo al montar (fix bug re-hidratación)
 
   function markModified(key: string) {
     setModified(prev => {
