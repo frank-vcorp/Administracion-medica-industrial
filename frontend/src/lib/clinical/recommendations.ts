@@ -26,10 +26,11 @@
 
 /** Hallazgo detectado (semilla para el catálogo de recomendaciones). */
 export interface Hallazgo {
-  /** ID canónico del hallazgo (clave del catálogo). */
+  /** ID canónico del hallazgo (clave del catálogo). Requerido. */
   id: string
-  /** Texto legible del hallazgo (para logs/UI). */
-  texto: string
+  /** Texto legible del hallazgo (para logs/UI). Opcional — `buildRecommendations`
+   *  solo necesita `id` para armar la lista; el `texto` se usa para diagnóstico. */
+  texto?: string
   /** Categoría opcional para agrupación. */
   categoria?: HallazgoCategoria
 }
@@ -162,28 +163,6 @@ export const CATALOGO_RECOMENDACIONES: Record<string, string[]> = {
   laboratorio_anormal: [
     'VALORACIÓN POR MEDICINA INTERNA POR HALLAZGOS DE LABORATORIO',
   ],
-}
-
-/** Categoría por defecto según el id del hallazgo (para agrupación en UI). */
-const CATEGORIA_POR_ID: Record<string, HallazgoCategoria> = {
-  caries: 'salud_bucal',
-  sarro: 'salud_bucal',
-  caries_sarro: 'salud_bucal',
-  sobrepeso: 'nutricional',
-  obesidad: 'nutricional',
-  bajo_peso: 'nutricional',
-  vision_disminuida: 'visual',
-  presion_alta: 'cardiovascular',
-  presion_baja: 'cardiovascular',
-  insuficiencia_venosa: 'venosa',
-  auditiva_conductiva: 'auditiva',
-  auditiva_sensorineural: 'auditiva',
-  auditiva_mixta: 'auditiva',
-  patron_restrictivo: 'respiratoria',
-  patron_obstructivo: 'respiratoria',
-  patron_mixto: 'respiratoria',
-  radiografia_patologica: 'radiologica',
-  laboratorio_anormal: 'laboratorio',
 }
 
 // ─── Detección de hallazgos ───────────────────────────────────────────────────

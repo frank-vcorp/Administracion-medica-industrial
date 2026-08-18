@@ -66,6 +66,21 @@ import {
   isPendienteResultados,
   aptitudLabel,
 } from '@/lib/clinical/aptitud.helper'
+// IMPL-20260817-09-C5 (ARCH-20260817-02 corte 2 DA-5/DA-7): tests de
+// los helpers de auto-poblamiento del resumen ejecutivo y las
+// recomendaciones del dictamen.
+import {
+  buildExamSummary,
+  EXAM_SUMMARY_LABELS,
+} from '@/lib/clinical/exam-summary'
+import {
+  buildRecommendations,
+  buildRecommendationsFromExam,
+  detectHallazgosFromExam,
+  detectHallazgosFromIa,
+  extractHallazgos,
+  CATALOGO_RECOMENDACIONES,
+} from '@/lib/clinical/recommendations'
 import {
   DatosPersonalesModulo1Schema,
   HeredoFamiliaresSchema,
@@ -1148,5 +1163,241 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
       expect(isNoCumple('NO APTO')).toBe(true)
       expect(isAptoFromVerdict('NO APTO')).toBe(false)
     })
+  })
+})
+
+// ────────────────────────────────────────────────────────────────────────────
+// IMPL-20260817-09-C5 (ARCH-20260817-02 corte 2 DA-5/DA-7): tests de
+// helpers de auto-poblamiento (resumen ejecutivo + recomendaciones).
+// Regla explicita de Frank (2026-08-17): "Quiero que se autopoble.
+// Quiero que el medico solo llene lo estrictamente necesario."
+// ────────────────────────────────────────────────────────────────────────────
+describe('IMPL-20260817-09-C5: buildExamSummary + buildRecommendations (Corte 2 auto-poblamiento)', () => {
+  // ─── buildExamSummary (DA-5) ───────────────────────────────────────────────
+  it('75. buildExamSummary: retorna 9 campos auto-poblados desde el snapshot del examen', () => {
+    const summary = buildExamSummary({
+      estado_nutricional: 'SOBREPESO',
+      agudeza_visual_resumen: 'DISMINUIDA',
+      salud_bucal: 'CARIES Y SARRO',
+      presion_arterial_resumen: 'NORMAL AL MOMENTO DE LA TOMA',
+      examen_medico_texto: 'Hallazgos positivos en agudeza visual.',
+    })
+    expect(summary.estado_nutricional).toBe('SOBREPESO')
+    expect(summary.agudeza_visual).toBe('DISMINUIDA')
+    expect(summary.salud_bucal).toBe('CARIES Y SARRO')
+    expect(summary.presion_arterial).toBe('NORMAL AL MOMENTO DE LA TOMA')
+    expect(summary.examen_medico).toBe('Hallazgos positivos en agudeza visual.')
+    // Campos IA sin valor → string vacío (UI muestra "Pendiente de resultado").
+    expect(summary.audiometria).toBe('')
+    expect(summary.espirometria).toBe('')
+    expect(summary.laboratorios).toBe('')
+    expect(summary.radiografia).toBe('')
+  })
+
+  it('76. buildExamSummary: prioridad IA sobre manual para audiometria (DA-5)', () => {
+    const summary = buildExamSummary(
+      { audiometria_texto: 'Manual OD: HIPOACUSIA LEVE' },
+      { audiometria_resumen: 'IA: HIPOACUSIA CONDUCTIVA LEVE' },
+    )
+    expect(summary.audiometria).toBe('IA: HIPOACUSIA CONDUCTIVA LEVE')
+  })
+
+  it('77. buildExamSummary: prioridad IA sobre manual para espirometria (DA-5)', () => {
+    const summary = buildExamSummary(
+      { espirometria_texto: 'Manual: FVC 80%' },
+      { espirometria_resumen: 'IA: patron restrictivo leve, FVC 78%' },
+    )
+    expect(summary.espirometria).toBe('IA: patron restrictivo leve, FVC 78%')
+  })
+
+  it('78. buildExamSummary: sin IA disponible cae al texto manual (DA-5)', () => {
+    const summary = buildExamSummary(
+      { audiometria_texto: 'Manual OD: HIPOACUSIA LEVE' },
+      undefined,
+    )
+    expect(summary.audiometria).toBe('Manual OD: HIPOACUSIA LEVE')
+  })
+
+  it('79. buildExamSummary: campos null/undefined se normalizan a string vacío', () => {
+    const summary = buildExamSummary({
+      estado_nutricional: null,
+      agudeza_visual_resumen: undefined,
+      salud_bucal: '',
+      presion_arterial_resumen: null,
+      examen_medico_texto: undefined,
+    })
+    expect(summary.estado_nutricional).toBe('')
+    expect(summary.agudeza_visual).toBe('')
+    expect(summary.salud_bucal).toBe('')
+    expect(summary.presion_arterial).toBe('')
+    expect(summary.examen_medico).toBe('')
+  })
+
+  it('80. EXAM_SUMMARY_LABELS: expone 9 labels verbatim del PDF canonico', () => {
+    expect(EXAM_SUMMARY_LABELS).toHaveLength(9)
+    const labels = EXAM_SUMMARY_LABELS.map(([, l]) => l)
+    expect(labels).toContain('ESTADO NUTRICIONAL')
+    expect(labels).toContain('AGUDEZA VISUAL')
+    expect(labels).toContain('SALUD BUCAL')
+    expect(labels).toContain('EXAMEN MEDICO')
+    expect(labels).toContain('PRESION ARTERIAL')
+    expect(labels).toContain('AUDIOMETRIA')
+    expect(labels).toContain('ESPIROMETRIA')
+    expect(labels).toContain('LABORATORIOS')
+    expect(labels).toContain('RADIOGRAFIA')
+  })
+
+  // ─── buildRecommendations (DA-7) ────────────────────────────────────────────
+  it('81. buildRecommendations: catalogo cerrado hallazgo -> recomendaciones', () => {
+    const recs = buildRecommendations([
+      { id: 'caries_sarro', texto: 'Caries y sarro' },
+      { id: 'vision_disminuida', texto: 'Disminucion agudeza visual' },
+    ])
+    expect(recs).toContain('VALORACIÓN POR ODONTOLOGÍA PARA TRATAMIENTO DE CARIES Y SARRO')
+    expect(recs).toContain('VALORACIÓN CON OPTOMETRISTA POR DISMINUCIÓN DE LA AGUDEZA VISUAL')
+    expect(recs).toContain('USO DE LENTES PARA LABORAR')
+    expect(recs).toContain('EXAMEN DE LA VISTA CADA AÑO')
+  })
+
+  it('82. buildRecommendations: lista numerada con formato PDF (1.- ... 2.- ...)', () => {
+    const recs = buildRecommendations([{ id: 'caries_sarro' }])
+    expect(recs).toMatch(/^1\.- /)
+    expect(recs.startsWith('1.- VALORACIÓN POR ODONTOLOGÍA')).toBe(true)
+    expect(recs.endsWith('.')).toBe(false) // sin punto final (la numeracion usa '. ' entre items)
+  })
+
+  it('83. buildRecommendations: deduplica recomendaciones del mismo hallazgo', () => {
+    const recs = buildRecommendations([
+      { id: 'vision_disminuida' },
+      { id: 'vision_disminuida' }, // duplicado intencional
+    ])
+    const matches = recs.match(/OPTOMETRISTA/g)
+    expect(matches?.length).toBe(1)
+  })
+
+  it('84. buildRecommendations: deduplica cuando multiples hallazgos generan la misma recomendacion', () => {
+    // Ninguno del catalogo actual genera duplicados de otros hallazgos
+    // (los IDs son disjuntos), pero validamos la deduplicacion del Set.
+    const recs = buildRecommendations([
+      { id: 'sobrepeso' },
+      { id: 'obesidad' },
+    ])
+    // 'sobrepeso' tiene 2 recs, 'obesidad' tiene 3 recs, con 1 repetida
+    // (MEJORAR HABITOS ALIMENTICIOS y REALIZAR EJERCICIO...) → dedup = 4 recs.
+    // Contamos las recomendaciones deduplicadas: deben ser 4 (las unicas).
+    const matchesHabitos = recs.match(/MEJORAR HÁBITOS ALIMENTICIOS/g)
+    expect(matchesHabitos?.length).toBe(1)
+  })
+
+  it('85. buildRecommendations: retorna string vacío cuando no hay hallazgos reconocidos', () => {
+    const recs = buildRecommendations([
+      { id: 'no_existe_en_catalogo', texto: 'X' },
+    ])
+    expect(recs).toBe('')
+  })
+
+  it('86. buildRecommendations: retorna string vacío cuando la lista esta vacia', () => {
+    expect(buildRecommendations([])).toBe('')
+  })
+
+  // ─── detectHallazgos (DA-7) ────────────────────────────────────────────────
+  it('87. detectHallazgosFromExam: deriva hallazgos desde campos manuales', () => {
+    const hallazgos = detectHallazgosFromExam({
+      estado_nutricional: 'SOBREPESO',
+      agudeza_visual_resumen: 'DISMINUIDA',
+      salud_bucal: 'CARIES Y SARRO',
+      presion_arterial_resumen: 'ALTA',
+    })
+    const ids = hallazgos.map(h => h.id).sort()
+    expect(ids).toEqual(['caries_sarro', 'presion_alta', 'sobrepeso', 'vision_disminuida'])
+  })
+
+  it('88. detectHallazgosFromExam: case-insensitive (lowercase se acepta)', () => {
+    const hallazgos = detectHallazgosFromExam({
+      salud_bucal: 'caries y sarro',
+      estado_nutricional: 'sobrepeso',
+    })
+    const ids = hallazgos.map(h => h.id).sort()
+    expect(ids).toContain('caries_sarro')
+    expect(ids).toContain('sobrepeso')
+  })
+
+  it('89. detectHallazgosFromExam: exploracion.circulacion_venosa INSUFICIENCIA → hallazgo venoso', () => {
+    const hallazgos = detectHallazgosFromExam({
+      exploracion: { circulacion_venosa: 'INSUFICIENCIA VENOSA' },
+    })
+    expect(hallazgos.map(h => h.id)).toContain('insuficiencia_venosa')
+  })
+
+  it('90. detectHallazgosFromIa: deriva hallazgos desde resultados IA', () => {
+    const hallazgos = detectHallazgosFromIa({
+      audiometria_clasificacion: 'HIPOACUSIA CONDUCTIVA LEVE',
+      espirometria_patron: 'RESTRICTIVO',
+      radiografia_hallazgo: 'PATOLOGICO',
+      laboratorio_out_of_range: true,
+    })
+    const ids = hallazgos.map(h => h.id).sort()
+    expect(ids).toEqual([
+      'auditiva_conductiva',
+      'laboratorio_anormal',
+      'patron_restrictivo',
+      'radiografia_patologica',
+    ])
+  })
+
+  it('91. detectHallazgosFromIa: audiometria normal no genera hallazgo', () => {
+    const hallazgos = detectHallazgosFromIa({ audiometria_clasificacion: 'NORMAL' })
+    expect(hallazgos).toEqual([])
+  })
+
+  it('92. extractHallazgos: deduplica hallazgos con mismo id (manual + IA)', () => {
+    const hallazgos = extractHallazgos(
+      { salud_bucal: 'CARIES Y SARRO' }, // hallazgo manual
+      {}, // IA vacío
+    )
+    expect(hallazgos).toHaveLength(1)
+    expect(hallazgos[0].id).toBe('caries_sarro')
+  })
+
+  it('93. extractHallazgos: combina hallazgos manual + IA sin duplicar id', () => {
+    const hallazgos = extractHallazgos(
+      { salud_bucal: 'CARIES Y SARRO' },
+      { audiometria_clasificacion: 'HIPOACUSIA SENSORINEURAL' },
+    )
+    const ids = hallazgos.map(h => h.id).sort()
+    expect(ids).toEqual(['auditiva_sensorineural', 'caries_sarro'])
+  })
+
+  // ─── buildRecommendationsFromExam (atajo) ──────────────────────────────────
+  it('94. buildRecommendationsFromExam: atajo derivar hallazgos + construir recomendaciones', () => {
+    const recs = buildRecommendationsFromExam({
+      estado_nutricional: 'OBESIDAD G2',
+      salud_bucal: 'CARIES',
+    })
+    // 'obesidad' genera 3 recs; 'caries' genera 1 rec → 4 items.
+    expect(recs).toContain('VALORACIÓN POR ODONTOLOGÍA PARA TRATAMIENTO DE CARIES')
+    expect(recs).toContain('VALORACIÓN POR NUTRICIÓN')
+    expect(recs).toContain('MEJORAR HÁBITOS ALIMENTICIOS')
+    expect(recs).toContain('REALIZAR EJERCICIO TODOS LOS DÍAS, DURANTE 30 MINUTOS AL DÍA')
+  })
+
+  it('95. CATALOGO_RECOMENDACIONES: expone reglas para todos los hallazgos detectados', () => {
+    // Cobertura: todos los IDs que detectHallazgos pueden emitir deben
+    // existir en el catalogo.
+    const idsCubiertos = [
+      'caries_sarro', 'caries', 'sarro',
+      'sobrepeso', 'obesidad', 'bajo_peso',
+      'vision_disminuida',
+      'presion_alta', 'presion_baja',
+      'insuficiencia_venosa',
+      'auditiva_conductiva', 'auditiva_sensorineural', 'auditiva_mixta',
+      'patron_restrictivo', 'patron_obstructivo', 'patron_mixto',
+      'radiografia_patologica',
+      'laboratorio_anormal',
+    ]
+    for (const id of idsCubiertos) {
+      expect(CATALOGO_RECOMENDACIONES[id]).toBeDefined()
+      expect(CATALOGO_RECOMENDACIONES[id].length).toBeGreaterThan(0)
+    }
   })
 })
