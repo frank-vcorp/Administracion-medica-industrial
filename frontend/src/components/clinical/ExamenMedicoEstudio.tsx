@@ -56,16 +56,17 @@ import {
   VAC_SI_NO_VALUES,
   type PlantillaEfKey,
 } from "@/schemas/clinical/exam.schema"
-// IMPL-20260817-09-C3 (ARCH-20260817-02 corte 2 DA-5): helpers de
-// auto-poblamiento para el resumen ejecutivo del reporte de aptitud.
-// Regla explicita de Frank (2026-08-17):
-//   "Quiero que se autopoble. Quiero que el medico solo llene lo
-//   estrictamente necesario."
-import { buildExamSummary, EXAM_SUMMARY_LABELS } from "@/lib/clinical/exam-summary"
 // IMPL-20260817-09-C4 (ARCH-20260817-02 corte 2 DA-7): helper de
 // auto-poblamiento para las recomendaciones del dictamen (catalogo
 // hallazgo → recomendacion + edicion manual).
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
+// IMPL-20260817-11-C1 (ARCH-20260817-02 corte 4 DA-5): preview en vivo de los
+// 9 campos auto-poblados, renderizado ARRIBA del selector de aptitud. El medico
+// ve primero lo que se va a poblar y despues decide la aptitud.
+// Regla explicita de Frank (2026-08-17):
+//   "Quiero que se autopoble. Quiero que el medico solo llene lo
+//   estrictamente necesario."
+import LiveSummaryPreview from "@/components/clinical/LiveSummaryPreview"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -268,75 +269,6 @@ const APTITUD_OPTIONS: AptitudOption[] = [
   { value: 'NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO', label: '❌ No Cumple con los Criterios', color: 'border-red-400 bg-red-50 text-red-800' },
   { value: 'PENDIENTE DE RESULTADOS', label: '⏳ Pendiente de Resultados', color: 'border-slate-300 bg-slate-50 text-slate-700' },
 ]
-
-// ─── Sub-componente: Resumen Ejecutivo Preview (IMPL-20260817-09-C3) ──────────
-// IMPL-20260817-09-C3 (ARCH-20260817-02 DA-5): preview read-only de los
-// 9 campos del PDF canonico. El medico NO edita aqui — si quiere ajustar,
-// va a las pestañas de origen (Resumen Clinico / Exploracion / etc).
-// `buildExamSummary` arma el resumen desde `form` (manual) + IA (futuro).
-function ResumenEjecutivoPreview({ form }: { form: Record<string, string> }) {
-  const summary = buildExamSummary({
-    estado_nutricional: form.estado_nutricional ?? null,
-    agudeza_visual_resumen: form.agudeza_visual_resumen ?? null,
-    salud_bucal: form.salud_bucal ?? null,
-    presion_arterial_resumen: form.presion_arterial_resumen ?? null,
-    examen_medico_texto: form.impresion_diagnostica ?? null,
-    // Campos IA 6-9: en esta SPEC no estan plumbed al componente padre; si
-    // se añaden mas adelante via props, se pasarán aquí.
-  })
-
-  // Texto placeholder cuando el campo está vacío (manual vs IA).
-  const placeholderManual = 'Pendiente'
-  const placeholderIa = 'Pendiente de resultado'
-
-  return (
-    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-          Resumen ejecutivo del reporte de aptitud
-        </p>
-        <span className="text-[10px] text-slate-400 italic">Auto-poblado · read-only</span>
-      </div>
-      <p className="text-[10px] text-slate-500 leading-relaxed">
-        Estos campos se generan automáticamente desde el examen clínico y los
-        resultados de IA. Para ajustar un valor, edita el campo en su pestaña de
-        correspondiente.
-      </p>
-      <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-        {EXAM_SUMMARY_LABELS.map(([key, label]) => {
-          const value = summary[key]
-          const isIaField =
-            key === 'audiometria' ||
-            key === 'espirometria' ||
-            key === 'laboratorios' ||
-            key === 'radiografia'
-          const placeholder = isIaField ? placeholderIa : placeholderManual
-          const isEmpty = value.trim() === ''
-          const isWide = key === 'examen_medico'
-          return (
-            <div
-              key={key}
-              className={`flex flex-col gap-0.5 ${isWide ? 'md:col-span-2' : ''}`}
-            >
-              <dt className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                {label}
-              </dt>
-              <dd
-                className={
-                  isEmpty
-                    ? 'text-slate-400 italic text-xs'
-                    : 'text-slate-800 font-medium'
-                }
-              >
-                {isEmpty ? placeholder : value}
-              </dd>
-            </div>
-          )
-        })}
-      </dl>
-    </div>
-  )
-}
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -1492,6 +1424,25 @@ export default function ExamenMedicoEstudio({
       {/* ── Sub-tab 4: Impresión Diagnóstica y Aptitud ────────────────── */}
           {activeInnerTab === 'impresion' && (
         <div className="space-y-4">
+          {/*
+            IMPL-20260817-11-C1 (ARCH-20260817-02 corte 4 DA-5): preview en vivo
+            de los 9 campos auto-poblados, renderizado ARRIBA del selector de
+            aptitud. Regla explicita de Frank (2026-08-17):
+              "Quiero que se autopoble. Quiero que el medico solo llene lo
+              estrictamente necesario."
+
+            - El medico ve primero lo que se va a firmar y despues decide la
+              aptitud (DA-5: tabla en vivo).
+            - Reactivo: como `form` viene del state del padre, cualquier
+              cambio en los combos / textareas re-renderiza este componente
+              sin recargar (AC-21).
+            - Los campos 6-9 muestran "Pendiente de resultado" si no hay IA
+              todavia; cuando llega el resultado IA, se actualiza (AC-22).
+            - IA no esta plumbed al componente padre todavia; cuando se
+              añada via props, se pasara como segundo argumento.
+          */}
+          <LiveSummaryPreview form={form} />
+
           {/* Selección de Aptitud */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -1572,21 +1523,16 @@ export default function ExamenMedicoEstudio({
           </div>
 
           {/*
-            IMPL-20260817-09-C3 (ARCH-20260817-02 DA-5): Resumen Ejecutivo
-            auto-poblado con los 9 campos del PDF canónico
-            (REPORTE DE EXAMEN MEDICO (APTITUD) EJEMPLO.pdf).
+            IMPL-20260817-09-C3 (ARCH-20260817-02 DA-5): el Resumen Ejecutivo
+            auto-poblado (9 campos del PDF canonico) ahora vive en su propio
+            archivo (`LiveSummaryPreview`) y se renderiza ARRIBA del selector
+            de aptitud — IMPL-20260817-11-C1 (Corte 4). El medico ve primero
+            lo que se va a poblar y despues decide la aptitud.
+
             Regla explicita de Frank (2026-08-17):
               "Quiero que se autopoble. Quiero que el medico solo llene lo
               estrictamente necesario."
-
-            - Read-only display (NO inputs). El medico NO edita estos campos
-              directamente; si quiere ajustar, va a las pestañas de origen.
-            - Live preview: se re-arma en cada render desde `form` (campos 1-5)
-              y desde los resultados IA cuando esten disponibles (campos 6-9).
-            - Cuando falta un valor, se muestra "Pendiente" / "Pendiente de
-              resultado" para distinguir captura manual vs IA.
           */}
-          <ResumenEjecutivoPreview form={form} />
 
           {/* Impresión Diagnóstica */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
