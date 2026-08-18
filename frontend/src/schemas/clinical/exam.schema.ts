@@ -490,8 +490,10 @@ export const ImpresiónAptitudSchema = z.object({
   estado_nutricional: tolerantZinEnum(ESTADO_NUTRICIONAL_VALUES),
   salud_bucal: tolerantZinEnum(SALUD_BUCAL_VALUES),
   // IMPL-20260817-08-C2 (ARCH-20260817-02 DA-6): enums cortos ZIN alineados al PDF.
-  agudeza_visual_resumen: tolerantZinEnum(AGUDEZA_VISUAL_RESUMEN_VALUES),
-  presion_arterial_resumen: tolerantZinEnum(PRESION_ARTERIAL_RESUMEN_VALUES),
+  // Mantener `.optional()` — el original `cleanString` lo era, y registros legacy
+  // sin estos campos siguen parseando (DA-1 preserva compat).
+  agudeza_visual_resumen: tolerantZinEnum(AGUDEZA_VISUAL_RESUMEN_VALUES).optional(),
+  presion_arterial_resumen: tolerantZinEnum(PRESION_ARTERIAL_RESUMEN_VALUES).optional(),
   medico_revisor: cleanString,
 });
 
