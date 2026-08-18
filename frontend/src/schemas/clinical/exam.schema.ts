@@ -253,6 +253,36 @@ export const LEGACY_APTITUD_VALUES = ['NO APTO'] as const
  */
 export const aptitudSchema = tolerantZinEnum(APTITUD_VALUES)
 
+// ────────────────────────────────────────────────────────────────────────────
+// RESUMEN VISUAL + PRESIÓN ARTERIAL — enums cortos (ARCH-20260817-02 / DA-6)
+// IMPL-20260817-08-C2 — Corte 1.
+// `agudeza_visual_resumen` y `presion_arterial_resumen` pasan de `cleanString`
+// a `tolerantZinEnum` con catálogos cortos alineados al ZIN (`ddlIDAgudezaNormal`,
+// `dllIDPresionArt`) y al PDF de referencia (`DISMINUIDA`, `NORMAL AL MOMENTO…`).
+// DA-1 (Opción A): schema tolerante preserva registros legacy.
+// @id IMPL-20260817-08-C2
+// @spec SPEC_ARCH-20260817-02 §2.6, §6
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Agudeza Visual resumen (Resumen Clínico) — 4 opciones (fiel al PDF). */
+export const AGUDEZA_VISUAL_RESUMEN_VALUES = [
+  'NORMAL',
+  'DISMINUIDA',
+  'NORMAL ALTA',
+  'BAJA AL MOMENTO DE LA TOMA',
+] as const
+
+export type AgudezaVisualResumenValue = (typeof AGUDEZA_VISUAL_RESUMEN_VALUES)[number]
+
+/** Presión Arterial resumen (Resumen Clínico) — 3 opciones (catálogo ZIN `dllIDPresionArt`). */
+export const PRESION_ARTERIAL_RESUMEN_VALUES = [
+  'NORMAL AL MOMENTO DE LA TOMA',
+  'ALTA',
+  'BAJA',
+] as const
+
+export type PresionArterialResumenValue = (typeof PRESION_ARTERIAL_RESUMEN_VALUES)[number]
+
 /**
  * Patrones Sí/No/No aplica para acordeones "Especifique" (D-5).
  * Aplica a: `txtHLPEspecificar` (factor de riesgo laboral), `txtAPTDrogasEspec`,
@@ -459,8 +489,9 @@ export const ImpresiónAptitudSchema = z.object({
   // Campos faltantes identificados en ARCH-20260325-09
   estado_nutricional: tolerantZinEnum(ESTADO_NUTRICIONAL_VALUES),
   salud_bucal: tolerantZinEnum(SALUD_BUCAL_VALUES),
-  agudeza_visual_resumen: cleanString,
-  presion_arterial_resumen: cleanString,
+  // IMPL-20260817-08-C2 (ARCH-20260817-02 DA-6): enums cortos ZIN alineados al PDF.
+  agudeza_visual_resumen: tolerantZinEnum(AGUDEZA_VISUAL_RESUMEN_VALUES),
+  presion_arterial_resumen: tolerantZinEnum(PRESION_ARTERIAL_RESUMEN_VALUES),
   medico_revisor: cleanString,
 });
 
