@@ -185,6 +185,15 @@ export async function getCompanyEventsHistory() {
             id: true,
             finalDiagnosis: true,
             signedAt: true,
+            // IMPL-20260817-08-C5 (ARCH-20260817-02 DA-1): exponer
+            // `physicalExamData.aptitud` para clasificación estructurada en el portal.
+            event: {
+              select: {
+                exam: {
+                  select: { physicalExamData: true }
+                }
+              }
+            }
           }
         },
         branch: {

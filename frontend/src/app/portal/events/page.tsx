@@ -4,6 +4,9 @@ import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import Link from 'next/link'
 import { EventRowButtons } from '@/components/EventRowButtons'
+// IMPL-20260817-08-C5 (ARCH-20260817-02 DA-1): clasificar dictamen vía campo
+// estructurado `aptitud` (5 valores PDF) + fallback legacy `includes('no apto')`.
+import { isNoCumple } from '@/lib/clinical/aptitud.helper'
 
 /**
  * @id IMPL-20260225-03
@@ -53,7 +56,17 @@ export default async function PortalEventsPage() {
                         {events?.map((event) => {
                             const isCompleted = event.status === 'COMPLETED'
                             const hasVerdict = !!event.verdict
-                            const isApto = event.verdict?.finalDiagnosis?.toLowerCase().includes('no apto') === false
+                            // IMPL-20260817-08-C5 (ARCH-20260817-02 DA-1): clasificar
+                            // desde `aptitud` estructurada del `physicalExamData` si
+                            // está disponible; fallback a `finalDiagnosis.includes('no apto')`.
+                            // El literal canónico "NO CUMPLE CON LOS CRITERIOS..."
+                            // NO contiene "no apto", por lo que la heurística histórica
+                            // lo clasificaba erróneamente como APTO.
+                            const aptitud = (event.verdict?.event?.exam?.physicalExamData as
+                              | { aptitud?: string | null } | null)?.aptitud ?? null
+                            const isApto = aptitud
+                              ? !isNoCumple(aptitud)
+                              : !(event.verdict?.finalDiagnosis?.toLowerCase().includes('no apto') ?? false)
 
                             return (
                                 <tr key={event.id} className="hover:bg-slate-50 transition-colors">
