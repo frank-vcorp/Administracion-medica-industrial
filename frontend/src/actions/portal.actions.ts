@@ -3,6 +3,11 @@
 import prisma from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
+// IMPL-20260817-08-C4 (ARCH-20260817-02 DA-1): heurística `includes('no apto')`
+// migra a `isNoCumple(aptitud)` estructurada con fallback legacy. El literal
+// canónico "NO CUMPLE CON LOS CRITERIOS..." NO contiene "no apto", por lo
+// que la heurística histórica clasificaba erróneamente como APTO.
+import { isNoCumple } from '@/lib/clinical/aptitud.helper'
 
 /**
  * Obtiene la sesión segura del servidor + valida que el usuario sea COMPANY_CLIENT
@@ -51,18 +56,41 @@ export async function getCompanyDashboardStats() {
 
     const inProgressEvents = totalEvents - completedEvents
 
-    // Calcular dictámenes aptos vs no aptos usando agregaciones
+    // IMPL-20260817-08-C4 (ARCH-20260817-02 DA-1): clasificar apto/no-apto desde
+    // el campo estructurado `aptitud` de `MedicalExam.physicalExamData`. Fallback
+    // legacy: si `aptitud` es null/indef, cae a `finalDiagnosis.includes('no apto')`
+    // (preserva dictámenes históricos sin campo estructurado).
     const verdicts = await prisma.medicalVerdict.findMany({
       where: { event: { worker: { companyId } } },
-      select: { finalDiagnosis: true }
+      select: {
+        finalDiagnosis: true,
+        event: {
+          select: {
+            exam: {
+              select: { physicalExamData: true }
+            }
+          }
+        }
+      }
     })
 
     let aptos = 0
     let noAptos = 0
     verdicts.forEach(v => {
-      const diag = v.finalDiagnosis.toLowerCase()
-      if (diag.includes('no apto')) noAptos++
-      else aptos++
+      const physicalExamData = (v.event?.exam?.physicalExamData ?? null) as
+        | { aptitud?: string | null }
+        | null
+      const aptitud = physicalExamData?.aptitud ?? null
+      if (aptitud) {
+        // Camino estructurado (DA-1): lee el campo `aptitud` canónico.
+        if (isNoCumple(aptitud)) noAptos++
+        else aptos++
+      } else {
+        // Fallback legacy: dictámenes sin `aptitud` estructurada.
+        const diag = (v.finalDiagnosis ?? '').toLowerCase()
+        if (diag.includes('no apto')) noAptos++
+        else aptos++
+      }
     })
 
     return {
