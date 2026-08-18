@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import Link from 'next/link'
+// IMPL-20260817-08-C6 (ARCH-20260817-02 DA-1): clasificar dictamen vía campo
+// estructurado `aptitud` (5 valores PDF) + fallback legacy `includes('no apto')`.
+import { isNoCumple } from '@/lib/clinical/aptitud.helper'
 
 /**
  * @id IMPL-20260225-01
@@ -49,7 +52,14 @@ export default async function PortalWorkersPage() {
                     <tbody className="divide-y divide-slate-100">
                         {workers?.map((worker) => {
                             const lastEvent = worker.medicalHistory[0]
-                            const isApto = lastEvent?.verdict?.finalDiagnosis?.toLowerCase().includes('no apto') === false
+                            // IMPL-20260817-08-C6 (ARCH-20260817-02 DA-1): clasificar
+                            // desde `aptitud` estructurada del `physicalExamData` si
+                            // está disponible; fallback a `finalDiagnosis.includes('no apto')`.
+                            const aptitud = (lastEvent?.verdict?.event?.exam?.physicalExamData as
+                              | { aptitud?: string | null } | null)?.aptitud ?? null
+                            const isApto = aptitud
+                              ? !isNoCumple(aptitud)
+                              : !(lastEvent?.verdict?.finalDiagnosis?.toLowerCase().includes('no apto') ?? false)
 
                             return (
                                 <tr key={worker.id} className="hover:bg-slate-50 transition-colors">
@@ -116,7 +126,14 @@ export default async function PortalWorkersPage() {
                     <tbody className="divide-y divide-slate-100">
                         {workers?.map((worker) => {
                             const lastEvent = worker.medicalHistory[0]
-                            const isApto = lastEvent?.verdict?.finalDiagnosis?.toLowerCase().includes('no apto') === false
+                            // IMPL-20260817-08-C6 (ARCH-20260817-02 DA-1): clasificar
+                            // desde `aptitud` estructurada del `physicalExamData` si
+                            // está disponible; fallback a `finalDiagnosis.includes('no apto')`.
+                            const aptitud = (lastEvent?.verdict?.event?.exam?.physicalExamData as
+                              | { aptitud?: string | null } | null)?.aptitud ?? null
+                            const isApto = aptitud
+                              ? !isNoCumple(aptitud)
+                              : !(lastEvent?.verdict?.finalDiagnosis?.toLowerCase().includes('no apto') ?? false)
 
                             return (
                                 <tr key={worker.id} className="hover:bg-slate-50 transition-colors">

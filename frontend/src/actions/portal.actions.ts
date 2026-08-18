@@ -141,6 +141,15 @@ export async function getCompanyWorkersWithStatus() {
               select: {
                 id: true,
                 finalDiagnosis: true,
+                // IMPL-20260817-08-C6 (ARCH-20260817-02 DA-1): exponer
+                // `physicalExamData.aptitud` para clasificación estructurada en /portal/workers.
+                event: {
+                  select: {
+                    exam: {
+                      select: { physicalExamData: true }
+                    }
+                  }
+                }
               }
             }
           }
