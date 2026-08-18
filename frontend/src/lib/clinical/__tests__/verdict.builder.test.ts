@@ -42,7 +42,9 @@ describe('IMPL-20260817-10-C3: buildVerdictFromExam (DA-2 auto-poblamiento Medic
     expect(fromObject.aptitud).toBe('PENDIENTE DE RESULTADOS')
   })
 
-  it('99. Auto-pobla impresión diagnóstica desde physicalExamData.impresion_diagnostica', () => {
+  it('99. Auto-pobla impresión diagnóstica desde physicalExamData.impresion_diagnostica (DA-1 legacy sin slots)', () => {
+    // IMPL-20260817-12-C1: si NO hay slots por prueba, fallback al legacy
+    // `impresion_diagnostica` consolidado.
     const verdict = buildVerdictFromExam({ impresion_diagnostica: 'Sano' })
     expect(verdict.impresionDiagnostica).toBe('Sano')
   })
@@ -70,7 +72,10 @@ describe('IMPL-20260817-10-C3: buildVerdictFromExam (DA-2 auto-poblamiento Medic
     expect(verdict.examenFisico).toBe('')
   })
 
-  it('103. Auto-poblamiento completo desde physicalExamData completo', () => {
+  it('103. Auto-poblamiento completo desde physicalExamData completo (Corte 4.5)', () => {
+    // IMPL-20260817-12-C1: cuando hay slot nuevo por prueba, gana sobre
+    // el legacy. Aquí solo `examen_medico_texto` está set, por lo que el
+    // consolidado devuelve el prefijo "Examen médico: ..." y NO el legacy.
     const physicalExamData = {
       aptitud: 'APTO CONDICIONADO',
       impresion_diagnostica: 'Hallazgos visuales menores',
@@ -79,7 +84,9 @@ describe('IMPL-20260817-10-C3: buildVerdictFromExam (DA-2 auto-poblamiento Medic
     }
     const verdict = buildVerdictFromExam(physicalExamData)
     expect(verdict.aptitud).toBe('APTO CONDICIONADO')
-    expect(verdict.impresionDiagnostica).toBe('Hallazgos visuales menores')
+    expect(verdict.impresionDiagnostica).toBe(
+      'Examen médico: Examen físico sin alteraciones',
+    )
     expect(verdict.recomendaciones).toBe('1.- Valoración por optometría')
     expect(verdict.examenFisico).toBe('Examen físico sin alteraciones')
   })
@@ -92,7 +99,7 @@ describe('IMPL-20260817-10-C3: buildVerdictFromExam (DA-2 auto-poblamiento Medic
       recomendaciones: 'Recomendaciones editadas',
     }
     const verdict = buildVerdictFromExam(
-      { aptitud: 'APTO', impresion_diagnostica: 'Auto' },
+      { aptitud: 'APTO', examen_medico_texto: 'Auto' },
       manual,
     )
     expect(verdict.aptitud).toBe('APTO CONDICIONADO') // preserva manual
@@ -196,7 +203,10 @@ describe('IMPL-20260817-10-C3: buildVerdictFromExam (DA-2 auto-poblamiento Medic
   })
 
   // ─── Integración: caso típico de DA-2 ───────────────────────────────────────
-  it('113. Caso típico DA-2: médico firmó apto condicionado con restricciones', () => {
+  it('113. Caso típico DA-2: médico firmó apto condicionado con restricciones (Corte 4.5)', () => {
+    // IMPL-20260817-12-C1: el slot `examen_medico_texto` setea el
+    // consolidado del dictamen (gana sobre legacy). Legacy `impresion_diagnostica`
+    // queda como respaldo para DA-1.
     const physicalExamData = {
       aptitud: 'APTO CONDICIONADO',
       impresion_diagnostica: 'Trabajador con sobrepeso y disminución de agudeza visual.',
@@ -207,10 +217,85 @@ describe('IMPL-20260817-10-C3: buildVerdictFromExam (DA-2 auto-poblamiento Medic
     const verdict = buildVerdictFromExam(physicalExamData)
     expect(verdict.aptitud).toBe('APTO CONDICIONADO')
     expect(verdict.impresionDiagnostica).toBe(
-      'Trabajador con sobrepeso y disminución de agudeza visual.',
+      'Examen médico: Exploración física sin alteraciones mayores.',
     )
     expect(verdict.examenFisico).toBe(
       'Exploración física sin alteraciones mayores.',
     )
+  })
+
+  // ─── IMPL-20260817-12-C1 (Corte 4.5): 5 slots por prueba + DA-1 ────────────
+  it('114. Concatena los 5 slots por prueba para el Diagnóstico Final', () => {
+    // Sin punto final en los textos para evitar "doble punto" en join('. ').
+    const physicalExamData = {
+      examen_medico_texto: 'Sin hallazgos patológicos',
+      audiometria_texto: 'OD: HIPOACUSIA LEVE',
+      espirometria_texto: 'Patrón restrictivo leve',
+      laboratorios_texto: 'BH normal, QS normal',
+      radiografia_texto: 'RXTORAX sin alteraciones',
+    }
+    const verdict = buildVerdictFromExam(physicalExamData)
+    expect(verdict.impresionDiagnostica).toBe(
+      'Examen médico: Sin hallazgos patológicos. ' +
+        'Audiometría: OD: HIPOACUSIA LEVE. ' +
+        'Espirometría: Patrón restrictivo leve. ' +
+        'Laboratorios: BH normal, QS normal. ' +
+        'Radiografía: RXTORAX sin alteraciones',
+    )
+  })
+
+  it('115. Solo algunos slots: concatena los presentes en orden, ignora vacíos', () => {
+    const physicalExamData = {
+      examen_medico_texto: 'Examen físico normal',
+      laboratorios_texto: 'QS: glucosa 110 mg/dL',
+    }
+    const verdict = buildVerdictFromExam(physicalExamData)
+    expect(verdict.impresionDiagnostica).toBe(
+      'Examen médico: Examen físico normal. Laboratorios: QS: glucosa 110 mg/dL',
+    )
+  })
+
+  it('116. DA-1: sin slots, fallback a legacy `impresion_diagnostica` consolidado', () => {
+    const physicalExamData = {
+      impresion_diagnostica: 'Trabajador sano, sin hallazgos.',
+    }
+    const verdict = buildVerdictFromExam(physicalExamData)
+    expect(verdict.impresionDiagnostica).toBe(
+      'Trabajador sano, sin hallazgos.',
+    )
+  })
+
+  it('117. DA-1: slots vacíos (strings vacíos), fallback a legacy', () => {
+    const physicalExamData = {
+      examen_medico_texto: '',
+      audiometria_texto: '',
+      espirometria_texto: '',
+      laboratorios_texto: '',
+      radiografia_texto: '',
+      impresion_diagnostica: 'Hallazgos visuales menores.',
+    }
+    const verdict = buildVerdictFromExam(physicalExamData)
+    expect(verdict.impresionDiagnostica).toBe('Hallazgos visuales menores.')
+  })
+
+  it('118. DA-1: ningún slot NI legacy → string vacío', () => {
+    const verdict = buildVerdictFromExam({})
+    expect(verdict.impresionDiagnostica).toBe('')
+  })
+
+  it('119. examenFisico prefiere slot nuevo, fallback a legacy (DA-1)', () => {
+    const withNew = buildVerdictFromExam({
+      examen_medico_texto: 'Texto del slot nuevo',
+      impresion_diagnostica: 'Texto legacy',
+    })
+    expect(withNew.examenFisico).toBe('Texto del slot nuevo')
+
+    const legacyOnly = buildVerdictFromExam({
+      impresion_diagnostica: 'Solo legacy',
+    })
+    expect(legacyOnly.examenFisico).toBe('Solo legacy')
+
+    const nothing = buildVerdictFromExam({})
+    expect(nothing.examenFisico).toBe('')
   })
 })

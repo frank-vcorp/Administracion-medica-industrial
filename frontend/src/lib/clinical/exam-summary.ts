@@ -35,9 +35,13 @@ export interface ExamSnapshot {
   agudeza_visual_resumen?: string | null
   salud_bucal?: string | null
   presion_arterial_resumen?: string | null
-  /** Texto diagnóstico del examen (campo "EXAMEN MEDICO" en el PDF). */
+  /** Texto diagnóstico del examen (campo "EXAMEN MEDICO" en el PDF).
+   *  IMPL-20260817-12-C1: slot nuevo; preferir sobre `impresion_diagnostica` legacy. */
   examen_medico_texto?: string | null
-  /** Textos manuales opcionales para campos IA (placeholder si no llega IA). */
+  /** DA-1 legacy: campo antiguo consolidado. Fallback para `examen_medico`. */
+  impresion_diagnostica?: string | null
+  /** Textos manuales opcionales para campos IA (placeholder si no llega IA).
+   *  IMPL-20260817-12-C1: slots nuevos por prueba (Frank 2026-08-17). */
   audiometria_texto?: string | null
   espirometria_texto?: string | null
   laboratorios_texto?: string | null
@@ -97,6 +101,17 @@ function pick(ia: string | null | undefined, manual: string | null | undefined):
   return s(manual)
 }
 
+/** Prioridad: slot nuevo > campo legacy > vacío.
+ *  IMPL-20260817-12-C1 (Corte 4.5): DA-1 — datos legacy con un solo
+ *  `impresion_diagnostica` consolidado siguen funcionando, pero si el médico
+ *  ya capturó el slot por separado, ese gana (más fiel al modelo).
+ */
+function pickText(opts: { nuevo?: string | null; legacy?: string | null }): string {
+  const nuevo = s(opts.nuevo)
+  if (nuevo.trim() !== '') return nuevo
+  return s(opts.legacy)
+}
+
 // ─── Builder principal ────────────────────────────────────────────────────────
 
 /**
@@ -125,7 +140,13 @@ export function buildExamSummary(
     estado_nutricional: s(exam.estado_nutricional),
     agudeza_visual: s(exam.agudeza_visual_resumen),
     salud_bucal: s(exam.salud_bucal),
-    examen_medico: s(exam.examen_medico_texto),
+    // IMPL-20260817-12-C1: `examen_medico` prefiere el slot nuevo
+    // `examen_medico_texto`, con fallback al campo legacy
+    // `impresion_diagnostica` (DA-1).
+    examen_medico: pickText({
+      nuevo: exam.examen_medico_texto,
+      legacy: exam.impresion_diagnostica,
+    }),
     presion_arterial: s(exam.presion_arterial_resumen),
     audiometria: pick(iaResults?.audiometria_resumen, exam.audiometria_texto),
     espirometria: pick(iaResults?.espirometria_resumen, exam.espirometria_texto),

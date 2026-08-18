@@ -1087,6 +1087,63 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
       expect(parsed.presion_arterial_resumen).toBe('130/85')
     })
 
+    // ── IMPL-20260817-12-C1 (Corte 4.5): 5 slots por prueba + DA-1 legacy ──
+    it('65a. ImpresiónAptitudSchema acepta los 5 slots por prueba (Corte 4.5)', () => {
+      const payload = {
+        estado_nutricional: 'NORMAL',
+        salud_bucal: 'BUENA',
+        examen_medico_texto: 'Sin hallazgos patológicos',
+        audiometria_texto: 'OD: HIPOACUSIA LEVE',
+        espirometria_texto: 'Patrón restrictivo leve',
+        laboratorios_texto: 'BH normal',
+        radiografia_texto: 'RXTORAX sin alteraciones',
+      }
+      const parsed = ImpresiónAptitudSchema.parse(payload)
+      expect(parsed.examen_medico_texto).toBe('Sin hallazgos patológicos')
+      expect(parsed.audiometria_texto).toBe('OD: HIPOACUSIA LEVE')
+      expect(parsed.espirometria_texto).toBe('Patrón restrictivo leve')
+      expect(parsed.laboratorios_texto).toBe('BH normal')
+      expect(parsed.radiografia_texto).toBe('RXTORAX sin alteraciones')
+    })
+
+    it('65b. ImpresiónAptitudSchema: slots son .optional() (DA-1 legacy compat)', () => {
+      // Sin slots, solo resumen clínico → debe parsear OK.
+      const parsed = ImpresiónAptitudSchema.parse({
+        estado_nutricional: 'NORMAL',
+        salud_bucal: 'BUENA',
+      })
+      expect(parsed.examen_medico_texto).toBeUndefined()
+      expect(parsed.audiometria_texto).toBeUndefined()
+      expect(parsed.espirometria_texto).toBeUndefined()
+      expect(parsed.laboratorios_texto).toBeUndefined()
+      expect(parsed.radiografia_texto).toBeUndefined()
+      expect(parsed.impresion_diagnostica).toBeUndefined()
+    })
+
+    it('65c. ImpresiónAptitudSchema: legacy `impresion_diagnostica` sigue siendo aceptado (DA-1)', () => {
+      const legacy = {
+        impresion_diagnostica: 'Trabajador sano, sin hallazgos',
+        estado_nutricional: 'NORMAL',
+        salud_bucal: 'BUENA',
+      }
+      const parsed = ImpresiónAptitudSchema.parse(legacy)
+      expect(parsed.impresion_diagnostica).toBe('Trabajador sano, sin hallazgos')
+    })
+
+    it('65d. ImpresiónAptitudSchema: coexisten slots nuevos + legacy (DA-1)', () => {
+      // El médico ya capturó slots por prueba Y existe el legacy
+      // consolidado. Ambos se preservan; los helpers deciden cuál usar.
+      const payload = {
+        examen_medico_texto: 'Slot nuevo',
+        impresion_diagnostica: 'Legacy consolidado',
+        estado_nutricional: 'NORMAL',
+        salud_bucal: 'BUENA',
+      }
+      const parsed = ImpresiónAptitudSchema.parse(payload)
+      expect(parsed.examen_medico_texto).toBe('Slot nuevo')
+      expect(parsed.impresion_diagnostica).toBe('Legacy consolidado')
+    })
+
     // ── Helpers ─────────────────────────────────────────────────────────────
     it('66. isAptoFromVerdict: APTO y variantes retornan true', () => {
       expect(isAptoFromVerdict('APTO')).toBe(true)
@@ -1245,6 +1302,23 @@ describe('IMPL-20260817-09-C5: buildExamSummary + buildRecommendations (Corte 2 
     expect(labels).toContain('ESPIROMETRIA')
     expect(labels).toContain('LABORATORIOS')
     expect(labels).toContain('RADIOGRAFIA')
+  })
+
+  // ── IMPL-20260817-12-C1 (Corte 4.5): pickText nuevo vs legacy ─────────────
+  it('80a. buildExamSummary: examen_medico prefiere slot nuevo, fallback legacy (DA-1)', () => {
+    const summaryNew = buildExamSummary({
+      examen_medico_texto: 'Slot nuevo',
+      impresion_diagnostica: 'Legacy consolidado',
+    })
+    expect(summaryNew.examen_medico).toBe('Slot nuevo')
+
+    const summaryLegacy = buildExamSummary({
+      impresion_diagnostica: 'Solo legacy',
+    })
+    expect(summaryLegacy.examen_medico).toBe('Solo legacy')
+
+    const summaryEmpty = buildExamSummary({})
+    expect(summaryEmpty.examen_medico).toBe('')
   })
 
   // ─── buildRecommendations (DA-7) ────────────────────────────────────────────

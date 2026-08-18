@@ -479,13 +479,29 @@ export const ExploracionFisicaSchema = z.object({
 // `tolerantZinEnum` (ZIN combos — DA-1). Ver SPEC §4.2.
 // ----------------------------------------------------------------------
 export const ImpresiónAptitudSchema = z.object({
-  // IMPL-20260817-08-C1 (ARCH-20260817-02 DA-1): enum de aptitud pasa de 4 a 5
-  // valores del PDF canónico. Schema tolerante preserva legacy `'NO APTO'`.
-  aptitud: aptitudSchema.optional(),
-  restricciones: cleanString,
-  impresion_diagnostica: cleanString,
-  observaciones_finales: cleanString,
-  medico_evaluador: cleanString,
+  // === DIAGNÓSTICOS SEPARADOS POR PRUEBA (Frank 2026-08-17) ===
+  // IMPL-20260817-12-C1 (ARCH-20260817-02 Corte 4.5 — fix schema):
+  // Frank señaló que el modelo correcto es "cada prueba con su slot
+  // independiente en BD". El campo único `impresion_diagnostica` mezclaba
+  // las 5 pruebas y los campos 6-9 del resumen ejecutivo (audiometría,
+  // espirometría, laboratorios, radiografía) se perdían al persistir.
+  //
+  // DA-1: los 5 slots son `.optional()` para preservar registros legacy
+  // con `impresion_diagnostica` consolidado. Helpers deben preferir el
+  // slot nuevo si existe, con fallback al legacy.
+  examen_medico_texto: cleanString.optional(),
+  audiometria_texto: cleanString.optional(),
+  espirometria_texto: cleanString.optional(),
+  laboratorios_texto: cleanString.optional(),
+  radiografia_texto: cleanString.optional(),
+
+  // === LEGACY (DA-1) ===
+  // IMPL-20260817-12-C1: campo antiguo consolidado, ahora opcional para
+  // retrocompatibilidad. Los nuevos slots por prueba son la fuente de
+  // verdad; este se conserva solo para parsear datos legacy sin migración.
+  impresion_diagnostica: cleanString.optional(),
+
+  // === RESUMEN EJECUTIVO (auto-poblado por buildExamSummary) ===
   // Campos faltantes identificados en ARCH-20260325-09
   estado_nutricional: tolerantZinEnum(ESTADO_NUTRICIONAL_VALUES),
   salud_bucal: tolerantZinEnum(SALUD_BUCAL_VALUES),
@@ -494,6 +510,14 @@ export const ImpresiónAptitudSchema = z.object({
   // sin estos campos siguen parseando (DA-1 preserva compat).
   agudeza_visual_resumen: tolerantZinEnum(AGUDEZA_VISUAL_RESUMEN_VALUES).optional(),
   presion_arterial_resumen: tolerantZinEnum(PRESION_ARTERIAL_RESUMEN_VALUES).optional(),
+
+  // === CONSOLIDADO (decisión del médico) ===
+  // IMPL-20260817-08-C1 (ARCH-20260817-02 DA-1): enum de aptitud pasa de 4 a 5
+  // valores del PDF canónico. Schema tolerante preserva legacy `'NO APTO'`.
+  aptitud: aptitudSchema.optional(),
+  restricciones: cleanString,
+  observaciones_finales: cleanString,
+  medico_evaluador: cleanString,
   medico_revisor: cleanString,
 });
 

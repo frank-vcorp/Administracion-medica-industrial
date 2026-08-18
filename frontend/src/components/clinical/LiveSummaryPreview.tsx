@@ -48,7 +48,10 @@ function formToSnapshot(form: Record<string, string>): ExamSnapshot {
     agudeza_visual_resumen: form.agudeza_visual_resumen ?? null,
     salud_bucal: form.salud_bucal ?? null,
     presion_arterial_resumen: form.presion_arterial_resumen ?? null,
-    examen_medico_texto: form.impresion_diagnostica ?? null,
+    // IMPL-20260817-12-C1: preferir el slot nuevo `examen_medico_texto`
+    // sobre el campo legacy `impresion_diagnostica` (DA-1 compat).
+    examen_medico_texto: form.examen_medico_texto ?? null,
+    impresion_diagnostica: form.impresion_diagnostica ?? null,
   }
 }
 

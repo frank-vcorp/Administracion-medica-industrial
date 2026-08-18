@@ -85,13 +85,22 @@ export const DEFAULT_APTITUD = 'PENDIENTE DE RESULTADOS' as const
  * Si `existing` es null/undefined, devuelve una propuesta basada en
  * `physicalExamData`:
  * - `aptitud` ← `physicalExamData.aptitud` (string), o `DEFAULT_APTITUD`.
- * - `impresionDiagnostica` ← `physicalExamData.impresion_diagnostica` (string),
- *   o `''`.
+ * - `impresionDiagnostica` ← concatenación de los 5 slots por prueba
+ *   (`examen_medico_texto`, `audiometria_texto`, `espirometria_texto`,
+ *   `laboratorios_texto`, `radiografia_texto`) con prefijo del nombre de
+ *   la prueba (`"Examen médico: ..."`, etc.). Si ninguno está presente,
+ *   fallback al campo legacy `impresion_diagnostica` (DA-1).
  * - `recomendaciones` ← `physicalExamData.recomendaciones` (string), o `''`.
- * - `examenFisico` ← `physicalExamData.examen_medico_texto` (string), o `''`.
+ * - `examenFisico` ← `physicalExamData.examen_medico_texto` (string), o
+ *   fallback a `impresion_diagnostica` legacy si no hay slot nuevo (DA-1).
  * - `fechaEmision` ← `defaults.fechaEmision ?? new Date()`.
  * - `medicoEvaluador` ← `defaults.medicoEvaluador` (opcional).
  * - `medicoRevisor` ← `defaults.medicoRevisor` (opcional).
+ *
+ * **IMPL-20260817-12-C1 (Corte 4.5 — fix schema):** "Cada prueba con su
+ * slot independiente en BD" (Frank 2026-08-17). Antes había 1 solo campo
+ * `impresion_diagnostica` que mezclaba todo; ahora se concatenan los 5
+ * slots para construir el "Diagnóstico Final" del dictamen.
  *
  * **Defensa en profundidad:** todos los campos se normalizan a `string` con
  * `typeof === 'string'` para tolerar datos corruptos / legacy en BD.
@@ -125,20 +134,52 @@ export function buildVerdictFromExam(
       ? physicalExamData.aptitud
       : DEFAULT_APTITUD
 
-  const impresionDiagnostica =
-    typeof physicalExamData.impresion_diagnostica === 'string'
-      ? physicalExamData.impresion_diagnostica
-      : ''
-
   const recomendaciones =
     typeof physicalExamData.recomendaciones === 'string'
       ? physicalExamData.recomendaciones
       : ''
 
-  const examenFisico =
-    typeof physicalExamData.examen_medico_texto === 'string'
-      ? physicalExamData.examen_medico_texto
-      : ''
+  // IMPL-20260817-12-C1: leer los 5 slots por prueba + legacy fallback.
+  const legacy = typeof physicalExamData.impresion_diagnostica === 'string'
+    ? physicalExamData.impresion_diagnostica
+    : ''
+
+  const examenMedicoTexto = typeof physicalExamData.examen_medico_texto === 'string'
+    ? physicalExamData.examen_medico_texto
+    : ''
+
+  const audiometriaTexto = typeof physicalExamData.audiometria_texto === 'string'
+    ? physicalExamData.audiometria_texto
+    : ''
+
+  const espirometriaTexto = typeof physicalExamData.espirometria_texto === 'string'
+    ? physicalExamData.espirometria_texto
+    : ''
+
+  const laboratoriosTexto = typeof physicalExamData.laboratorios_texto === 'string'
+    ? physicalExamData.laboratorios_texto
+    : ''
+
+  const radiografiaTexto = typeof physicalExamData.radiografia_texto === 'string'
+    ? physicalExamData.radiografia_texto
+    : ''
+
+  // Construir el texto consolidado del "Diagnóstico Final" del dictamen
+  // concatenando los 5 slots con prefijo del nombre de la prueba.
+  const consolidatedParts: string[] = []
+  if (examenMedicoTexto) consolidatedParts.push(`Examen médico: ${examenMedicoTexto}`)
+  if (audiometriaTexto) consolidatedParts.push(`Audiometría: ${audiometriaTexto}`)
+  if (espirometriaTexto) consolidatedParts.push(`Espirometría: ${espirometriaTexto}`)
+  if (laboratoriosTexto) consolidatedParts.push(`Laboratorios: ${laboratoriosTexto}`)
+  if (radiografiaTexto) consolidatedParts.push(`Radiografía: ${radiografiaTexto}`)
+
+  const impresionDiagnostica = consolidatedParts.length > 0
+    ? consolidatedParts.join('. ')
+    : legacy // DA-1 fallback
+
+  // `examenFisico` es el texto del campo "EXAMEN MEDICO" en el PDF
+  // (tabla resumen 9 campos). Preferencia: slot nuevo, fallback legacy.
+  const examenFisico = examenMedicoTexto || legacy
 
   return {
     aptitud,
