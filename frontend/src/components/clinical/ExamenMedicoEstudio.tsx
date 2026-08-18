@@ -41,6 +41,11 @@ import {
   CIRCULACION_VENOSA_VALUES,
   SALUD_BUCAL_VALUES,
   ESTADO_NUTRICIONAL_VALUES,
+  // IMPL-20260817-08-C7 (ARCH-20260817-02 DA-1/DA-6): 5 valores canónicos PDF
+  // para aptitud + enums cortos para agudeza/presión.
+  APTITUD_VALUES,
+  AGUDEZA_VISUAL_RESUMEN_VALUES,
+  PRESION_ARTERIAL_RESUMEN_VALUES,
   PLANTILLAS_EF,
   // IMPL-20260817-07: catálogos ZIN para Módulo 1 (ginecológicos + vacunas).
   // Ver SPEC §4.6.
@@ -234,10 +239,23 @@ const EXPLORACION_FIELDS: ExplField[] = [
   { name: "especificar_quiste", label: "Especificar Quiste", kind: "text" },
 ]
 
-const APTITUD_OPTIONS = [
+// IMPL-20260817-08-C7 (ARCH-20260817-02 DA-1): 5 valores canónicos del PDF de
+// referencia (`REPORTE DE EXAMEN MEDICO (APTITUD) EJEMPLO.pdf`) + PENDIENTE
+// operativa. El literal largo "NO CUMPLE CON LOS CRITERIOS..." se renderiza
+// con `break-words` para que no rompa el layout del botón en grid 2-col.
+// Legacy `'NO APTO'` ya NO aparece como opción de UI; el schema Zod lo sigue
+// aceptando vía DA-1 (registros previos sin migración).
+type AptitudOption = {
+  value: (typeof APTITUD_VALUES)[number]
+  label: string
+  color: string
+}
+
+const APTITUD_OPTIONS: AptitudOption[] = [
   { value: 'APTO', label: '✅ Apto', color: 'border-emerald-400 bg-emerald-50 text-emerald-800' },
+  { value: 'APTO CONDICIONADO', label: '🟡 Apto Condicionado', color: 'border-yellow-400 bg-yellow-50 text-yellow-800' },
   { value: 'APTO CON RESTRICCIONES', label: '⚠️ Apto con Restricciones', color: 'border-amber-400 bg-amber-50 text-amber-800' },
-  { value: 'NO APTO', label: '❌ No Apto', color: 'border-red-400 bg-red-50 text-red-800' },
+  { value: 'NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO', label: '❌ No Cumple con los Criterios', color: 'border-red-400 bg-red-50 text-red-800' },
   { value: 'PENDIENTE DE RESULTADOS', label: '⏳ Pendiente de Resultados', color: 'border-slate-300 bg-slate-50 text-slate-700' },
 ]
 
@@ -1393,7 +1411,11 @@ export default function ExamenMedicoEstudio({
                   key={opt.value}
                   disabled={readonly}
                   onClick={() => setAptitud(aptitud === opt.value ? '' : opt.value)}
-                  className={`text-xs font-bold px-3 py-3 rounded-xl border-2 transition-all text-left ${
+                  // IMPL-20260817-08-C7 (ARCH-20260817-02 DA-1): `break-words` permite
+                  // que el literal largo "NO CUMPLE CON LOS CRITERIOS..." fluya sin
+                  // romper el grid 2-col.
+                  title={opt.value}
+                  className={`text-xs font-bold px-3 py-3 rounded-xl border-2 transition-all text-left break-words ${
                     aptitud === opt.value
                       ? opt.color + ' border-current ring-2 ring-offset-1 ring-current/30'
                       : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-60'
@@ -1411,13 +1433,21 @@ export default function ExamenMedicoEstudio({
             <div className="grid grid-cols-2 gap-3">
                 {RESUMEN_CLINICO_FIELDS.map(([field, label]) => {
                   // IMPL-20260817-01-C2: estado_nutricional + salud_bucal
-                  // son ZIN combos (DA-1). Los otros 2 campos siguen text.
+                  // son ZIN combos (DA-1).
+                  // IMPL-20260817-08-C7 (ARCH-20260817-02 DA-6): agudeza_visual_resumen
+                  // y presion_arterial_resumen ahora son <select> con catálogos ZIN.
                   const isEstadoNutricional = field === 'estado_nutricional'
                   const isSaludBucal = field === 'salud_bucal'
+                  const isAgudezaVisual = field === 'agudeza_visual_resumen'
+                  const isPresionArterial = field === 'presion_arterial_resumen'
                   const comboValues = isEstadoNutricional
                     ? ESTADO_NUTRICIONAL_VALUES
                     : isSaludBucal
                     ? SALUD_BUCAL_VALUES
+                    : isAgudezaVisual
+                    ? AGUDEZA_VISUAL_RESUMEN_VALUES
+                    : isPresionArterial
+                    ? PRESION_ARTERIAL_RESUMEN_VALUES
                     : null
                   return (
                   <div key={field}>
