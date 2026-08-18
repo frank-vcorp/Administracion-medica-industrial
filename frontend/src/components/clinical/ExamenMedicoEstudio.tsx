@@ -42,6 +42,13 @@ import {
   SALUD_BUCAL_VALUES,
   ESTADO_NUTRICIONAL_VALUES,
   PLANTILLAS_EF,
+  // IMPL-20260817-07: catálogos ZIN para Módulo 1 (ginecológicos + vacunas).
+  // Ver SPEC §4.6.
+  AG_IVS_VALUES,
+  AG_VSA_VALUES,
+  AG_NUMERIC_0_11,
+  AG_ABORTO_VALUES,
+  VAC_SI_NO_VALUES,
   type PlantillaEfKey,
 } from "@/schemas/clinical/exam.schema"
 
@@ -110,17 +117,62 @@ const LONGITUDINAL_SECTIONS: [string, string][] = [
   ['no_patologicos', 'No Patológicos'],
   ['patologicos', 'Patológicos'],
 ]
-const GINE_FIELDS: [string, string][] = [
-  ['m1_gine_menarca', 'Menarca'], ['m1_gine_fum', 'FUM'], ['m1_gine_ivs', 'IVS'],
-  ['m1_gine_ritmo', 'Ritmo'], ['m1_gine_gesta', 'Gesta'], ['m1_gine_aborto', 'Aborto'],
-  ['m1_gine_parto', 'Parto'], ['m1_gine_cesarea', 'Cesárea'], ['m1_gine_doc', 'DOC'],
-  ['m1_gine_fup_uc', 'FUP/FUC'], ['m1_gine_exp_mamaria', 'Exp. Mamaria'], ['m1_gine_mpf', 'MPF'],
+/**
+ * IMPL-20260817-07 — Módulo 1 Ginecológicos → select con catálogo ZIN.
+ * Cada campo declara su `kind` para el render correcto:
+ *   - `select` → <select> con valores ZIN (8 campos).
+ *   - `number` → <input type="number"> con min/max (menarca 0-30).
+ *   - `date` → <input type="date"> (FUM, FUP/FUC — texto legacy, sigue
+ *     siendo text para no romper fechas DD/MM/YYYY que ya había capturado).
+ *   - `text` → input text (exp_mamaria = plantilla prellenada).
+ * Mantenemos text para fechas para no invalidar fechas legacy.
+ * Ver SPEC §4.6.
+ */
+type GineKind = 'select' | 'number' | 'date' | 'text'
+
+type GineField = {
+  name: string
+  label: string
+  kind: GineKind
+  /** Catálogo ZIN cuando kind === 'select'. */
+  values?: readonly (string | number)[]
+  /** min/max para kind === 'number'. */
+  min?: number
+  max?: number
+}
+
+const GINE_FIELDS_TYPES: GineField[] = [
+  { name: 'm1_gine_menarca', label: 'Menarca', kind: 'number', min: 0, max: 30 },
+  { name: 'm1_gine_fum', label: 'FUM', kind: 'date' },
+  { name: 'm1_gine_ivs', label: 'IVS', kind: 'select', values: AG_IVS_VALUES },
+  { name: 'm1_gine_ritmo', label: 'Ritmo', kind: 'select', values: AG_VSA_VALUES },
+  { name: 'm1_gine_gesta', label: 'Gesta', kind: 'select', values: AG_NUMERIC_0_11 },
+  { name: 'm1_gine_aborto', label: 'Aborto', kind: 'select', values: AG_ABORTO_VALUES },
+  { name: 'm1_gine_parto', label: 'Parto', kind: 'select', values: AG_NUMERIC_0_11 },
+  { name: 'm1_gine_cesarea', label: 'Cesárea', kind: 'select', values: AG_NUMERIC_0_11 },
+  { name: 'm1_gine_doc', label: 'DOC', kind: 'select', values: AG_VSA_VALUES },
+  { name: 'm1_gine_fup_uc', label: 'FUP/FUC', kind: 'date' },
+  { name: 'm1_gine_exp_mamaria', label: 'Exp. Mamaria', kind: 'text' },
+  { name: 'm1_gine_mpf', label: 'MPF', kind: 'select', values: AG_NUMERIC_0_11 },
 ]
-const INMUNO_FIELDS: [string, string][] = [
-  ['m1_vac_rubeola', 'Rubéola'], ['m1_vac_neumococo', 'Neumococo'],
-  ['m1_vac_sarampion', 'Sarampión'], ['m1_vac_influenza', 'Influenza'],
-  ['m1_vac_toxoide', 'Toxoide Tetánico'], ['m1_vac_hepatitisb', 'Hepatitis B'],
-  ['m1_vac_otras', 'Otras'],
+
+/**
+ * IMPL-20260817-07 — Módulo 1 Vacunas → acordeón Sí/No + 'especifique'.
+ * Mismo patrón que Patologicos (commit `80fa3ad`):
+ *   - <select> con VAC_SI_NO_VALUES (NEGADO / SI / NO APLICA).
+ *   - Si estado === 'SI' Y (focused OR sin especifique) → inputs desplegados.
+ *   - Si estado === 'SI' Y tiene especifique Y no focused → resumen colapsado.
+ *   - Click en resumen → expande para editar.
+ * Ver SPEC §4.6.
+ */
+const VACUNAS_LIST: { key: string; label: string }[] = [
+  { key: 'm1_vac_rubeola', label: 'Rubéola' },
+  { key: 'm1_vac_neumococo', label: 'Neumococo' },
+  { key: 'm1_vac_sarampion', label: 'Sarampión' },
+  { key: 'm1_vac_influenza', label: 'Influenza' },
+  { key: 'm1_vac_toxoide', label: 'Toxoide Tetánico' },
+  { key: 'm1_vac_hepatitisb', label: 'Hepatitis B' },
+  { key: 'm1_vac_otras', label: 'Otras' },
 ]
 const RESUMEN_CLINICO_FIELDS: [string, string][] = [
   ['estado_nutricional', 'Estado Nutricional'],
@@ -245,6 +297,10 @@ export default function ExamenMedicoEstudio({
     )
   })
   const [m1Tab, setM1Tab] = useState<M1Tab>('inmuno')
+  // IMPL-20260817-07: acordeón Vacunas — campo enfocado (mismo patrón que
+  // `focusedPatologiaField` de AntecedentesCaptura). Si es null, todos los
+  // acordeones con contenido se muestran colapsados.
+  const [focusedVacuna, setFocusedVacuna] = useState<string | null>(null)
 
   // IMPL-20260809-02 (ARCH-20260809-01 v2): estado levantado de `antecedentes_captured`.
   // Mismo patrón que `modulo1`: se inicializa desde `physicalExamData.antecedentes_captured`
@@ -1011,13 +1067,85 @@ export default function ExamenMedicoEstudio({
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Antecedentes Ginecológicos</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {GINE_FIELDS.map(([key, lbl]) => (
-                  <div key={key}>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">{lbl}</label>
-                    <input type="text" value={modulo1[key] ?? ''} onChange={e => setM1Field(key, e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-                  </div>
-                ))}
+                {/* IMPL-20260817-07: 9 ginecológicos a <select> con catálogo ZIN
+                    + menarca a input numérico 0-30. Mantener fechas y
+                    exp_mamaria como texto libre. Ver SPEC §4.6. */}
+                {GINE_FIELDS_TYPES.map(field => {
+                  const currentValue = modulo1[field.name] ?? ''
+                  const baseInputClass = "w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60"
+                  if (field.kind === 'select' && field.values) {
+                    // DA-1: si el valor legacy no está en el catálogo, mostrar
+                    // opción "— otro (legacy) —" para que el médico lo vea
+                    // y pueda re-seleccionar sin perderlo.
+                    const isLegacy = currentValue !== '' && !field.values.includes(currentValue as never)
+                    return (
+                      <div key={field.name}>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+                        <select
+                          value={isLegacy ? '__legacy__' : currentValue}
+                          onChange={e => {
+                            if (e.target.value === '__legacy__') return // no-op
+                            setM1Field(field.name, e.target.value)
+                          }}
+                          disabled={readonly}
+                          className={baseInputClass}
+                        >
+                          <option value="">—</option>
+                          {isLegacy && (
+                            <option value="__legacy__">{currentValue} (legacy)</option>
+                          )}
+                          {field.values.map(v => (
+                            <option key={String(v)} value={String(v)}>{String(v)}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  }
+                  if (field.kind === 'number') {
+                    return (
+                      <div key={field.name}>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+                        <input
+                          type="number"
+                          min={field.min}
+                          max={field.max}
+                          value={currentValue}
+                          onChange={e => setM1Field(field.name, e.target.value)}
+                          disabled={readonly}
+                          className={baseInputClass}
+                        />
+                      </div>
+                    )
+                  }
+                  if (field.kind === 'date') {
+                    return (
+                      <div key={field.name}>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+                        <input
+                          type="text"
+                          value={currentValue}
+                          onChange={e => setM1Field(field.name, e.target.value)}
+                          disabled={readonly}
+                          placeholder="DD/MM/AAAA"
+                          className={baseInputClass}
+                        />
+                      </div>
+                    )
+                  }
+                  // text
+                  return (
+                    <div key={field.name}>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+                      <input
+                        type="text"
+                        value={currentValue}
+                        onChange={e => setM1Field(field.name, e.target.value)}
+                        disabled={readonly}
+                        className={baseInputClass}
+                      />
+                    </div>
+                  )
+                })}
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">VSA</label>
@@ -1033,14 +1161,81 @@ export default function ExamenMedicoEstudio({
           {m1Tab === 'inmuno' && (
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Inmunizaciones (reportadas por el paciente)</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {INMUNO_FIELDS.map(([key, lbl]) => (
-                  <div key={key}>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">{lbl}</label>
-                    <input type="text" value={modulo1[key] ?? ''} onChange={e => setM1Field(key, e.target.value)} disabled={readonly}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Fecha / Estado" />
-                  </div>
-                ))}
+              {/* IMPL-20260817-07: acordeón Sí/No + 'especifique' para 7 vacunas.
+                  Mismo patrón que Patologicos (commit `80fa3ad`). Ver SPEC §4.6. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {VACUNAS_LIST.map(({ key, label }) => {
+                  const estado = (modulo1[key] ?? 'NEGADO') as
+                    | (typeof VAC_SI_NO_VALUES)[number]
+                    | string
+                  const especifiqueKey = `${key}_especifique`
+                  const especifique = modulo1[especifiqueKey] ?? ''
+                  const isFocused = focusedVacuna === key
+                  const hasContent = Boolean(especifique.trim())
+                  const showInputs = estado === 'SI' && (isFocused || !hasContent)
+                  const showSummary = estado === 'SI' && !showInputs
+                  const baseInputClass = "w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                  return (
+                    <div key={key} className="border border-slate-100 rounded-lg p-2 bg-white">
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase">{label}</label>
+                      <select
+                        value={estado}
+                        onChange={e => {
+                          setM1Field(key, e.target.value)
+                          if (e.target.value === 'SI') {
+                            setFocusedVacuna(key)
+                          } else if (focusedVacuna === key) {
+                            setFocusedVacuna(null)
+                          }
+                        }}
+                        disabled={readonly}
+                        className={`w-full text-xs px-2 py-1 border rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60 mt-1 ${
+                          estado === 'SI'
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                            : estado === 'NO APLICA'
+                              ? 'border-slate-200 bg-slate-50 text-slate-500'
+                              : 'border-slate-200 bg-white text-slate-700'
+                        }`}
+                      >
+                        {VAC_SI_NO_VALUES.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                      {showSummary && (
+                        <button
+                          type="button"
+                          onClick={() => setFocusedVacuna(key)}
+                          className="w-full text-left mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs hover:bg-emerald-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-1 font-medium text-emerald-800 mb-1">
+                            <span>✓</span>
+                            <span>{label}</span>
+                            <span className="text-emerald-600 ml-auto text-[10px]">click para editar</span>
+                          </div>
+                          <div className="text-slate-600">
+                            <p><span className="font-medium">Especificación:</span> {especifique || '—'}</p>
+                          </div>
+                        </button>
+                      )}
+                      {showInputs && (
+                        <div className="mt-2 space-y-1 p-2 bg-slate-50 rounded border border-slate-100">
+                          <label className="block text-[9px] font-medium text-slate-500 uppercase">
+                            Dosis / Fecha
+                          </label>
+                          <input
+                            type="text"
+                            value={especifique}
+                            onChange={e => setM1Field(especifiqueKey, e.target.value)}
+                            disabled={readonly}
+                            placeholder="ej: 2 dosis, 2023"
+                            maxLength={200}
+                            className={baseInputClass}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase">Próxima Dosis / Esquema Completo</label>

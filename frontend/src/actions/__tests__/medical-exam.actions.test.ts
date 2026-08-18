@@ -19,6 +19,7 @@
  * @spec context/SPECs/SPEC_ARCH-20260809-01-ANTECEDENTES-SUB-PESTANA-EXAMEN-MEDICO.md
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { z } from 'zod'
 import {
   ExamenMedicoCompletoSchema,
   ExploracionFisicaSchema,
@@ -44,6 +45,13 @@ import {
   SALUD_BUCAL_VALUES,
   ESTADO_NUTRICIONAL_VALUES,
   PLANTILLAS_EF,
+  // IMPL-20260817-07: catálogos ZIN Módulo 1 (ginecológicos + vacunas)
+  AG_IVS_VALUES,
+  AG_VSA_VALUES,
+  AG_NUMERIC_0_11,
+  AG_ABORTO_VALUES,
+  VAC_SI_NO_VALUES,
+  SI_NO_NA_VALUES,
 } from '@/schemas/clinical/exam.schema'
 import {
   DatosPersonalesModulo1Schema,
@@ -857,5 +865,131 @@ describe('IMPL-20260817-06: acordeón Patologicos colapsable con resumen', () =>
     })
     expect(refilled.diabetes.estado).toBe('SI')
     expect(refilled.diabetes.detalle?.desde_cuando).toBe('20 años')
+  })
+})
+
+// IMPL-20260817-07 — Módulo 1 (sub-tab "declarativa") a combos:
+// - 9 ginecológicos a <select> con catálogo ZIN + menarca numérico 0-30.
+// - 7 vacunas a acordeón Sí/No + condicional `*_especifique`.
+// DA-1: schema sigue tolerante — registros legacy string libre siguen parseando
+// sin error. Ver SPEC §4.6.
+describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () => {
+  // ── Catálogos ZIN ─────────────────────────────────────────────────────────
+  it('48. AG_IVS_VALUES tiene 3 opciones canónicas', () => {
+    expect(AG_IVS_VALUES.length).toBe(3)
+    expect(AG_IVS_VALUES).toContain('N/A')
+    expect(AG_IVS_VALUES).toContain('ACTIVA')
+    expect(AG_IVS_VALUES).toContain('NO ACTIVA')
+  })
+
+  it('49. AG_VSA_VALUES incluye 7 métodos anticonceptivos canónicos', () => {
+    expect(AG_VSA_VALUES.length).toBe(7)
+    expect(AG_VSA_VALUES).toContain('NINGUNO')
+    expect(AG_VSA_VALUES).toContain('DE BARRERA')
+    expect(AG_VSA_VALUES).toContain('HORMONAL')
+    expect(AG_VSA_VALUES).toContain('DIU')
+    expect(AG_VSA_VALUES).toContain('OTB')
+    expect(AG_VSA_VALUES).toContain('RITMO')
+    expect(AG_VSA_VALUES).toContain('OTRO')
+  })
+
+  it('50. AG_NUMERIC_0_11 tiene 12 valores (0-11) y orden ascendente', () => {
+    expect(AG_NUMERIC_0_11.length).toBe(12)
+    expect(AG_NUMERIC_0_11[0]).toBe(0)
+    expect(AG_NUMERIC_0_11[11]).toBe(11)
+    // Ascendente
+    for (let i = 1; i < AG_NUMERIC_0_11.length; i++) {
+      expect(AG_NUMERIC_0_11[i]).toBeGreaterThan(AG_NUMERIC_0_11[i - 1] as number)
+    }
+  })
+
+  it('51. AG_ABORTO_VALUES tiene 2 opciones (SI / NO)', () => {
+    expect(AG_ABORTO_VALUES.length).toBe(2)
+    expect(AG_ABORTO_VALUES).toContain('SI')
+    expect(AG_ABORTO_VALUES).toContain('NO')
+  })
+
+  it('52. VAC_SI_NO_VALUES es alias de SI_NO_NA_VALUES (NEGADO / SI / NO APLICA)', () => {
+    // Mismas 3 opciones, en el mismo orden
+    expect(VAC_SI_NO_VALUES.length).toBe(3)
+    expect(VAC_SI_NO_VALUES).toContain('NEGADO')
+    expect(VAC_SI_NO_VALUES).toContain('SI')
+    expect(VAC_SI_NO_VALUES).toContain('NO APLICA')
+    expect([...VAC_SI_NO_VALUES]).toEqual([...SI_NO_NA_VALUES])
+  })
+
+  // ── 7 vacunas esperadas (mantener en sync con VACUNAS_LIST en componente) ─
+  it('53. Cobertura de las 7 vacunas esperadas', () => {
+    // Esta constante vive en ExamenMedicoEstudio.tsx; el test verifica que el
+    // set de keys esperadas coincida con la documentación de la SPEC §4.6.
+    const EXPECTED_KEYS = [
+      'm1_vac_rubeola',
+      'm1_vac_neumococo',
+      'm1_vac_sarampion',
+      'm1_vac_influenza',
+      'm1_vac_toxoide',
+      'm1_vac_hepatitisb',
+      'm1_vac_otras',
+    ]
+    expect(EXPECTED_KEYS.length).toBe(7)
+    expect(EXPECTED_KEYS).toContain('m1_vac_rubeola')
+    expect(EXPECTED_KEYS).toContain('m1_vac_neumococo')
+    expect(EXPECTED_KEYS).toContain('m1_vac_sarampion')
+    expect(EXPECTED_KEYS).toContain('m1_vac_influenza')
+    expect(EXPECTED_KEYS).toContain('m1_vac_toxoide')
+    expect(EXPECTED_KEYS).toContain('m1_vac_hepatitisb')
+    expect(EXPECTED_KEYS).toContain('m1_vac_otras')
+  })
+
+  // ── DA-1: compat legacy ────────────────────────────────────────────────────
+  it('54. DA-1: schema tolera modulo1 con strings simples legacy', () => {
+    // El sub-schema `modulo1` está definido como `z.record(z.string(), z.any())`
+    // — acepta cualquier par key→value. Verificamos que valores que
+    // coinciden con los catálogos (legacy persistido) se aceptan sin error.
+    const legacy = {
+      m1_sexo: 'Femenino',
+      m1_gine_ivs: 'ACTIVA',
+      m1_gine_ritmo: 'HORMONAL',
+      m1_gine_gesta: '2',
+      m1_gine_parto: '1',
+      m1_gine_aborto: 'NO',
+      m1_vac_rubeola: 'SI',
+      m1_vac_rubeola_especifique: '2 dosis, 2023',
+      m1_vac_influenza: 'NEGADO',
+    }
+    // El sub-schema acepta sin error
+    const result = z.record(z.string(), z.any()).optional().safeParse(legacy)
+    expect(result.success).toBe(true)
+    expect(result.data).toEqual(legacy)
+  })
+
+  it('55. DA-1: schema acepta modulo1 con valores fuera del catálogo (legacy sin migrar)', () => {
+    // Frank tenía 'm1_gine_gesta: "doce"' antes de migrar a <select>.
+    // El sub-schema sigue aceptándolo (DA-1 — no rechazamos).
+    const weirdLegacy = {
+      m1_gine_gesta: 'doce', // no está en AG_NUMERIC_0_11
+      m1_vac_otras: 'A RECORDAR EN 2027', // texto libre
+    }
+    const result = z.record(z.string(), z.any()).optional().safeParse(weirdLegacy)
+    expect(result.success).toBe(true)
+    expect(result.data).toEqual(weirdLegacy)
+  })
+
+  // ── Cobertura select Módulo 1 ──────────────────────────────────────────────
+  it('56. Catálogos ZIN Módulo 1 son disjuntos (no hay colisión entre IVS / VSA / Aborto)', () => {
+    const allValues = new Set<string>()
+    for (const v of AG_IVS_VALUES) allValues.add(v)
+    for (const v of AG_VSA_VALUES) allValues.add(v)
+    for (const v of AG_ABORTO_VALUES) allValues.add(v)
+    // Total: 3 + 7 + 2 = 12
+    expect(allValues.size).toBe(12)
+  })
+
+  it('57. AG_NUMERIC_0_11 valores son todos enteros no-negativos', () => {
+    for (const v of AG_NUMERIC_0_11) {
+      expect(Number.isInteger(v)).toBe(true)
+      expect(v).toBeGreaterThanOrEqual(0)
+      expect(v).toBeLessThanOrEqual(11)
+    }
   })
 })

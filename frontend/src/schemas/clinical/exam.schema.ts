@@ -222,6 +222,49 @@ export const SI_NO_NA_VALUES = ['NEGADO', 'SI', 'NO APLICA'] as const
 
 export type SiNoNaValue = (typeof SI_NO_NA_VALUES)[number]
 
+// ────────────────────────────────────────────────────────────────────────────
+// MÓDULO 1 — ANTECEDENTES GINECOLÓGICOS + INMUNIZACIONES (IMPL-20260817-07)
+// Catálogos ZIN para sub-tab "declarativa" del Examen Médico.
+// DA-1: schema sigue siendo tolerante (registros legacy string libre);
+// los catálogos sólo se usan para construir `<select>` con opciones canónicas.
+// Ver SPEC §4.6.
+// @id IMPL-20260817-07
+// @spec SPEC_ARCH-20260817-01 §4.6
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Módulo 1 — IVS (vida sexual activa) — 3 opciones. */
+export const AG_IVS_VALUES = ['N/A', 'ACTIVA', 'NO ACTIVA'] as const
+
+export type AgIvsValue = (typeof AG_IVS_VALUES)[number]
+
+/** Módulo 1 — Métodos anticonceptivos / VSA (aplica a ritmo y DOC) — 7 opciones. */
+export const AG_VSA_VALUES = [
+  'NINGUNO',
+  'DE BARRERA',
+  'HORMONAL',
+  'DIU',
+  'OTB',
+  'RITMO',
+  'OTRO',
+] as const
+
+export type AgVsaValue = (typeof AG_VSA_VALUES)[number]
+
+/** Módulo 1 — Helper numérico 0-11 (gesta/parto/cesárea/MPF). */
+export const AG_NUMERIC_0_11 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const
+
+export type AgNumeric0_11 = (typeof AG_NUMERIC_0_11)[number]
+
+/** Módulo 1 — Aborto Sí/No. */
+export const AG_ABORTO_VALUES = ['SI', 'NO'] as const
+
+export type AgAbortoValue = (typeof AG_ABORTO_VALUES)[number]
+
+/** Módulo 1 — Vacunas — acordeón Sí/No/No aplica (alias semántico de SI_NO_NA_VALUES). */
+export const VAC_SI_NO_VALUES = SI_NO_NA_VALUES
+
+export type VacSiNoValue = (typeof VAC_SI_NO_VALUES)[number]
+
 /**
  * Plantillas ZIN literales — Exploración Física (16 textos).
  * Extraídas verbatim del `NOTA MEDICA EJEMPLO.pdf` (ver análisis ZIN §B).
