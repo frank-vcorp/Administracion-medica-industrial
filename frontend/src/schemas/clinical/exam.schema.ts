@@ -212,6 +212,47 @@ export const ESTADO_NUTRICIONAL_VALUES = [
 
 export type EstadoNutricionalValue = (typeof ESTADO_NUTRICIONAL_VALUES)[number]
 
+// ────────────────────────────────────────────────────────────────────────────
+// APTITUD — 5 valores del PDF canónico (ARCH-20260817-02 / DA-1, IMPL-20260817-08)
+// Adoptados del `REPORTE DE EXAMEN MEDICO (APTITUD) EJEMPLO.pdf` (4 literales)
+// + `PENDIENTE DE RESULTADOS` operativa (cuando faltan estudios).
+// DA-1 (Opción A): schema tolerante — acepta los 5 valores del nuevo enum
+// + legacy `'NO APTO'` (registros previos) + cualquier string legacy.
+// NO se migran datos. Sin tocar `prisma/schema.prisma`.
+// @id IMPL-20260817-08-C1
+// @spec SPEC_ARCH-20260817-02 §2.1
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Aptitud — 5 valores canónicos del PDF de referencia + `PENDIENTE DE RESULTADOS`. */
+export const APTITUD_VALUES = [
+  'APTO',
+  'APTO CONDICIONADO',
+  'APTO CON RESTRICCIONES',
+  'NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO',
+  'PENDIENTE DE RESULTADOS',
+] as const
+
+export type AptitudValue = (typeof APTITUD_VALUES)[number]
+
+/** Aptitud — valores legacy aceptados por DA-1 (registros previos sin migración). */
+export const LEGACY_APTITUD_VALUES = ['NO APTO'] as const
+
+/** Schema Zod tolerante para campo `aptitud` (DA-1). Acepta:
+ *  - Los 5 valores del nuevo enum (`APTITUD_VALUES`).
+ *  - Los legacy (`LEGACY_APTITUD_VALUES`: `'NO APTO'`).
+ *  - String vacío (compatibilidad con campo opcional).
+ *  - Cualquier string no-vacío (registros legacy en BD — DA-1 Opción A).
+ *
+ *  Migración: `aptitud` pasa de `z.enum(['APTO','APTO CON RESTRICCIONES','NO APTO','PENDIENTE DE RESULTADOS'])`
+ *  a `tolerantZinEnum(APTITUD_VALUES)`. La tolerancia cubre registros legacy con
+ *  `'NO APTO'` y cualquier variante tipográfica (Frank: "lo copia igualito" del PDF
+ *  canónico implica que el enum nuevo se usa para CAPTURA NUEVA; legacy se conserva).
+ *
+ *  @id IMPL-20260817-08-C1
+ *  @spec SPEC_ARCH-20260817-02 §2.1, §6
+ */
+export const aptitudSchema = tolerantZinEnum(APTITUD_VALUES)
+
 /**
  * Patrones Sí/No/No aplica para acordeones "Especifique" (D-5).
  * Aplica a: `txtHLPEspecificar` (factor de riesgo laboral), `txtAPTDrogasEspec`,
@@ -408,7 +449,9 @@ export const ExploracionFisicaSchema = z.object({
 // `tolerantZinEnum` (ZIN combos — DA-1). Ver SPEC §4.2.
 // ----------------------------------------------------------------------
 export const ImpresiónAptitudSchema = z.object({
-  aptitud: z.enum(['APTO', 'APTO CON RESTRICCIONES', 'NO APTO', 'PENDIENTE DE RESULTADOS']).optional(),
+  // IMPL-20260817-08-C1 (ARCH-20260817-02 DA-1): enum de aptitud pasa de 4 a 5
+  // valores del PDF canónico. Schema tolerante preserva legacy `'NO APTO'`.
+  aptitud: aptitudSchema.optional(),
   restricciones: cleanString,
   impresion_diagnostica: cleanString,
   observaciones_finales: cleanString,
