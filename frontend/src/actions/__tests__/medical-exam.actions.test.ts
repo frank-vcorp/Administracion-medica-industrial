@@ -52,7 +52,20 @@ import {
   AG_ABORTO_VALUES,
   VAC_SI_NO_VALUES,
   SI_NO_NA_VALUES,
+  // IMPL-20260817-08 (ARCH-20260817-02): 5 valores PDF para aptitud +
+  // enums cortos para agudeza/presión.
+  APTITUD_VALUES,
+  AGUDEZA_VISUAL_RESUMEN_VALUES,
+  PRESION_ARTERIAL_RESUMEN_VALUES,
 } from '@/schemas/clinical/exam.schema'
+// IMPL-20260817-08-C8 (ARCH-20260817-02): tests de helpers de aptitud
+// (isAptoFromVerdict, isNoCumple, isPendienteResultados, aptitudLabel).
+import {
+  isAptoFromVerdict,
+  isNoCumple,
+  isPendienteResultados,
+  aptitudLabel,
+} from '@/lib/clinical/aptitud.helper'
 import {
   DatosPersonalesModulo1Schema,
   HeredoFamiliaresSchema,
@@ -991,5 +1004,149 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
       expect(v).toBeGreaterThanOrEqual(0)
       expect(v).toBeLessThanOrEqual(11)
     }
+  })
+
+  // ────────────────────────────────────────────────────────────────────────
+  // IMPL-20260817-08-C8 — ARCH-20260817-02 Corte 1 — aptitud enum + helpers
+  // 5 valores del PDF canónico + DA-1 tolerante legacy `'NO APTO'` +
+  // heurística portal migrada con fallback.
+  // ────────────────────────────────────────────────────────────────────────
+  describe('IMPL-20260817-08-C8: aptitud enum 5 valores + DA-1 + helpers', () => {
+    it('58. APTITUD_VALUES expone 5 valores canónicos del PDF de referencia', () => {
+      expect(APTITUD_VALUES).toHaveLength(5)
+      expect(APTITUD_VALUES).toContain('APTO')
+      expect(APTITUD_VALUES).toContain('APTO CONDICIONADO')
+      expect(APTITUD_VALUES).toContain('APTO CON RESTRICCIONES')
+      expect(APTITUD_VALUES).toContain('NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO')
+      expect(APTITUD_VALUES).toContain('PENDIENTE DE RESULTADOS')
+      // Legacy 'NO APTO' NO está en el nuevo enum (queda solo como tolerancia DA-1).
+      expect(APTITUD_VALUES).not.toContain('NO APTO')
+    })
+
+    it('59. ImpresiónAptitudSchema acepta los 5 valores del nuevo enum', () => {
+      APTITUD_VALUES.forEach(v => {
+        const parsed = ImpresiónAptitudSchema.parse({ aptitud: v })
+        expect(parsed.aptitud).toBe(v)
+      })
+    })
+
+    it('60. ImpresiónAptitudSchema acepta legacy "NO APTO" (DA-1 tolerante)', () => {
+      const parsed = ImpresiónAptitudSchema.parse({ aptitud: 'NO APTO' })
+      expect(parsed.aptitud).toBe('NO APTO')
+    })
+
+    it('61. ImpresiónAptitudSchema acepta aptitud omitida (campo opcional)', () => {
+      const parsed = ImpresiónAptitudSchema.parse({})
+      expect(parsed.aptitud).toBeUndefined()
+    })
+
+    it('62. AGUDEZA_VISUAL_RESUMEN_VALUES expone 4 valores canónicos', () => {
+      expect(AGUDEZA_VISUAL_RESUMEN_VALUES).toHaveLength(4)
+      expect(AGUDEZA_VISUAL_RESUMEN_VALUES).toContain('NORMAL')
+      expect(AGUDEZA_VISUAL_RESUMEN_VALUES).toContain('DISMINUIDA')
+    })
+
+    it('63. PRESION_ARTERIAL_RESUMEN_VALUES expone 3 valores canónicos', () => {
+      expect(PRESION_ARTERIAL_RESUMEN_VALUES).toHaveLength(3)
+      expect(PRESION_ARTERIAL_RESUMEN_VALUES).toContain('NORMAL AL MOMENTO DE LA TOMA')
+      expect(PRESION_ARTERIAL_RESUMEN_VALUES).toContain('ALTA')
+      expect(PRESION_ARTERIAL_RESUMEN_VALUES).toContain('BAJA')
+    })
+
+    it('64. ImpresiónAptitudSchema acepta agudeza_visual_resumen + presion_arterial_resumen con catálogos nuevos', () => {
+      const parsed = ImpresiónAptitudSchema.parse({
+        agudeza_visual_resumen: 'DISMINUIDA',
+        presion_arterial_resumen: 'ALTA',
+      })
+      expect(parsed.agudeza_visual_resumen).toBe('DISMINUIDA')
+      expect(parsed.presion_arterial_resumen).toBe('ALTA')
+    })
+
+    it('65. ImpresiónAptitudSchema acepta agudeza/presion legacy libre (DA-1)', () => {
+      const legacy = {
+        agudeza_visual_resumen: '20/40 corregida',
+        presion_arterial_resumen: '130/85',
+      }
+      const parsed = ImpresiónAptitudSchema.parse(legacy)
+      expect(parsed.agudeza_visual_resumen).toBe('20/40 corregida')
+      expect(parsed.presion_arterial_resumen).toBe('130/85')
+    })
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    it('66. isAptoFromVerdict: APTO y variantes retornan true', () => {
+      expect(isAptoFromVerdict('APTO')).toBe(true)
+      expect(isAptoFromVerdict('APTO CONDICIONADO')).toBe(true)
+      expect(isAptoFromVerdict('APTO CON RESTRICCIONES')).toBe(true)
+      // Case-insensitive
+      expect(isAptoFromVerdict('apto')).toBe(true)
+      expect(isAptoFromVerdict('Apto Condicionado')).toBe(true)
+    })
+
+    it('67. isAptoFromVerdict: no-cumple + legacy + pendiente retornan false', () => {
+      expect(isAptoFromVerdict('NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO')).toBe(false)
+      expect(isAptoFromVerdict('NO APTO')).toBe(false) // legacy
+      expect(isAptoFromVerdict('PENDIENTE DE RESULTADOS')).toBe(false)
+    })
+
+    it('68. isAptoFromVerdict: null/undefined/vacío retornan false', () => {
+      expect(isAptoFromVerdict(null)).toBe(false)
+      expect(isAptoFromVerdict(undefined)).toBe(false)
+      expect(isAptoFromVerdict('')).toBe(false)
+    })
+
+    it('69. isNoCumple: NO CUMPLE canónico + legacy NO APTO retornan true', () => {
+      expect(isNoCumple('NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO')).toBe(true)
+      expect(isNoCumple('NO APTO')).toBe(true) // legacy
+      // Case-insensitive
+      expect(isNoCumple('no cumple con los criterios de salud para el puesto propuesto')).toBe(true)
+      expect(isNoCumple('no apto')).toBe(true)
+    })
+
+    it('70. isNoCumple: variantes apto + pendiente retornan false', () => {
+      expect(isNoCumple('APTO')).toBe(false)
+      expect(isNoCumple('APTO CONDICIONADO')).toBe(false)
+      expect(isNoCumple('APTO CON RESTRICCIONES')).toBe(false)
+      expect(isNoCumple('PENDIENTE DE RESULTADOS')).toBe(false)
+      expect(isNoCumple(null)).toBe(false)
+      expect(isNoCumple(undefined)).toBe(false)
+      expect(isNoCumple('')).toBe(false)
+    })
+
+    it('71. isPendienteResultados: solo PENDIENTE DE RESULTADOS retorna true', () => {
+      expect(isPendienteResultados('PENDIENTE DE RESULTADOS')).toBe(true)
+      expect(isPendienteResultados('APTO')).toBe(false)
+      expect(isPendienteResultados('NO APTO')).toBe(false)
+      expect(isPendienteResultados(null)).toBe(false)
+      expect(isPendienteResultados(undefined)).toBe(false)
+    })
+
+    it('72. aptitudLabel: mapea 5 valores canónicos + legacy', () => {
+      expect(aptitudLabel('APTO')).toBe('APTO')
+      expect(aptitudLabel('APTO CONDICIONADO')).toBe('APTO CONDICIONADO')
+      expect(aptitudLabel('APTO CON RESTRICCIONES')).toBe('APTO CON RESTRICCIONES')
+      expect(aptitudLabel('NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO')).toBe('NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO')
+      expect(aptitudLabel('PENDIENTE DE RESULTADOS')).toBe('PENDIENTE DE RESULTADOS')
+      expect(aptitudLabel('NO APTO')).toBe('NO APTO') // legacy
+      expect(aptitudLabel(null)).toBe('')
+      expect(aptitudLabel(undefined)).toBe('')
+    })
+
+    // ── Heurística portal: regresión crítica DA-1 ────────────────────────────
+    it('73. Heurística portal: NO CUMPLE canónico NO debe clasificarse como apto (regresión DA-1)', () => {
+      // Reproduce el bug latente: el literal largo no contiene 'no apto'
+      // por subcadena, por lo que la heurística histórica fallaba.
+      const aptitud = 'NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO'
+      // Camino nuevo (lectura estructurada):
+      expect(isNoCumple(aptitud)).toBe(true)
+      expect(isAptoFromVerdict(aptitud)).toBe(false)
+      // Fallback legacy NO aplicaría (sí hay aptitud estructurada).
+      const legacyHitsSubstring = aptitud.toLowerCase().includes('no apto')
+      expect(legacyHitsSubstring).toBe(false) // confirma el bug latente
+    })
+
+    it('74. Heurística portal: legacy NO APTO sigue clasificando como no-cumple', () => {
+      expect(isNoCumple('NO APTO')).toBe(true)
+      expect(isAptoFromVerdict('NO APTO')).toBe(false)
+    })
   })
 })
