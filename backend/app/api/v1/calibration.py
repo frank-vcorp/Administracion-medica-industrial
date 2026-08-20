@@ -46,6 +46,11 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.services.ai import ExtractorService, PrediagnosticService
+from app.services.ai.calibration_resolver import (
+    CalibrationResolver,
+    OperationMode,
+    get_default_resolver,
+)
 from app.services.ai.extractor import (
     ExtractionAuthError,
     ExtractionProviderUnknownError,
@@ -760,3 +765,80 @@ async def list_calibration_snapshots(test_id: str):
         )
 
     return {"snapshots": [_serialize_calibration_snapshot(r) for r in rows]}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/calibration/resolve?test_id=<uuid>&state=published|tested|draft
+# ARCH-20260820-01 Fase 1 — única fuente runtime de `aiCalibration` V3.
+#
+# Wrapper HTTP del `CalibrationResolver` (backend/app/services/ai/calibration_resolver.py).
+# Devuelve la versión V3 resuelta (con `operationMode` efectivo) o `null` si:
+#   - `operationMode == manual_service` (no aplica IA — CB-13).
+#   - JSON V1/V2 corrupto (CB-11): devuelve null + log de error.
+#   - desired_state no disponible (e.g. 'tested' sin borrador V3).
+#
+# NO expone secretos (contrato V3 no contiene API keys; los prompts pueden
+# exponerse porque no son secretos — son metadata clínica operativa).
+# CA-G02 / AC-1.3.
+# ---------------------------------------------------------------------------
+@router.get("/resolve")
+async def resolve_calibration(
+    test_id: str,
+    state: str = "published",
+):
+    """
+    Resuelve la calibración V3 efectiva para una MedicalTest.
+
+    Args:
+        test_id: ID de MedicalTest (UUID string).
+        state:   'published' (default) | 'tested' | 'draft'.
+
+    Returns:
+        { "test_id": ..., "state": ..., "version": { ...V3 resuelto... } | null }
+
+    Errores:
+        - 400: state inválido o test_id ausente.
+        - 404: MedicalTest no existe.
+        - 503: Prisma no inicializado.
+    """
+    if not test_id or not test_id.strip():
+        raise HTTPException(status_code=400, detail="test_id es obligatorio")
+    if state not in ("published", "tested", "draft"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"state inválido: '{state}'. Permitidos: published, tested, draft.",
+        )
+
+    prisma = get_prisma_client()
+    if prisma is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Prisma no inicializado. Reintenta en unos segundos.",
+        )
+
+    try:
+        test_row = await prisma.medicaltest.find_unique(where={"id": test_id})
+    except Exception as e:
+        print(
+            f"❌ [ARCH-20260820-01] Error consultando MedicalTest en /resolve: "
+            f"{type(e).__name__}: {e}"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"Error consultando MedicalTest: {type(e).__name__}",
+        )
+
+    if test_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"MedicalTest {test_id} no existe",
+        )
+
+    resolver: CalibrationResolver = get_default_resolver()
+    resolved = resolver.resolve(test_row, desired_state=state)  # type: ignore[arg-type]
+
+    return {
+        "test_id": test_id,
+        "state": state,
+        "version": resolved.to_dict() if resolved is not None else None,
+    }
