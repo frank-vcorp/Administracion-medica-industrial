@@ -613,10 +613,14 @@ class CalibrationResolver:
             return None
 
         if ai_calibration.get("schemaVersion") == "V3":
+            # F-4 cleanup (QA-20260820-02): propagar operation_mode explícito
+            # del catálogo a _resolve_v3 para eliminar la dependencia frágil
+            # de la heurística de re-inferencia (_operation_mode_from_v3).
             return self._resolve_v3(
                 test_id=test_id,
                 ai_calibration=ai_calibration,
                 desired_state=desired_state,
+                operation_mode=operation_mode,
             )
 
         # V1/V2 con operationMode explícita: tratar como adaptador.
@@ -634,6 +638,7 @@ class CalibrationResolver:
         test_id: str,
         ai_calibration: Dict[str, Any],
         desired_state: DesiredState,
+        operation_mode: Optional[OperationMode] = None,
     ) -> Optional[AICalibrationVersionResolved]:
         version = _select_version_for_state(ai_calibration, desired_state)
         if not version:
@@ -650,9 +655,15 @@ class CalibrationResolver:
             family_template=family_template,
         )
 
-        operation_mode = ai_calibration.get("operationMode") or _operation_mode_from_v3(
-            effective
-        )
+        # F-4 cleanup (QA-20260820-02): preferir operation_mode explícito del
+        # catálogo (propagado por _resolve_with_explicit_mode) sobre la
+        # heurística de re-inferencia. Si no llega explícito (rama 2 de
+        # `resolve`, V3 sin operationMode en options), se conserva el
+        # comportamiento anterior: inferir desde el contenido de la versión.
+        if operation_mode is None:
+            operation_mode = ai_calibration.get("operationMode") or _operation_mode_from_v3(
+                effective
+            )
         if operation_mode not in (
             "manual_service",
             "document_extraction",

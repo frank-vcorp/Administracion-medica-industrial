@@ -649,6 +649,13 @@ export async function getCalibrationSnapshots(testId: string) {
 /**
  * Persiste la configuración aiCalibration dentro de MedicalTest.options (JSON merge).
  * No rompe otros campos existentes en options.
+ *
+ * @deprecated desde ARCH-20260820-01 Fase 2. Usar `saveAICalibrationV3` +
+ *   `publishAICalibrationV3` (frontend/src/actions/calibration-v3.actions.ts)
+ *   con estados de publicación `draft/tested/published/superseded/disabled`.
+ *   Esta función permanece operativa hasta Fase 7 (corte de soporte V1/V2,
+ *   decisión pendiente Frank — ADR §7.3). No eliminar.
+ *
  * @id ARCH-20260327-15
  */
 export async function saveAICalibration(
@@ -696,6 +703,13 @@ export async function saveAICalibration(
  * Si `fieldDefinitions` cambia respecto al contrato vigente, se genera
  * una nueva versión de calibración sin que el usuario capture el número.
  * Preserva compatibilidad con todos los campos V1 existentes.
+ *
+ * @deprecated desde ARCH-20260820-01 Fase 2. Usar `saveAICalibrationV3` +
+ *   `publishAICalibrationV3` (frontend/src/actions/calibration-v3.actions.ts)
+ *   con estados de publicación `draft/tested/published/superseded/disabled`
+ *   y gates G0-G9. Esta función permanece operativa hasta Fase 7 (corte de
+ *   soporte V1/V2, decisión pendiente Frank — ADR §7.3). No eliminar.
+ *
  * @id IMPL-20260327-19
  * @backup context/SPECs/SPEC_ARCH-20260327-19-CALIBRACION-IA-ASISTIDA-VERSIONADO-AUTOMATICO.md
  */

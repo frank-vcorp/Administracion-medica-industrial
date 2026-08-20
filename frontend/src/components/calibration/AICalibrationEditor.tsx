@@ -2,15 +2,72 @@
  * @fileoverview Editor de configuración aiCalibration por prueba médica.
  *   Muestra solo dos prompts/versiones por prueba: extracción (Gemini) y diagnóstico (MedGemma).
  *   Maneja el caso inicial (sin configuración) y el caso de edición (ya configurado).
+ *
+ *   ARCH-20260820-01 Fase 2: editor V3 condicional por `operationMode`
+ *   (DEC-20260820-02). Para `manual_service` no se muestra el editor
+ *   (AC-2.6). Para `document_extraction` se oculta la sección de criterios
+ *   clínicos/prediagnóstico (CB-14). Para `clinical_interpretation` se
+ *   muestra el editor completo.
+ *
  * @id ARCH-20260516-03
  * @backup context/SPECs/SPEC_ARCH-20260516-03-CALIBRACION-CONFIG-SOLO-DOS-PROMPTS.md
  * @intervention ARCH-20260518-06
  * @see context/SPECs/SPEC_ARCH-20260518-06-BASE-EXTRACCION-Y-PLANTILLA-CALIBRACION.md
+ * @intervention ARCH-20260820-01 Fase 2 (editor condicional por operationMode)
  */
 "use client"
 
 import { useState, useTransition } from "react"
-import { saveAICalibration } from "@/actions/medical-profiles"
+import { saveAICalibrationV3 } from "@/actions/calibration-v3.actions"
+import type {
+  AICalibrationDraftV3,
+  AICalibrationPresentationV3,
+  ClinicalCriteria,
+  FieldDefinition,
+  OperationMode,
+  StudyPresentationSchema,
+} from "@/types/calibration"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Editor condicional por operationMode (DEC-20260820-02, AC-2.1, AC-2.6, CB-14)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Secciones del editor V3 que se muestran según `operationMode`.
+ *
+ * - `manual_service`: el editor **no se muestra** (null). DEC-20260820-02.
+ * - `document_extraction`: extracción + presentación; **sin** criterios
+ *   clínicos/prediagnóstico (CB-14).
+ * - `clinical_interpretation`: editor completo (extracción + clínica + presentación).
+ *
+ * Helper puro exportable para tests (sin montar React). El componente lo
+ * consume para decidir qué secciones renderizar.
+ */
+export interface EditorSections {
+  showExtraction: boolean
+  showClinicalCriteria: boolean
+  showPresentation: boolean
+}
+
+export function getEditorSectionsForOperationMode(
+  operationMode: OperationMode | null | undefined,
+): EditorSections | null {
+  if (!operationMode) {
+    // Sin operationMode confirmado: flujo legacy V1/V2 (mostrar todo para
+    // no romper el comportamiento anterior). No se asume Audiometría.
+    return { showExtraction: true, showClinicalCriteria: true, showPresentation: true }
+  }
+  if (operationMode === "manual_service") {
+    // AC-2.6 / DEC-20260820-02: no se muestra editor de calibración IA.
+    return null
+  }
+  if (operationMode === "document_extraction") {
+    // CB-14: sin criterios clínicos/prediagnóstico.
+    return { showExtraction: true, showClinicalCriteria: false, showPresentation: true }
+  }
+  // clinical_interpretation: editor completo.
+  return { showExtraction: true, showClinicalCriteria: true, showPresentation: true }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
@@ -19,6 +76,13 @@ import { saveAICalibration } from "@/actions/medical-profiles"
 interface AICalibrationEditorProps {
   testId: string
   initial: Record<string, unknown> | null
+  /**
+   * Modo operativo del catálogo (DEC-20260820-02). Si es `manual_service`,
+   * el editor no se muestra (AC-2.6). Si es `document_extraction`, se
+   * oculta la sección de criterios clínicos/prediagnóstico (CB-14).
+   * Opcional: si ausente, se asume flujo legacy V1/V2 (mostrar todo).
+   */
+  operationMode?: OperationMode | null
 }
 
 const EXTRACTION_PROMPT_TEMPLATE = `REGLAS ESPECIFICAS DEL ESTUDIO: {{nombre_del_estudio}}
@@ -104,10 +168,138 @@ function looksLikePromptContent(value: string): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// F-2.2 (QA-20260820-03): constructor del draft V3 desde el estado del editor
+// AC-2.1 — el editor persiste vía saveAICalibrationV3, no saveAICalibration (V1).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Valores normalizados que handleSubmit calcula desde el estado del form. */
+export interface EditorFormState {
+  enabled: boolean
+  canonicalStudyType: string
+  extractPrompt: string
+  extractVersion: string
+  extractProvider: "gemini" | "m3"
+  extractModel: string
+  diagPrompt: string
+  diagVersion: string
+}
+
+/** Entrada del constructor del draft V3. */
+export interface BuildDraftV3Input extends EditorFormState {
+  /** `initial` del editor (raw V1/V2 shape; puede traer fieldDefinitions/presentation). */
+  initial: Record<string, unknown> | null
+  /** operationMode prop; null/undefined → asume clinical_interpretation (legacy). */
+  operationMode?: OperationMode | null
+  /** Secciones computadas por getEditorSectionsForOperationMode. */
+  sections: EditorSections
+}
+
+/**
+ * Coacciona el `presentation` legacy (V2) al tipo V3. El editor aún no expone
+ * edición de `presentation.schema` (Fase 6); se preserva lo que ya había.
+ */
+function coercePresentationV3(
+  raw: Record<string, unknown> | null,
+): AICalibrationPresentationV3 {
+  if (!raw) return { enabled: false, schema: null }
+  const schema = raw.schema
+  return {
+    enabled: Boolean(raw.enabled),
+    schema:
+      typeof schema === "object" && schema !== null && !Array.isArray(schema)
+        ? (schema as unknown as StudyPresentationSchema)
+        : null,
+  }
+}
+
+/**
+ * Construye un `AICalibrationDraftV3` mínimo mapeando los campos V1/V2 que el
+ * editor ya edita a la estructura del draft V3 (F-2.2, AC-2.1).
+ *
+ * Campos V3 que el editor aún NO expone en UI y se dejan como null/vacíos:
+ *   - `fieldDefinitions` se preserva de `initial` V2 (no se editan aquí).
+ *   - `presentation.schema` se preserva de `initial` V2 (no se edita aquí).
+ *   - `clinicalCriteria.requiredParams`, `confidenceThreshold`,
+ *     `supportingReferences` (nulos/vacíos).
+ *   - `extraction.targetFields` (vacío).
+ *
+ * Estos se completarán en Fase 6 (integración UI completa del editor V3).
+ */
+export function buildDraftV3FromEditorState(input: BuildDraftV3Input): AICalibrationDraftV3 {
+  const {
+    enabled,
+    canonicalStudyType,
+    extractPrompt,
+    extractVersion,
+    extractProvider,
+    extractModel,
+    diagPrompt,
+    diagVersion,
+    initial,
+    sections,
+  } = input
+
+  const extractionLegacy = getNested(initial, "extraction")
+  const diagnosisLegacy = getNested(initial, "diagnosis")
+
+  // fieldDefinitions: preservar de initial V2 si existen.
+  // Fase 6: exponer editor de fieldDefinitions completo (unit/referenceRange/aliases).
+  const fieldDefinitionsRaw = initial?.fieldDefinitions
+  const fieldDefinitions: FieldDefinition[] = Array.isArray(fieldDefinitionsRaw)
+    ? (fieldDefinitionsRaw as unknown as FieldDefinition[])
+    : []
+
+  // presentation: preservar de initial V2 si existe.
+  // Fase 6: exponer editor de presentation.schema editable como contrato.
+  const presentation = coercePresentationV3(getNested(initial, "presentation"))
+
+  // clinicalCriteria: solo si sections.showClinicalCriteria (clinical_interpretation
+  // o legacy sin operationMode). Para document_extraction es null (CB-14).
+  // Fase 6: exponer requiredParams/confidenceThreshold/supportingReferences editables.
+  let clinicalCriteria: ClinicalCriteria | null = null
+  if (sections.showClinicalCriteria) {
+    const prediagnosisEnabled = diagnosisLegacy ? getBool(diagnosisLegacy, "enabled") : true
+    clinicalCriteria = {
+      prediagnosisEnabled,
+      requiredParams: [],
+      confidenceThreshold: null,
+      prompt: diagPrompt || null,
+      promptVersion: diagVersion || null,
+      promptHash: null,
+    }
+  }
+
+  return {
+    status: "draft",
+    label: "cal-v3-draft",
+    enabled,
+    canonicalStudyType: canonicalStudyType.trim() || null,
+    extraction: {
+      enabled: getBool(extractionLegacy, "enabled"),
+      prompt: extractPrompt || null,
+      version: extractVersion || null,
+      schemaVersion: extractVersion || null,
+      provider: extractProvider,
+      model: extractModel.trim() || null,
+      targetFields: [], // Fase 6: exponer targetFields editables
+    },
+    fieldDefinitions,
+    clinicalCriteria,
+    presentation,
+    // updatedAt lo fija saveAICalibrationV3 (server-side, tamper-safe).
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function AICalibrationEditor({ testId, initial }: AICalibrationEditorProps) {
+export default function AICalibrationEditor({ testId, initial, operationMode }: AICalibrationEditorProps) {
+  // ARCH-20260820-01 Fase 2: editor condicional por operationMode.
+  // El early return para manual_service va DESPUÉS de los hooks (ver abajo)
+  // para cumplir react-hooks/rules-of-hooks.
+  const sections = getEditorSectionsForOperationMode(operationMode)
+
   const extraction = getNested(initial, "extraction")
   const diagnosis = getNested(initial, "diagnosis")
   const rawExtractVersion = getStr(extraction, "version") || getStr(extraction, "schemaVersion")
@@ -146,6 +338,26 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
   const [isPending, startTransition] = useTransition()
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
+  // AC-2.6 / DEC-20260820-02: manual_service no muestra editor de calibración IA.
+  // El early return va aquí (después de todos los hooks) para cumplir
+  // react-hooks/rules-of-hooks.
+  if (sections === null) {
+    return (
+      <div
+        className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600"
+        data-testid="ai-calibration-editor-disabled-manual-service"
+        role="status"
+      >
+        Esta prueba tiene <code className="font-mono">operationMode=manual_service</code>.
+        Los servicios manuales no admiten calibración IA (DEC-20260820-02).
+      </div>
+    )
+  }
+
+  // Tras el early return de manual_service, sections es EditorSections (no null).
+  // TS no narrow dentro de closures (handleSubmit), así que fijamos el tipo aquí.
+  const editorSections: EditorSections = sections
+
   // ── Submit ─────────────────────────────────────────────────────────────────
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -156,36 +368,30 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
     const normalizedDiagPrompt = diagPrompt.trim() || (looksLikePromptContent(diagPromptVersion) ? diagPromptVersion.trim() : "")
     const normalizedDiagVersion = looksLikePromptContent(diagPromptVersion) ? "" : diagPromptVersion.trim()
 
-    // Merge sobre initial para preservar campos V2 (fieldDefinitions, versions, aiAssistance, etc.)
-    const data: Record<string, unknown> = {
-      ...(initial ?? {}),
+    // F-2.2 (QA-20260820-03, AC-2.1): el editor construye un draft V3 y persiste
+    // vía saveAICalibrationV3 (no saveAICalibration V1). El mapeo V1/V2 → V3
+    // vive en buildDraftV3FromEditorState. Campos V3 no expuestos en UI se
+    // documentan como Fase 6 dentro del helper.
+    const draftV3 = buildDraftV3FromEditorState({
       enabled,
-      canonicalStudyType: canonicalStudyType.trim() || null,
-      extraction: {
-        ...(extraction ?? {}),
-        prompt: normalizedExtractPrompt || null,
-        version: normalizedExtractVersion || null,
-        schemaVersion: normalizedExtractVersion || null,
-        // ARCH-20260809-02: persistir selección de proveedor/modelo extractivo.
-        // Merge con `...(extraction ?? {})` preserva campos legacy y no rompe consumidores.
-        provider: extractProvider,
-        model: extractModel.trim() || null,
-      },
-      diagnosis: {
-        ...(diagnosis ?? {}),
-        prompt: normalizedDiagPrompt || null,
-        version: normalizedDiagVersion || null,
-        promptVersion: normalizedDiagVersion || null,
-      },
-    }
+      canonicalStudyType,
+      extractPrompt: normalizedExtractPrompt,
+      extractVersion: normalizedExtractVersion,
+      extractProvider,
+      extractModel,
+      diagPrompt: normalizedDiagPrompt,
+      diagVersion: normalizedDiagVersion,
+      initial,
+      operationMode,
+      sections: editorSections,
+    })
 
     startTransition(async () => {
-      const result = await saveAICalibration(testId, data)
-      if (result.success) {
+      const result = await saveAICalibrationV3(testId, draftV3)
+      if (result.ok) {
         setMessage({ type: "success", text: "Configuración guardada correctamente." })
       } else {
-        const errResult = result as { success: false; error: string }
-        setMessage({ type: "error", text: errResult.error ?? "Error al guardar." })
+        setMessage({ type: "error", text: result.error ?? "Error al guardar." })
       }
     })
   }
@@ -361,41 +567,45 @@ export default function AICalibrationEditor({ testId, initial }: AICalibrationEd
       </div>
 
       {/* ── Diagnóstico clínico — MedGemma ──────────────────────────────────── */}
-      <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Diagnóstico clínico</p>
-          <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MedGemma</span>
-        </div>
-        <p className="text-xs text-violet-600">Prompt y versión que MedGemma usa para interpretar los datos y generar el prediagnóstico.</p>
+      {/* ARCH-20260820-01 Fase 2: sección condicional por operationMode.
+          Para document_extraction no se muestra (CB-14: clinicalCriteria=null). */}
+      {sections.showClinicalCriteria && (
+        <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl space-y-3" data-testid="ai-calibration-clinical-section">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Diagnóstico clínico</p>
+            <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MedGemma</span>
+          </div>
+          <p className="text-xs text-violet-600">Prompt y versión que MedGemma usa para interpretar los datos y generar el prediagnóstico.</p>
 
-        <div>
-          <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt-version">
-            Versión de prompt de diagnóstico
-          </label>
-          <input
-            id="diag-prompt-version"
-            type="text"
-            value={diagPromptVersion}
-            onChange={(e) => setDiagPromptVersion(e.target.value)}
-            placeholder="ej. predx-audio-medgemma-v2"
-            className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
-          />
-        </div>
+          <div>
+            <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt-version">
+              Versión de prompt de diagnóstico
+            </label>
+            <input
+              id="diag-prompt-version"
+              type="text"
+              value={diagPromptVersion}
+              onChange={(e) => setDiagPromptVersion(e.target.value)}
+              placeholder="ej. predx-audio-medgemma-v2"
+              className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+            />
+          </div>
 
-        <div>
-          <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt">
-            Prompt clínico específico
-          </label>
-          <textarea
-            id="diag-prompt"
-            value={diagPrompt}
-            onChange={(e) => setDiagPrompt(e.target.value)}
-            rows={8}
-            placeholder="Pega aqui el prompt clínico específico del estudio para MedGemma."
-            className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
-          />
+          <div>
+            <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt">
+              Prompt clínico específico
+            </label>
+            <textarea
+              id="diag-prompt"
+              value={diagPrompt}
+              onChange={(e) => setDiagPrompt(e.target.value)}
+              rows={8}
+              placeholder="Pega aqui el prompt clínico específico del estudio para MedGemma."
+              className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Acción ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3">
