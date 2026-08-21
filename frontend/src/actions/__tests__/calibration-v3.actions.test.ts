@@ -54,9 +54,9 @@ vi.mock('@/lib/auth/roles', () => ({
 import {
   saveAICalibrationV3,
   publishAICalibrationV3,
-  MAX_SUPERSEDED_VERSIONS,
-  PUBLISH_REQUIRED_ROLE,
 } from '@/actions/calibration-v3.actions'
+// FIX-20260820-01-VERCEL-BUILD: constantes movidas a módulo compartido (no 'use server').
+import { MAX_SUPERSEDED_VERSIONS, PUBLISH_REQUIRED_ROLE } from '@/lib/calibration-v3-shared'
 import { getEditorSectionsForOperationMode, buildDraftV3FromEditorState } from '@/components/calibration/AICalibrationEditor'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

@@ -18,10 +18,11 @@
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
-import {
-  extractSnapshotVersioningFromBackendAudit,
-  getPublishedVersionForSnapshot,
-} from './calibration-v3.actions'
+// FIX-20260820-01-VERCEL-BUILD: helper síncrono vive ahora en el módulo
+// compartido (no en el archivo 'use server'); getPublishedVersionForSnapshot
+// permanece en el actions file (es server action async legítimo).
+import { extractSnapshotVersioningFromBackendAudit } from '@/lib/calibration-v3-shared'
+import { getPublishedVersionForSnapshot } from './calibration-v3.actions'
 
 const PYTHON_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 

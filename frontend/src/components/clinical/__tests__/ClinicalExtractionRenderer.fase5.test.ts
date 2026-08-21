@@ -30,10 +30,10 @@ import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import ClinicalExtractionRenderer from '../ClinicalExtractionRenderer'
-import {
-  getPublishedVersionForSnapshot,
-  extractSnapshotVersioningFromBackendAudit,
-} from '@/actions/calibration-v3.actions'
+// FIX-20260820-01-VERCEL-BUILD: helper síncrono vive ahora en el módulo
+// compartido; getPublishedVersionForSnapshot se mantiene en el actions file.
+import { getPublishedVersionForSnapshot } from '@/actions/calibration-v3.actions'
+import { extractSnapshotVersioningFromBackendAudit } from '@/lib/calibration-v3-shared'
 import { createHash } from 'node:crypto'
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,10 @@ import { triggerStudyAIAnalysis } from "./ai-prediagnosis.actions"
 import { isAIEligibleEventTest, getCanonicalAIStudyType } from "@/lib/study-ai"
 // ARCH-20260820-01 Fase 3 (SPEC §9.1): Events consume la versión `published`
 // del resolver antes de caer a la heurística de nombre (fallback trazado).
-import { getPublishedCalibrationForEventTest, getPublishedVersionForSnapshot, extractSnapshotVersioningFromBackendAudit } from "./calibration-v3.actions"
+// FIX-20260820-01-VERCEL-BUILD: helper síncrono se importa desde el módulo
+// compartido; los server actions siguen viniendo del actions file.
+import { getPublishedCalibrationForEventTest, getPublishedVersionForSnapshot } from "./calibration-v3.actions"
+import { extractSnapshotVersioningFromBackendAudit } from "@/lib/calibration-v3-shared"
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import { writeTimelineEntry } from "@/lib/timeline.service"
 import { TimelineEntryType } from "@prisma/client"
