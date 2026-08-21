@@ -3376,3 +3376,450 @@ class TestPrediagnosisFase4ARCH20260820_01:
         assert eff["fieldDefinitionsIncomplete"] is True
         # El prompt vacío fuerza fallback parcial al backend_fallback.
         assert eff["prompt"] == ""
+
+
+# ---------------------------------------------------------------------------
+# IMPL-20260821-01 — FIX-20260821-01: Gate table-aware Espirometría +
+# backfill determinista desde `parametros[]`.
+# Cubre AC-1.1..1.3 (gate), AC-2.1..2.5 (normalizador), AC-3.1 (determinismo),
+# AC-4.1..4.2 (control regresión), AC-5.1 (selector provider).
+# Spec: context/SPECs/SPEC_FIX-20260821-01-GATE-TABLEAWARE-ESPIROMETRIA.md §7
+# ---------------------------------------------------------------------------
+
+class TestFIX20260821_01GateTableawareEspirometria:
+    """
+    FIX-20260821-01: Suite dirigida al fix del gate clínico table-aware
+    para Espirometría y al backfill determinista desde `parametros[]`.
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-api-key", model="gemini-2.5-pro")
+
+    @pytest.fixture
+    def prediagnostic_svc(self):
+        from app.services.ai.prediagnostic import PrediagnosticService
+        return PrediagnosticService(api_key="test-api-key", model="gemini-2.5-flash")
+
+    # ── AC-1.1: Gate table-aware Espirometría — fila FEV1 estándar sin `fev1` raíz
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_check_minimum_params_espirometry_tableaware_basic(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        AC-1.1: Espirometría con fev1/fvc=None en raíz pero con filas estándar
+        en `parametros[]`. El gate debe PASAR y debe invocarse DR7.
+        """
+        mock_call.return_value = {
+            "summary": "Función pulmonar normal.",
+            "confidence": 0.78,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["FEV1/FVC y FVC dentro de rangos normales"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Test AC-1.1",
+                "fev1": None,
+                "fvc": None,
+                # FEV1/FVC estándar en `parametros[]` con m1 poblado.
+                "parametros": [
+                    {"label": "FVC", "key": "fvc_l", "unidad": "L",
+                     "m1": 4.0, "m2": 3.9, "m3": 3.8, "ref": 5.0, "lln": 4.0},
+                    {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                     "m1": 3.2, "m2": 3.1, "m3": 3.0, "ref": 3.8, "lln": 3.0},
+                ],
+            },
+        )
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.non_conclusive_reason is None
+        # DR7 debe haber sido invocado (mock verificado).
+        mock_call.assert_called_once()
+
+    # ── AC-1.2: Gate table-aware — fila `Mejor FEV1` con m1 poblada
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_check_minimum_params_espirometry_mejor_fila(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        AC-1.2: Mejor FEV1 + Mejor FVC en tabla → gate pasa.
+        El backfill (no el gate) prioriza fila Mejor (m1) sobre estándar.
+        """
+        mock_call.return_value = {
+            "summary": "Función pulmonar normal.",
+            "confidence": 0.80,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": [],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Test AC-1.2",
+                "fev1": None,
+                "fvc": None,
+                "parametros": [
+                    {"label": "Mejor FEV1", "key": "mejor_fev1_l", "unidad": "L",
+                     "m1": 3.45, "m1_pct_ref": 84.1},
+                    {"label": "Mejor FVC", "key": "mejor_fvc_l", "unidad": "L",
+                     "m1": 4.12, "m1_pct_ref": 79.4},
+                    # Fila estándar redundante (m1 != m1 de Mejor *) — el backfill
+                    # debe preferir la fila Mejor *.
+                    {"label": "FVC", "key": "fvc_l", "unidad": "L",
+                     "m1": 3.5, "m2": 3.4, "m3": 3.3},
+                    {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                     "m1": 2.9, "m2": 2.8, "m3": 2.7},
+                ],
+            },
+        )
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.non_conclusive_reason is None
+        mock_call.assert_called_once()
+
+    # ── AC-1.3: Negativa — sin filas FEV1/FVC en raíz ni tabla
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_check_minimum_params_espirometry_negative(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        AC-1.3: Espirometría sin fev1/fvc en raíz ni en tabla →
+        AI_NON_CONCLUSIVE con reason idéntico al actual (sin cambios).
+        """
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Espirometria",
+            extracted_data={
+                "paciente": "Test AC-1.3",
+                "fev1": None,
+                "fvc": None,
+                "parametros": [
+                    {"label": "FEF25-75", "key": "fef25_75_l_s",
+                     "m1": 3.0, "ref": 4.5},
+                ],
+            },
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.non_conclusive_reason is not None
+        assert "fev1" in result.non_conclusive_reason
+        assert "fvc" in result.non_conclusive_reason
+        mock_call.assert_not_called()
+
+    # ── AC-2.1: Backfill desde fila estándar (sin sufijo) → max(m1,m2,m3)
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_normalize_espirometry_backfill_standard(
+        self, mock_gemini, extractor
+    ):
+        """
+        AC-2.1: Sin fev1/fvc en raíz pero con filas `fev1_l` / `fvc_l` en tabla
+        con m1/m2/m3 poblados → backfill = max(m1,m2,m3) por fila estándar.
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            "paciente": "Test AC-2.1",
+            "fecha_estudio": "16/05/2026",
+            "fev1": None,
+            "fvc": None,
+            "fev1_fvc_ratio": None,
+            "fev1_percent_predicho": None,
+            "fvc_percent_predicho": None,
+            "es_interpretable": None,
+            "completitud_documental": None,
+            "parametros": [
+                {"label": "FVC", "key": "fvc_l", "unidad": "L",
+                 "m1": 4.0, "m2": 3.8, "m3": 3.7, "m1_pct_ref": 78.0,
+                 "ref": 5.1, "lln": 4.1},
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                 "m1": 3.2, "m2": 3.1, "m3": 3.0, "m1_pct_ref": 84.0,
+                 "ref": 3.8, "lln": 3.0},
+            ],
+        }
+        result = extractor.extract_by_type(
+            "/fake/ac_2_1.pdf", "Espirometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
+            extraction_provider_override="gemini",
+        )
+        assert isinstance(result, EspirometriaData)
+        assert result.fev1 == 3.2  # max(3.2, 3.1, 3.0)
+        assert result.fvc == 4.0   # max(4.0, 3.8, 3.7)
+        assert result.fev1_fvc_ratio == round(3.2 / 4.0, 4)
+
+    # ── AC-2.2: Backfill con `Mejor FEV1`/`Mejor FVC` con prioridad
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_normalize_espirometry_backfill_mejor_priority(
+        self, mock_gemini, extractor
+    ):
+        """
+        AC-2.2: fila `Mejor FEV1` con m1 poblado → backfill toma m1 de esa fila
+        (no max de la fila estándar). Precedencia: Mejor * > estándar.
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            "paciente": "Test AC-2.2",
+            "fecha_estudio": "16/05/2026",
+            "fev1": None,
+            "fvc": None,
+            "fev1_fvc_ratio": None,
+            "es_interpretable": None,
+            "completitud_documental": None,
+            "parametros": [
+                # Fila Mejor * con m1 explícito (distinto del estándar).
+                {"label": "Mejor FVC", "key": "mejor_fvc_l", "unidad": "L",
+                 "m1": 4.12, "m1_pct_ref": 79.4},
+                {"label": "Mejor FEV1", "key": "mejor_fev1_l", "unidad": "L",
+                 "m1": 3.45, "m1_pct_ref": 84.1},
+                # Fila estándar con m1/m2/m3 — debe ser IGNORADA por backfill
+                # porque la fila Mejor * tiene prioridad.
+                {"label": "FVC", "key": "fvc_l", "unidad": "L",
+                 "m1": 3.5, "m2": 3.4, "m3": 3.3},
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                 "m1": 2.9, "m2": 2.8, "m3": 2.7},
+            ],
+        }
+        result = extractor.extract_by_type(
+            "/fake/ac_2_2.pdf", "Espirometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
+            extraction_provider_override="gemini",
+        )
+        assert isinstance(result, EspirometriaData)
+        assert result.fev1 == 3.45   # m1 de Mejor FEV1 (no max estándar 2.9)
+        assert result.fvc == 4.12    # m1 de Mejor FVC (no max estándar 3.5)
+        assert result.fev1_percent_predicho == 84.1
+        assert result.fvc_percent_predicho == 79.4
+
+    # ── AC-2.3: Variantes con sufijo (`fev1_l`/`fvc_l`) — backfill idéntico
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_normalize_espirometry_backfill_with_suffix(
+        self, mock_gemini, extractor
+    ):
+        """
+        AC-2.3: filas con sufijo `_l` (fev1_l, fvc_l) → backfill idéntico a AC-2.1.
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            "paciente": "Test AC-2.3",
+            "fecha_estudio": "16/05/2026",
+            "fev1": None,
+            "fvc": None,
+            "parametros": [
+                {"label": "FVC", "key": "fvc_l", "unidad": "L",
+                 "m1": 4.0, "m2": 3.8, "m3": 3.7},
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                 "m1": 3.2, "m2": 3.1, "m3": 3.0},
+            ],
+        }
+        result = extractor.extract_by_type(
+            "/fake/ac_2_3.pdf", "Espirometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
+            extraction_provider_override="gemini",
+        )
+        assert isinstance(result, EspirometriaData)
+        assert result.fev1 == 3.2
+        assert result.fvc == 4.0
+
+    # ── AC-2.4: `es_interpretable=true` con keys bare (`fev1`, `fvc`)
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_normalize_espirometry_quality_with_bare_keys(
+        self, mock_gemini, extractor
+    ):
+        """
+        AC-2.4: variantes bare `fev1`/`fvc` (sin sufijo) en `parametros[]`
+        → es_interpretable=true, completitud_documental=suficiente (≥6 principales).
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            "paciente": "Test AC-2.4",
+            "fecha_estudio": "16/05/2026",
+            "fev1": None,
+            "fvc": None,
+            "es_interpretable": None,
+            "completitud_documental": None,
+            "notas_calidad": None,
+            "calidad": {
+                "repetibilidad_ats_ers_fvc": "Aceptable",
+                "es_interpretable": None,
+                "completitud_documental": None,
+            },
+            "parametros": [
+                {"label": "FVC", "key": "fvc", "m1": 4.0, "m2": 3.9, "m3": 3.8},
+                {"label": "FEV1", "key": "fev1", "m1": 3.2, "m2": 3.1, "m3": 3.0},
+                {"label": "FEV1/FVC", "key": "fev1_fvc", "m1": 80.0},
+                {"label": "FEF25-75", "key": "fef25_75", "m1": 3.0},
+                {"label": "FEF25", "key": "fef25", "m1": 7.0},
+                {"label": "FEF50", "key": "fef50", "m1": 5.0},
+                {"label": "FEF75", "key": "fef75", "m1": 2.0},
+            ],
+        }
+        result = extractor.extract_by_type(
+            "/fake/ac_2_4.pdf", "Espirometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
+            extraction_provider_override="gemini",
+        )
+        assert isinstance(result, EspirometriaData)
+        assert result.es_interpretable is True
+        assert result.completitud_documental == "suficiente"
+        assert result.calidad is not None
+        assert result.calidad.completitud_documental == "suficiente"
+
+    # ── AC-2.5: `paciente`/`fecha_estudio` desde sub-bloques
+    @patch('app.services.ai.base.GeminiBase.call_gemini')
+    def test_normalize_espirometry_paciente_fecha_from_subblocks(
+        self, mock_gemini, extractor
+    ):
+        """
+        AC-2.4: paciente/fecha_estudio ausentes en raíz pero presentes en
+        `paciente_detalle.nombre_completo` / `estudio.fecha_estudio` →
+        se mapean defensivamente a raíz para evitar la caída al dict crudo.
+        """
+        from app.schemas.medical import EspirometriaData
+        mock_gemini.return_value = {
+            # Sin paciente/fecha_estudio en raíz
+            "paciente": "",
+            "fecha_estudio": "",
+            "fev1": 3.2,
+            "fvc": 4.0,
+            "paciente_detalle": {"nombre_completo": "Trabajador B"},
+            "estudio": {"fecha_estudio": "18/05/2026"},
+            "parametros": [
+                {"label": "FVC", "key": "fvc_l", "m1": 4.0},
+                {"label": "FEV1", "key": "fev1_l", "m1": 3.2},
+            ],
+        }
+        result = extractor.extract_by_type(
+            "/fake/ac_2_5.pdf", "Espirometria",
+            ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
+            extraction_provider_override="gemini",
+        )
+        assert isinstance(result, EspirometriaData)
+        assert result.paciente == "Trabajador B"
+        assert result.fecha_estudio == "18/05/2026"
+
+    # ── AC-3.1: Determinismo bit-a-bit
+    def test_normalize_espirometry_determinism(self, extractor):
+        """
+        AC-3.1: dos corridas sobre el mismo input → mismo output (dict equality).
+        El backfill es puro, sin RNG, sin timestamps.
+        """
+        input_dict = {
+            "paciente": "Determinismo",
+            "fecha_estudio": "16/05/2026",
+            "fev1": None,
+            "fvc": None,
+            "fev1_fvc_ratio": None,
+            "fev1_percent_predicho": None,
+            "fvc_percent_predicho": None,
+            "es_interpretable": None,
+            "completitud_documental": None,
+            "parametros": [
+                {"label": "FVC", "key": "fvc_l", "m1": 4.0, "m2": 3.8, "m3": 3.7,
+                 "m1_pct_ref": 78.0},
+                {"label": "FEV1", "key": "fev1_l", "m1": 3.2, "m2": 3.1, "m3": 3.0,
+                 "m1_pct_ref": 84.0},
+                {"label": "Mejor FVC", "key": "mejor_fvc_l", "m1": 4.12,
+                 "m1_pct_ref": 79.4},
+                {"label": "Mejor FEV1", "key": "mejor_fev1_l", "m1": 3.45,
+                 "m1_pct_ref": 84.1},
+            ],
+        }
+        r1 = extractor._normalize_espirometria_result({**input_dict})
+        r2 = extractor._normalize_espirometria_result({**input_dict})
+        assert r1 == r2
+
+    # ── AC-4.1: Audiometría — comportamiento del gate sin cambios
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    def test_check_minimum_params_audiometria_unchanged(self, prediagnostic_svc):
+        """
+        AC-4.1: Audiometría con oido_derecho/oido_izquierdo presentes en raíz
+        → gate pasa; sin cambios respecto al comportamiento previo.
+        """
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data={
+                "paciente": "Test AC-4.1",
+                "oido_derecho": {"1000": 10, "4000": 15},
+                "oido_izquierdo": {"1000": 12, "4000": 14},
+            },
+        )
+        # Sin MedGemma/DR7 el resultado cae a AI_NON_CONCLUSIVE por falta de
+        # capacidad clínica, NO por el gate de mínimos (el gate pasó).
+        assert result.non_conclusive_reason is None or (
+            "fev1" not in (result.non_conclusive_reason or "")
+            and "fvc" not in (result.non_conclusive_reason or "")
+        )
+
+    # ── AC-4.2: Otros tipos — sin cambios
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    def test_check_minimum_params_other_studies_unchanged(self, prediagnostic_svc):
+        """
+        AC-4.2: Laboratorio / Rayos_X / ECG / Somatometría / AgudezaVisual —
+        el gate table-aware SOLO aplica a Espirometría; el resto conserva el
+        comportamiento previo (parámetros faltantes en raíz → missing, sin
+        consultar `parametros[]`).
+        """
+        # Laboratorio: sin `parametros` raíz → debe fallar el gate.
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Laboratorio",
+            extracted_data={"paciente": "Test AC-4.2 Lab"},
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.non_conclusive_reason is not None
+        assert "parametros" in result.non_conclusive_reason
+
+        # Rayos_X: sin hallazgos/localizacion → debe fallar.
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Rayos_X",
+            extracted_data={"paciente": "Test AC-4.2 RX"},
+        )
+        assert "hallazgos" in (result.non_conclusive_reason or "")
+        assert "localizacion" in (result.non_conclusive_reason or "")
+
+        # Electrocardiograma: sin ritmo/frecuencia → debe fallar.
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Electrocardiograma",
+            extracted_data={"paciente": "Test AC-4.2 ECG"},
+        )
+        assert "ritmo" in (result.non_conclusive_reason or "")
+        assert "frecuencia_bpm" in (result.non_conclusive_reason or "")
+
+    # ── AC-5.1: Provider extractivo `m3` preservado
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_extractor_provider_selector_unchanged(self, mock_call_m3, extractor):
+        """
+        AC-5.1: el dispatcher extractivo sigue resolviendo provider=m3 para
+        espirometría cuando el selector apunta a m3 (no se introdujo fallback).
+        Verifica que `last_extraction_audit.extraction_provider_used == "m3"`.
+        Mockea `M3VisionBase.call_m3` para que el dispatch no falle por falta de
+        credenciales en el entorno de tests.
+        """
+        mock_call_m3.return_value = {
+            "paciente": "Test AC-5.1",
+            "fecha_estudio": "16/05/2026",
+            "fev1": 3.2,
+            "fvc": 4.0,
+        }
+        with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+            extractor.extract_by_type(
+                "/fake/ac_5_1.pdf", "Espirometria",
+                ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
+                extraction_provider_override="m3",
+            )
+        assert mock_call_m3.called
+        audit = extractor.last_extraction_audit
+        assert audit["extraction_provider_requested"] == "m3"
+        assert audit["extraction_provider_used"] == "m3"
+        assert audit["extraction_fallback_reason"] is None

@@ -147,10 +147,22 @@ GUARDRAILS ESPECÍFICOS PARA AUDIOMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBRA
 # Claves canónicas a las que debe mapear el `key` de cada fila del cuadro FVC.
 # Se incluyen variantes ortográficas válidas (fef2575_l_s / fef25_75_l_s) para
 # no flagar falsos positivos cuando el LLM usa una grafía equivalente.
+#
+# FIX-20260821-01: Ampliado con buckets equivalentes (sin sufijos `_l`, `_pct`,
+# `_l_s`, `_s`) y con claves "Mejor *" y "fev1_fvc" para soportar variantes que
+# el modelo M3 emite en el fixture del hallazgo FND-20260821-03
+# (mismo hash sha256:6a94384d…de541). Mantener como frozenset = fuente única
+# de verdad para el normalizador; evita errores de normalización runtime.
 _ESPIROMETRIA_CANONICAL_KEYS: frozenset = frozenset({
-    "mejor_fvc_l", "mejor_fev1_l", "fef2575_l_s", "fef25_75_l_s",
-    "fvc_l", "fev1_l", "fev1_fvc_pct", "fef25_l_s", "fef50_l_s",
-    "fef75_l_s", "fet100_s", "vext_l", "edad_pulmon_anios",
+    "mejor_fvc_l", "mejor_fev1_l", "mejor_fvc", "mejor_fev1",
+    "fef2575_l_s", "fef25_75_l_s", "fef25_75",
+    "fvc_l", "fvc", "fev1_l", "fev1",
+    "fev1_fvc_pct", "fev1_fvc", "fev1_fvc_ratio",
+    "fef25_l_s", "fef50_l_s", "fef75_l_s",
+    "fef25", "fef50", "fef75",
+    "fet100_s", "fet100",
+    "vext_l", "vext",
+    "edad_pulmon_anios", "edad_pulmon",
     "repetibilidad_fvc", "repetibilidad_fev1",
 })
 
@@ -345,24 +357,31 @@ notas de calidad y gráficas.
 
     def _normalize_espirometria_result(self, result: dict) -> dict:
         """
-        FIX-20260812-20 | ARCH-20260518-17: Post-procesamiento del dict extraído
-        para Espirometría. Espejo de _normalize_audiometria_result.
+        FIX-20260812-20 | ARCH-20260518-17 | FIX-20260821-01:
+        Post-procesamiento del dict extraído para Espirometría.
 
         Acciones:
         1. Normaliza `parametros` (lista de dicts): coerce valores numéricos a
            float, conserva label/unidad/key como str, omite entradas no-dict.
-        2. Deriva `completitud_documental` (legacy raíz + bloque calidad) desde
+        2. FIX-20260821-01: Backfill determinista desde `parametros[]` hacia
+           raíz para `fev1`, `fvc`, `fev1_fvc_ratio`, `fev1_percent_predicho`
+           y `fvc_percent_predicho` cuando están ausentes en raíz. Precedencia
+           explícita (no se sobreescriben valores ya presentes):
+             a. Fila `Mejor *` (mejor maniobra consolidada) → su `m1`.
+             b. Fila estándar → `max(m1, m2, m3)` (mejor maniobra disponible).
+        3. FIX-20260821-01: Mapeo defensivo `paciente`/`fecha_estudio` desde
+           `paciente_detalle.nombre_completo` / `estudio.fecha_estudio` cuando
+           están ausentes en raíz (evita la caída al dict crudo en extract_by_type).
+        4. Deriva `completitud_documental` (legacy raíz + bloque calidad) desde
            el conteo de parámetros principales con valores de maniobra si quedó null.
-        3. Deriva `es_interpretable` (legacy raíz) si quedó null: True solo si hay
-           filas fev1_l y fvc_l con al menos un valor de maniobra.
-        4. Anota filas con `key` no canónico en `notas_calidad` (raíz + bloque
+        5. Deriva `es_interpretable` (legacy raíz) si quedó null: True solo si hay
+           filas fev1/fvc (con o sin sufijo `_l`) con al menos un valor de maniobra
+           — FIX-20260821-01 amplía el conjunto reconocido.
+        6. Anota filas con `key` no canónico en `notas_calidad` (raíz + bloque
            calidad) como sospecha de mapeo label→key incorrecto.
         """
         parametros = result.get("parametros")
         if not isinstance(parametros, list):
-            # Sin tabla de parámetros (snapshot legacy o extracción mínima):
-            # no hay nada que normalizar — se devuelve tal cual para que el
-            # schema EspirometriaData aplique sus defaults opcionales.
             return result
 
         def _to_float(v):
@@ -395,7 +414,6 @@ notas de calidad y gráficas.
                       "m3", "m3_pct_ref", "ref", "lln"):
                 normalized[f] = _to_float(row.get(f))
             normalized_rows.append(normalized)
-            # Conteo de parámetros principales con al menos un valor de maniobra.
             if key in _ESPIROMETRIA_CANONICAL_KEYS and any(
                 normalized.get(f) is not None for f in ("m1", "m2", "m3")
             ):
@@ -405,7 +423,42 @@ notas de calidad y gráficas.
 
         result["parametros"] = normalized_rows
 
-        # 2. Derivar completitud_documental si quedó null (raíz + bloque calidad).
+        # FIX-20260821-01 §4.1: Backfill determinista desde `parametros[]`.
+        # Precedencia: Mejor fila (m1) → fila estándar → max(m1,m2,m3).
+        # No sobreescribe valores ya presentes en raíz.
+        _espiro_backfill_fields = (
+            ("fev1", "fev1"),
+            ("fvc", "fvc"),
+            ("fev1_percent_predicho", "fev1_pct_ref"),
+            ("fvc_percent_predicho", "fvc_pct_ref"),
+        )
+        for target, bucket in _espiro_backfill_fields:
+            if result.get(target) is None:
+                backfilled = _backfill_espirometry_scalar(normalized_rows, bucket)
+                if backfilled is not None:
+                    result[target] = backfilled
+        # Ratio derivado si ambos quedaron poblados (raíz o backfill).
+        if result.get("fev1_fvc_ratio") is None:
+            f = result.get("fev1")
+            v = result.get("fvc")
+            if isinstance(f, (int, float)) and isinstance(v, (int, float)) and v:
+                result["fev1_fvc_ratio"] = round(float(f) / float(v), 4)
+
+        # FIX-20260821-01 §4.4: Mapeo defensivo paciente/fecha_estudio desde sub-bloques.
+        if not result.get("paciente"):
+            pd = result.get("paciente_detalle")
+            if isinstance(pd, dict):
+                name = pd.get("nombre_completo")
+                if isinstance(name, str) and name.strip():
+                    result["paciente"] = name.strip()
+        if not result.get("fecha_estudio"):
+            estudio = result.get("estudio")
+            if isinstance(estudio, dict):
+                fecha = estudio.get("fecha_estudio")
+                if isinstance(fecha, str) and fecha.strip():
+                    result["fecha_estudio"] = fecha.strip()
+
+        # Derivar completitud_documental si quedó null (raíz + bloque calidad).
         if principales_con_valores >= 6:
             _derived = "suficiente"
         elif principales_con_valores >= 3:
@@ -422,19 +475,22 @@ notas de calidad y gráficas.
                 calidad["completitud_documental"] = _derived
                 result["calidad"] = calidad
 
-        # 3. Derivar es_interpretable (legacy) si quedó null.
+        # FIX-20260821-01: Derivar es_interpretable (legacy) si quedó null.
+        # Acepta keys bare (`fev1`, `fvc`) y con sufijo (`fev1_l`, `fvc_l`).
         if result.get("es_interpretable") is None:
+            fev1_keys = ("fev1_l", "fev1")
+            fvc_keys = ("fvc_l", "fvc")
             fev1_ok = any(
-                r.get("key") == "fev1_l" and r.get("m1") is not None
+                r.get("key") in fev1_keys and r.get("m1") is not None
                 for r in normalized_rows
             )
             fvc_ok = any(
-                r.get("key") == "fvc_l" and r.get("m1") is not None
+                r.get("key") in fvc_keys and r.get("m1") is not None
                 for r in normalized_rows
             )
             result["es_interpretable"] = bool(fev1_ok and fvc_ok)
 
-        # 4. Anotar keys no canónicos como sospecha de mapeo incorrecto.
+        # Anotar keys no canónicos como sospecha de mapeo incorrecto.
         if non_canonical_labels:
             warning = (
                 "SOSPECHA_MAPEO: parámetros con key no canónico: "
@@ -904,3 +960,74 @@ notas de calidad y gráficas.
         except Exception as e:
             print(f"⚠️ Error al parsear {doc_type}: {e}")
             return result
+
+
+# FIX-20260821-01 §4.1: Helper determinista para backfill desde `parametros[]`.
+# Precedencia: Mejor fila (m1) → fila estándar → max(m1, m2, m3).
+# Retorna el escalar a inyectar en raíz, o None si no hay fila utilizable.
+# Módulo-nivel (no método) para mantenerlo puro y reutilizable por
+# `_check_minimum_params` del gate clínico (misma precedencia).
+def _backfill_espirometry_scalar(normalized_rows, bucket: str):
+    """
+    Args:
+        normalized_rows: lista de dicts normalizados (label/key/unidad/m1/...).
+        bucket: 'fev1' | 'fvc' | 'fev1_pct_ref' | 'fvc_pct_ref'.
+
+    Returns:
+        float | None — escalar a usar para backfill, o None si no hay fila.
+
+    Para buckets de valor absoluto ('fev1', 'fvc'): usa m1/m2/m3 de la fila.
+    Para buckets de porcentaje ('fev1_pct_ref', 'fvc_pct_ref'): usa m*_pct_ref
+    de la fila del mismo parámetro (no existe fila dedicada "mejor_fev1_pct_ref"
+    en layouts reales; el %REF vive en la misma fila que el valor absoluto).
+    """
+    if not normalized_rows:
+        return None
+
+    # Para pct_ref, el "mejor *" en layouts reales está en la misma fila que el
+    # valor absoluto (ej: `mejor_fev1_l` con `m1` y `m1_pct_ref`); por tanto
+    # el prefijo a buscar es el del valor absoluto (sin sufijo `_pct_ref`).
+    abs_bucket = bucket.replace("_pct_ref", "")  # 'fev1' | 'fvc'
+    mejor_prefix = f"mejor_{abs_bucket}"          # 'mejor_fev1' | 'mejor_fvc'
+    std_prefix = abs_bucket                       # 'fev1' | 'fvc'
+    is_pct = bucket.endswith("_pct_ref")
+
+    def _row_matches(row, prefix):
+        key = (row.get("key") or "").lower()
+        if not key:
+            return False
+        return key == prefix or key.startswith(prefix + "_")
+
+    # (a) Fila Mejor * (mejor maniobra consolidada): usar m1 (m1_pct_ref si pct).
+    for row in normalized_rows:
+        if _row_matches(row, mejor_prefix):
+            if is_pct:
+                # El pct_ref de la mejor maniobra vive en la misma fila que m1.
+                v = row.get("m1_pct_ref")
+                if v is not None:
+                    return float(v)
+            else:
+                v = row.get("m1")
+                if v is not None:
+                    return float(v)
+
+    # (b) Fila estándar: max(m1, m2, m3) — mejor maniobra disponible.
+    mejores = []
+    for row in normalized_rows:
+        if _row_matches(row, std_prefix):
+            if is_pct:
+                for f in ("m1_pct_ref", "m2_pct_ref", "m3_pct_ref"):
+                    v = row.get(f)
+                    if v is not None:
+                        mejores.append(float(v))
+                        break
+            else:
+                for f in ("m1", "m2", "m3"):
+                    v = row.get(f)
+                    if v is not None:
+                        mejores.append(float(v))
+                        break
+    if mejores:
+        return max(mejores)
+
+    return None

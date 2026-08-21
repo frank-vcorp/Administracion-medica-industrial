@@ -156,14 +156,28 @@ const STATUS_BADGE: Record<StudyStatus, string> = {
 // @id IMPL-20260516-04
 // @backup context/checkpoints/CHK_IMPL-20260516-04.md
 
+import { extractingStageLabel } from '@/lib/clinical/extraction-stage-label'
+
 type UploadStageId = 'uploading' | 'classifying' | 'extracting' | 'prediagnosing' | 'saving'
 
-const AI_PIPELINE_STAGES: { id: UploadStageId; label: string; pct: number }[] = [
-  { id: 'uploading',     label: 'Subiendo archivo',                      pct: 10  },
-  { id: 'classifying',   label: 'Clasificando estudio',                  pct: 25  },
-  { id: 'extracting',    label: 'Extrayendo datos con Gemini',           pct: 50  },
-  { id: 'prediagnosing', label: 'Generando prediagnóstico con MedGemma', pct: 80  },
-  { id: 'saving',        label: 'Guardando resultado',                   pct: 100 },
+// FIX-20260821-01 §4.5: Labels dejan de afirmar "Gemini" hardcodeado. El label
+// del stage "extracting" se deriva del provider extractivo real expuesto por
+// `extraction_snapshot.audit.extraction_provider_used` vía `extractingStageLabel`.
+// Resto de stages: textos estables.
+const AI_PIPELINE_STAGE_LABELS: Record<UploadStageId, (provider?: string) => string> = {
+  uploading:     () => 'Subiendo archivo',
+  classifying:   () => 'Clasificando estudio',
+  extracting:    (provider) => extractingStageLabel(provider),
+  prediagnosing: () => 'Generando prediagnóstico con MedGemma',
+  saving:        () => 'Guardando resultado',
+}
+
+const AI_PIPELINE_STAGES: { id: UploadStageId; pct: number }[] = [
+  { id: 'uploading',     pct: 10  },
+  { id: 'classifying',   pct: 25  },
+  { id: 'extracting',    pct: 50  },
+  { id: 'prediagnosing', pct: 80  },
+  { id: 'saving',        pct: 100 },
 ]
 
 // --- Helpers de formularios dedicados (no IA) ---
@@ -817,9 +831,13 @@ void _CapturedValuesPanel
 function UploadProgressPanel({
   stage,
   isRegen = false,
+  extractionProvider,
 }: {
   stage: UploadStageId
   isRegen?: boolean
+  // FIX-20260821-01 §4.5: provider extractivo real (m3 | gemini | undefined).
+  // Si está disponible, el label deriva del provider; si no, texto neutro.
+  extractionProvider?: 'm3' | 'gemini' | string
 }) {
   const stages = isRegen
     ? AI_PIPELINE_STAGES.filter(s => s.id !== 'uploading')
@@ -827,6 +845,9 @@ function UploadProgressPanel({
   const visibleIdx = stages.findIndex(s => s.id === stage)
   const current = stages[visibleIdx]
   const pct = current?.pct ?? (isRegen ? 25 : 10)
+  const label = current
+    ? AI_PIPELINE_STAGE_LABELS[current.id](extractionProvider)
+    : 'Iniciando...'
 
   return (
     <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 space-y-3">
@@ -849,7 +870,7 @@ function UploadProgressPanel({
       <div className="space-y-1">
         <div className="flex justify-between items-center">
           <span className="text-xs text-teal-700 font-semibold truncate pr-2">
-            {current?.label ?? 'Iniciando...'}
+            {label}
           </span>
           <span className="text-xs font-bold text-teal-700 tabular-nums shrink-0">{pct}%</span>
         </div>
@@ -878,7 +899,7 @@ function UploadProgressPanel({
               <span className="shrink-0 w-4 text-center">
                 {isDone ? '✓' : isActive ? '▶' : '·'}
               </span>
-              <span>{s.label}</span>
+              <span>{AI_PIPELINE_STAGE_LABELS[s.id](extractionProvider)}</span>
               {isActive && <span className="animate-pulse text-teal-500 ml-1">●●●</span>}
             </div>
           )

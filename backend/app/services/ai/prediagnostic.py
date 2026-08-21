@@ -182,6 +182,31 @@ REQUIRED_PARAMS: Dict[str, list] = {
     # ExamenMedico no tiene mínimos estrictos; el prompt maneja datos parciales
 }
 
+
+# FIX-20260821-01 §4.2: Helper módulo-nivel para gate table-aware Espirometría.
+# Reutiliza `_backfill_espirometry_scalar` del extractor (misma precedencia:
+# Mejor * → estándar → max(m1,m2,m3)). Si el helper devuelve escalar > 0,
+# el parámetro se considera presente en la tabla y el gate pasa.
+def _espirometry_param_present_in_tabla(extracted_data: Dict[str, Any], param: str) -> bool:
+    """
+    Args:
+        extracted_data: dict con posible clave `parametros` (lista de filas).
+        param: 'fev1' | 'fvc' (únicos relevantes para el gate actual).
+
+    Returns:
+        True si hay una fila utilizable en `parametros[]` que aporte un escalar
+        > 0 para el parámetro; False en caso contrario (incluye ausencia de tabla).
+    """
+    # Import lazy para evitar ciclos; el helper es puro y módulo-nivel.
+    from app.services.ai.extractor import _backfill_espirometry_scalar
+
+    parametros = extracted_data.get("parametros")
+    if not isinstance(parametros, list) or not parametros:
+        return False
+    # `param` es 'fev1' o 'fvc'; mapeo directo al bucket del helper.
+    value = _backfill_espirometry_scalar(parametros, param)
+    return isinstance(value, (int, float)) and value > 0
+
 # IMPL-20260326-17: Tipos con prediagnóstico IA explícito. Campimetria y RiesgoCardiovascular
 # quedan fuera en V1 — sus documentos ya contienen el resultado calculado o requieren
 # tablas normativas altamente especializadas que el modelo general no debe asumir.
@@ -600,6 +625,13 @@ Responde en JSON con esta estructura exacta:
         ARCH-20260820-01 Fase 4 (handoff §6.4): `required_params` proviene de
         `calibration_version.clinicalCriteria.requiredParams` si está presente;
         si no, cae a la constante de módulo `REQUIRED_PARAMS[study_type]`.
+
+        FIX-20260821-01 §4.2: gate table-aware SOLO para Espirometría. Si el
+        parámetro requerido no está en raíz, lo busca en `extracted_data.parametros[]`
+        por key/label con precedencia (Mejor * → estándar → max(m1,m2,m3)).
+        Resto de tipos: comportamiento actual sin cambios. El gate NO se relaja:
+        si una fila no existe en raíz ni en `parametros[]` (con cualquier variante),
+        sigue retornando `AI_NON_CONCLUSIVE` con el mismo reason.
         """
         if required_params is None:
             required = REQUIRED_PARAMS.get(study_type, [])
@@ -609,6 +641,10 @@ Responde en JSON con esta estructura exacta:
         for param in required:
             value = extracted_data.get(param)
             if value is None or value == [] or value == {}:
+                # FIX-20260821-01: gate table-aware solo para Espirometría.
+                if study_type == "Espirometria" and param in ("fev1", "fvc"):
+                    if _espirometry_param_present_in_tabla(extracted_data, param):
+                        continue
                 missing.append(param)
         if missing:
             return f"Parámetros mínimos faltantes: {', '.join(missing)}"
