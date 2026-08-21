@@ -83,6 +83,17 @@ interface AICalibrationEditorProps {
    * Opcional: si ausente, se asume flujo legacy V1/V2 (mostrar todo).
    */
   operationMode?: OperationMode | null
+  /**
+   * Status inicial del draft a guardar. Default `draft`. ARCH-20260820-01
+   * Fase 2B (AC-2B.4): permite al usuario persistir `tested` directamente
+   * desde la UI (gate para `publishAICalibrationV3`).
+   */
+  initialStatus?: "draft" | "tested"
+  /**
+   * Callback opcional invocado al guardar exitosamente. Permite al
+   * workspace refrescar el estado V3 (panel + header) tras `saveAICalibrationV3`.
+   */
+  onSaved?: (status: "draft" | "tested") => void
 }
 
 const EXTRACTION_PROMPT_TEMPLATE = `REGLAS ESPECIFICAS DEL ESTUDIO: {{nombre_del_estudio}}
@@ -192,6 +203,13 @@ export interface BuildDraftV3Input extends EditorFormState {
   operationMode?: OperationMode | null
   /** Secciones computadas por getEditorSectionsForOperationMode. */
   sections: EditorSections
+  /**
+   * Status inicial del draft a persistir (`draft` o `tested`). Default
+   * `draft` (preserva comportamiento previo). ARCH-20260820-01 Fase 2B
+   * (AC-2B.4): la UI permite seleccionar "guardar como tested" para
+   * satisfacer el gate G0+ de publicación.
+   */
+  status?: "draft" | "tested"
 }
 
 /**
@@ -237,6 +255,7 @@ export function buildDraftV3FromEditorState(input: BuildDraftV3Input): AICalibra
     diagVersion,
     initial,
     sections,
+    status,
   } = input
 
   const extractionLegacy = getNested(initial, "extraction")
@@ -270,7 +289,7 @@ export function buildDraftV3FromEditorState(input: BuildDraftV3Input): AICalibra
   }
 
   return {
-    status: "draft",
+    status: status ?? "draft",
     label: "cal-v3-draft",
     enabled,
     canonicalStudyType: canonicalStudyType.trim() || null,
@@ -294,7 +313,7 @@ export function buildDraftV3FromEditorState(input: BuildDraftV3Input): AICalibra
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function AICalibrationEditor({ testId, initial, operationMode }: AICalibrationEditorProps) {
+export default function AICalibrationEditor({ testId, initial, operationMode, initialStatus, onSaved }: AICalibrationEditorProps) {
   // ARCH-20260820-01 Fase 2: editor condicional por operationMode.
   // El early return para manual_service va DESPUÉS de los hooks (ver abajo)
   // para cumplir react-hooks/rules-of-hooks.
@@ -337,6 +356,9 @@ export default function AICalibrationEditor({ testId, initial, operationMode }: 
   // ── Estado de la acción ────────────────────────────────────────────────────
   const [isPending, startTransition] = useTransition()
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  // ARCH-20260820-01 Fase 2B (AC-2B.4): selección de status del draft al guardar.
+  // Default `initialStatus` (provisto por el workspace) o `"draft"`.
+  const [saveStatus, setSaveStatus] = useState<"draft" | "tested">(initialStatus ?? "draft")
 
   // AC-2.6 / DEC-20260820-02: manual_service no muestra editor de calibración IA.
   // El early return va aquí (después de todos los hooks) para cumplir
@@ -384,12 +406,14 @@ export default function AICalibrationEditor({ testId, initial, operationMode }: 
       initial,
       operationMode,
       sections: editorSections,
+      status: saveStatus,
     })
 
     startTransition(async () => {
       const result = await saveAICalibrationV3(testId, draftV3)
       if (result.ok) {
         setMessage({ type: "success", text: "Configuración guardada correctamente." })
+        onSaved?.(saveStatus)
       } else {
         setMessage({ type: "error", text: result.error ?? "Error al guardar." })
       }
@@ -608,6 +632,40 @@ export default function AICalibrationEditor({ testId, initial, operationMode }: 
       )}
 
       {/* ── Acción ──────────────────────────────────────────────────────────── */}
+      {/* ARCH-20260820-01 Fase 2B (AC-2B.4): selección de status al guardar. */}
+      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Guardar como</p>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            <input
+              type="radio"
+              name="cal-save-status"
+              value="draft"
+              checked={saveStatus === "draft"}
+              onChange={() => setSaveStatus("draft")}
+              className="h-4 w-4 border-slate-300 text-violet-600 focus:ring-violet-400"
+              data-testid="cal-save-status-draft"
+            />
+            <span>Borrador (<code className="font-mono">draft</code>)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            <input
+              type="radio"
+              name="cal-save-status"
+              value="tested"
+              checked={saveStatus === "tested"}
+              onChange={() => setSaveStatus("tested")}
+              className="h-4 w-4 border-slate-300 text-violet-600 focus:ring-violet-400"
+              data-testid="cal-save-status-tested"
+            />
+            <span>Probado (<code className="font-mono">tested</code>)</span>
+          </label>
+        </div>
+        <p className="text-xs text-slate-500">
+          <code className="font-mono">tested</code> es el estado requerido para publicar (gate G0+ de <code className="font-mono">publishAICalibrationV3</code>).
+        </p>
+      </div>
+
       <div className="flex items-center gap-3">
         <button
           type="submit"

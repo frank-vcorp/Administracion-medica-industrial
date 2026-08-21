@@ -1,0 +1,92 @@
+# Decisions
+
+## DEC-20260819-01 — Dictámenes por prueba antes del consolidado
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-19
+- **Pregunta:** ¿Cómo debe presentar Impresión y Aptitud los resultados de una atención con una o varias pruebas?
+- **Opciones consideradas:**
+  1. Un único texto de impresión diagnóstica que mezcle todo.
+  2. Un dictamen independiente por prueba y un dictamen general consolidado.
+- **Decisión de Frank:** Cada prueba conserva un dictamen independiente, un resumen pequeño y su descargable. Al final existe un dictamen general consolidado, sin importar cuántas pruebas se realizaron.
+- **Razón:** El médico necesita consultar toda la evidencia individual antes de determinar la aptitud laboral, sin perder trazabilidad clínica.
+- **Consecuencias:**
+  - Impresión y Aptitud debe mostrar tarjetas por prueba.
+  - El Examen Médico es una prueba independiente.
+  - El dictamen integrado no reemplaza ni mezcla los dictámenes individuales.
+  - Debe existir descarga individual por prueba y ZIP final con todo el lote disponible.
+- **Confirmación:** Frank, 2026-08-19.
+- **Referencias:** BR-20260819-01, FLOW-20260819-01, FND-20260819-01.
+
+## DEC-20260819-02 — Mantener Impresión y Aptitud anidada bajo Examen Médico hasta revisión AMI
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-19
+- **Pregunta:** ¿Debe moverse ahora Impresión y Aptitud a nivel de atención para soportar perfiles sin Examen Médico?
+- **Decisión de Frank:** No cambiar la ubicación actual. Mantener Impresión y Aptitud bajo Examen Médico y esperar la revisión clínica con AMI.
+- **Razón:** La política clínica para perfiles sin Examen Médico aún no está confirmada.
+- **Consecuencias:**
+  - No se implementa navegación global de Resultados y Dictamen.
+  - FND-20260819-02 queda sin resolución técnica.
+  - OQ-20260819-04 se difiere hasta revisión AMI.
+- **Confirmación:** Frank, 2026-08-19.
+- **Referencias:** FND-20260819-02, OQ-20260819-04.
+
+## DEC-20260819-03 — Validar tarjetas por prueba con papeletas de muestra antes de cerrar entregables
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-19
+- **Decisión de Frank:** Antes de definir definitivamente los entregables de Audiometría y Espirometría desde extracción, mostrar dentro de Impresión y Aptitud tres tarjetas: Examen Médico, Audiometría y Espirometría.
+- **Uso de muestras:** Las papeletas disponibles sirven como referencia de layout, resumen y dictamen individual; no se persisten como información clínica del paciente ni se descargan como documentos finales.
+- **Razón:** Frank revisará la interfaz visual y pedirá correcciones antes de conectar resultados reales, extracción y descargables definitivos.
+- **Consecuencias:**
+  - El consolidado final y ZIP quedan en espera de esa revisión visual.
+  - Cada tarjeta debe identificar claramente si es una vista de muestra.
+  - La implementación requiere SPEC técnica y prototipo UI antes de derivar datos clínicos reales.
+- **Confirmación:** Frank, 2026-08-19.
+- **Referencias:** DEC-20260819-01, FND-20260819-01.
+
+## DEC-20260820-01 — Calibración como fuente única de comportamiento por prueba
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-20
+- **Decisión de Frank:** Toda configuración de extracción, interpretación clínica y presentación de una prueba debe ajustarse y verificarse dentro del módulo de Calibración. Events debe consumir esa configuración sin reglas clínicas duplicadas o hardcodeadas que la contradigan.
+- **Resultado esperado:** Lo aprobado en Calibración debe producir en Events la misma extracción, el mismo prediagnóstico y la misma presentación clínica.
+- **Razón:** Evitar redeploys y cambios de código para ajustar qué datos se extraen, qué información se muestra y qué resultado clínico se sugiere por cada prueba.
+- **Consecuencias:**
+  - Calibración debe gobernar activación, tipo canónico, campos esperados, criterios mínimos, prompts, umbrales y presentación.
+  - El modo de prueba debe reproducir la experiencia real de Events.
+  - Events debe consumir una versión publicada de calibración y conservar trazabilidad de la versión utilizada.
+  - Los fallbacks hardcodeados solo pueden existir como contingencia explícita y visible, no como fuente primaria silenciosa.
+  - La UI estructural de Events no se rediseña: navegación, tabs y flujo permanecen iguales. Solo cambia la visualización de resultados cuando la calibración publicada define otro contenido, orden o sección.
+  - El preview de Calibración debe usar el mismo renderer clínico y el mismo contrato de presentación que Events.
+- **Confirmación:** Frank, 2026-08-20.
+- **Referencias:** FND-20260820-01, FND-20260820-02, FND-20260820-03, BR-20260820-01.
+
+## DEC-20260820-02 — Solo las pruebas que lo necesitan tienen calibración IA
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-20
+- **Decisión de Frank:** Las pruebas o servicios que no requieren extracción documental, operaciones clínicas ni prediagnóstico IA no deben tener configuración de Calibración IA. Ejemplo: ambulancias y servicios operativos.
+- **Clasificación funcional:**
+  1. `manual_service`: captura operativa/manual, sin calibración IA.
+  2. `document_extraction`: requiere extracción configurable, con calibración básica.
+  3. `clinical_interpretation`: requiere extracción, criterios, operaciones, prediagnóstico y presentación; con calibración completa.
+- **Consecuencias:**
+  - Ambulancias, consultas, vacunas y servicios similares no muestran editor de calibración IA.
+  - No se debe usar ningún default silencioso como `Audiometria` para una prueba sin calibración.
+  - El catálogo debe mostrar claramente el modo operativo de cada entrada.
+  - La calibración completa se reserva para Audiometría, Espirometría, Examen Médico, ECG, laboratorios interpretables e imagen cuando aplique.
+- **Confirmación:** Frank, 2026-08-20.
+- **Referencias:** DEC-20260820-01, FND-20260820-04.
+
+## DEC-20260820-03 — Publicación V3 visible desde Calibración
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-20
+- **Decisión de Frank:** Continuar con el cableado del editor V3 en la pantalla de Calibración para que un administrador pueda guardar `draft/tested` y publicar explícitamente una versión `published`.
+- **Alcance funcional:** Mantener la ruta y tabs actuales; añadir el flujo visible de edición/publicación V3 sin eliminar el fallback legacy V1/V2. `manual_service` no muestra editor IA. Publicar requiere el rol definido por el contrato vigente.
+- **Resultado esperado:** Desde `Admin → Servicios → Calibración IA`, el usuario puede identificar el estado V3, guardar el draft/test y publicar; Events consume esa versión publicada.
+- **Fuera de alcance:** No cambiar la navegación de Events, no eliminar hardcodeos restantes, no crear catálogo FamilyTemplate y no aplicar migraciones adicionales.
+- **Confirmación:** Frank, 2026-08-20.
+- **Referencias:** DEC-20260820-01, DEC-20260820-02, SPEC_ARCH-20260820-01 §14 Fase 2/3.

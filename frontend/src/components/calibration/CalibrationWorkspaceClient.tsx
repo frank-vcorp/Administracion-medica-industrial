@@ -13,11 +13,14 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import type {
   CandidateField,
   AICalibrationV2,
+  AICalibrationV3,
   CalibrationTestResults as CalibrationTestResultsData,
   FieldDefinition,
+  OperationMode,
 } from "@/types/calibration"
 import CandidateSchemaPanel from "@/components/calibration/CandidateSchemaPanel"
 import CalibrationVersionHistory from "@/components/calibration/CalibrationVersionHistory"
@@ -26,9 +29,14 @@ import CalibrationDocumentViewer, {
   type DocumentEntry,
 } from "@/components/calibration/CalibrationDocumentViewer"
 import AICalibrationEditor from "@/components/calibration/AICalibrationEditor"
+import CalibrationV3StatusPanel from "@/components/calibration/CalibrationV3StatusPanel"
 import PresentationSchemaPanel from "@/components/calibration/PresentationSchemaPanel"
 import CalibrationTestUpload from "@/components/calibration/CalibrationTestUpload"
 import CalibrationTestResults from "@/components/calibration/CalibrationTestResults"
+import {
+  describeCalibrationV3State,
+  coerceV3DraftToEditorInitial,
+} from "@/lib/calibration-v3-ui"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos derivados de los datos Prisma (serializables — dates como string)
@@ -64,7 +72,15 @@ interface EventTestEntry {
 interface CalibrationWorkspaceClientProps {
   testId: string
   aiCalibration: AICalibrationV2 | null
+  /** Raíz V3 (schemaVersion === 'V3') de MedicalTest.options.aiCalibration. */
+  aiCalibrationV3: AICalibrationV3 | null
   initialRawCalibration: Record<string, unknown> | null
+  /** operationMode de MedicalTest.options (DEC-20260820-02). */
+  operationMode: OperationMode | null
+  /** isAdminLike(role): editar drafts (ADMIN+). */
+  canEdit: boolean
+  /** isSuperAdmin(role): publicar calibración (SUPERADMIN). */
+  canPublish: boolean
   eventTests: EventTestEntry[]
   candidateFields: CandidateField[]
   apiUrl: string
@@ -282,12 +298,20 @@ function SnapshotsTab({
 export default function CalibrationWorkspaceClient({
   testId,
   aiCalibration,
+  aiCalibrationV3,
   initialRawCalibration,
+  operationMode,
+  canEdit,
+  canPublish,
   eventTests,
   candidateFields,
   apiUrl,
 }: CalibrationWorkspaceClientProps) {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<LeftTab>("propuesta")
+
+  // Derivación pura de estado V3 (no inventa; ver calibration-v3-ui.ts).
+  const v3State = describeCalibrationV3State(aiCalibrationV3, operationMode)
 
   // Snapshot seleccionado (controla qué documento se muestra a la derecha)
   const allSnapshots = eventTests.flatMap((et) =>
@@ -452,18 +476,48 @@ export default function CalibrationWorkspaceClient({
             />
           )}
 
-          {/* ── Tab: Configuración (V1 legacy) ── */}
+          {/* ── Tab: Configuración (V1 legacy + V3 panel) ── */}
           {activeTab === "configuracion" && (
             <div className="space-y-4">
-              {aiCalibration && (
+              {/* ARCH-20260820-01 Fase 2B: badge V3 (siempre). El badge legacy
+                  V2 se mantiene solo cuando NO hay raíz V3 (isLegacyOnly). */}
+              {v3State.isLegacyOnly && aiCalibration && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg text-xs text-violet-700">
                   <span className="font-bold">v{aiCalibration.currentVersion}</span>
                   <span>·</span>
                   <span className="font-mono">{aiCalibration.currentVersionLabel}</span>
-                  <span className="ml-auto text-violet-500">Versión vigente</span>
+                  <span className="ml-auto text-violet-500">Versión vigente (legacy V1/V2)</span>
                 </div>
               )}
-              <AICalibrationEditor testId={testId} initial={initialRawCalibration} />
+
+              {/* Panel V3: status, gates, publicar. Muestra aviso si canEdit=false
+                  o si manual_service (no editor ni publicar). */}
+              <CalibrationV3StatusPanel
+                testId={testId}
+                operationMode={operationMode}
+                aiCalibrationV3={aiCalibrationV3}
+                canEdit={canEdit}
+                canPublish={canPublish}
+                onChanged={() => router.refresh()}
+              />
+
+              {/* Editor: dentro del bloque está el propio early-return de
+                  manual_service (ARCH-20260820-01 Fase 2). Coexiste con
+                  calibration-v3-ui.ts que también renderiza el aviso de
+                  manual_service a nivel del panel (defensa en profundidad). */}
+              {!v3State.isManualService && (
+                <AICalibrationEditor
+                  testId={testId}
+                  initial={
+                    aiCalibrationV3?.draft
+                      ? coerceV3DraftToEditorInitial(aiCalibrationV3.draft)
+                      : initialRawCalibration
+                  }
+                  operationMode={operationMode}
+                  initialStatus={aiCalibrationV3?.draft?.status ?? "draft"}
+                  onSaved={() => router.refresh()}
+                />
+              )}
             </div>
           )}
 
