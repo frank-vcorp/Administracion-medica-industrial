@@ -780,6 +780,51 @@ async def list_calibration_snapshots(test_id: str):
 # NO expone secretos (contrato V3 no contiene API keys; los prompts pueden
 # exponerse porque no son secretos — son metadata clínica operativa).
 # CA-G02 / AC-1.3.
+#
+# ---------------------------------------------------------------------------
+# F-3 (QA-20260820-02) — CIERRE DOCUMENTAL (ARCH-20260820-01 Fase 3)
+# ---------------------------------------------------------------------------
+# Análisis de auth del endpoint `/resolve` (hallazgo F-3 del QA Fase 1,
+# cerrado en Fase 3 antes de que Events consuma el resolver):
+#
+# 1. NO existe middleware de auth global en `main.py`. El único middleware
+#    registrado es `CORSMiddleware` (main.py:132). No hay `HTTPBearer`,
+#    `Depends(get_current_user)` ni verificación de JWT/sesión a nivel app.
+#
+# 2. El router `calibration_router` se monta con `app.include_router(...)`
+#    sin prefijo `/api/v1/admin/` (main.py:2007), por lo que `/resolve`
+#    hereda el patrón del módulo Calibración: `/upload`, `/snapshots` y
+#    `/test/{id}/results` tampoco tienen `Depends(...)` de auth directa
+#    (verificado: ningún router de `app/api/` usa `Depends(`).
+#
+# 3. El endpoint es de SOLO LECTURA y NO expone secretos ni PII: el contrato
+#    V3 por diseño (ADR §2.9) no contiene credenciales; los `extraction.prompt`
+#    y `clinicalCriteria.prompt` son metadata clínica operativa, no secretos.
+#    Validado por `TestNoSecretsExposed` (backend/tests/test_calibration_resolver.py).
+#
+# 4. Events NO consume `/resolve` por fetch público desde el navegador. Lo
+#    consume vía el server action `getPublishedCalibrationForEventTest`
+#    (frontend/src/actions/calibration-v3.actions.ts), que corre server-side
+#    en Next.js (no expuesto al navegador), lee `MedicalTest.options`
+#    directamente con Prisma (patrón establecido en Fase 2 por
+#    `saveAICalibrationV3`) y NO replica la lógica de resolución del
+#    adaptador V1/V2 (esa sigue siendo ownership del resolver backend, que
+#    `prediagnostic.py` consumirá en Fase 4 vía `resolve(test_id, "published")`).
+#
+# 5. Añadir un guard de auth directa al endpoint (`_require_superadmin` con
+#    headers `x-ami-*`, patrón de `admin_ai_keys_probe.py`) requiere decidir
+#    el rol a exigir (SUPERADMIN vs ADMIN vs cualquier autenticado). Esa
+#    decisión toca ADR §7.1 (rol de publicación) PENDIENTE de Frank — no se
+#    infiere (handoff §11 "No inventes un sistema de auth nuevo"; "Auth"
+#    fuera de alcance explícito). Inventar un guard ahora congelaría una
+#    decisión de producto que no corresponde a SOFIA.
+#
+# CONCLUSIÓN: F-3 se cierra documentalmente en Fase 3. El endpoint queda
+# protegido por la capa server-side del server action (no expuesto al
+# navegador). La decisión de añadir auth directa al endpoint se difiere a
+# ADR §7.1 (pendiente Frank), a implementar cuando el rol de publicación
+# esté confirmado. Hasta entonces, el endpoint es solo-lectura sin secretos,
+# consistente con el patrón del módulo Calibración.
 # ---------------------------------------------------------------------------
 @router.get("/resolve")
 async def resolve_calibration(

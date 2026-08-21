@@ -560,12 +560,12 @@ model AIProviderKey {
 // Una fila por clave. value es Json para soportar estructuras complejas.
 // NUNCA almacenar secretos aquí (usar AIProviderKey para cifrar keys de proveedor).
 model AppConfig {
-  key        String   @id              // ej. "extraction_default_provider"
-  value      Json                       // ej. {"provider":"gemini"}
-  updatedBy  String?
-  updatedAt  DateTime @updatedAt
-  createdAt  DateTime @default(now())
-  user       User?    @relation("AppConfigUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+  key       String   @id // ej. "extraction_default_provider"
+  value     Json // ej. {"provider":"gemini"}
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  user      User?    @relation("AppConfigUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@map("app_config")
 }
@@ -706,24 +706,32 @@ model PrefilledInvitation {
 /// Snapshot inmutable de extracción estructurada por estudio.
 /// Capa extractiva: parámetros canónicos sin interpretación clínica.
 model StudyExtractionSnapshot {
-  id                String   @id @default(uuid())
-  eventTestId       String
-  version           Int      @default(1)
-  studyType         String // Audiometria | Laboratorio | Espirometria | Rayos_X | Otro
-  sourceFileName    String?
-  sourceFileUrl     String?
-  sourceFileHash    String? // SHA-256 del archivo fuente
+  id                         String   @id @default(uuid())
+  eventTestId                String
+  version                    Int      @default(1)
+  studyType                  String // Audiometria | Laboratorio | Espirometria | Rayos_X | Otro
+  sourceFileName             String?
+  sourceFileUrl              String?
+  sourceFileHash             String? // SHA-256 del archivo fuente
   // structuredData: ExtractionSnapshotPayload (ver medical.py)
   // Incluye extracted_data, missing_fields, quality_notes, audit
-  structuredData    Json
-  clinicalState     String   @default("DRAFT_EXTRACTED")
-  modelName         String   @default("gemini-2.5-flash")
-  promptVersion     String   @default("extract-v2")
-  pipelineVersion   String   @default("ai-pipeline-2026-03")
-  triggeredByUserId String?
-  triggerReason     String   @default("initial_upload")
-  isSuperseded      Boolean  @default(false)
-  createdAt         DateTime @default(now())
+  structuredData             Json
+  clinicalState              String   @default("DRAFT_EXTRACTED")
+  modelName                  String   @default("gemini-2.5-flash")
+  promptVersion              String   @default("extract-v2")
+  pipelineVersion            String   @default("ai-pipeline-2026-03")
+  triggeredByUserId          String?
+  triggerReason              String   @default("initial_upload")
+  isSuperseded               Boolean  @default(false)
+  createdAt                  DateTime @default(now())
+  // ── ARCH-20260820-01 Fase 5 — Snapshot versionado histórico (aditivo, nullable) ──
+  // SPEC §10 / §14 Fase 5 / ADR §2.8. Congela la versión efectivamente usada para
+  // que los históricos se rendericen idénticos aunque la Calibración cambie después.
+  // `null` = snapshot pre-V5 (legible, marcado con `calibration_version_mismatch=true`).
+  calibrationVersionId       String?
+  calibrationVersionNumber   Int?
+  presentationSchemaSnapshot Json? // copia inmutable del StudyPresentationSchema efectivo (post-fusión familia)
+  extractionPromptHash       String? // sha256:<hex> del prompt de extracción usado
 
   eventTest      EventTest                @relation(fields: [eventTestId], references: [id], onDelete: Cascade)
   aiPrediagnoses AIPrediagnosisSnapshot[]
@@ -735,19 +743,27 @@ model StudyExtractionSnapshot {
 /// Capa interpretativa: se basa exactamente en una versión de extracción.
 /// GUARDRAIL: nunca propaga a dictamen final, aptitud ni PDF firmado sin revisión médica.
 model AIPrediagnosisSnapshot {
-  id                   String   @id @default(uuid())
-  extractionSnapshotId String
-  version              Int      @default(1)
+  id                       String   @id @default(uuid())
+  extractionSnapshotId     String
+  version                  Int      @default(1)
   // prediagnosisData: AIPrediagnosisResult (ver medical.py)
   // Incluye summary, confidence, justification, clinical_basis, citations, limitations, red_flags
-  prediagnosisData     Json
-  clinicalState        String   @default("AI_PENDING_REVIEW")
-  modelName            String   @default("gemini-2.5-flash")
-  promptVersion        String   @default("predx-v1")
-  corpusVersion        String?
-  triggeredByUserId    String?
-  isSuperseded         Boolean  @default(false)
-  createdAt            DateTime @default(now())
+  prediagnosisData         Json
+  clinicalState            String   @default("AI_PENDING_REVIEW")
+  modelName                String   @default("gemini-2.5-flash")
+  promptVersion            String   @default("predx-v1")
+  corpusVersion            String?
+  triggeredByUserId        String?
+  isSuperseded             Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  // ── ARCH-20260820-01 Fase 5 — Snapshot versionado histórico (aditivo, nullable) ──
+  // Espejo de los identificadores de versión en la capa interpretativa para permitir
+  // regenerar el prediagnóstico desde la versión congelada (SPEC §10.2) y conservar
+  // el contrato de hashes clínicos. `null` = snapshot pre-V5.
+  calibrationVersionId     String?
+  calibrationVersionNumber Int?
+  clinicalPromptHash       String? // sha256:<hex> del prompt clínico usado
+  clinicalCriteriaHash     String? // sha256:<hex> del JSON canónico de clinicalCriteria
 
   extractionSnapshot StudyExtractionSnapshot @relation(fields: [extractionSnapshotId], references: [id], onDelete: Cascade)
   doctorReviews      DoctorStudyReview[]

@@ -467,9 +467,20 @@ class PrediagnosisInputDebug(BaseModel):
     """
     study_type: str
     extracted_data: Dict[str, Any] = Field(default_factory=dict)
+    # ARCH-20260820-01 Fase 4 (handoff §6): el canal `medical_calibration` se
+    # retira del flujo principal (H11) y se reemplaza por `calibration_version`
+    # (versión V3 resuelta por `CalibrationResolver`). Se conserva el campo
+    # `medical_calibration` en el schema sólo como compat deprecada para
+    # snapshots/telemetría legacy.
     medical_calibration: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Calibración médica aplicada (dict clínico sin credenciales)"
+        description="DEPRECADO Fase 4 — sustituido por `calibration_version` (V3 resuelta)",
+    )
+    # ARCH-20260820-01 Fase 4 (handoff §3): `calibration_version` snapshot
+    # serializado (V3 resuelta). None cuando el resolver devolvió None.
+    calibration_version: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Versión V3 resuelta aplicada al prediagnóstico (serializada del resolver)",
     )
     clinical_provider: Optional[str] = None
     clinical_model_used: Optional[str] = None
@@ -543,10 +554,39 @@ class AIPrediagnosisResult(BaseModel):
         default=None,
         description="Audiometría: clasificación de hipoacusia por oído y bilateral con confianza."
     )
-    # IMPL-20260513-01: Trazabilidad de proveedor clínico y política de calibración
-    calibration_source: Optional[Literal["medical_calibration", "general_fallback"]] = Field(
+    # IMPL-20260513-01 + ARCH-20260820-01 Fase 4: trazabilidad del resolver V3.
+    # SPEC §12.1 + handoff §3: calibration_source ∈ {published_v3, calibration_disabled,
+    # legacy_hardcoded}. Los valores legacy `medical_calibration` y `general_fallback`
+    # quedan deprecados (no se emiten; shim de compat los remapea para tests).
+    calibration_source: Optional[Literal[
+        "medical_calibration",
+        "general_fallback",
+        "published_v3",
+        "calibration_disabled",
+        "legacy_hardcoded",
+    ]] = Field(
         default=None,
-        description="Indica si se usó calibración médica del panel o fallback general en modo sombra"
+        description=(
+            "Fuente del contrato aplicado al prediagnóstico: "
+            "'published_v3' = aiCalibration.clinicalCriteria publicada; "
+            "'calibration_disabled' = enabled=false o prediagnosisEnabled=false; "
+            "'legacy_hardcoded' = resolver devolvió None, fallback trazado; "
+            "'medical_calibration'/'general_fallback' = deprecados Fase 4."
+        )
+    )
+    # ARCH-20260820-01 Fase 4 (SPEC §12.1): razón del fallback a hardcodeados.
+    legacy_hardcoded_reason: Optional[Literal[
+        "no_published_version",
+        "published_disabled",
+        "field_definitions_incomplete",
+    ]] = Field(
+        default=None,
+        description=(
+            "Motivo del fallback legacy_hardcoded: "
+            "'no_published_version' = resolver devolvió None; "
+            "'published_disabled' = versión publicada con enabled=false; "
+            "'field_definitions_incomplete' = clinicalCriteria no presente o incompleto."
+        )
     )
     clinical_model_used: Optional[str] = Field(
         default=None,
@@ -557,13 +597,14 @@ class AIPrediagnosisResult(BaseModel):
         default=None,
         description="Proveedor backend de la capa clínica: 'gemini' (Gemini text-only) o 'featherless' (MedGemma vía OpenAI SDK)"
     )
-    # IMPL-20260518-03: Fuente real del prompt clínico (ARCH-20260518-03)
-    prompt_source: Optional[Literal["ai_calibration", "backend_fallback"]] = Field(
+    # IMPL-20260518-03 + ARCH-20260820-01 Fase 4 (handoff §3.4): fuente del prompt.
+    prompt_source: Optional[Literal["ai_calibration", "backend_fallback", "clinical_criteria_v3"]] = Field(
         default=None,
         description=(
             "Fuente real del prompt clínico usado: "
-            "'ai_calibration' si vino de aiCalibration.diagnosis.prompt, "
-            "'backend_fallback' si se usó el prompt backend hardcodeado"
+            "'clinical_criteria_v3' = aiCalibration.clinicalCriteria.prompt publicada; "
+            "'ai_calibration' = aiCalibration.diagnosis.prompt legacy V1/V2 (deprecado); "
+            "'backend_fallback' = prompt backend hardcodeado."
         )
     )
     # IMPL-20260518-03: Versión real del prompt clínico usado (ARCH-20260518-03)

@@ -46,6 +46,31 @@ function normalize(s: string): string {
  * Devuelve el type canónico esperado por el backend V2.
  * La detección se basa en testNameSnapshot + test.category.name.
  * Los códigos de test son opacos y no se usan como criterio primario.
+ *
+ * @fallback ARCH-20260820-01 Fase 3 (SPEC §9.1, §12.1, AC-3.3)
+ *
+ * **Esta función es un fallback explícito y trazado.** No es la fuente
+ * primaria de routing de IA desde Fase 3 en adelante.
+ *
+ * Flujo canónico en Events (SPEC §9.1):
+ *   1. `event-test.actions.ts` consulta primero `getPublishedCalibrationForEventTest`
+ *      (versión V3 `published`). Si hay `canonicalStudyType` published, enruta
+ *      por ese valor (AC-3.2). Si `enabled=false`, no dispara IA y marca el
+ *      snapshot con `calibration_source="calibration_disabled"` (AC-3.1).
+ *   2. **Sólo si el resolver devuelve `null`** (no hay V3 published — incluye
+ *      calibraciones V1/V2 no migradas y pruebas sin `aiCalibration`) se invoca
+ *      esta heurística, marcando el snapshot con `source="legacy_heuristic"`
+ *      (AC-3.3, SPEC §12.1).
+ *
+ * La función **se conserva** (no se elimina) porque hasta Fase 7 (eliminación
+ * de hardcodeos) muchas pruebas del catálogo no tendrán V3 published y
+ * caerán legítimamente aquí. Eliminarla antes violaría SPEC §12.3 (regresión
+ * silenciosa). La trazabilidad del fallback está en
+ * `extraction_snapshot.structuredData.audit.calibration_source`.
+ *
+ * @deprecated como fuente primaria desde Fase 3 — usar
+ *   `getPublishedCalibrationForEventTest` primero. Esta heurística sólo debe
+ *   invocarse como fallback trazado (SPEC §9.1 paso 2).
  */
 export function getCanonicalAIStudyType(test: StudyTestRef): CanonicalAIStudyType | null {
   const name = normalize(test.testNameSnapshot)

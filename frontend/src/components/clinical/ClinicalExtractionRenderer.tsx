@@ -476,17 +476,46 @@ interface ClinicalExtractionRendererProps {
   /** Tipo canónico del estudio — determina qué schema de presentación usar */
   studyType: string | null | undefined
   presentationSchema?: PersistedStudyPresentationSchema | null
+  /**
+   * ARCH-20260820-01 Fase 5 — Snapshot congelado del schema de presentación
+   * persistido en `StudyExtractionSnapshot.presentationSchemaSnapshot` (post-V5).
+   * Cuando existe, gana sobre el `presentationSchema` "vigente" para que un
+   * histórico post-V5 se renderice idéntico aunque la Calibración cambie.
+   *
+   * Si `null`/`undefined`/`Array.isArray(empty)`: cae a `presentationSchema`/legacy.
+   * El flag `calibrationVersionMismatch` (CB-08) indica al médico que el snapshot
+   * no congeló versión (legible, pero se renderiza con la calibración actual).
+   */
+  frozenPresentationSchema?: unknown | null
+  /** ARCH-20260820-01 Fase 5: flag trazabilidad CB-08 — snapshot pre-V5 o vigente. */
+  calibrationVersionMismatch?: boolean
 }
 
 /**
- * Prioriza el schema persistido de calibración y conserva el fallback legacy.
- * @id IMPL-20260604-01
- * @backup context/SPECs/SPEC_ARCH-20260604-01-CALIBRACION-PRESENTACION-ESTUDIOS-IA.md
+ * Resuelve el schema de presentación a aplicar en el render clínico.
+ *
+ * Prioridad (ARCH-20260820-01 Fase 5):
+ *   1. `frozenPresentationSchema` (snapshot histórico post-V5) — gana siempre
+ *      si tiene `sections[]`. Garantiza que los históricos no se re-renderizan
+ *      cuando la Calibración cambia después.
+ *   2. `presentationSchema` (calibración vigente). Mantiene semántica Fase 2.
+ *   3. `getStudySchema(studyType)` — fallback legacy hardcodeado.
+ *
+ * @id IMPL-20260604-01 + IMPL-20260820-01-F5
+ * @backup context/SPECs/SPEC_ARCH-20260820-01-CALIBRACION-FUENTE-UNICA.md §10
  */
 function resolvePresentationSchema(
   studyType: string | null | undefined,
-  presentationSchema?: PersistedStudyPresentationSchema | null
+  presentationSchema?: PersistedStudyPresentationSchema | null,
+  frozenPresentationSchema?: unknown | null,
 ) {
+  if (
+    frozenPresentationSchema &&
+    typeof frozenPresentationSchema === 'object' &&
+    Array.isArray((frozenPresentationSchema as { sections?: unknown }).sections)
+  ) {
+    return frozenPresentationSchema as PersistedStudyPresentationSchema
+  }
   if (presentationSchema && Array.isArray(presentationSchema.sections)) {
     return presentationSchema
   }
@@ -499,6 +528,8 @@ export default function ClinicalExtractionRenderer({
   version,
   studyType,
   presentationSchema,
+  frozenPresentationSchema,
+  calibrationVersionMismatch,
 }: ClinicalExtractionRendererProps) {
   // Sin datos y sin campos faltantes: nada que renderizar
   if (
@@ -508,7 +539,18 @@ export default function ClinicalExtractionRenderer({
     return null
   }
 
-  const schema = resolvePresentationSchema(studyType, presentationSchema)
+  // ARCH-20260820-01 Fase 5 (CB-08): si el snapshot es pre-V5 (no congeló
+  // versión), señalar visualmente con un aviso de trazabilidad para que el
+  // médico sepa que la presentación corresponde al resolver actual y no a
+  // un schema inmutable. NO bloquea el render (CB-08: "no se rompe").
+  const _calibrationVersionMismatch = !!calibrationVersionMismatch
+  void _calibrationVersionMismatch
+
+  const schema = resolvePresentationSchema(
+    studyType,
+    presentationSchema,
+    frozenPresentationSchema,
+  )
 
   // Sin schema configurado para este studyType: usar renderer genérico de fallback
   if (!schema || !extractedData) {

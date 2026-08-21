@@ -497,7 +497,15 @@ export default function CalibrationWorkspaceClient({
               </div>
               <CalibrationTestUpload
                 testId={testId}
-                testType={aiCalibration?.canonicalStudyType ?? "Audiometria"}
+                // ARCH-20260820-01 Fase 3 (AC-3.4, H3, DEC-20260820-02):
+                // Eliminado el default silencioso a "Audiometria". El
+                // `testType` del modo de prueba se obtiene del
+                // `canonicalStudyType` (draft/published). Si el draft no lo
+                // define, se pasa string vacío y CalibrationTestUpload muestra
+                // un placeholder ("Sin tipo canónico") — NO se asume
+                // Audiometría (anti-patrón H3). El backend resuelve
+                // `aiCalibration.canonicalStudyType` si test_type llega vacío.
+                testType={aiCalibration?.canonicalStudyType ?? ""}
                 onResults={setTestResults}
                 apiUrl={apiUrl}
               />

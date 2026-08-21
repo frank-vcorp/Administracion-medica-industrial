@@ -690,3 +690,365 @@ function generateVersionId(): string {
   // Fallback (tests / entornos sin Web Crypto).
   return `cal-v3-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getPublishedCalibrationForEventTest — Events consume published (ARCH-20260820-01 Fase 3)
+// SPEC §9.1, §14 Fase 3 (AC-3.1, AC-3.2, AC-3.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Versión published resuelta para un EventTest, consumida por Events frontend
+ * para respetar el gate `enabled` y enrutar por `canonicalStudyType` publicado.
+ *
+ * No normaliza V1/V2 (eso es responsabilidad del `CalibrationResolver`
+ * backend, Fase 4). Si el `MedicalTest` no tiene versión V3 `published`,
+ * devuelve `null` → el caller cae a la heurística de nombre marcada con
+ * `source="legacy_heuristic"` (AC-3.3, SPEC §12.1).
+ *
+ * - `enabled=false` (versión `disabled` vigente): el caller NO dispara IA y
+ *   persiste el snapshot con `calibration_source="calibration_disabled"`
+ *   (AC-3.1, CB-02).
+ * - `enabled=true` + `canonicalStudyType` published: el caller enruta por ese
+ *   valor, no por la heurística (AC-3.2).
+ *
+ * Lectura directa de `MedicalTest.options.aiCalibration` (patrón establecido
+ * en Fase 2 por `saveAICalibrationV3`). No es "resolución" (no infiere
+ * `operationMode`, no adapta V1/V2, no fusiona `familyTemplate`); sólo lee
+ * el campo `enabled` y `canonicalStudyType` de la versión V3 publicada ya
+ * resuelta por el admin. La inferencia/adaptación queda en el resolver
+ * backend (Fase 4 consumirá el endpoint `/resolve` desde `prediagnostic.py`).
+ *
+ * F-3 (QA-20260820-02): este server action lee Prisma directamente (no llama
+ * al endpoint `/api/v1/calibration/resolve` por fetch), por lo que Events NO
+ * expone el endpoint al navegador. Ver comentario F-3 en `calibration.py`.
+ */
+export interface PublishedCalibrationForEventTest {
+  /** Gate global por prueba (H1). false → Events no dispara IA. */
+  enabled: boolean
+  /** Gate routing (H2, H3, H10). null si la versión published no lo define. */
+  canonicalStudyType: string | null
+  /** versionId de la versión published vigente (auditoría de snapshot). */
+  versionId: string | null
+  /** versionNumber monótono (legibilidad del snapshot). */
+  versionNumber: number | null
+  /** Origen de la resolución — siempre "published_v3" cuando hay published. */
+  source: 'published_v3'
+}
+
+/**
+ * Resuelve la versión V3 `published` vigente para el `MedicalTest` asociado a
+ * un `EventTest`. Devuelve `null` si el `MedicalTest` no tiene versión V3
+ * publicada (incluye calibraciones V1/V2 no migradas y pruebas sin
+ * `aiCalibration`) → el caller cae a heurística trazada (AC-3.3).
+ *
+ * Es no-bloqueante ante fallos de lectura: si Prisma falla o el JSON está
+ * corrupto, devuelve `null` (Events cae a heurística trazada, CB-11).
+ *
+ * @param eventTestId - ID del EventTest cuyo MedicalTest se consulta.
+ * @returns Versión published resuelta, o `null` si no hay V3 published.
+ */
+export async function getPublishedCalibrationForEventTest(
+  eventTestId: string,
+): Promise<PublishedCalibrationForEventTest | null> {
+  if (!eventTestId || typeof eventTestId !== 'string') {
+    return null
+  }
+
+  try {
+    const eventTest = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: {
+        test: {
+          select: { options: true },
+        },
+      },
+    })
+
+    if (!eventTest?.test?.options) {
+      // EventTest sin test asociado o test sin options → no hay published.
+      return null
+    }
+
+    const options = parseOptions(eventTest.test.options)
+    const root = readV3Root(options)
+    if (!root) {
+      // No es V3 (V1/V2 legacy o sin aiCalibration) → el adaptador backend
+      // lo resolvería, pero Events no lo replica aquí. Cae a heurística.
+      return null
+    }
+
+    const publishedVersions = root.publishedVersions ?? []
+    if (publishedVersions.length === 0) {
+      // V3 inicializado pero sin publicaciones → heurística.
+      return null
+    }
+
+    // Identificar la versión vigente (máximo una published o disabled, SPEC §6.2).
+    // Preferir currentPublishedVersionId; si no coincide, la primera published/disabled.
+    let vigent: AICalibrationVersionV3 | undefined
+    if (root.currentPublishedVersionId) {
+      vigent = publishedVersions.find(
+        (v) => v.versionId === root.currentPublishedVersionId,
+      )
+    }
+    if (!vigent) {
+      vigent = publishedVersions.find(
+        (v) => v.status === 'published' || v.status === 'disabled',
+      )
+    }
+
+    if (!vigent) {
+      // Hay publishedVersions pero ninguna vigente (todas superseded) →
+      // estado inconsistente; cae a heurística (no se inventa published).
+      return null
+    }
+
+    // `disabled` → enabled=false (CB-02). `published` → enabled real.
+    const enabled = vigent.status === 'disabled' ? false : vigent.enabled
+
+    return {
+      enabled,
+      canonicalStudyType: vigent.canonicalStudyType ?? null,
+      versionId: vigent.versionId ?? null,
+      versionNumber: typeof vigent.versionNumber === 'number' ? vigent.versionNumber : null,
+      source: 'published_v3',
+    }
+  } catch (err) {
+    // CB-11: error de lectura/parseo → null + log. Events cae a heurística.
+    console.warn(
+      '[ARCH-20260820-01 Fase 3] getPublishedCalibrationForEventTest falló; cae a heurística:',
+      err instanceof Error ? err.message : err,
+    )
+    return null
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ARCH-20260820-01 Fase 5 — Snapshot versionado histórico (espejo para
+// sitio de persistencia en frontend). Lee la MISMA versión V3 published que
+// `getPublishedCalibrationForEventTest` (no inventa versiones) pero expone el
+// `presentation.schema` y los textos de prompts necesarios para hashear en
+// frontend cuando el backend no devuelve los hashes en la respuesta (camino
+// legacy XML → direct parser, o `prediagnosis-from-params` si la calibración
+// se resolvió en proceso).
+//
+// Si el MedicalTest no tiene versión V3 published, devuelve `null`. El
+// snapshot se persiste entonces con todos los campos de Fase 5 = `null`
+// (snapshot pre-V5, legible con `calibration_version_mismatch=true` según
+// CB-08 / SPEC §10.2).
+//
+// NOTA: NO modifica `getPublishedCalibrationForEventTest` (mantiene su
+// shape exacto para no romper tests de Fase 3 — qa-20260820-04 AC-3.1/3.2/3.3).
+// Es un espejo paralelo orientado a Fase 5.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PublishedVersionForSnapshot {
+  /** `versionId` de la versión publicada (`null` si pre-V5). */
+  versionId: string | null
+  /** `versionNumber` monótono (`null` si pre-V5). */
+  versionNumber: number | null
+  /** `schema` persistido en `presentation.schema` (post-fusión si registry poblado). */
+  presentationSchemaSnapshot: unknown | null
+  /** Texto del prompt de extracción (front-end computa su propio hash si el
+   *  backend no lo expuso en la respuesta). */
+  extractionPrompt: string | null
+  /** Texto del prompt clínico (idem; puede ser null para document_extraction). */
+  clinicalPrompt: string | null
+  /** `clinicalCriteria` completo (idem). */
+  clinicalCriteria: unknown | null
+}
+
+function _sha256Prefixed(value: unknown): string | null {
+  /**
+   * ARCH-20260820-01 Fase 5: `sha256:<hex>` del JSON canónico. Si el valor es
+   * `null`/`undefined`/vacío → devuelve `null` (NO hashea nulls).
+   *
+   * Implementación determinista y sync (server actions Node 20). Mismo prefijo
+   * `sha256:` que el backend (`build_snapshot_versioning_payload`) para que la
+   * tabla de auditoría sea comparable entre runtime backend y snapshots
+   * persistidos.
+   */
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string') {
+    if (!value) return null
+    // Node 20 `node:crypto` sincroniza SHA-256; usamos createHash en lugar de
+    // la WebCrypto (subtle.digest es async y complica la API pública).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeCrypto = require('node:crypto') as typeof import('node:crypto')
+    return `sha256:${nodeCrypto
+      .createHash('sha256')
+      .update(value, 'utf8')
+      .digest('hex')}`
+  }
+  if (typeof value === 'object') {
+    // JSON canónico: claves ordenadas, sin caracteres no-ASCII escapados.
+    const canonical = JSON.stringify(
+      value,
+      Object.keys(value as Record<string, unknown>).sort(),
+      2,
+    )
+    if (!canonical) return null
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeCrypto = require('node:crypto') as typeof import('node:crypto')
+    return `sha256:${nodeCrypto
+      .createHash('sha256')
+      .update(canonical, 'utf8')
+      .digest('hex')}`
+  }
+  return null
+}
+
+export async function getPublishedVersionForSnapshot(
+  eventTestId: string,
+): Promise<PublishedVersionForSnapshot | null> {
+  if (!eventTestId || typeof eventTestId !== 'string') return null
+  try {
+    const eventTest = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: {
+        test: {
+          select: { options: true },
+        },
+      },
+    })
+    if (!eventTest?.test?.options) return null
+
+    const options = parseOptions(eventTest.test.options)
+    const root = readV3Root(options)
+    if (!root) return null
+    const publishedVersions = root.publishedVersions ?? []
+    if (publishedVersions.length === 0) return null
+
+    let vigent: AICalibrationVersionV3 | undefined
+    if (root.currentPublishedVersionId) {
+      vigent = publishedVersions.find(
+        (v) => v.versionId === root.currentPublishedVersionId,
+      )
+    }
+    if (!vigent) {
+      vigent = publishedVersions.find(
+        (v) => v.status === 'published' || v.status === 'disabled',
+      )
+    }
+    if (!vigent) return null
+
+    // presentation.schema (inmutable, copiado del contrato publicado). Si el
+    // registry de FamilyTemplate está poblado y `familyTemplateId` resuelto,
+    // ya viene fusionado en la versión efectiva (`vigent`).
+    let presentationSchemaSnapshot: unknown | null = null
+    const presentation = (vigent as { presentation?: unknown }).presentation
+    if (presentation && typeof presentation === 'object') {
+      const schema = (presentation as { schema?: unknown }).schema
+      if (schema && typeof schema === 'object' && !Array.isArray(schema)) {
+        presentationSchemaSnapshot = schema
+      } else if (Array.isArray(schema) && schema.length > 0) {
+        presentationSchemaSnapshot = schema
+      }
+    }
+
+    // extraction.prompt — usado para hashear (si el backend no expuso
+    // el hash en su respuesta, este sitio lo calcula).
+    let extractionPrompt: string | null = null
+    const extraction = (vigent as { extraction?: unknown }).extraction
+    if (extraction && typeof extraction === 'object') {
+      const prompt = (extraction as { prompt?: unknown }).prompt
+      if (typeof prompt === 'string' && prompt) extractionPrompt = prompt
+    }
+
+    // clinicalCriteria (puede ser null para `document_extraction`)
+    let clinicalCriteria: unknown | null = null
+    let clinicalPrompt: string | null = null
+    const clinicalCriteriaRaw = (vigent as { clinicalCriteria?: unknown })
+      .clinicalCriteria
+    if (
+      clinicalCriteriaRaw &&
+      typeof clinicalCriteriaRaw === 'object' &&
+      !Array.isArray(clinicalCriteriaRaw)
+    ) {
+      clinicalCriteria = clinicalCriteriaRaw
+      const prompt = (clinicalCriteriaRaw as { prompt?: unknown }).prompt
+      if (typeof prompt === 'string' && prompt) clinicalPrompt = prompt
+    }
+
+    return {
+      versionId: vigent.versionId ?? null,
+      versionNumber:
+        typeof vigent.versionNumber === 'number' ? vigent.versionNumber : null,
+      presentationSchemaSnapshot,
+      extractionPrompt,
+      clinicalPrompt,
+      clinicalCriteria,
+    }
+  } catch (err) {
+    console.warn(
+      '[ARCH-20260820-01 Fase 5] getPublishedVersionForSnapshot falló:',
+      err instanceof Error ? err.message : err,
+    )
+    return null
+  }
+}
+
+/**
+ * Helper interno: toma el `audit` (u objeto) que el backend embebe en su
+ * respuesta y extrae los campos congelados de Fase 5 con prioridad al valor
+ * backend (sha256 real). Si el backend no los expuso, calcula hashes de
+ * respaldo a partir del `publishedVersion` (sha256 también — determinista).
+ *
+ * Devuelve SIEMPRE un objeto con todos los campos presentes (null si no hay).
+ */
+export function extractSnapshotVersioningFromBackendAudit(args: {
+  backendAudit: Record<string, unknown> | null | undefined
+  publishedVersion: PublishedVersionForSnapshot | null
+}): {
+  calibrationVersionId: string | null
+  calibrationVersionNumber: number | null
+  presentationSchemaSnapshot: unknown | null
+  extractionPromptHash: string | null
+  clinicalPromptHash: string | null
+  clinicalCriteriaHash: string | null
+} {
+  const backend = args.backendAudit ?? {}
+  const pub = args.publishedVersion
+
+  // VersionId/Number: backend payload es la verdad si está presente;
+  // caemos al publishedVersion para rutas que ya lo tienen cargado.
+  const calibrationVersionId = readString(backend.calibration_version_id) ?? pub?.versionId ?? null
+  const calibrationVersionNumber =
+    typeof backend.calibration_version_number === 'number'
+      ? (backend.calibration_version_number as number)
+      : pub?.versionNumber ?? null
+
+  // presentationSchemaSnapshot: prioridad backend; si no, derivado de la
+  // published version.
+  const presentationSchemaSnapshot =
+    (backend.presentation_schema_snapshot as unknown) ??
+    pub?.presentationSchemaSnapshot ??
+    null
+
+  // Hashes: prioridad backend (sha256 canónico). Si no, calculamos
+  // localmente con la publishedVersion como auditoría secundaria.
+  const extractionPromptHash =
+    readString(backend.extraction_prompt_hash) ??
+    (pub?.extractionPrompt ? _sha256Prefixed(pub.extractionPrompt) : null)
+  const clinicalPromptHash =
+    readString(backend.clinical_prompt_hash) ??
+    (pub?.clinicalPrompt ? _sha256Prefixed(pub.clinicalPrompt) : null)
+  const clinicalCriteriaHash =
+    readString(backend.clinical_criteria_hash) ??
+    (pub?.clinicalCriteria
+      ? _sha256Prefixed(pub.clinicalCriteria)
+      : null)
+
+  return {
+    calibrationVersionId,
+    calibrationVersionNumber,
+    presentationSchemaSnapshot,
+    extractionPromptHash,
+    clinicalPromptHash,
+    clinicalCriteriaHash,
+  }
+}
+
+function readString(v: unknown): string | null {
+  return typeof v === 'string' && v ? v : null
+}

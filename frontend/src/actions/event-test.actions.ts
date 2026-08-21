@@ -12,6 +12,9 @@ import { revalidatePath } from "next/cache"
 import { EventTestStatus, Prisma } from "@prisma/client"
 import { triggerStudyAIAnalysis } from "./ai-prediagnosis.actions"
 import { isAIEligibleEventTest, getCanonicalAIStudyType } from "@/lib/study-ai"
+// ARCH-20260820-01 Fase 3 (SPEC §9.1): Events consume la versión `published`
+// del resolver antes de caer a la heurística de nombre (fallback trazado).
+import { getPublishedCalibrationForEventTest, getPublishedVersionForSnapshot, extractSnapshotVersioningFromBackendAudit } from "./calibration-v3.actions"
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import { writeTimelineEntry } from "@/lib/timeline.service"
 import { TimelineEntryType } from "@prisma/client"
@@ -347,6 +350,11 @@ async function persistXmlDirectSnapshots(args: {
   eventTestId: string
   eventId: string
   triggeredByUserId: string
+  // ARCH-20260820-01 Fase 3: trazabilidad de la fuente de calibración en el
+  // snapshot XML (SPEC §12.1/§17.4). Propagada por uploadEventTestFile según
+  // el resolver published o el fallback heurístico.
+  calibrationSource?: string | null
+  calibrationVersionId?: string | null
   xmlResult: {
     file: string
     file_url: string
@@ -368,6 +376,8 @@ async function persistXmlDirectSnapshots(args: {
   extractionVersion: number
 }> {
   const { eventTestId, eventId, triggeredByUserId, xmlResult } = args
+  const calibrationSource = args.calibrationSource ?? null
+  const calibrationVersionId = args.calibrationVersionId ?? null
 
   const existingExtractions = await prisma.studyExtractionSnapshot.count({
     where: { eventTestId },
@@ -387,6 +397,17 @@ async function persistXmlDirectSnapshots(args: {
     'AI_PENDING_REVIEW'
 
   const extractionAudit = (xmlResult.extraction_snapshot.audit ?? {}) as Record<string, unknown>
+  const predxAudit = (predxData.audit ?? {}) as Record<string, unknown>
+
+  // ── ARCH-20260820-01 Fase 5: resolver snapshot versioning (congela la versión
+  // publicada efectivamente usada para que los históricos se rendericen
+  // idénticos aunque la Calibración cambie después).
+  const publishedVersionForSnap = await getPublishedVersionForSnapshot(eventTestId)
+  const versioning = extractSnapshotVersioningFromBackendAudit({
+    backendAudit: { ...extractionAudit, ...predxAudit },
+    publishedVersion: publishedVersionForSnap,
+  })
+
   const structuredDataPayload = {
     study_type: xmlResult.extraction_snapshot.study_type,
     extracted_data: xmlResult.extraction_snapshot.extracted_data,
@@ -397,6 +418,15 @@ async function persistXmlDirectSnapshots(args: {
       ...extractionAudit,
       triggered_by_user_id: triggeredByUserId,
       trigger_reason: 'initial_upload_xml',
+      ...(calibrationSource ? { calibration_source: calibrationSource } : {}),
+      ...(calibrationVersionId ? { calibration_version_id: calibrationVersionId } : {}),
+      // Fase 5: incluir los hashes congelados también en el JSON legacy.
+      ...(versioning.extractionPromptHash
+        ? { extraction_prompt_hash: versioning.extractionPromptHash }
+        : {}),
+      ...(versioning.presentationSchemaSnapshot
+        ? { presentation_schema_snapshot: versioning.presentationSchemaSnapshot }
+        : {}),
     },
   } as Prisma.InputJsonValue
 
@@ -433,21 +463,46 @@ async function persistXmlDirectSnapshots(args: {
         triggeredByUserId,
         triggerReason: 'initial_upload_xml',
         isSuperseded: false,
+        // ARCH-20260820-01 Fase 5: snapshot versionado — capa extractiva congelada.
+        calibrationVersionId: versioning.calibrationVersionId,
+        calibrationVersionNumber: versioning.calibrationVersionNumber,
+        presentationSchemaSnapshot:
+          (versioning.presentationSchemaSnapshot as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+        extractionPromptHash: versioning.extractionPromptHash,
       },
     })
 
-    const predxAudit = (predxData.audit ?? {}) as Record<string, unknown>
     const nextPrediagnosisSnapshot = await tx.aIPrediagnosisSnapshot.create({
       data: {
         extractionSnapshotId: nextExtractionSnapshot.id,
         version: 1,
-        prediagnosisData: predxData as Prisma.InputJsonValue,
+        prediagnosisData: {
+          ...predxData,
+          audit: {
+            ...predxAudit,
+            triggered_by_user_id: triggeredByUserId,
+            ...(calibrationSource ? { calibration_source: calibrationSource } : {}),
+            ...(calibrationVersionId ? { calibration_version_id: calibrationVersionId } : {}),
+            // Fase 5: incluir también los hashes clínicos en el JSON legacy.
+            ...(versioning.clinicalPromptHash
+              ? { clinical_prompt_hash: versioning.clinicalPromptHash }
+              : {}),
+            ...(versioning.clinicalCriteriaHash
+              ? { clinical_criteria_hash: versioning.clinicalCriteriaHash }
+              : {}),
+          },
+        } as Prisma.InputJsonValue,
         clinicalState,
         modelName: (predxAudit.model_name as string) || 'gemini-2.5-flash',
         promptVersion: (predxAudit.prompt_version as string) || 'predx-v1',
         corpusVersion: (predxAudit.corpus_version as string | null) ?? null,
         triggeredByUserId,
         isSuperseded: false,
+        // ARCH-20260820-01 Fase 5: snapshot versionado — capa interpretativa congelada.
+        calibrationVersionId: versioning.calibrationVersionId,
+        calibrationVersionNumber: versioning.calibrationVersionNumber,
+        clinicalPromptHash: versioning.clinicalPromptHash,
+        clinicalCriteriaHash: versioning.clinicalCriteriaHash,
       },
     })
 
@@ -583,6 +638,170 @@ async function uploadXmlAudiometryDirect(
 }
 
 /**
+ * ARCH-20260820-01 Fase 3 — AC-3.1 / SPEC §9.1 / CB-02:
+ * Cuando la versión `published` del `MedicalTest` tiene `enabled=false`, Events
+ * NO dispara la IA (gate `enabled` no-negociable, SPEC §15 regla 8). En su
+ * lugar persiste un snapshot no concluyente marcado con
+ * `calibration_source="calibration_disabled"` y `reason="calibration_disabled"`,
+ * consistente con el contrato que el backend `prediagnostic.py` respetará en
+ * Fase 4 (`AI_NON_CONCLUSIVE` con `reason="calibration_disabled"`, SPEC §9.1).
+ *
+ * El snapshot respeta la inmutabilidad de los snapshots previos (marca los
+ * vigentes como `isSuperseded=true`) y deja el EventTest en `RESULT_REGISTERED`
+ * con `resultNotes` claras para el médico.
+ */
+async function persistCalibrationDisabledSnapshot(args: {
+  eventTestId: string
+  eventId: string
+  triggeredByUserId: string
+  versionId: string | null
+  versionNumber: number | null
+}): Promise<{
+  success: true
+  fileUrl: null
+  aiAnalysis: {
+    extractionSnapshotId: string
+    prediagnosisSnapshotId: string
+    clinicalState: string
+    summary: string | null
+    confidence: number | null
+  }
+}> {
+  const { eventTestId, eventId, triggeredByUserId, versionId, versionNumber } = args
+
+  const nowIso = new Date().toISOString()
+  const auditBase = {
+    triggered_by_user_id: triggeredByUserId,
+    trigger_reason: 'calibration_disabled',
+    created_at: nowIso,
+    calibration_source: 'calibration_disabled' as const,
+    calibration_version_id: versionId,
+    calibration_version_number: versionNumber,
+    reason: 'calibration_disabled',
+  }
+
+  const { extractionSnapshot, prediagnosisSnapshot } = await prisma.$transaction(async (tx) => {
+    // Marcar snapshots vigentes previos como superseded (inmutabilidad).
+    const activeExtractions = (
+      await tx.studyExtractionSnapshot.findMany({
+        where: { eventTestId, isSuperseded: false },
+        select: { id: true },
+      })
+    ).map((s) => s.id)
+    if (activeExtractions.length > 0) {
+      await tx.aIPrediagnosisSnapshot.updateMany({
+        where: { extractionSnapshotId: { in: activeExtractions }, isSuperseded: false },
+        data: { isSuperseded: true },
+      })
+      await tx.studyExtractionSnapshot.updateMany({
+        where: { id: { in: activeExtractions } },
+        data: { isSuperseded: true },
+      })
+    }
+
+    const extractionVersion = activeExtractions.length + 1
+    // ARCH-20260820-01 Fase 5: la calibración está disabled pero existe la
+    // versión publicada; persistimos su identidad (versionId/versionNumber) y
+    // dejamos los hashes/schema = null (no congelamos schema porque la IA no
+    // corrió — el snapshot queda legible pero marca deshabilitación).
+    const extractionSnapshot = await tx.studyExtractionSnapshot.create({
+      data: {
+        eventTestId,
+        version: extractionVersion,
+        // Sin tipo canónico resuelto (la IA no disparó). 'Otro' = captura genérica.
+        studyType: 'Otro',
+        sourceFileName: null,
+        sourceFileUrl: null,
+        sourceFileHash: null,
+        structuredData: {
+          study_type: 'Otro',
+          source_file_name: null,
+          extracted_data: {},
+          missing_fields: [],
+          quality_notes: ['calibration_disabled'],
+          data_source: 'calibration_disabled',
+          audit: auditBase,
+        } as Prisma.InputJsonValue,
+        clinicalState: 'AI_NON_CONCLUSIVE',
+        modelName: 'calibration-gate',
+        promptVersion: 'calibration-disabled-v1',
+        pipelineVersion: 'ai-pipeline-2026-03',
+        triggeredByUserId,
+        triggerReason: 'calibration_disabled',
+        isSuperseded: false,
+        // ARCH-20260820-01 Fase 5: snapshot versionado — identification only
+        // (hashes/schema = null porque la IA no corrió con calibración).
+        calibrationVersionId: versionId ?? null,
+        calibrationVersionNumber: versionNumber ?? null,
+        presentationSchemaSnapshot: Prisma.JsonNull,
+        extractionPromptHash: null,
+      },
+    })
+
+    const prediagnosisSnapshot = await tx.aIPrediagnosisSnapshot.create({
+      data: {
+        extractionSnapshotId: extractionSnapshot.id,
+        version: 1,
+        prediagnosisData: {
+          clinical_state: 'AI_NON_CONCLUSIVE',
+          summary: null,
+          confidence: null,
+          audit: auditBase,
+        } as Prisma.InputJsonValue,
+        clinicalState: 'AI_NON_CONCLUSIVE',
+        modelName: 'calibration-gate',
+        promptVersion: 'calibration-disabled-v1',
+        corpusVersion: null,
+        triggeredByUserId,
+        isSuperseded: false,
+        // ARCH-20260820-01 Fase 5: snapshot versionado — idéntica identidad
+        // que el de extracción (mismo calibrationVersionId); hashes clínicos
+        // = null porque la capa interpretativa no corrió.
+        calibrationVersionId: versionId ?? null,
+        calibrationVersionNumber: versionNumber ?? null,
+        clinicalPromptHash: null,
+        clinicalCriteriaHash: null,
+      },
+    })
+
+    await tx.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        status: 'RESULT_REGISTERED',
+        resultNotes:
+          `IA no generada: la calibración publicada de esta prueba tiene ` +
+          `enabled=false (gate global). ${versionId ? `versión ${versionNumber ?? '?'} (${versionId.slice(0, 12)}…).` : ''} ` +
+          `Se requiere análisis manual.`,
+      },
+    })
+
+    return { extractionSnapshot, prediagnosisSnapshot }
+  })
+
+  // Log trazable del gate (SPEC §17.4: trazabilidad de fallback visible).
+  console.info(
+    '[ARCH-20260820-01 Fase 3] calibration_disabled: eventTestId=%s versionId=%s versionNumber=%s',
+    eventTestId,
+    versionId ?? 'none',
+    versionNumber ?? 'none',
+  )
+
+  revalidatePath(`/events/${eventId}`)
+
+  return {
+    success: true,
+    fileUrl: null,
+    aiAnalysis: {
+      extractionSnapshotId: extractionSnapshot.id,
+      prediagnosisSnapshotId: prediagnosisSnapshot.id,
+      clinicalState: 'AI_NON_CONCLUSIVE',
+      summary: null,
+      confidence: null,
+    },
+  }
+}
+
+/**
  * Sube un archivo al backend Python (pipeline IA V2) y lo vincula atómicamente
  * al estudio correspondiente en la papeleta.
  * IMPL-20260326-16: Ahora usa V2 (extracción estructurada + prediagnóstico IA separado)
@@ -607,40 +826,100 @@ export async function uploadEventTestFile(formData: FormData) {
 
   // IMPL-20260326-18: Verificar elegibilidad IA usando la matriz central.
   // Carga el EventTest con test/categoría desde Prisma para decisión precisa.
+  //
+  // ARCH-20260820-01 Fase 3 (SPEC §9.1, AC-3.1/AC-3.2/AC-3.3):
+  //  1. Consultar la versión `published` del resolver (V3) ANTES de la
+  //     heurística de nombre.
+  //  2. Si `enabled=false` published → NO dispara IA; persiste snapshot con
+  //     `calibration_source="calibration_disabled"` (AC-3.1, CB-02).
+  //  3. Si hay `canonicalStudyType` published → enruta por ese valor
+  //     (AC-3.2), marcando `source="published_v3"`.
+  //  4. Si no hay published → cae a heurística de nombre trazada con
+  //     `source="legacy_heuristic"` (AC-3.3, SPEC §12.1).
   let isAIEligible = false
   let canonicalTypeForXml: string | null = null
+  let calibrationSource: 'published_v3' | 'legacy_heuristic' = 'legacy_heuristic'
+  let publishedVersionId: string | null = null
   try {
     const eventTest = await prisma.eventTest.findUnique({
       where: { id: eventTestId },
       select: {
         testNameSnapshot: true,
-        test: { select: { code: true, category: { select: { name: true } } } },
+        test: { select: { id: true, code: true, category: { select: { name: true } } } },
       },
     })
     if (eventTest) {
-      isAIEligible = isAIEligibleEventTest(eventTest)
-      if (isAIEligible) {
-        const canonicalType = getCanonicalAIStudyType(eventTest)
-        if (canonicalType) {
-          formData.set('study_type', canonicalType)
-          canonicalTypeForXml = canonicalType
+      const published = await getPublishedCalibrationForEventTest(eventTestId)
+
+      if (published) {
+        publishedVersionId = published.versionId
+
+        if (!published.enabled) {
+          // AC-3.1 / CB-02 / SPEC §15 regla 8: gate enabled=false no-negociable.
+          return await persistCalibrationDisabledSnapshot({
+            eventTestId,
+            eventId,
+            triggeredByUserId,
+            versionId: published.versionId,
+            versionNumber: published.versionNumber,
+          })
+        }
+
+        // enabled=true: enrutar por canonicalStudyType published si existe.
+        if (published.canonicalStudyType) {
+          isAIEligible = true
+          canonicalTypeForXml = published.canonicalStudyType
+          calibrationSource = 'published_v3'
+          formData.set('study_type', published.canonicalStudyType)
         } else {
-          // FIX-20260812-11 Cambio #5: el EventTest es AI-eligible pero su
-          // test no tiene mapping canónico en study-ai.ts → el FormData
-          // viaja sin study_type. El backend (FIX-20260812-11 Cambios #1+#2)
-          // ya cubre esto defensivamente: skip del classifier Gemini y
-          // detected_type='unknown' cuando default provider=m3. Log explícito
-          // para diagnóstico de mappings faltantes (BACKLOG TKT-20260812-11-01).
-          console.warn(
-            '[FIX-20260812-11] EventTest AI-eligible pero sin mapping canónico; el backend caerá a classifier o a detected_type=unknown',
-            {
-              eventTestId,
-              testCode: eventTest?.test?.code,
-              categoryName: eventTest?.test?.category?.name,
-            }
-          )
+          // V3 published sin canonicalStudyType (document_extraction sin
+          // routing XML): la IA puede disparar sin study_type canónico.
+          isAIEligible = true
+          calibrationSource = 'published_v3'
+        }
+      } else {
+        // AC-3.3: no hay V3 published → heurística de nombre como fallback
+        // trazado (SPEC §12.1). source="legacy_heuristic" se propaga al
+        // snapshot vía triggerStudyAIAnalysis (ai-prediagnosis.actions.ts).
+        isAIEligible = isAIEligibleEventTest(eventTest)
+        calibrationSource = 'legacy_heuristic'
+        if (isAIEligible) {
+          const canonicalType = getCanonicalAIStudyType(eventTest)
+          if (canonicalType) {
+            formData.set('study_type', canonicalType)
+            canonicalTypeForXml = canonicalType
+          } else {
+            // FIX-20260812-11 Cambio #5: el EventTest es AI-eligible pero su
+            // test no tiene mapping canónico en study-ai.ts → el FormData
+            // viaja sin study_type. El backend (FIX-20260812-11 Cambios #1+#2)
+            // ya cubre esto defensivamente: skip del classifier Gemini y
+            // detected_type='unknown' cuando default provider=m3. Log explícito
+            // para diagnóstico de mappings faltantes (BACKLOG TKT-20260812-11-01).
+            console.warn(
+              '[FIX-20260812-11] EventTest AI-eligible pero sin mapping canónico; el backend caerá a classifier o a detected_type=unknown',
+              {
+                eventTestId,
+                testCode: eventTest?.test?.code,
+                categoryName: eventTest?.test?.category?.name,
+              }
+            )
+          }
         }
       }
+
+      // Propagar trazabilidad al snapshot (SPEC §12.1, §17.4).
+      formData.set('calibration_source', calibrationSource)
+      if (publishedVersionId) {
+        formData.set('calibration_version_id', publishedVersionId)
+      }
+    }
+
+    // ARCH-20260820-01 Fase 4 (handoff §2.2): enviar `medical_test_id` al backend
+    // para que el resolver V3 se active en proceso (no vía HTTP `/resolve`).
+    // Se prefiere sobre el legacy `ai_calibration_json` deprecado.
+    const medicalTestIdForForm = eventTest?.test?.id
+    if (medicalTestIdForForm) {
+      formData.set('medical_test_id', medicalTestIdForForm)
     }
   } catch (eligibilityErr) {
     console.warn('[IMPL-20260326-18] No se pudo verificar elegibilidad IA, fallback V1:', eligibilityErr)
@@ -667,6 +946,8 @@ export async function uploadEventTestFile(formData: FormData) {
             eventTestId,
             eventId,
             triggeredByUserId,
+            calibrationSource,
+            calibrationVersionId: publishedVersionId,
             xmlResult: xmlResponse.payload,
           })
           await prisma.eventTest.update({
@@ -848,7 +1129,7 @@ export async function regenerateStudyAI(
       select: {
         fileUrl: true,
         testNameSnapshot: true,
-        test: { select: { code: true, category: { select: { name: true } } } },
+        test: { select: { id: true, code: true, category: { select: { name: true } } } },
       },
     })
 
@@ -877,16 +1158,58 @@ export async function regenerateStudyAI(
     const fileName = eventTest.fileUrl.split('/').pop() || 'study-file.pdf'
     const file = new File([blob], fileName, { type: blob.type || 'application/pdf' })
 
-    // Determinar tipo canónico para el backend V2
-    const canonicalType = getCanonicalAIStudyType(eventTest)
+    // ARCH-20260820-01 Fase 3 (SPEC §9.1, AC-3.1/AC-3.2/AC-3.3):
+    // Antes de la heurística de nombre, consultar la versión published del
+    // resolver. Si enabled=false → no regenera IA (gate no-negociable). Si hay
+    // canonicalStudyType published → enruta por ese valor. Si no, heurística
+    // trazada con source="legacy_heuristic".
+    const published = await getPublishedCalibrationForEventTest(eventTestId)
+
+    if (published && !published.enabled) {
+      // AC-3.1: gate enabled=false → no regenera IA; persiste snapshot disabled.
+      const disabled = await persistCalibrationDisabledSnapshot({
+        eventTestId,
+        eventId,
+        triggeredByUserId,
+        versionId: published.versionId,
+        versionNumber: published.versionNumber,
+      })
+      return { success: disabled.success, error: undefined }
+    }
+
+    // Determinar tipo canónico: published wins; heurística como fallback trazado.
+    let canonicalType: string | null = null
+    let calibrationSource: 'published_v3' | 'legacy_heuristic' = 'legacy_heuristic'
+    let publishedVersionId: string | null = null
+
+    if (published && published.enabled && published.canonicalStudyType) {
+      canonicalType = published.canonicalStudyType
+      calibrationSource = 'published_v3'
+      publishedVersionId = published.versionId
+    } else {
+      // AC-3.3: no hay published (o published sin canonicalStudyType) →
+      // heurística de nombre como fallback trazado (SPEC §12.1).
+      calibrationSource = 'legacy_heuristic'
+      canonicalType = getCanonicalAIStudyType(eventTest)
+    }
 
     const formData = new FormData()
     formData.set('eventTestId', eventTestId)
     formData.set('eventId', eventId)
     formData.set('file', file)
     formData.set('triggeredByUserId', triggeredByUserId)
+    formData.set('calibration_source', calibrationSource)
+    if (publishedVersionId) {
+      formData.set('calibration_version_id', publishedVersionId)
+    }
     if (canonicalType) {
       formData.set('study_type', canonicalType)
+    }
+    // ARCH-20260820-01 Fase 4 (handoff §2.2): enviar `medical_test_id` para
+    // activar el resolver V3 en proceso (no HTTP).
+    const medicalTestIdForForm = eventTest?.test?.id
+    if (medicalTestIdForForm) {
+      formData.set('medical_test_id', medicalTestIdForForm)
     }
 
     const aiResult = await triggerStudyAIAnalysis(formData)

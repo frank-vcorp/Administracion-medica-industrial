@@ -16,9 +16,11 @@
 **Alcance autorizado:** Fases 1-7 secuenciales según SPEC §14. Frank autorizó explícitamente 2026-08-20 14:20 CST ejecutar todas las fases una tras otra **sin pedir confirmación entre fases**, con gates (typecheck/tests/lint) y auditoría GEMINI por fase. Cada fase debe completar sus gates + GEMINI QA antes de abrir la siguiente.
 
 **Estado de fases:**
-- **Fase 1:** DONE — commit `22ba048` en `main`; GEMINI `QA-20260820-02` APROBADO_CON_OBSERVACIONES (43/43 tests). 4 observaciones P3 (F-1/F-2/F-4 = cleanup no bloqueante; F-3 = cerrar antes de Fase 3).
-- **Fase 2:** IN_PROGRESS — **delegación activa a SOFIA en este handoff** (contrato V3 + estados + publicación + editor condicional por `operationMode`).
-- **Fases 3-7:** READY (se encadenan automáticamente tras gates + GEMINI de Fase 2).
+- **Fase 1:** DONE — commit `22ba048` en `main`; GEMINI `QA-20260820-02` APROBADO_CON_OBSERVACIONES (43/43 tests). 4 observaciones P3 (F-1/F-2/F-4 = cleanup no bloqueante; F-3 cerrada en Fase 3).
+- **Fase 2:** DONE — commit `0cce88f` en `main`; GEMINI `QA-20260820-03` PASS_WITH_WARNINGS (41 tests, P2 cerrados tras rework).
+- **Fase 3:** DONE (verificado localmente, sin commit/push) — GEMINI `QA-20260820-04` PASS_WITH_WARNINGS (AC-3.1–3.4 PASS, 62/62 vitest, 43/43 pytest, 0 bloqueadores; F-3 cierre documental válido).
+- **Fase 4:** READY — delegación vía `context/interconsultas/HANDOFF_ARCH-20260820-01_FASE4_SOFIA_CALIBRACION-FUENTE-UNICA.md`.
+- **Fases 5-7:** READY (se encadenan automáticamente tras gates + GEMINI de la fase previa).
 
 **Análisis de dependencias bloqueantes (ADR §7) para Fase 2 — resueltas con propuestas INTEGRA (§11):**
 Las decisiones pendientes del ADR §7 afectan Fase 2 (publicación), pero NO bloquean porque el handoff §11 ya las resolvió con propuestas INTEGRA reversibles:
@@ -181,7 +183,7 @@ Ver SPEC §16 (CB-01 a CB-12).
 4. Con GEMINI PASS/PASS_WITH_WARNINGS + gates verdes (typecheck 0, vitest verde, lint 0 nuevos), commit de fase y **continuar automáticamente a Fase 3** (Frank autorizó encadenamiento sin confirmación entre fases).
 
 **Fase 3:** gate `enabled` + routing por `canonicalStudyType` (Events frontend). **Cierra observación F-3 (auth del endpoint `/resolve`) antes de conectar Events.**
-**Fase 4:** `clinicalCriteria` reemplaza hardcodeos en backend; conectar sin romper defaults V1/V2.
+**Fase 4:** `clinicalCriteria` reemplaza hardcodeos en backend; conectar sin romper defaults V1/V2. **READY y delegada vía `HANDOFF_ARCH-20260820-01_FASE4_SOFIA_CALIBRACION-FUENTE-UNICA.md`** (consumir el resolver en proyecto, no el endpoint HTTP `/resolve`; F-3 NO se reabre para Fase 4).
 **Fase 5:** migración Prisma aditiva (snapshot versionado). **Gate de validación/backup antes de ejecutarse** — si la política considera la migración no reversible o requiere aprobación adicional, detener y reportar blocker específico.
 **Fase 6:** paridad de UI + editor de `presentation.schema`.
 **Fase 7 (final):** eliminación de hardcodeos (solo si catálogo clasificado + V3 publicada).

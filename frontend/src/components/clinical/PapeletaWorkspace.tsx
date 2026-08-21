@@ -419,6 +419,13 @@ export default function PapeletaWorkspace({
         const resTyped = res as UploadResWithSnapshot
         updateLocalFile(testId, res.fileUrl, resTyped.extractionSnapshotData ?? null)
         router.refresh()
+      } else if (res.success && res.aiAnalysis) {
+        // ARCH-20260820-01 Fase 3 (AC-3.1): IA no generada por gate
+        // `enabled=false` (calibration_disabled). Se persistió un snapshot
+        // no concluyente; no hay archivo pero hay resultado trazable. El
+        // panel de prediagnóstico mostrará AI_NON_CONCLUSIVE tras refresh.
+        setUploadStage(null)
+        router.refresh()
       } else {
         setUploadError(res.error || 'Error al subir archivo')
       }
@@ -1289,6 +1296,20 @@ function StudyPanel({
                 missingFields={test.extractionSnapshot.missingFields as string[] | null}
                 version={test.extractionSnapshot.version}
                 studyType={getCanonicalAIStudyType(test)}
+                // ARCH-20260820-01 Fase 5 — Snapshot congelado (CB-08/CB-18):
+                // pasamos el `presentationSchemaSnapshot` del snapshot si
+                // existe. Gana sobre el schema vigente para que un histórico
+                // post-V5 se renderice idéntico aunque la Calibración cambie.
+                // Pre-V5 (`null` + `calibration_version_mismatch=true`) cae al
+                // schema vigente sin romperse.
+                frozenPresentationSchema={
+                  (test.extractionSnapshot as { presentationSchemaSnapshot?: unknown | null })
+                    .presentationSchemaSnapshot ?? null
+                }
+                calibrationVersionMismatch={
+                  (test.extractionSnapshot as { calibration_version_mismatch?: boolean })
+                    .calibration_version_mismatch ?? false
+                }
                 presentationSchema={getPersistedPresentationSchema(test)}
               />
             )}

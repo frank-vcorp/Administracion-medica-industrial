@@ -203,7 +203,11 @@ export default function CalibrationTestUpload({
           Subir archivo de prueba
         </p>
         <p className="text-xs text-slate-400 font-mono">
-          {testType} · test_id={testId.slice(0, 8)}…
+          {/* ARCH-20260820-01 Fase 3 (AC-3.4): si no hay canonicalStudyType
+              en el draft/published, mostrar placeholder en vez de asumir
+              Audiometría (anti-patrón H3). El backend resuelve
+              aiCalibration.canonicalStudyType si test_type llega vacío. */}
+          {testType ? testType : 'Sin tipo canónico'} · test_id={testId.slice(0, 8)}…
         </p>
       </div>
 

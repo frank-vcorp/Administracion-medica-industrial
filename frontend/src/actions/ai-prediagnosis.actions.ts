@@ -18,6 +18,10 @@
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+import {
+  extractSnapshotVersioningFromBackendAudit,
+  getPublishedVersionForSnapshot,
+} from './calibration-v3.actions'
 
 const PYTHON_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -127,6 +131,15 @@ export async function triggerStudyAIAnalysis(
     // 1. Llamar al backend V2
     // IMPL-20260326-18: Reenviar study_type canónico si fue determinado por el helper central
     const studyType = (formData.get('study_type') as string) || null
+    // ARCH-20260820-01 Fase 3 (SPEC §9.1, §12.1, §17.4): propagar la fuente de
+    // resolución de la calibración al snapshot de extracción/prediagnóstico.
+    //   - 'published_v3'        → routing por canonicalStudyType published (AC-3.2)
+    //   - 'legacy_heuristic'    → fallback heurístico trazado (AC-3.3)
+    //   - 'calibration_disabled'→ snapshot disabled persistido aparte (AC-3.1)
+    const calibrationSource =
+      (formData.get('calibration_source') as string | null) ?? null
+    const calibrationVersionId =
+      (formData.get('calibration_version_id') as string | null) ?? null
     const eventTest = await prisma.eventTest.findUnique({
       where: { id: eventTestId },
       select: {
@@ -198,6 +211,63 @@ export async function triggerStudyAIAnalysis(
     const predxData = result.prediagnosis_snapshot ?? {}
     const clinicalState: string = predxData.clinical_state ?? 'AI_PENDING_REVIEW'
 
+    // ARCH-20260820-01 Fase 3: fusionar `calibration_source` y versionId en el
+    // audit del snapshot (trazabilidad de fallback, SPEC §12.1/§17.4). El
+    // backend ya puede aportar su propio `audit.calibration_source` (Fase 4
+    // consumirá el resolver); aquí garantizamos el trazo frontend cuando no.
+    const backendExtractionAudit =
+      (result.extraction_snapshot?.audit as Record<string, unknown> | undefined) ?? {}
+    // ARCH-20260820-01 Fase 5: resolver el published version local (para
+    // fallback si el backend no expuso hashes en su respuesta).
+    const publishedVersionForSnap = await getPublishedVersionForSnapshot(eventTestId)
+    const versioningV2 = extractSnapshotVersioningFromBackendAudit({
+      backendAudit: backendExtractionAudit,
+      publishedVersion: publishedVersionForSnap,
+    })
+    const mergedExtractionAudit: Record<string, unknown> = {
+      ...backendExtractionAudit,
+      triggered_by_user_id: triggeredByUserId,
+      trigger_reason: 'initial_upload',
+      ...(calibrationSource
+        ? { calibration_source: calibrationSource }
+        : {}),
+      ...(calibrationVersionId
+        ? { calibration_version_id: calibrationVersionId }
+        : {}),
+      // Fase 5: incluir hashes/schema congelados también en el JSON legacy.
+      ...(versioningV2.extractionPromptHash
+        ? { extraction_prompt_hash: versioningV2.extractionPromptHash }
+        : {}),
+      ...(versioningV2.presentationSchemaSnapshot
+        ? { presentation_schema_snapshot: versioningV2.presentationSchemaSnapshot }
+        : {}),
+    }
+    const mergedExtractionSnapshot = {
+      ...(result.extraction_snapshot ?? {}),
+      audit: mergedExtractionAudit,
+    }
+
+    const backendPredxAudit =
+      (predxData.audit as Record<string, unknown> | undefined) ?? {}
+    const mergedPredxAudit: Record<string, unknown> = {
+      ...backendPredxAudit,
+      triggered_by_user_id: triggeredByUserId,
+      ...(calibrationSource
+        ? { calibration_source: calibrationSource }
+        : {}),
+      ...(calibrationVersionId
+        ? { calibration_version_id: calibrationVersionId }
+        : {}),
+      // Fase 5: incluir hashes clínicos congelados también en el JSON legacy.
+      ...(versioningV2.clinicalPromptHash
+        ? { clinical_prompt_hash: versioningV2.clinicalPromptHash }
+        : {}),
+      ...(versioningV2.clinicalCriteriaHash
+        ? { clinical_criteria_hash: versioningV2.clinicalCriteriaHash }
+        : {}),
+    }
+    const mergedPredxData = { ...predxData, audit: mergedPredxAudit }
+
     // 3-6. Mantener histórico y desplazar la vigencia a la nueva corrida.
     const { extractionSnapshot, prediagnosisSnapshot } = await prisma.$transaction(async (tx) => {
       if (activeExtractionIds.length > 0) {
@@ -223,7 +293,7 @@ export async function triggerStudyAIAnalysis(
           sourceFileName: result.file,
           sourceFileUrl: result.file_url ?? `/uploads/${result.file}`,
           sourceFileHash: result.extraction_snapshot?.audit?.source_file_hash ?? null,
-          structuredData: result.extraction_snapshot ?? {},
+          structuredData: mergedExtractionSnapshot,
           clinicalState: 'DRAFT_EXTRACTED',
           modelName: result.extraction_snapshot?.audit?.model_name ?? 'gemini-2.5-flash',
           promptVersion: result.extraction_snapshot?.audit?.prompt_version ?? 'extract-v2',
@@ -231,6 +301,12 @@ export async function triggerStudyAIAnalysis(
           triggeredByUserId,
           triggerReason: 'initial_upload',
           isSuperseded: false,
+          // ARCH-20260820-01 Fase 5: snapshot versionado — capa extractiva congelada.
+          calibrationVersionId: versioningV2.calibrationVersionId,
+          calibrationVersionNumber: versioningV2.calibrationVersionNumber,
+          presentationSchemaSnapshot:
+            (versioningV2.presentationSchemaSnapshot as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+          extractionPromptHash: versioningV2.extractionPromptHash,
         },
       })
 
@@ -238,13 +314,18 @@ export async function triggerStudyAIAnalysis(
         data: {
           extractionSnapshotId: nextExtractionSnapshot.id,
           version: 1,
-          prediagnosisData: predxData,
+          prediagnosisData: mergedPredxData,
           clinicalState,
           modelName: predxData.audit?.model_name ?? 'gemini-2.5-flash',
           promptVersion: predxData.audit?.prompt_version ?? 'predx-v1',
           corpusVersion: predxData.audit?.corpus_version ?? null,
           triggeredByUserId,
           isSuperseded: false,
+          // ARCH-20260820-01 Fase 5: snapshot versionado — capa interpretativa congelada.
+          calibrationVersionId: versioningV2.calibrationVersionId,
+          calibrationVersionNumber: versioningV2.calibrationVersionNumber,
+          clinicalPromptHash: versioningV2.clinicalPromptHash,
+          clinicalCriteriaHash: versioningV2.clinicalCriteriaHash,
         },
       })
 
@@ -348,6 +429,14 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
       return { success: false, error: result.error || 'Error desconocido en prediagnóstico estructurado' }
     }
 
+    // ARCH-20260820-01 Fase 5: resolver published version + extraer hashes del
+    // audit que el backend ya incluye en `result.audit` (ver §2.2 backend).
+    const publishedVersionStructuredSnap = await getPublishedVersionForSnapshot(eventTestId)
+    const versioningStructured = extractSnapshotVersioningFromBackendAudit({
+      backendAudit: (result.audit as Record<string, unknown> | undefined) ?? null,
+      publishedVersion: publishedVersionStructuredSnap,
+    })
+
     const extractionVersion = await prisma.studyExtractionSnapshot.count({
       where: { eventTestId },
     }) + 1
@@ -373,6 +462,17 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
             triggered_by_user_id: triggeredByUserId,
             trigger_reason: 'manual_regeneration',
             created_at: new Date().toISOString(),
+            // ARCH-20260820-01 Fase 5: incluir hashes/schema congelados también
+            // en el JSON legacy para auditoría del snapshot de extracción.
+            ...(versioningStructured.extractionPromptHash
+              ? { extraction_prompt_hash: versioningStructured.extractionPromptHash }
+              : {}),
+            ...(versioningStructured.presentationSchemaSnapshot
+              ? {
+                  presentation_schema_snapshot:
+                    versioningStructured.presentationSchemaSnapshot,
+                }
+              : {}),
           },
         } as Prisma.InputJsonValue,
         clinicalState: 'DRAFT_EXTRACTED',
@@ -382,6 +482,14 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
         triggeredByUserId,
         triggerReason,
         isSuperseded: false,
+        // ARCH-20260820-01 Fase 5: snapshot versionado — capa extractiva
+        // congelada (compartida con el de prediagnóstico, misma versión).
+        calibrationVersionId: versioningStructured.calibrationVersionId,
+        calibrationVersionNumber: versioningStructured.calibrationVersionNumber,
+        presentationSchemaSnapshot:
+          (versioningStructured.presentationSchemaSnapshot as Prisma.InputJsonValue) ??
+          Prisma.JsonNull,
+        extractionPromptHash: versioningStructured.extractionPromptHash,
       },
     })
 
@@ -397,6 +505,14 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
           audit: {
             ...(result.audit ?? {}),
             triggered_by_user_id: triggeredByUserId,
+            // ARCH-20260820-01 Fase 5: hashes clínicos congelados también en
+            // el JSON legacy para auditoría sin recarga a Prisma.
+            ...(versioningStructured.clinicalPromptHash
+              ? { clinical_prompt_hash: versioningStructured.clinicalPromptHash }
+              : {}),
+            ...(versioningStructured.clinicalCriteriaHash
+              ? { clinical_criteria_hash: versioningStructured.clinicalCriteriaHash }
+              : {}),
           },
         },
         clinicalState,
@@ -405,6 +521,12 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
         corpusVersion: result.audit?.corpus_version ?? null,
         triggeredByUserId,
         isSuperseded: false,
+        // ARCH-20260820-01 Fase 5: snapshot versionado — capa interpretativa
+        // congelada (mismas versiones y hashes clínicos que el audit de arriba).
+        calibrationVersionId: versioningStructured.calibrationVersionId,
+        calibrationVersionNumber: versioningStructured.calibrationVersionNumber,
+        clinicalPromptHash: versioningStructured.clinicalPromptHash,
+        clinicalCriteriaHash: versioningStructured.clinicalCriteriaHash,
       },
     })
 

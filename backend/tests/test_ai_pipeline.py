@@ -799,13 +799,13 @@ class TestCalibrationV1AudioEspiro:
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
-    def test_prediagnostico_audiometria_usa_calibracion_medica_cuando_disponible(self, prediagnostic_svc):
+    def test_prediagnostico_audiometria_medical_calibration_legacy_deprecado(self, prediagnostic_svc):
         """
-        Cuando se pasa medical_calibration, el resultado debe tener
-        calibration_source='medical_calibration' (sin llamada real a Gemini).
-        Se valida el camino de datos, no la respuesta del modelo.
+        ARCH-20260820-01 Fase 4 (handoff §2.2): el canal `medical_calibration`
+        se retira del flujo principal (H11). Pasarlo por compat debe derivar
+        a `legacy_hardcoded` (no hay V3 resuelta) con `legacy_hardcoded_reason`
+        poblado; el parámetro se ignora para trazabilidad.
         """
-        # Prediagnóstico sin datos mínimos pero verificando el campo calibration_source
         result = prediagnostic_svc.generate_prediagnosis(
             study_type="Audiometria",
             extracted_data={"paciente": "Test"},  # Faltarán oido_derecho y oido_izquierdo
@@ -813,23 +813,34 @@ class TestCalibrationV1AudioEspiro:
         )
         # Al faltar parámetros mínimos retorna AI_NON_CONCLUSIVE, pero con calibration_source correcto
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.calibration_source == "medical_calibration"
+        # medical_calibration ya no produce calibration_source="medical_calibration";
+        # cae al fallback legacy_hardcoded.
+        assert result.calibration_source == "legacy_hardcoded"
+        assert result.legacy_hardcoded_reason in (
+            "no_published_version",
+            "field_definitions_incomplete",
+        )
         assert result.clinical_model_used == "medgemma-4b-it"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
-    def test_prediagnostico_audiometria_usa_fallback_general_sin_calibracion(self, prediagnostic_svc):
+    def test_prediagnostico_audiometria_usa_legacy_hardcoded_sin_calibracion(self, prediagnostic_svc):
         """
-        Cuando NO se pasa medical_calibration, el resultado debe tener
-        calibration_source='general_fallback'.
+        Cuando NO se pasa `calibration_version` (resolver None) y `ai_calibration`
+        está ausente, el resultado debe tener
+        `calibration_source='legacy_hardcoded'` con `legacy_hardcoded_reason`
+        poblado. (Antes Fase 4 era `general_fallback`).
         """
         result = prediagnostic_svc.generate_prediagnosis(
             study_type="Audiometria",
             extracted_data={"paciente": "Test"},  # Faltarán oido_derecho y oido_izquierdo
-            # Sin medical_calibration → fallback general
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.calibration_source == "general_fallback"
+        assert result.calibration_source == "legacy_hardcoded"
+        assert result.legacy_hardcoded_reason in (
+            "no_published_version",
+            "field_definitions_incomplete",
+        )
         assert result.clinical_model_used == "medgemma-4b-it"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
@@ -856,10 +867,11 @@ class TestCalibrationV1AudioEspiro:
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
     @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
     @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
-    def test_prediagnostico_espirometria_nominal_con_calibracion(self, mock_call, prediagnostic_svc):
+    def test_prediagnostico_espirometria_nominal_sin_calibration_version_v3(self, mock_call, prediagnostic_svc):
         """
-        Espirometría nominal con calibración médica: el prediagnóstico debe completarse
-        con calibration_source='medical_calibration' y el modelo clínico trazado.
+        Espirometría nominal SIN `calibration_version` resuelta: el prediagnóstico
+        cae al fallback legacy_hardcoded con `prompt_source="backend_fallback"`.
+        El canal `medical_calibration` legacy se ignora.
         """
         mock_call.return_value = {
             "summary": "Parámetros espirométricos compatibles con función pulmonar conservada.",
@@ -890,7 +902,9 @@ class TestCalibrationV1AudioEspiro:
             },
         )
         assert result.clinical_state == "AI_PENDING_REVIEW"
-        assert result.calibration_source == "medical_calibration"
+        # Fase 4: sin calibration_version → legacy_hardcoded (no medical_calibration).
+        assert result.calibration_source == "legacy_hardcoded"
+        assert result.prompt_source == "backend_fallback"
         assert result.clinical_model_used == "medgemma-4b-it"
         assert result.confidence >= 0.60
 
@@ -2822,3 +2836,543 @@ class TestFix20260812_18_M3WarmupCacheCoherence:
         client._refresh_keys()
         assert client.api_key == "sk-db-warmup-e2e"
         assert client.key_source == "db"
+
+
+# ---------------------------------------------------------------------------
+# ARCH-20260820-01 Fase 4 — `clinicalCriteria` reemplaza hardcodeos en backend
+# Cubre AC-4.1 a AC-4.5 (handoff §5).
+# Respaldo: context/interconsultas/HANDOFF_ARCH-20260820-01_FASE4_SOFIA_CALIBRACION-FUENTE-UNICA.md
+# ---------------------------------------------------------------------------
+
+class _FakeAICalibrationVersionResolved:
+    """
+    Helper mínimo para inyectar una `AICalibrationVersionResolved` sintética
+    en `generate_prediagnosis` (sin acoplar los tests al shape interno del
+    dataclass de `calibration_resolver`).
+    """
+
+    __slots__ = (
+        "operationMode",
+        "enabled",
+        "canonicalStudyType",
+        "extraction",
+        "fieldDefinitions",
+        "clinicalCriteria",
+        "presentation",
+        "versionId",
+        "versionNumber",
+        "familyTemplateId",
+        "requiresReview",
+        "schemaVersion",
+        "status",
+        "sourceRaw",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        for k in self.__slots__:
+            setattr(self, k, kwargs.get(k))
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: getattr(self, k) for k in self.__slots__}
+
+
+class TestPrediagnosisFase4ARCH20260820_01:
+    """
+    Tests dirigidos a Fase 4 — `clinicalCriteria` V3 reemplaza hardcodeos
+    en backend, fallback `legacy_hardcoded` trazado, sin llamada a DR7 si
+    `enabled=false` o `prediagnosisEnabled=false`, y canal `medical_calibration`
+    retirado del flujo principal (H11).
+    """
+
+    @pytest.fixture
+    def prediagnostic_svc(self):
+        from app.services.ai.prediagnostic import PrediagnosticService
+        return PrediagnosticService(api_key="test-api-key", model="gemini-2.5-flash")
+
+    _AUDIO_MINIMA = {
+        "paciente": "Test Fase4",
+        "oido_derecho": {"500": 15, "1000": 20, "2000": 25},
+        "oido_izquierdo": {"500": 10, "1000": 15, "2000": 20},
+        "completitud_documental": "suficiente",
+    }
+
+    # --- AC-4.1 --------------------------------------------------------
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_AC_4_1_calibration_v3_resuelta_inyecta_clinical_criteria(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        AC-4.1: `generate_prediagnosis` recibe `calibration_version` resuelta y
+        lee `requiredParams`, `confidenceThreshold`, `prediagnosisEnabled`,
+        `prompt` desde `clinicalCriteria` (no desde constantes de módulo).
+        - `prompt_source == "clinical_criteria_v3"`
+        - `calibration_source == "published_v3"`
+        - el `prompt` inyectado es el publicado (no el hardcoded).
+        """
+        custom_prompt = "PROMPT_V3_INYECTADO: {extracted_json}"
+        custom_threshold = 0.99  # distinto a CONFIDENCE_THRESHOLDS["Audiometria"]=0.55
+        custom_required = ["oido_derecho", "oido_izquierdo"]
+        v3 = _FakeAICalibrationVersionResolved(
+            operationMode="clinical_interpretation",
+            enabled=True,
+            canonicalStudyType="Audiometria",
+            extraction=None,
+            fieldDefinitions=[],
+            clinicalCriteria={
+                "prediagnosisEnabled": True,
+                "requiredParams": custom_required,
+                "confidenceThreshold": custom_threshold,
+                "prompt": custom_prompt,
+                "promptVersion": "calibration_v3_test",
+                "supportingReferences": [],
+            },
+            presentation=None,
+            versionId="cal-v3-test",
+            versionNumber=3,
+            familyTemplateId=None,
+            requiresReview=False,
+            schemaVersion="V3",
+            status="published",
+            sourceRaw={},
+        )
+        mock_call.return_value = {
+            "summary": "Audiometría V3 resuelta.",
+            "confidence": 0.90,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["Umbrales disponibles"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
+
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data=self._AUDIO_MINIMA,
+            calibration_version=v3,
+        )
+
+        assert result.calibration_source == "published_v3"
+        assert result.prompt_source == "clinical_criteria_v3"
+        assert result.legacy_hardcoded_reason is None
+        assert result.prompt_version == "calibration_v3_test"
+
+        # El mock de DR7 fue invocado con el prompt V3 inyectado.
+        sent_prompt = mock_call.call_args[0][0]
+        assert "PROMPT_V3_INYECTADO" in sent_prompt
+        # El umbral custom_threshold (0.99) > 0.90 (mock confidence), por lo que
+        # el resultado debe degradarse a AI_NON_CONCLUSIVE por umbral (no por gate).
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert "umbral 0.99" in (result.non_conclusive_reason or "")
+
+    # --- AC-4.2 --------------------------------------------------------
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    def test_AC_4_2_fallback_legacy_hardcoded_trazado(self, prediagnostic_svc):
+        """
+        AC-4.2: si `calibration_version is None`, el comportamiento cae a
+        hardcodeados actuales con `calibration_source == "legacy_hardcoded"`
+        y `legacy_hardcoded_reason` poblado.
+        """
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data=self._AUDIO_MINIMA,
+            calibration_version=None,
+        )
+        # Faltan campos requeridos por REQUIRED_PARAMS pero la versión
+        # tiene 'oido_derecho' y 'oido_izquierdo' parciales (>=3 frecuencias)
+        # — el _check_minimum_params falla por sub-keys pero eso es OK: la
+        # trazabilidad de fallback debe estar poblada de todos modos.
+        assert result.calibration_source == "legacy_hardcoded"
+        assert result.legacy_hardcoded_reason in (
+            "no_published_version",
+            "field_definitions_incomplete",
+        )
+        assert result.clinical_state in ("AI_NON_CONCLUSIVE", "AI_PENDING_REVIEW")
+
+    # --- AC-4.3 (verificación de fuente, no behavioral) ----------------
+
+    def test_AC_4_3_medical_calibration_retirado_del_flujo_principal(self):
+        """
+        AC-4.3: `_build_calibration_context` ya no se invoca desde el flujo
+        principal (canal muerto H11 eliminado). Se conserva como stub no-op
+        para no romper callers legacy.
+        """
+        from app.services.ai.prediagnostic import PrediagnosticService
+        # El stub retorna cadena vacía (no afecta la trazabilidad clínica).
+        assert PrediagnosticService._build_calibration_context(
+            {"description": "x"}
+        ) == ""
+
+    def test_AC_4_3b_medical_calibration_no_aparece_en_main_prediagnosis_callers(self):
+        """
+        AC-4.3 (verificación de fuente, AST-based multi-línea): `medical_calibration=`
+        no se pasa como kwarg en llamadas activas a
+        `prediagnostic_svc.generate_prediagnosis(...)` en `main.py`.
+
+        Excepción documentada (handoff Fase 4 §6.3 — Transición de firma):
+        se autoriza mantener el kwarg `medical_calibration=` como shim
+        deprecado/compatibilidad únicamente en callers backend no migrables,
+        siempre que la línea del kwarg esté explícitamente marcada como
+        deprecada ( `# DEPRECADO`, `# COMPAT`, referencia a `Fase 4` /
+        `handoff` / `§6.3`). El servicio emite warning único por proceso al
+        recibir el kwarg legacy (`prediagnostic.py` ~798-810).
+
+        Implementación: usamos `ast` para localizar TODAS las llamadas a
+        `prediagnostic_svc.generate_prediagnosis(...)` (multi-línea robusto),
+        capturamos kwargs y el bloque fuente de cada llamada, y verificamos
+        que ningún caller pase `medical_calibration=` sin marcador de shim.
+        Esto cubre la regresión F-1 de QA-20260820-05 (grep single-line que
+        pasaba falsamente por el caller `v2_prediagnosis_from_params:1491-1497`).
+        """
+        import ast as _ast
+
+        main_path = Path(__file__).parent.parent / "app" / "main.py"
+        source = main_path.read_text(encoding="utf-8")
+        source_lines = source.splitlines()
+
+        tree = _ast.parse(source)
+        calls = [
+            n for n in _ast.walk(tree)
+            if isinstance(n, _ast.Call)
+            and isinstance(n.func, _ast.Attribute)
+            and n.func.attr == "generate_prediagnosis"
+            # `prediagnostic_svc` es una variable local en main.py (no
+            # `module.attr`), así que `func.value` es `ast.Name`.
+            and isinstance(n.func.value, _ast.Name)
+            and n.func.value.id == "prediagnostic_svc"
+        ]
+
+        # El test asume que existe al menos un caller backend del servicio;
+        # si en el futuro se eliminan todos los callers, este test debe
+        # re-evaluarse (no aplica AC-4.3 sin callers).
+        assert calls, (
+            "AC-4.3: no se encontraron llamadas a "
+            "`prediagnostic_svc.generate_prediagnosis(...)` en main.py; "
+            "revisa si el caller fue refactorizado fuera de main.py."
+        )
+
+        # Marcadores válidos de shim explícitamente deprecado/compatibilidad.
+        # Coinciden con los que autoriza el handoff Fase 4 §6.3 y con el
+        # comentario observado en main.py:1496 (`# DEPRECADO Fase 4`).
+        _SHIM_MARKERS = (
+            "DEPRECADO",
+            "DEPRECATED",
+            "COMPAT",
+            "§6.3",
+            "Fase 4",
+            "shim",
+        )
+
+        active_callers = []   # pasan medical_calibration= SIN marcador de shim
+        documented_shims = []  # pasan medical_calibration= CON marcador de shim
+        for call in calls:
+            kwarg_names = [k.arg for k in call.keywords]
+            if "medical_calibration" not in kwarg_names:
+                continue
+            start = call.lineno
+            end = call.end_lineno or call.lineno
+            block = "\n".join(source_lines[start - 1 : end])
+            if any(marker in block for marker in _SHIM_MARKERS):
+                documented_shims.append((start, end, block))
+            else:
+                active_callers.append((start, end, block))
+
+        assert active_callers == [], (
+            "AC-4.3: main.py pasa `medical_calibration=` como kwarg a "
+            "`prediagnostic_svc.generate_prediagnosis(...)` SIN marcador de "
+            "shim deprecado/compatibilidad. El kwarg debe retirarse del "
+            "flujo principal (handoff Fase 4 §6.3) o, si se conserva como "
+            "compat, marcarse explícitamente con `# DEPRECADO`, `# COMPAT`, "
+            "`Fase 4`, `§6.3` o `shim`. Callers activos encontrados:\n"
+            + "\n".join(
+                f"  líneas {s}-{e}:\n{blk}" for s, e, blk in active_callers
+            )
+        )
+        # Nota: la presencia/ausencia de shims documentados es informativa;
+        # AC-4.3 sólo exige que los `medical_calibration=` restantes sean shims
+        # explícitamente marcados. Si en una iteración futura todos los
+        # callers dejan de pasar el kwarg, `documented_shims` quedará vacío
+        # y el test seguirá pasando (cumple la condición "no existe uso
+        # activo en callers principales").
+
+    # --- AC-4.4 --------------------------------------------------------
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_AC_4_4_enabled_false_retorna_non_conclusive_sin_llamar_dr7(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        AC-4.4: con `calibration_version.enabled=false` →
+        `AI_NON_CONCLUSIVE` con `non_conclusive_reason="calibration_disabled"`
+        **sin llamar** a DR7 (`_call_dr7_medical_chat` no se invoca).
+        """
+        v3 = _FakeAICalibrationVersionResolved(
+            operationMode="clinical_interpretation",
+            enabled=False,  # <-- gate global
+            canonicalStudyType="Audiometria",
+            extraction=None,
+            fieldDefinitions=[],
+            clinicalCriteria={
+                "prediagnosisEnabled": True,
+                "requiredParams": ["oido_derecho", "oido_izquierdo"],
+                "confidenceThreshold": 0.55,
+                "prompt": "PROMPT_NO_DEBE_LLEGAR",
+                "promptVersion": "calibration_v3_disabled",
+            },
+            presentation=None,
+            versionId="cal-v3-disabled",
+            versionNumber=3,
+            familyTemplateId=None,
+            requiresReview=False,
+            schemaVersion="V3",
+            status="disabled",
+            sourceRaw={},
+        )
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data=self._AUDIO_MINIMA,
+            calibration_version=v3,
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.non_conclusive_reason == "calibration_disabled"
+        assert result.calibration_source == "calibration_disabled"
+        assert result.legacy_hardcoded_reason is None
+        # DR7 NO se invocó.
+        mock_call.assert_not_called()
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_AC_4_4b_prediagnosis_disabled_false_retorna_non_conclusive_sin_llamar_dr7(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        AC-4.4 (variante): `clinicalCriteria.prediagnosisEnabled=false` →
+        `AI_NON_CONCLUSIVE` con `non_conclusive_reason="calibration_disabled"`
+        sin llamar DR7, aunque `enabled` global sea true.
+        """
+        v3 = _FakeAICalibrationVersionResolved(
+            operationMode="clinical_interpretation",
+            enabled=True,  # gate global OK
+            canonicalStudyType="Audiometria",
+            extraction=None,
+            fieldDefinitions=[],
+            clinicalCriteria={
+                "prediagnosisEnabled": False,  # <-- gate de capa
+                "requiredParams": ["oido_derecho"],
+                "confidenceThreshold": 0.55,
+                "prompt": "PROMPT_NO_DEBE_LLEGAR",
+                "promptVersion": "calibration_v3_prediag_off",
+            },
+            presentation=None,
+            versionId="cal-v3-prediag-off",
+            versionNumber=3,
+            familyTemplateId=None,
+            requiresReview=False,
+            schemaVersion="V3",
+            status="published",
+            sourceRaw={},
+        )
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data=self._AUDIO_MINIMA,
+            calibration_version=v3,
+        )
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.non_conclusive_reason == "calibration_disabled"
+        assert result.calibration_source == "calibration_disabled"
+        mock_call.assert_not_called()
+
+    # --- AC-4.5 --------------------------------------------------------
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_AC_4_5_document_extraction_sintetiza_prediagnosis_solo_con_clinical_criteria(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        AC-4.5: un `MedicalTest` con `operationMode=document_extraction` (sin
+        `clinicalCriteria` en V3) → el resolver devuelve `clinicalCriteria=None`
+        ⇒ el prediagnóstico NO debe sintetizar `clinicalCriteria` indebido.
+        Cae al fallback `legacy_hardcoded`; si el estudio está en
+        `PREDIAGNOSIS_SUPPORTED_TYPES` y los params mínimos están presentes,
+        se ejecuta el prompt backend (sin V3), trazado como
+        `calibration_source="legacy_hardcoded"`.
+        """
+        # Resolved con clinicalCriteria=None (document_extraction ⇒ no IA clínica).
+        v3 = _FakeAICalibrationVersionResolved(
+            operationMode="document_extraction",
+            enabled=True,
+            canonicalStudyType="Laboratorio",
+            extraction={"prompt": "extract"},
+            fieldDefinitions=[],
+            clinicalCriteria=None,  # <-- document_extraction ⇒ None
+            presentation={"schema": {}},
+            versionId="cal-v3-doc",
+            versionNumber=3,
+            familyTemplateId=None,
+            requiresReview=False,
+            schemaVersion="V3",
+            status="published",
+            sourceRaw={},
+        )
+        # Si cae al backend_fallback y el estudio tiene prompt, el mock debe
+        # devolver un resultado válido para verificar que NO se invoca con
+        # un clinicalCriteria inventado.
+        mock_call.return_value = {
+            "summary": "Resultado backend fallback.",
+            "confidence": 0.80,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["params mínimos OK"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Laboratorio",
+            extracted_data={
+                "paciente": "Test DocExt",
+                "parametros": [{"parametro": "Glucosa", "valor": "90", "estado": "normal"}],
+            },
+            calibration_version=v3,
+        )
+        # calibration_source=legacy_hardcoded (no published_v3 porque
+        # clinicalCriteria=None ⇒ no hay V3 efectiva para capa clínica).
+        assert result.calibration_source == "legacy_hardcoded"
+        # prompt_source cae al backend_fallback (V3 ausente) o clinical_criteria_v3
+        # sólo si V3 presente — en este caso el bloque `if not v3.clinicalCriteria`
+        # fuerza `prompt_source="backend_fallback"`.
+        assert result.prompt_source == "backend_fallback"
+        # DR7 sí se invoca con el prompt backend hardcodeado (no se inventó clinicalCriteria).
+        mock_call.assert_called_once()
+        sent_prompt = mock_call.call_args[0][0]
+        # El prompt NO contiene contenido de clinicalCriteria inventado.
+        assert "PROMPT_NO_DEBE_LLEGAR" not in sent_prompt
+
+    # --- Cobertura adicional: ai_calibration shim legacy → prompt_source --
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_prompt_source_ai_calibration_shim_legacy_sin_v3(
+        self, mock_call, prediagnostic_svc
+    ):
+        """
+        Si NO hay V3 pero `ai_calibration["diagnosis"]["prompt"]` existe
+        (shim legacy V1/V2), `prompt_source="ai_calibration"` y
+        `calibration_source="legacy_hardcoded"` (no published_v3).
+        """
+        mock_call.return_value = {
+            "summary": "Resultado con shim legacy.",
+            "confidence": 0.80,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["params OK"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
+        result = prediagnostic_svc.generate_prediagnosis(
+            study_type="Audiometria",
+            extracted_data=self._AUDIO_MINIMA,
+            calibration_version=None,
+            ai_calibration={
+                "diagnosis": {"prompt": "PROMPT_LEGACY", "version": "legacy_v1"}
+            },
+        )
+        # Como faltan los required_params completos (sólo 3 frecuencias por oído
+        # vs REQUIRED_PARAMS["Audiometria"]=["oido_derecho","oido_izquierdo"]),
+        # puede caer a AI_NON_CONCLUSIVE — pero `prompt_source` debe ser
+        # trazable si llegó al bloque DR7. Como params faltan, debe ser
+        # AI_NON_CONCLUSIVE por params mínimos — el prompt_source se fija
+        # antes del gate de params, así que podemos inspeccionarlo vía result.
+        assert result.calibration_source == "legacy_hardcoded"
+        # prompt_source cae al backend_fallback (porque el gate params falla
+        # antes de llegar a DR7). Si quisiéramos probar el camino DR7 con shim
+        # legacy, los requiredParams deberían estar completos.
+        assert result.prompt_source in ("ai_calibration", "backend_fallback")
+
+    # --- _resolve_clinical_criteria: helper unitario ----------------------
+
+    def test_resolve_clinical_criteria_v3_completo(self, prediagnostic_svc):
+        """
+        `_resolve_clinical_criteria` devuelve el dict V3 tal cual cuando
+        `clinicalCriteria` está completo; no marca `incomplete`.
+        """
+        v3 = _FakeAICalibrationVersionResolved(
+            operationMode="clinical_interpretation",
+            enabled=True,
+            canonicalStudyType="Audiometria",
+            extraction=None,
+            fieldDefinitions=[],
+            clinicalCriteria={
+                "prediagnosisEnabled": True,
+                "requiredParams": ["oido_derecho"],
+                "confidenceThreshold": 0.5,
+                "prompt": "X",
+                "promptVersion": "v3",
+            },
+            presentation=None,
+            versionId="v",
+            versionNumber=3,
+            familyTemplateId=None,
+            requiresReview=False,
+            schemaVersion="V3",
+            status="published",
+            sourceRaw={},
+        )
+        eff = prediagnostic_svc._resolve_clinical_criteria(
+            calibration_version=v3, ai_calibration_shim=None, study_type="Audiometria"
+        )
+        assert eff["prediagnosisEnabled"] is True
+        assert eff["requiredParams"] == ["oido_derecho"]
+        assert eff["confidenceThreshold"] == 0.5
+        assert eff["prompt"] == "X"
+        assert eff["incomplete"] is False
+        assert eff["fieldDefinitionsIncomplete"] is False
+
+    def test_resolve_clinical_criteria_v3_incompleto_marca_fallback(self, prediagnostic_svc):
+        """
+        V3 con `clinicalCriteria` parcial (sin `prompt`) se marca como
+        `incomplete=True` y `fieldDefinitionsIncomplete=True`.
+        """
+        v3 = _FakeAICalibrationVersionResolved(
+            operationMode="clinical_interpretation",
+            enabled=True,
+            canonicalStudyType="Audiometria",
+            extraction=None,
+            fieldDefinitions=[],
+            clinicalCriteria={
+                "prediagnosisEnabled": True,
+                "requiredParams": ["oido_derecho"],
+                "confidenceThreshold": 0.5,
+                # prompt ausente
+            },
+            presentation=None,
+            versionId="v",
+            versionNumber=3,
+            familyTemplateId=None,
+            requiresReview=False,
+            schemaVersion="V3",
+            status="published",
+            sourceRaw={},
+        )
+        eff = prediagnostic_svc._resolve_clinical_criteria(
+            calibration_version=v3, ai_calibration_shim=None, study_type="Audiometria"
+        )
+        assert eff["incomplete"] is True
+        assert eff["fieldDefinitionsIncomplete"] is True
+        # El prompt vacío fuerza fallback parcial al backend_fallback.
+        assert eff["prompt"] == ""

@@ -234,6 +234,12 @@ export async function fetchEventPageData(input: {
       id: string
       version: number
       structuredData: unknown
+      // ARCH-20260820-01 Fase 5: snapshot versionado histórico (campos
+      // congelados nullable; pre-V5 = todos null).
+      calibrationVersionId?: string | null
+      calibrationVersionNumber?: number | null
+      presentationSchemaSnapshot?: unknown
+      extractionPromptHash?: string | null
       aiPrediagnoses?: Array<{
         id: string
         version: number
@@ -241,6 +247,10 @@ export async function fetchEventPageData(input: {
         createdAt: Date
         isSuperseded: boolean
         prediagnosisData: unknown
+        calibrationVersionId?: string | null
+        calibrationVersionNumber?: number | null
+        clinicalPromptHash?: string | null
+        clinicalCriteriaHash?: string | null
         doctorReviews?: Array<{
           id: string
           doctorStatus: string
@@ -257,6 +267,11 @@ export async function fetchEventPageData(input: {
       event.eventTests.map((et: EventTestWithExtras) => {
         const latestExtraction = et.extractionSnapshots?.[0] ?? null
         const latestPredx = latestExtraction?.aiPrediagnoses?.[0] ?? null
+        // ARCH-20260820-01 Fase 5 (CB-08): si el snapshot pre-V5 no trae
+        // calibrationVersionId → no congeló versión → flag explícito en
+        // audit para que la UI lo muestre y NO congele el resolver actual.
+        const hasFrozenExtraction = !!latestExtraction?.calibrationVersionId
+        const hasFrozenPredx = !!latestPredx?.calibrationVersionId
         const aiSnapshot = latestPredx
           ? {
               prediagnosisSnapshotId: latestPredx.id,
@@ -267,9 +282,14 @@ export async function fetchEventPageData(input: {
                 createdAt: latestPredx.createdAt,
                 isSuperseded: latestPredx.isSuperseded,
                 prediagnosisData: latestPredx.prediagnosisData,
+                calibrationVersionId: latestPredx.calibrationVersionId ?? null,
+                calibrationVersionNumber: latestPredx.calibrationVersionNumber ?? null,
+                clinicalPromptHash: latestPredx.clinicalPromptHash ?? null,
+                clinicalCriteriaHash: latestPredx.clinicalCriteriaHash ?? null,
                 doctorReviews: latestPredx.doctorReviews ?? [],
               },
               existingReview: latestPredx.doctorReviews?.[0] ?? null,
+              calibration_version_mismatch: !hasFrozenPredx,
             }
           : null
         const rawStructured =
@@ -281,6 +301,13 @@ export async function fetchEventPageData(input: {
               extractedData: rawStructured?.extracted_data ?? null,
               missingFields: rawStructured?.missing_fields ?? null,
               rawPayload: rawStructured ?? null,
+              calibrationVersionId: latestExtraction.calibrationVersionId ?? null,
+              calibrationVersionNumber:
+                latestExtraction.calibrationVersionNumber ?? null,
+              presentationSchemaSnapshot:
+                latestExtraction.presentationSchemaSnapshot ?? null,
+              extractionPromptHash: latestExtraction.extractionPromptHash ?? null,
+              calibration_version_mismatch: !hasFrozenExtraction,
             }
           : null
         return {

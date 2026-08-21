@@ -4,18 +4,29 @@ IMPL-20260326-16: ARCH-20260326-16 §"Separación de capas" §"Prediagnóstico I
 IMPL-20260513-01: Política de calibración médica; soporte MedGemma (pending_integration).
 IMPL-20260603-01: Migración clínica a DR7.ai; respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md.
 
+ARCH-20260820-01 Fase 4 (SPEC §14 + handoff Fase 4):
+  - `clinicalCriteria` del contrato V3 resuelto por `CalibrationResolver` es la
+    fuente primaria de `requiredParams`, `confidenceThreshold`, `prediagnosisEnabled`
+    y `prompt` clínico. Las constantes de módulo (`REQUIRED_PARAMS`,
+    `CONFIDENCE_THRESHOLDS`, `PREDIAGNOSIS_SUPPORTED_TYPES`, `PREDIAGNOSTIC_PROMPTS`)
+    permanecen como **fallback explícito y trazado** (`legacy_hardcoded`).
+  - El canal `medical_calibration` se retira del flujo principal (H11 FIX);
+    `_build_calibration_context` se elimina. `ai_calibration` se conserva
+    como shim deprecado (remapea a `published_v3` cuando contiene
+    `clinicalCriteria`, sino a `legacy_hardcoded`).
+  - Si `calibration_version.enabled=false` o `clinicalCriteria.prediagnosisEnabled=false`
+    → `AI_NON_CONCLUSIVE` con `non_conclusive_reason="calibration_disabled"`
+    **sin** invocar DR7.
+  - `calibration_source` ∈ {`published_v3`, `calibration_disabled`, `legacy_hardcoded`}
+    (legacy `medical_calibration`/`general_fallback` siguen aceptos como
+    deprecados para compat de snapshots históricos).
+  - `prompt_source` ∈ {`clinical_criteria_v3`, `ai_calibration`, `backend_fallback`}.
+
 GUARDRAILS obligatorios:
   - Esta capa recibe parámetros ya extraídos y validados (ExtractionSnapshotPayload).
   - NO puede autopoblar aptitud laboral, dictamen final, firma digital ni documentos oficiales.
   - El lenguaje deve ser prudente: "compatible con", "sugiere", "requiere correlación clínica".
   - Si faltan parámetros mínimos o calidad es baja → estado: AI_NON_CONCLUSIVE.
-
-POLÍTICA DE CALIBRACIÓN MÉDICA (IMPL-20260513-01):
-  - Si se pasa `medical_calibration` (dict del panel aiCalibration), se inyecta en el prompt
-    como marco preferente de interpretación. Se registra calibration_source="medical_calibration".
-  - Si no se pasa calibración, el modelo opera con conocimiento general en modo sombra.
-    Se registra calibration_source="general_fallback".
-  - En ambos casos queda trazado en AIPrediagnosisResult.calibration_source.
 
 MEDGEMMA (IMPL-20260513-01 / IMPL-20260603-01):
     - MedGemma es el proveedor médico objetivo para esta capa.
@@ -33,6 +44,16 @@ from typing import Dict, Any, Optional
 from .base import GeminiBase
 from .keys import key_resolver, is_ai_keys_from_db_enabled
 from app.schemas.medical import AIPrediagnosisResult, ClinicalBasisItem, ClinicalCitation, PrediagnosisInputDebug
+# ARCH-20260820-01 Fase 4 (handoff §6.4): resolver de calibración V3 en proceso.
+# `calibration_version` viaja como `AICalibrationVersionResolved` ya resuelto
+# por `get_default_resolver().resolve(test_row, "published")` desde `main.py`.
+# Importación local para evitar ciclos y mantener snapshot al import.
+try:
+    from .calibration_resolver import AICalibrationVersionResolved  # noqa: F401
+    _HAS_CALIBRATION_RESOLVER = True
+except Exception:  # pragma: no cover — protege tests aislados sin resolver.
+    _HAS_CALIBRATION_RESOLVER = False
+    AICalibrationVersionResolved = None  # type: ignore[assignment]
 
 
 def _medgemma_enabled() -> bool:
@@ -566,12 +587,24 @@ Responde en JSON con esta estructura exacta:
 }""",
     }
 
-    def _check_minimum_params(self, study_type: str, extracted_data: Dict[str, Any]) -> Optional[str]:
+    def _check_minimum_params(
+        self,
+        study_type: str,
+        extracted_data: Dict[str, Any],
+        required_params: Optional[list] = None,
+    ) -> Optional[str]:
         """
         Verifica si existen los parámetros mínimos para generar prediagnóstico.
         Retorna None si OK, o la razón de non-conclusive si faltan parámetros.
+
+        ARCH-20260820-01 Fase 4 (handoff §6.4): `required_params` proviene de
+        `calibration_version.clinicalCriteria.requiredParams` si está presente;
+        si no, cae a la constante de módulo `REQUIRED_PARAMS[study_type]`.
         """
-        required = REQUIRED_PARAMS.get(study_type, [])
+        if required_params is None:
+            required = REQUIRED_PARAMS.get(study_type, [])
+        else:
+            required = required_params
         missing = []
         for param in required:
             value = extracted_data.get(param)
@@ -587,80 +620,148 @@ Responde en JSON con esta estructura exacta:
             return "Completitud documental insuficiente para audiometría: menos de 3 frecuencias por oído"
         return None
 
+    # ARCH-20260820-01 Fase 4 (handoff §2.2, §6): `_build_calibration_context`
+    # se elimina del flujo principal (canal muerto H11). Los criterios clínicos
+    # viven dentro de `clinicalCriteria` del contrato V3 resuelto y se inyectan
+    # en el prompt como bloque derivado de `prompt_source=clinical_criteria_v3`.
+    # El método se conserva como stub deprecado para tests legacy que aún lo
+    # invocan — retorna cadena vacía (no afecta trazabilidad).
     @staticmethod
-    def _build_calibration_context(medical_calibration: Optional[Dict[str, Any]]) -> str:
+    def _build_calibration_context(medical_calibration: Optional[Dict[str, Any]]) -> str:  # noqa: D401
         """
-        IMPL-20260513-01: Construye el bloque de contexto de calibración médica para el prompt.
-        Si existe calibración capturada en el panel aiCalibration, la inyecta como marco preferente.
-        Si no, retorna cadena vacía (el prompt opera con conocimiento general).
+        DEPRECADO Fase 4 (H11). El canal `medical_calibration` fue retirado del
+        flujo principal en ARCH-20260820-01; los criterios viven en
+        `calibration_version.clinicalCriteria` (resuelto por
+        `CalibrationResolver`). Se conserva la firma para no romper callers
+        legacy y/o tests que importan el símbolo.
         """
-        if not medical_calibration:
-            return ""  # Sin calibración → el prompt usa conocimiento general
+        return ""
 
-        lines = [
-            "MARCO DE CALIBRACIÓN MÉDICA (prioridad sobre conocimiento general):",
-            "Se ha capturado calibración médica específica en el panel de administración.",
-            "Úsala como marco preferente de interpretación sobre el conocimiento general.",
-            "",
-        ]
-        # Extraer campos relevantes de aiCalibration si existen
-        description = medical_calibration.get("description") or medical_calibration.get("descripcion")
-        if description:
-            lines.append(f"- Descripción: {description}")
+    # ── Helpers internos Fase 4 ──────────────────────────────────────────
 
-        criteria = medical_calibration.get("criteria") or medical_calibration.get("criterios")
-        if criteria:
-            if isinstance(criteria, list):
-                for c in criteria:
-                    lines.append(f"- Criterio: {c}")
-            else:
-                lines.append(f"- Criterios: {criteria}")
+    def _resolve_clinical_criteria(
+        self,
+        calibration_version: Any,
+        ai_calibration_shim: Optional[Dict[str, Any]],
+        study_type: str,
+    ) -> Dict[str, Any]:
+        """
+        Devuelve el `clinicalCriteria` efectivo a aplicar:
+          - Si `calibration_version` trae `clinicalCriteria` completo
+            (clinical_interpretation) → ese dict.
+          - Si `calibration_version` trae `clinicalCriteria` parcial/incompleto
+            → fallback parcial a constantes de módulo, marcado con `incomplete=True`.
+          - Si `calibration_version` es None → constantes de módulo.
+          - `ai_calibration_shim` (legacy V1/V2 con `diagnosis.prompt`) sólo se
+            usa si V3 está ausente.
 
-        thresholds = medical_calibration.get("thresholds") or medical_calibration.get("umbrales")
-        if thresholds:
-            lines.append(f"- Umbrales específicos: {json.dumps(thresholds, ensure_ascii=False)}")
+        Returns:
+          {
+            "prediagnosisEnabled": bool,
+            "requiredParams": list,
+            "confidenceThreshold": float | None,
+            "prompt": str,
+            "promptVersion": str,
+            "incomplete": bool,         # True si hubo fallback parcial
+            "fieldDefinitionsIncomplete": bool,
+          }
+        """
+        # Prioridad 1: V3 resuelta con clinicalCriteria completo
+        if calibration_version is not None and getattr(calibration_version, "clinicalCriteria", None):
+            cc = calibration_version.clinicalCriteria
+            incomplete = False
+            field_definitions_incomplete = False
+            # Validar completitud mínima: prediagnosisEnabled + requiredParams + confidenceThreshold
+            if (
+                cc.get("prediagnosisEnabled") is None
+                or cc.get("requiredParams") is None
+                or cc.get("confidenceThreshold") is None
+                or not cc.get("prompt")
+            ):
+                incomplete = True
+                field_definitions_incomplete = True
+            return {
+                "prediagnosisEnabled": bool(cc.get("prediagnosisEnabled", True)),
+                "requiredParams": list(cc.get("requiredParams") or []),
+                "confidenceThreshold": cc.get("confidenceThreshold"),
+                "prompt": cc.get("prompt") or "",
+                "promptVersion": cc.get("promptVersion") or "calibration_v3",
+                "incomplete": incomplete,
+                "fieldDefinitionsIncomplete": field_definitions_incomplete,
+            }
 
-        notes = medical_calibration.get("notes") or medical_calibration.get("notas")
-        if notes:
-            lines.append(f"- Notas del calibrador: {notes}")
+        # Prioridad 2: shim `ai_calibration` legacy (V1/V2 con diagnosis.prompt)
+        if ai_calibration_shim:
+            _diagnosis_cfg = (ai_calibration_shim or {}).get("diagnosis") or {}
+            _legacy_prompt = _diagnosis_cfg.get("prompt")
+            if _legacy_prompt:
+                return {
+                    "prediagnosisEnabled": True,
+                    "requiredParams": [],
+                    "confidenceThreshold": CONFIDENCE_THRESHOLDS.get(study_type),
+                    "prompt": _legacy_prompt,
+                    "promptVersion": _diagnosis_cfg.get("version", "calibration_custom"),
+                    "incomplete": True,  # shim no garantiza requiredParams/threshold trazados
+                    "fieldDefinitionsIncomplete": True,
+                }
 
-        version = medical_calibration.get("version") or medical_calibration.get("calibration_version")
-        if version:
-            lines.append(f"- Versión de calibración: {version}")
+        # Prioridad 3: fallback hardcodeado (legacy_hardcoded).
+        default_prompt = self.PREDIAGNOSTIC_PROMPTS.get(study_type, "")
+        return {
+            "prediagnosisEnabled": study_type in PREDIAGNOSIS_SUPPORTED_TYPES,
+            "requiredParams": list(REQUIRED_PARAMS.get(study_type, [])),
+            "confidenceThreshold": CONFIDENCE_THRESHOLDS.get(study_type),
+            "prompt": default_prompt,
+            "promptVersion": "backend_v2",
+            "incomplete": False,
+            "fieldDefinitionsIncomplete": False,
+        }
 
-        lines.append("")
-        return "\n".join(lines)
+    # Mantengo bloque stub para que `generate_prediagnosis` lo invoque de forma
+    # no-op en lugar de fallar si un test monkey-patchea el símbolo.
+    _legacy_build_calibration_context = _build_calibration_context  # type: ignore[attr-defined]
 
     def generate_prediagnosis(
         self,
         study_type: str,
         extracted_data: Dict[str, Any],
-        medical_calibration: Optional[Dict[str, Any]] = None,
+        calibration_version: Any = None,
         ai_calibration: Optional[Dict[str, Any]] = None,
+        medical_calibration: Optional[Dict[str, Any]] = None,  # DEPRECADO Fase 4
     ) -> AIPrediagnosisResult:
         """
         Genera prediagnóstico IA basado en parámetros ya extraídos.
-        IMPL-20260513-01: Acepta calibración médica del panel aiCalibration.
-        IMPL-20260518-03: Resuelve prompt clínico desde aiCalibration.diagnosis.prompt;
-            si falta, usa fallback clínico general backend (ARCH-20260518-03).
+
+        ARCH-20260820-01 Fase 4 (handoff §3.1, §5, §6):
+          - `calibration_version`: `AICalibrationVersionResolved` producida por
+            `CalibrationResolver.resolve(test_row, "published")` en `main.py`.
+            Es la fuente primaria de `clinicalCriteria` (SPEC §5.2, §14 Fase 4).
+          - `ai_calibration`: shim legacy V1/V2 (deprecado). Se conserva sólo
+            para compat: si trae `diagnosis.prompt`, se usa como
+            `prompt_source="ai_calibration"`; si no, se ignora silenciosamente.
+          - `medical_calibration`: RETIRADO del flujo principal (H11 FIX). El
+            parámetro se conserva para no romper callers legacy pero se ignora;
+            se loguea una sola vez por proceso si se recibe.
 
         Args:
             study_type:        Tipo de estudio (Audiometria, Laboratorio, etc.)
             extracted_data:    Dict con parámetros canónicos extraídos
-            medical_calibration: Dict con aiCalibration del panel admin para contexto de
-                calibración (umbrales, criterios). Si se pasa → calibration_source='medical_calibration'.
-            ai_calibration:    Dict completo de aiCalibration. Si contiene
-                ai_calibration['diagnosis']['prompt'], se usa como template clínico
-                (prompt_source='ai_calibration'). Si no, se usa PREDIAGNOSTIC_PROMPTS
-                como fallback general (prompt_source='backend_fallback').
+            calibration_version: Versión V3 resuelta por el resolver en proceso
+                (ver handoff §6.1). None → fallback hardcodeado trazado.
+            ai_calibration:    DEPRECADO. Dict V1/V2 de aiCalibration. Si
+                contiene `diagnosis.prompt`, se usa como prompt clínico legacy
+                (prompt_source="ai_calibration") sin enriquecer con
+                `clinicalCriteria` (no hay V3 resuelta).
 
         Returns:
             AIPrediagnosisResult — siempre retorna un resultado; usa AI_NON_CONCLUSIVE si no hay datos.
-            Los campos calibration_source, clinical_model_used y prompt_source quedan trazados.
+            `calibration_source` ∈ {`published_v3`, `calibration_disabled`,
+            `legacy_hardcoded`}. `prompt_source` ∈ {`clinical_criteria_v3`,
+            `ai_calibration`, `backend_fallback`}. `legacy_hardcoded_reason`
+            ∈ {`no_published_version`, `published_disabled`,
+            `field_definitions_incomplete`} sólo cuando
+            `calibration_source == "legacy_hardcoded"`.
         """
-        # IMPL-20260513-01: determinar camino de calibración para trazabilidad
-        calibration_source = "medical_calibration" if medical_calibration else "general_fallback"
-
         # IMPL-20260603-01 | respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md
         # La capa clínica usa exclusivamente MedGemma vía DR7.ai.
         # Gemini queda reservado a la extracción multimodal, nunca al prediagnóstico.
@@ -688,50 +789,146 @@ Responde en JSON con esta estructura exacta:
             result_obj.clinical_provider = clinical_provider
             return result_obj
 
-        # IMPL-20260518-03: resolver prompt clínico desde aiCalibration o fallback general backend
-        _diagnosis_cfg = (ai_calibration or {}).get("diagnosis") or {}
-        _custom_clinical_prompt = _diagnosis_cfg.get("prompt")
-        if _custom_clinical_prompt:
+        # ── Fase 4: resolver clinicalCriteria efectivo ─────────────────────
+        effective = self._resolve_clinical_criteria(
+            calibration_version=calibration_version,
+            ai_calibration_shim=ai_calibration,
+            study_type=study_type,
+        )
+        # Shim deprecado medical_calibration: warning único por proceso (no por call).
+        if medical_calibration is not None:
+            try:
+                if not getattr(PrediagnosticService, "_warned_deprecated_medical_calibration", False):
+                    print(
+                        "⚠️ [ARCH-20260820-01 Fase 4] `medical_calibration` está "
+                        "deprecado; el flujo principal consume "
+                        "`calibration_version` (V3 resuelta). El parámetro se "
+                        "ignora para trazabilidad."
+                    )
+                    PrediagnosticService._warned_deprecated_medical_calibration = True
+            except Exception:
+                pass
+
+        # ── Determinar calibration_source y legacy_hardcoded_reason ───────
+        if calibration_version is not None and getattr(calibration_version, "clinicalCriteria", None):
+            # Resolver devolvió V3 con clinicalCriteria.
+            v3_enabled = bool(getattr(calibration_version, "enabled", True))
+            v3_prediag_enabled = bool(effective["prediagnosisEnabled"])
+            if not v3_enabled or not v3_prediag_enabled:
+                calibration_source = "calibration_disabled"
+                legacy_hardcoded_reason = None
+            else:
+                calibration_source = "published_v3"
+                legacy_hardcoded_reason = None
+        elif calibration_version is not None and not bool(getattr(calibration_version, "enabled", True)):
+            # V3 publicada pero disabled explícitamente.
+            calibration_source = "calibration_disabled"
+            legacy_hardcoded_reason = None
+        else:
+            # Resolver devolvió None (no hay versión publicada) o V3 sin
+            # clinicalCriteria (e.g. document_extraction ⇒ CB-14: no IA clínica).
+            calibration_source = "legacy_hardcoded"
+            if effective.get("fieldDefinitionsIncomplete"):
+                legacy_hardcoded_reason = "field_definitions_incomplete"
+            else:
+                legacy_hardcoded_reason = "no_published_version"
+
+        # ── prompt_source ────────────────────────────────────────────────
+        if calibration_source == "published_v3":
+            prompt_source = "clinical_criteria_v3"
+            _clinical_prompt_version = effective["promptVersion"]
+        elif ai_calibration and (ai_calibration.get("diagnosis") or {}).get("prompt"):
             prompt_source = "ai_calibration"
-            _clinical_prompt_version = _diagnosis_cfg.get("version", "calibration_custom")
-            print(
-                f"✅ [ARCH-20260518-03] Prompt clínico resuelto desde aiCalibration "
-                f"(v={_clinical_prompt_version}) para {study_type}"
+            _clinical_prompt_version = (ai_calibration.get("diagnosis") or {}).get(
+                "version", "calibration_custom"
             )
         else:
             prompt_source = "backend_fallback"
             _clinical_prompt_version = "backend_v2"
-            print(
-                f"ℹ️ [ARCH-20260518-03] Sin prompt clínico en aiCalibration — "
-                f"usando fallback general backend para {study_type}"
-            )
 
-        # IMPL-20260326-17: Tipos sin soporte de prediagnóstico IA en V1
-        # Campimetria y RiesgoCardiovascular retornan AI_NON_CONCLUSIVE explícito.
-        if study_type not in PREDIAGNOSIS_SUPPORTED_TYPES:
-            print(f"ℹ️ Tipo '{study_type}' sin prediagnóstico IA en V1 — revisión médica manual requerida")
+        # ── Gates Fase 4 (AC-4.4): enabled=false / prediagnosisEnabled=false ─
+        if calibration_source == "calibration_disabled":
+            reason = (
+                "calibration_disabled: aiCalibration publicada con enabled=false"
+                if not bool(getattr(calibration_version, "enabled", True))
+                else "calibration_disabled: clinicalCriteria.prediagnosisEnabled=false"
+            )
+            print(f"ℹ️ [ARCH-20260820-01 Fase 4] {reason} para {study_type}")
             return _result_with_provider(
                 summary=(
-                    f"Estudio '{study_type}' registrado. "
-                    "El documento requiere revisión médica manual. "
-                    "El prediagnóstico IA no está disponible para este tipo en V1."
+                    "Prediagnóstico IA no habilitado para esta prueba: la versión "
+                    "publicada tiene `enabled=false` o `clinicalCriteria.prediagnosisEnabled=false`."
                 ),
                 confidence=0.0,
                 clinical_state="AI_NON_CONCLUSIVE",
                 justification=[],
                 clinical_basis=[],
                 citations=[],
-                limitations=[f"Prediagnóstico IA no soportado para '{study_type}' en V1."],
+                limitations=[
+                    "Calibración publicada deshabilitada para esta prueba; no se invoca DR7.",
+                ],
                 red_flags=[],
-                non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido en V1.",
+                non_conclusive_reason="calibration_disabled",
                 calibration_source=calibration_source,
+                legacy_hardcoded_reason=legacy_hardcoded_reason,
+                clinical_model_used=clinical_model_used,
+                prompt_source=prompt_source,
+                prompt_version=_clinical_prompt_version,
+                input_debug=PrediagnosisInputDebug(
+                    study_type=study_type,
+                    extracted_data=extracted_data,
+                    medical_calibration=None,  # H11: canal muerto, siempre None.
+                    calibration_version=(
+                        calibration_version.to_dict()
+                        if calibration_version is not None
+                        and hasattr(calibration_version, "to_dict")
+                        else None
+                    ),
+                    clinical_provider=clinical_provider,
+                    clinical_model_used=clinical_model_used,
+                    rendered_prompt=None,
+                ),
+            )
+
+        # CB-14 / AC-4.5: document_extraction ⇒ clinicalCriteria=None ⇒ el
+        # backend NO debe sintetizar prediagnóstico. Esta rama se cubre arriba
+        # cuando `calibration_version.clinicalCriteria is None` y
+        # `ai_calibration` shim está ausente: calibration_source="legacy_hardcoded"
+        # + `fieldDefinitionsIncomplete=False` ⇒ cae al fallback. Si el estudio
+        # NO está en PREDIAGNOSIS_SUPPORTED_TYPES, el bloque inferior retorna
+        # AI_NON_CONCLUSIVE explícito sin llamar DR7.
+
+        # IMPL-20260326-17: Tipos sin soporte de prediagnóstico IA en V1
+        # Campimetria y RiesgoCardiovascular retornan AI_NON_CONCLUSIVE explícito.
+        if study_type not in PREDIAGNOSIS_SUPPORTED_TYPES or not effective["prediagnosisEnabled"]:
+            print(f"ℹ️ Tipo '{study_type}' sin prediagnóstico IA habilitado — revisión médica manual requerida")
+            return _result_with_provider(
+                summary=(
+                    f"Estudio '{study_type}' registrado. "
+                    "El documento requiere revisión médica manual. "
+                    "El prediagnóstico IA no está disponible para este tipo."
+                ),
+                confidence=0.0,
+                clinical_state="AI_NON_CONCLUSIVE",
+                justification=[],
+                clinical_basis=[],
+                citations=[],
+                limitations=[f"Prediagnóstico IA no soportado para '{study_type}'."],
+                red_flags=[],
+                non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido.",
+                calibration_source=calibration_source,
+                legacy_hardcoded_reason=legacy_hardcoded_reason,
                 clinical_model_used=clinical_model_used,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
             )
 
         # Verificar parámetros mínimos
-        non_conclusive_reason = self._check_minimum_params(study_type, extracted_data)
+        non_conclusive_reason = self._check_minimum_params(
+            study_type,
+            extracted_data,
+            required_params=effective["requiredParams"] or None,
+        )
         if non_conclusive_reason:
             print(f"⚠️ Prediagnóstico no concluyente: {non_conclusive_reason}")
             return _result_with_provider(
@@ -745,17 +942,13 @@ Responde en JSON con esta estructura exacta:
                 red_flags=[],
                 non_conclusive_reason=non_conclusive_reason,
                 calibration_source=calibration_source,
+                legacy_hardcoded_reason=legacy_hardcoded_reason,
                 clinical_model_used=clinical_model_used,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
             )
 
-        # ARCH-20260518-03: prompt template = aiCalibration.diagnosis.prompt si existe,
-        #                    sino PREDIAGNOSTIC_PROMPTS[study_type] como fallback general backend.
-        if _custom_clinical_prompt:
-            prompt_template = _custom_clinical_prompt
-        else:
-            prompt_template = self.PREDIAGNOSTIC_PROMPTS.get(study_type, "")
+        prompt_template = effective["prompt"]
 
         if not prompt_template:
             return _result_with_provider(
@@ -765,21 +958,18 @@ Responde en JSON con esta estructura exacta:
                 limitations=["Tipo de estudio no soportado por prediagnóstico V1."],
                 non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido.",
                 calibration_source=calibration_source,
+                legacy_hardcoded_reason=legacy_hardcoded_reason,
                 clinical_model_used=clinical_model_used,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
             )
 
-        # IMPL-20260513-01: inyectar contexto de calibración médica en el prompt
-        calibration_context_block = self._build_calibration_context(medical_calibration)
-        if calibration_source == "medical_calibration":
-            print(f"✅ Usando calibración médica del panel para {study_type}")
-        else:
-            print(f"ℹ️ Sin calibración médica — operando con conocimiento general para {study_type}")
-
+        # ARCH-20260518-03 + Fase 4: si el template contiene "{calibration_context}"
+        # (legacy), se sustituye por cadena vacía (Fase 4: contexto ya vive en el
+        # prompt clínico de clinicalCriteria o en el prompt backend hardcodeado).
         prompt = prompt_template.replace(
             "{calibration_context}",
-            calibration_context_block,
+            "",
         ).replace(
             "{extracted_json}",
             json.dumps(extracted_data, ensure_ascii=False, indent=2),
@@ -811,13 +1001,20 @@ Responde en JSON con esta estructura exacta:
                 red_flags=[],
                 non_conclusive_reason=unavailable_reason,
                 calibration_source=calibration_source,
+                legacy_hardcoded_reason=legacy_hardcoded_reason,
                 clinical_model_used=clinical_model_used,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
                 input_debug=PrediagnosisInputDebug(
                     study_type=study_type,
                     extracted_data=extracted_data,
-                    medical_calibration=medical_calibration,
+                    medical_calibration=None,  # H11: canal retirado.
+                    calibration_version=(
+                        calibration_version.to_dict()
+                        if calibration_version is not None
+                        and hasattr(calibration_version, "to_dict")
+                        else None
+                    ),
                     clinical_provider=clinical_provider,
                     clinical_model_used=clinical_model_used,
                     rendered_prompt=_rendered_prompt,
@@ -857,6 +1054,7 @@ Responde en JSON con esta estructura exacta:
                     red_flags=[],
                     non_conclusive_reason=dr7_reason,
                     calibration_source=calibration_source,
+                    legacy_hardcoded_reason=legacy_hardcoded_reason,
                     clinical_model_used=clinical_model_used,
                     prompt_source=prompt_source,
                     prompt_version=_clinical_prompt_version,
@@ -874,6 +1072,7 @@ Responde en JSON con esta estructura exacta:
                     red_flags=[],
                     non_conclusive_reason=f"DR7ParseError: {str(e)[:300]}",
                     calibration_source=calibration_source,
+                    legacy_hardcoded_reason=legacy_hardcoded_reason,
                     clinical_model_used=clinical_model_used,
                     prompt_source=prompt_source,
                     prompt_version=_clinical_prompt_version,
@@ -883,9 +1082,11 @@ Responde en JSON con esta estructura exacta:
             result = AIPrediagnosisResult(**raw_result)
             result_fields = getattr(type(result), "model_fields", {})
             # IMPL-20260513-03: añadir proveedor clínico real
-            # IMPL-20260518-03: añadir fuente real del prompt clínico (ARCH-20260518-03)
+            # IMPL-20260518-03 + Fase 4: añadir fuente real del prompt clínico.
             if "calibration_source" in result_fields:
                 result.calibration_source = calibration_source
+            if "legacy_hardcoded_reason" in result_fields:
+                result.legacy_hardcoded_reason = legacy_hardcoded_reason
             if "clinical_model_used" in result_fields:
                 result.clinical_model_used = clinical_model_used
             if "clinical_provider" in result_fields:
@@ -894,10 +1095,16 @@ Responde en JSON con esta estructura exacta:
                 result.prompt_source = prompt_source
             if "prompt_version" in result_fields:
                 result.prompt_version = _clinical_prompt_version
-            # IMPL-20260518-03: si se usó fallback clínico backend, registrar en limitations
+            # IMPL-20260518-03 + Fase 4: trazabilidad explícita de fuente del prompt.
             if prompt_source == "backend_fallback":
                 result.limitations.append(
-                    "Prompt clínico resuelto desde fallback general backend (aiCalibration.diagnosis.prompt no configurado)."
+                    "Prompt clínico resuelto desde fallback general backend "
+                    "(aiCalibration.clinicalCriteria.prompt no configurado)."
+                )
+            elif prompt_source == "clinical_criteria_v3":
+                # AC-4.1: trazabilidad explícita de la fuente.
+                result.limitations.append(
+                    "Prompt clínico resuelto desde aiCalibration.clinicalCriteria.prompt publicada."
                 )
             # IMPL-20260516-08: poblar input_debug con payload de entrada (ARCH-20260516-08)
             # Solo datos clínicos: study_type, extracted_data, calibración y prompt renderizado.
@@ -906,13 +1113,22 @@ Responde en JSON con esta estructura exacta:
                 result.input_debug = PrediagnosisInputDebug(
                     study_type=study_type,
                     extracted_data=extracted_data,
-                    medical_calibration=medical_calibration,
+                    medical_calibration=None,  # H11: canal retirado.
+                    calibration_version=(
+                        calibration_version.to_dict()
+                        if calibration_version is not None
+                        and hasattr(calibration_version, "to_dict")
+                        else None
+                    ),
                     clinical_provider=getattr(result, "clinical_provider", clinical_provider),
                     clinical_model_used=getattr(result, "clinical_model_used", clinical_model_used),
                     rendered_prompt=_rendered_prompt,
                 )
-            # Aplicar umbral de confianza — si baja del umbral, marcar non-conclusive
-            threshold = CONFIDENCE_THRESHOLDS.get(study_type, 0.5)
+            # Aplicar umbral de confianza — si baja del umbral, marcar non-conclusive.
+            # Fase 4: threshold viene de clinicalCriteria si está; si no, constante.
+            threshold = effective["confidenceThreshold"]
+            if threshold is None:
+                threshold = CONFIDENCE_THRESHOLDS.get(study_type, 0.5)
             if result.confidence < threshold and result.clinical_state == "AI_PENDING_REVIEW":
                 result.clinical_state = "AI_NON_CONCLUSIVE"
                 reason = f"Confianza {result.confidence:.2f} por debajo del umbral {threshold:.2f} para {study_type}"
@@ -929,6 +1145,7 @@ Responde en JSON con esta estructura exacta:
                 limitations=["Error interno al procesar respuesta del modelo IA."],
                 non_conclusive_reason=f"ParseError: {str(e)[:200]}",
                 calibration_source=calibration_source,
+                legacy_hardcoded_reason=legacy_hardcoded_reason,
                 clinical_model_used=clinical_model_used,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
