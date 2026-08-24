@@ -1037,6 +1037,10 @@ async def v2_upload_and_analyze(
         ExtractionAuthError,
         ExtractionProviderUnknownError,
     )
+    # SPEC-FIX-20260824-01: import lazy de StudyTypeMismatchError para mapear
+    # rechazos de modalidad (FND-20260824-02) a respuesta estructurada
+    # sanitizada con error_code="STUDY_TYPE_MISMATCH".
+    from app.services.ai.study_type_mismatch import StudyTypeMismatchError
 
     # FIX-20260810-06: pre-calentar la caché TTL del key_resolver en contexto
     # async (await nativo) antes de entrar al pipeline sync (extract_by_type /
@@ -1260,6 +1264,52 @@ async def v2_upload_and_analyze(
                 "error_code": "EXTRACTION_PROVIDER_UNKNOWN",
                 "file": filename,
             }
+        except StudyTypeMismatchError as mismatch_err:
+            # SPEC-FIX-20260824-01 + QA-20260824-12 F-2 + F-4: el rechazo del
+            # proveedor fue clasificado como mismatch de modalidad por
+            # `detect_study_type_mismatch`. Responder con error_code
+            # estructurado, mensaje user-friendly (campo `message` del
+            # contrato) y `detected_study_type` validado a canónico o null.
+            # NUNCA incluir `provider_text` (puede contener prompt, PII del
+            # paciente o respuesta cruda del modelo — FND-20260824-02 +
+            # F-4). El log de servidor sólo emite longitud + sha256 truncado
+            # del texto (sin contenido del modelo), vía
+            # `sanitize_provider_text_for_log`.
+            from app.services.ai.study_type_mismatch import (
+                CANONICAL_STUDY_TYPES as _CANON,
+                sanitize_provider_text_for_log,
+            )
+            # F-2: `message` siempre presente en el response (contrato).
+            _user_message = mismatch_err.message
+            # F-3 / F-2 cierre: validar `detected_study_type` a canónico o null
+            # antes de serializar (defensa contra inputs no controlados).
+            _detected = mismatch_err.detected_study_type
+            if _detected is not None and _detected not in _CANON:
+                _detected = None  # null si no canónico
+            _selected = mismatch_err.selected_study_type
+            if _selected is not None and _selected not in _CANON:
+                _selected = None
+            # F-4: log sanitizado — NUNCA contenido del modelo.
+            _log_safe = sanitize_provider_text_for_log(
+                mismatch_err.provider_text
+            )
+            print(
+                f"⚠️ [SPEC-FIX-20260824-01] STUDY_TYPE_MISMATCH "
+                f"selected={_selected!r} "
+                f"detected={_detected!r} "
+                f"provider={mismatch_err.provider!r} "
+                f"provider_len={_log_safe['len']} "
+                f"provider_sha256_16={_log_safe['sha256_16']}"
+            )
+            return {
+                "status": "error",
+                "error": _user_message,      # retrocompat con callers que sólo leen `error`
+                "message": _user_message,    # F-2: contrato explícito
+                "error_code": "STUDY_TYPE_MISMATCH",
+                "selected_study_type": _selected,
+                "detected_study_type": _detected,
+                "file": filename,
+            }
         except ExtractionAuthError as auth_err:
             print(f"❌ [ARCH-20260809-02] {auth_err}")
             # FIX-20260812-14: error_code específico para credenciales ausentes
@@ -1438,8 +1488,65 @@ async def v2_upload_and_analyze(
         }
 
     except Exception as e:
-        print(f"❌ Error en V2 upload-and-analyze: {e}")
-        return {"status": "error", "error": str(e), "file": filename}
+        # SPEC-FIX-20260824-01 + QA-20260824-13 G-1: el catch-all NUNCA
+        # devuelve `str(e)` al cliente (puede contener el texto crudo del
+        # proveedor cuando el `ValueError("Respuesta de M3 no es JSON
+        # válido: '<raw>…'")` se filtra sin ser clasificado como mismatch).
+        # Sanitizar: detectar ValueError "no es JSON" y devolver
+        # `error_code="EXTRACTION_NOT_JSON"` con mensaje user-friendly;
+        # para el resto, devolver `error_code="EXTRACTION_FAILED"` con
+        # mensaje genérico. El raw del modelo sólo va al log de servidor.
+        from app.services.ai.study_type_mismatch import (
+            sanitize_provider_text_for_log,
+        )
+        if isinstance(e, ValueError):
+            err_msg = str(e)
+            # Detectar el patrón canónico del extractor (provider_text
+            # crudo embebido).
+            if "no es JSON" in err_msg or "not JSON" in err_msg:
+                raw_tail = sanitize_provider_text_for_log(err_msg)
+                print(
+                    f"❌ [QA-20260824-13 G-1] EXTRACTION_NOT_JSON "
+                    f"file={filename} "
+                    f"err_len={raw_tail['len']} "
+                    f"err_sha256_16={raw_tail['sha256_16']}"
+                )
+                return {
+                    "status": "error",
+                    "error_code": "EXTRACTION_NOT_JSON",
+                    "error": (
+                        "La IA no pudo procesar el documento. "
+                        "Verifica el archivo y vuelve a intentarlo."
+                    ),
+                    "message": (
+                        "La IA no pudo procesar el documento. "
+                        "Verifica el archivo y vuelve a intentarlo."
+                    ),
+                    "file": filename,
+                }
+        # Fallback genérico: tipo + mensaje no-sensitive (sin str(e)).
+        err_type = type(e).__name__
+        safe_log = sanitize_provider_text_for_log(str(e))
+        print(
+            f"❌ [QA-20260824-13 G-1] EXTRACTION_FAILED "
+            f"file={filename} "
+            f"err_type={err_type} "
+            f"err_len={safe_log['len']} "
+            f"err_sha256_16={safe_log['sha256_16']}"
+        )
+        return {
+            "status": "error",
+            "error_code": "EXTRACTION_FAILED",
+            "error": (
+                "Ocurrió un error inesperado al procesar el estudio. "
+                "Intenta nuevamente."
+            ),
+            "message": (
+                "Ocurrió un error inesperado al procesar el estudio. "
+                "Intenta nuevamente."
+            ),
+            "file": filename,
+        }
 
 
 @app.post("/api/v2/studies/prediagnosis-from-params")

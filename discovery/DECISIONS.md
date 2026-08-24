@@ -90,3 +90,22 @@
 - **Fuera de alcance:** No cambiar la navegación de Events, no eliminar hardcodeos restantes, no crear catálogo FamilyTemplate y no aplicar migraciones adicionales.
 - **Confirmación:** Frank, 2026-08-20.
 - **Referencias:** DEC-20260820-01, DEC-20260820-02, SPEC_ARCH-20260820-01 §14 Fase 2/3.
+
+## DEC-20260820-04 — Lote nocturno de validación Audio-Espiro
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-20
+- **Decisión de Frank:** Autorizar un lote nocturno para preparar y validar Audiometría y Espirometría contra los documentos reales AMI y los valores de referencia proporcionados, usando Playwright y evidencias reproducibles.
+- **Alcance:** calibraciones V3 en `draft/tested`, ejecución de casos reales, revisión de valores extraídos, calidad/completitud, prelectura asistida, renderer clínico y trazabilidad; documentar gaps y evidencia QA.
+- **Límite:** no publicar cambios clínicos en producción automáticamente; la IA no emite diagnóstico final ni aptitud.
+- **Pendiente operativo:** registrar en `PROYECTO.md` el `loteId`, permisos, inicio y expiración antes de iniciar el lote nocturno.
+- **Referencias:** DEC-20260820-01, DEC-20260820-03, FND-20260820-05, SPEC_ARCH-20260513-01, SPEC_ARCH-20260516-07, SPEC_ARCH-20260516-12, FIX-20260812-20.
+
+## DEC-20260824-01 — Mensaje claro ante documento de estudio incorrecto
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-24
+- **Decisión de Frank:** Sustituir el error técnico crudo de MiniMax/M3 por un mensaje clínico-operativo claro cuando el archivo no corresponde al estudio seleccionado.
+- **Resultado esperado:** indicar el estudio seleccionado, el tipo detectado si es confiable y la acción concreta; por ejemplo: “Seleccionaste Audiometría, pero el documento parece ser Espirometría. Abre Espirometría y vuelve a cargar el archivo.” No mostrar HTML, prompt, respuesta del modelo ni stack técnico.
+- **Límite:** no ocultar errores de proveedor no relacionados; conservar trazabilidad técnica en auditoría/log seguro sin PII ni secretos.
+- **Referencia:** FND-20260824-02 (documento incorrecto en estudio), FND-20260821-03.

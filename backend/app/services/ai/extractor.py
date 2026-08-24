@@ -18,6 +18,12 @@ import time
 import os
 from typing import Dict, Any, Union, Optional, Tuple
 from .base import GeminiBase, M3VisionBase, M3CredentialsUnavailableError
+from .study_type_mismatch import (
+    StudyTypeMismatchError,
+    detect_study_type_mismatch,
+    extract_raw_response_text_from_value_error,
+    build_user_facing_message,
+)
 from app.schemas.medical import (
     AudiometriaData,
     LaboratorioData,
@@ -605,6 +611,12 @@ notas de calidad y gráficas.
         prompt: str,
         provider: str,
         model: str,
+        # SPEC-FIX-20260824-01: estudio seleccionado por el operador (necesario
+        # para clasificar rechazos del proveedor como STUDY_TYPE_MISMATCH).
+        # Si es None, NO se clasifica como mismatch (defensa: la heurística
+        # necesita un "expected type" para discriminar una mention de tipo en
+        # el rechazo).
+        selected_study_type: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], str, Optional[str]]:
         """
         ARCH-20260809-02: Ejecuta la llamada al proveedor resolviendo fallback
@@ -650,6 +662,30 @@ notas de calidad y gráficas.
                     getattr(m3_client, "key_resolution_warning", None),
                 )
                 return result, "m3", None
+            except ValueError as json_err:
+                # SPEC-FIX-20260824-01: si el rechazo del proveedor indica un
+                # mismatch de modalidad (FND-20260824-02), re-lanzar como
+                # StudyTypeMismatchError en lugar del ValueError genérico.
+                # NO es transient → NO disparar fallback a Gemini
+                # (FIX-20260812-12). La capa HTTP de main.py lo captura y
+                # responde con error_code="STUDY_TYPE_MISMATCH".
+                raw_response = extract_raw_response_text_from_value_error(json_err)
+                assessment = detect_study_type_mismatch(raw_response, selected_study_type)
+                if assessment.is_mismatch:
+                    msg = build_user_facing_message(
+                        assessment.selected_study_type,
+                        assessment.detected_study_type,
+                    )
+                    raise StudyTypeMismatchError(
+                        selected_study_type=assessment.selected_study_type,
+                        detected_study_type=assessment.detected_study_type,
+                        provider="m3",
+                        provider_text=raw_response,
+                        message=msg,
+                    ) from json_err
+                # No es mismatch (rechazo genérico de parseo): re-raise original
+                # para preservar CB-03 (JSON no parseable NO es fallback).
+                raise
             except M3CredentialsUnavailableError as creds_err:
                 # FIX-20260812-14: M3 sin key tras `_refresh_keys` (env ausente
                 # y BD sin fila válida, o cold-loader que ya no deadlockea).
@@ -698,6 +734,26 @@ notas de calidad y gráficas.
         # (`GEMINI_API_KEY_EXPIRED`) en lugar del 500 opaco previo.
         try:
             result = self.call_gemini(file_path, prompt)
+        except ValueError as gemini_json_err:
+            # SPEC-FIX-20260824-01: paridad con M3 — clasificar rechazos de
+            # modalidad del proveedor Gemini como STUDY_TYPE_MISMATCH.
+            # Gemini NO tiene fallback por contrato; si la detección dispara,
+            # propagamos la StudyTypeMismatchError sin fallback.
+            raw_response = extract_raw_response_text_from_value_error(gemini_json_err)
+            assessment = detect_study_type_mismatch(raw_response, selected_study_type)
+            if assessment.is_mismatch:
+                msg = build_user_facing_message(
+                    assessment.selected_study_type,
+                    assessment.detected_study_type,
+                )
+                raise StudyTypeMismatchError(
+                    selected_study_type=assessment.selected_study_type,
+                    detected_study_type=assessment.detected_study_type,
+                    provider="gemini",
+                    provider_text=raw_response,
+                    message=msg,
+                ) from gemini_json_err
+            raise
         except Exception as gemini_err:
             status_code = getattr(gemini_err, "response", None)
             status_code = getattr(status_code, "status_code", None) if status_code is not None else None
@@ -855,7 +911,25 @@ notas de calidad y gráficas.
                 prompt=prompt,
                 provider=provider,
                 model=model,
+                # SPEC-FIX-20260824-01: pasar `doc_type` como
+                # `selected_study_type` para clasificar rechazos de modalidad.
+                selected_study_type=doc_type,
             )
+        except StudyTypeMismatchError as mismatch_err:
+            # SPEC-FIX-20260824-01: el dispatcher clasificó el rechazo como
+            # mismatch de modalidad. NO es transient (FIX-20260812-12) → NO
+            # fallback. Adjuntar trazabilidad mínima y propagar al caller
+            # (`main.py`) que responderá con error_code="STUDY_TYPE_MISMATCH".
+            self.last_extraction_audit = {
+                "extraction_provider_requested": provider,
+                "extraction_provider_used": None,
+                "extraction_model_used": model,
+                "extraction_fallback_reason": "study_type_mismatch",
+                # El texto crudo del proveedor queda sólo en audit interno —
+                # main.py NO lo serializa al frontend (privacidad FND-20260824-02).
+                "mismatch_provider_text": getattr(mismatch_err, "provider_text", ""),
+            }
+            raise
         except ExtractionAuthError as auth_err:
             # Adjuntar trazabilidad mínima al error para que main.py la propague.
             self.last_extraction_audit = {

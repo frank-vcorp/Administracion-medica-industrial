@@ -82,3 +82,20 @@
 - **Impacto:** la extracción documental funciona, pero no se prueba MiniMax ni se genera prediagnóstico clínico para Espirometría; publicar V3 sin corregir esta paridad produciría una experiencia incompleta.
 - **Relación:** DEC-20260820-01/03/04, FND-20260820-05, SPEC_ARCH-20260516-12, FIX-20260812-20.
 - **Siguiente paso:** DEBY/INTEGRA deben aislar provider efectivo y corregir el mapeo de criterios; después repetir E2E en entorno de prueba antes de publicar V3.
+
+## FND-20260824-01 — El expediente de prueba usado no corresponde al PDF cargado
+
+- **Estado:** confirmed
+- **Severidad:** P1
+- **Evidencia:** El expediente `8af728bf-f572-47c3-94b7-31aa9916a4b8` pertenece a Olvera/Jorge, mientras `context/RD2026/ESPIROMETRIA.pdf` corresponde a Peña Patricia Marbella. El E2E técnico cargó ese PDF en el expediente de Olvera.
+- **Impacto:** La prueba técnica de MiniMax es válida como smoke de pipeline, pero el resultado no debe considerarse clínico ni permanecer asociado a ese expediente.
+- **Acción requerida:** retirar/limpiar el archivo y análisis de prueba del expediente, con autorización explícita por tratarse de una eliminación de datos de producción; repetir la validación sólo con un documento cuyo paciente corresponda al expediente o en entorno de prueba.
+
+## FND-20260824-02 — La UI muestra el error técnico crudo ante tipo de estudio incorrecto
+
+- **Estado:** confirmed
+- **Severidad:** P1 UX/operativa
+- **Evidencia:** Al cargar `ESPIROMETRIA.pdf` dentro de `AUDIOMETRIA`, la pantalla muestra “Respuesta de M3 no es JSON válido” y el contenido del rechazo del modelo, aunque el sistema sí detectó el conflicto de modalidad.
+- **Impacto:** El usuario no recibe una instrucción accionable y se expone detalle técnico/prompt del proveedor.
+- **Acción:** clasificar el error como `STUDY_TYPE_MISMATCH` y mostrar estudio seleccionado, tipo detectado y acción para corregir; conservar detalle sólo en auditoría segura.
+- **Relación:** DEC-20260824-01, FND-20260824-01, FND-20260821-03.

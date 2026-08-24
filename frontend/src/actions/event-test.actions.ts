@@ -37,6 +37,11 @@ function buildAIResultNote(input: { success: boolean; summary?: string | null; c
   return `Archivo cargado, pero la IA no generó prediagnóstico: ${input.error ?? 'sin detalle'}`
 }
 
+// SPEC-FIX-20260824-01: helper de redacción para resultNotes vive en un
+// módulo separado (no `'use server'`) para ser testeable sin violar la
+// restricción de Next.js sobre exports en archivos `'use server'`.
+import { buildMismatchResultNote } from '@/lib/clinical/study-type-mismatch-note'
+
 /**
  * ARCH-20260507-06: Resuelve el grupo de muestra de un EventTest.
  * Fuente principal: test.options.sampleType (campo JSON en MedicalTest).
@@ -1048,6 +1053,44 @@ export async function uploadEventTestFile(formData: FormData) {
           },
         }
       }
+
+      // SPEC-FIX-20260824-01: STUDENT_TYPE_MISMATCH se trata aparte:
+      //   - NO es un error técnico → persistir un resultNotes redactado
+      //     (NUNCA HTML/prompt/respuesta del proveedor/PII).
+      //   - Propagar los campos estructurados para que la UI muestre el
+      //     mensaje accionable (DEC-20260824-01).
+      if (v2Result.errorCode === 'STUDY_TYPE_MISMATCH') {
+        console.info(
+          '[SPEC-FIX-20260824-01] STUDY_TYPE_MISMATCH propagado al cliente:',
+          {
+            eventTestId,
+            selectedStudyType: v2Result.selectedStudyType,
+            detectedStudyType: v2Result.detectedStudyType,
+          }
+        )
+        await prisma.eventTest.update({
+          where: { id: eventTestId },
+          data: {
+            resultNotes: buildMismatchResultNote({
+              selectedStudyType: v2Result.selectedStudyType ?? null,
+              detectedStudyType: v2Result.detectedStudyType ?? null,
+              message: v2Result.message ?? null,
+            }),
+          },
+        })
+        return {
+          success: false,
+          error:
+            v2Result.message ??
+            v2Result.error ??
+            'Documento incompatible con el estudio seleccionado.',
+          errorCode: 'STUDY_TYPE_MISMATCH',
+          message: v2Result.message ?? null,
+          selectedStudyType: v2Result.selectedStudyType ?? null,
+          detectedStudyType: v2Result.detectedStudyType ?? null,
+        }
+      }
+
       console.warn('[IMPL-20260326-16] V2 falló para estudio IA elegible; se cancela fallback V1:', v2Result.error)
       return {
         success: false,
@@ -1121,7 +1164,16 @@ export async function regenerateStudyAI(
   eventTestId: string,
   eventId: string,
   triggeredByUserId: string = 'system'
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  success: boolean
+  error?: string
+  // SPEC-FIX-20260824-01: campos estructurados cuando el rechazo del
+  // proveedor fue clasificado como STUDY_TYPE_MISMATCH.
+  errorCode?: string
+  message?: string | null
+  selectedStudyType?: string | null
+  detectedStudyType?: string | null
+}> {
   if (!eventTestId || !eventId) {
     return { success: false, error: 'Parámetros incompletos' }
   }
@@ -1216,6 +1268,34 @@ export async function regenerateStudyAI(
     }
 
     const aiResult = await triggerStudyAIAnalysis(formData)
+
+    // SPEC-FIX-20260824-01: STUDY_TYPE_MISMATCH durante regeneración → mismas
+    // garantías que en upload inicial: resultNotes redactado, mensaje
+    // user-friendly propagado al cliente.
+    if (!aiResult.success && aiResult.errorCode === 'STUDY_TYPE_MISMATCH') {
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: {
+          resultNotes: buildMismatchResultNote({
+            selectedStudyType: aiResult.selectedStudyType ?? null,
+            detectedStudyType: aiResult.detectedStudyType ?? null,
+            message: aiResult.message ?? null,
+          }),
+        },
+      })
+      revalidatePath(`/events/${eventId}`)
+      return {
+        success: false,
+        error:
+          aiResult.message ??
+          aiResult.error ??
+          'Documento incompatible con el estudio seleccionado.',
+        errorCode: 'STUDY_TYPE_MISMATCH',
+        message: aiResult.message ?? null,
+        selectedStudyType: aiResult.selectedStudyType ?? null,
+        detectedStudyType: aiResult.detectedStudyType ?? null,
+      }
+    }
 
     // ARCH-20260326-05: Si IA no está disponible, consultar /api/v2/ai/status para causa raíz exacta.
     let enrichedError = aiResult.error ?? null

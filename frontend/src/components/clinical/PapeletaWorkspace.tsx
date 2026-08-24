@@ -47,6 +47,16 @@ import TraceabilidadLigera from "@/components/clinical/TraceabilidadLigera"
 
 // --- Tipos locales ---
 
+// SPEC-FIX-20260824-01: payload estructurado que el server action devuelve
+// cuando el rechazo del proveedor fue clasificado como STUDY_TYPE_MISMATCH.
+// Mantenerlo aquí (cliente puro) para no contaminar actions.ts con tipos de UI.
+type StudyTypeMismatchState = {
+  errorCode: 'STUDY_TYPE_MISMATCH'
+  message: string
+  selectedStudyType: string | null
+  detectedStudyType: string | null
+}
+
 type StudyStatus = 'PENDING' | 'IN_PROGRESS' | 'SAMPLE_TAKEN' | 'RESULT_REGISTERED' | 'COMPLETED' | 'SKIPPED' | 'CANCELLED'
 
 type StudyTest = {
@@ -322,6 +332,13 @@ export default function PapeletaWorkspace({
   // IMPL-20260326-03: Estado para regeneración IA desde archivo existente
   const [isRegenerating, setIsRegenerating] = useState(false)
   const [regenError, setRegenError] = useState('')
+  // SPEC-FIX-20260824-01: cuando el backend clasifica el rechazo del proveedor
+  // como STUDY_TYPE_MISMATCH, mostramos el mensaje user-friendly estructurado
+  // y NUNCA el `error` crudo. `uploadMismatch` / `regenMismatch` son null
+  // cuando el error no es mismatch (UI muestra `uploadError` / `regenError`
+  // normalmente).
+  const [uploadMismatch, setUploadMismatch] = useState<StudyTypeMismatchState | null>(null)
+  const [regenMismatch, setRegenMismatch] = useState<StudyTypeMismatchState | null>(null)
   // IMPL-20260516-04: Etapa activa del pipeline IA para UX de progreso visual
   const [uploadStage, setUploadStage] = useState<UploadStageId | null>(null)
   const [regenStage, setRegenStage] = useState<UploadStageId | null>(null)
@@ -411,6 +428,7 @@ export default function PapeletaWorkspace({
     let currentStage: UploadStageId | null = 'uploading'
     setIsUploading(true)
     setUploadError('')
+    setUploadMismatch(null)
     setUploadStage('uploading')
     const t1 = setTimeout(() => { currentStage = 'classifying';   setUploadStage('classifying') },   3000)
     const t2 = setTimeout(() => { currentStage = 'extracting';    setUploadStage('extracting') },    7000)
@@ -421,17 +439,25 @@ export default function PapeletaWorkspace({
     formData.append('eventId', eventId)
     formData.append('file', file)
     try {
-      const res = await uploadEventTestFile(formData)
+      // Tipo extendido para los nuevos campos estructurados de mismatch
+      type UploadActionResult = {
+        success: boolean
+        error?: string
+        fileUrl?: string | null
+        extractionSnapshotData?: StudyTest['extractionSnapshot']
+        aiAnalysis?: unknown
+        errorCode?: string
+        message?: string | null
+        selectedStudyType?: string | null
+        detectedStudyType?: string | null
+      }
+      const res = (await uploadEventTestFile(formData)) as UploadActionResult
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
       if (res.success && res.fileUrl) {
         setUploadStage('saving')
         await new Promise<void>(r => setTimeout(r, 700))
         // ARCH-20260518-04: actualización optimista con snapshot si el action lo devuelve
-        type UploadResWithSnapshot = typeof res & {
-          extractionSnapshotData?: StudyTest['extractionSnapshot']
-        }
-        const resTyped = res as UploadResWithSnapshot
-        updateLocalFile(testId, res.fileUrl, resTyped.extractionSnapshotData ?? null)
+        updateLocalFile(testId, res.fileUrl, res.extractionSnapshotData ?? null)
         router.refresh()
       } else if (res.success && res.aiAnalysis) {
         // ARCH-20260820-01 Fase 3 (AC-3.1): IA no generada por gate
@@ -440,6 +466,15 @@ export default function PapeletaWorkspace({
         // panel de prediagnóstico mostrará AI_NON_CONCLUSIVE tras refresh.
         setUploadStage(null)
         router.refresh()
+      } else if (res.errorCode === 'STUDY_TYPE_MISMATCH') {
+        // SPEC-FIX-20260824-01: rechazo de modalidad estructurado.
+        // Mostrar el mensaje user-friendly redactado, NO el `error` crudo.
+        setUploadMismatch({
+          errorCode: 'STUDY_TYPE_MISMATCH',
+          message: res.message ?? res.error ?? '',
+          selectedStudyType: res.selectedStudyType ?? null,
+          detectedStudyType: res.detectedStudyType ?? null,
+        })
       } else {
         setUploadError(res.error || 'Error al subir archivo')
       }
@@ -472,17 +507,35 @@ export default function PapeletaWorkspace({
     let currentStage: UploadStageId | null = 'classifying'
     setIsRegenerating(true)
     setRegenError('')
+    setRegenMismatch(null)
     setRegenStage('classifying')
     const t1 = setTimeout(() => { currentStage = 'extracting';    setRegenStage('extracting') },    4000)
     const t2 = setTimeout(() => { currentStage = 'prediagnosing'; setRegenStage('prediagnosing') }, 10000)
     const t3 = setTimeout(() => { currentStage = 'saving';        setRegenStage('saving') },        22000)
     try {
-      const res = await regenerateStudyAI(testId, eventId, reviewerUserId)
+      type RegenActionResult = {
+        success: boolean
+        error?: string
+        errorCode?: string
+        message?: string | null
+        selectedStudyType?: string | null
+        detectedStudyType?: string | null
+      }
+      const res = (await regenerateStudyAI(testId, eventId, reviewerUserId)) as RegenActionResult
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
       if (res.success) {
         setRegenStage('saving')
         await new Promise<void>(r => setTimeout(r, 700))
         router.refresh()
+      } else if (res.errorCode === 'STUDY_TYPE_MISMATCH') {
+        // SPEC-FIX-20260824-01: rechazo de modalidad estructurado en
+        // regeneración. Mostrar mensaje user-friendly, NO el `error` crudo.
+        setRegenMismatch({
+          errorCode: 'STUDY_TYPE_MISMATCH',
+          message: res.message ?? res.error ?? '',
+          selectedStudyType: res.selectedStudyType ?? null,
+          detectedStudyType: res.detectedStudyType ?? null,
+        })
       } else {
         setRegenError(res.error || 'Error al regenerar análisis IA')
       }
@@ -664,9 +717,11 @@ export default function PapeletaWorkspace({
               isPending={isPending}
               isUploading={isUploading}
               uploadError={uploadError}
+              uploadMismatch={uploadMismatch}
               uploadStage={uploadStage}
               isRegenerating={isRegenerating}
               regenError={regenError}
+              regenMismatch={regenMismatch}
               regenStage={regenStage}
               apiUrl={apiUrl}
               somatometryEventTestId={somatometriaTest?.id}
@@ -956,6 +1011,40 @@ function WorkerHeader({
   )
 }
 
+// --- Sub-componente: Banner de mismatch de modalidad (SPEC-FIX-20260824-01) ---
+
+/**
+ * Banner accionable para STUDY_TYPE_MISMATCH. Renderiza SOLO el `message`
+ * redactado que viene del backend. Privacidad: este banner NO expone
+ * prompt del proveedor, respuesta cruda del modelo, stack, PII ni secretos.
+ * Privacidad reforzada: el texto se renderiza como children JSX (escape
+ * automático de React); nunca se pasa por atributos de inyección HTML.
+ */
+function MismatchMessageBanner({ mismatch }: { mismatch: StudyTypeMismatchState }) {
+  // Defensive: si por algún motivo el backend devolvió `message` vacío,
+  // mostramos el genérico del SPEC para no quedar sin texto.
+  const safeMessage =
+    (mismatch.message && mismatch.message.trim()) ||
+    'El documento no parece corresponder al estudio seleccionado. Verifica el archivo y vuelve a intentarlo.'
+  return (
+    <div
+      role="alert"
+      className="mt-2 text-left bg-amber-50 border border-amber-300 rounded-lg px-3 py-2"
+      data-testid="study-type-mismatch-banner"
+    >
+      <p className="text-xs font-bold text-amber-800 mb-1">Documento incompatible</p>
+      <p className="text-xs text-amber-800 leading-relaxed">{safeMessage}</p>
+      {mismatch.selectedStudyType && mismatch.detectedStudyType &&
+        mismatch.selectedStudyType !== mismatch.detectedStudyType ? (
+          <p className="text-[10px] text-amber-700 mt-1">
+            Estudio seleccionado: <span className="font-semibold">{mismatch.selectedStudyType}</span>
+            {' · '}Tipo detectado: <span className="font-semibold">{mismatch.detectedStudyType}</span>
+          </p>
+        ) : null}
+    </div>
+  )
+}
+
 // --- Sub-componente: Panel de trabajo del estudio seleccionado ---
 
 function StudyPanel({
@@ -970,9 +1059,11 @@ function StudyPanel({
   isPending,
   isUploading,
   uploadError,
+  uploadMismatch,
   uploadStage,
   isRegenerating,
   regenError,
+  regenMismatch,
   regenStage,
   apiUrl,
   somatometryEventTestId,
@@ -997,9 +1088,12 @@ function StudyPanel({
   isPending: boolean
   isUploading: boolean
   uploadError: string
+  // SPEC-FIX-20260824-01: mismatch estructurado del proveedor extractivo.
+  uploadMismatch: StudyTypeMismatchState | null
   uploadStage: UploadStageId | null
   isRegenerating: boolean
   regenError: string
+  regenMismatch: StudyTypeMismatchState | null
   regenStage: UploadStageId | null
   apiUrl: string
   somatometryEventTestId: string | undefined
@@ -1218,7 +1312,13 @@ function StudyPanel({
                       }}
                     />
                   </label>
-                  {uploadError && (
+                  {uploadMismatch ? (
+                    // SPEC-FIX-20260824-01: rechazo estructurado del proveedor.
+                    // El `message` ya viene redactado por el backend; no
+                    // renderizamos HTML ni el `uploadError` crudo.
+                    <MismatchMessageBanner mismatch={uploadMismatch} />
+                  ) : null}
+                  {!uploadMismatch && uploadError && (
                     <p className="text-xs text-red-500 mt-2">{uploadError}</p>
                   )}
                   {(test.fileUrl || test.extractionSnapshot || test.aiSnapshot) && (
@@ -1282,7 +1382,13 @@ function StudyPanel({
                     </p>
                   </div>
                 </div>
-                {regenError && (
+                {regenMismatch ? (
+                  // SPEC-FIX-20260824-01: rechazo estructurado del proveedor.
+                  // El `message` ya viene redactado por el backend; no
+                  // renderizamos HTML ni el `regenError` crudo.
+                  <MismatchMessageBanner mismatch={regenMismatch} />
+                ) : null}
+                {!regenMismatch && regenError && (
                   <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                     {regenError}
                   </p>

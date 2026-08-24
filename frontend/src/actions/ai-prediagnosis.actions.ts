@@ -45,6 +45,18 @@ export interface StudyAIAnalysisResult {
   extractedData?: unknown
   missingFields?: unknown
   rawPayload?: unknown
+  /**
+   * SPEC-FIX-20260824-01: campos estructurados cuando el rechazo del
+   * proveedor extractivo fue clasificado como mismatch de modalidad.
+   * Cuando `errorCode === 'STUDY_TYPE_MISMATCH'`, la UI debe usar `message`
+   * (redactado) y `selectedStudyType`/`detectedStudyType` para guiar al
+   * usuario. NUNCA debe renderizar `error` ni ningún texto crudo del
+   * proveedor en este caso (privacidad FND-20260824-02).
+   */
+  errorCode?: string
+  message?: string
+  selectedStudyType?: string | null
+  detectedStudyType?: string | null
 }
 
 export interface DoctorStudyReviewInput {
@@ -180,6 +192,34 @@ export async function triggerStudyAIAnalysis(
     })
 
     if (!response.ok) {
+      // SPEC-FIX-20260824-01: aún si el HTTP status no es OK, intentamos
+      // parsear un body estructurado para detectar STUDY_TYPE_MISMATCH
+      // (main.py responde 200 con status='error' + error_code estructurado,
+      // pero mantenemos el parsing defensivo para HTTP 4xx/5xx también).
+      let errBody: {
+        status?: string
+        error?: string
+        error_code?: string
+        message?: string
+        selected_study_type?: string | null
+        detected_study_type?: string | null
+      } | null = null
+      try {
+        const errText = await response.text().catch(() => '')
+        errBody = errText ? JSON.parse(errText) : null
+      } catch {
+        // No JSON parseable: caemos al mensaje genérico.
+      }
+      if (errBody && errBody.error_code === 'STUDY_TYPE_MISMATCH') {
+        return {
+          success: false,
+          error: errBody.error ?? errBody.message ?? 'Documento incompatible con el estudio seleccionado.',
+          errorCode: 'STUDY_TYPE_MISMATCH',
+          message: errBody.message ?? errBody.error ?? undefined,
+          selectedStudyType: errBody.selected_study_type ?? null,
+          detectedStudyType: errBody.detected_study_type ?? null,
+        }
+      }
       const errText = await response.text().catch(() => 'Sin detalle')
       return {
         success: false,
@@ -190,6 +230,26 @@ export async function triggerStudyAIAnalysis(
     const result = await response.json()
 
     if (result.status !== 'success') {
+      // SPEC-FIX-20260824-01: mapear STUDY_TYPE_MISMATCH a campos
+      // estructurados. NO exponer el `error` crudo al consumidor — la UI
+      // debe usar `message` (redactado por el backend vía
+      // build_user_facing_message) y `selectedStudyType`/`detectedStudyType`
+      // para guiar al usuario.
+      if (result.error_code === 'STUDY_TYPE_MISMATCH') {
+        return {
+          success: false,
+          // `error` se conserva para retrocompat con callers que sólo
+          // inspeccionan `error` — contiene el mensaje redactado.
+          error:
+            result.error ??
+            result.message ??
+            'Documento incompatible con el estudio seleccionado.',
+          errorCode: 'STUDY_TYPE_MISMATCH',
+          message: result.message ?? result.error ?? null,
+          selectedStudyType: result.selected_study_type ?? null,
+          detectedStudyType: result.detected_study_type ?? null,
+        }
+      }
       return {
         success: false,
         error: result.error || 'Error desconocido en backend V2',
