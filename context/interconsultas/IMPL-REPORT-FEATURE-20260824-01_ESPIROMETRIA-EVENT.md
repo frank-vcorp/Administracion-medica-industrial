@@ -1,71 +1,93 @@
-# IMPL-REPORT — FEATURE-20260824-01
+# IMPL-REPORT — FEATURE-20260824-01 (rev. 1.1)
 
-ID intervención: IMPL-20260824-01
+ID intervención: IMPL-20260824-01 (corrección `IMPLEMENTATION_DEFECT` rev. 1.1)
 ID tarea: FEATURE-20260824-01 (Criterios clínicos de Espirometría en Events)
-SPEC: `context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md` v1
-Discovery refs: FND-20260824-03 (origen); FND-20260821-02 (PDF Sibelmed real)
+SPEC: `context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md` rev. 1.1
 Estado: READY_FOR_VERIFYING
+
+## Defecto detectado (rev. 1 → rev. 1.1)
+
+El usuario verificó visualmente el Event: el bloque `Criterios clínicos de Espirometría` sólo mostraba el sub-bloque `NOTAS DE CALIDAD`. Faltan los 11 criterios individuales (Pico máximo, Forma triangular, Libre de artefactos, Meseta, Tiempo, Repetibilidad FVC < 200, Repetibilidad FEV1 < 200, #Pruebas aceptables, Criterios para Dx, Calidad, Repetibilidad FVC numérica, Repetibilidad FEV1 numérica).
+
+### Causa raíz
+
+`EspirometriaClinicalCriteriaPanel` recibía sólo `extractedData.calidad`. Cuando el snapshot del lote (`extraction-espirometria-rd2026.json`) no expone `repetibilidad_fvc_ml`/`repetibilidad_fev1_ml` ni `pruebas_aceptables` explícitos en `calidad`, el panel no tenía forma de derivarlos de la tabla `parametros[]` (donde sí están M1/M2/M3 de FVC/FEV1). El payload real SÍ contiene las maniobras; sólo que en la clave `parametros[]`, no en `calidad`.
+
+La SPEC rev. 1.1 (sección §2.1) formaliza el cálculo determinista obligatorio desde `parametros[]`.
+
+### Corrección aplicada
+
+- `EspirometriaClinicalCriteriaPanel.tsx`:
+  - Prop cambiada: `calidad: Record<string, unknown>` → `extractedData: Record<string, unknown>`.
+  - Nuevo helper exportado `computeRepetibilidadFromRow(row)`:
+    - Toma los 2 valores más altos de `m1/m2/m3` de la fila `parametros`.
+    - `diffMl` = diferencia × 1000 sólo si `unidad === 'L'` (no se inventa unidad).
+    - `pruebas` = # de maniobras válidas (finitas).
+  - Nuevo helper exportado `resolveCriteria(extractedData)`:
+    - `repetibilidad_fvc_ml`/`fev1_ml`: extraído en `calidad` **gana** sobre cálculo desde `parametros`.
+    - `repetibilidad_<200`: extraído en `calidad` gana; si no, derivado como `Sí`/`No` del diff.
+    - `pruebas_aceptables`: extraído gana; si no, count de M1/M2/M3 de la fila FVC (fallback FEV1).
+    - Cualitativos (Pico máximo, Forma triangular, Libre de artefactos, Meseta, Tiempo, Criterios para Dx, Calidad): **NO se infieren** desde la tabla numérica — sólo se muestran si vienen del payload; si no, label visible con `—`.
+  - Layout reorganizado para coincidir con la segunda imagen:
+    1. **Repetibilidad numérica** (FVC ml, FEV1 ml) — primero.
+    2. **Indicadores de calidad** (8 badges SI/NO: <200 FVC, <200 FEV1, Pico, Forma, Libre, Meseta, Tiempo, Criterios).
+    3. **Resumen de aceptabilidad** (#Pruebas, Calidad).
+    4. **Notas de calidad** (si existen).
+    5. **Texto fuente del documento** (sólo si `impresion_diagnostica_texto`/`recomendaciones_texto` presentes; marbete explícito "no es diagnóstico IA").
+  - Atributos `data-testid` para E2E: `repetibilidad-fvc-ml`, `repetibilidad-fev1-ml`, `pruebas-aceptables`.
+  - Etiqueta visible pequeña "PDF" / "calc." para auditoría del origen (extraído vs derivado).
+- `PapeletaWorkspace.tsx`: prop del componente actualizada para pasar `extractedData` raíz en lugar de `calidad.calidad`. Sin tocar el resto del flujo.
+- `extraction-presentation-schemas.ts`: **NO modificado** — el panel usa `resolveCriteria` propio; no se expone nada al renderer clínico general (contrato protegido).
+- `StudyAIPrediagnosisPanel.tsx`: sin cambios (rev. 1.0 sigue vigente).
 
 ## Archivos modificados
 
-- `frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx` (nuevo): componente presentacional puro que lee `extractedData.calidad` y renderiza los 11 criterios del PDF más el marbete explícito "Texto fuente del documento (no es diagnóstico IA)" si el payload expone `impresion_diagnostica_texto` / `recomendaciones_texto`. Sin recálculos ni reinterpretación clínica. Tolerante a payload parcial/histórico (ausencia de campos → no se renderiza el bloque, sin placeholders ni valores inventados).
-- `frontend/src/components/clinical/PapeletaWorkspace.tsx`: +19 líneas — import del nuevo componente y bloque presentacional insertado en la **columna derecha** del grid de estudios documentales, **entre el visor (`StudyDocumentViewer`) y `StudyAIPrediagnosisPanel`**. Sólo se renderiza cuando `getCanonicalAIStudyType(test) === 'Espirometria'` y existe `extractionSnapshot` con claves conocidas (helper `hasRenderableEspirometriaCriteria`).
-- `frontend/src/components/clinical/StudyAIPrediagnosisPanel.tsx`: +11/-3 líneas — atributo `open` agregado a los tres `<details>` (Justificación, Limitaciones, Fuentes clínicas). Contrato IA y modo sombra clínica intactos (guardrail "Modo sombra clínica" sigue visible; el contrato `AIPrediagnosisData` no cambia).
-- `frontend/src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts` (nuevo): 14 casos — cubren AC-1, AC-2, AC-3, AC-5, AC-6 (helper discriminador), texto fuente del documento, notas de calidad como string/objeto, valores booleanos NO y enteros sin decimales forzados.
-- `frontend/src/components/clinical/__tests__/StudyAIPrediagnosisPanel.open-details.test.ts` (nuevo): 3 casos — AC-4 (los 3 `<details>` inician con `open`), guardrail del modo sombra intacto, ausencia de datos → no se renderizan `<details>` vacíos.
-
-## Contratos afectados
-
-- **Protegidos (no tocados):** schema Prisma, migraciones, endpoints, persistencia, `extractedData`, `fuente_texto_crudo`, modo sombra clínica, revisión médica, renderer de Audiometría, `StudyPresentationSchema`.
-- **Aceptablemente modificados:** presentación UI de Events para estudios Espirometría (nuevo bloque) y estado inicial de tres `<details>` en el panel IA (acordado por la SPEC §3).
+- `frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx` — rediseño completo del componente (~470 líneas).
+- `frontend/src/components/clinical/PapeletaWorkspace.tsx` — cambio de prop (`calidad` → `extractedData`); +1/-1 línea efectiva.
+- `frontend/src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts` — reescrito completo con 31 tests cubriendo SPEC rev. 1.1.
+- `frontend/src/components/clinical/__tests__/StudyAIPrediagnosisPanel.open-details.test.ts` — sin cambios (3 tests siguen pasando).
 
 ## Validación
 
-- **baseline:** PASS — antes de editar, `npx tsc --noEmit` y suite frontend estaba verde para los archivos en alcance (los 15 fallos preexistentes en `medical-exam.actions.test.ts` son ajenos y ya existían en `9df05fb` HEAD sin mis cambios, confirmado con `git stash` + rerun).
-- **build/typecheck:** PASS — `npx tsc --noEmit` (frontend) sin errores tras las 3 ediciones (componente nuevo + PapeletaWorkspace + StudyAIPrediagnosisPanel).
-- **tests focales (V1):** PASS — `npx vitest run src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts src/components/clinical/__tests__/StudyAIPrediagnosisPanel.open-details.test.ts` → 17/17 PASS (14 criterios + 3 panel IA).
-- **tests (V2):** PASS-EN-ALCANCE — `npx vitest run` → 713 PASS / 15 FAIL preexistentes en `src/actions/__tests__/medical-exam.actions.test.ts` (Zod schema `ImpresiónAptitudSchema` legacy con campos `estado_nutricional`/`salud_bucal` no aceptados; falla idéntica con `git stash`, sin regresión introducida por este incremento).
-- **lint:** N/A — `package.json` define `"lint": "eslint"` pero el repo no trae `.eslintrc` operativo (verificado por convención del proyecto); no se solicitó ejecutar lint en el handoff.
-- **smoke/E2E (V3):** NO EJECUTADA — corresponde a GEMINI en el gate final sobre el Event real con `context/RD2026/ESPIROMETRIA.pdf` (Playwright + consola/network). Señalado abajo.
+- **typecheck:** PASS — `npx tsc --noEmit` sin errores.
+- **tests focales (V1):** PASS — 34/34 (31 del panel rediseñado + 3 del panel IA con `details open`).
+  - AC-2 con payload real: `FVC 30.00`, `FEV1 40.00`, ambos `Sí`, `3` pruebas.
+  - AC-5 payload parcial: extraído gana sobre calculado; cualitativos no se infieren.
+  - AC-6: discriminación Audiometría vs Espirometría.
+  - Helper puro `computeRepetibilidadFromRow` cubre 6 casos (orden de maniobras, una sola maniobra, sin fila, unidad distinta de L, valores reales del PDF Sibelmed).
+  - Tests de precedencia extraído > calculado cubren 5 escenarios.
+- **V2 suite frontend:** no reejecutada en este incremento (presupuesto §11; V2 ya fue PASS-en-alcance en rev. 1.0; sólo cambia un prop y un componente UI sin acoplar a otros archivos). Sin delta de riesgo vs rev. 1.0.
+- **V3 Playwright:** pendiente — sigue correspondiendo al gate final de GEMINI sobre el expediente real con `context/RD2026/ESPIROMETRIA.pdf`. Ahora el panel SÍ tiene `data-testid` propios (`repetibilidad-fvc-ml`, `repetibilidad-fev1-ml`, `pruebas-aceptables`) para assertions deterministas.
 
-## Trazabilidad (AC → evidencia)
+## Trazabilidad (AC → evidencia) rev. 1.1
 
 | AC | Cobertura |
 |---|---|
-| AC-1 — Criterios visibles antes de `Prediagnóstico IA` con `context/RD2026/ESPIROMETRIA.pdf` | `PapeletaWorkspace.tsx` líneas ~1506-1524 (inserción del bloque en columna derecha, entre visor y panel IA). Test "AC-1: renderiza el bloque cuando hay criterios válidos". V3 GEMINI pendiente. |
-| AC-2 — FVC 30 ml y FEV1 40 ml | Test "AC-2: muestra FVC 30 ml y FEV1 40 ml cuando están presentes" verifica `>30<…ml` y `>40<…ml` para `data-criteria-key="Repetibilidad FVC"` / `…FEV1"`. |
-| AC-3 — 3 pruebas aceptables y calidad A | Test "AC-3: muestra 3 pruebas aceptables y calidad A…" verifica `>3<` en `#Pruebas aceptables` y `>A<` en `Calidad`. Cobertura completa de los 8 criterios SI/NO. |
-| AC-4 — Justificación, Limitaciones y Fuentes clínicas desplegadas | Test "Justificación, Limitaciones y Fuentes clínicas inician con atributo open" cuenta `≥ 3` matches `<details … open>`; texto visible de las tres secciones verificado. |
-| AC-5 — Payload parcial/histórico sin invención | 4 tests: "payload parcial sin campos conocidos NO genera render ni excepción" (null/undefined/{} sin claves conocidas → `''`), "payload parcial con sólo pruebas_aceptables + calidad" (sin `ml` cuando no hay repetibilidad numérica), "Notas de calidad como objeto (legacy)" (aplanamiento seguro). |
-| AC-6 — Audiometría y otros tipos conservan comportamiento actual | Helper `hasRenderableEspirometriaCriteria` discrimina: aplica `false` para un payload tipo Audiometría con `oido_derecho` + `completitud_documental` (no son claves del namespace de criterios de espirometría). `PapeletaWorkspace.tsx` sólo renderiza el bloque si `getCanonicalAIStudyType(test) === 'Espirometria'`. |
-| AC-7 — Typecheck y tests focales frontend pasan | PASS — `tsc --noEmit` sin errores; 17/17 tests focales PASS. |
+| AC-1 — Criterios visibles antes de `Prediagnóstico IA` | Tests `AC-1: renderiza el bloque…`; ubicación física del bloque en `PapeletaWorkspace.tsx` (columna derecha, entre visor y panel IA, sin cambios vs rev. 1.0). |
+| AC-2 — FVC 30 ml y FEV1 40 ml | Test `AC-2: muestra FVC 30.00 ml y FEV1 40.00 ml calculados desde parametros[]` + helper test `FVC: diff entre 2 valores más altos = 30 ml` y `FEV1: … = 40 ml`. **Con el PDF Sibelmed ahora se muestran exactamente `30.00` y `40.00`** (toFixed(2) sobre diff L×1000). |
+| AC-3 — 3 pruebas aceptables y calidad A | Test `AC-3: muestra 3 pruebas aceptables derivado de M1/M2/M3 presentes` verifica `data-criteria-value="3"`. Calidad A cubierta por `AC-3: muestra calidad A`. |
+| AC-4 — `details open` | Test `Justificación, Limitaciones y Fuentes clínicas inician con atributo open` cuenta `≥ 3` matches `<details … open>`. |
+| AC-5 — Payload parcial sin inflar | 4 tests: `Sin extractionSnapshot…`, `Sin parametros[] ni calidad`, `Sólo calidad sin parametros (no infla numéricos)`, `Sólo parametros[] (calcula + "—" para cualitativos ausentes)`. |
+| AC-6 — Audiometría y otros tipos | `hasRenderableEspirometriaCriteria` testea Audiometría → false; Espirometría → true; null/undefined → false. |
+| AC-7 — Typecheck + tests focales PASS | PASS — `tsc --noEmit` limpio, 34/34 tests focales PASS. |
 
-## Riesgos y desviaciones
+## Cumplimiento §2.1 (cálculos deterministas)
 
-- **Riesgo bajo:** cambio puramente presentacional sobre snapshots existentes. Renderiza tolerancia a payload parcial. No introduce claves nuevas al contrato extractivo, ni recalcula `repetibilidad_fvc_ml`/`repetibilidad_fev1_ml` (los lee directamente del snapshot).
-- **Texto fuente del documento:** si el payload NO expone `impresion_diagnostica_texto`/`recomendaciones_texto` (caso actual del fixture `extraction-espirometria-rd2026.json`), el bloque D no se renderiza y NO se inventa. Si el payload los expone, se renderizan dentro de un contenedor amber explícitamente etiquetado como "Texto fuente del documento (no es diagnóstico IA)". El médico conserva el control de aptitud/dictamen.
-- **Enteros sin decimales forzados:** `Number.isInteger(n)` muestra 30/40 en lugar de 30.00/40.00. Coherente con la presentación de la página AMI y con la lectura clínica habitual; el test fue ajustado para reflejarlo y la SPEC no exige decimales fijos.
-- **V3 Playwright NO ejecutada** desde SOFIA: queda en el gate final de GEMINI sobre el Event real con el PDF Sibelmed, según `HANDOFF_FEATURE-20260824-01_SOFIA_ESPIROMETRIA-EVENT.md` §Validaciones. Sin autorización para ejecutarla en este incremento.
-- **No-detectado SPEC-GAP técnico.**
+- ✅ `repetibilidad_fvc_ml`: diff top-2 FVC × 1000 (L → ml). Con payload Sibelmed: `30.00 ml`.
+- ✅ `repetibilidad_fev1_ml`: idem FEV1. Con payload Sibelmed: `40.00 ml`.
+- ✅ `repetibilidad_fvc_menor_200`: `Sí` cuando diff < 200 ml. Con payload Sibelmed: `Sí`.
+- ✅ `repetibilidad_fev1_menor_200`: idem. Con payload Sibelmed: `Sí`.
+- ✅ `pruebas_aceptables`: count de M1/M2/M3 finitos de la fila FVC. Con payload Sibelmed: `3`.
+- ✅ Cualitativos sólo si vienen del payload (no inferencia silenciosa desde tabla numérica).
+- ✅ Si el extractor ya emitió `repetibilidad_fvc_ml`/`fev1_ml`/`pruebas_aceptables`/`<200` en `calidad`, esos ganan sobre el cálculo.
 
-## Requiere GEMINI: sí (V3 gate)
+## Riesgos y notas de reversión
 
-Regla aplicable: §5 SOFIA — "cambio toca UI clínico sobre Events con datos de extracción y cambia el panel IA pre-existente". Aunque es presentacional, conviene verificación independiente del orden visual y del estado `open` con Playwright sobre el expediente real (Olvera/Jorge del lote nocturno o uno equivalente) cargando `context/RD2026/ESPIROMETRIA.pdf`. Esto complementa AC-1/AC-4 sin que SOFIA pueda ejecutar el flujo de carga.
-
-## Requiere DEBY: no
-
-Sin bug reproducible; sin causa raíz de runtime. El cambio es declarativo (atributo `open`) y tolerante a payload parcial.
+- Riesgo bajo: presentacional sobre snapshot existente, sin tocar extractor, persistencia ni calibración publicada. Extracción real gana sobre derivación (consistente con §2.1).
+- Numeración float: la diff se calcula con floats JS (`2.33 - 2.30 = 0.03000000000000025`), pero el render visible usa `toFixed(2)` → muestra `30.00` exacto. Los tests verifican ambos: visible (`>30.00<`) y atributo crudo (`data-criteria-value="30…"`).
+- No se introdujo dependencia nueva, lockfile no modificado, sin migraciones, sin deploy, sin commit/push (siguiendo la orden de Frank; el commit anterior ya fue publicado y ATLAS integrará el nuevo corte).
 
 ## Pendientes ATLAS
 
-1. Decidir si conserva los snapshots congelados del lote (`extraction-espirometria-rd2026.json` no expone `impresion_diagnostica_texto` aún) o si reabre el extractor para emitir el texto fuente cuando exista en el PDF (FND-20260824-03 lo menciona como opcional).
-2. Gate GEMINI V3 sobre Playwright con `context/RD2026/ESPIROMETRIA.pdf`.
-3. Confirmar archivado/limpieza del expediente Olvera/Jorge (FND-20260824-01) antes de cualquier prueba clínica nueva — Frank tiene la palabra.
-
-## Notas de reversión
-
-Rollback 100% presentacional:
-- Quitar el import y el bloque JSX agregado en `PapeletaWorkspace.tsx` (3 líneas netas de import + 13 del bloque).
-- Quitar los tres atributos `open` en `StudyAIPrediagnosisPanel.tsx` (3 cambios `open` removidos).
-- Eliminar `EspirometriaClinicalCriteriaPanel.tsx` y los dos `__tests__/*.test.ts`.
-Sin migración, sin datos, sin impacto en backend ni en snapshots persistidos.
+1. Gate V3 Playwright (GEMINI) sobre el Event real con `context/RD2026/ESPIROMETRIA.pdf`; ahora se cuenta con `data-testid` deterministas para asserts Playwright.
+2. Confirmar archivado del expediente Olvera/Jorge (FND-20260824-01) antes de cualquier prueba clínica nueva — Frank.

@@ -1525,14 +1525,14 @@ function StudyPanel({
 
             {/* IMPL-20260824-01 (FEATURE-20260824-01): criterios clínicos de
                 Espirometría. Sólo se muestra cuando el tipo canónico es
-                Espirometría y existe snapshot de extracción con campos
-                conocidos. Tolerante a payload parcial/histórico: si no hay
-                datos, no se renderiza y NO inventa valores. */}
+                Espirometría y existe snapshot de extracción. Pasa el
+                `extractedData` raíz para que el panel pueda derivar
+                repetibilidad numérica desde `parametros[]` cuando no esté
+                pre-extraída en `calidad`. Tolerante a payload parcial. */}
             {getCanonicalAIStudyType(test) === 'Espirometria' && test.extractionSnapshot ? (
               <EspirometriaClinicalCriteriaPanel
-                calidad={
-                  (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined)
-                    ?.calidad as Record<string, unknown> | null ?? null
+                extractedData={
+                  (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined) ?? null
                 }
                 version={test.extractionSnapshot.version}
               />
