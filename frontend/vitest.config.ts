@@ -18,7 +18,11 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/__tests__/**/*.test.ts', 'src/**/*.test.ts'],
+    include: [
+      'src/**/__tests__/**/*.test.ts',
+      'src/**/*.test.ts',
+      'scripts/__tests__/**/*.test.ts',
+    ],
     globals: true,
   },
 })
