@@ -48,6 +48,7 @@
  * campo ausente se muestra con placeholder "—" sin lanzar excepciones.
  *
  * @id IMPL-20260824-01
+ * @id IMPL-20260824-05 — Fix precedencia booleanos ≤150 (derivan SIEMPRE del numérico)
  * @backup context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md (rev. 1.3)
  */
 import type { CSSProperties, ReactElement } from "react"
@@ -467,22 +468,44 @@ export function resolveCriteria(
     fev1Extracted !== null ? "extracted" : fev1Calc.diffMl !== null ? "computed" : "missing"
 
   // --- Booleanos ≤150 (Sí/No) — BR-20260824-01 ---
-  // Preferir extraído de calidad. Acepta ambas claves históricas para
-  // compat con snapshots previos (`..._menor_200` con etiqueta clínica
-  // "<200" usada en algunos formatos AMI), pero la regla activa es 150 ml.
-  const menor150FvcExtracted =
-    normalizeSiNo(calidad?.repetibilidad_fvc_menor_150) ??
-    normalizeSiNo(calidad?.repetibilidad_fvc_menor_200)
-  const menor150FvcComputed = isWithinAmiThreshold(repetibilidadFvcMl)
+  // REGLA DE PRECEDENCIA (IMPL-20260824-05 — fix v6 captura Sibelmed):
+  //   Los flags `Repetibilidad FVC/FEV1 ≤ 150 ml` se derivan SIEMPRE del
+  //   valor numérico (`repetibilidadFvcMl` / `repetibilidadFev1Ml`) aplicando
+  //   el umbral AMI ≤ 150 ml (BR-20260824-01).
+  //
+  //   `repetibilidadFvcMl`/`repetibilidadFev1Ml` ya respetan la fuente
+  //   numérica explícita del documento (`calidad.repetibilidad_fvc_ml` /
+  //   `_fev1_ml`) cuando existe; en caso contrario se calculan desde la
+  //   tabla `parametros[]` (top-2 sobre m1/m2/m3 × 1000).
+  //
+  //   NO se consultan como verdad las claves `calidad.repetibilidad_*_menor_150`
+  //   ni la legacy `*_menor_200`: el extractor (incluso v4→v5) las puede
+  //   poblar copiando "Repetibilidad ATS/ERS: No" de la imagen embebida del
+  //   Sibelmed W20s, criterio distinto y a veces contradictorio con la
+  //   diferencia numérica real entre M1/M2/M3. Ese flag binario ATS/ERS del
+  //   equipo es un criterio aparte (ya visible en "Calidad técnica del
+  //   estudio" vía `extraction-presentation-schemas.ts` como
+  //   `repetibilidad_ats_ers_fvc`/`_fev1`) y NO debe sobrescribir el
+  //   criterio AMI del panel.
+  //
+  //   Caso Sibelmed RD2026 (defecto v6): el extractor copia
+  //   `repetibilidad_fvc_menor_200: "SI"` y la imagen embebida dice
+  //   "Repetibilidad ATS/ERS: FVC: No", pero los vectores PDF muestran
+  //   "Repetibilidad FVC: 30.00 ml / FEV1: 40.00 ml". Con la regla anterior
+  //   el panel mostraba NO/NO por copiar el flag ATS/ERS; con la nueva
+  //   muestra SI/SI por derivar del numérico (30/40 ≤ 150).
   const repetibilidadFvcMenor150: "SI" | "NO" | null =
-    menor150FvcExtracted ?? (menor150FvcComputed === null ? null : menor150FvcComputed ? "SI" : "NO")
-
-  const menor150Fev1Extracted =
-    normalizeSiNo(calidad?.repetibilidad_fev1_menor_150) ??
-    normalizeSiNo(calidad?.repetibilidad_fev1_menor_200)
-  const menor150Fev1Computed = isWithinAmiThreshold(repetibilidadFev1Ml)
+    repetibilidadFvcMl === null
+      ? null
+      : isWithinAmiThreshold(repetibilidadFvcMl)
+      ? "SI"
+      : "NO"
   const repetibilidadFev1Menor150: "SI" | "NO" | null =
-    menor150Fev1Extracted ?? (menor150Fev1Computed === null ? null : menor150Fev1Computed ? "SI" : "NO")
+    repetibilidadFev1Ml === null
+      ? null
+      : isWithinAmiThreshold(repetibilidadFev1Ml)
+      ? "SI"
+      : "NO"
 
   // --- #Pruebas aceptables ---
   const pruebasExtracted = asFiniteNumber(calidad?.pruebas_aceptables)

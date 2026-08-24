@@ -451,33 +451,136 @@ describe('resolveCriteria — extraído gana sobre calculado', () => {
     expect(c.repetibilidadFvcMenor150).toBe('NO')
   })
 
-  it('boolean extraído en calidad gana sobre cálculo (clave canónica _menor_150)', () => {
+  it('boolean extraído en calidad NO sobrescribe el cálculo numérico (IMPL-20260824-05)', () => {
+    // Defecto v6 captura Sibelmed: el extractor podía copiar
+    // `repetibilidad_fvc_menor_150: 'NO'` desde el flag ATS/ERS de la imagen
+    // embebida. Bajo IMPL-20260824-05 el panel SIEMPRE deriva el boolean
+    // del valor numérico (repetibilidadFvcMl), así que `calidad.*_menor_150`
+    // queda IGNORADO como fuente de verdad (es un criterio distinto del
+    // AMI ≤ 150 ml del panel). ATS/ERS se conserva aparte vía el renderer
+    // (`repetibilidad_ats_ers_fvc`).
     const c = resolveCriteria({
       calidad: { repetibilidad_fvc_menor_150: 'NO' },
       parametros: [
-        { key: 'fvc_l', unidad: 'L', m1: 2.3, m2: 2.31, m3: 2.32 }, // diff = 20 ml → Sí (cálculo)
+        // top-2 = 2.32 y 2.30 → diff = 0.02 L = 20 ml
+        { key: 'fvc_l', unidad: 'L', m1: 2.28, m2: 2.32, m3: 2.30 },
       ],
     })
-    expect(c.repetibilidadFvcMenor150).toBe('NO')
-  })
-
-  it('Backwards compat: payload con clave legacy _menor_200 se acepta como fallback', () => {
-    const c = resolveCriteria({
-      calidad: { repetibilidad_fvc_menor_200: 'SI' },
-      // Sin parametros para forzar el fallback a la clave legacy.
-    })
+    // Numérico 20 ml ≤ 150 → SI, ignorando el boolean extraído.
+    expect(c.repetibilidadFvcMl).toBeCloseTo(20, 5)
     expect(c.repetibilidadFvcMenor150).toBe('SI')
   })
 
-  it('Precedencia: clave canónica _menor_150 gana sobre _menor_200 legacy', () => {
+  it('Legacy _menor_200 ya NO se acepta como fallback del boolean (IMPL-20260824-05)', () => {
+    // Antes: la clave legacy `repetibilidad_fvc_menor_200` sustentaba el
+    // boolean cuando no había numérico. Ahora el panel NO consulta esas
+    // claves como verdad — sólo el numérico. Sin numérico → null.
+    const c = resolveCriteria({
+      calidad: { repetibilidad_fvc_menor_200: 'SI' },
+    })
+    expect(c.repetibilidadFvcMenor150).toBe(null)
+  })
+
+  it('Sin numérico ni calidad numérica → null (IMPL-20260824-05)', () => {
+    // Aunque calidad declare ambas claves booleanas, sin numérico no hay
+    // base para derivar el AMI ≤ 150.
     const c = resolveCriteria({
       calidad: {
         repetibilidad_fvc_menor_150: 'NO',
-        repetibilidad_fvc_menor_200: 'SI', // legacy
+        repetibilidad_fvc_menor_200: 'SI',
       },
-      // Sin parametros para no entrar al cálculo derivado.
     })
+    expect(c.repetibilidadFvcMl).toBe(null)
+    expect(c.repetibilidadFvcMenor150).toBe(null)
+  })
+
+  it('CASO V6 SIBELMED: repetibilidad 30/40 ml + flag ATS/ERS NO extraído → resuelve SI/SI', () => {
+    // Reproducción exacta del defecto visible en la captura v6:
+    //   - El extractor copia el flag ATS/ERS de la imagen embebida
+    //     (`repetibilidad_ats_ers_fvc: 'No'`) en claves booleanas.
+    //   - Los vectores PDF dicen "Repetibilidad FVC: 30.00 ml /
+    //     FEV1: 40.00 ml" (transcrito a `repetibilidad_fvc_ml: 30` y
+    //     `repetibilidad_fev1_ml: 40`).
+    //   - El panel antes mostraba NO/NO por copiar el flag; ahora SI/SI
+    //     por derivar del numérico (30/40 ≤ 150).
+    const c = resolveCriteria({
+      calidad: {
+        // Simula el extractor post-v4 que copió el flag ATS/ERS a la
+        // clave canónica (defecto v6):
+        repetibilidad_fvc_menor_150: 'NO',
+        repetibilidad_fev1_menor_150: 'NO',
+        // Y también quedó el flag legacy _menor_200 con la lectura
+        // histórica del documento ("SI"), irrelevante bajo la nueva regla.
+        repetibilidad_fvc_menor_200: 'SI',
+        repetibilidad_fev1_menor_200: 'SI',
+        // Repetibilidad ATS/ERS del equipo (criterio aparte; ya se renderiza
+        // vía `extraction-presentation-schemas.ts`):
+        repetibilidad_ats_ers_fvc: 'No',
+        repetibilidad_ats_ers_fev1: 'No',
+        // Valor numérico explícito del documento (vector PDF):
+        repetibilidad_fvc_ml: 30,
+        repetibilidad_fev1_ml: 40,
+        pruebas_aceptables: 3,
+      },
+      parametros: [
+        { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.30, m2: 2.33, m3: 2.26 },
+        { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.15, m2: 2.11, m3: 2.09 },
+      ],
+    })
+    // Numéricos preservados (ganan sobre cálculo porque vienen del PDF).
+    expect(c.repetibilidadFvcMl).toBe(30)
+    expect(c.repetibilidadFev1Ml).toBe(40)
+    expect(c.repetibilidadFvcSource).toBe('extracted')
+    expect(c.repetibilidadFev1Source).toBe('extracted')
+    // Booleanos derivados del NUMÉRICO (NO del ATS/ERS del equipo).
+    // 30 ml ≤ 150 → SI; 40 ml ≤ 150 → SI.
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+    expect(c.repetibilidadFev1Menor150).toBe('SI')
+    // pruebas_aceptables explícito gana (3 maniobras en FVC).
+    expect(c.pruebasAceptables).toBe(3)
+  })
+
+  it('CASO V6 SIBELMED (cálculo puro, sin numérico en calidad): 30/40 ml calculados + flag NO → SI/SI', () => {
+    // Variante: el extractor NO entrega el numérico explícito
+    // (repetibilidad_fvc_ml), sólo el flag ATS/ERS copiado a _menor_150.
+    // El panel calcula 30/40 ml desde `parametros[]` y deriva SI/SI.
+    const c = resolveCriteria({
+      calidad: {
+        repetibilidad_fvc_menor_150: 'NO',
+        repetibilidad_fev1_menor_150: 'NO',
+      },
+      parametros: [
+        { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.30, m2: 2.33, m3: 2.26 },
+        { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.15, m2: 2.11, m3: 2.09 },
+      ],
+    })
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.repetibilidadFvcSource).toBe('computed')
+    expect(c.repetibilidadFev1Source).toBe('computed')
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+    expect(c.repetibilidadFev1Menor150).toBe('SI')
+  })
+
+  it('CASO V6 SIBELMED: diff 200/210 ml + flag NO extraído → NO/NO (umbral respetado)', () => {
+    // Garantía: aunque el extractor haya copiado SI a _menor_150, un diff
+    // real > 150 ml produce NO (no es el flag copiado el que decide).
+    const c = resolveCriteria({
+      calidad: {
+        repetibilidad_fvc_menor_150: 'SI', // copia contradictoria
+        repetibilidad_fev1_menor_150: 'SI',
+      },
+      parametros: [
+        // top-2 FVC = 2.4 y 2.2 → diff = 0.2 L = 200 ml → NO
+        { key: 'fvc_l', unidad: 'L', m1: 2.0, m2: 2.2, m3: 2.4 },
+        // top-2 FEV1 = 2.32 y 2.11 → diff = 0.21 L = 210 ml → NO
+        { key: 'fev1_l', unidad: 'L', m1: 2.0, m2: 2.11, m3: 2.32 },
+      ],
+    })
+    expect(c.repetibilidadFvcMl).toBeCloseTo(200, 5)
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(210, 5)
     expect(c.repetibilidadFvcMenor150).toBe('NO')
+    expect(c.repetibilidadFev1Menor150).toBe('NO')
   })
 })
 
