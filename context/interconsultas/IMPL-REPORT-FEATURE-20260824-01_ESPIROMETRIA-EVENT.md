@@ -189,6 +189,70 @@ FEV1: (2.15 − 2.11) × 1000 = 40.00 ml
 
 ---
 
+# IMPL-REPORT — mini-corte: ocultar NOTAS DE CALIDAD + prompt Railway
+
+- **ID intervención:** `IMPL-20260824-01` (mini-corte presentacional + actualización de prompt en Railway, mismo incremento)
+- **SPEC:** `context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md` rev. 1.2 (sin cambio de SPEC)
+- **Estado:** `READY_FOR_VERIFYING`
+
+## Cambios
+
+### 1) `EspirometriaClinicalCriteriaPanel.tsx` — ocultar bloque NOTAS DE CALIDAD
+
+- Eliminado el JSX del bloque "Notas de calidad".
+- `resolveCriteria` SIGUE leyendo `notas_calidad` del snapshot (`c.notasCalidad`) para conservarlo en auditoría / payload persistido. Sólo se retira el render visual.
+- Comentario inline留下的 con la referencia al IMPL-REPORT para auditoría de código.
+
+### 2) `frontend/scripts/update-espirometria-extraction-prompt.ts` — nuevo prompt v3
+
+- Patrón heredado de `update-audiometria-extraction-prompt.ts`:
+  - Lee MedicalTest, fusiona `options.aiCalibration` preservando todo lo demás.
+  - Sólo modifica `extraction.prompt` y `extraction.version`.
+  - Reporta pre/post (versión previa, tamaño previo, claves preservadas, top-level, `prediagnostico`/`normalization`).
+- Nueva versión: `espirometria-sibelmed-v3` (antes `espirometria-sibelmed-v2`).
+- Prompt v3 (5601 chars) añade, dentro de `calidad`, las claves que el panel renderiza:
+  `pico_maximo`, `forma_triangular`, `libre_artefactos`, `meseta`, `tiempo`,
+  `repetibilidad_fvc_menor_150`, `repetibilidad_fev1_menor_150`,
+  `pruebas_aceptables`, `criterios_para_dx`, `calidad`,
+  `impresion_diagnostica`, `recomendaciones`.
+- Reglas explícitas del prompt:
+  - Null si no es visible en el reporte; nunca inventar.
+  - El cálculo numérico de repetibilidad en ml sigue siendo responsabilidad del panel (`parametros[]` → top-2 → `× 1000`).
+  - `impresion_diagnostica` y `recomendaciones` son TEXTO FUENTE del documento médico, nunca salida IA.
+- NO crea/modifica `aiCalibration.prediagnostico` ni `aiCalibration.normalization` (no existían antes; tampoco los crea ahora).
+
+## Archivos modificados
+
+- `frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx` — bloque JSX "Notas de calidad" eliminado; comentario inline.
+- `frontend/src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts` — nuevo `describe` "NOTAS DE CALIDAD oculto" (2 tests):
+  - El payload `notas_calidad` NO se renderiza (cadena y data-criteria-key ausentes).
+  - `resolveCriteria` sigue devolviendo `c.notasCalidad` para conservarlo en snapshot/auditoría.
+- `frontend/scripts/update-espirometria-extraction-prompt.ts` — reescrito con prompt v3 y reporte pre/post.
+
+## Ejecución contra Railway (verificación)
+
+- **Comando:** ejecución remota mediante `railway run` con `DATABASE_URL` inyectada; la credencial no se persiste en documentación.
+- **Resultado observado:**
+  - MedicalTest: `ESPIROMETRIA` (`id=273bb1ef-0973-4f92-b762-e6a54cd98852`).
+  - Versión previa `extraction.version`: `espirometria-sibelmed-v2` (2629 chars).
+  - Versión nueva `extraction.version`: `espirometria-sibelmed-v3` (5601 chars).
+  - Top-level preservado: `[enabled, diagnosis, extraction, canonicalStudyType]`.
+  - `extraction.*` preservado: `[model, prompt, version, provider, schemaVersion]`.
+  - `prediagnostico`/`normalization` siguen ausentes (sin creación).
+  - Las 12 claves cualitativas nuevas (`pico_maximo`, `forma_triangular`, `libre_artefactos`, `meseta`, `tiempo`, `repetibilidad_fvc_menor_150`, `repetibilidad_fev1_menor_150`, `pruebas_aceptables`, `criterios_para_dx`, `calidad`, `impresion_diagnostica`, `recomendaciones`) verificadas `OK` dentro del nuevo prompt remoto.
+
+## Validación
+
+- **typecheck:** PASS — `npx tsc --noEmit` sin errores.
+- **tests focales (V1):** PASS — 59/59 (56 panel + 3 IA).
+- **V2/V3:** sin cambios estructurales en frontend (sólo JSX de un bloque quitado + script de migración de prompt). La verificación del flujo real con nuevo prompt queda pendiente del gate V3 Playwright que GEMINI ejecute sobre un Event con PDF Sibelmed.
+
+## Estado
+
+**READY_FOR_VERIFYING.** Sin commit/push.
+
+---
+
 # IMPL-REPORT — FEATURE-20260824-01 (rev. 1.4 — IMPLEMENTATION_DEFECT upstream)
 
 - **ID intervención:** `IMPL-20260824-01` (rev. 1.4 — IMPLEMENTATION_DEFECT)

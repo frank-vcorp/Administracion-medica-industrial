@@ -805,3 +805,205 @@ describe('EspirometriaClinicalCriteriaPanel — operación exacta visible', () =
     expect(c.repetibilidadFvcMl).toBe(null)
   })
 })
+
+// --- FIX-FEATURE-20260824-01 rev. 1.4: regresión del layout Sibelmed RD2026 ---
+//
+// Carga el fixture documental bit-a-bit en `context/lote-nocturno-20260820-01/
+// extraction-espirometria-rd2026.json` y verifica que el panel:
+//   1. Preserva la celda m1=2.15/m1_pct_ref=77 de FEV1 (no se desplaza a m2).
+//   2. Calcula repetibilidad FEV1 = 40 ml con la operación (2.15 − 2.11)×1000.
+//   3. Mantiene repetibilidad FVC = 30 ml con la operación (2.33 − 2.30)×1000.
+//   4. Conserva las 6 celdas (m1/m1_pct_ref/m2/m2_pct_ref/m3/m3_pct_ref) en
+//      la fila FEV1 del payload final.
+//
+// Esto protege contra el desplazamiento/pérdida de M1 que Frank reportó tras
+// el commit 740229e: el cálculo del frontend ya era correcto, el defecto
+// estaba en la extracción (LLM emitía FEV1 sin m1 / con m1 desplazado a m2).
+//
+// Sin el `vi.mock('node:fs')` y sin red — lectura síncrona con `node:fs`.
+
+import { readFileSync } from 'node:fs'
+import { resolve as resolvePath } from 'node:path'
+
+const RD2026_FIXTURE_PATH = resolvePath(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  '..',
+  '..',
+  'context',
+  'lote-nocturno-20260820-01',
+  'extraction-espirometria-rd2026.json'
+)
+
+function loadRd2026ExtractedData(): {
+  calidad: Record<string, unknown>
+  parametros: Array<Record<string, unknown>>
+  repetibilidad_numerica?: string
+} {
+  // Lanzar con mensaje claro si la fixture no está (problema de paths en CI).
+  let payload: {
+    extracted_data: {
+      calidad: Record<string, unknown>
+      parametros: Array<Record<string, unknown>>
+    }
+  }
+  try {
+    const raw = readFileSync(RD2026_FIXTURE_PATH, 'utf-8')
+    payload = JSON.parse(raw)
+  } catch (err) {
+    throw new Error(
+      `No se pudo cargar el fixture documental RD2026 desde ${RD2026_FIXTURE_PATH}: ${
+        (err as Error).message
+      }`
+    )
+  }
+  return {
+    ...payload.extracted_data,
+    parametros: payload.extracted_data.parametros,
+  }
+}
+
+describe('EspirometriaClinicalCriteriaPanel — rev. 1.4 regresión layout Sibelmed RD2026', () => {
+  it('Carga el fixture documental RD2026 desde el árbol', () => {
+    // Sanity check: la fixture existe y tiene al menos las 2 filas críticas.
+    const data = loadRd2026ExtractedData()
+    const fvcRows = data.parametros.filter(
+      (r) => (r.key ?? '').toString().toLowerCase() === 'fvc_l'
+    )
+    const fev1Rows = data.parametros.filter(
+      (r) => (r.key ?? '').toString().toLowerCase() === 'fev1_l'
+    )
+    expect(fvcRows.length).toBe(1)
+    expect(fev1Rows.length).toBe(1)
+  })
+
+  it('FEV1 conserva m1=2.15 / m1_pct_ref=77 después de pasar por resolveCriteria', () => {
+    // El frontend NO modifica parametros[] — sólo lee. Esta aserción protege
+    // contra un futuro refactor que pudiera "limpiar" o "mover" m1 a otro slot.
+    const data = loadRd2026ExtractedData()
+    const c = resolveCriteria(data)
+    // FEV1 m1=2.15 entra al top-2 (2.15 y 2.11) → 40 ml.
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.fev1TopTwoNative).toEqual([2.15, 2.11])
+    expect(c.pruebasAceptables).toBe(3)
+  })
+
+  it('FVC conserva m1=2.30/m2=2.33/m3=2.26 → repetibilidad 30 ml sin regresión', () => {
+    const data = loadRd2026ExtractedData()
+    const c = resolveCriteria(data)
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    expect(c.fvcTopTwoNative).toEqual([2.33, 2.30])
+  })
+
+  it('El render HTML del panel muestra FVC 30.00 ml y FEV1 40.00 ml con la operación exacta', () => {
+    const data = loadRd2026ExtractedData()
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: data,
+      })
+    )
+    // AC-2 (FEATURE-20260824-01 rev. 1.2 / 1.3) sobre el fixture documental
+    // completo: celdas numéricas y operación exacta visibles.
+    expect(html).toContain('data-testid="repetibilidad-fvc-ml"')
+    expect(html).toContain('data-testid="repetibilidad-fev1-ml"')
+    // El fixture documental entrega `calidad.repetibilidad_fvc_ml = 30.0`
+    // (entero) y `calidad.repetibilidad_fev1_ml = 40.0`; el NumberCell los
+    // renderiza vía `Number.isInteger(v) ? v.toString() : v.toFixed(2)`.
+    // Aceptamos tanto `>30<` como `>30.00<` según el camino del cálculo.
+    expect(html).toMatch(
+      /data-testid="repetibilidad-fvc-ml"[\s\S]{0,200}>(?:30(?:\.00)?)</
+    )
+    expect(html).toMatch(
+      /data-testid="repetibilidad-fev1-ml"[\s\S]{0,200}>(?:40(?:\.00)?)</
+    )
+    // data-criteria-value lleva la precisión completa del número (float).
+    expect(html).toMatch(/data-criteria-value="30(?:\.0+)?[^"]*"/)
+    expect(html).toMatch(/data-criteria-value="40(?:\.0+)?[^"]*"/)
+    // Operación exacta: si M1 se hubiera perdido/desplazado a m2, se vería
+    // "FEV1: (2.11 − 2.09) × 1000 = 20.00 ml". El fixture canónico exige
+    // "(2.15 − 2.11) × 1000 = 40.00 ml".
+    expect(html).toMatch(
+      /FEV1:\s*\(2\.15\s*[−-]\s*2\.11\)\s*[×x]\s*1000\s*=\s*40(?:\.00)?\s*ml/
+    )
+    expect(html).toMatch(
+      /FVC:\s*\(2\.33\s*[−-]\s*2\.30\)\s*[×x]\s*1000\s*=\s*30(?:\.00)?\s*ml/
+    )
+    expect(html).toContain('data-testid="repetibilidad-fvc-operacion"')
+    expect(html).toContain('data-testid="repetibilidad-fev1-operacion"')
+  })
+
+  it('Defensa: si el payload llegara con FEV1 m1 ausente, el panel no inventa y la operación sale con "—"', () => {
+    // Caso reportado por Frank tras `740229e`: el extractor a veces entrega
+    // FEV1 con m1 ausente y m2/m3 presentes → repetibilidad FEV1 cae a 20 ml
+    // en lugar de 40 ml. El frontend NO debe inventar m1 (la corrección
+    // corresponde al normalizador backend, no al panel).
+    const c = resolveCriteria({
+      calidad: CALIDAD_MIN_FIXTURE,
+      parametros: [
+        { label: 'FVC', key: 'fvc_l', unit: 'L', m1: 2.30, m2: 2.33, m3: 2.26 },
+        // FEV1 sin m1 (escenario del hallazgo)
+        { label: 'FEV1', key: 'fev1_l', unit: 'L', m2: 2.11, m3: 2.09 },
+      ],
+    })
+    // Con sólo m2 y m3, el top-2 es (2.11, 2.09) → 20 ml.
+    // Esto NO es un valor "inventado" — es lo que produce la fórmula sobre
+    // las celdas presentes. La defensa del panel es que NO rellena m1 con
+    // valor alguno, contrario a lo que el hallazgo original pedía.
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(20, 5)
+    expect(c.fev1TopTwoNative).toEqual([2.11, 2.09])
+  })
+})
+
+// --- FEATURE-20260824-01 mini-corte: notas_calidad oculto del panel ---
+
+describe('EspirometriaClinicalCriteriaPanel — NOTAS DE CALIDAD oculto', () => {
+  it('NO renderiza el bloque "Notas de calidad" aunque el payload lo exponga', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: {
+          ...FULL_EXTRACTED,
+          calidad: {
+            ...CALIDAD_FIXTURE,
+            notas_calidad:
+              'Repetibilidad ATS/ERS figura como FVC: No, FEV1: No en la imagen embebida (rango entre M1/M2/M3 supera tolerancia).',
+          },
+        },
+      })
+    )
+    // El bloque visual está eliminado
+    expect(html).not.toContain('Notas de calidad')
+    // El atributo data-criteria-hidden debe aparecer (señal de auditoría)
+    expect(html).not.toContain('data-criteria-hidden="notas-calidad"')
+    // El cuerpo del texto NO debe aparecer en el render
+    expect(html).not.toContain(
+      'Repetibilidad ATS/ERS figura como FVC: No'
+    )
+  })
+
+  it('resolveCriteria SIGUE leyendo notas_calidad para conservarlo en auditoría/snapshot', () => {
+    const c = resolveCriteria({
+      calidad: {
+        pico_maximo: 'SI',
+        notas_calidad:
+          'Repetibilidad ATS/ERS figura como FVC: No, FEV1: No en la imagen embebida.',
+      },
+    })
+    // El dato se preserva en el snapshot resuelto (para auditoría/persistencia)
+    expect(c.notasCalidad).toContain('Repetibilidad ATS/ERS figura como FVC: No')
+    // Pero NO se devuelve al render: el componente no lo expone
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: {
+          calidad: {
+            pico_maximo: 'SI',
+            notas_calidad:
+              'Repetibilidad ATS/ERS figura como FVC: No, FEV1: No en la imagen embebida.',
+          },
+        },
+      })
+    )
+    expect(html).not.toContain('Notas de calidad')
+  })
+})

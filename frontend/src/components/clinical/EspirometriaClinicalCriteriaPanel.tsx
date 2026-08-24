@@ -729,23 +729,13 @@ export default function EspirometriaClinicalCriteriaPanel({
         </div>
       </div>
 
-      {/* === BLOQUE 4: notas de calidad (si están) === */}
-      {c.notasCalidad ? (
-        <div className="bg-white border border-sky-100 rounded-lg p-3 space-y-1">
-          <p
-            className="text-[10px] font-bold text-sky-700 uppercase tracking-wider"
-            style={headerStyle}
-          >
-            Notas de calidad
-          </p>
-          <p
-            className="text-xs text-slate-700 leading-relaxed"
-            data-criteria-key="Notas de calidad"
-          >
-            {c.notasCalidad}
-          </p>
-        </div>
-      ) : null}
+      {/* === BLOQUE 4: notas de calidad — FEATURE-20260824-01 mini-corte ===
+          OCULTO visualmente del panel: `notas_calidad` se SIGUE leyendo del
+          snapshot en `resolveCriteria` (c.notasCalidad) para conservarlo en
+          auditoría / payload persistido, pero NO se renderiza aquí para
+          evitar duplicación con el resto de criterios cualitativos y
+          numéricos (Pico/Forma/Libre/Meseta/Tiempo/Criterios/Calidad).
+          Ver `IMPL-REPORT-FEATURE-20260824-01_ESPIROMETRIA-EVENT.md`. */}
 
       {/* === BLOQUE 5: texto fuente del documento (NO IA) === */}
       {c.impresionTexto || c.recomendacionesTexto ? (
