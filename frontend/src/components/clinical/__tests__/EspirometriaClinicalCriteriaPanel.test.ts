@@ -127,17 +127,19 @@ describe('EspirometriaClinicalCriteriaPanel — AC-1, AC-2, AC-3 con payload rea
     expect(html).toMatch(/>A</)
   })
 
-  it('Repetibilidad FVC < 200 y FEV1 < 200 se muestran como Sí (Sí/No calculado del diff < 200 ml)', () => {
+  it('Repetibilidad FVC ≤ 150 ml y FEV1 ≤ 150 ml se muestran como Sí (BR-20260824-01, diff Sibelmed 30/40 ≤ 150)', () => {
     const html = renderToStaticMarkup(
       createElement(EspirometriaClinicalCriteriaPanel, {
         extractedData: FULL_EXTRACTED,
       })
     )
-    // Labels (HTML-escaped el `<`)
-    expect(html).toContain('Repetibilidad FVC &lt; 200')
-    expect(html).toContain('Repetibilidad FEV1 &lt; 200')
-    // Ambos como Sí (diff 30 y 40 ml son < 200)
-    // El valor Sí aparece en al menos 2 badges
+    // Labels (React NO escapa el unicode `≤`; `&le;` no aplica aquí)
+    expect(html).toContain('Repetibilidad FVC ≤ 150 ml')
+    expect(html).toContain('Repetibilidad FEV1 ≤ 150 ml')
+    // El umbral 200 NO debe aparecer como regla activa (BR-20260824-01)
+    expect(html).not.toContain('Repetibilidad FVC &lt; 200')
+    expect(html).not.toContain('Repetibilidad FEV1 &lt; 200')
+    // Ambos como Sí (diff 30 y 40 ml son ≤ 150)
     const siMatches = html.match(/>SI</g) ?? []
     expect(siMatches.length).toBeGreaterThanOrEqual(2)
   })
@@ -410,48 +412,87 @@ describe('resolveCriteria — extraído gana sobre calculado', () => {
     expect(c.pruebasAceptables).toBe(4)
   })
 
-  it('repetibilidad_<200 se deriva del diff cuando calidad no expone el boolean', () => {
+  it('repetibilidad_≤150 se deriva del diff cuando calidad no expone el boolean (BR-20260824-01)', () => {
     const c = resolveCriteria({
-      parametros: PARAMETROS_FIXTURE, // diff 30 y 40 → <200 → Sí
+      parametros: PARAMETROS_FIXTURE, // diff 30 y 40 ml → ≤ 150 → Sí
     })
-    expect(c.repetibilidadFvcMenor200).toBe('SI')
-    expect(c.repetibilidadFev1Menor200).toBe('SI')
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+    expect(c.repetibilidadFev1Menor150).toBe('SI')
   })
 
-  it('repetibilidad_<200 se deriva como NO si el diff ≥ 200', () => {
+  it('repetibilidad_≤150 se deriva como NO si el diff > 150 ml', () => {
     const c = resolveCriteria({
       parametros: [
-        { key: 'fvc_l', unidad: 'L', m1: 2.0, m2: 2.3, m3: 2.5 }, // diff 200 ml
-        { key: 'fev1_l', unidad: 'L', m1: 2.0, m2: 2.5, m3: 2.6 }, // diff 100 ml → Sí
+        { key: 'fvc_l', unidad: 'L', m1: 2.0, m2: 2.3, m3: 2.5 }, // diff = 200 ml → NO
+        { key: 'fev1_l', unidad: 'L', m1: 2.0, m2: 2.15, m3: 2.3 }, // diff = 150 ml → Sí (inclusivo)
       ],
     })
-    expect(c.repetibilidadFvcMenor200).toBe('NO')
-    expect(c.repetibilidadFev1Menor200).toBe('SI')
+    expect(c.repetibilidadFvcMenor150).toBe('NO')
+    expect(c.repetibilidadFev1Menor150).toBe('SI')
   })
 
-  it('boolean extraído en calidad gana sobre cálculo', () => {
+  it('BR-20260824-01: diff EXACTAMENTE 150 ml → Sí (umbral inclusivo)', () => {
     const c = resolveCriteria({
-      calidad: { repetibilidad_fvc_menor_200: 'NO' },
       parametros: [
-        { key: 'fvc_l', unidad: 'L', m1: 2.3, m2: 2.31, m3: 2.32 }, // diff = 20 ml → Sí
+        { key: 'fvc_l', unidad: 'L', m1: 2.0, m2: 2.15, m3: 2.3 }, // top-2 = 2.15/2.30 → diff = 0.15 L = 150 ml
       ],
     })
-    expect(c.repetibilidadFvcMenor200).toBe('NO')
+    expect(c.repetibilidadFvcMl).toBeCloseTo(150, 5)
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+  })
+
+  it('BR-20260824-01: diff = 151 ml → NO', () => {
+    const c = resolveCriteria({
+      parametros: [
+        { key: 'fvc_l', unidad: 'L', m1: 2.0, m2: 2.0, m3: 2.151 }, // diff = 0.151 L = 151 ml
+      ],
+    })
+    expect(c.repetibilidadFvcMl).toBeCloseTo(151, 1)
+    expect(c.repetibilidadFvcMenor150).toBe('NO')
+  })
+
+  it('boolean extraído en calidad gana sobre cálculo (clave canónica _menor_150)', () => {
+    const c = resolveCriteria({
+      calidad: { repetibilidad_fvc_menor_150: 'NO' },
+      parametros: [
+        { key: 'fvc_l', unidad: 'L', m1: 2.3, m2: 2.31, m3: 2.32 }, // diff = 20 ml → Sí (cálculo)
+      ],
+    })
+    expect(c.repetibilidadFvcMenor150).toBe('NO')
+  })
+
+  it('Backwards compat: payload con clave legacy _menor_200 se acepta como fallback', () => {
+    const c = resolveCriteria({
+      calidad: { repetibilidad_fvc_menor_200: 'SI' },
+      // Sin parametros para forzar el fallback a la clave legacy.
+    })
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+  })
+
+  it('Precedencia: clave canónica _menor_150 gana sobre _menor_200 legacy', () => {
+    const c = resolveCriteria({
+      calidad: {
+        repetibilidad_fvc_menor_150: 'NO',
+        repetibilidad_fvc_menor_200: 'SI', // legacy
+      },
+      // Sin parametros para no entrar al cálculo derivado.
+    })
+    expect(c.repetibilidadFvcMenor150).toBe('NO')
   })
 })
 
 // --- AC-7: cobertura de los 8 indicadores cualitativos SI/NO ---
 
 describe('EspirometriaClinicalCriteriaPanel — cobertura cualitativos', () => {
-  it('Renderiza los 8 indicadores: <200 FVC, <200 FEV1, Pico, Forma, Libre, Meseta, Tiempo, Criterios', () => {
+  it('Renderiza los 8 indicadores: ≤150 FVC, ≤150 FEV1, Pico, Forma, Libre, Meseta, Tiempo, Criterios', () => {
     const html = renderToStaticMarkup(
       createElement(EspirometriaClinicalCriteriaPanel, {
         extractedData: FULL_EXTRACTED,
       })
     )
     for (const label of [
-      'Repetibilidad FVC &lt; 200',
-      'Repetibilidad FEV1 &lt; 200',
+      'Repetibilidad FVC ≤ 150 ml',
+      'Repetibilidad FEV1 ≤ 150 ml',
       'Pico máximo',
       'Forma triangular',
       'Libre de artefactos',
@@ -461,6 +502,9 @@ describe('EspirometriaClinicalCriteriaPanel — cobertura cualitativos', () => {
     ]) {
       expect(html).toContain(label)
     }
+    // El umbral "200" NO debe aparecer como regla activa visible
+    expect(html).not.toContain('Repetibilidad FVC &lt; 200')
+    expect(html).not.toContain('Repetibilidad FEV1 &lt; 200')
   })
 
   it('Layout: repetibilidad numérica aparece ANTES del bloque de indicadores SI/NO', () => {

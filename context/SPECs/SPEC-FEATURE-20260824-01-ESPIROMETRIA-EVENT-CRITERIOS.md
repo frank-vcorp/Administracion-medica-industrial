@@ -1,7 +1,7 @@
 # SPEC-FEATURE-20260824-01 — Criterios clínicos de Espirometría en Events
 
 - **Estado:** READY_FOR_SOFIA
-- **Revisión:** 1.1 — corrección por evidencia visual del Event y requerimiento explícito de Frank, 2026-08-24
+- **Revisión:** 1.2 — umbral AMI confirmado de 150 ml, 2026-08-24
 - **Origen:** FND-20260824-03
 - **Prioridad:** P1 UX/funcional
 - **Fuente de prueba:** `context/RD2026/ESPIROMETRIA.pdf`
@@ -21,8 +21,8 @@ Para estudios canónicos `Espirometria`, renderizar una sección visible antes d
 - Libre de artefactos.
 - Meseta.
 - Tiempo.
-- Repetibilidad FVC < 200.
-- Repetibilidad FEV1 < 200.
+- Repetibilidad FVC ≤ 150 ml.
+- Repetibilidad FEV1 ≤ 150 ml.
 - Número de pruebas aceptables.
 - Criterios para diagnóstico.
 - Calidad.
@@ -38,11 +38,13 @@ Cuando `parametros[]` contiene las maniobras M1/M2/M3:
 
 - `repetibilidad_fvc_ml`: diferencia absoluta entre los dos valores FVC más altos.
 - `repetibilidad_fev1_ml`: diferencia absoluta entre los dos valores FEV1 más altos.
-- `repetibilidad_fvc_menor_200`: `Sí` si la diferencia FVC es menor que 200 ml.
-- `repetibilidad_fev1_menor_200`: `Sí` si la diferencia FEV1 es menor que 200 ml.
+- `repetibilidad_fvc_menor_150`: `Sí` si la diferencia FVC es menor o igual que 150 ml.
+- `repetibilidad_fev1_menor_150`: `Sí` si la diferencia FEV1 es menor o igual que 150 ml.
 - `pruebas_aceptables`: cantidad de maniobras válidas disponibles, en el caso de prueba `3`.
 
 Para el PDF de prueba, el resultado esperado es exactamente `FVC 30.00 ml`, `FEV1 40.00 ml`, `Sí`, `Sí` y `3`.
+
+El umbral de 150 ml/0.15 L proviene del criterio comunicado por AMI. No usar 200 ml como umbral de cumplimiento, aunque el documento clínico pueda mostrar una etiqueta histórica “<200”.
 
 Los criterios cualitativos (`Pico máximo`, `Forma triangular`, `Libre de artefactos`, `Meseta`, `Tiempo`, `Criterios para Dx`, `Calidad`) sólo pueden mostrarse como valores SI/A cuando el payload fuente los proporciona; no deben inferirse silenciosamente desde la tabla numérica. Si Frank requiere que se reproduzcan los valores de la segunda imagen aun sin estar en el PDF fuente, se necesita un insumo clínico/configuración explícita adicional.
 

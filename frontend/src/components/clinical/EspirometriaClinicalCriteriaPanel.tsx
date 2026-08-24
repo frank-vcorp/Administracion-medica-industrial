@@ -11,8 +11,9 @@
  *   - `repetibilidad_fvc_ml` = diff absoluta entre los 2 valores FVC más altos,
  *     en ml (L × 1000 si `unidad === 'L'`).
  *   - `repetibilidad_fev1_ml` = idem para FEV1.
- *   - `repetibilidad_fvc_menor_200` = Sí si diff FVC < 200 ml.
- *   - `repetibilidad_fev1_menor_200` = Sí si diff FEV1 < 200 ml.
+ *   - Umbral AMI: la repetibilidad CUMPLE cuando la diferencia es
+ *     **menor o igual a 150 ml (0.15 L)** — BR-20260824-01, criterio comunicado
+ *     por AMI. No usar 200 ml como umbral de cumplimiento.
  *   - `pruebas_aceptables` = # maniobras válidas disponibles en la fila
  *     FVC (3 cuando m1/m2/m3 presentes).
  *
@@ -130,10 +131,18 @@ export function computeRepetibilidadFromRow(
   }
 }
 
-function isLessThan200(diffMl: number | null): boolean | null {
+function isWithinAmiThreshold(diffMl: number | null): boolean | null {
+  // BR-20260824-01: repetibilidad CUMPLE si diff ≤ 150 ml (0.15 L).
+  // El umbral "≤ 150 ml" es inclusivo en el límite.
   if (diffMl === null) return null
-  return diffMl < 200
+  return diffMl <= 150
 }
+
+/**
+ * Umbral AMI (BR-20260824-01) en mililitros. Expuesto para tests y para
+ * mostrarlo junto al label del criterio si se requiere auditoría visible.
+ */
+export const AMI_REPETIBILIDAD_THRESHOLD_ML = 150
 
 function hasValue(value: unknown): boolean {
   if (value === null || value === undefined) return false
@@ -258,8 +267,8 @@ function NumberCell({
 export interface ResolvedCriteria {
   repetibilidadFvcMl: number | null
   repetibilidadFev1Ml: number | null
-  repetibilidadFvcMenor200: "SI" | "NO" | null
-  repetibilidadFev1Menor200: "SI" | "NO" | null
+  repetibilidadFvcMenor150: "SI" | "NO" | null
+  repetibilidadFev1Menor150: "SI" | "NO" | null
   pruebasAceptables: number | null
   picoMaximo: unknown
   formaTriangular: unknown
@@ -313,17 +322,23 @@ export function resolveCriteria(
   const repetibilidadFev1Source: ResolvedCriteria["repetibilidadFev1Source"] =
     fev1Extracted !== null ? "extracted" : fev1Calc.diffMl !== null ? "computed" : "missing"
 
-  // --- Booleanos <200 (Sí/No) ---
-  // Preferir extraído de calidad; si no, derivar del cálculo numérico.
-  const menor200FvcExtracted = normalizeSiNo(calidad?.repetibilidad_fvc_menor_200)
-  const menor200FvcComputed = isLessThan200(repetibilidadFvcMl)
-  const repetibilidadFvcMenor200: "SI" | "NO" | null =
-    menor200FvcExtracted ?? (menor200FvcComputed === null ? null : menor200FvcComputed ? "SI" : "NO")
+  // --- Booleanos ≤150 (Sí/No) — BR-20260824-01 ---
+  // Preferir extraído de calidad. Acepta ambas claves históricas para
+  // compat con snapshots previos (`..._menor_200` con etiqueta clínica
+  // "<200" usada en algunos formatos AMI), pero la regla activa es 150 ml.
+  const menor150FvcExtracted =
+    normalizeSiNo(calidad?.repetibilidad_fvc_menor_150) ??
+    normalizeSiNo(calidad?.repetibilidad_fvc_menor_200)
+  const menor150FvcComputed = isWithinAmiThreshold(repetibilidadFvcMl)
+  const repetibilidadFvcMenor150: "SI" | "NO" | null =
+    menor150FvcExtracted ?? (menor150FvcComputed === null ? null : menor150FvcComputed ? "SI" : "NO")
 
-  const menor200Fev1Extracted = normalizeSiNo(calidad?.repetibilidad_fev1_menor_200)
-  const menor200Fev1Computed = isLessThan200(repetibilidadFev1Ml)
-  const repetibilidadFev1Menor200: "SI" | "NO" | null =
-    menor200Fev1Extracted ?? (menor200Fev1Computed === null ? null : menor200Fev1Computed ? "SI" : "NO")
+  const menor150Fev1Extracted =
+    normalizeSiNo(calidad?.repetibilidad_fev1_menor_150) ??
+    normalizeSiNo(calidad?.repetibilidad_fev1_menor_200)
+  const menor150Fev1Computed = isWithinAmiThreshold(repetibilidadFev1Ml)
+  const repetibilidadFev1Menor150: "SI" | "NO" | null =
+    menor150Fev1Extracted ?? (menor150Fev1Computed === null ? null : menor150Fev1Computed ? "SI" : "NO")
 
   // --- #Pruebas aceptables ---
   const pruebasExtracted = asFiniteNumber(calidad?.pruebas_aceptables)
@@ -348,8 +363,8 @@ export function resolveCriteria(
   return {
     repetibilidadFvcMl,
     repetibilidadFev1Ml,
-    repetibilidadFvcMenor200,
-    repetibilidadFev1Menor200,
+    repetibilidadFvcMenor150,
+    repetibilidadFev1Menor150,
     pruebasAceptables,
     picoMaximo: calidad?.pico_maximo ?? null,
     formaTriangular: calidad?.forma_triangular ?? null,
@@ -378,8 +393,8 @@ export function hasRenderableEspirometriaCriteria(
   if (c.repetibilidadFvcMl !== null) return true
   if (c.repetibilidadFev1Ml !== null) return true
   if (c.pruebasAceptables !== null && c.pruebasAceptables > 0) return true
-  if (c.repetibilidadFvcMenor200) return true
-  if (c.repetibilidadFev1Menor200) return true
+  if (c.repetibilidadFvcMenor150) return true
+  if (c.repetibilidadFev1Menor150) return true
   if (c.picoMaximo !== null || c.formaTriangular !== null || c.libreArtefactos !== null ||
       c.meseta !== null || c.tiempo !== null || c.criteriosParaDx !== null) return true
   if (c.calidad) return true
@@ -400,10 +415,11 @@ export default function EspirometriaClinicalCriteriaPanel({
 
   const c = resolveCriteria(extractedData)
 
-  // Bloque A: indicadores SI/NO (orden de la segunda imagen)
+  // Bloque A: indicadores SI/NO (orden de la segunda imagen).
+  // Labels reflejan BR-20260824-01: umbral AMI ≤ 150 ml.
   const booleanEntries: Array<{ label: string; value: unknown }> = [
-    { label: "Repetibilidad FVC < 200", value: c.repetibilidadFvcMenor200 },
-    { label: "Repetibilidad FEV1 < 200", value: c.repetibilidadFev1Menor200 },
+    { label: "Repetibilidad FVC ≤ 150 ml", value: c.repetibilidadFvcMenor150 },
+    { label: "Repetibilidad FEV1 ≤ 150 ml", value: c.repetibilidadFev1Menor150 },
     { label: "Pico máximo", value: c.picoMaximo },
     { label: "Forma triangular", value: c.formaTriangular },
     { label: "Libre de artefactos", value: c.libreArtefactos },
