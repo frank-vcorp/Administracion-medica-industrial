@@ -459,7 +459,10 @@ export default function StudyAIPrediagnosisPanel({
 
         {/* Justificación */}
         {(predxData.justification ?? []).length > 0 && (
-          <details>
+          // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada para que
+          // el médico vea la trazabilidad IA sin clicks extra. El usuario puede
+          // colapsarla manualmente; el contrato IA no cambia.
+          <details open>
             <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700 select-none">
               Justificación ({predxData.justification.length} razones)
             </summary>
@@ -473,7 +476,8 @@ export default function StudyAIPrediagnosisPanel({
 
         {/* Limitaciones */}
         {(predxData.limitations ?? []).length > 0 && (
-          <details>
+          // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada.
+          <details open>
             <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700 select-none">
               Limitaciones ({predxData.limitations.length})
             </summary>
@@ -487,7 +491,8 @@ export default function StudyAIPrediagnosisPanel({
 
         {/* Citas clínicas — IMPL-20260326-04: fuentes con URL conocida son enlaces clicables */}
         {(predxData.citations ?? []).length > 0 && (
-          <details>
+          // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada.
+          <details open>
             <summary className="text-[11px] font-semibold text-slate-400 cursor-pointer hover:text-slate-600 select-none">
               Fuentes clínicas ({predxData.citations.length})
             </summary>

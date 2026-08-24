@@ -44,6 +44,10 @@ import ClinicalExtractionRenderer from "@/components/clinical/ClinicalExtraction
 import { isAIEligibleEventTest, getAIWorkflowLabel, getCanonicalAIStudyType } from "@/lib/study-ai"
 // ARCH-20260507-07: Bloque de trazabilidad operativa ligera (sin cambiar flujo)
 import TraceabilidadLigera from "@/components/clinical/TraceabilidadLigera"
+// IMPL-20260824-01 (FEATURE-20260824-01): criterios clínicos de Espirometría
+// mostrados en la columna derecha entre el visor y el panel IA. Sólo
+// presentación; consume el snapshot ya extraído sin recalcular ni reinterpretar.
+import EspirometriaClinicalCriteriaPanel from "@/components/clinical/EspirometriaClinicalCriteriaPanel"
 
 // --- Tipos locales ---
 
@@ -1518,6 +1522,21 @@ function StudyPanel({
                 <p className="text-xs text-slate-400 mt-1">Sube el resultado para visualizarlo aquí.</p>
               </div>
             )}
+
+            {/* IMPL-20260824-01 (FEATURE-20260824-01): criterios clínicos de
+                Espirometría. Sólo se muestra cuando el tipo canónico es
+                Espirometría y existe snapshot de extracción con campos
+                conocidos. Tolerante a payload parcial/histórico: si no hay
+                datos, no se renderiza y NO inventa valores. */}
+            {getCanonicalAIStudyType(test) === 'Espirometria' && test.extractionSnapshot ? (
+              <EspirometriaClinicalCriteriaPanel
+                calidad={
+                  (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined)
+                    ?.calidad as Record<string, unknown> | null ?? null
+                }
+                version={test.extractionSnapshot.version}
+              />
+            ) : null}
 
             {/* Panel de Prediagnóstico IA — debajo del archivo vinculado, en la columna derecha.
                 FIX-20260812-19: movido desde la columna izquierda para alinear
