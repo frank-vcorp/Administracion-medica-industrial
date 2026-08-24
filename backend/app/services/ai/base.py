@@ -97,29 +97,95 @@ class GeminiBase:
         cleaned_text = re.sub(r"(?:\s*<pad>\s*)+", " ", cleaned_text, flags=re.IGNORECASE)
         return cleaned_text.strip()
 
-    @staticmethod
-    def _tolerant_json_parse(text: str) -> Dict[str, Any]:
+    # IMPL-20260824-02: patrón regex conservador para eliminar comas finales
+    # en objetos/arrays. Se compila una sola vez a nivel de clase (sin
+    # dependencias externas). La transformación es MONÓTONA: quitar comas
+    # antes de `}` o `]` sólo acerca la cadena a JSON válido y nunca
+    # introduce ambigüedad en un payload ya cercano a JSON estricto.
+    _TRAILING_COMMA_RE = re.compile(r",(\s*[}\]])")
+
+    @classmethod
+    def _tolerant_json_parse(cls, text: str) -> Dict[str, Any]:
         """
-        Parseo tolerante de JSON: intenta recuperar respuestas de modelo con texto extra
-        o cierres faltantes. Si falla, lanza ValueError informativo.
-        IMPL-20260326-03 — sin dependencias externas.
+        Parseo tolerante de JSON: intenta recuperar respuestas de modelo con
+        texto extra, fences Markdown ya saneados, comas finales o cierres
+        faltantes. Si ningún intento recupera un objeto JSON válido,
+        lanza ValueError informativo.
+
+        IMPL-20260326-03 — base (json.loads directo + substring {...}).
+        IMPL-20260824-02 — IMPL_FIX-20260824-02: añade 2 estrategias SEGURAS
+        para tolerar únicamente formatos recuperables del proveedor:
+
+          1. `json.JSONDecoder().raw_decode()` — escanea desde el inicio
+             ignorando espacios y devuelve el primer valor JSON completo.
+             Robusto ante texto explicativo líder cuando el JSON empieza
+             desde el primer carácter no-espacio.
+
+          2. Eliminación de comas finales (`,}` y `,]`) sobre la subcadena
+             `{...}` — quirk muy común en LLMs. La transformación es
+             MONÓTONA hacia JSON válido y NUNCA inventa contenido.
+
+        Si ninguna estrategia recupera un objeto JSON, se preserva el
+        ValueError trazable original (no se enmascara el error y no se
+        devuelve `{}`). El caller (M3/Gemini/Featherless call_*) lo
+        convierte en `Respuesta de X no es JSON válido: ...`, que la capa
+        HTTP boundary mapea a `error_code="EXTRACTION_NOT_JSON"`.
         """
-        # Intento directo
+        if not text:
+            raise ValueError(
+                f"Respuesta del modelo no es JSON parseable: {text!r}"
+            )
+
+        # Intento 1: parseo directo.
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
 
-        # Intento extrayendo primer { ... último } para ignorar texto extra al final
-        start = text.find('{')
-        end = text.rfind('}')
-        if start != -1 and end != -1 and end > start:
+        # Intento 2: raw_decode — salta whitespace inicial y devuelve el
+        # primer valor JSON completo. Robusto contra texto líder antes
+        # del JSON si ese texto NO contiene un `{`/`[` válido al inicio.
+        # `raw_decode` falla si hay caracteres no-whitespace antes del
+        # valor, por lo que sólo aporta valor cuando el payload empieza
+        # directamente por JSON (con posibles espacios/newlines).
+        decoder = json.JSONDecoder()
+        stripped = text.lstrip()
+        if stripped and stripped[0] in ("{", "["):
             try:
-                return json.loads(text[start:end + 1])
+                obj, _end = decoder.raw_decode(stripped)
+                if isinstance(obj, dict):
+                    return obj
             except json.JSONDecodeError:
                 pass
 
-        raise ValueError(f"Respuesta del modelo no es JSON parseable: {text[:300]!r}")
+        # Intento 3: extraer subcadena primer `{` ... último `}` para
+        # ignorar texto extra al inicio/fin (eg. fences, explicaciones).
+        start = text.find("{")
+        end = text.rfind("}")
+        candidate: Optional[str] = None
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start : end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
+        # Intento 4: subcadena `{...}` con comas finales eliminadas
+        # (transformación segura y monótona hacia JSON válido).
+        if candidate is not None:
+            cleaned = cls._TRAILING_COMMA_RE.sub(r"\1", candidate)
+            if cleaned != candidate:
+                try:
+                    return json.loads(cleaned)
+                except json.JSONDecodeError:
+                    pass
+
+        # Ningún intento recuperó un objeto JSON. Fallar con error
+        # trazable — NO devolver dict vacío (FIX-FEATURE-20260824-01
+        # rev. 1.4 contrato: error preserva raw del modelo para log).
+        raise ValueError(
+            f"Respuesta del modelo no es JSON parseable: {text[:300]!r}"
+        )
     
     def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash"):
         # IMPL-20260809-06 — ARCH-20260809-03:
@@ -292,23 +358,19 @@ class FeatherlessVisionBase:
 
     @staticmethod
     def _tolerant_json_parse(text: str) -> Dict[str, Any]:
-        """Parseo tolerante de JSON. Estrategia idéntica a GeminiBase."""
+        """Parseo tolerante de JSON.
+
+        IMPL-20260824-02: delega en `GeminiBase._tolerant_json_parse` para
+        unificar las estrategias (json.loads → raw_decode → substring
+        `{...}` → substring sin comas finales). Preserva el mensaje de
+        error específico de Featherless para trazabilidad en logs.
+        """
         try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        start = text.find('{')
-        end = text.rfind('}')
-        if start != -1 and end != -1 and end > start:
-            try:
-                return json.loads(text[start:end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        raise ValueError(
-            f"Respuesta de Featherless no es JSON parseable: {text[:300]!r}"
-        )
+            return GeminiBase._tolerant_json_parse(text)
+        except ValueError as inner:
+            raise ValueError(
+                f"Respuesta de Featherless no es JSON parseable: {inner}"
+            ) from inner
 
     def __init__(
         self,
@@ -515,23 +577,19 @@ class M3VisionBase:
 
     @staticmethod
     def _tolerant_json_parse(text: str) -> Dict[str, Any]:
-        """Parseo tolerante de JSON. Estrategia idéntica a GeminiBase/FeatherlessVisionBase."""
+        """Parseo tolerante de JSON.
+
+        IMPL-20260824-02: delega en `GeminiBase._tolerant_json_parse` para
+        unificar las estrategias (json.loads → raw_decode → substring
+        `{...}` → substring sin comas finales). Preserva el mensaje de
+        error específico de M3 para trazabilidad en logs.
+        """
         try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        start = text.find('{')
-        end = text.rfind('}')
-        if start != -1 and end != -1 and end > start:
-            try:
-                return json.loads(text[start:end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        raise ValueError(
-            f"Respuesta de M3 no es JSON parseable: {text[:300]!r}"
-        )
+            return GeminiBase._tolerant_json_parse(text)
+        except ValueError as inner:
+            raise ValueError(
+                f"Respuesta de M3 no es JSON parseable: {inner}"
+            ) from inner
 
     def __init__(
         self,

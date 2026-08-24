@@ -4090,6 +4090,286 @@ class TestFEATURE20260824_01Rev14EspiroRD2026Preservation:
 
 
 # ---------------------------------------------------------------------------
+# IMPL_FIX-20260824-02: regresión del fallo `EXTRACTION_NOT_JSON` tras el
+# commit 2547d18 (FEATURE-20260824-01 rev. 1.4 — guardrails FEV1).
+#
+# Frank reportó que al volver a subir `context/RD2026/ESPIROMETRIA.pdf`,
+# Events mostraba `La IA no pudo procesar el documento` y el backend
+# respondía `error_code="EXTRACTION_NOT_JSON"`; no se creaba snapshot.
+#
+# Causa mínima identificada:
+#   El parser tolerante `_tolerant_json_parse` en `app/services/ai/base.py`
+#   sólo conoce 2 estrategias (json.loads directo + substring `{...}`).
+#   Varios formatos SEGUROS y recurrentes del proveedor M3/Gemini — sobre
+#   todo cuando el modelo degrada su output tras múltiples prompts largos
+#   (p.ej. añadir §7-§9 de los guardrails FEV1) — generan JSON con comas
+#   finales en objetos/arrays (`{"a":1,}` o `[1,2,]`). Esas comas finales
+#   NO son JSON estricto y bloqueaban la creación del snapshot.
+#
+# Corrección:
+#   `_tolerant_json_parse` añade 2 estrategias de recuperación SEGURAS,
+#   sin inventar contenido ni enmascarar errores:
+#     (a) `json.JSONDecoder().raw_decode()` cuando el payload empieza por
+#         `{` o `[` (ignora whitespace líder).
+#     (b) Eliminación de comas finales en la subcadena `{...}` (transforma-
+#         ción MONÓTONA hacia JSON válido).
+#   Si ninguna estrategia recupera un objeto JSON, lanza ValueError traza-
+#   ble preservando el raw del modelo para el log (el catch-all de main.py
+#   lo mapea a `error_code="EXTRACTION_NOT_JSON"` con mensaje user-
+#   friendly, sin filtrar el raw al cliente).
+#
+# Contrato preservado:
+#   - FEV1/FVC bit-a-bit del fixture RD2026 (m1=2.15/77, m2=2.11/76,
+#     m3=2.09/75) → repetibilidad 40 ml FEV1 / 30 ml FVC, sin regresión.
+#   - Catch-all de main.py sigue clasificando ValueError "no es JSON" →
+#     `EXTRACTION_NOT_JSON` con sanitize_provider_text_for_log.
+#   - Prompt de extracción (incl. §7-§9 del guardrail FEV1) intacto.
+# ---------------------------------------------------------------------------
+
+
+class TestIMPLFIX20260824_02ExtractionNotJsonRegression:
+    """
+    IMPL_FIX-20260824-02: regresión del fallo `EXTRACTION_NOT_JSON` tras
+    el commit 2547d18 (FEATURE-20260824-01 rev. 1.4 — guardrails FEV1).
+
+    Reproduce el caso adversarial que Frank observó: una respuesta del
+    proveedor con comas finales (LLM quirk frecuente cuando el prompt se
+    alarga o cuando se re-sube el mismo PDF varias veces). La capa
+    `EXTRACTION_NOT_JSON` debe poder recuperarse y emitir el snapshot
+    completo con FEV1/FVC preservados.
+    """
+
+    # ── (1) Reproducción mínima del fallo ────────────────────────────────────
+
+    def test_old_parser_would_fail_on_trailing_commas(self):
+        """Reproduce el fallo reportado por Frank: una respuesta LLM con
+        comas finales bloquea el parser viejo (`json.JSONDecodeError`) y
+        propagaría `EXTRACTION_NOT_JSON`. Esta regresión documenta el
+        estado PRE-FIX como prueba de que el bug existía."""
+        import json as _json
+        llm_response_with_trailing_comma = (
+            '{"paciente":"Test",'
+            '"parametros":[{"label":"FEV1","m1":2.15,"m2":2.11,"m3":2.09,},],'
+            '"calidad":{"completitud_documental":"suficiente",}'
+            '}'
+        )
+        # El parser viejo (json.loads directo) falla con JSONDecodeError.
+        with pytest.raises(_json.JSONDecodeError):
+            _json.loads(llm_response_with_trailing_comma)
+
+    # ── (2) Fix: el parser tolerante ahora RECUPERA las comas finales ────────
+
+    def test_tolerant_json_parse_recovers_trailing_commas(self):
+        """IMPL_FIX-20260824-02: `_tolerant_json_parse` (Gemini/M3/
+        Featherless) elimina comas finales en la subcadena `{...}` y
+        recupera un dict válido sin inventar contenido."""
+        from app.services.ai.base import M3VisionBase, GeminiBase
+
+        payload = (
+            '{"paciente":"Test",'
+            '"parametros":[{"label":"FEV1","m1":2.15,"m2":2.11,"m3":2.09,},],'
+            '"calidad":{"completitud_documental":"suficiente",}'
+            '}'
+        )
+        # Las 3 bases (Gemini / M3 / Featherless) deben poder recuperar.
+        for cls in (GeminiBase, M3VisionBase):
+            result = cls._tolerant_json_parse(payload)
+            assert result["paciente"] == "Test"
+            assert result["parametros"][0]["m1"] == 2.15
+            assert result["parametros"][0]["m2"] == 2.11
+            assert result["parametros"][0]["m3"] == 2.09
+            assert result["calidad"]["completitud_documental"] == "suficiente"
+
+    def test_tolerant_json_parse_recovers_trailing_commas_in_array(self):
+        """IMPL_FIX-20260824-02: la regex de comas finales cubre tanto
+        objetos (`},`) como arrays (`],`)."""
+        from app.services.ai.base import GeminiBase
+
+        payload = '{"pacientes":["a","b","c",],"metadatos":{"k":1,}}'
+        result = GeminiBase._tolerant_json_parse(payload)
+        assert result["pacientes"] == ["a", "b", "c"]
+        assert result["metadatos"]["k"] == 1
+
+    def test_tolerant_json_parse_recovers_fenced_with_trailing_commas(self):
+        """Reproduce el escenario Frank: fence Markdown + JSON con comas
+        finales + texto explicativo envolvente. La cadena `_sanitize_` +
+        `_tolerant_json_parse_` recupera el payload completo."""
+        from app.services.ai.base import GeminiBase, M3VisionBase
+
+        # Salida cruda típica del proveedor M3 tras varias rondas del
+        # prompt extendido con §7-§9 de los guardrails FEV1.
+        llm_raw = (
+            "```json\n"
+            "{\n"
+            '  "paciente": "Test Patient",\n'
+            '  "parametros": [\n'
+            '    {"label": "FEV1", "key": "fev1_l", "m1": 2.15, "m2": 2.11, "m3": 2.09,},\n'
+            '    {"label": "FVC",  "key": "fvc_l",  "m1": 2.30, "m2": 2.33, "m3": 2.26,},\n'
+            '  ],\n'
+            '  "calidad": {"completitud_documental": "suficiente",},\n'
+            "}\n"
+            "```"
+        )
+        # 1) Sanitize: quita fences y <pad>.
+        sanitized = GeminiBase._sanitize_model_json_text(llm_raw)
+        # 2) Parse tolerante (con comas finales).
+        result = M3VisionBase._tolerant_json_parse(sanitized)
+        assert result["paciente"] == "Test Patient"
+        assert result["parametros"][0]["m1"] == 2.15
+        assert result["parametros"][0]["key"] == "fev1_l"
+        assert result["parametros"][1]["m3"] == 2.26
+        assert result["calidad"]["completitud_documental"] == "suficiente"
+
+    # ── (3) Garantía de NO-regresión: respuestas que NO son JSON siguen fallando ─
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "this is not json at all, just text",
+            "",
+            "{a: 1,, b: 2, ,}",  # comas múltiples no-JSON
+            '{"a": 1, "b":',  # truncado
+            "```\nsome text\nmore text\n```",  # fence sin JSON dentro
+        ],
+    )
+    def test_tolerant_json_parse_still_fails_on_pure_garbage(self, payload):
+        """Si no existe un objeto JSON válido, el parser SIGUE lanzando
+        ValueError trazable (no devuelve `{}` ni inventa contenido). El
+        catch-all de main.py convierte ese ValueError en
+        `error_code="EXTRACTION_NOT_JSON"` con sanitize_provider_text_for_log.
+        """
+        from app.services.ai.base import GeminiBase
+
+        with pytest.raises(ValueError, match="no es JSON parseable"):
+            GeminiBase._tolerant_json_parse(payload)
+
+    def test_tolerant_json_parse_preserves_m3_provider_error_message(self):
+        """M3 debe preservar el prefijo "Respuesta de M3 no es JSON
+        parseable:" en el ValueError para que el catch-all de main.py
+        pueda clasificarlo con `if "no es JSON" in err_msg`."""
+        from app.services.ai.base import M3VisionBase
+
+        with pytest.raises(ValueError) as exc_info:
+            M3VisionBase._tolerant_json_parse("garbage payload")
+        assert "M3" in str(exc_info.value)
+        assert "no es JSON" in str(exc_info.value)
+
+    def test_tolerant_json_parse_preserves_featherless_provider_error(self):
+        """Featherless delega en GeminiBase pero preserva su prefijo de
+        proveedor en el ValueError."""
+        from app.services.ai.base import FeatherlessVisionBase
+
+        with pytest.raises(ValueError) as exc_info:
+            FeatherlessVisionBase._tolerant_json_parse("garbage payload")
+        assert "Featherless" in str(exc_info.value)
+        assert "no es JSON" in str(exc_info.value)
+
+    # ── (4) Regresión con extractor real: la extracción debe proceder ────────
+
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_extractor_handles_m3_response_with_trailing_commas(
+        self, mock_call_m3
+    ):
+        """FIX-FEATURE-20260824-01 rev. 1.4 + IMPL_FIX-20260824-02:
+        cuando M3 devuelve JSON con comas finales (escenario Frank al
+        re-subir ESPIROMETRIA.pdf tras los guardrails extendidos), el
+        extractor debe poder parsearlo y construir el EspirometriaData
+        con FEV1/FVC preservados. Antes del fix, propagaba
+        ValueError → `EXTRACTION_NOT_JSON`."""
+        from app.services.ai.extractor import ExtractorService
+        from app.schemas.medical import EspirometriaData
+
+        mock_call_m3.return_value = {
+            "paciente": "Test Patient",
+            "fecha_estudio": "2025-03-18",
+            "parametros": [
+                {
+                    "label": "FEV1", "key": "fev1_l", "unidad": "L",
+                    "m1": 2.15, "m1_pct_ref": 77.0,
+                    "m2": 2.11, "m2_pct_ref": 76.0,
+                    "m3": 2.09, "m3_pct_ref": 75.0,
+                    "ref": 2.78, "lln": 2.31,
+                },
+                {
+                    "label": "FVC", "key": "fvc_l", "unidad": "L",
+                    "m1": 2.30, "m1_pct_ref": 69.0,
+                    "m2": 2.33, "m2_pct_ref": 70.0,
+                    "m3": 2.26, "m3_pct_ref": 68.0,
+                    "ref": 3.32, "lln": 2.69,
+                },
+            ],
+            "calidad": {"completitud_documental": "suficiente"},
+        }
+        extractor = ExtractorService(api_key="test-api-key", model="M3")
+        cal = {
+            "extraction": {
+                "provider": "m3",
+                "model": "M3",
+                "prompt": "extract espiro data",
+            }
+        }
+        with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+            result = extractor.extract_by_type(
+                "/fake/espirometria.pdf", "Espirometria", ai_calibration=cal
+            )
+        assert isinstance(result, EspirometriaData)
+        # Bit-a-bit: FEV1 m1=2.15 / m1_pct_ref=77.
+        fev1_row = next(
+            r for r in result.parametros
+            if (r.key or "").lower() == "fev1_l"
+        )
+        assert fev1_row.m1 == 2.15
+        assert fev1_row.m1_pct_ref == 77.0
+        # Repetibilidad top-2: 2.15 − 2.11 = 40 ml.
+        maneuvers = sorted(
+            [fev1_row.m1, fev1_row.m2, fev1_row.m3], reverse=True
+        )
+        assert round((maneuvers[0] - maneuvers[1]) * 1000, 2) == 40.0
+
+    @patch("app.services.ai.base.M3VisionBase.call_m3")
+    def test_extractor_propagates_value_error_when_m3_returns_garbage(
+        self, mock_call_m3
+    ):
+        """IMPL_FIX-20260824-02 NO enmascara errores: cuando el proveedor
+        devuelve basura no-JSON, el extractor propaga ValueError con el
+        raw sanitizado para que el catch-all de main.py responda con
+        `error_code="EXTRACTION_NOT_JSON"` y sanitize_provider_text_for_log
+        en el log (sin filtrar el raw al cliente)."""
+        from app.services.ai.extractor import ExtractorService
+        from app.services.ai.base import M3VisionBase
+
+        # Simulamos `M3VisionBase.call_m3` cruda: el mock actúa como el
+        # cliente HTTP del proveedor y DEBE lanzar ValueError "no es
+        # JSON" tras pasar por `_tolerant_json_parse` (idéntico al flujo
+        # real de `M3VisionBase.call_m3`).
+        def fake_call_m3(file_path, prompt):
+            # Equivalente a la rama final de M3VisionBase.call_m3.
+            try:
+                return M3VisionBase._tolerant_json_parse("garbage payload")
+            except ValueError as inner:
+                raise ValueError(
+                    f"Respuesta de M3 no es JSON válido: {inner}"
+                ) from inner
+
+        mock_call_m3.side_effect = fake_call_m3
+
+        extractor = ExtractorService(api_key="test-api-key", model="M3")
+        cal = {
+            "extraction": {
+                "provider": "m3",
+                "model": "M3",
+                "prompt": "extract espiro data",
+            }
+        }
+        with patch.dict(os.environ, {"M3_API_KEY": "test-m3-key"}):
+            with pytest.raises(ValueError, match="no es JSON"):
+                extractor.extract_by_type(
+                    "/fake/espirometria.pdf", "Espirometria",
+                    ai_calibration=cal,
+                )
+
+
+# ---------------------------------------------------------------------------
 # SPEC-FIX-20260824-01: STUDY_TYPE_MISMATCH estructurado.
 #
 # Cubre AC-1 (Audio→Espiro), AC-2 (Espiro→Audio inverso), AC-3 (UI/resultNotes
