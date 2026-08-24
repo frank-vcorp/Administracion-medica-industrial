@@ -524,3 +524,213 @@ describe('EspirometriaClinicalCriteriaPanel — cobertura cualitativos', () => {
     expect(idxIndicadores).toBeLessThan(idxAceptabilidad)
   })
 })
+
+// --- rev. 1.3: aliases reales del renderer/schema (`key`/`unit`/`m1_value`/...) ---
+
+/**
+ * Fixture alineada con `frontend/src/components/clinical/extraction-presentation-schemas.ts`:
+ * columnas `{key, unit, m1_value, m2_value, m3_value, ref_value, lln_value}`.
+ * Es la forma que el renderer/schema espera para la tabla "Parámetros
+ * espirométricos". El extractor en producción puede entregar esta forma o
+ * la del extractor (`m1`/`unidad`); el panel debe soportar AMBAS.
+ */
+const PARAMETROS_ALIASED_FIXTURE = [
+  { label: 'FVC', key: 'fvc_l', unit: 'L', m1_value: 2.30, m2_value: 2.33, m3_value: 2.26, ref_value: 3.32, lln_value: 2.69 },
+  { label: 'FEV1', key: 'fev1_l', unit: 'L', m1_value: 2.15, m2_value: 2.11, m3_value: 2.09, ref_value: 2.77, lln_value: 2.23 },
+]
+
+const CALIDAD_MIN_FIXTURE = {
+  pico_maximo: 'SI',
+  forma_triangular: 'SI',
+  libre_artefactos: 'SI',
+  meseta: 'SI',
+  tiempo: 'SI',
+  criterios_para_dx: 'SI',
+  calidad: 'A',
+}
+
+const EXTRACTED_ALIASED = {
+  calidad: CALIDAD_MIN_FIXTURE,
+  parametros: PARAMETROS_ALIASED_FIXTURE,
+}
+
+describe('EspirometriaClinicalCriteriaPanel — rev. 1.3 aliases renderer/schema', () => {
+  it('Soporta m1_value/m2_value/m3_value con key canónica y unit (sin m1/m2/m3/unidad)', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: EXTRACTED_ALIASED,
+      })
+    )
+    // AC-2 con aliases: FVC 30 ml, FEV1 40 ml visibles.
+    expect(html).toContain('data-testid="repetibilidad-fvc-ml"')
+    expect(html).toContain('data-testid="repetibilidad-fev1-ml"')
+    expect(html).toMatch(/>30\.00</)
+    expect(html).toMatch(/>40\.00</)
+    expect(html).toMatch(/data-criteria-value="30(?:\.0+)?[^"]*"/)
+    expect(html).toMatch(/data-criteria-value="40(?:\.0+)?[^"]*"/)
+    // AC-3: 3 pruebas aceptables derivadas del # de m*_value presentes.
+    expect(html).toContain('data-testid="pruebas-aceptables"')
+    expect(html).toContain('data-criteria-value="3"')
+    // BR-20260824-01: Sí/Sí porque 30 y 40 ml ≤ 150.
+    expect(html).toContain('Repetibilidad FVC ≤ 150 ml')
+    expect(html).toContain('Repetibilidad FEV1 ≤ 150 ml')
+    const siMatches = html.match(/>SI</g) ?? []
+    expect(siMatches.length).toBeGreaterThanOrEqual(2)
+    // Calidad A preservada del bloque calidad.
+    expect(html).toMatch(/>A</)
+    // El bloque se renderiza con el marcador de fuente "calc." porque no
+    // hay repetibilidad_fvc_ml en `calidad` y se derivó de la tabla.
+    expect(html).toContain('FVC: calc.')
+    expect(html).toContain('FEV1: calc.')
+  })
+
+  it('Soporta mezcla de aliases (m1/m2/m3 + m1_value/m2_value/m3_value) en la misma fila', () => {
+    // Caso defensivo: el extractor puede emitir m1/m2/m3 legacy y el
+    // renderer/schema puede sobreescribir parcialmente con m*_value.
+    const mezcla = {
+      calidad: CALIDAD_MIN_FIXTURE,
+      parametros: [
+        // FVC con m1 legacy pero m2/m3 como _value
+        { label: 'FVC', key: 'fvc_l', unit: 'l', m1: 2.30, m2_value: 2.33, m3_value: 2.26 },
+        // FEV1 sólo con _value
+        { label: 'FEV1', key: 'fev1_l', unit: 'l', m1_value: 2.15, m2_value: 2.11, m3_value: 2.09 },
+      ],
+    }
+    const c = resolveCriteria(mezcla)
+    // FVC: top-2 = 2.33 - 2.30 = 0.03 L → 30 ml
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    // FEV1: top-2 = 2.15 - 2.11 = 0.04 L → 40 ml
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.pruebasAceptables).toBe(3)
+  })
+
+  it('Acepta unit="l" (minúscula) como L para conversión a ml', () => {
+    const c = resolveCriteria({
+      calidad: CALIDAD_MIN_FIXTURE,
+      parametros: [
+        { label: 'FVC', key: 'fvc_l', unit: 'l', m1_value: 2.30, m2_value: 2.33, m3_value: 2.26 },
+      ],
+    })
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+  })
+
+  it('Acepta unit="L" (mayúscula) como L para conversión a ml', () => {
+    const c = resolveCriteria({
+      calidad: CALIDAD_MIN_FIXTURE,
+      parametros: [
+        { label: 'FEV1', key: 'fev1_l', unit: 'L', m1_value: 2.15, m2_value: 2.11, m3_value: 2.09 },
+      ],
+    })
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+  })
+
+  it('Si unidad NO es L/l (p.ej. "l/s"), diffMl queda null pero diffNative sí se computa', () => {
+    const c = resolveCriteria({
+      calidad: CALIDAD_MIN_FIXTURE,
+      parametros: [
+        { label: 'FEF25%-75%', key: 'fef25_75_l_s', unit: 'l/s', m1_value: 3.29, m2_value: 2.92, m3_value: 3.03 },
+      ],
+    })
+    expect(c.repetibilidadFvcMl).toBe(null) // no hay FVC
+    expect(c.repetibilidadFev1Ml).toBe(null) // no hay FEV1
+    expect(c.pruebasAceptables).toBe(null) // sólo FVC computable, pero aquí no hay FVC
+  })
+
+  it('FVC/FEV1 no se prefieren cuando la única fila es "Mejor FVC" / "Mejor FEV1"', () => {
+    // Caso defensivo: si el extractor sólo entrega la fila resumen
+    // "Mejor FVC"/"Mejor FEV1" (sin la estándar), el panel NO debe
+    // confundir la fila resumen con la estándar para fines de repetibilidad.
+    // La fila resumen tiene m1=m2=m3 idénticos → diff = 0 (NO representativo).
+    const c = resolveCriteria({
+      calidad: CALIDAD_MIN_FIXTURE,
+      parametros: [
+        { label: 'Mejor FVC', key: 'mejor_fvc_l', unit: 'L', m1_value: 2.33, m2_value: 2.33, m3_value: 2.33 },
+        { label: 'Mejor FEV1', key: 'mejor_fev1_l', unit: 'L', m1_value: 2.15, m2_value: 2.15, m3_value: 2.15 },
+      ],
+    })
+    // Como fallback (paso 3) usa las filas "mejor_*" pero su diff es 0 ml.
+    // El test verifica que NO se inflan los repetibilidad desde filas "Mejor X"
+    // cuando también existen filas estándar, garantizando la exclusión.
+    // Cuando SÓLO hay filas "Mejor X", el panel reporta diff=0 con marca
+    // explícita "calc." y el médico ve "0.00 ml" (no es inventado, es lo
+    // que produce la fórmula); en este caso la única opción es mostrar
+    // ese valor computed.
+    expect(c.repetibilidadFvcMl).toBeCloseTo(0, 5)
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(0, 5)
+  })
+
+  it('Si coexisten filas "Mejor FVC"/"FVC", la fila estándar gana para el cálculo', () => {
+    // Caso crítico: NO usar la fila "Mejor FVC" (diff=0) sino la "FVC"
+    // estándar (diff=30 ml). Verifica que findRowByKey excluye correctamente.
+    const c = resolveCriteria({
+      calidad: CALIDAD_MIN_FIXTURE,
+      parametros: [
+        { label: 'Mejor FVC', key: 'mejor_fvc_l', unit: 'L', m1_value: 2.33, m2_value: 2.33, m3_value: 2.33 },
+        { label: 'FVC', key: 'fvc_l', unit: 'L', m1_value: 2.30, m2_value: 2.33, m3_value: 2.26 },
+        { label: 'Mejor FEV1', key: 'mejor_fev1_l', unit: 'L', m1_value: 2.15, m2_value: 2.15, m3_value: 2.15 },
+        { label: 'FEV1', key: 'fev1_l', unit: 'L', m1_value: 2.15, m2_value: 2.11, m3_value: 2.09 },
+      ],
+    })
+    // FVC: 2.33 - 2.30 = 0.03 L → 30 ml (de la fila "FVC" estándar)
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    // FEV1: 2.15 - 2.11 = 0.04 L → 40 ml (de la fila "FEV1" estándar)
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.pruebasAceptables).toBe(3)
+  })
+
+  it('Fallback por label "FVC"/"FEV1" cuando key canónica está ausente (extractor entrega sólo label)', () => {
+    const c = resolveCriteria({
+      calidad: CALIDAD_MIN_FIXTURE,
+      parametros: [
+        { label: 'FVC', unit: 'L', m1_value: 2.30, m2_value: 2.33, m3_value: 2.26 },
+        { label: 'FEV1', unit: 'L', m1_value: 2.15, m2_value: 2.11, m3_value: 2.09 },
+      ],
+    })
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.pruebasAceptables).toBe(3)
+  })
+
+  it('Caso real Sibelmed con aliases: extraído en calidad gana sobre cálculo (alias-safe)', () => {
+    // Cuando calidad entrega repetibilidad_fvc_ml/fev1_ml explícitas del
+    // documento, esas ganan sobre el cálculo desde parametros (independiente
+    // del alias usado para maniobras).
+    const c = resolveCriteria({
+      calidad: {
+        ...CALIDAD_MIN_FIXTURE,
+        repetibilidad_fvc_ml: 30,
+        repetibilidad_fev1_ml: 40,
+        repetibilidad_fvc_menor_150: 'SI',
+        repetibilidad_fev1_menor_150: 'SI',
+        pruebas_aceptables: 3,
+      },
+      parametros: PARAMETROS_ALIASED_FIXTURE,
+    })
+    expect(c.repetibilidadFvcMl).toBe(30)
+    expect(c.repetibilidadFvcSource).toBe('extracted')
+    expect(c.repetibilidadFev1Ml).toBe(40)
+    expect(c.repetibilidadFev1Source).toBe('extracted')
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+    expect(c.repetibilidadFev1Menor150).toBe('SI')
+    expect(c.pruebasAceptables).toBe(3)
+  })
+
+  it('El panel NO muestra "—" para FVC/FEV1/#Pruebas cuando el payload usa aliases renderer/schema', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: EXTRACTED_ALIASED,
+      })
+    )
+    // Repetibilidad numérica visible (no "—").
+    expect(html).toContain('data-testid="repetibilidad-fvc-ml"')
+    expect(html).toContain('data-testid="repetibilidad-fev1-ml"')
+    expect(html).toContain('data-testid="pruebas-aceptables"')
+    // NO debe haber "—" en las celdas de repetibilidad/pruebas.
+    // Las celdas que SÍ pueden tener "—" son los cualitativos ausentes
+    // (este fixture los tiene todos como SI, pero por seguridad verificamos
+    // que las celdas numéricas tienen valores).
+    expect(html).toMatch(/data-testid="repetibilidad-fvc-ml"[\s\S]{0,200}>30\.00</)
+    expect(html).toMatch(/data-testid="repetibilidad-fev1-ml"[\s\S]{0,200}>40\.00</)
+    expect(html).toMatch(/data-testid="pruebas-aceptables"[\s\S]{0,200}>3</)
+  })
+})

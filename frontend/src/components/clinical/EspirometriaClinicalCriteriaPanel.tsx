@@ -9,13 +9,25 @@
  * Tabla `parametros[]` cuando contiene las filas canónicas FVC y FEV1 con
  * maniobras M1/M2/M3:
  *   - `repetibilidad_fvc_ml` = diff absoluta entre los 2 valores FVC más altos,
- *     en ml (L × 1000 si `unidad === 'L'`).
+ *     en ml (L × 1000 si `unidad === 'L'` o `unit === 'L'`).
  *   - `repetibilidad_fev1_ml` = idem para FEV1.
  *   - Umbral AMI: la repetibilidad CUMPLE cuando la diferencia es
  *     **menor o igual a 150 ml (0.15 L)** — BR-20260824-01, criterio comunicado
  *     por AMI. No usar 200 ml como umbral de cumplimiento.
  *   - `pruebas_aceptables` = # maniobras válidas disponibles en la fila
  *     FVC (3 cuando m1/m2/m3 presentes).
+ *
+ * Resolución de filas FVC/FEV1 (rev. 1.3): el extractor puede entregar la
+ * fila con clave canónica `fvc_l`/`fev1_l` o sólo con `label === "FVC"`/
+ * `"FEV1"`; también puede emitir filas "Mejor FVC"/"Mejor FEV1" como
+ * resumen (clave `mejor_fvc_l`/`mejor_fev1_l`) que NO deben sustituir la fila
+ * estándar para el cálculo de repetibilidad (las maniobras son las mismas
+ * pero la fila canónica es la fuente primaria para top-2 entre M1/M2/M3).
+ * El renderer/schema real (`extraction-presentation-schemas.ts`) usa aliases
+ * de tabla `m1_value`/`m2_value`/`m3_value`/`unit`/`ref_value`/`lln_value`,
+ * no `m1`/`m2`/`m3`/`unidad`/`ref`/`lln` que es lo que emite el extractor;
+ * por eso aceptamos AMBAS formas para no romper la prueba real ni el caso
+ * de presentación clínica.
  *
  * Si `calidad` ya expone alguna de estas claves, gana el valor extraído
  * (sobre el calculado), porque la fuente explícita del documento es
@@ -36,17 +48,24 @@
  * campo ausente se muestra con placeholder "—" sin lanzar excepciones.
  *
  * @id IMPL-20260824-01
- * @backup context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md (rev. 1.1)
+ * @backup context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md (rev. 1.3)
  */
 import type { CSSProperties, ReactElement } from "react"
 
 export type EspirometriaParametrosRow = {
   label?: string | null
   key?: string | null
+  /** Alias del extractor: `unidad`. Alias del renderer/schema: `unit`. */
   unidad?: string | null
+  unit?: string | null
+  /** Aliases del extractor para maniobras: `m1`/`m2`/`m3`. */
   m1?: number | string | null
   m2?: number | string | null
   m3?: number | string | null
+  /** Aliases del renderer/schema para maniobras: `m1_value`/`m2_value`/`m3_value`. */
+  m1_value?: number | string | null
+  m2_value?: number | string | null
+  m3_value?: number | string | null
   [k: string]: unknown
 }
 
@@ -71,39 +90,99 @@ function asFiniteNumber(value: unknown): number | null {
 
 function findRowByKey(
   parametros: EspirometriaParametrosRow[],
-  key: string
+  canonicalKey: string,
+  normalizedLabel: string
 ): EspirometriaParametrosRow | null {
+  // 1) Coincidencia exacta por `key` canónico, EXCLUYENDO filas "Mejor X".
+  //    Las filas "Mejor FVC"/"Mejor FEV1" resumen la mejor maniobra, pero la
+  //    fila canónica FVC/FEV1 es la fuente primaria para el cálculo de
+  //    repetibilidad entre M1/M2/M3.
+  const lowerCanonical = canonicalKey.toLowerCase()
   for (const row of parametros) {
-    if (row && typeof row === "object" && (row as { key?: unknown }).key === key) {
-      return row
-    }
+    if (!row || typeof row !== "object") continue
+    const rk = (row as { key?: unknown }).key
+    if (typeof rk !== "string") continue
+    if (rk.toLowerCase() !== lowerCanonical) continue
+    if (isMejorRow(row)) continue
+    return row
+  }
+  // 2) Fallback por `label` normalizado, también excluyendo "Mejor X".
+  const lowerLabel = normalizedLabel.toLowerCase()
+  for (const row of parametros) {
+    if (!row || typeof row !== "object") continue
+    if (isMejorRow(row)) continue
+    const lbl = row.label
+    if (typeof lbl !== "string") continue
+    if (lbl.trim().toLowerCase() !== lowerLabel) continue
+    return row
+  }
+  // 3) Último recurso: la fila canónica aunque sea "Mejor X" (caso raro en
+  //    que el extractor sólo entregue la fila resumen). Mantiene
+  //    comportamiento conservador en lugar de devolver null absoluto.
+  for (const row of parametros) {
+    if (!row || typeof row !== "object") continue
+    const rk = (row as { key?: unknown }).key
+    if (typeof rk === "string" && rk.toLowerCase() === lowerCanonical) return row
   }
   return null
+}
+
+function isMejorRow(row: EspirometriaParametrosRow): boolean {
+  const lbl = typeof row.label === "string" ? row.label.trim().toLowerCase() : ""
+  if (lbl.startsWith("mejor")) return true
+  // Defensa adicional por clave: `mejor_*_l` también es fila resumen.
+  const rk = typeof row.key === "string" ? row.key.trim().toLowerCase() : ""
+  if (rk.startsWith("mejor_")) return true
+  return false
 }
 
 function collectManeuverValues(
   row: EspirometriaParametrosRow
 ): number[] {
   const out: number[] = []
-  for (const slot of ["m1", "m2", "m3"] as const) {
-    const v = asFiniteNumber(row[slot])
+  // Pares (alias extractor, alias renderer/schema). Para cada maniobra, el
+  // alias extractor tiene precedencia si ambos están presentes (consistente
+  // con el resto del backend que serializa `m1`/`m2`/`m3`).
+  const slotPairs: ReadonlyArray<readonly [string, string]> = [
+    ["m1", "m1_value"],
+    ["m2", "m2_value"],
+    ["m3", "m3_value"],
+  ]
+  for (const [shortSlot, longSlot] of slotPairs) {
+    const v = asFiniteNumber(row[shortSlot]) ?? asFiniteNumber(row[longSlot])
     if (v !== null) out.push(v)
   }
   return out
 }
 
+/**
+ * Lee la unidad de una fila `parametros[]` desde los aliases `unidad`
+ * (extractor) o `unit` (renderer/schema). Devuelve el valor normalizado
+ * (`trim().toLowerCase()`) o string vacío si no hay unidad declarada.
+ */
+function readRowUnit(row: EspirometriaParametrosRow): string {
+  const candidates: unknown[] = [row.unidad, row.unit]
+  for (const c of candidates) {
+    if (typeof c === "string") {
+      const trimmed = c.trim().toLowerCase()
+      if (trimmed) return trimmed
+    }
+  }
+  return ""
+}
+
 export interface RepetibilidadCalc {
   /** Diferencia entre los 2 valores más altos, en la unidad de la fila. */
   diffNative: number | null
-  /** Diferencia en mililitros si la unidad es 'L', si no null. */
+  /** Diferencia en mililitros si la unidad es 'L' (case-insensitive), si no null. */
   diffMl: number | null
-  /** Maniobras válidas disponibles (cuenta de m1/m2/m3 finitos). */
+  /** Maniobras válidas disponibles (cuenta de m1/m2/m3 finitos, considerando aliases). */
   pruebas: number | null
 }
 
 /**
  * Calcula repetibilidad y #maniobras a partir de una fila `parametros[]`.
- * Devuelve `diffMl` sólo si la unidad es 'L' (caso FVC/FEV1).
+ * Devuelve `diffMl` sólo si la unidad es 'L' (case-insensitive, caso FVC/FEV1).
  * Para filas con otras unidades (l/s, s, %, años) devuelve `diffNative`
  * pero `diffMl = null` para no inventar unidades.
  */
@@ -122,7 +201,7 @@ export function computeRepetibilidadFromRow(
   // Top 2 valores más altos
   const sorted = [...values].sort((a, b) => b - a)
   const diff = Math.abs(sorted[0] - sorted[1])
-  const unit = typeof row.unidad === "string" ? row.unidad.trim().toLowerCase() : ""
+  const unit = readRowUnit(row)
   const diffMl = unit === "l" ? diff * 1000 : null
   return {
     diffNative: diff,
@@ -304,7 +383,10 @@ export function resolveCriteria(
   const fvcExtracted = hasValue(calidad?.repetibilidad_fvc_ml)
     ? asFiniteNumber(calidad?.repetibilidad_fvc_ml)
     : null
-  const fvcRow = findRowByKey(parametros, "fvc_l")
+  // Resolución robusta: clave canónica `fvc_l`, con fallback seguro por label
+  // `FVC`. Las filas "Mejor FVC" se excluyen para que la fila estándar sea la
+  // fuente del cálculo de repetibilidad entre M1/M2/M3.
+  const fvcRow = findRowByKey(parametros, "fvc_l", "FVC")
   const fvcCalc = computeRepetibilidadFromRow(fvcRow)
   const repetibilidadFvcMl =
     fvcExtracted !== null ? fvcExtracted : fvcCalc.diffMl
@@ -315,7 +397,7 @@ export function resolveCriteria(
   const fev1Extracted = hasValue(calidad?.repetibilidad_fev1_ml)
     ? asFiniteNumber(calidad?.repetibilidad_fev1_ml)
     : null
-  const fev1Row = findRowByKey(parametros, "fev1_l")
+  const fev1Row = findRowByKey(parametros, "fev1_l", "FEV1")
   const fev1Calc = computeRepetibilidadFromRow(fev1Row)
   const repetibilidadFev1Ml =
     fev1Extracted !== null ? fev1Extracted : fev1Calc.diffMl
