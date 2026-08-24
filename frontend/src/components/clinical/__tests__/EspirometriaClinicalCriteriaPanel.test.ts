@@ -734,3 +734,74 @@ describe('EspirometriaClinicalCriteriaPanel — rev. 1.3 aliases renderer/schema
     expect(html).toMatch(/data-testid="pruebas-aceptables"[\s\S]{0,200}>3</)
   })
 })
+
+// --- Operación exacta visible (FEATURE-20260824-01 rev. 1.3, mini-corte) ---
+
+describe('EspirometriaClinicalCriteriaPanel — operación exacta visible', () => {
+  it('Con payload Sibelmed: FVC: (2.33 − 2.30) × 1000 = 30.00 ml  /  FEV1: (2.15 − 2.11) × 1000 = 40.00 ml', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: FULL_EXTRACTED,
+      })
+    )
+    // Top-2 FVC = 2.33 y 2.30 → (2.33 − 2.30) × 1000 = 30.00 ml
+    expect(html).toMatch(
+      /FVC:\s*\(2\.33\s*[−-]\s*2\.30\)\s*[×x]\s*1000\s*=\s*30\.00\s*ml/
+    )
+    // Top-2 FEV1 = 2.15 y 2.11 → (2.15 − 2.11) × 1000 = 40.00 ml
+    expect(html).toMatch(
+      /FEV1:\s*\(2\.15\s*[−-]\s*2\.11\)\s*[×x]\s*1000\s*=\s*40\.00\s*ml/
+    )
+    // data-testid para E2E
+    expect(html).toContain('data-testid="repetibilidad-fvc-operacion"')
+    expect(html).toContain('data-testid="repetibilidad-fev1-operacion"')
+  })
+
+  it('Si faltan valores (sin fila FVC), muestra "—" sin inventar', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: {
+          // Sin parametros: no hay fuente para la operación
+          calidad: { repetibilidad_fvc_ml: 30, repetibilidad_fev1_ml: 40 },
+        },
+      })
+    )
+    // El bloque se renderiza por los numéricos extraídos
+    expect(html).toContain('Repetibilidad numérica')
+    // Líneas de operación presentes con "—"
+    expect(html).toContain('data-testid="repetibilidad-fvc-operacion"')
+    expect(html).toContain('data-testid="repetibilidad-fev1-operacion"')
+    expect(html).toMatch(/FVC:\s*[—]/)
+    expect(html).toMatch(/FEV1:\s*[—]/)
+  })
+
+  it('Una sola maniobra no produce operación: muestra "—" (no inventa)', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: {
+          parametros: [
+            { label: 'FVC', key: 'fvc_l', unit: 'L', m1: 2.33 },
+            { label: 'FEV1', key: 'fev1_l', unit: 'L', m1: 2.15 },
+          ],
+        },
+      })
+    )
+    // Sin repetibilidad numérica (no hay 2+ maniobras), el bloque no
+    // debería renderizar Repetibilidad numérica. Las operaciones no aparecen.
+    expect(html).not.toContain('Repetibilidad numérica')
+    expect(html).not.toContain('data-testid="repetibilidad-fvc-operacion"')
+    expect(html).not.toContain('data-testid="repetibilidad-fev1-operacion"')
+  })
+
+  it('La fórmula NO usa la unidad nativa si la fila está en l/s: "—" (no se mezcla)', () => {
+    // FEF25%-75% tiene unidad 'l/s'; no es FVC ni FEV1, pero verificamos que
+    // aunque tuviera key 'fvc_l' por algún error, la unidad != 'l' → topTwo null.
+    const c = resolveCriteria({
+      parametros: [
+        { label: 'FVC', key: 'fvc_l', unit: 'l/s', m1: 2.30, m2: 2.33, m3: 2.26 },
+      ],
+    })
+    expect(c.fvcTopTwoNative).toBe(null)
+    expect(c.repetibilidadFvcMl).toBe(null)
+  })
+})

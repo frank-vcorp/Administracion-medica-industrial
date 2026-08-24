@@ -140,3 +140,49 @@ No se cambian criterios cualitativos, no se cambian placeholders, no se cambian 
 ## Estado
 
 **READY_FOR_VERIFYING.** WIP=0, sesión SOFIA cerrada. Entrega a ATLAS → INTEGRA verifica → GEMINI confirma si requiere → ATLAS pide OK Frank.
+
+---
+
+# IMPL-REPORT — mini-corte (operación exacta visible)
+
+- **ID intervención:** `IMPL-20260824-01` (mini-corte presentacional sobre rev. 1.3, mismo incremento)
+- **SPEC:** `context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md` rev. 1.2 (sin cambio de SPEC; sólo presentación de auditoría en UI)
+- **Estado:** `READY_FOR_VERIFYING`
+
+## Cambio
+
+Debajo de cada celda numérica (`Repetibilidad FVC` / `Repetibilidad FEV1`) se renderiza una línea pequeña con la operación exacta usada por el helper:
+
+```
+FVC: (2.33 − 2.30) × 1000 = 30.00 ml
+FEV1: (2.15 − 2.11) × 1000 = 40.00 ml
+```
+
+- Sin cambio de fórmula ni de umbral (sigue siendo BR-20260824-01 ≤ 150 ml).
+- El helper ya calculado (`computeRepetibilidadFromRow`) ahora también devuelve `topTwoNative: [number, number] | null` con los 2 valores más altos en la unidad nativa.
+- Si la fila no existe, la unidad no es `'l'`, o hay <2 maniobras válidas → `topTwoNative = null` → la línea muestra `—` sin inventar.
+- Atributos `data-testid` añadidos para E2E Playwright: `repetibilidad-fvc-operacion`, `repetibilidad-fev1-operacion`.
+
+## Archivos modificados
+
+- `frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx`:
+  - `RepetibilidadCalc`: añadido `topTwoNative: [number, number] | null`.
+  - `computeRepetibilidadFromRow`: devuelve también los 2 valores más altos cuando la unidad es `'l'`.
+  - `ResolvedCriteria`: añadido `fvcTopTwoNative` / `fev1TopTwoNative`.
+  - Nuevo sub-componente `RepetibilidadOperationLine` que formatea la operación con unicode `−` (U+2212) y `×` (U+00D7).
+  - JSX del bloque "Repetibilidad numérica": inserta `RepetibilidadOperationLine` debajo de cada `NumberCell` FVC/FEV1.
+- `frontend/src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts`: nuevas aserciones (4 casos):
+  1. Operación visible exacta con payload Sibelmed: `FVC: (2.33 − 2.30) × 1000 = 30.00 ml` y `FEV1: (2.15 − 2.11) × 1000 = 40.00 ml`.
+  2. Sin `parametros[]` (sólo extraído en `calidad`) → líneas presentes con `—`.
+  3. Una sola maniobra → bloque de repetibilidad no se renderiza → líneas de operación ausentes.
+  4. Unidad ≠ `'l'` (ej. `l/s`) → `topTwoNative = null` → no se mezcla unidad.
+
+## Validación
+
+- **typecheck:** PASS — `npx tsc --noEmit`.
+- **tests focales (V1):** PASS — 52/52 (49 panel + 3 IA).
+- Sin cambio de contratos ni de snapshot. Sin commit/push.
+
+## Estado
+
+**READY_FOR_VERIFYING.** Sin pendientes para ATLAS distintos del gate V3 Playwright ya documentado en rev. 1.3.

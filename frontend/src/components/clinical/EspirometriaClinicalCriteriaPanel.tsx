@@ -178,6 +178,11 @@ export interface RepetibilidadCalc {
   diffMl: number | null
   /** Maniobras válidas disponibles (cuenta de m1/m2/m3 finitos, considerando aliases). */
   pruebas: number | null
+  /** Los 2 valores más altos en la unidad nativa, ordenados descendente.
+   *  Disponible cuando hay ≥ 2 maniobras válidas y la unidad es 'L'
+   *  (es decir, cuando `diffMl` también es computable). Si no, null.
+   *  Sirve para que la UI muestre la operación exacta. */
+  topTwoNative: [number, number] | null
 }
 
 /**
@@ -189,13 +194,14 @@ export interface RepetibilidadCalc {
 export function computeRepetibilidadFromRow(
   row: EspirometriaParametrosRow | null
 ): RepetibilidadCalc {
-  if (!row) return { diffNative: null, diffMl: null, pruebas: null }
+  if (!row) return { diffNative: null, diffMl: null, pruebas: null, topTwoNative: null }
   const values = collectManeuverValues(row)
   if (values.length < 2) {
     return {
       diffNative: null,
       diffMl: null,
       pruebas: values.length > 0 ? values.length : null,
+      topTwoNative: null,
     }
   }
   // Top 2 valores más altos
@@ -203,10 +209,17 @@ export function computeRepetibilidadFromRow(
   const diff = Math.abs(sorted[0] - sorted[1])
   const unit = readRowUnit(row)
   const diffMl = unit === "l" ? diff * 1000 : null
+  // `topTwoNative` sólo es informativo cuando la unidad es 'L' (es decir,
+  // cuando la fórmula `(max - secondMax) × 1000 = ml` aplica). En otro
+  // caso lo devolvemos null para no inducir a pensar que la operación es
+  // representativa.
+  const topTwoNative: [number, number] | null =
+    unit === "l" ? [sorted[0], sorted[1]] : null
   return {
     diffNative: diff,
     diffMl,
     pruebas: values.length,
+    topTwoNative,
   }
 }
 
@@ -341,6 +354,49 @@ function NumberCell({
   )
 }
 
+/**
+ * Línea de operación exacta: muestra la fórmula `(max − second) × 1000 = ml`
+ * con los valores M1/M2/M3 ya seleccionados por el helper. Si el helper no
+ * pudo tomar los dos mayores (fila ausente o unidad distinta de L), se
+ * muestra `—` sin inventar números.
+ */
+function RepetibilidadOperationLine({
+  label,
+  topTwo,
+  diffMl,
+}: {
+  label: string
+  topTwo: [number, number] | null
+  diffMl: number | null
+}) {
+  let body: string
+  if (topTwo === null) {
+    body = "—"
+  } else {
+    const [maxVal, secondVal] = topTwo
+    const maxStr = Number.isInteger(maxVal) ? maxVal.toString() : maxVal.toFixed(2)
+    const secondStr = Number.isInteger(secondVal) ? secondVal.toString() : secondVal.toFixed(2)
+    const result =
+      diffMl === null
+        ? "—"
+        : Number.isInteger(diffMl)
+        ? diffMl.toString()
+        : diffMl.toFixed(2)
+    // Operación exacta: usa unicode "−" (U+2212) y "×" (U+00D7) para
+    // alinearse con la notación matemática del PDF.
+    body = `(${maxStr} − ${secondStr}) × 1000 = ${result} ml`
+  }
+  return (
+    <p
+      className="text-[10px] text-slate-500 italic pl-1 -mt-0.5 pb-1"
+      data-criteria-key={`${label} operación`}
+      data-testid={`repetibilidad-${label.toLowerCase()}-operacion`}
+    >
+      {label}: {body}
+    </p>
+  )
+}
+
 // --- Decisión de qué datos usar: extraído gana sobre calculado ---
 
 export interface ResolvedCriteria {
@@ -349,6 +405,12 @@ export interface ResolvedCriteria {
   repetibilidadFvcMenor150: "SI" | "NO" | null
   repetibilidadFev1Menor150: "SI" | "NO" | null
   pruebasAceptables: number | null
+  /** Los 2 valores FVC más altos en la unidad nativa (L), o null si no
+   *  se pudieron tomar del snapshot. Sirven para mostrar la operación
+   *  exacta en la UI (`(max − second) × 1000 = ml`). */
+  fvcTopTwoNative: [number, number] | null
+  /** Los 2 valores FEV1 más altos en la unidad nativa (L), o null. */
+  fev1TopTwoNative: [number, number] | null
   picoMaximo: unknown
   formaTriangular: unknown
   libreArtefactos: unknown
@@ -448,6 +510,12 @@ export function resolveCriteria(
     repetibilidadFvcMenor150,
     repetibilidadFev1Menor150,
     pruebasAceptables,
+    // Trazabilidad de la fórmula: top-2 valores tomados del snapshot.
+    // Independiente de si `repetibilidadFvcMl` viene extraído o calculado,
+    // exponemos los valores de maniobra para que la UI muestre la operación
+    // exacta que respaldó el cálculo. Si la fila/valores no están, null.
+    fvcTopTwoNative: fvcCalc.topTwoNative,
+    fev1TopTwoNative: fev1Calc.topTwoNative,
     picoMaximo: calidad?.pico_maximo ?? null,
     formaTriangular: calidad?.forma_triangular ?? null,
     libreArtefactos: calidad?.libre_artefactos ?? null,
@@ -577,6 +645,11 @@ export default function EspirometriaClinicalCriteriaPanel({
               testId="repetibilidad-fvc-ml"
             />
           )}
+          <RepetibilidadOperationLine
+            label="FVC"
+            topTwo={c.fvcTopTwoNative}
+            diffMl={c.repetibilidadFvcMl}
+          />
           {c.repetibilidadFev1Ml !== null ? (
             <NumberCell
               label="Repetibilidad FEV1"
@@ -592,6 +665,11 @@ export default function EspirometriaClinicalCriteriaPanel({
               testId="repetibilidad-fev1-ml"
             />
           )}
+          <RepetibilidadOperationLine
+            label="FEV1"
+            topTwo={c.fev1TopTwoNative}
+            diffMl={c.repetibilidadFev1Ml}
+          />
           {(c.repetibilidadFvcSource !== "missing" ||
             c.repetibilidadFev1Source !== "missing") ? (
             <p
