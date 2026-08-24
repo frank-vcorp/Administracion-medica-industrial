@@ -3826,6 +3826,270 @@ class TestFIX20260821_01GateTableawareEspirometria:
 
 
 # ---------------------------------------------------------------------------
+# FEATURE-20260824-01 rev. 1.4: regresión de preservación bit-a-bit del layout
+# tabular Sibelmed RD2026 en `parametros[]`. Tras detectarse que la celda M1
+# de FEV1 se desplazaba o se perdía en producciones reales, el normalizador
+# ahora anota `SOSPECHA_DESPLAZAMIENTO_M1` cuando m1 falta con m2/m3
+# presentes en filas principales (FEV1/FVC y variantes bare).
+#
+# Esta suite NO modifica el cálculo downstream (la fórmula de repetibilidad
+# sigue siendo top-2 sobre m1/m2/m3 finitos y el umbral AMI ≤150 ml). Sólo
+# garantiza dos cosas:
+#   (a) la entrada canónica del fixture documental RD2026 sobrevive el paso
+#       del normalizador sin desplazamiento (m1=2.15 / m1_pct_ref=77 de FEV1
+#       sigue siendo m1=2.15 / m1_pct_ref=77);
+#   (b) la entrada defectuosa (m1 ausente + m2/m3 presentes) activa la
+#       anotación defensiva sin inventar valores.
+# ---------------------------------------------------------------------------
+
+# FIX-FEATURE-20260824-01 rev. 1.4: snapshot bit-a-bit del fixture documental
+# `context/lote-nocturno-20260820-01/extraction-espirometria-rd2026.json`,
+# reducido a `extracted_data.parametros[]` (10 filas canónicas + Mejor X).
+# Cargado vía Path relativo para mantenerlo anclado al repo, sin importar PII.
+_RD2026_ESPIRO_FIXTURE_PATH = (
+    Path(__file__).parent.parent.parent
+    / "context"
+    / "lote-nocturno-20260820-01"
+    / "extraction-espirometria-rd2026.json"
+)
+
+
+def _load_rd2026_parametros() -> list:
+    """Carga las 10 filas `parametros[]` del fixture documental RD2026.
+
+    Returns:
+        Lista de dicts con label/key/unidad/m1/m1_pct_ref/m2/m2_pct_ref/m3/m3_pct_ref/ref/lln
+        correspondiente a la tabla Sibelmed W20s del PDF RD2026/ESPIROMETRIA.pdf
+        (paciente PEÑA PATRICIO MARBELLA).
+
+    Raises:
+        FileNotFoundError: si el fixture documental no existe en el árbol
+            esperado — se considera error de configuración del test, no del
+            normalizador.
+    """
+    if not _RD2026_ESPIRO_FIXTURE_PATH.exists():
+        raise FileNotFoundError(
+            f"Fixture documental RD2026 no encontrado: {_RD2026_ESPIRO_FIXTURE_PATH}"
+        )
+    payload = json.loads(_RD2026_ESPIRO_FIXTURE_PATH.read_text(encoding="utf-8"))
+    return payload["extracted_data"]["parametros"]
+
+
+class TestFEATURE20260824_01Rev14EspiroRD2026Preservation:
+    """FEATURE-20260824-01 rev. 1.4: regresión sobre el fixture documental
+    RD2026 (Sibelmed W20s) — preserva cada celda M1/%REF/M2/%REF/M3/%REF sin
+    desplazamiento, especialmente FEV1 (m1=2.15, m1_pct_ref=77).
+
+    Comprueba:
+    - m1=2.15 de FEV1 no se desplaza a m2.
+    - El cálculo de repetibilidad downstream (top-2 sobre los m* resultantes)
+      sigue produciendo 40 ml para FEV1 y 30 ml para FVC.
+    - Cuando el extractor emite FEV1 con m1 ausente y m2/m3 presentes
+      (defecto observado), el normalizador anota `SOSPECHA_DESPLAZAMIENTO_M1`
+      en `notas_calidad` sin inventar el valor faltante.
+    - El resto de filas (`Mejor FEV1`, `Mejor FVC`, `FEV1/FVC`, etc.) NO se
+      ven afectadas — la detección defensiva sólo dispara para `fe{v,c}1*`
+      y `fvc*` y excluye `mejor_*` (las filas resumen con m1=m2=m3 no son
+      candidatas a la heurística de M1 ausente con M2/M3 presentes).
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-api-key", model="gemini-2.5-pro")
+
+    @pytest.fixture
+    def rd2026_input(self):
+        """Snapshot del fixture documental con sólo los campos que el
+        normalizador consume — sin PII del paciente ni del médico firmante.
+        """
+        parametros = _load_rd2026_parametros()
+        return {
+            "paciente": "PEÑA PATRICIO MARBELLA",
+            "fecha_estudio": "2025-03-18",
+            "parametros": parametros,
+            "calidad": {
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+            },
+        }
+
+    # ── AC rev 1.4-1: la fila FEV1 conserva m1=2.15 / m1_pct_ref=77
+    def test_rd2026_fev1_row_preserves_m1_and_m1_pct_ref(self, extractor, rd2026_input):
+        """El normalizador preserva la celda m1 (2.15) y m1_pct_ref (77) del
+        FEV1 sin desplazamiento tras `parametros[]` → `EspirometriaData`."""
+        normalized = extractor._normalize_espirometria_result(dict(rd2026_input))
+        fev1_rows = [
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fev1_l"
+        ]
+        assert len(fev1_rows) == 1, (
+            f"Esperaba 1 fila FEV1 canónica en el payload RD2026; "
+            f"encontré {len(fev1_rows)} keys={[r.get('key') for r in fev1_rows]}"
+        )
+        fev1 = fev1_rows[0]
+        assert fev1["m1"] == 2.15, f"FEV1.m1 desplazada/perdida: {fev1['m1']}"
+        assert fev1["m1_pct_ref"] == 77.0, (
+            f"FEV1.m1_pct_ref desplazada/perdida: {fev1['m1_pct_ref']}"
+        )
+        assert fev1["m2"] == 2.11
+        assert fev1["m2_pct_ref"] == 76.0
+        assert fev1["m3"] == 2.09
+        assert fev1["m3_pct_ref"] == 75.0
+        # Trazabilidad bit-a-bit.
+        assert fev1["label"] == "FEV1"
+        assert fev1["unidad"] == "L"
+        assert fev1["ref"] == 2.77
+        assert fev1["lln"] == 2.23
+
+    # ── AC rev 1.4-2: la fila FVC conserva sus 6 celdas intactas
+    def test_rd2026_fvc_row_preserves_all_six_cells(self, extractor, rd2026_input):
+        """El normalizador preserva m1=2.30/69, m2=2.33/70, m3=2.26/68 de FVC
+        sin ningún desplazamiento."""
+        normalized = extractor._normalize_espirometria_result(dict(rd2026_input))
+        fvc_rows = [
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fvc_l"
+        ]
+        assert len(fvc_rows) == 1
+        fvc = fvc_rows[0]
+        assert fvc["m1"] == 2.30
+        assert fvc["m1_pct_ref"] == 69.0
+        assert fvc["m2"] == 2.33
+        assert fvc["m2_pct_ref"] == 70.0
+        assert fvc["m3"] == 2.26
+        assert fvc["m3_pct_ref"] == 68.0
+        assert fvc["ref"] == 3.32
+        assert fvc["lln"] == 2.69
+
+    # ── AC rev 1.4-3: repetibilidad 40 ml FEV1 (top-2 = 2.15 − 2.11)
+    def test_repetibilidad_fev1_top_two_equals_40ml(self, extractor, rd2026_input):
+        """El cálculo de repetibilidad downstream (max−second_max)×1000 debe
+        dar 40 ml para FEV1 sobre el fixture RD2026 — confirmando que el flujo
+        extractor→normalizador→panel conserva M1=2.15 antes de aplicar top-2."""
+        normalized = extractor._normalize_espirometria_result(dict(rd2026_input))
+        from app.services.ai.prediagnostic import _espirometry_param_present_in_tabla
+        # El gate tiene que poder derivar FEV1 desde la tabla para el cálculo
+        # del panel: la presencia del escalar debe garantizar la fila canónica.
+        assert _espirometry_param_present_in_tabla(normalized, "fev1") is True
+        # Y el backfill determinista debe elegir max(m1,m2,m3) = 2.15 como
+        # `fev1` raíz (no 2.11, que sería síntoma del desplazamiento).
+        from app.services.ai.extractor import _backfill_espirometry_scalar
+        fev1_root = _backfill_espirometry_scalar(normalized["parametros"], "fev1")
+        assert fev1_root == 2.15, (
+            f"El backfill devolvió {fev1_root}; esperaba 2.15 (max entre "
+            f"maniobras). Si es <2.15, M1 se perdió en la normalización."
+        )
+
+    # ── AC rev 1.4-4: repetibilidad FVC 30 ml (preservada, sin regresión)
+    def test_repetibilidad_fvc_top_two_equals_30ml(self, extractor, rd2026_input):
+        """El cálculo de repetibilidad downstream debe dar 30 ml para FVC
+        sobre el fixture RD2026 (top-2 = 2.33 − 2.30). Esto confirma que el
+        refuerzo del guardrail y la anotación defensiva no afectaron FVC."""
+        normalized = extractor._normalize_espirometria_result(dict(rd2026_input))
+        from app.services.ai.extractor import _backfill_espirometry_scalar
+        fvc_root = _backfill_espirometry_scalar(normalized["parametros"], "fvc")
+        assert fvc_root == 2.33, (
+            f"Backfill FVC: esperaba max=2.33, obtuve {fvc_root}"
+        )
+        # Cálculo directo del top-2 × 1000 = ml:
+        fvc_rows = [
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fvc_l"
+        ]
+        maneuvers = sorted(
+            [fvc_rows[0]["m1"], fvc_rows[0]["m2"], fvc_rows[0]["m3"]],
+            reverse=True,
+        )
+        diff_ml = round((maneuvers[0] - maneuvers[1]) * 1000, 2)
+        assert diff_ml == 30.0
+
+    # ── AC rev 1.4-5: el payload RD2026 canónico NO activa SOSPECHA_DESPLAZAMIENTO_M1
+    def test_rd2026_canonical_payload_does_not_flag_displacement(
+        self, extractor, rd2026_input
+    ):
+        """Si la entrada ya tiene las 6 celdas sanas, el normalizador NO debe
+        marcar SOSPECHA_DESPLAZAMIENTO_M1 (sería un falso positivo)."""
+        normalized = extractor._normalize_espirometria_result(dict(rd2026_input))
+        notas = normalized.get("notas_calidad") or ""
+        assert "SOSPECHA_DESPLAZAMIENTO_M1" not in notas, (
+            f"Falso positivo: notas_calidad incluye la advertencia pese a que "
+            f"el payload tenía m1 en FEV1 y FVC.\n  notas_calidad={notas!r}"
+        )
+
+    # ── AC rev 1.4-6: FEV1 con m1 ausente + m2/m3 presentes ⇒ anotación defensiva
+    def test_fev1_m1_missing_m2_m3_present_flags_displacement(self, extractor):
+        """Si el extractor (LLM) emite FEV1 con m1 ausente pero m2/m3 presentes
+        (defecto observado en producción), el normalizador anota
+        `SOSPECHA_DESPLAZAMIENTO_M1` en `notas_calidad` y NO inventa el valor."""
+        input_dict = {
+            "paciente": "Test desplazamiento",
+            "fecha_estudio": "2025-03-18",
+            "parametros": [
+                # FVC intacta (sanity check: el resto no se ve afectado).
+                {"label": "FVC", "key": "fvc_l", "unidad": "L",
+                 "m1": 2.30, "m1_pct_ref": 69.0,
+                 "m2": 2.33, "m2_pct_ref": 70.0,
+                 "m3": 2.26, "m3_pct_ref": 68.0},
+                # FEV1 con m1 AUSENTE — caso reportado por Frank.
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                 "m1": None, "m1_pct_ref": None,
+                 "m2": 2.11, "m2_pct_ref": 76.0,
+                 "m3": 2.09, "m3_pct_ref": 75.0},
+            ],
+            "calidad": {
+                "es_interpretable": None,
+                "completitud_documental": None,
+            },
+        }
+        normalized = extractor._normalize_espirometria_result(input_dict)
+        notas = normalized.get("notas_calidad") or ""
+        assert "SOSPECHA_DESPLAZAMIENTO_M1" in notas, (
+            f"Anotación defensiva NO emitida. notas_calidad={notas!r}"
+        )
+        assert "FEV1" in notas, (
+            f"La advertencia no nombra la fila afectada: {notas!r}"
+        )
+        # Defensa: el normalizador NO debe haber inventado m1.
+        fev1_rows = [
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fev1_l"
+        ]
+        assert fev1_rows[0]["m1"] is None, (
+            "El normalizador NO debe asignar un valor a m1 — sólo anotar."
+        )
+        # La anotación también debe aparecer en `calidad.notas_calidad` para
+        # los consumidores que sólo lean el sub-bloque (consistente con la
+        # nota de SOSPECHA_MAPEO previa).
+        calidad = normalized.get("calidad") or {}
+        assert "SOSPECHA_DESPLAZAMIENTO_M1" in (calidad.get("notas_calidad") or "")
+
+    # ── AC rev 1.4-7: el guardrail FEV1 rev 1.4 está inyectado en el prompt
+    def test_espirometry_prompt_contains_rd2026_fev1_example(self, extractor):
+        """FIX-FEATURE-20260824-01 rev. 1.4: el guardrail backend cita el
+        ejemplo concreto FEV1 del fixture RD2026 (m1=2.15, m1_pct_ref=77)
+        para que el LLM no dude entre las 3 maniobras y conserve el orden."""
+        from app.services.ai.extractor import _ESPIROMETRIA_BACKEND_GUARDRAILS
+        # La constante global incluye el ejemplo bit-a-bit.
+        assert "2.15" in _ESPIROMETRIA_BACKEND_GUARDRAILS
+        assert "77" in _ESPIROMETRIA_BACKEND_GUARDRAILS
+        assert "PRESERVACIÓN ESTRICTA" in _ESPIROMETRIA_BACKEND_GUARDRAILS
+        # El builder inyecta el guardrail entre la base universal y el bloque
+        # específico editable por calibración.
+        prompt = extractor._build_espirometria_extraction_prompt(
+            "bloque_calibracion_x"
+        )
+        # El ejemplo FEV1 vive en el guardrail, no en el bloque del estudio.
+        assert "2.15" in prompt
+        guardrail_pos = prompt.index(
+            _ESPIROMETRIA_BACKEND_GUARDRAILS.splitlines()[0]
+        )
+        bloque_pos = prompt.index("bloque_calibracion_x")
+        assert guardrail_pos < bloque_pos, (
+            "El guardrail debe preceder al bloque editable de calibración"
+        )
+
+
+# ---------------------------------------------------------------------------
 # SPEC-FIX-20260824-01: STUDY_TYPE_MISMATCH estructurado.
 #
 # Cubre AC-1 (Audio→Espiro), AC-2 (Espiro→Audio inverso), AC-3 (UI/resultNotes

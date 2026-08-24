@@ -175,6 +175,10 @@ _ESPIROMETRIA_CANONICAL_KEYS: frozenset = frozenset({
 # Guardrails backend inyectados antes del bloque de calibración para reforzar
 # la extracción tabular FVC/FEV1/M1/M2/M3/REF/LLN sin depender de ediciones
 # en la configuración de DB. Espejo de _AUDIOMETRIA_BACKEND_GUARDRAILS.
+# FIX-FEATURE-20260824-01 rev. 1.4: añadir §7-§9 con ejemplo concreto de fila
+# FEV1 (layout Sibelmed RD2026) tras detectarse desplazamiento/pérdida de la
+# celda M1 en producciones reales — el LLM emitía m1/m1_pct_ref faltantes o
+# desplazados a m2/m2_pct_ref, alterando el cálculo downstream de repetibilidad.
 _ESPIROMETRIA_BACKEND_GUARDRAILS = """
 GUARDRAILS ESPECÍFICOS PARA ESPIROMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBRACIÓN)
 1. La tabla INFORME DE FVC es la fuente primaria de datos numéricos.
@@ -196,6 +200,25 @@ GUARDRAILS ESPECÍFICOS PARA ESPIROMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBR
    - "suficiente"     → ≥6 parámetros principales con valores M1+M2+M3
    - "parcial"        → 3-5 parámetros
    - "no_concluyente" → <3 parámetros
+7. PRESERVACIÓN ESTRICTA DE LAS 6 CELDAS DE MANIOBRAS POR FILA. Cada fila
+   interpretable de `parametros[]` debe contener, para cada una de las 3
+   maniobras, el valor numérico Y su %REF asociado — 6 celdas en total:
+   `m1`, `m1_pct_ref`, `m2`, `m2_pct_ref`, `m3`, `m3_pct_ref`. Trata
+   `m1_pct_ref` como la celda INMEDIATAMENTE A LA DERECHA de `m1` (no la
+   confundas con un valor independiente). Lo mismo para `m2_pct_ref`/`m3_pct_ref`.
+8. NO permitas layout alternativo que omita o desplace celdas. Específicamente:
+   - Si `m1` está presente, `m1_pct_ref` debe vivir en la columna %REF de M1.
+   - Si una celda está vacía en la fuente, usa null — no rellenes con el valor
+     de la celda adyacente ni con el valor de otra maniobra.
+   - NO uses pares heterogéneos del tipo (m1 con %REF de M2) ni omitas
+     ninguna de las 6 celdas de una fila estándar (Mejor X, FVC, FEV1).
+9. EJEMPLO CONCRETO (layout Sibelmed W20s, fila FEV1) — referencia bit-a-bit:
+   "FEV1" → key "fev1_l", unidad "L", con la siguiente serie de 6 celdas:
+     m1 = 2.15, m1_pct_ref = 77, m2 = 2.11, m2_pct_ref = 76, m3 = 2.09, m3_pct_ref = 75
+   Este patrón se repite análogamente para FVC (`m1=2.30/69, m2=2.33/70,
+   m3=2.26/68`) y para "Mejor FEV1" / "Mejor FVC" donde `m1=m2=m3` consolidan
+   la mejor maniobra. Mantener la correspondencia celda↔campo es crítico para
+   el cálculo downstream de repetibilidad (top-2 = `max(m1,m2,m3) − segundo_max`).
 """.strip()
 
 
@@ -501,6 +524,48 @@ notas de calidad y gráficas.
             warning = (
                 "SOSPECHA_MAPEO: parámetros con key no canónico: "
                 f"{non_canonical_labels}. Verifique mapeo label→key."
+            )
+            existing = result.get("notas_calidad") or ""
+            result["notas_calidad"] = (
+                f"{existing} | {warning}" if existing else warning
+            )
+            if isinstance(calidad, dict):
+                cn = calidad.get("notas_calidad") or ""
+                calidad["notas_calidad"] = (
+                    f"{cn} | {warning}" if cn else warning
+                )
+                result["calidad"] = calidad
+
+        # FIX-FEATURE-20260824-01 rev. 1.4: detección defensiva de
+        # desplazamiento/pérdida de la celda M1 en filas principales
+        # (`fev1_l`/`fvc_l` y variantes bare `fev1`/`fvc`). Sin corrección
+        # automática — sólo anotación en `notas_calidad` para auditoría y
+        # trazabilidad downstream. Falsos positivos acotados a la condición
+        # estricta m1 ausente + m2 ó m3 presente (no se dispara si la fila
+        # sólo trae m1, lo cual es válido cuando la fuente realmente
+        # expone una sola maniobra aceptable).
+        _PRINCIPAL_PARAM_KEYS = {
+            "fev1_l", "fev1", "fvc_l", "fvc",
+        }
+        desplazamiento_warnings = []
+        for r in normalized_rows:
+            rk = (r.get("key") or "").lower()
+            if rk not in _PRINCIPAL_PARAM_KEYS:
+                continue
+            if r.get("m1") is not None:
+                continue  # celda sana — sin desplazamiento.
+            # m1 null pero m2 ó m3 presente => M1 fue omitida por el extractor.
+            if r.get("m2") is not None or r.get("m3") is not None:
+                lbl = r.get("label") or rk
+                desplazamiento_warnings.append(
+                    f"{lbl}: celda m1 ausente con m2/m3 presentes "
+                    "(posible desplazamiento o pérdida de M1)"
+                )
+        if desplazamiento_warnings:
+            warning = (
+                "SOSPECHA_DESPLAZAMIENTO_M1: "
+                + "; ".join(desplazamiento_warnings)
+                + ". Verifique alineación tabular M1/%REF en la fuente."
             )
             existing = result.get("notas_calidad") or ""
             result["notas_calidad"] = (
