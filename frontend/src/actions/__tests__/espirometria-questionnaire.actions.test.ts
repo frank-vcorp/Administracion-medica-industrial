@@ -7,8 +7,12 @@
  *
  * Aislamiento:
  *   - Mock de `@/lib/prisma` y `next/cache` (sin tocar la BD real).
- *   - `validateEspirometriaQuestionnairePayload` se prueba en aislamiento
- *     sin tocar Prisma.
+ *   - `validateEspirometriaQuestionnairePayload` (helper puro) se prueba
+ *     en aislamiento sin tocar Prisma. Vive en
+ *     `frontend/src/lib/clinical/espirometria-questionnaire-validate.ts`
+ *     (FIX-Vercel-Build 2026-08-25 — Next.js 16 rechaza exports síncronos
+ *     en módulos `'use server'`; el helper se extrajo para desbloquear el
+ *     build Vercel preservando la validación Zod intacta).
  *
  * @id IMPL-FEATURE-20260824-02
  * @backup context/SPECs/SPEC-FEATURE-20260824-02-CUESTIONARIO-ESPIROMETRIA.md
@@ -33,10 +37,8 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import {
-  saveEspirometriaQuestionnaire,
-  validateEspirometriaQuestionnairePayload,
-} from '../espirometria-questionnaire.actions'
+import { saveEspirometriaQuestionnaire } from '../espirometria-questionnaire.actions'
+import { validateEspirometriaQuestionnairePayload } from '@/lib/clinical/espirometria-questionnaire-validate'
 import { ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from '@/schemas/clinical/espirometria-questionnaire.schema'
 
 const VALID_PAYLOAD = {
