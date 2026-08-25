@@ -32,24 +32,20 @@ import {
 } from '../update-espirometria-prediagnosis-prompt'
 
 describe('update-espirometria-prediagnosis-prompt — AC-DEC-02-A: constantes exportadas', () => {
-  it('PREDIAGNOSIS_VERSION es estrictamente v2 (rev. UI prediagnóstico Frank)', () => {
-    expect(PREDIAGNOSIS_VERSION).toBe('espirometria-prediagnosis-v2')
+  it('PREDIAGNOSIS_VERSION es estrictamente v3 (AMI-ESPIROMETRIA-v1, Frank)', () => {
+    expect(PREDIAGNOSIS_VERSION).toBe('espirometria-prediagnosis-v3')
     expect(PREDIAGNOSIS_VERSION).toMatch(/^espirometria-prediagnosis-v\d+$/)
   })
 
-  it('Referencia explícita a DEC-20260824-02 y a IMPL-FIX-20260824-XX (rev. UI)', () => {
-    // La trazabilidad DEC-20260824-02 vive en el docstring del script
-    // (no en el prompt mismo, para no contaminar tokens de salida LLM).
-    // Aquí verificamos que la marca de la rev. UI prediagnóstico SÍ está
-    // en el prompt (referencia operativa, no decorativa).
-    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('IMPL-FIX-20260824-XX')
-    // Y que el docstring sigue apuntando a DEC-20260824-02.
+  it('Referencia explícita a AMI-ESPIROMETRIA-v1 y trazabilidad DEC-20260824-02', () => {
+    // La trazabilidad AMI-ESPIROMETRIA-v1 vive en el docstring del script.
     const fs = require('node:fs') as typeof import('node:fs')
     const src = fs.readFileSync(
       new URL('../update-espirometria-prediagnosis-prompt.ts', import.meta.url)
         .pathname,
       'utf8'
     )
+    expect(src).toContain('AMI-ESPIROMETRIA-v1')
     expect(src).toContain('DEC-20260824-02')
   })
 })
@@ -197,7 +193,7 @@ describe('update-espirometria-prediagnosis-prompt — AC-DEC-02-I: contrato no r
 //   - Modo sombra + revisión médica preservados.
 // ---------------------------------------------------------------------------
 
-describe('update-espirometria-prediagnosis-prompt — IMPL-FIX-20260824-XX rev. UI prediagnóstico', () => {
+describe('update-espirometria-prediagnosis-prompt — AMI-ESPIROMETRIA-v1 (Frank)', () => {
   it('summary: prompt define "IMPRESIÓN DIAGNÓSTICA SUGERIDA BREVE" (estilo documento clínico)', () => {
     expect(NEW_PREDIAGNOSIS_PROMPT).toContain(
       'IMPRESIÓN DIAGNÓSTICA SUGERIDA BREVE'
@@ -214,10 +210,17 @@ describe('update-espirometria-prediagnosis-prompt — IMPL-FIX-20260824-XX rev. 
   })
 
   it('summary: prompt PROHÍBE copiar `impresion_diagnostica_texto` del PDF', () => {
+    // El v3 usa backticks escapados en el template literal TS (\\`); el
+    // runtime produce `calidad.impresion_diagnostica_texto`. El regex
+    // tolera espacios O backticks entre "PROHIBIDO copiar" y la referencia.
     expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(
-      /PROHIBIDO copiar\s+`?calidad\.impresion_diagnostica_texto`?/i
+      /PROHIBIDO copiar[\s`]*calidad\.impresion_diagnostica_texto/i
     )
-    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/GENERADO\s+desde\s+los\s+par[aá]metros/i)
+    // El v3 indica que la impresión se construye desde los parámetros
+    // extraídos (no del PDF), no transcrito.
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(
+      /Construye la impresi[oó]n desde los par[aá]metros extra[ií]dos/i
+    )
   })
 
   it('summary: prompt incluye ejemplos válidos del estilo clínico', () => {
@@ -251,14 +254,12 @@ describe('update-espirometria-prediagnosis-prompt — IMPL-FIX-20260824-XX rev. 
 
   it('recommendation: prompt PROHÍBE copiar `recomendaciones_texto` del PDF', () => {
     expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(
-      /PROHIBIDO copiar\s+`?calidad\.recomendaciones_texto`?/i
+      /PROHIBIDO copiar[\s`]*calidad\.recomendaciones_texto/i
     )
-    // El v2 prompt indica que recommendation es GENERADO desde análisis
-    // de parámetros (no transcrito). El formato exacto puede variar,
-    // así que validamos el principio general sin atar el regex a una
-    // frase literal específica.
+    // El v3 indica que la recomendación se construye contextualizada al
+    // patrón + calidad + entorno (no transcrita del PDF).
     expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(
-      /GENERADO\s+desde/i
+      /RECOMENDACI[OÓ]N OCUPACIONAL CONTEXTUALIZADA/i
     )
   })
 
@@ -267,7 +268,9 @@ describe('update-espirometria-prediagnosis-prompt — IMPL-FIX-20260824-XX rev. 
       /s[oó]lo cuando la evidencia lo justifique/i
     )
     // Si patrón NORMAL sin exposición ocupacional, recomendación mínima.
-    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/NORMAL\s+y\s+NO\s+hay\s+exposici[oó]n/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(
+      /NORMAL\s+sin\s+exposici[oó]n\s+ocupacional/i
+    )
   })
 
   it('Modo sombra + revisión médica: prompt preserva semántica', () => {
@@ -287,16 +290,138 @@ describe('update-espirometria-prediagnosis-prompt — IMPL-FIX-20260824-XX rev. 
     expect(NEW_PREDIAGNOSIS_PROMPT).toContain('NOM-022-STPS-2015')
   })
 
-  it('Reglas de patrón preservadas (obstructivo / restrictivo / mixto / normal / dudosa)', () => {
-    for (const patron of ['OBSTRUCTIVO', 'RESTRICCIÓN', 'MIXTO', 'NORMAL', 'DUDOSA']) {
+  it('Reglas de patrón preservadas (obstructivo / restrictivo / mixto / normal / calidad dudosa)', () => {
+    for (const patron of ['OBSTRUCTIVO', 'RESTRICCIÓN', 'MIXTO', 'NORMAL']) {
       expect(NEW_PREDIAGNOSIS_PROMPT).toContain(patron)
     }
+    // "Calidad dudosa" cubre el v3 (v2 usaba "DUDOSA").
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/calidad\s+dudosa/i)
   })
 
   it('Sin migración: el script no publica V3 ni modifica schema Prisma', () => {
     // Verificación estática: el script no debe publicar versiones V3.
     expect(PREDIAGNOSIS_VERSION).not.toMatch(/^v[0-9]+$/)
     // Sigue siendo rama V1/V2 legacy (lee via aiCalibration.diagnosis).
+    expect(PREDIAGNOSIS_VERSION).toMatch(/^espirometria-prediagnosis-v\d+$/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// AMI-ESPIROMETRIA-v1: tests específicos del flujo AMI extraído de
+// `context/datos AMI/DETERMINAR EL PATRÓN ESPIROMÉTRICO.pptx` que ahora
+// preside el prompt v3.
+//
+// AC:
+//   - AMI es FUENTE PRIORITARIA (aparece ANTES de ATS/ERS 2022).
+//   - Cada paso del algoritmo AMI está presente en el prompt:
+//       paso 1: aceptabilidad/repetibilidad
+//       paso 2: FEV1/FVC < LIN obstructivo; FVC > 80% normal; FVC ≤ 80% restrictivo
+//       paso 3: gradación FEV1% (70-100 leve; 60-69 moderada; 50-59 mod. grave; 35-49 grave; <35 muy grave)
+//       paso 4: broncodilatador >200 ml Y >12% (normaliza → hiperreactividad; no normaliza → obstrucción crónica)
+//       paso 5: FVC baja → TLC/pletismografía
+//   - ATS/ERS 2022 se mantiene como REFERENCIA SECUNDARIA.
+//   - Modo sombra + revisión médica preservados.
+// ---------------------------------------------------------------------------
+
+describe('update-espirometria-prediagnosis-prompt — AMI-ESPIROMETRIA-v1 flujo AMI prioritario', () => {
+  it('AMI como fuente prioritaria: aparece ANTES de ATS/ERS 2022 en el prompt', () => {
+    const ami_pos = NEW_PREDIAGNOSIS_PROMPT.indexOf('CRITERIOS AMI')
+    const ats_pos = NEW_PREDIAGNOSIS_PROMPT.indexOf('ATS/ERS 2022')
+    expect(ami_pos).toBeGreaterThan(-1)
+    expect(ats_pos).toBeGreaterThan(-1)
+    expect(ami_pos).toBeLessThan(ats_pos)
+  })
+
+  it('PASO 1 AMI: gate de aceptabilidad y repetibilidad', () => {
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('PASO 1')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('ACEPTABILIDAD Y REPETIBILIDAD')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/Baja la confianza/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/REPETIR el estudio con t[eé]cnica adecuada/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/NO emitas patr[oó]n definitivo/i)
+  })
+
+  it('PASO 2 AMI: FEV1/FVC < LIN → obstructivo; FVC > 80% → normal; FVC ≤ 80% → sugestivo de restricción', () => {
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('PASO 2')
+    // FEV1/FVC < LIN → obstructivo.
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/FEV1\/FVC\s*<\s*LIN/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/patr[oó]n OBSTRUCTIVO/i)
+    // FEV1/FVC ≥ LIN + FVC > 80% → normal.
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/FVC\s*>\s*80%/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/patr[oó]n NORMAL/i)
+    // FEV1/FVC ≥ LIN + FVC ≤ 80% → sugestivo de restricción.
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/FVC\s*≤\s*80%/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/SUGESTIVO DE RESTRICCI[OÓ]N/i)
+  })
+
+  it('PASO 3 AMI: gradación de obstrucción con FEV1 % predicho', () => {
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('PASO 3')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('GRADUACIÓN DE OBSTRUCCIÓN')
+    // Escala completa: 70-100, 60-69, 50-59, 35-49, <35.
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/70-100%\s*=\s*LEVE/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/60-69%\s*=\s*MODERADA/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/50-59%\s*=\s*MODERADAMENTE GRAVE/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/35-49%\s*=\s*GRAVE/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/<35%\s*=\s*MUY GRAVE/i)
+  })
+
+  it('PASO 4 AMI: broncodilatador >200 ml Y >12% (normaliza → hiperreactividad; no normaliza → obstrucción crónica)', () => {
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('PASO 4')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('PRUEBA BRONCODILATADORA')
+    // "Mejora FEV1 y/o FVC > 200 ml Y > 12%" — el "/" puede dar problemas
+    // en regex si no se escapa. Aquí el patrón es claro en el prompt.
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('> 200 ml')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('> 12%')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/NORMALIZA o CASI NORMALIZA/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('HIPERREACTIVIDAD BRONQUIAL')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/NO normaliza/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('OBSTRUCCIÓN CRÓNICA')
+  })
+
+  it('PASO 5 AMI: FVC baja NO confirma restricción; TLC/pletismografía', () => {
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('PASO 5')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('CONFIRMACIÓN DE RESTRICCIÓN')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/FVC baja\s*NO confirma restricci[oó]n/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/TLC\s*\/\s*pletismograf[ií]a/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/NO afirmar restricci[oó]n definitiva/i)
+  })
+
+  it('ATS/ERS 2022 se mantiene como REFERENCIA SECUNDARIA (no desplazado)', () => {
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('REFERENCIA SECUNDARIA ATS/ERS 2022')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/complemento,\s*NO desplaza AMI/i)
+  })
+
+  it('Orden del prompt v3: AMI primero → datos → salida → guardrails', () => {
+    const idx_ami = NEW_PREDIAGNOSIS_PROMPT.indexOf('CRITERIOS AMI')
+    const idx_datos = NEW_PREDIAGNOSIS_PROMPT.indexOf('DATOS DEL ESTUDIO')
+    const idx_salida = NEW_PREDIAGNOSIS_PROMPT.indexOf('SALIDA JSON')
+    const idx_guardrails = NEW_PREDIAGNOSIS_PROMPT.indexOf(
+      'LIMITES MÉDICOS OBLIGATORIOS'
+    )
+    expect(idx_ami).toBeLessThan(idx_datos)
+    expect(idx_datos).toBeLessThan(idx_salida)
+    expect(idx_salida).toBeLessThan(idx_guardrails)
+  })
+
+  it('Modo sombra + revisión médica preservados (modo sombra clínica + alerta)', () => {
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('MODO SOMBRA')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/APOYO A LA DECISI[OÓ]N/i)
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/el m[eé]dico firmante/i)
+  })
+
+  it('Citations incluye AMI como fuente prioritaria', () => {
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('AMI-DETERMINAR-PATRON-2024')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/Algoritmo AMI/i)
+    // ATS/ERS y NOM-022-STPS-2015 también presentes (no se eliminan).
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('ATS-ERS-2022')
+    expect(NEW_PREDIAGNOSIS_PROMPT).toContain('NOM-022-STPS-2015')
+  })
+
+  it('Justificación cita pasos AMI explícitamente', () => {
+    // El JSON skeleton justifica citing AMI step numbers.
+    expect(NEW_PREDIAGNOSIS_PROMPT).toMatch(/AMI paso\s*\d+/i)
+  })
+
+  it('Sin migración Prisma: el script sólo inyecta diagnosis, no schema', () => {
     expect(PREDIAGNOSIS_VERSION).toMatch(/^espirometria-prediagnosis-v\d+$/)
   })
 })

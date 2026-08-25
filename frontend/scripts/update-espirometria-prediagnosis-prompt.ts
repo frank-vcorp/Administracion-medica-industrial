@@ -1,6 +1,6 @@
 /**
  * Script para configurar el prompt clínico (prediagnóstico) de
- * Espirometría en Railway — IMPL-FIX-20260824-XX (rev. UI prediagnóstico).
+ * Espirometría en Railway — AMI-ESPIROMETRIA-v1 + IMPL-FIX-20260824-XX.
  *
  * USO:
  *   cd frontend && \
@@ -11,7 +11,7 @@
  *   - Busca el MedicalTest cuyo `name` sea "ESPIROMETRIA" (case-insensitive).
  *   - Actualiza únicamente `options.aiCalibration.diagnosis.prompt` y
  *     `options.aiCalibration.diagnosis.version` →
- *     'espirometria-prediagnosis-v2' (Frank confirmó el cambio rev. UI).
+ *     'espirometria-prediagnosis-v3' (AMI-ESPIROMETRIA-v1, Frank confirmado).
  *   - Preserva intactos los demás campos de `options.aiCalibration`,
  *     incluyendo:
  *       * `aiCalibration.enabled`
@@ -22,35 +22,35 @@
  *       * `aiCalibration.presentation` (si existe)
  *       * Cualquier otra clave de primer nivel bajo `aiCalibration`.
  *
- * CONTRATO INTACTO + AJUSTES rev. UI prediagnóstico (Frank):
+ * CONTRATO INTACTO + AJUSTES AMI-ESPIROMETRIA-v1 (Frank confirmado):
  *   - El resolver consume `aiCalibration.diagnosis.prompt` por la rama V1/V2
  *     (legacy) → `prompt_source="ai_calibration"` → el snapshot deja de
  *     mostrar la limitation "Fallback general backend".
- *   - El prompt exige `recommendation` singular no nulo cuando hay datos
- *     suficientes, contextualizado al patrón, calidad del estudio y entorno
- *     ocupacional (EPP, seguimiento, estudios complementarios, vigilancia).
- *   - **NUEVO rev. UI prediagnóstico** (Frank): `summary` es ahora una
- *     IMPRESIÓN DIAGNÓSTICA SUGERIDA BREVE, en estilo del documento clínico,
- *     generada a partir de los parámetros (NO copia texto fuente del PDF).
- *     Ejemplos:
- *       "Patrón espirométrico restrictivo; FVC 70%"
- *       "Espirometría sin patrón obstructivo/restrictivo evidente; FVC 81%"
- *     El frontend `StudyAIPrediagnosisPanel` la renderiza bajo el encabezado
- *     "Hallazgo sugerido" — NO se confunde con texto fuente del documento.
- *   - **NUEVO rev. UI prediagnóstico**: `recommendation` es una
- *     RECOMENDACIÓN OCUPACIONAL CONTEXTUALIZADA. Sólo incluye EPP,
- *     ejercicios/seguimiento o estudios complementarios cuando la
- *     evidencia lo justifique (patrón identificado, calidad del estudio,
- *     entorno ocupacional inferido). NO copia texto fuente del PDF.
- *   - Mantiene `limitations`, `justification` y `citations` (clinical basis).
- *   - Modo sombra + revisión médica (BR-20260824-02): todo lo generado es
- *     APOYO A LA DECISIÓN, NO dictamen.
- *   - PROHIBICIONES preservadas: aptitud laboral, incapacidad, tratamiento,
- *     diagnóstico definitivo, verbos prescriptivos absolutos.
+ *   - **NUEVO AMI-ESPIROMETRIA-v1**: el prompt coloca al INICIO y como
+ *     fuente prioritaria el flujo clínico AMI extraído de la presentación
+ *     `context/datos AMI/DETERMINAR EL PATRÓN ESPIROMÉTRICO.pptx`. Orden
+ *     del prompt v3:
+ *       1) CRITERIOS AMI primero (aceptabilidad, FEV1/FVC, gradación
+ *          FEV1%, broncodilatador, FVC → restricción/pletismografía).
+ *       2) DATOS DEL ESTUDIO (parámetros extraídos).
+ *       3) SALIDA (`summary` impresión sugerida breve, `recommendation`
+ *          ocupacional contextualizada, `limitations`, `justification`,
+ *          `citations`).
+ *       4) GUARDRAILS (límites médicos obligatorios, modo sombra).
+ *   - ATS/ERS 2022 se conserva como referencia secundaria (no desplaza
+ *     al AMI) para los detalles de clasificación cuando aplique.
+ *   - **Preservado de rev. UI prediagnóstico**: `summary` es IMPRESIÓN
+ *     DIAGNÓSTICA SUGERIDA BREVE (estilo documento clínico, NO copia texto
+ *     del PDF); `recommendation` es OCUPACIONAL CONTEXTUALIZADA (EPP,
+ *     seguimiento, estudios complementarios sólo si la evidencia lo
+ *     justifica).
+ *   - PROHIBICIONES preservadas: aptitud laboral, incapacidad,
+ *     tratamiento, diagnóstico definitivo, verbos prescriptivos absolutos,
+ *     copiar texto del PDF como summary/recommendation.
  *
  * IDEMPOTENCIA:
  *   - Si `options.aiCalibration.diagnosis.version` ya es
- *     'espirometria-prediagnosis-v2', el script no escribe y reporta
+ *     'espirometria-prediagnosis-v3', el script no escribe y reporta
  *     "ya configurado". Permite re-ejecución segura.
  *   - Si `aiCalibration.diagnosis` está ausente, lo crea preservando
  *     `enabled`, `canonicalStudyType` y `extraction` intactos.
@@ -61,8 +61,8 @@
  *   - No se publica V3 (`status='published'` se maneja en el editor; este
  *     script sólo inyecta el prompt para que el resolver V1/V2 lo consuma).
  *
- * @id IMPL-FIX-20260824-XX (rev. UI prediagnóstico, Frank)
- * @backup discovery/DECISIONS.md (DEC-20260824-02)
+ * @id AMI-ESPIROMETRIA-v1 (Frank confirmado 2026-08-24)
+ * @backup context/datos AMI/DETERMINAR EL PATRÓN ESPIROMÉTRICO.pptx
  */
 import { Prisma, PrismaClient } from '@prisma/client'
 import { fileURLToPath } from 'node:url'
@@ -72,7 +72,7 @@ import { fileURLToPath } from 'node:url'
 // NO son parte del contrato público: son internas al script de mantenimiento
 // del prompt clínico de Espirometría.
 // ---------------------------------------------------------------------------
-export const PREDIAGNOSIS_VERSION = 'espirometria-prediagnosis-v2'
+export const PREDIAGNOSIS_VERSION = 'espirometria-prediagnosis-v3'
 
 export const NEW_PREDIAGNOSIS_PROMPT = `Eres un sistema de apoyo a la decisión clínica para neumología ocupacional.
 Recibirás parámetros espirométricos extraídos, en formato corto (campos fev1/fvc/ratio)
@@ -82,35 +82,64 @@ El sistema funciona en MODO SOMBRA: TODO lo que generes es APOYO A LA DECISIÓN
 del médico firmante. La impresión diagnóstica definitiva, aptitud laboral y
 tratamiento los decide el médico.
 
-REGLAS ESTRICTAS — OBSERVACIÓN OBLIGATORIA:
-1. Usa lenguaje prudente: "patrón compatible con", "sugiere evaluación", "requiere correlación clínica".
-2. NO declares diagnóstico de enfermedad pulmonar ni aptitud laboral.
-3. Si el payload incluye bloque \`parametros\`, PRIORIZA esos valores tabulares. Cita label y key en \`justification\`.
-4. Si hay \`lln\` en alguna fila de \`parametros\`, úsala como umbral preferente sobre 0.70 genérico.
-5. Si no hay \`lln\`, usa umbrales ATS/ERS 2022 y decláralo explícitamente como limitación.
-6. Si faltan FEV1, FVC o la relación, declara AI_NON_CONCLUSIVE.
-7. Si \`calidad.completitud_documental\` o el campo legacy \`completitud_documental\` indica limitaciones, consérvalo como limitación técnica; NO bloquees automáticamente la interpretación si los parámetros clave y la tabla están presentes.
-9. Responde SOLO en JSON, sin markdown.
+=== 1) CRITERIOS AMI (FUENTE PRIORITARIA — DETERMINAR EL PATRÓN ESPIROMÉTRICO) ===
 
-JERAQUÍA DE EVIDENCIA (en orden de prioridad):
+El flujo AMI es la referencia principal para clasificar la espirometría.
+Sigue el árbol de decisión del algoritmo AMI (DETERMINAR EL PATRÓN ESPIROMÉTRICO):
+
+PASO 1 — ACEPTABILIDAD Y REPETIBILIDAD (gate de entrada):
+- Si la espirometría NO es aceptable ni repetible (criterios_para_dx=NO, repetibilidad_fev1_menor_150=NO, maniobras válidas <2, curvas no legibles):
+   * Baja la confianza.
+   * Recomienda REPETIR el estudio con técnica adecuada.
+   * NO emitas patrón definitivo. Marca "calidad insuficiente para interpretación definitiva".
+- Si ES aceptable y repetible, avanza al paso 2.
+
+PASO 2 — RELACIÓN FEV1/FVC vs LIN (Límite Inferior Normal):
+- Si FEV1/FVC < LIN (o < 0.70 si no hay LIN) → patrón OBSTRUCTIVO (avanza a paso 3).
+- Si FEV1/FVC ≥ LIN (o ≥ 0.70 si no hay LIN):
+   * Si FVC > 80% del predicho → patrón NORMAL (avanza a paso 5).
+   * Si FVC ≤ 80% del predicho → patrón SUGESTIVO DE RESTRICCIÓN (avanza a paso 5).
+
+PASO 3 — GRADUACIÓN DE OBSTRUCCIÓN con FEV1 % predicho:
+- 70-100% = LEVE
+- 60-69% = MODERADA
+- 50-59% = MODERADAMENTE GRAVE
+- 35-49% = GRAVE
+- <35% = MUY GRAVE
+
+PASO 4 — PRUEBA BRONCODILATADORA (sólo si hay obstrucción y datos post-BD):
+- Mejora FEV1 y/o FVC > 200 ml Y > 12%:
+   * Si NORMALIZA o CASI NORMALIZA → sugiere HIPERREACTIVIDAD BRONQUIAL (siempre como apoyo).
+   * Si NO normaliza → sugiere OBSTRUCCIÓN CRÓNICA (siempre como apoyo).
+- Si NO hay datos post-BD → no especular; mencionar "considerar prueba broncodilatadora" en el campo \`recommendation\`.
+
+PASO 5 — CONFIRMACIÓN DE RESTRICCIÓN:
+- FVC baja NO confirma restricción por sí sola (puede ser restricción o mezcla).
+- Sugerir CONFIRMACIÓN con TLC / pletismografía en el campo \`recommendation\`.
+- NO afirmar restricción definitiva; usar lenguaje prudente ("sugestivo de", "compatible con").
+
+=== 2) DATOS DEL ESTUDIO (parámetros extraídos) ===
+
+{extracted_json}
+
+=== 3) JERARQUÍA DE EVIDENCIA ===
 1. Valores tabulares explícitos del bloque \`parametros\` (con key canónica)
-2. LLN de la tabla si disponible
+2. LLN de la tabla si disponible (preferente sobre 0.70 genérico)
 3. % del predicho de la tabla
 4. Campos flat fev1/fvc/fev1_fvc_ratio si no hay tabla
-5. Umbrales ATS/ERS genéricos solo como fallback de último recurso
+5. Umbrales ATS/ERS 2022 solo como referencia secundaria (NO desplaza al AMI)
 
-CLASIFICACIÓN ESPIROMÉTRICA ATS/ERS 2022:
-- Patrón OBSTRUCTIVO: FEV1/FVC < LLN (o < 0.70 si no hay LLN).
-  Severidad por FEV1% predicho: Leve≥70%, Moderado 60-69%, Mod. Severo 50-59%, Severo 35-49%, Muy severo<35%.
-- Patrón SUGESTIVO DE RESTRICCIÓN: FVC% predicho < 80% (o FVC < LLN) CON FEV1/FVC CONSERVADO (≥ LLN o ≥ 0.70).
-  NOTA: diagnóstico definitivo requiere TLC/pletismografía.
+=== 4) REFERENCIA SECUNDARIA ATS/ERS 2022 (complemento, NO desplaza AMI) ===
+- Patrón OBSTRUCTIVO: FEV1/FVC < LLN (o < 0.70 si no hay LLN). Severidad por FEV1% predicho según escala AMI del paso 3.
+- Patrón SUGESTIVO DE RESTRICCIÓN: FVC% < 80% (o FVC < LLN) CON FEV1/FVC CONSERVADO (≥ LLN o ≥ 0.70).
+  NOTA: diagnóstico definitivo requiere TLC/pletismografía (paso 5 AMI).
 - Patrón MIXTO: FEV1/FVC < LLN Y FVC < LLN o FVC% < 80%. Considera calidad técnica antes de etiquetar.
-- Patrón NORMAL: FEV1/FVC ≥ LLN y FEV1% ≥ 80% y FVC% ≥ 80%.
-- Broncodilatador: si hay datos post-BD, comenta reversibilidad (aumento FEV1 ≥ 12% y 200 mL).
+- Patrón NORMAL: FEV1/FVC ≥ LLN y FEV1% ≥ 80% y FVC% ≥ 80% (paso 2 AMI).
+- Broncodilatador: si hay datos post-BD, comenta reversibilidad según AMI paso 4.
 
-REGLAS DE SÍNTESIS CRÍTICAS — PROHIBICIONES ABSOLUTAS:
+=== 5) REGLAS DE SÍNTESIS CRÍTICAS — PROHIBICIONES ABSOLUTAS ===
 REGLA A: Si FEV1/FVC está CONSERVADO (≥ LLN o ≥ 0.70) y FVC o FVC% está REDUCIDA,
-   NO cierres como patrón obstructivo. El patrón es sugestivo de restricción o no concluyente.
+   NO cierres como patrón obstructivo. El patrón es sugestivo de restricción o no concluyente (paso 2 AMI).
 REGLA B: Si FEV1/FVC está disminuido y FVC también está reducida, NO simplifiques automáticamente
    a obstructivo. Considera patrón mixto o calidad insuficiente; explicita la ambigüedad.
 REGLA C: Si \`calidad.repetibilidad_ats_ers_fvc\` o \`calidad.repetibilidad_ats_ers_fev1\` son negativas,
@@ -118,12 +147,12 @@ REGLA C: Si \`calidad.repetibilidad_ats_ers_fvc\` o \`calidad.repetibilidad_ats_
 REGLA D: Si tu justificación numérica indica un patrón X pero tu summary propone patrón Y,
    prevalece la degradación a AI_NON_CONCLUSIVE.
 
-=== NUEVO rev. UI prediagnóstico (Frank) ===
+=== 6) SALIDA JSON (orden estricto) ===
 
 CAMPO \`summary\` — IMPRESIÓN DIAGNÓSTICA SUGERIDA BREVE (estilo documento clínico):
-- Estructura: una sola línea en estilo conciso del documento clínico
-  (no prosa narrativa larga). Construye la impresión desde los
-  parámetros extraídos (NO desde \`impresion_diagnostica_texto\` del PDF).
+- Estructura: una sola línea en estilo conciso del documento clínico.
+  Construye la impresión desde los parámetros extraídos (NO desde
+  \`calidad.impresion_diagnostica_texto\` del PDF).
 - Formato preferido (1 oración, ≤ 160 caracteres):
     "<patrón>; FVC <X>%; FEV1/FVC <ratio>"
     o
@@ -133,95 +162,67 @@ CAMPO \`summary\` — IMPRESIÓN DIAGNÓSTICA SUGERIDA BREVE (estilo documento c
     "Espirometría sin patrón obstructivo/restrictivo evidente; FVC 81%"
     "Patrón obstructivo leve; FVC 95%; FEV1/FVC 0.66"
     "Función pulmonar normal; FVC 92%; FEV1/FVC 0.82"
-- Si la calidad es insuficiente, indícalo brevemente en el summary
-  ("Calidad insuficiente para interpretación definitiva") y deriva a
-  AI_NON_CONCLUSIVE si los parámetros clave faltan.
-- PROHIBIDO copiar \`calidad.impresion_diagnostica_texto\` /
-  \`calidad.impresion_diagnostica\` del PDF como summary. El summary es
-  GENERADO desde los parámetros numéricos, no transcrito del documento.
-- Mantén el lenguaje prudente del documento clínico: usa "compatible
-  con", "sugiere", "sin patrón evidente". NUNCA afirma diagnóstico
-  definitivo ("el paciente tiene EPOC", etc.).
+    "Calidad insuficiente para interpretación definitiva; FVC 92%"
+- Si calidad insuficiente, indícalo brevemente en summary.
+- PROHIBIDO copiar \`calidad.impresion_diagnostica_texto\` / \`calidad.impresion_diagnostica\` del PDF como summary.
 
 CAMPO \`recommendation\` — RECOMENDACIÓN OCUPACIONAL CONTEXTUALIZADA:
-- IMPL-FIX-20260824-XX (Frank): la recomendación es OCUPACIONAL y
-  CONTEXTUALIZADA al patrón, la calidad del estudio y el entorno
-  ocupacional inferido. Construye desde la evidencia de parámetros, NO
-  desde \`recomendaciones_texto\` del PDF.
-- Componentes permitidos, sólo cuando la evidencia lo justifique:
+- Componentes permitidos (sólo cuando la evidencia lo justifique):
     * EPP (protección respiratoria) si hay exposición ocupacional inferida.
     * Vigilancia periódica según protocolo y severidad.
     * Correlación clínica con espirometría previa.
     * Estudios complementarios (pletismografía/TLC, broncodilatadora).
-    * Ejercicios/seguimiento rehabilitatorio (con prudencia).
-- Reglas por patrón (mismas reglas de v1, preservadas):
-    * Patrón OBSTRUCTIVO (FEV1/FVC < LLN o < 0.70): mencionar correlación
-      con espirometría previa, vigilancia periódica según severidad y
-      exposición, y confirmación con prueba broncodilatadora si no hay
-      datos post-BD.
-    * Patrón SUGESTIVO DE RESTRICCIÓN (FVC% < 80% o FVC < LLN, ratio
-      conservado): mencionar correlación con espirometría previa y
-      consideración de pletismografía/TLC para confirmación (NO afirmar
-      restricción definitiva).
-    * Patrón MIXTO (FEV1/FVC bajo + FVC baja): describir la ambigüedad,
-      recomendar repetición con técnica adecuada y valoración médica.
-    * Función NORMAL: mencionar vigilancia espirométrica periódica según
-      protocolo ocupacional y reforzar protección respiratoria (EPP) si
-      hay exposición a polvos, humos, vapores o alergenos respiratorios.
-    * Calidad DUDOSA (repetibilidad AMI > 150 ml, criterios_para_dx null,
-      curvas no legibles, maniobras < 2 aceptables): recomendar REPETIR el
-      estudio con técnica adecuada ANTES de cualquier sugerencia clínica.
-      Esta es la recomendación PRINCIPAL cuando la calidad es insuficiente.
-- PROHIBIDO copiar \`calidad.recomendaciones_texto\` /
-  \`calidad.recomendaciones\` del PDF como recommendation. La
-  recommendation es GENERADA desde el análisis de parámetros, no
-  transcrita del documento.
-- PROHIBIDO agregar EPP/ejercicios/seguimiento/estudios complementarios
-  sin que la evidencia lo justifique. Si el patrón es NORMAL y NO hay
-  exposición ocupacional inferida, la recomendación puede limitarse a
-  "vigilancia periódica según protocolo".
+- Reglas por patrón (alineadas con AMI + ATS/ERS):
+    * Obstrucción (paso 3 AMI): mencionar correlación con espirometría
+      previa, vigilancia periódica según severidad y exposición, y
+      broncodilatadora si no hay datos post-BD.
+    * Sugestivo de restricción (paso 5 AMI): mencionar correlación y
+      considerar pletismografía/TLC (NO afirmar restricción definitiva).
+    * Patrón MIXTO: describir ambigüedad, recomendar repetición con
+      técnica adecuada y valoración médica.
+    * Normal: vigilancia periódica según protocolo ocupacional +
+      reforzar EPP si hay exposición ocupacional inferida.
+    * Calidad dudosa (paso 1 AMI): REPETIR el estudio con técnica
+      adecuada ANTES de cualquier sugerencia clínica.
+- PROHIBIDO copiar \`calidad.recomendaciones_texto\` / \`calidad.recomendaciones\` del PDF como recommendation.
+- PROHIBIDO agregar EPP/ejercicios/seguimiento/estudios sin que la
+  evidencia lo justifique. Si patrón NORMAL sin exposición ocupacional
+  inferida, recomendación mínima ("vigilancia periódica según protocolo").
 
-Límites médicos OBLIGATORIOS (nunca violar):
-   * PROHIBIDO declarar aptitud laboral, incapacidad, tratamiento farmacológico ni dictamen final.
-   * PROHIBIDO usar verbos prescriptivos absolutos ("debe", "deberá") sobre indicaciones
-     clínicas que requieren valoración médica presencial.
-   * PROHIBIDO afirmar diagnóstico definitivo ("el paciente tiene EPOC", "es asmático").
-     Usa SIEMPRE lenguaje prudente: "compatible con", "sugiere evaluación de",
-     "requiere correlación clínica".
-   * Si la calidad es insuficiente, la recomendación PRINCIPAL debe ser repetir el estudio,
-     no una sugerencia clínica prescriptiva.
-   * PROHIBIDO copiar texto del PDF (calidad.impresion_diagnostica_texto,
-     calidad.recomendaciones_texto, calidad.impresion_diagnostica,
-     calidad.recomendaciones) en summary ni recommendation. Ambos campos
-     son GENERADOS a partir del análisis numérico de parámetros.
-
-Longitud: summary ≤ 160 caracteres; recommendation 1-3 oraciones (≤ 320 caracteres).
-Si los datos son insuficientes (AI_NON_CONCLUSIVE por falta de FEV1/FVC/ratio),
-\`recommendation\` puede ser \`null\` y debe ir acompañado de
-\`non_conclusive_reason\` explícito.
-
-Parámetros extraídos:
-{extracted_json}
+=== 7) LIMITES MÉDICOS OBLIGATORIOS (GUARDRAILS — MODO SOMBRA) ===
+- PROHIBIDO declarar aptitud laboral, incapacidad, tratamiento farmacológico ni dictamen final.
+- PROHIBIDO usar verbos prescriptivos absolutos ("debe", "deberá") sobre indicaciones clínicas que requieren valoración médica presencial.
+- PROHIBIDO afirmar diagnóstico definitivo ("el paciente tiene EPOC", "es asmático").
+  Usa SIEMPRE lenguaje prudente: "compatible con", "sugiere evaluación de", "requiere correlación clínica".
+- Si calidad insuficiente, recomendación PRINCIPAL es repetir el estudio (paso 1 AMI).
+- PROHIBIDO copiar texto del PDF (\`calidad.impresion_diagnostica_texto\`, \`calidad.recomendaciones_texto\`,
+  \`calidad.impresion_diagnostica\`, \`calidad.recomendaciones\`) en summary ni recommendation.
+- Longitud: summary ≤ 160 caracteres; recommendation 1-3 oraciones (≤ 320 caracteres).
+- Si los datos son insuficientes (AI_NON_CONCLUSIVE por falta de FEV1/FVC/ratio),
+  el campo \`recommendation\` puede ser null y debe ir acompañado de
+  non_conclusive_reason explícito.
 
 Responde en JSON con esta estructura exacta:
 {
-  "summary": "Patrón espirométrico restrictivo; FVC 70%",
+  "summary": "Patrón espirométrico obstructivo leve; FVC 95%; FEV1/FVC 0.66",
   "confidence": 0.72,
   "clinical_state": "AI_PENDING_REVIEW",
   "justification": [
-    "FEV1/FVC X.XX (LLN: Y.YY desde tabla) — ratio conservado, descarta patrón obstructivo primario",
-    "FVC Z.ZL es X% del predicho (REF: W.WL, LLN: V.VL) — reducida, sugestiva de restricción"
+    "FEV1/FVC X.XX (LLN: Y.YY desde tabla) — bajo LIN, indica patrón obstructivo (AMI paso 2)",
+    "FEV1 X% del predicho — grado LEVE según escala AMI (70-100%)",
+    "FVC W% del predicho — conservada, sin componente restrictivo"
   ],
   "clinical_basis": [
-    {"principle": "Clasificación espirométrica ATS/ERS 2022", "applied_parameters": ["fev1_fvc_ratio", "fvc_percent_predicho", "lln"]}
+    {"principle": "AMI DETERMINAR EL PATRÓN ESPIROMÉTRICO", "applied_parameters": ["fev1_fvc_ratio", "fvc_percent_predicho", "lln"]}
   ],
   "citations": [
+    {"source_id": "AMI-DETERMINAR-PATRON-2024", "title": "Algoritmo AMI — DETERMINAR EL PATRÓN ESPIROMÉTRICO", "section": "Pasos 1-5", "excerpt": "FEV1/FVC < LIN → obstructivo; graduar con FEV1% (70-100 leve, 60-69 moderado, 50-59 mod. grave, 35-49 grave, <35 muy grave)", "version_or_date": "2024"},
     {"source_id": "ATS-ERS-2022", "title": "ATS/ERS Technical Standard: interpretive strategies for routine lung function tests", "section": "Tabla 1", "excerpt": "FEV1/FVC < LLN define obstrucción; FVC < LLN con ratio conservado sugiere restricción", "version_or_date": "2022"},
-    {"source_id": "NOM-20260824-STPS", "title": "NOM-022-STPS-2015 — Condiciones de seguridad e higiene — agentes químicos contaminantes", "section": "Vigilancia médica", "excerpt": "Espirometría como herramienta de vigilancia de la función pulmonar en trabajadores expuestos", "version_or_date": "2015"}
+    {"source_id": "NOM-022-STPS-2015", "title": "NOM-022-STPS-2015 — Condiciones de seguridad e higiene — agentes químicos contaminantes", "section": "Vigilancia médica", "excerpt": "Espirometría como herramienta de vigilancia de la función pulmonar en trabajadores expuestos", "version_or_date": "2015"}
   ],
-  "limitations": ["Interpretación requiere valores predichos según edad, talla y sexo; confirmar con espirometría previa si disponible"],
+  "limitations": ["Calidad AMI no cumple → interpretar con cautela; repetir estudio con técnica adecuada"],
   "red_flags": [],
-  "recommendation": "Correlacionar con espirometría previa y valorar prueba broncodilatadora. Reforzar EPP respiratorio si hay exposición ocupacional a polvos o humos.",
+  "recommendation": "Correlacionar con espirometría previa y considerar prueba broncodilatadora si no hay datos post-BD. Reforzar EPP respiratorio si hay exposición ocupacional a polvos o humos. Vigilancia periódica según protocolo.",
   "non_conclusive_reason": null
 }`
 
@@ -231,7 +232,7 @@ const prisma = new PrismaClient()
 
 async function main() {
   console.log(
-    `=== IMPL-FIX-20260824-XX (DEC-20260824-02 — Espirometría prediagnosis prompt v${PREDIAGNOSIS_VERSION}; rev. UI prediagnóstico Frank) ===\n`
+    `=== AMI-ESPIROMETRIA-v1 (DEC-20260824-02 — Espirometría prediagnosis prompt v${PREDIAGNOSIS_VERSION}; AMI primero + rev. UI Frank) ===\n`
   )
 
   const test = await prisma.medicalTest.findFirst({
