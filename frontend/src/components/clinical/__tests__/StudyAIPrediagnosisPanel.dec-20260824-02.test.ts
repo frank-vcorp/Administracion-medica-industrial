@@ -159,6 +159,44 @@ describe('StudyAIPrediagnosisPanel — DEC-20260824-02 / IMPL-20260824-06', () =
     expect(html).toContain('Acción B ocupacional.')
   })
 
+  it('AC-DEC-02-2 (orden/anti-ocultación): `recommendation` singular NO se oculta por alias `recommendations: []` vacío', () => {
+    // DEC-20260824-02: "no ocultes el contenido por un alias".
+    // Si el snapshot trae `recommendation` válido Y `recommendations: []`
+    // (array vacío como alias), el singular DEBE ganar. Antes del fix esto
+    // podía renderizar "Recomendaciones sugeridas (0)".
+    const html = renderToStaticMarkup(
+      createElement(
+        StudyAIPrediagnosisPanel,
+        baseProps({
+          ...FULL_PREDIAGNOSIS,
+          recommendations: [],
+          recommended_actions: [],
+          recommendation: 'Correlacionar con espirometría previa.',
+        })
+      )
+    )
+    expect(html).toContain('Recomendaciones sugeridas (1)')
+    expect(html).toContain('Correlacionar con espirometría previa.')
+    expect(html).not.toContain('Recomendaciones sugeridas (0)')
+  })
+
+  it('AC-DEC-02-2 (orden/anti-ocultación 2): `recommendation` singular gana sobre alias con strings vacíos', () => {
+    // Si `recommendations: ["", "  "]` y `recommendation: "X"` → debe ganar singular.
+    const html = renderToStaticMarkup(
+      createElement(
+        StudyAIPrediagnosisPanel,
+        baseProps({
+          ...FULL_PREDIAGNOSIS,
+          recommendations: ['', '   ', ''],
+          recommendation: 'Repetir el estudio con técnica adecuada.',
+        })
+      )
+    )
+    expect(html).toContain('Recomendaciones sugeridas (1)')
+    expect(html).toContain('Repetir el estudio con técnica adecuada.')
+    expect(html).not.toContain('Recomendaciones sugeridas (3)')
+  })
+
   it('AC-DEC-02-2 (vacío): si el snapshot no trae ninguna recomendación, la sección se OMITE', () => {
     const html = renderToStaticMarkup(
       createElement(
@@ -173,6 +211,45 @@ describe('StudyAIPrediagnosisPanel — DEC-20260824-02 / IMPL-20260824-06', () =
     )
     expect(html).not.toContain('Recomendaciones sugeridas')
     expect(html).not.toContain('data-testid="prediagnosis-section-recomendaciones"')
+  })
+
+  it('AC-DEC-02-2 (snapshot viejo): snapshot pre-DEC-20260824-02 sin recommendation → sección omitida, no se inventa', () => {
+    // Documenta la regla: snapshots viejos sin `recommendation` requieren
+    // REPROCESO del Event. El frontend NO infiere desde `summary` ni desde
+    // otra sección. La sección se omite silenciosamente.
+    const OLD_SNAPSHOT = {
+      summary: 'Sugerencia IA de prueba (snapshot viejo sin recommendation).',
+      confidence: 0.5,
+      clinical_state: 'AI_PENDING_REVIEW',
+      justification: ['Razón histórica 1', 'Razón histórica 2'],
+      clinical_basis: [],
+      citations: [],
+      limitations: ['Limitación histórica.'],
+      red_flags: [],
+      recommendation: null,
+      // Alias ausentes o nulos — no deben inventar contenido.
+      recommendations: null,
+      recommended_actions: null,
+      non_conclusive_reason: null,
+      calibration_source: 'medical_calibration',
+      clinical_model_used: 'medgemma-1.5',
+      clinical_provider: 'gemini',
+    }
+
+    const html = renderToStaticMarkup(
+      createElement(StudyAIPrediagnosisPanel, baseProps(OLD_SNAPSHOT))
+    )
+
+    // El panel sigue mostrando todo lo demás (modo sombra, etc.).
+    expect(html).toContain('Prediagnóstico IA')
+    expect(html).toContain('Hallazgo sugerido')
+    expect(html).toContain('Modo sombra clínica')
+    // Pero la sección de recomendaciones NO aparece — no se inventa.
+    expect(html).not.toContain('Recomendaciones sugeridas')
+    expect(html).not.toContain('data-testid="prediagnosis-section-recomendaciones"')
+    // El resto del panel (orden clínico) sigue intacto.
+    expect(html).toContain('data-testid="prediagnosis-section-hallazgo"')
+    expect(html).toContain('data-testid="prediagnosis-section-confianza"')
   })
 
   it('AC-DEC-02-2 (string vacío): strings vacíos o whitespace se ignoran, no se renderiza la sección', () => {

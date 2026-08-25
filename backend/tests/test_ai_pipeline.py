@@ -5334,3 +5334,193 @@ class TestEspirometriaPrediagnosticRecommendationContextDEC20260824_02:
                 f"prediagnostic.py contiene referencia prohibida a M3/Minimax: "
                 f"patrón {pat!r}"
             )
+
+
+class TestEspirometriaDiagnosisPromptResolverDEC20260824_02:
+    """
+    DEC-20260824-02 / IMPL-20260824-06: cuando el script remoto
+    `update-espirometria-prediagnosis-prompt.ts` configura
+    `aiCalibration.diagnosis.prompt` en Railway, el resolver debe:
+
+      1. Consumir ese prompt por la rama V1/V2 (Prioridad 2 del
+         `_resolve_clinical_criteria`), NO el default backend hardcodeado.
+      2. Devolver `prompt_source = "ai_calibration"` (no
+         `backend_fallback`), para que la limitation
+         "Fallback general backend (aiCalibration.clinicalCriteria.prompt
+         no configurado)" desaparezca del snapshot.
+      3. Preservar `extraction`, `canonicalStudyType`, `enabled` y
+         cualquier otro campo de `aiCalibration` (idempotencia).
+
+    Estos tests inspeccionan la lógica del helper
+    `PrediagnosticService._resolve_clinical_criteria` directamente — sin
+    llamar al modelo clínico, sin tocar BD.
+    """
+
+    @pytest.fixture
+    def prediagnostic_svc(self):
+        from app.services.ai.prediagnostic import PrediagnosticService
+
+        return PrediagnosticService(api_key="test-api-key", model="medgemma-4b-it")
+
+    def test_resolver_uses_diagnosis_prompt_when_present(
+        self, prediagnostic_svc
+    ):
+        """
+        Caso central DEC-20260824-02: el MedicalTest trae
+        `aiCalibration.diagnosis.prompt` configurado por el script remoto.
+        El resolver debe devolver ESE prompt (no el default backend) y
+        marcar `incomplete=True` (shim V1/V2 — semántica esperada).
+        """
+        custom_prompt = (
+            "PROMPT CLINICO CONFIGURADO POR SCRIPT REMOTO "
+            "(espirometria-prediagnosis-v1, IMPL-20260824-06)"
+        )
+        ai_calibration = {
+            "enabled": True,
+            "canonicalStudyType": "Espirometria",
+            "extraction": {"prompt": "x", "version": "espirometria-sibelmed-v5"},
+            "diagnosis": {
+                "prompt": custom_prompt,
+                "version": "espirometria-prediagnosis-v1",
+            },
+            # No hay clinicalCriteria publicado en V3.
+        }
+
+        effective = prediagnostic_svc._resolve_clinical_criteria(
+            calibration_version=None,
+            ai_calibration_shim=ai_calibration,
+            study_type="Espirometria",
+        )
+
+        # Prioridad 2 (shim V1/V2) gana sobre Prioridad 3 (default backend).
+        assert effective["prompt"] == custom_prompt, (
+            "El resolver debe usar aiCalibration.diagnosis.prompt "
+            "(Prioridad 2), NO el default backend hardcodeado."
+        )
+        assert effective["promptVersion"] == "espirometria-prediagnosis-v1"
+        assert effective["prediagnosisEnabled"] is True
+        # Shim no garantiza requiredParams/threshold trazados.
+        assert effective["incomplete"] is True
+        assert effective["fieldDefinitionsIncomplete"] is True
+
+    def test_resolver_falls_back_to_backend_when_diagnosis_prompt_absent(
+        self, prediagnostic_svc
+    ):
+        """
+        Caso opuesto (estado pre-script): si el MedicalTest NO trae
+        `aiCalibration.diagnosis.prompt`, el resolver cae al default
+        backend hardcodeado (Prioridad 3). En este caso `prompt_source`
+        sería "backend_fallback" y la limitation aparecería en el
+        snapshot — exactamente lo que el script remoto corrige.
+        """
+        ai_calibration = {
+            "enabled": True,
+            "canonicalStudyType": "Espirometria",
+            "extraction": {"prompt": "x", "version": "espirometria-sibelmed-v5"},
+            # diagnosis ausente → cae a Prioridad 3.
+        }
+
+        effective = prediagnostic_svc._resolve_clinical_criteria(
+            calibration_version=None,
+            ai_calibration_shim=ai_calibration,
+            study_type="Espirometria",
+        )
+
+        # Prioridad 3 (default backend).
+        from app.services.ai.prediagnostic import PrediagnosticService
+
+        assert effective["prompt"] == PrediagnosticService.PREDIAGNOSTIC_PROMPTS["Espirometria"]
+        assert effective["promptVersion"] == "backend_v2"
+        assert effective["incomplete"] is False
+
+    def test_resolver_prioridad1_v3_clinical_criteria_wins_over_diagnosis(
+        self, prediagnostic_svc
+    ):
+        """
+        Si en el futuro el MedicalTest migra a V3 con
+        `clinicalCriteria.prompt` publicado, esa versión PUBLICADA gana
+        sobre el shim V1/V2 `diagnosis.prompt` (Prioridad 1 sobre 2).
+        Documenta la jerarquía esperada y blind contra regresiones.
+        """
+
+        class _FakeV3:
+            clinicalCriteria = {
+                "prediagnosisEnabled": True,
+                "requiredParams": ["fev1", "fvc"],
+                "confidenceThreshold": 0.6,
+                "prompt": "PROMPT V3 PUBLICADO",
+                "promptVersion": "espirometria-v3-publicada",
+            }
+
+        fake_v3 = _FakeV3()
+
+        effective = prediagnostic_svc._resolve_clinical_criteria(
+            calibration_version=fake_v3,
+            ai_calibration_shim={
+                "diagnosis": {"prompt": "PROMPT V1/V2 SHIM", "version": "v0"},
+            },
+            study_type="Espirometria",
+        )
+
+        # Prioridad 1 (V3 publicada) gana.
+        assert effective["prompt"] == "PROMPT V3 PUBLICADO"
+        assert effective["promptVersion"] == "espirometria-v3-publicada"
+        assert effective["incomplete"] is False
+
+    def test_script_preserves_extraction_and_other_keys(self):
+        """
+        IMPL-20260824-06: el script
+        `update-espirometria-prediagnosis-prompt.ts` debe preservar
+        intactos `extraction.{prompt,version,model,provider,schemaVersion}`
+        y `canonicalStudyType`, `enabled`. Esto valida estáticamente que
+        el script NO toca el prompt de extracción v5 (IMPL-20260824-05).
+        """
+        from pathlib import Path
+
+        script_path = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-prediagnosis-prompt.ts"
+        )
+        src = script_path.read_text(encoding="utf-8")
+
+        # El script debe preservar `extraction` intacto (no reasignarlo).
+        # Construye `updatedDiagnosis` (no toca extraction) y luego
+        # `updatedAiCalibration = { ...currentAiCalibration, diagnosis: ...}`
+        # (preserva extraction via spread).
+        assert "currentExtraction" in src, (
+            "Falta capturar `extraction` actual para preservarlo"
+        )
+        assert "extraction" in src and "version" in src
+        # El script NO debe reasignar extraction.prompt/version (sólo diagnosis).
+        assert (
+            "updatedExtraction" not in src
+        ), "El script no debe reasignar `extraction` (rompería IMPL-20260824-05)"
+
+        # El script debe preservar canonicalStudyType y enabled.
+        assert "canonicalStudyType" in src
+        assert "enabled" in src
+
+    def test_script_is_idempotent(self):
+        """
+        El script detecta si `diagnosis.version` ya coincide con
+        `PREDIAGNOSIS_VERSION` y sale sin escribir — permite reejecución
+        segura.
+        """
+        from pathlib import Path
+
+        script_path = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-prediagnosis-prompt.ts"
+        )
+        src = script_path.read_text(encoding="utf-8")
+
+        assert "previousVersion === PREDIAGNOSIS_VERSION" in src, (
+            "Falta guarda de idempotencia (previousVersion === PREDIAGNOSIS_VERSION)"
+        )
+        assert "No se realizan cambios (idempotente)" in src, (
+            "Falta mensaje explícito de idempotencia para el operador"
+        )

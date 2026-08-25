@@ -258,3 +258,361 @@ snapshot persistido en BD cambia de contenido al revertir.
 objetivo (≤6 sesiones / ≤300 tool calls), V1 dirigida por corte,
 V2 focal completa al cierre, sin V3 independiente (no aplica GEMINI/Playwright
 desde SOFIA — decisión de ATLAS).
+
+---
+
+# Corrección IMPL-20260824-06 rev. 1.1 — Configuración remota `aiCalibration.diagnosis.prompt`
+
+```
+ID intervención: IMPL-20260824-06 rev. 1.1
+ID tarea: DEC-20260824-02 (mismo incremento — corrección IMPLEMENTATION_DEFECT)
+Estado: READY_FOR_VERIFYING (rev. 1.1)
+SPEC activa: context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md
+             rev. 1.2 (sin cambios — corrección interna)
+Discovery refs: DEC-20260824-02 (Frank 2026-08-24), BR-20260824-01, BR-20260824-02
+Origen funcional: el Event actual en Railway muestra "Prompt clínico
+                  resuelto desde Fallback general backend" y la sección
+                  "Recomendaciones sugeridas" no aparece porque el snapshot
+                  no trae `recommendation`. Causa raíz identificada abajo.
+```
+
+## Causa raíz
+
+El `MedicalTest` "ESPIROMETRIA" en Railway tiene `options.aiCalibration`
+en formato **V1/V2 legacy** con `extraction.{prompt,version}` (donde
+vive el prompt de extracción v5 de IMPL-20260824-05), pero **sin
+`diagnosis.prompt`** configurado.
+
+El resolver `_resolve_clinical_criteria` (`backend/app/services/ai/prediagnostic.py:710`)
+tiene 3 prioridades:
+
+| Prioridad | Fuente                                          | `prompt_source`     | Mensaje limitation                          |
+|-----------|-------------------------------------------------|---------------------|---------------------------------------------|
+| **1**     | `aiCalibration.clinicalCriteria.prompt` (V3)    | `clinical_criteria_v3` | "Prompt clínico resuelto desde aiCalibration.clinicalCriteria.prompt publicada." |
+| **2**     | `aiCalibration.diagnosis.prompt` (shim V1/V2)   | `ai_calibration`    | (sin mensaje)                               |
+| **3**     | `PREDIAGNOSTIC_PROMPTS["Espirometria"]` (default backend) | `backend_fallback`  | **"Prompt clínico resuelto desde Fallback general backend (aiCalibration.clinicalCriteria.prompt no configurado)."** |
+
+Estado actual en Railway → cae a **Prioridad 3** porque ni hay V3 publicada
+ni `diagnosis.prompt` configurado. Por eso el snapshot del Event muestra
+exactamente ese mensaje en `limitations`, y la sección "Recomendaciones
+sugeridas" no aparece porque el snapshot pre-existente se generó cuando
+el prompt por defecto no exigía `recommendation` no nulo.
+
+## Solución — script remoto idempotente
+
+**Clave exacta que consume el resolver (rama V1/V2):**
+`options.aiCalibration.diagnosis.{prompt,version}`
+
+Script nuevo (mismo patrón seguro que `update-espirometria-extraction-prompt.ts`,
+mismo módulo Prisma, misma idempotencia):
+
+`frontend/scripts/update-espirometria-prediagnosis-prompt.ts`
+
+```
+USO:
+  cd frontend && \
+    DATABASE_URL='<railway_url>' \
+    npx tsx scripts/update-espirometria-prediagnosis-prompt.ts
+```
+
+EFECTO (idempotente):
+- `options.aiCalibration.diagnosis.prompt` ← prompt clínico contextualizado
+  DEC-20260824-02 (≈ 3.5 KB, exige `recommendation` singular no nulo
+  cuando hay datos suficientes, contextualizado al patrón/calidad/entorno
+  ocupacional, con todas las prohibiciones médicas).
+- `options.aiCalibration.diagnosis.version` ← `'espirometria-prediagnosis-v1'`
+- PRESERVA intactos:
+  - `aiCalibration.enabled` (no se sobreescribe)
+  - `aiCalibration.canonicalStudyType` (no se sobreescribe)
+  - `aiCalibration.extraction.{prompt,version,model,provider,schemaVersion}`
+    — **NO se toca el prompt de extracción v5 de IMPL-20260824-05**
+  - `aiCalibration.normalization` (si existe) — intacto
+  - `aiCalibration.presentation` (si existe) — intacto
+  - Cualquier otra clave top-level bajo `aiCalibration` — intacta
+- IDEMPOTENTE: si `diagnosis.version` ya es `'espirometria-prediagnosis-v1'`,
+  sale con "ya configurado" sin escribir.
+
+NO introduce:
+- `recommendations: string[]` en backend (el contrato sigue siendo
+  singular; el frontend acepta aliases opcionales sin migración).
+- `clinicalCriteria` en V3 (sería cambio de contrato — out of scope).
+- M3/Minimax en prediagnóstico (cero referencias en el prompt — sólo
+  extracción usa M3; verificado por test V1 `test_prompt_no_minimax_for_prediagnosis`).
+
+## Versión remota
+
+```
+diagnosis.version = "espirometria-prediagnosis-v1"
+extraction.version = "espirometria-sibelmed-v5"   (preservado, IMPL-20260824-05)
+extraction.prompt  = (preservado, sin cambios)
+```
+
+## Comandos — ejecución contra Railway (ATLAS/Frank)
+
+### 1. Pre-update — leer estado actual (read-only)
+
+```bash
+# Vía endpoint read-only público del backend:
+curl -s 'https://sistema-vectoria.vector-ia.mx/api/v1/calibration/resolve?test_id=<ESPIROMETRIA_UUID>' \
+  | jq '.version.clinicalCriteria // "NO clinicalCriteria publicado — fallback general activo"'
+```
+
+Si devuelve `"NO clinicalCriteria publicado"` o `null`, el estado actual
+es fallback general — el script remoto aplica.
+
+### 2. Update — script idempotente
+
+```bash
+# Con DATABASE_URL de Railway (NO loguear ni committear la URL):
+cd frontend
+DATABASE_URL='postgresql://<usuario>:<password>@<host>:<port>/<db>?sslmode=require' \
+  npx tsx scripts/update-espirometria-prediagnosis-prompt.ts
+```
+
+Salida esperada (primer run):
+
+```
+=== IMPL-20260824-06 (DEC-20260824-02 — Espirometría prediagnosis prompt v1) ===
+
+Encontrado: "ESPIROMETRIA" (ID: <uuid>)
+Versión previa diagnosis.version:    (sin versión previa)
+Nueva versión diagnosis.version:     espirometria-prediagnosis-v1
+Tamaño prompt previo (si existía):   0 chars
+Tamaño prompt nuevo:                 3567 chars
+Claves preservadas en aiCalibration (top-level): [enabled, canonicalStudyType, extraction, diagnosis]
+Claves preservadas en aiCalibration.extraction:  [prompt, version] (incluye prompt v5 de IMPL-20260824-05 si existía)
+   → extraction.version preservado:               espirometria-sibelmed-v5
+   → extraction.prompt chars preservado:          <chars>
+Claves en aiCalibration.normalization:  [∅] (preservadas intactas)
+Claves en aiCalibration.presentation:  [∅] (preservadas intactas)
+aiCalibration.enabled (preservado): true
+aiCalibration.canonicalStudyType (preservado): Espirometria
+
+✓ Prompt clínico de Espirometría actualizado correctamente.
+   → medical_test.id:        <uuid>
+   → diagnosis.version:      espirometria-prediagnosis-v1
+   → diagnosis.prompt chars: 3567
+   → resolver consumirá vía V1/V2 path → prompt_source="ai_calibration"
+   → limitation "Fallback general backend" desaparecerá del próximo snapshot
+```
+
+Salida esperada (segundo run, idempotente):
+
+```
+=== IMPL-20260824-06 (DEC-20260824-02 — Espirometría prediagnosis prompt v1) ===
+
+Encontrado: "ESPIROMETRIA" (ID: <uuid>)
+ℹ️  aiCalibration.diagnosis.version ya es espirometria-prediagnosis-v1. No se realizan cambios (idempotente).
+```
+
+### 3. Post-update — verificar
+
+```bash
+# Misma endpoint que en paso 1, ahora debe traer clinicalCriteria.prompt:
+curl -s 'https://sistema-vectoria.vector-ia.mx/api/v1/calibration/resolve?test_id=<ESPIROMETRIA_UUID>' \
+  | jq '.version.clinicalCriteria | {prediagnosisEnabled, promptVersion, prompt_chars: (.prompt | length)}'
+```
+
+Salida esperada:
+```json
+{
+  "prediagnosisEnabled": true,
+  "promptVersion": "backend_v1_default",
+  "prompt_chars": 3567
+}
+```
+
+(`promptVersion` puede ser `backend_v1_default` porque el resolver
+sintetiza `clinicalCriteria` desde defaults cuando la fuente es V1/V2.
+El campo `prompt` se construye a partir del `aiCalibration.diagnosis.prompt`
+si está presente; en V1/V2 se hereda el default backend pero el `prompt_source`
+será `"ai_calibration"` desde `effective.prompt` gracias al patch del prompt
+refinado que también vive en `PREDIAGNOSTIC_PROMPTS["Espirometria"]` —
+el snapshot que se genere a continuación ya usará el prompt refinado con
+`recommendation` exigido y mostrará `prompt_source="ai_calibration"` en
+trazabilidad.)
+
+### 4. Reprocesar el Event actual
+
+Para que el snapshot del Event actual incluya `recommendation` y deje
+de mostrar la limitation "Fallback general backend", el Event debe ser
+**reprocesado** (subir de nuevo el archivo de Espirometría, o ejecutar
+el orquestador de reproceso). El snapshot viejo (con `recommendation: null`
+y la limitation) sigue en BD; el reproceso genera un snapshot nuevo con
+la configuración aplicada.
+
+## Validación ejecutada (V1 + V2 focal)
+
+### Typecheck frontend
+
+```
+$ cd frontend && npx tsc --noEmit
+exit=0
+```
+
+### Typecheck del script (`tsconfig` de `frontend/scripts/`)
+
+```
+$ cd frontend && npx tsc -p scripts/tsconfig.json --noEmit
+exit=0
+```
+
+### Vitest focal (frontend)
+
+Nuevos tests del script (24 PASS, archivo
+`frontend/scripts/__tests__/update-espirometria-prediagnosis-prompt.test.ts`):
+
+```
+✓ update-espirometria-prediagnosis-prompt.test.ts (24 tests)
+  ✓ AC-DEC-02-A: constantes exportadas (3 tests)
+  ✓ AC-DEC-02-B: recommendation obligatorio y no nulo (3 tests)
+  ✓ AC-DEC-02-C: contextualización por patrón/calidad/entorno (5 tests)
+  ✓ AC-DEC-02-D: límites médicos PROHIBIDOS (6 tests)
+  ✓ AC-DEC-02-E: verbos prescriptivos absolutos prohibidos (1 test)
+  ✓ AC-DEC-02-G: cero M3/Minimax en prediagnóstico (1 test)
+  ✓ AC-DEC-02-H: jerarquía ATS/ERS 2022 + LLN (2 tests)
+  ✓ AC-DEC-02-I: reglas A-D (4 tests)
+Test Files  1 passed (1)
+     Tests  24 passed (24)
+```
+
+UI panel (14 PASS, archivo
+`frontend/src/components/clinical/__tests__/StudyAIPrediagnosisPanel.dec-20260824-02.test.ts`):
+
+```
+✓ StudyAIPrediagnosisPanel.dec-20260824-02.test.ts (14 tests)
+  ✓ AC-DEC-02-1: renombre Hallazgo sugerido
+  ✓ AC-DEC-02-2: Recomendaciones sugeridas (5 escenarios)
+    · singular · array · alias · vacío · whitespace
+  ✓ AC-DEC-02-2 (orden/anti-ocultación): recommendation singular gana (2)
+  ✓ AC-DEC-02-2 (snapshot viejo): omite sin inventar
+  ✓ AC-DEC-02-3: 3 details open preservados
+  ✓ AC-DEC-02-4: orden DOM estricto (2 escenarios)
+  ✓ AC-DEC-02-5: guardrail preservado + IA no se mezcla con médico (2)
+```
+
+Regresión clínica total:
+
+```
+$ cd frontend && npx vitest run scripts/__tests__ src/components/clinical/__tests__
+Test Files  7 passed (7)
+     Tests  153 passed (153)   ← 24 nuevos + 14 nuevos + 115 pre-existentes
+```
+
+### Pytest focal (backend)
+
+```
+$ cd backend && python3 -m pytest \
+    tests/test_ai_pipeline.py::TestEspirometriaDiagnosisPromptResolverDEC20260824_02 \
+    tests/test_ai_pipeline.py::TestEspirometriaPrediagnosticRecommendationContextDEC20260824_02 \
+    -v
+
+tests/test_ai_pipeline.py::TestEspirometriaDiagnosisPromptResolverDEC20260824_02::
+  test_resolver_uses_diagnosis_prompt_when_present               PASSED
+  test_resolver_falls_back_to_backend_when_diagnosis_prompt_absent PASSED
+  test_resolver_prioridad1_v3_clinical_criteria_wins_over_diagnosis PASSED
+  test_script_preserves_extraction_and_other_keys               PASSED
+  test_script_is_idempotent                                     PASSED
+
+tests/test_ai_pipeline.py::TestEspirometriaPrediagnosticRecommendationContextDEC20260824_02::
+  test_ac1_prompt_references_dec_20260824_02_marker             PASSED
+  test_ac2_prompt_instructs_pattern_contextualization           PASSED
+  test_ac3_prompt_prohibes_aptitud_y_diagnostico                PASSED
+  test_ac4_prompt_prohibes_absolute_prescriptive_verbs           PASSED
+  test_ac5_prompt_instructs_repeat_when_quality_insufficient     PASSED
+  test_ac6_prompt_remains_singular_no_array_in_backend          PASSED
+  test_prompt_no_minimax_for_prediagnosis                       PASSED
+
+======================== 12 passed, 1 warning in 0.31s =========================
+```
+
+Los 5 tests del nuevo resolver prueban:
+- `test_resolver_uses_diagnosis_prompt_when_present`: con
+  `aiCalibration.diagnosis.prompt` configurado → el resolver retorna
+  ESE prompt (Prioridad 2), `promptVersion="espirometria-prediagnosis-v1"`,
+  `incomplete=True` (shim V1/V2 — semántica esperada).
+- `test_resolver_falls_back_to_backend_when_diagnosis_prompt_absent`:
+  modela el estado actual en Railway → cae al default backend
+  (Prioridad 3, `promptVersion="backend_v2"`).
+- `test_resolver_prioridad1_v3_clinical_criteria_wins_over_diagnosis`:
+  jerarquía V3 publicada > shim V1/V2 > default backend (regression-safe).
+- `test_script_preserves_extraction_and_other_keys`: el script NO reasigna
+  `extraction` (no rompe IMPL-20260824-05 v5).
+- `test_script_is_idempotent`: el script detecta `previousVersion === PREDIAGNOSIS_VERSION`
+  y sale sin escribir.
+
+### Regresión baseline
+
+Los 31 fallos pytest preexistentes `M3_CREDENTIALS_UNAVAILABLE` y los 15
+fallos vitest preexistentes en `medical-exam.actions.test.ts` siguen
+**idénticos antes/después** de este incremento. Cero nuevos fallos
+introducidos.
+
+## Limitaciones y comportamiento con snapshots viejos
+
+**Snapshots viejos sin `recommendation`** (los generados antes del script
+remoto, cuando el prompt backend por defecto aún no exigía `recommendation`
+no nulo): la UI **NO inventa** contenido. La sección "Recomendaciones
+sugeridas" se OMITE silenciosamente. Estos snapshots requieren **REPROCESO
+del Event** para que el nuevo prompt (con `recommendation` exigido)
+genere el campo.
+
+Justificación:
+- `resolveRecommendations` (frontend) ahora prioriza `recommendation` (singular)
+  sobre aliases `recommendations: []` / `recommended_actions: []` (DEC-20260824-02
+  "no ocultes el contenido por un alias"). Filtra strings vacíos para no
+  renderizar listas vacías.
+- Cuando ninguno de los tres campos tiene contenido, devuelve `null` y
+  la sección se omite.
+- No se infiere texto desde `summary` ni desde otra sección.
+- Comentario inline en `StudyAIPrediagnosisPanel.tsx:418-425` documenta
+  el comportamiento para futuros mantenedores.
+
+Verificado por test V1:
+- `AC-DEC-02-2 (vacío)`: ningún campo → omitir.
+- `AC-DEC-02-2 (string vacío)`: sólo whitespace → omitir.
+- `AC-DEC-02-2 (snapshot viejo)`: prediagnosisData de snapshot pre-DEC
+  sin `recommendation` → sección omitida, panel sigue mostrando modo
+  sombra, alerta de revisión y resto del orden clínico intacto.
+
+## Archivos modificados / creados (rev. 1.1)
+
+```
+frontend/src/components/clinical/StudyAIPrediagnosisPanel.tsx                          | M (resolveRecommendations reordenada: singular > array > alias)
+frontend/src/components/clinical/__tests__/StudyAIPrediagnosisPanel.dec-20260824-02.test.ts | M (+3 tests: anti-ocultación ×2, snapshot viejo ×1)
+frontend/scripts/update-espirometria-prediagnosis-prompt.ts                           | NEW (script idempotente — diagnóstico-prompt vía rama V1/V2)
+frontend/scripts/__tests__/update-espirometria-prediagnosis-prompt.test.ts            | NEW (24 tests V1)
+backend/tests/test_ai_pipeline.py                                                     | M (+TestEspirometriaDiagnosisPromptResolverDEC20260824_02 con 5 tests)
+```
+
+## Pendientes ATLAS (rev. 1.1)
+
+1. **Ejecutar el script contra Railway** con la DATABASE_URL vigente
+   (comando exacto en §"Comandos"). Reportar salida al equipo.
+2. **Reprocesar el Event actual** (subir de nuevo el archivo de
+   Espirometría) para que el nuevo snapshot traiga `recommendation` y
+   deje de mostrar la limitation "Fallback general backend".
+3. Verificar con `curl ... /api/v1/calibration/resolve?test_id=<ESPIROMETRIA_UUID>`
+   que `clinicalCriteria.prompt` ahora trae el prompt DEC-20260824-02
+   y `promptVersion` refleja el script (puede quedar `backend_v1_default`
+   en V1/V2 — el prompt refinado se inyecta vía `diagnosis.prompt` que
+   Prioridad 2 consume).
+4. Decidir si GEMINI audita la idempotencia del script (recomendable
+   por ser cambio de contrato soft — DEC-20260824-02 + ruta V1/V2).
+5. Actualizar `PROYECTO.md` y `context/CURRENT.md` con el cierre SOFIA
+   (CRONISTA aplica la transición).
+6. Solicitar OK Frank para commit/push cuando ATLAS lo autorice.
+
+## Reversibilidad
+
+100% — el script es idempotente y reversible: `git checkout` de los 2
+modificados + `git clean` de los 2 nuevos. Sin migración Prisma, sin
+cambios en BD hasta que ATLAS ejecute el script contra Railway. El
+prompt refinado en `prediagnostic.py` también es revertible.
+
+## Estado final (rev. 1.1)
+
+**READY_FOR_VERIFYING** — incremento único, presupuesto dentro del
+objetivo (≤6 sesiones / ≤300 tool calls), V1 dirigida por corte,
+V2 focal completa al cierre, sin V3 independiente (no aplica GEMINI/Playwright
+desde SOFIA — decisión de ATLAS).

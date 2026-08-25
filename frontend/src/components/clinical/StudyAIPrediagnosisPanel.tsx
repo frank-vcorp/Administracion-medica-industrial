@@ -57,20 +57,43 @@ interface AIPrediagnosisData {
 /**
  * IMPL-20260824-06 (DEC-20260824-02): unifica el campo de recomendaciones
  * preservando compat con snapshots viejos (sólo `recommendation` singular).
- * Devuelve null si el snapshot no trae nada — la sección no se renderiza
- * para no inventar contenido en frontend.
+ *
+ * Prioridad (importante — DEC-20260824-02 "no ocultes el contenido por un alias"):
+ *   1. `recommendation` (singular) — campo vigente del contrato backend.
+ *      Si está presente y no vacío, SIEMPRE gana. Un alias vacío
+ *      (`recommendations: []` o `recommended_actions: []`) NO puede ocultar
+ *      un `recommendation` válido.
+ *   2. `recommendations: string[]` — alias opcional futuro.
+ *   3. `recommended_actions: string[]` — alias opcional futuro.
+ *
+ * Devuelve `null` (sección omitida) sólo si los tres campos están vacíos.
+ * NO se inventa contenido en frontend.
+ *
+ * IMPORTANTE para snapshots viejos sin `recommendation`: la sección se OMITE
+ * silenciosamente. NO se infiere texto desde `summary` ni desde otra sección.
+ * Esos snapshots requieren REPROCESO del Event para generar la recomendación
+ * contextualizada (DEC-20260824-02 / IMPL-20260824-06 §pendientes ATLAS).
  */
 function resolveRecommendations(
   predxData: AIPrediagnosisData
 ): string[] | null {
-  if (Array.isArray(predxData.recommendations) && predxData.recommendations.length > 0) {
-    return predxData.recommendations.filter((r) => typeof r === 'string' && r.trim().length > 0)
-  }
-  if (Array.isArray(predxData.recommended_actions) && predxData.recommended_actions.length > 0) {
-    return predxData.recommended_actions.filter((r) => typeof r === 'string' && r.trim().length > 0)
-  }
+  // 1) `recommendation` (singular) — campo vigente del contrato backend.
   if (typeof predxData.recommendation === 'string' && predxData.recommendation.trim().length > 0) {
     return [predxData.recommendation.trim()]
+  }
+  // 2) `recommendations` (array) — alias opcional.
+  if (Array.isArray(predxData.recommendations) && predxData.recommendations.length > 0) {
+    const filtered = predxData.recommendations.filter(
+      (r) => typeof r === 'string' && r.trim().length > 0
+    )
+    if (filtered.length > 0) return filtered
+  }
+  // 3) `recommended_actions` (array) — alias opcional.
+  if (Array.isArray(predxData.recommended_actions) && predxData.recommended_actions.length > 0) {
+    const filtered = predxData.recommended_actions.filter(
+      (r) => typeof r === 'string' && r.trim().length > 0
+    )
+    if (filtered.length > 0) return filtered
   }
   return null
 }
@@ -417,6 +440,15 @@ export default function StudyAIPrediagnosisPanel({
   const clinicalModel = predxData.clinical_model_used
   // DEC-20260824-02 / IMPL-20260824-06: lista unificada de recomendaciones
   // (soporta singular/array legacy). Null si el snapshot no trae nada.
+  //
+  // Para snapshots VIEJOS sin `recommendation` (generados antes de este
+  // incremento o con `prompt_source=backend_fallback` sin requisito explícito
+  // de recommendation): `resolveRecommendations` devuelve null y la sección
+  // se OMITE silenciosamente. NO se inventa contenido en frontend.
+  // Esos snapshots requieren REPROCESO del Event (subir el archivo de
+  // nuevo en la misma prueba, o re-procesarlo por el orquestador) para
+  // que el nuevo prompt contextualizado (IMPL-20260824-06) genere
+  // `recommendation` no nulo.
   const recommendationsList = resolveRecommendations(predxData)
   const medgemmaFailure = isNonConclusive && (
     clinicalProvider === 'featherless' ||
