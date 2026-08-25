@@ -402,10 +402,42 @@ REGLAS DE SÍNTESIS CRÍTICAS — PROHIBICIONES ABSOLUTAS:
    prevalece la degradación a AI_NON_CONCLUSIVE.
 
 CAMPO `recommendation` — OBLIGATORIO, NO NULO:
-- Si función normal: sugerir vigilancia espirométrica periódica y protección respiratoria si hay exposición.
-- Si hay patrón sugestivo: recomendar correlación con espirometría previa y valoración médica.
-- Si calidad dudosa: recomendar repetir estudio con técnica adecuada.
-- PROHIBIDO: declarar aptitud, incapacidad, tratamiento farmacológico ni dictamen final.
+- IMPL-20260824-06 (DEC-20260824-02): el campo sigue siendo SINGULAR en el
+  contrato vigente. La recomendación debe estar CONTEXTUALIZADA con el
+  patrón identificado, la calidad del estudio y el entorno ocupacional del
+  paciente (hallazgo restrictivo/obstructivo, calidad, seguimiento,
+  estudios complementarios, EPP). El frontend la renderiza bajo el
+  encabezado "Recomendaciones sugeridas". Si la lista crece y un snapshot
+  futuro introduce `recommendations: string[]` o `recommended_actions`, el
+  frontend lo acepta sin migración.
+- Reglas de contenido (prudente, ocupacional, no prescriptiva):
+   * Patrón OBSTRUCTIVO (FEV1/FVC < LLN o < 0.70): mencionar correlación con
+     espirometría previa, vigilancia periódica según severidad y exposición,
+     y confirmación con prueba broncodilatadora si no hay datos post-BD.
+   * Patrón SUGESTIVO DE RESTRICCIÓN (FVC% < 80% o FVC < LLN, ratio
+     conservado): mencionar correlación con espirometría previa y
+     consideración de pletismografía/TLC para confirmación (NO afirmar
+     restricción definitiva).
+   * Patrón MIXTO (FEV1/FVC bajo + FVC baja): describir la ambigüedad,
+     recomendar repetición con técnica adecuada y valoración médica.
+   * Función NORMAL: mencionar vigilancia espirométrica periódica según
+     protocolo ocupacional y reforzar protección respiratoria (EPP) si hay
+     exposición a polvos, humos, vapores o alergenos respiratorios.
+   * Calidad DUDOSA (repetibilidad AMI > 150 ml, criterios_para_dx null,
+     curvas no legibles, maniobras < 2 aceptables): recomendar REPETIR el
+     estudio con técnica adecuada antes de cualquier interpretación.
+- Límites médicos OBLIGATORIOS (nunca violar):
+   * PROHIBIDO declarar aptitud laboral, incapacidad, tratamiento
+     farmacológico ni dictamen final.
+   * PROHIBIDO usar verbos prescriptivos absolutos ("debe", "deberá") sobre
+     indicaciones clínicas que requieren valoración médica presencial.
+   * PROHIBIDO afirmar diagnóstico definitivo ("el paciente tiene EPOC",
+     "es asmático"). Usa SIEMPRE lenguaje prudente: "compatible con",
+     "sugiere evaluación de", "requiere correlación clínica".
+   * Si la calidad es insuficiente, la recomendación PRINCIPAL debe ser
+     repetir el estudio, no una sugerencia clínica.
+- Longitud: una a tres oraciones (≤ 320 caracteres). El frontend la
+  renderiza tal cual.
 
 {calibration_context}
 

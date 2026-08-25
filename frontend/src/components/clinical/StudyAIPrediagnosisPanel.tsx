@@ -41,11 +41,38 @@ interface AIPrediagnosisData {
   red_flags: string[]
   // IMPL-20260516-06: Recomendación clínica prudente (ARCH-20260516-06)
   // Solo seguimiento/vigilancia/correlación. Optional para compatibilidad con snapshots viejos.
+  // DEC-20260824-02 / IMPL-20260824-06: contrato vigente sólo aporta `recommendation`
+  // singular; se acepta también `recommendations` (array) o `recommended_actions`
+  // si un snapshot futuro o un proveedor clínico los emite. NO se inventan
+  // datos en frontend: si ninguno está presente, la sección se omite.
   recommendation?: string | null
+  recommendations?: string[] | null
+  recommended_actions?: string[] | null
   non_conclusive_reason?: string | null
   calibration_source?: 'medical_calibration' | 'general_fallback' | null
   clinical_model_used?: string | null
   clinical_provider?: 'gemini' | 'featherless' | null
+}
+
+/**
+ * IMPL-20260824-06 (DEC-20260824-02): unifica el campo de recomendaciones
+ * preservando compat con snapshots viejos (sólo `recommendation` singular).
+ * Devuelve null si el snapshot no trae nada — la sección no se renderiza
+ * para no inventar contenido en frontend.
+ */
+function resolveRecommendations(
+  predxData: AIPrediagnosisData
+): string[] | null {
+  if (Array.isArray(predxData.recommendations) && predxData.recommendations.length > 0) {
+    return predxData.recommendations.filter((r) => typeof r === 'string' && r.trim().length > 0)
+  }
+  if (Array.isArray(predxData.recommended_actions) && predxData.recommended_actions.length > 0) {
+    return predxData.recommended_actions.filter((r) => typeof r === 'string' && r.trim().length > 0)
+  }
+  if (typeof predxData.recommendation === 'string' && predxData.recommendation.trim().length > 0) {
+    return [predxData.recommendation.trim()]
+  }
+  return null
 }
 
 interface DoctorReviewSummary {
@@ -388,6 +415,9 @@ export default function StudyAIPrediagnosisPanel({
   const isReviewed = reviewed || ['REVIEWED_ACCEPTED', 'REVIEWED_EDITED', 'REVIEWED_REJECTED'].includes(snapshot.clinicalState)
   const clinicalProvider = predxData.clinical_provider
   const clinicalModel = predxData.clinical_model_used
+  // DEC-20260824-02 / IMPL-20260824-06: lista unificada de recomendaciones
+  // (soporta singular/array legacy). Null si el snapshot no trae nada.
+  const recommendationsList = resolveRecommendations(predxData)
   const medgemmaFailure = isNonConclusive && (
     clinicalProvider === 'featherless' ||
     /featherless|medgemma/i.test(predxData.non_conclusive_reason ?? '')
@@ -434,50 +464,68 @@ export default function StudyAIPrediagnosisPanel({
           </div>
         )}
 
-        {/* Resumen */}
-        <div>
-          <p className="text-xs font-semibold text-slate-500 mb-1">Sugerencia IA</p>
+        {/* Resumen — DEC-20260824-02 / IMPL-20260824-06: renombrado a "Hallazgo sugerido" */}
+        <div data-testid="prediagnosis-section-hallazgo">
+          <p className="text-xs font-semibold text-slate-500 mb-1">Hallazgo sugerido</p>
           <p className="text-sm text-slate-800 leading-relaxed">{predxData.summary}</p>
           {isNonConclusive && predxData.non_conclusive_reason && (
             <p className="text-xs text-orange-600 mt-1">Razón: {predxData.non_conclusive_reason}</p>
           )}
         </div>
 
-        {/* Confianza */}
-        <div>
+        {/* DEC-20260824-02 / IMPL-20260824-06: Recomendaciones sugeridas
+            contextualizadas (patrón/calidad/entorno ocupacional) antes de la
+            confianza. Sección contextualizada por prediagnóstico, usando el
+            campo `recommendation` singular del contrato vigente. Si el
+            snapshot aporta `recommendations` (array) o `recommended_actions`,
+            se renderizan como lista. NO se inventan datos en frontend: si el
+            snapshot no trae ninguno, la sección se omite por completo. */}
+        {recommendationsList && recommendationsList.length > 0 && (
+          <div
+            className="bg-teal-50 border border-teal-200 rounded-lg px-3 py-2.5"
+            data-testid="prediagnosis-section-recomendaciones"
+          >
+            <p className="text-[11px] font-bold text-teal-700 mb-1">
+              Recomendaciones sugeridas ({recommendationsList.length})
+            </p>
+            {recommendationsList.length === 1 ? (
+              <p className="text-xs text-teal-800 leading-relaxed">{recommendationsList[0]}</p>
+            ) : (
+              <ul className="space-y-1">
+                {recommendationsList.map((r, i) => (
+                  <li
+                    key={i}
+                    className="text-xs text-teal-800 leading-relaxed pl-3 border-l-2 border-teal-300"
+                  >
+                    {r}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-[10px] text-teal-600/80 italic mt-1.5">
+              Sugerencias de apoyo a la decisión; no sustituyen indicación médica, diagnóstico definitivo ni dictamen de aptitud.
+            </p>
+          </div>
+        )}
+
+        {/* Confianza — DEC-20260824-02 / IMPL-20260824-06: movido después de
+            Hallazgo sugerido y Recomendaciones sugeridas. */}
+        <div data-testid="prediagnosis-section-confianza">
           <p className="text-[11px] font-semibold text-slate-400 mb-1">Confianza del modelo</p>
           <ConfidenceBar confidence={predxData.confidence} />
         </div>
 
-        {/* IMPL-20260516-06: Recomendación clínica prudente */}
-        {predxData.recommendation && (
-          <div className="bg-teal-50 border border-teal-200 rounded-lg px-3 py-2.5">
-            <p className="text-[11px] font-bold text-teal-700 mb-1">Seguimiento sugerido</p>
-            <p className="text-xs text-teal-800 leading-relaxed">{predxData.recommendation}</p>
-          </div>
-        )}
-
-        {/* Justificación */}
-        {(predxData.justification ?? []).length > 0 && (
-          // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada para que
-          // el médico vea la trazabilidad IA sin clicks extra. El usuario puede
-          // colapsarla manualmente; el contrato IA no cambia.
-          <details open>
-            <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700 select-none">
-              Justificación ({predxData.justification.length} razones)
-            </summary>
-            <ul className="mt-2 space-y-1">
-              {predxData.justification.map((j, i) => (
-                <li key={i} className="text-xs text-slate-600 pl-3 border-l-2 border-teal-200">{j}</li>
-              ))}
-            </ul>
-          </details>
-        )}
+        {/* DEC-20260824-02 / IMPL-20260824-06: orden clínico final
+              Hallazgo → Recomendaciones → Confianza → Limitaciones →
+              Justificación → Fuentes clínicas. */}
 
         {/* Limitaciones */}
         {(predxData.limitations ?? []).length > 0 && (
           // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada.
-          <details open>
+          // DEC-20260824-02 / IMPL-20260824-06: reubicada antes de Justificación
+          // para que el médico lea primero las restricciones técnicas antes
+          // de la narrativa causal.
+          <details open data-testid="prediagnosis-section-limitaciones">
             <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700 select-none">
               Limitaciones ({predxData.limitations.length})
             </summary>
@@ -489,10 +537,28 @@ export default function StudyAIPrediagnosisPanel({
           </details>
         )}
 
+        {/* Justificación */}
+        {(predxData.justification ?? []).length > 0 && (
+          // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada para que
+          // el médico vea la trazabilidad IA sin clicks extra. El usuario puede
+          // colapsarla manualmente; el contrato IA no cambia.
+          // DEC-20260824-02 / IMPL-20260824-06: reubicada después de Limitaciones.
+          <details open data-testid="prediagnosis-section-justificacion">
+            <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700 select-none">
+              Justificación ({predxData.justification.length} razones)
+            </summary>
+            <ul className="mt-2 space-y-1">
+              {predxData.justification.map((j, i) => (
+                <li key={i} className="text-xs text-slate-600 pl-3 border-l-2 border-teal-200">{j}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+
         {/* Citas clínicas — IMPL-20260326-04: fuentes con URL conocida son enlaces clicables */}
         {(predxData.citations ?? []).length > 0 && (
           // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada.
-          <details open>
+          <details open data-testid="prediagnosis-section-fuentes">
             <summary className="text-[11px] font-semibold text-slate-400 cursor-pointer hover:text-slate-600 select-none">
               Fuentes clínicas ({predxData.citations.length})
             </summary>

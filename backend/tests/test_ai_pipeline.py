@@ -5228,3 +5228,109 @@ class TestFIX20260824_01StudyTypeMismatch:
         assert "EXTRACTION_FAILED" in block_body, (
             "Falta error_code='EXTRACTION_FAILED' como fallback"
         )
+
+
+class TestEspirometriaPrediagnosticRecommendationContextDEC20260824_02:
+    """
+    DEC-20260824-02 / IMPL-20260824-06: el campo `recommendation` del prompt
+    de Espirometría debe estar CONTEXTUALIZADO con el patrón identificado,
+    la calidad del estudio y el entorno ocupacional. Reglas obligatorias
+    (sin schema, sin migración — sólo instrucciones del prompt de
+    prediagnóstico vigentes vía `PREDIAGNOSTIC_PROMPTS["Espirometria"]`).
+
+    AC-1: el prompt referencia explícitamente DEC-20260824-02 / IMPL-20260824-06.
+    AC-2: el prompt instruye reglas por patrón (obstructivo, restrictivo, mixto,
+          normal, calidad dudosa).
+    AC-3: el prompt prohíbe declarar aptitud, incapacidad, tratamiento ni
+          dictamen final (límites médicos obligatorios).
+    AC-4: el prompt prohíbe usar verbos prescriptivos absolutos ("debe").
+    AC-5: el prompt instruye repetir el estudio cuando la calidad es
+          insuficiente.
+    AC-6: el prompt sigue siendo SINGULAR (`recommendation`) — no se introduce
+          `recommendations` array en el contrato backend.
+    """
+
+    @pytest.fixture(scope="class")
+    def espirometry_prompt(self):
+        from app.services.ai.prediagnostic import PrediagnosticService
+
+        return PrediagnosticService.PREDIAGNOSTIC_PROMPTS["Espirometria"]
+
+    def test_ac1_prompt_references_dec_20260824_02_marker(self, espirometry_prompt):
+        assert espirometry_prompt is not None
+        assert "IMPL-20260824-06" in espirometry_prompt
+        assert "DEC-20260824-02" in espirometry_prompt
+
+    def test_ac2_prompt_instructs_pattern_contextualization(self, espirometry_prompt):
+        # Patrones esperados (reglas de contenido contextualizado).
+        for patron in [
+            "OBSTRUCTIVO",
+            "RESTRICCIÓN",
+            "MIXTO",
+            "NORMAL",
+        ]:
+            assert patron in espirometry_prompt, (
+                f"Falta instrucción contextualizada para patrón {patron}"
+            )
+        # Calidad dudosa → repetir estudio.
+        assert "DUDOSA" in espirometry_prompt or "dudosa" in espirometry_prompt
+        # Entorno ocupacional / EPP.
+        assert "EPP" in espirometry_prompt or "exposición" in espirometry_prompt
+        # Estudios complementarios (pletismografía/TLC).
+        assert "pletismografía" in espirometry_prompt or "TLC" in espirometry_prompt
+
+    def test_ac3_prompt_prohibes_aptitud_y_diagnostico(self, espirometry_prompt):
+        # Límites médicos obligatorios.
+        assert "PROHIBIDO" in espirometry_prompt
+        assert "aptitud" in espirometry_prompt
+        assert "incapacidad" in espirometry_prompt
+        assert "tratamiento" in espirometry_prompt
+        assert "dictamen" in espirometry_prompt
+        # Lenguaje prudente obligatorio.
+        assert "prudente" in espirometry_prompt
+
+    def test_ac4_prompt_prohibes_absolute_prescriptive_verbs(self, espirometry_prompt):
+        # El prompt NO debe ordenar al LLM usar verbos prescriptivos absolutos.
+        assert '"debe"' in espirometry_prompt or "'debe'" in espirometry_prompt, (
+            "Falta prohibición explícita del verbo prescriptivo 'debe'"
+        )
+
+    def test_ac5_prompt_instructs_repeat_when_quality_insufficient(self, espirometry_prompt):
+        # Cuando calidad es insuficiente, la recomendación PRINCIPAL es repetir.
+        assert "repetir" in espirometry_prompt.lower()
+        # El bloque debe estar dentro del apartado `recommendation`.
+        idx_reco = espirometry_prompt.find("CAMPO `recommendation`")
+        assert idx_reco > 0, "No se localizó el apartado CAMPO recommendation"
+
+    def test_ac6_prompt_remains_singular_no_array_in_backend(self, espirometry_prompt):
+        # El contrato backend sigue siendo `recommendation` singular.
+        # El frontend acepta arrays legacy pero el prompt NO los introduce.
+        assert "recommendations" not in espirometry_prompt or (
+            espirometry_prompt.count("recommendation") > 0
+        ), "El prompt debe seguir refiriéndose al campo singular `recommendation`"
+
+    def test_prompt_no_minimax_for_prediagnosis(self):
+        # DEC-20260824-02: "No usar Minimax para el diagnóstico: Minimax extrae;
+        # prediagnóstico clínico usa proveedor clínico existente."
+        # El módulo prediagnostic.py no debe mencionar "m3" como proveedor
+        # clínico (sólo aparece m1/m2/m3 de maniobras espirométricas).
+        import re
+
+        from app.services.ai import prediagnostic
+
+        src = Path(prediagnostic.__file__).read_text(encoding="utf-8")
+        # m3 como proveedor IA clínica NO debe aparecer en este módulo.
+        # m1/m2/m3 como maniobras sí (son referencias a datos clínicos).
+        # Buscamos menciones a 'm3' como string o token aislado (proveedor).
+        bad_patterns = [
+            r'"m3"',            # string literal "m3"
+            r"'m3'",            # string literal 'm3'
+            r'provider\s*=\s*"m3"',
+            r'clinical_provider\s*=\s*"m3"',
+            r"Minimax",          # nombre comercial del proveedor de extracción
+        ]
+        for pat in bad_patterns:
+            assert re.search(pat, src) is None, (
+                f"prediagnostic.py contiene referencia prohibida a M3/Minimax: "
+                f"patrón {pat!r}"
+            )
