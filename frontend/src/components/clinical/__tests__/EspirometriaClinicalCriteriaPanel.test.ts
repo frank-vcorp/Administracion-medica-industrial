@@ -1110,3 +1110,156 @@ describe('EspirometriaClinicalCriteriaPanel — NOTAS DE CALIDAD oculto', () => 
     expect(html).not.toContain('Notas de calidad')
   })
 })
+
+// --- FIX-FEATURE-20260824-01 rev. 1.5: duplicación M2→M1 marcado inconsistente ---
+//
+// Tras rev. 1.3/1.4, Frank reportó Event v9: el LLM DUPLICA M2 como M1 en la
+// fila FEV1 (m1=m2=2.11, %REF 76/76) en vez de dejar m1 vacío. La operación
+// renderizada era `(2.11 − 2.11) × 1000 = 0 ml` en lugar de
+// `(2.15 − 2.11) × 1000 = 40 ml`. El backend (rev. 1.5) ahora anota
+// `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`/`_FVC` en `notas_calidad` y fuerza
+// `completitud_documental = "no_concluyente"`.
+//
+// Esta suite verifica que el panel, al ver la anotación, NO presenta un
+// cálculo espurio (0 ml) sobre una fila no confiable:
+//   - Si la repetibilidad venía del CÁLCULO (source="computed"): invalida el
+//     número, la operación visible (topTwoNative=null → "—") y el flag ≤150.
+//   - Si la repetibilidad venía del TEXTO NATIVO extraído
+//     (`calidad.repetibilidad_fev1_ml`, fuente independiente del layout):
+//     conserva el número pero oculta la operación espuria ("—").
+//   - Inconsistencia selectiva: sólo el parámetro anotado se invalida.
+
+describe('EspirometriaClinicalCriteriaPanel — rev. 1.5 duplicación M2→M1 inconsistente', () => {
+  const DUPLICATED_FEV1_PARAMETROS = [
+    { label: 'Mejor FVC', key: 'mejor_fvc_l', unidad: 'L', m1: 2.33, m2: 2.33, m3: 2.33 },
+    { label: 'Mejor FEV1', key: 'mejor_fev1_l', unidad: 'L', m1: 2.15, m2: 2.15, m3: 2.15 },
+    { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.3, m2: 2.33, m3: 2.26 },
+    // FEV1 con M1 duplicada de M2 (defecto Event v9).
+    { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.11, m2: 2.11, m3: 2.09 },
+  ]
+
+  const INCONSISTENCIA_FEV1_NOTA =
+    'SOSPECHA_INCONSISTENCIA_MEJOR_FEV1: FEV1: max(m1,m2,m3)=2.11 de la fila ' +
+    'estándar < Mejor FEV1=2.15. El valor de la mejor maniobra no aparece entre ' +
+    'las maniobras de la fila estándar — posible duplicación de M2 como M1 o ' +
+    'pérdida de M1. (m1==m2 detectado). Extracción marcada no_concluyente: el ' +
+    'cálculo de repetibilidad sobre la(s) fila(s) afectada(s) no es confiable.'
+
+  it('Caso canónico (sin anotación): FEV1 40 ml + operación visible sin cambios', () => {
+    // Sanity: sin la anotación de inconsistencia, el panel sigue mostrando
+    // 40 ml con la operación (2.15 − 2.11) × 1000. La rev. 1.5 NO introduce
+    // regresión en el caso canónico.
+    const c = resolveCriteria({
+      calidad: { ...CALIDAD_FIXTURE },
+      parametros: PARAMETROS_FIXTURE,
+    })
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.fev1TopTwoNative).toEqual([2.15, 2.11])
+    expect(c.repetibilidadFev1Menor150).toBe('SI')
+  })
+
+  it('Duplicación FEV1 (source=computed) → invalida número, operación y flag ≤150', () => {
+    // El backend anotó la inconsistencia; el panel NO muestra 0 ml espurio.
+    const c = resolveCriteria({
+      calidad: {
+        ...CALIDAD_FIXTURE,
+        notas_calidad: INCONSISTENCIA_FEV1_NOTA,
+      },
+      parametros: DUPLICATED_FEV1_PARAMETROS,
+    })
+    // Repetibilidad FEV1 invalidada (no 0 ml como válido).
+    expect(c.repetibilidadFev1Ml).toBe(null)
+    expect(c.fev1TopTwoNative).toBe(null)
+    expect(c.repetibilidadFev1Menor150).toBe(null)
+    // La fuente sigue siendo "computed" (la anotación no cambia la fuente).
+    expect(c.repetibilidadFev1Source).toBe('computed')
+    // FVC consistente: NO se invalida (sigue 30 ml, operación visible).
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    expect(c.fvcTopTwoNative).toEqual([2.33, 2.3])
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+  })
+
+  it('Duplicación FEV1 con repetibilidad extraída del texto nativo → conserva 40, oculta operación', () => {
+    // El documento trajo `repetibilidad_fev1_ml=40` como texto nativo
+    // (fuente independiente del layout tabular). La anotación de
+    // inconsistencia NO invalida el valor extraído (es la verdad declarada
+    // por el reporte), PERO oculta la operación espuria derivada de la fila
+    // duplicada (topTwoNative=null → la operación muestra "—").
+    const c = resolveCriteria({
+      calidad: {
+        ...CALIDAD_FIXTURE,
+        repetibilidad_fev1_ml: 40,
+        notas_calidad: INCONSISTENCIA_FEV1_NOTA,
+      },
+      parametros: DUPLICATED_FEV1_PARAMETROS,
+    })
+    // Valor extraído del texto nativo conservado (fuente independiente).
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.repetibilidadFev1Source).toBe('extracted')
+    // Operación oculta (no mostrar "(2.11 − 2.11) × 1000 = 0 ml").
+    expect(c.fev1TopTwoNative).toBe(null)
+  })
+
+  it('Duplicación FVC → invalida selectivamente FVC, FEV1 intacto', () => {
+    // La anotación específica por parámetro permite invalidar sólo el
+    // afectado. Aquí sólo FVC está duplicada; FEV1 (consistente) sigue 40 ml.
+    const notaFvc = INCONSISTENCIA_FEV1_NOTA.replace(
+      /SOSPECHA_INCONSISTENCIA_MEJOR_FEV1/g,
+      'SOSPECHA_INCONSISTENCIA_MEJOR_FVC'
+    ).replace(/FEV1/g, 'FVC')
+    const c = resolveCriteria({
+      calidad: { ...CALIDAD_FIXTURE, notas_calidad: notaFvc },
+      parametros: [
+        { label: 'Mejor FVC', key: 'mejor_fvc_l', unidad: 'L', m1: 2.33, m2: 2.33, m3: 2.33 },
+        { label: 'Mejor FEV1', key: 'mejor_fev1_l', unidad: 'L', m1: 2.15, m2: 2.15, m3: 2.15 },
+        // FVC duplicada (defecto).
+        { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.33, m2: 2.33, m3: 2.26 },
+        { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.15, m2: 2.11, m3: 2.09 },
+      ],
+    })
+    // FVC invalidada.
+    expect(c.repetibilidadFvcMl).toBe(null)
+    expect(c.fvcTopTwoNative).toBe(null)
+    expect(c.repetibilidadFvcMenor150).toBe(null)
+    // FEV1 consistente: intacto (40 ml, operación visible).
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.fev1TopTwoNative).toEqual([2.15, 2.11])
+    expect(c.repetibilidadFev1Menor150).toBe('SI')
+  })
+
+  it('Render: con duplicación FEV1, la operación FEV1 muestra "—" (no 0 ml)', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: {
+          calidad: {
+            ...CALIDAD_FIXTURE,
+            notas_calidad: INCONSISTENCIA_FEV1_NOTA,
+          },
+          parametros: DUPLICATED_FEV1_PARAMETROS,
+        },
+      })
+    )
+    // NO se renderiza la operación espuria "(2.11 − 2.11) × 1000 = 0 ml".
+    expect(html).not.toMatch(/\(2\.11\s*[−-]\s*2\.11\)/)
+    // La operación FEV1 está presente pero muestra "—" (topTwoNative=null).
+    expect(html).toContain('data-testid="repetibilidad-fev1-operacion"')
+    expect(html).toMatch(/FEV1:\s*—/)
+    // FVC consistente: su operación sigue visible ((2.33 − 2.30) × 1000 = 30).
+    expect(html).toMatch(
+      /FVC:\s*\(2\.33\s*[−-]\s*2\.30\)\s*[×x]\s*1000\s*=\s*30(?:\.00)?\s*ml/
+    )
+  })
+
+  it('La anotación se busca en ambos canales (raíz notas_calidad y calidad.notas_calidad)', () => {
+    // El backend escribe la anotación en AMBOS canales. El panel debe
+    // detectarla en cualquiera de los dos (defensa: algunos snapshots sólo
+    // conservan uno).
+    const cRaiz = resolveCriteria({
+      notas_calidad: INCONSISTENCIA_FEV1_NOTA,
+      calidad: { ...CALIDAD_FIXTURE },
+      parametros: DUPLICATED_FEV1_PARAMETROS,
+    })
+    expect(cRaiz.repetibilidadFev1Ml).toBe(null)
+    expect(cRaiz.fev1TopTwoNative).toBe(null)
+  })
+})

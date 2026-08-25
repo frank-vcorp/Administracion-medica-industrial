@@ -219,6 +219,27 @@ GUARDRAILS ESPECÍFICOS PARA ESPIROMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBR
    m3=2.26/68`) y para "Mejor FEV1" / "Mejor FVC" donde `m1=m2=m3` consolidan
    la mejor maniobra. Mantener la correspondencia celda↔campo es crítico para
    el cálculo downstream de repetibilidad (top-2 = `max(m1,m2,m3) − segundo_max`).
+10. NO uses la fila "Mejor FEV1" / "Mejor FVC" como sustituto de la fila
+    estándar FEV1 / FVC. Son filas DISTINTAS del layout Sibelmed:
+    - "Mejor FEV1" CONSOLIDA la mejor maniobra (m1=m2=m3 = el mejor valor).
+    - "FEV1" contiene las 3 maniobras SEPARADAS (m1, m2, m3 pueden diferir).
+    Si la fila estándar FEV1/FVC no está visible, emite null para esas
+    celdas — NO rellenes la fila estándar copiando la fila "Mejor X".
+11. NO DUPLIQUES UNA CELDA EN OTRA. Específicamente, NO rellenes m1 con el
+    valor de m2, ni m1_pct_ref con m2_pct_ref. Cada celda conserva su propio
+    valor. Si la celda M1 está vacía en la fuente, usa null para m1 y
+    m1_pct_ref — nunca copies el valor de M2. El síntoma "(m1 − m2) × 1000
+    = 0 ml" revela que duplicaste M2 como M1; evítalo transcribiendo
+    literalmente cada celda en su columna.
+12. CONSISTENCIA ENTRE "Mejor X" Y FILA ESTÁNDAR X. En el layout Sibelmed,
+    el valor de la fila "Mejor FEV1" (m1=m2=m3) DEBE ser igual al máximo de
+    las maniobras de la fila "FEV1" (max(m1,m2,m3)), porque la mejor maniobra
+    consolidada es, por definición, el mayor valor entre las 3. Si al extraer
+    detectas que max(m1,m2,m3) de la fila FEV1 es MENOR que el valor de la
+    fila "Mejor FEV1", STOP: hay un error de extracción (probablemente
+    duplicaste M2 como M1 o perdiste M1). NO dupliques ni rellenes;
+    transcribe literalmente las celdas que veas y deja que la validación
+    posterior marque la fila como no concluyente. Lo mismo aplica a FVC.
 """.strip()
 
 
@@ -577,6 +598,108 @@ notas de calidad y gráficas.
                     f"{cn} | {warning}" if cn else warning
                 )
                 result["calidad"] = calidad
+
+        # FIX-FEATURE-20260824-01 rev. 1.5: validación cruzada entre la fila
+        # "Mejor X" y la fila estándar X (FEV1/FVC). El layout Sibelmed
+        # consolida en "Mejor X" la mejor maniobra (m1=m2=m3). Por tanto,
+        # max(m1,m2,m3) de la fila estándar X debe IGUALAR el m1 de la fila
+        # "Mejor X". Si la fila estándar tiene un máximo MENOR que la fila
+        # "Mejor X", el valor de la mejor maniobra se perdió o se duplicó
+        # otra celda (típicamente M2 duplicada como M1: m1==m2). El defecto
+        # NO se cubre con `SOSPECHA_DESPLAZAMIENTO_M1` (rev. 1.4) porque esa
+        # sólo dispara cuando `m1 is None`; aquí m1 está "poblado" con el
+        # valor erróneo (copia de m2), así que el flag anterior era inefectivo.
+        #
+        # Sin corrección automática (no se inventa ni rellena m1): se anota
+        # `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` / `_FVC` con el parámetro
+        # afectado y se fuerza `completitud_documental = "no_concluyente"`
+        # para que el gate clínico y el panel NO presenten un cálculo de
+        # repetibilidad espurio (p.ej. 0 ml) sobre una fila no confiable.
+        # Regla GENERAL (no hardcodea paciente ni valores): aplica a cualquier
+        # par (fila estándar X, fila "Mejor X") presente en `parametros[]`.
+        _MEJOR_CROSS_VALIDATION = (
+            # (prefix_fila_estandar, prefix_mejor, etiqueta_visible)
+            ("fev1", "mejor_fev1", "FEV1"),
+            ("fvc", "mejor_fvc", "FVC"),
+        )
+        cross_warnings = []
+        for std_prefix, mejor_prefix, display in _MEJOR_CROSS_VALIDATION:
+            std_row = None
+            mejor_row = None
+            for r in normalized_rows:
+                rk = (r.get("key") or "").lower()
+                if not rk:
+                    continue
+                # Fila "Mejor X": key empieza con mejor_ y coincide con el
+                # prefijo del parámetro (mejor_fev1 / mejor_fev1_l).
+                if rk.startswith("mejor_"):
+                    if rk == mejor_prefix or rk.startswith(mejor_prefix + "_"):
+                        mejor_row = r
+                    continue
+                # Fila estándar X: key == fev1 / fev1_l (sin "mejor_").
+                if rk == std_prefix or rk.startswith(std_prefix + "_"):
+                    std_row = r
+            if not (std_row and mejor_row):
+                continue
+            mejor_vals = [
+                v for v in (mejor_row.get(f) for f in ("m1", "m2", "m3"))
+                if v is not None
+            ]
+            std_vals = [
+                v for v in (std_row.get(f) for f in ("m1", "m2", "m3"))
+                if v is not None
+            ]
+            if not (mejor_vals and std_vals):
+                continue
+            mejor_max = max(mejor_vals)
+            std_max = max(std_vals)
+            # Epsilon para comparación de floats (L con 2 decimales).
+            if mejor_max > std_max + 1e-9:
+                # Síntoma de duplicación: m1==m2 (mismo par absoluto) en la
+                # fila estándar, con m1 "poblado" por copia de m2.
+                m1 = std_row.get("m1")
+                m2 = std_row.get("m2")
+                duplicated = (
+                    m1 is not None and m2 is not None
+                    and abs(float(m1) - float(m2)) < 1e-9
+                )
+                # Token específico por parámetro para que el panel frontend
+                # pueda invalidar el cálculo de repetibilidad selectivamente.
+                token = f"SOSPECHA_INCONSISTENCIA_MEJOR_{display}"
+                detail = (
+                    f"{token}: {display}: max(m1,m2,m3)={std_max} de la fila "
+                    f"estándar < Mejor {display}={mejor_max}. El valor de la "
+                    f"mejor maniobra no aparece entre las maniobras de la "
+                    f"fila estándar — posible duplicación de M2 como M1 o "
+                    f"pérdida de M1."
+                )
+                if duplicated:
+                    detail += " (m1==m2 detectado)."
+                cross_warnings.append(detail)
+        if cross_warnings:
+            warning = (
+                "; ".join(cross_warnings)
+                + " Extracción marcada no_concluyente: el cálculo de "
+                "repetibilidad sobre la(s) fila(s) afectada(s) no es "
+                "confiable. NO se duplicó ni rellenó M1."
+            )
+            existing = result.get("notas_calidad") or ""
+            result["notas_calidad"] = (
+                f"{existing} | {warning}" if existing else warning
+            )
+            if isinstance(calidad, dict):
+                cn = calidad.get("notas_calidad") or ""
+                calidad["notas_calidad"] = (
+                    f"{cn} | {warning}" if cn else warning
+                )
+                # Forzar no_concluyente: la fila tabular afectada no es
+                # confiable para interpretación ni para el cálculo de
+                # repetibilidad downstream. No sobrescribe un reason del
+                # gate mínimo (que en Espirometría sólo consulta presencia
+                # de filas, no completitud).
+                calidad["completitud_documental"] = "no_concluyente"
+                result["calidad"] = calidad
+            result["completitud_documental"] = "no_concluyente"
 
         return result
 

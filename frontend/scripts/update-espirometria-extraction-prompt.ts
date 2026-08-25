@@ -1,7 +1,8 @@
 /**
- * Script para actualizar el prompt de extracción de Espirometría a v5
- * (IMPL-20260824-05 — fix defecto v6 captura Sibelmed, separación
- * criterios AMI vs. ATS/ERS).
+ * Script para actualizar el prompt de extracción de Espirometría a v6
+ * (IMPL-FIX-20260824-04 — dictamen FIX-20260824-04 sobre regresión FEV1=0;
+ * prohíbe duplicar celdas, exige usar Mejor X como referencia de fila estándar,
+ * exige validación cruzada).
  *
  * USO:
  *   DATABASE_URL=<railway_url> npx tsx scripts/update-espirometria-extraction-prompt.ts
@@ -9,7 +10,7 @@
  * EFECTO:
  *   - Busca el MedicalTest cuyo `name` sea "ESPIROMETRIA" (case-insensitive).
  *   - Actualiza únicamente `options.aiCalibration.extraction.prompt` y
- *     `options.aiCalibration.extraction.version` → 'espirometria-sibelmed-v5'.
+ *     `options.aiCalibration.extraction.version` → 'espirometria-sibelmed-v6'.
  *   - Preserva intactos los demás campos de `options`, incluyendo:
  *       * `aiCalibration.enabled`
  *       * `aiCalibration.canonicalStudyType`
@@ -45,18 +46,34 @@
  *     `impresion_diagnostica_texto` y `recomendaciones_texto`; el prompt
  *     acepta ambos nombres. Sin invención.
  *
- * CAMBIOS vs v4 (IMPL-20260824-05):
- *   - Reglas EXPLÍCITAS para `tiempo` y `criterios_para_dx`: sólo si el
- *     reporte los declara; nunca derivarlos de duración de curva ni de
- *     heurística.
- *   - Regla EXPLÍCITA para `repetibilidad_*_menor_150`: el panel los
- *     calcula; el extractor NO los usa como fuente de verdad ni los
- *     copia del flag ATS/ERS embebido (que es un criterio distinto).
- *   - `calidad` se limita a letra/código EXPLÍCITO del documento; no
- *     se computa desde los demás campos visuales.
- *   - `pico_maximo`, `forma_triangular`, `libre_artefactos`, `meseta`
- *     mantienen inferencia visual clara con misma regla de v4 (null si
- *     la curva no es legible).
+ * CAMBIOS vs v5 (FIX-20260824-04):
+ *   - PROHIBICIÓN ABSOLUTA explícita: NO DUPLICAR UNA CELDA EN OTRA. Si M1
+ *     está vacía, usa null — NUNCA copies el valor de M2 ni de M3. La
+ *     duplicación produce cálculos de repetibilidad espurios (ej. FEV1
+ *     m1=2.11 + m2=2.11 ⇒ (2.11−2.11)×1000 = 0 ml).
+ *   - PROHIBICIÓN ABSOLUTA explícita: NO usar la fila "Mejor FEV1" /
+ *     "Mejor FVC" como sustituto de la fila estándar FEV1 / FVC. Son
+ *     filas DISTINTAS del layout Sibelmed:
+ *       * "Mejor FEV1" CONSOLIDA la mejor maniobra (m1=m2=m3 = el mejor
+ *         valor entre las 3 maniobras separadas de la fila FEV1).
+ *       * "FEV1" contiene las 3 maniobras SEPARADAS (m1, m2, m3 pueden
+ *         diferir).
+ *   - VALIDACIÓN CRUZADA OBLIGATORIA antes de cerrar el JSON:
+ *       Para cada par (Mejor X, fila estándar X), verificar que el valor
+ *       consolidado en la fila Mejor X es <= max(m1, m2, m3) de la fila
+ *       estándar X. Si NO se cumple, NO rellenar m1 — transcribir
+ *       literalmente las celdas visibles y dejar que la normalización
+ *       defensiva backend marque `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` /
+ *       `_FVC` + `completitud_documental = no_concluyente` para que el
+ *       cálculo de repetibilidad downstream se invalide (no muestre 0 ml).
+ *   - Apartado "PROHIBICIONES ABSOLUTAS" renumerado y reforzado con las
+ *     nuevas prohibiciones 9 (no usar Mejor X como fila estándar) y 10
+ *     (no copiar valores de M2 a M1 ni a %REF adyacente).
+ *   - Sin cambio en extracción `criterios_para_dx`, `tiempo`, `calidad`,
+ *     `pico_maximo`, `forma_triangular`, `libre_artefactos`, `meseta` —
+ *     reglas de v5 preservadas.
+ *   - Sin cambio en repetibilidad `<150` ni `<200` (siguen SIEMPRE null
+ *     en extractor; los deriva el panel con umbral AMI ≤ 150 ml).
  */
 import { Prisma, PrismaClient } from '@prisma/client'
 import { fileURLToPath } from 'node:url'
@@ -65,9 +82,9 @@ import { fileURLToPath } from 'node:url'
 // inspeccionarlas sin tener que leer el archivo fuente ni ejecutarlo contra
 // la BD. NO son parte del contrato público: son internas al script de
 // mantenimiento del prompt de extracción de Espirometría.
-export const EXTRACTION_VERSION = 'espirometria-sibelmed-v5'
+export const EXTRACTION_VERSION = 'espirometria-sibelmed-v6'
 
-export const NEW_EXTRACTION_PROMPT = `REGLAS ESPECÍFICAS PARA EXTRACCIÓN DE ESPIROMETRÍA (v5 — IMPL-20260824-05, BR-20260824-01 + BR-20260824-02)
+export const NEW_EXTRACTION_PROMPT = `REGLAS ESPECÍFICAS PARA EXTRACCIÓN DE ESPIROMETRÍA (v6 — IMPL-FIX-20260824-04, BR-20260824-01 + BR-20260824-02)
 
 El documento contiene un estudio de función pulmonar. Devuelve ÚNICAMENTE un objeto JSON válido, sin markdown, sin texto adicional y sin bloques <think>.
 
@@ -80,6 +97,72 @@ FUENTE PRIMARIA (DATOS NUMÉRICOS)
 5. Extrae las filas FVC y FEV1 con sus valores absolutos M1/M2/M3 y sus porcentajes %REF.
 6. También extrae Mejor FVC, Mejor FEV1, FEV1/FVC, FEF25%-75%, FET100%, Vext. y Edad del pulmón cuando estén visibles.
 7. Extrae los datos del paciente, estudio, condiciones técnicas y de las gráficas.
+
+PROHIBICIONES ABSOLUTAS (FIX-20260824-04 — duplicación de celdas)
+
+8. NO DUPLIQUES UNA CELDA EN OTRA. Específicamente:
+   - NO rellenes \`m1\` con el valor de \`m2\` ni de \`m3\` (ni viceversa).
+   - NO rellenes \`m1_pct_ref\` con \`m2_pct_ref\` ni con \`m3_pct_ref\`.
+   - Si la celda M1 está vacía en la fuente, usa \`null\` para \`m1\` y para
+     \`m1_pct_ref\` — NUNCA copies el valor de M2 ni de M3.
+   - Cada celda conserva su propio valor (transcripción literal).
+
+   Síntoma de duplicación: si extraes m1 = m2 (par absoluto) con
+   porcentajes %REF iguales y la fila "Mejor X" trae un valor mayor,
+   la fórmula downstream \`(m1 − m2) × 1000 = 0 ml\` es un artefacto de
+   la duplicación, NO una repetibilidad real.
+
+9. NO USES la fila "Mejor FEV1" / "Mejor FVC" como sustituto de la fila
+   estándar FEV1 / FVC. Son filas DISTINTAS del layout Sibelmed:
+   - "Mejor FEV1" CONSOLIDA la mejor maniobra (\`m1 = m2 = m3\` = el
+     mejor valor entre las 3 maniobras separadas de la fila FEV1).
+   - "FEV1" contiene las 3 maniobras SEPARADAS (\`m1\`, \`m2\`, \`m3\`
+     pueden diferir).
+   Si la fila estándar FEV1/FVC no está visible, emite \`null\` para esas
+   celdas — NO rellenes la fila estándar copiando la fila "Mejor X".
+
+VALIDACIÓN CRUZADA OBLIGATORIA (FIX-20260824-04)
+
+10. ANTES de cerrar el JSON, para cada par (Mejor X, fila estándar X) presente
+    en \`parametros[]\`, valida la consistencia:
+
+    a. Identifica la fila "Mejor FEV1" (\`mejor_fev1_l\` o \`mejor_fev1\`)
+       y la fila estándar "FEV1" (\`fev1_l\` o \`fev1\`). El valor consolidado
+       de la fila "Mejor FEV1" es \`mejor_fev1_max = mejor_fev1.m1\`
+       (las 3 celdas \`m1/m2/m3\` son iguales en Sibelmed).
+    b. Identifica las 3 maniobras de la fila estándar FEV1 y calcula
+       \`fev1_std_max = max(fev1.m1, fev1.m2, fev1.m3)\`.
+    c. Verifica que \`mejor_fev1_max <= fev1_std_max\`. Si NO se cumple
+       (\`mejor_fev1_max > fev1_std_max + epsilon\`), hay un error de
+       extracción: probablemente duplicaste M2 como M1, perdiste M1, o
+       confundiste el orden de las maniobras.
+    d. Si detectas la inconsistencia, NO rellenes m1 desde "Mejor X" —
+       transcribe literalmente las celdas que veas y deja \`null\` si la
+       celda está vacía. La normalización defensiva backend anotará
+       \`SOSPECHA_INCONSISTENCIA_MEJOR_FEV1\` y forzará
+       \`completitud_documental = "no_concluyente"\` para que el cálculo
+       de repetibilidad downstream se invalide (no muestre 0 ml espurio).
+    e. Aplica el mismo procedimiento al par (Mejor FVC, fila estándar FVC).
+
+EJEMPLO CANÓNICO (FIX-20260824-04 — bit-a-bit)
+
+Para FEV1 (Sibelmed W20s, layout canónico de 9 columnas), la fila tiene
+exactamente esta serie de 6 celdas en orden: \`m1 = 2.15\`,
+\`m1_pct_ref = 77\`, \`m2 = 2.11\`, \`m2_pct_ref = 76\`, \`m3 = 2.09\`,
+\`m3_pct_ref = 75\`. La operación downstream esperada es
+\`max(2.15, 2.11, 2.09) − segundo = (2.15 − 2.11) × 1000 = 40 ml\` —
+NO 0 ml. Si al transcribir te encuentras escribiendo m1 = m2 = 2.11,
+STOP: estás duplicando. Revisa la columna M1 en el PDF.
+
+Para FVC (mismo layout), la fila tiene \`m1 = 2.30\`, \`m1_pct_ref = 69\`,
+\`m2 = 2.33\`, \`m2_pct_ref = 70\`, \`m3 = 2.26\`, \`m3_pct_ref = 68\`.
+Operación esperada: \`(2.33 − 2.30) × 1000 = 30 ml\`. Si el resultado
+te da 0 ml, es porque duplicaste M2 como M1.
+
+La fila "Mejor FEV1" del mismo reporte lleva \`m1 = m2 = m3 = 2.15\`
+(la mejor maniobra consolidada) y la fila "Mejor FVC" lleva
+\`m1 = m2 = m3 = 2.33\`. Estas filas resumen la mejor maniobra — NO
+las uses como sustituto de la fila estándar FEV1/FVC.
 
 INFERENCIA VISUAL DE CRITERIOS DE CALIDAD (BR-20260824-02)
 
@@ -171,6 +254,19 @@ PROHIBICIONES ABSOLUTAS (BR-20260824-02 + IMPL-20260824-05):
    transcribir M1/M2/M3 y, si están visibles en el reporte como texto
    nativo, \`repetibilidad_fvc_ml\`/\`repetibilidad_fev1_ml\` (en ml).
    El flag Sí/No ≤150 NO lo produces tú.
+9. NUNCA dupliques M2 como M1 (IMPL-20260824-06). Cada celda
+   M1/M2/M3/%REF debe transcribirse literalmente de su columna. Si la
+   celda M1 está vacía en la fuente, usa null para m1 y m1_pct_ref —
+   no copies el valor de M2. El síntoma "(m1 − m2) × 1000 = 0 ml"
+   revela que duplicaste M2 como M1; evítalo transcribiendo cada celda
+   en su columna.
+10. NUNCA uses la fila "Mejor FEV1"/"Mejor FVC" como fila FEV1/FVC
+    estándar (IMPL-20260824-06). Son filas DISTINTAS del layout
+    Sibelmed: "Mejor X" consolida la mejor maniobra (m1=m2=m3); la fila
+    estándar contiene las 3 maniobras separadas. Si la fila estándar no
+    está visible, emite null para esas celdas — no la rellenes con la
+    fila "Mejor X". El valor de "Mejor FEV1" debe coincidir con el
+    máximo de las maniobras de la fila "FEV1".
 
 ALIASES PARA REPETIBILIDAD Y ACEPTABILIDAD (compatibilidad con el esquema existente)
 

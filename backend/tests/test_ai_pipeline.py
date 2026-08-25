@@ -4090,6 +4090,266 @@ class TestFEATURE20260824_01Rev14EspiroRD2026Preservation:
 
 
 # ---------------------------------------------------------------------------
+# FEATURE-20260824-01 rev. 1.5: detección de duplicación M2→M1 y validación
+# cruzada entre la fila "Mejor X" y la fila estándar X (FEV1/FVC).
+#
+# Tras rev. 1.4 (que sólo cubría `m1 is None`), Frank reportó Event v9 con un
+# patrón DISTINTO: el LLM ahora DUPLICA M2 como M1 (m1==m2==2.11, %REF 76/76)
+# en vez de dejar m1 vacío. El flag `SOSPECHA_DESPLAZAMIENTO_M1` no disparaba
+# porque `m1 is not None` (vale 2.11, copia de m2). La operación renderizada
+# era `(2.11 − 2.11) × 1000 = 0 ml` en lugar de `(2.15 − 2.11) × 1000 = 40 ml`.
+#
+# Corrección (regla GENERAL, no hardcodea paciente ni valores): el
+# normalizador cruza la fila "Mejor FEV1" (m1=m2=m3 = mejor maniobra
+# consolidada) con la fila "FEV1" (max(m1,m2,m3)). Si max(FEV1) <
+# Mejor FEV1, el valor de la mejor maniobra se perdió/duplicó → se anota
+# `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` y se fuerza
+# `completitud_documental = "no_concluyente"`. NO se inventa ni rellena m1.
+# ---------------------------------------------------------------------------
+
+
+class TestFEATURE20260824_01Rev15EspiroDuplicacionM1:
+    """FEATURE-20260824-01 rev. 1.5: detección de duplicación M2→M1 y
+    validación cruzada Mejor X vs fila estándar X.
+
+    Cubre:
+    - Caso canónico RD2026 (m1=2.15, Mejor FEV1=2.15): NO dispara
+      inconsistencia, NO fuerza no_concluyente, backfill fev1=2.15,
+      repetibilidad 40 ml FEV1 / 30 ml FVC preservadas.
+    - Caso defectuoso (m1=m2=2.11 duplicado, Mejor FEV1=2.15): dispara
+      `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`, fuerza `no_concluyente`, NO
+      inventa m1 (sigue 2.11, no se rellena con 2.15).
+    - Inconsistencia selectiva: si sólo FEV1 está duplicado, sólo FEV1 se
+      anota; FVC consistente no se ve afectado.
+    - Guardrail §10/§11/§12 inyectados en el prompt.
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-api-key", model="gemini-2.5-pro")
+
+    @pytest.fixture
+    def rd2026_canonical_input(self):
+        """Snapshot del fixture documental RD2026 (canónico, consistente)."""
+        parametros = _load_rd2026_parametros()
+        return {
+            "paciente": "PEÑA PATRICIO MARBELLA",
+            "fecha_estudio": "2025-03-18",
+            "parametros": parametros,
+            "calidad": {
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+            },
+        }
+
+    # ── AC rev 1.5-1: el payload RD2026 canónico NO dispara inconsistencia
+    def test_rd2026_canonical_does_not_flag_inconsistency(
+        self, extractor, rd2026_canonical_input
+    ):
+        """Cuando la fila FEV1 preserva m1=2.15 (== Mejor FEV1=2.15), el
+        normalizador NO debe anotar inconsistencia ni forzar no_concluyente
+        (sería un falso positivo que rompería el cálculo de 40 ml)."""
+        normalized = extractor._normalize_espirometria_result(
+            dict(rd2026_canonical_input)
+        )
+        notas = normalized.get("notas_calidad") or ""
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" not in notas, (
+            f"Falso positivo: {notas!r}"
+        )
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FVC" not in notas, (
+            f"Falso positivo FVC: {notas!r}"
+        )
+        # completitud NO se fuerza a no_concluyente (queda suficiente, como
+        # vino en el payload RD2026).
+        assert normalized.get("completitud_documental") != "no_concluyente"
+
+    # ── AC rev 1.5-2: caso canónico preserva pares (absoluto, %REF) por
+    #    columna y la repetibilidad 40 ml FEV1 / 30 ml FVC.
+    def test_rd2026_canonical_preserves_pairs_and_repetibilidad(
+        self, extractor, rd2026_canonical_input
+    ):
+        """La fila FEV1 conserva los 3 pares (absoluto, %REF) por columna:
+        (m1=2.15, m1_pct_ref=77), (m2=2.11, m2_pct_ref=76),
+        (m3=2.09, m3_pct_ref=75). El backfill da fev1=2.15 (no 2.11) y la
+        repetibilidad top-2 = 40 ml. FVC = 30 ml sin regresión."""
+        normalized = extractor._normalize_espirometria_result(
+            dict(rd2026_canonical_input)
+        )
+        fev1 = next(
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fev1_l"
+        )
+        # Pares (absoluto, %REF) por columna M1/M2/M3 conservados.
+        assert (fev1["m1"], fev1["m1_pct_ref"]) == (2.15, 77.0)
+        assert (fev1["m2"], fev1["m2_pct_ref"]) == (2.11, 76.0)
+        assert (fev1["m3"], fev1["m3_pct_ref"]) == (2.09, 75.0)
+        # Backfill determinista: fev1 = max(m1,m2,m3) = 2.15 (no 2.11).
+        from app.services.ai.extractor import _backfill_espirometry_scalar
+        fev1_root = _backfill_espirometry_scalar(normalized["parametros"], "fev1")
+        assert fev1_root == 2.15
+        fvc_root = _backfill_espirometry_scalar(normalized["parametros"], "fvc")
+        assert fvc_root == 2.33
+        # Repetibilidad top-2 × 1000 = ml.
+        fev1_maneuvers = sorted(
+            [fev1["m1"], fev1["m2"], fev1["m3"]], reverse=True
+        )
+        assert round((fev1_maneuvers[0] - fev1_maneuvers[1]) * 1000, 2) == 40.0
+        fvc = next(
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fvc_l"
+        )
+        fvc_maneuvers = sorted(
+            [fvc["m1"], fvc["m2"], fvc["m3"]], reverse=True
+        )
+        assert round((fvc_maneuvers[0] - fvc_maneuvers[1]) * 1000, 2) == 30.0
+
+    # ── AC rev 1.5-3: duplicación M2→M1 dispara inconsistencia + no_concluyente
+    def test_fev1_duplicated_m2_as_m1_flags_inconsistency(
+        self, extractor
+    ):
+        """Caso defectuoso Event v9: FEV1 con m1=m2=2.11 (M2 duplicada como
+        M1), m3=2.09, y fila "Mejor FEV1" con m1=m2=m3=2.15. El normalizador
+        debe anotar `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`, forzar
+        `completitud_documental = "no_concluyente"` (raíz + calidad), y NO
+        inventar m1 (sigue 2.11 — no se rellena con 2.15)."""
+        input_dict = {
+            "paciente": "Test duplicación",
+            "fecha_estudio": "2025-03-18",
+            "parametros": [
+                # FVC consistente (no se ve afectada).
+                {"label": "Mejor FVC", "key": "mejor_fvc_l", "unidad": "L",
+                 "m1": 2.33, "m1_pct_ref": 70, "m2": 2.33, "m2_pct_ref": 70,
+                 "m3": 2.33, "m3_pct_ref": 70},
+                # Mejor FEV1 = 2.15 (consolidación de la mejor maniobra).
+                {"label": "Mejor FEV1", "key": "mejor_fev1_l", "unidad": "L",
+                 "m1": 2.15, "m1_pct_ref": 77, "m2": 2.15, "m2_pct_ref": 77,
+                 "m3": 2.15, "m3_pct_ref": 77},
+                {"label": "FVC", "key": "fvc_l", "unidad": "L",
+                 "m1": 2.30, "m1_pct_ref": 69, "m2": 2.33, "m2_pct_ref": 70,
+                 "m3": 2.26, "m3_pct_ref": 68},
+                # FEV1 con M1 DUPLICADA de M2 (defecto Event v9).
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                 "m1": 2.11, "m1_pct_ref": 76, "m2": 2.11, "m2_pct_ref": 76,
+                 "m3": 2.09, "m3_pct_ref": 75},
+            ],
+            "calidad": {
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+            },
+        }
+        normalized = extractor._normalize_espirometria_result(input_dict)
+        notas = normalized.get("notas_calidad") or ""
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in notas, (
+            f"Inconsistencia FEV1 no detectada: {notas!r}"
+        )
+        # FVC consistente NO se anota.
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FVC" not in notas, (
+            f"FVC marcada por error (debe ser consistente): {notas!r}"
+        )
+        # completitud forzada a no_concluyente en raíz y en calidad.
+        assert normalized.get("completitud_documental") == "no_concluyente"
+        calidad = normalized.get("calidad") or {}
+        assert calidad.get("completitud_documental") == "no_concluyente"
+        # La anotación también vive en calidad.notas_calidad.
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in (
+            calidad.get("notas_calidad") or ""
+        )
+        # NO se inventa ni rellena m1: sigue 2.11 (el valor extraído, erróneo,
+        # se preserva sin corrección automática — sólo anotación).
+        fev1 = next(
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fev1_l"
+        )
+        assert fev1["m1"] == 2.11, (
+            "El normalizador NO debe rellenar m1 con 2.15 — sólo anotar."
+        )
+
+    # ── AC rev 1.5-4: el backfill alimenta raíz desde Mejor FEV1, pero la
+    #    fila FEV1 NO se corrige (sigue duplicada) — la defensa es la anotación
+    def test_backfill_feeds_root_from_mejor_but_row_stays_duplicated(
+        self, extractor
+    ):
+        """FIX-20260821-01 precedencia (a): el backfill alimenta `fev1` raíz
+        desde la fila "Mejor FEV1" (m1=2.15) cuando existe — esto es
+        CORRECTO para el escalar enviado al gate/DR7. PERO la fila FEV1 en
+        `parametros[]` NO se corrige: sigue m1=2.11 (duplicada), que es lo
+        que el panel usaría para el cálculo de repetibilidad → (2.11−2.11)
+        ×1000 = 0 ml espurio. La defensa es la anotación
+        `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` + `no_concluyente`: el panel
+        frontend invalida el cálculo al verla. NO se rellena ni duplica."""
+        input_dict = {
+            "paciente": "Test backfill",
+            "fecha_estudio": "2025-03-18",
+            "parametros": [
+                {"label": "Mejor FEV1", "key": "mejor_fev1_l", "unidad": "L",
+                 "m1": 2.15, "m2": 2.15, "m3": 2.15},
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                 "m1": 2.11, "m2": 2.11, "m3": 2.09},
+            ],
+            "calidad": {"es_interpretable": True, "completitud_documental": "suficiente"},
+        }
+        normalized = extractor._normalize_espirometria_result(input_dict)
+        # Backfill (precedencia Mejor * → m1): alimenta `fev1` raíz = 2.15
+        # desde la fila "Mejor FEV1" — escalar correcto para el gate/DR7.
+        from app.services.ai.extractor import _backfill_espirometry_scalar
+        fev1_root = _backfill_espirometry_scalar(normalized["parametros"], "fev1")
+        assert fev1_root == 2.15
+        # La fila FEV1 en parametros[] NO se corrige: m1 sigue 2.11 (el valor
+        # extraído, erróneo, se preserva sin relleno automático).
+        fev1 = next(
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fev1_l"
+        )
+        assert fev1["m1"] == 2.11
+        assert fev1["m2"] == 2.11
+        # La anotación + no_concluyente es la defensa trazable.
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in (
+            normalized.get("notas_calidad") or ""
+        )
+        assert normalized.get("completitud_documental") == "no_concluyente"
+
+    # ── AC rev 1.5-5: m1 ausente (caso rev 1.4) TAMBIÉN dispara inconsistencia
+    def test_fev1_m1_missing_also_flags_inconsistency(self, extractor):
+        """El caso rev 1.4 (m1=None, m2/m3 presentes) además de
+        `SOSPECHA_DESPLAZAMIENTO_M1` ahora también dispara la validación
+        cruzada (max(m2,m3) < Mejor FEV1). Cobertura reforzada sin conflicto."""
+        input_dict = {
+            "paciente": "Test m1 ausente",
+            "fecha_estudio": "2025-03-18",
+            "parametros": [
+                {"label": "Mejor FEV1", "key": "mejor_fev1_l", "unidad": "L",
+                 "m1": 2.15, "m2": 2.15, "m3": 2.15},
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L",
+                 "m1": None, "m2": 2.11, "m3": 2.09},
+            ],
+            "calidad": {"es_interpretable": None, "completitud_documental": None},
+        }
+        normalized = extractor._normalize_espirometria_result(input_dict)
+        notas = normalized.get("notas_calidad") or ""
+        # Ambas anotaciones coexisten (desplazamiento + inconsistencia).
+        assert "SOSPECHA_DESPLAZAMIENTO_M1" in notas
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in notas
+        assert normalized.get("completitud_documental") == "no_concluyente"
+
+    # ── AC rev 1.5-6: el guardrail §10/§11/§12 está inyectado en el prompt
+    def test_guardrail_contains_duplication_and_cross_validation_rules(
+        self, extractor
+    ):
+        """FIX-FEATURE-20260824-01 rev. 1.5: el guardrail backend cita las
+        reglas §10 (no usar Mejor X como fila estándar), §11 (no duplicar
+        celda) y §12 (consistencia Mejor X vs fila estándar X)."""
+        from app.services.ai.extractor import _ESPIROMETRIA_BACKEND_GUARDRAILS
+        assert "NO uses la fila" in _ESPIROMETRIA_BACKEND_GUARDRAILS  # §10
+        assert "NO DUPLIQUES UNA CELDA" in _ESPIROMETRIA_BACKEND_GUARDRAILS  # §11
+        assert "CONSISTENCIA ENTRE" in _ESPIROMETRIA_BACKEND_GUARDRAILS  # §12
+        prompt = extractor._build_espirometria_extraction_prompt(
+            "bloque_calibracion_y"
+        )
+        assert "NO DUPLIQUES UNA CELDA" in prompt
+        assert "CONSISTENCIA ENTRE" in prompt
+
+
+# ---------------------------------------------------------------------------
 # IMPL_FIX-20260824-02: regresión del fallo `EXTRACTION_NOT_JSON` tras el
 # commit 2547d18 (FEATURE-20260824-01 rev. 1.4 — guardrails FEV1).
 #
@@ -5524,3 +5784,281 @@ class TestEspirometriaDiagnosisPromptResolverDEC20260824_02:
         assert "No se realizan cambios (idempotente)" in src, (
             "Falta mensaje explícito de idempotencia para el operador"
         )
+
+
+# ---------------------------------------------------------------------------
+# IMPL-FIX-20260824-04 — dictamen FIX-20260824-04 sobre regresión FEV1=0.
+#
+# Síntoma reportado: la extracción duplica M2 como M1 (FEV1 m1=2.11/%76,
+# m2=2.11/%76, m3=2.09/%75) mientras "Mejor FEV1" conserva 2.15/%77. La
+# fórmula downstream `(m1 − m2) × 1000 = 0 ml` produce 0 ml en lugar de
+# `(2.15 − 2.11) × 1000 = 40 ml` — artefacto de duplicación, no repetibilidad.
+#
+# La defensa ya existe en backend rev. 1.5 + frontend rev. 1.5 (con
+# SOSPECHA_INCONSISTENCIA_MEJOR_FEV1/_FVC + invalidación selectiva). El
+# prompt de extracción se promueve de v5 → v6 con PROHIBICIONES ABSOLUTAS
+# tempranas + VALIDACIÓN CRUZADA OBLIGATORIA explícitas. Esta suite
+# canónica consolida los ACs del dictamen en un sólo lugar.
+# ---------------------------------------------------------------------------
+
+
+class TestFIX20260824_04RegresionFEV1_Cero:
+    """
+    FIX-20260824-04: AC canónicos del dictamen sobre regresión FEV1=0.
+
+    - AC-1 (canónico FEV1): m1=2.15, m2=2.11, m3=2.09 ⇒ repetibilidad
+      downstream 40 ml (top-2 sobre m*). NO 0 ml.
+    - AC-2 (canónico FVC): m1=2.30, m2=2.33, m3=2.26 ⇒ repetibilidad
+      downstream 30 ml. NO regresa.
+    - AC-3 (duplicación): si m1=m2 (par absoluto) y el valor de "Mejor X"
+      es mayor, el normalizador marca `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`/
+      `_FVC` y fuerza `completitud_documental = "no_concluyente"` SIN
+      rellenar m1 (defensa trazable, no corrección silenciosa).
+    - AC-4 (defensa prompt): el guardrail backend cita explícitamente
+      "no duplicar celda" + "no usar Mejor X como fila estándar" +
+      "consistencia Mejor X vs fila estándar X".
+    - AC-5 (frontend): la UI muestra "—" (no 0 ml) cuando el normalizador
+      marca la fila como inconsistente y la repetibilidad provenía del
+      cálculo. Si provenía del texto nativo extraído, lo conserva
+      (fuente independiente) pero oculta la operación espuria.
+
+    Estos tests son la suite canónica del dictamen: cualquier regresión
+    sobre estos 5 ACs requiere reabrir FIX-20260824-04.
+    """
+
+    @pytest.fixture
+    def extractor(self):
+        return ExtractorService(api_key="test-api-key", model="gemini-2.5-pro")
+
+    @pytest.fixture
+    def canonical_input(self):
+        """Snapshot canónico Sibelmed: FEV1 2.15/77, 2.11/76, 2.09/75 +
+        Mejor FEV1 = 2.15. Sin duplicación. Esperado: repetibilidad 40 ml
+        FEV1 y 30 ml FVC, sin anotación de inconsistencia."""
+        return {
+            "paciente": "CASO CANONICO FIX-20260824-04",
+            "fecha_estudio": "2025-03-18",
+            "parametros": [
+                {
+                    "label": "Mejor FVC", "key": "mejor_fvc_l", "unidad": "L",
+                    "m1": 2.33, "m1_pct_ref": 70, "m2": 2.33, "m2_pct_ref": 70,
+                    "m3": 2.33, "m3_pct_ref": 70,
+                },
+                {
+                    "label": "Mejor FEV1", "key": "mejor_fev1_l", "unidad": "L",
+                    "m1": 2.15, "m1_pct_ref": 77, "m2": 2.15, "m2_pct_ref": 77,
+                    "m3": 2.15, "m3_pct_ref": 77,
+                },
+                {
+                    "label": "FVC", "key": "fvc_l", "unidad": "L",
+                    "m1": 2.30, "m1_pct_ref": 69, "m2": 2.33, "m2_pct_ref": 70,
+                    "m3": 2.26, "m3_pct_ref": 68,
+                },
+                {
+                    "label": "FEV1", "key": "fev1_l", "unidad": "L",
+                    "m1": 2.15, "m1_pct_ref": 77, "m2": 2.11, "m2_pct_ref": 76,
+                    "m3": 2.09, "m3_pct_ref": 75,
+                },
+            ],
+            "calidad": {
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+            },
+        }
+
+    @pytest.fixture
+    def duplicated_input(self):
+        """Snapshot con la regresión FEV1=0: FEV1 m1=m2=2.11 (duplicado),
+        m3=2.09; Mejor FEV1=2.15. Esperado: anotación SOSPECHA +
+        no_concluyente, SIN relleno de m1, panel muestra "—"."""
+        return {
+            "paciente": "CASO DEFECTUOSO FIX-20260824-04",
+            "fecha_estudio": "2025-03-18",
+            "parametros": [
+                {
+                    "label": "Mejor FVC", "key": "mejor_fvc_l", "unidad": "L",
+                    "m1": 2.33, "m1_pct_ref": 70, "m2": 2.33, "m2_pct_ref": 70,
+                    "m3": 2.33, "m3_pct_ref": 70,
+                },
+                {
+                    "label": "Mejor FEV1", "key": "mejor_fev1_l", "unidad": "L",
+                    "m1": 2.15, "m1_pct_ref": 77, "m2": 2.15, "m2_pct_ref": 77,
+                    "m3": 2.15, "m3_pct_ref": 77,
+                },
+                {
+                    "label": "FVC", "key": "fvc_l", "unidad": "L",
+                    "m1": 2.30, "m1_pct_ref": 69, "m2": 2.33, "m2_pct_ref": 70,
+                    "m3": 2.26, "m3_pct_ref": 68,
+                },
+                {
+                    "label": "FEV1", "key": "fev1_l", "unidad": "L",
+                    "m1": 2.11, "m1_pct_ref": 76, "m2": 2.11, "m2_pct_ref": 76,
+                    "m3": 2.09, "m3_pct_ref": 75,
+                },
+            ],
+            "calidad": {
+                "es_interpretable": True,
+                "completitud_documental": "suficiente",
+            },
+        }
+
+    # ── AC-1 canónico FEV1 ──────────────────────────────────────────────────
+    def test_ac1_canonical_fev1_repetibilidad_40ml(self, extractor, canonical_input):
+        """Caso canónico: FEV1 2.15/77, 2.11/76, 2.09/75 ⇒ repetibilidad
+        40 ml (top-2 sobre m1,m2,m3 × 1000). NO 0 ml. NO se anota
+        inconsistencia (el layout es coherente)."""
+        normalized = extractor._normalize_espirometria_result(dict(canonical_input))
+        fev1 = next(
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fev1_l"
+        )
+        # Pares (absoluto, %REF) preservados.
+        assert (fev1["m1"], fev1["m1_pct_ref"]) == (2.15, 77.0)
+        assert (fev1["m2"], fev1["m2_pct_ref"]) == (2.11, 76.0)
+        assert (fev1["m3"], fev1["m3_pct_ref"]) == (2.09, 75.0)
+        # Top-2 × 1000 = 40 ml (no 0).
+        sorted_vals = sorted(
+            [fev1["m1"], fev1["m2"], fev1["m3"]], reverse=True
+        )
+        assert round((sorted_vals[0] - sorted_vals[1]) * 1000, 2) == 40.0
+        # NO se dispara la anotación de inconsistencia.
+        notas = normalized.get("notas_calidad") or ""
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" not in notas
+        # NO se fuerza no_concluyente.
+        assert normalized.get("completitud_documental") != "no_concluyente"
+
+    # ── AC-2 canónico FVC ──────────────────────────────────────────────────
+    def test_ac2_canonical_fvc_repetibilidad_30ml_no_regress(
+        self, extractor, canonical_input
+    ):
+        """Caso canónico: FVC 2.30/69, 2.33/70, 2.26/68 ⇒ repetibilidad
+        30 ml (top-2). NO regresa (no se queda en 0 ml ni en ml absurdo)."""
+        normalized = extractor._normalize_espirometria_result(dict(canonical_input))
+        fvc = next(
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fvc_l"
+        )
+        assert (fvc["m1"], fvc["m1_pct_ref"]) == (2.30, 69.0)
+        assert (fvc["m2"], fvc["m2_pct_ref"]) == (2.33, 70.0)
+        assert (fvc["m3"], fvc["m3_pct_ref"]) == (2.26, 68.0)
+        sorted_vals = sorted([fvc["m1"], fvc["m2"], fvc["m3"]], reverse=True)
+        assert round((sorted_vals[0] - sorted_vals[1]) * 1000, 2) == 30.0
+        # FVC consistente: NO se anota SOSPECHA.
+        notas = normalized.get("notas_calidad") or ""
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FVC" not in notas
+
+    # ── AC-3 duplicación m1=m2 → marcado + invalida ────────────────────────
+    def test_ac3_duplicacion_m1_eq_m2_marks_inconsistent(
+        self, extractor, duplicated_input
+    ):
+        """Caso defectuoso Event v9: FEV1 m1=m2=2.11 (duplicado),
+        Mejor FEV1=2.15. El normalizador:
+          - Anota `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` (no FVC).
+          - Fuerza `completitud_documental = "no_concluyente"`.
+          - NO rellena m1 (sigue 2.11 — el valor erróneo se preserva sin
+            corrección automática silenciosa)."""
+        normalized = extractor._normalize_espirometria_result(dict(duplicated_input))
+        notas = normalized.get("notas_calidad") or ""
+        # 1) Anotación específica por parámetro.
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in notas, (
+            f"Inconsistencia FEV1 no detectada: {notas!r}"
+        )
+        # 2) NO anotar FVC (consistente).
+        assert "SOSPECHA_INCONSISTENCIA_MEVC" not in notas
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FVC" not in notas
+        # 3) Forzar no_concluyente en raíz y en calidad.
+        assert normalized.get("completitud_documental") == "no_concluyente"
+        calidad = normalized.get("calidad") or {}
+        assert calidad.get("completitud_documental") == "no_concluyente"
+        # 4) NO rellenar m1: sigue 2.11 (valor extraído, erróneo, preservado
+        #    sin corrección automática — sólo anotación trazable).
+        fev1 = next(
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fev1_l"
+        )
+        assert fev1["m1"] == 2.11
+        assert fev1["m2"] == 2.11
+        # 5) Detalle incluye "m1==m2 detectado" (síntoma específico).
+        assert "m1==m2 detectado" in notas
+
+    # ── AC-4 defensas del prompt backend ────────────────────────────────────
+    def test_ac4_guardrail_backend_declares_prohibiciones_y_consistencia(
+        self, extractor
+    ):
+        """El guardrail backend declara las 3 defensas del dictamen
+        FIX-20260824-04: no duplicar celda, no usar Mejor X como fila
+        estándar, consistencia Mejor X vs fila estándar X."""
+        from app.services.ai.extractor import _ESPIROMETRIA_BACKEND_GUARDRAILS
+
+        assert "NO DUPLIQUES UNA CELDA" in _ESPIROMETRIA_BACKEND_GUARDRAILS
+        assert "NO uses la fila" in _ESPIROMETRIA_BACKEND_GUARDRAILS
+        assert "CONSISTENCIA ENTRE" in _ESPIROMETRIA_BACKEND_GUARDRAILS
+        # El guardrail inyectado en el prompt construido.
+        prompt = extractor._build_espirometria_extraction_prompt(
+            "bloque_calibracion_y"
+        )
+        assert "NO DUPLIQUES UNA CELDA" in prompt
+        assert "CONSISTENCIA ENTRE" in prompt
+
+    # ── AC-5 frontend: extraído vs calculado ────────────────────────────────
+    def test_ac5_frontend_pantalla_invalida_calculo_espurio(
+        self, duplicated_input
+    ):
+        """Frontend rev. 1.5: cuando el normalizador marca la fila como
+        inconsistente y la repetibilidad provenía del cálculo
+        (`repetibilidad_fvc_ml`/`_fev1_ml` ausentes en payload), el panel
+        invalida el número (null), la operación visible (topTwoNative=null
+        → "—") y el flag ≤150. NO muestra 0 ml espurio.
+
+        Cuando provenía del texto nativo extraído, lo conserva (fuente
+        independiente) pero oculta la operación espuria."""
+        # El path de validación frontend vive en
+        # frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx
+        # y se prueba en `EspirometriaClinicalCriteriaPanel.test.ts` rev. 1.5.
+        # Aquí validamos que el backend marca la condición esperada y que el
+        # frontend tiene el contrato de invalidador:
+        #   - notas_calidad contiene `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`
+        #   - calidad.completitud_documental = "no_concluyente"
+        from app.services.ai.extractor import ExtractorService
+
+        ext = ExtractorService(api_key="test-api-key", model="gemini-2.5-pro")
+        normalized = ext._normalize_espirometria_result(dict(duplicated_input))
+        notas_root = normalized.get("notas_calidad") or ""
+        notas_calidad = (normalized.get("calidad") or {}).get("notas_calidad") or ""
+        # Anotación vive en ambos canales (raíz + calidad).
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in notas_root
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in notas_calidad
+        # El frontend valida contra cualquiera de los dos (ver test
+        # `La anotación se busca en ambos canales` en el panel test).
+
+    # ── AC-6 integración: el backfill alimenta raíz desde Mejor X pero la
+    #    fila FEV1 sigue duplicada — defensa trazable ──────────────────────
+    def test_ac6_backfill_feeds_root_but_row_stays_duplicated(
+        self, extractor, duplicated_input
+    ):
+        """FIX-20260821-01 precedencia: el backfill alimenta `fev1` raíz
+        desde la fila "Mejor FEV1" (m1=2.15) — escalar correcto para el
+        gate/DR7. PERO la fila FEV1 en `parametros[]` NO se corrige:
+        sigue m1=2.11 (duplicada), que es lo que el panel usaría para el
+        cálculo de repetibilidad → (2.11−2.11)×1000 = 0 ml espurio. La
+        defensa es la anotación `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` +
+        `no_concluyente`: el panel frontend invalida el cálculo al verla."""
+        from app.services.ai.extractor import _backfill_espirometry_scalar
+
+        normalized = extractor._normalize_espirometria_result(dict(duplicated_input))
+        # Backfill: fev1 raíz = 2.15 desde "Mejor FEV1" (correcto para el gate).
+        fev1_root = _backfill_espirometry_scalar(normalized["parametros"], "fev1")
+        assert fev1_root == 2.15
+        # La fila FEV1 NO se corrige: m1 sigue 2.11 (valor extraído, erróneo,
+        # se preserva sin relleno automático).
+        fev1 = next(
+            r for r in normalized["parametros"]
+            if (r.get("key") or "").lower() == "fev1_l"
+        )
+        assert fev1["m1"] == 2.11
+        assert fev1["m2"] == 2.11
+        # La anotación + no_concluyente es la defensa trazable.
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in (
+            normalized.get("notas_calidad") or ""
+        )
+        assert normalized.get("completitud_documental") == "no_concluyente"

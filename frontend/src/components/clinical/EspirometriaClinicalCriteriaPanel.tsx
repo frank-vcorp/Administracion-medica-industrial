@@ -49,6 +49,8 @@
  *
  * @id IMPL-20260824-01
  * @id IMPL-20260824-05 — Fix precedencia booleanos ≤150 (derivan SIEMPRE del numérico)
+ * @id IMPL-20260824-06 — rev. 1.5 invalida repetibilidad cuando el backend marca
+ *   `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`/`_FVC` (duplicación M2→M1 o pérdida de M1).
  * @backup context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md (rev. 1.3)
  */
 import type { CSSProperties, ReactElement } from "react"
@@ -527,18 +529,73 @@ export function resolveCriteria(
       ? calidad.recomendaciones_texto.trim()
       : ""
 
+  // FIX-FEATURE-20260824-01 rev. 1.5: invalidación por inconsistencia
+  // tabular. Si el normalizador backend marcó la fila FEV1/FVC como
+  // inconsistente frente a su fila "Mejor X" (duplicación de M2 como M1
+  // o pérdida de M1 — anotación `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` /
+  // `_FVC` en `notas_calidad`), NO presentamos un cálculo de
+  // repetibilidad espurio (p.ej. 0 ml de (2.11−2.11)×1000) sobre una fila
+  // no confiable.
+  //
+  //   - Ocultamos la operación visible (topTwoNative → null → la línea
+  //     de operación muestra "—").
+  //   - Si la repetibilidad provenía del CÁLCULO (source="computed"),
+  //     invalidamos también el número y el flag ≤150 (no mostramos 0 ml
+  //     como válido). El panel cae al placeholder "—".
+  //   - Si la repetibilidad provenía del TEXTO NATIVO extraído del
+  //     documento (`calidad.repetibilidad_fev1_ml`, fuente independiente
+  //     del layout tabular), la conservamos (es la verdad declarada por
+  //     el reporte) pero ocultamos la operación espuria derivada de la
+  //     fila duplicada.
+  const notasCalidadForInconsistency: string = [
+    typeof extractedData?.notas_calidad === "string"
+      ? (extractedData.notas_calidad as string)
+      : "",
+    typeof calidad?.notas_calidad === "string"
+      ? (calidad.notas_calidad as string)
+      : "",
+  ].join(" ")
+  const fev1Inconsistent = notasCalidadForInconsistency.includes(
+    "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1"
+  )
+  const fvcInconsistent = notasCalidadForInconsistency.includes(
+    "SOSPECHA_INCONSISTENCIA_MEJOR_FVC"
+  )
+  const fvcTopTwoFinal: [number, number] | null =
+    fvcInconsistent ? null : fvcCalc.topTwoNative
+  const fev1TopTwoFinal: [number, number] | null =
+    fev1Inconsistent ? null : fev1Calc.topTwoNative
+  const fvcMlFinal: number | null =
+    fvcInconsistent && repetibilidadFvcSource === "computed"
+      ? null
+      : repetibilidadFvcMl
+  const fev1MlFinal: number | null =
+    fev1Inconsistent && repetibilidadFev1Source === "computed"
+      ? null
+      : repetibilidadFev1Ml
+  const fvcMenor150Final: "SI" | "NO" | null =
+    fvcInconsistent && repetibilidadFvcSource === "computed"
+      ? null
+      : repetibilidadFvcMenor150
+  const fev1Menor150Final: "SI" | "NO" | null =
+    fev1Inconsistent && repetibilidadFev1Source === "computed"
+      ? null
+      : repetibilidadFev1Menor150
+
   return {
-    repetibilidadFvcMl,
-    repetibilidadFev1Ml,
-    repetibilidadFvcMenor150,
-    repetibilidadFev1Menor150,
+    repetibilidadFvcMl: fvcMlFinal,
+    repetibilidadFev1Ml: fev1MlFinal,
+    repetibilidadFvcMenor150: fvcMenor150Final,
+    repetibilidadFev1Menor150: fev1Menor150Final,
     pruebasAceptables,
     // Trazabilidad de la fórmula: top-2 valores tomados del snapshot.
     // Independiente de si `repetibilidadFvcMl` viene extraído o calculado,
     // exponemos los valores de maniobra para que la UI muestre la operación
     // exacta que respaldó el cálculo. Si la fila/valores no están, null.
-    fvcTopTwoNative: fvcCalc.topTwoNative,
-    fev1TopTwoNative: fev1Calc.topTwoNative,
+    // rev. 1.5: null también cuando el backend marcó la fila como
+    // inconsistente (no mostrar operación espuria).
+    fvcTopTwoNative: fvcTopTwoFinal,
+    fev1TopTwoNative: fev1TopTwoFinal,
     picoMaximo: calidad?.pico_maximo ?? null,
     formaTriangular: calidad?.forma_triangular ?? null,
     libreArtefactos: calidad?.libre_artefactos ?? null,
