@@ -1,7 +1,7 @@
 /**
  * @file Tests V1 focales para la propagación del `clinical_context` al
  *   backend de prediagnóstico (FEATURE-20260825-02 + gap-fix del
- *   IMPLEMENTATION_DEFECT detectado por GEMINI).
+ *   IMPLEMENTATION_DEFECT detectado por GEMINI + FIX-Vercel-Build).
  *
  * Cubre AC-11:
  *   - Cuando hay un cuestionario de Espirometría guardado (`schemaVersion`
@@ -13,19 +13,19 @@
  *   - Cualquier `schemaVersion` desconocida se rechaza sin bloquear el
  *     upload (defensa contra prompt injection / drift evolutivo).
  *
- * El helper `_extractAndValidateClinicalContextImpl` se exporta con
- * prefijo `_` para fines de testing exclusivamente; el código de
- * producción sigue usando `extractAndValidateClinicalContext` (wrapper
- * interno).
+ * FIX-Vercel-Build 2026-08-25 (commit 68f12fd): el helper se movió del
+ * server action `ai-prediagnosis.actions.ts` (donde bloqueaba el build
+ * por export síncrono bajo `'use server'`) al módulo
+ * `frontend/src/lib/clinical/clinical-context-propagation.ts`. Este
+ * test importa directamente desde el módulo de `lib/`, NO toca el
+ * server action, y mantiene la trazabilidad AC-11.
  *
  * @id IMPL-FEATURE-20260825-02
  * @backup context/SPECs/SPEC-FEATURE-20260825-02-AUDIOMETRIA-ENTREGABLE.md
  */
 
 import { describe, it, expect } from 'vitest'
-import {
-  _extractAndValidateClinicalContextImpl as extractCtx,
-} from '../ai-prediagnosis.actions'
+import { extractAndValidateClinicalContext as extractCtx } from '@/lib/clinical/clinical-context-propagation'
 import { ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from '@/schemas/clinical/espirometria-questionnaire.schema'
 import { AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from '@/schemas/clinical/audiometria-questionnaire.schema'
 import type {
