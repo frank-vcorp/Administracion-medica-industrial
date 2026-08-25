@@ -1,46 +1,40 @@
 /**
- * Tests focales (V1) del prompt de extracción de Espirometría v6
- * (IMPL-FIX-20260824-04 — dictamen FIX-20260824-04 sobre regresión FEV1=0;
- * prohíbe duplicar celdas, exige usar Mejor X como referencia de fila estándar,
- * exige validación cruzada).
+ * Tests focales (V1) del prompt de extracción de Espirometría v7
+ * (IMPL-FIX-20260824-04-rev2 — compactación contra regresión M3
+ * `EXTRACTION_NOT_JSON` por prompts largos).
  *
- * Cambios vs v5 (FIX-20260824-04):
- *   - Apartado "PROHIBICIONES ABSOLUTAS" tempranero (después de FUENTE
- *     PRIMARIA) con regla §8 explícita de NO duplicar celda y regla §9
- *     explícita de NO usar Mejor X como fila estándar.
- *   - Nuevo apartado "VALIDACIÓN CRUZADA OBLIGATORIA" (§10) que define
- *     el procedimiento paso a paso:
- *       mejor_fev1_max = mejor_fev1.m1
- *       fev1_std_max  = max(fev1.m1, fev1.m2, fev1.m3)
- *       Si mejor_fev1_max > fev1_std_max → NO rellenar m1, transcribir
- *       literalmente. La normalización defensiva backend anotará
- *       SOSPECHA_INCONSISTENCIA_MEJOR_FEV1 y forzará no_concluyente.
- *   - Apartado "PROHIBICIONES ABSOLUTAS" tardío (reglas 1-10) preserva las
- *     reglas de v5 (1-8) y refuerza 9-10 con la misma prohibición §9/§10
- *     del inicio.
+ * Cambios vs v6 (FIX-20260824-04-rev2):
+ *   - Prompt compactado de ~19.5 KB a 4.8 KB (<5 KB). Era demasiado largo
+ *     para que MiniMax M3 devolviera JSON en 4096 tokens; ahora cabe
+ *     incluso con margen.
+ *   - Reglas críticas PRESERVADAS (cada una con test focal):
+ *       AC-1: JSON único, sin markdown ni <think>.
+ *       AC-2: layout 9 columnas Sibelmed (PARÁMETRO | M1 | %REF | M2 | %REF
+ *              | M3 | %REF | REF | LLN).
+ *       AC-3: NO duplicar M1/M2/M3 (prohibición explícita + síntoma).
+ *       AC-4: NO usar "Mejor FEV1"/"Mejor FVC" como fila estándar.
+ *       AC-5: Validación cruzada mejor_fev1_max ≤ fev1_std_max (transcribir
+ *              sin rellenar si inconsistente).
+ *       AC-6: FEV1 canónico 2.15/77/2.11/76/2.09/75 + FVC 2.30/69/2.33/70/
+ *              2.26/68 como ejemplo de columnas.
+ *       AC-7: Visuales null si no claros (pico_maximo, forma_triangular,
+ *              libre_artefactos, meseta).
+ *       AC-8: tiempo/criterios_para_dx/calidad sólo si EXPLÍCITO.
+ *       AC-9: NO calcular repetibilidad en prompt (panel calcula top-2
+ *              × 1000, umbral AMI ≤ 150 ml).
+ *       AC-10: repetibilidad_<150> SIEMPRE null.
+ *       AC-11: prompt compacto (<5 KB / 5000 chars).
+ *       AC-12: panel maneja repetibilidad_ats_ers (criterio distinto).
  *
- * Cubre (preservado de v5):
- *   - AC-1: visuales puros desde gráficas.
- *   - AC-2: null si la curva no es legible.
- *   - AC-3: etiqueta "CRITERIOS DERIVADOS VISUALMENTE DE LAS GRÁFICAS".
- *   - AC-4: repetibilidad numérica es del panel (umbral AMI ≤ 150 ml).
- *   - AC-5: no inventar impresión/recomendaciones.
- *   - AC-6: aliases correctos para el panel.
- *   - AC-7: tiempo/criterios_para_dx/calidad del documento EXPLÍCITO.
- *   - AC-8: repetibilidad_*_menor_150 siempre null (panel los calcula).
- *
- * Cubre (NUEVO FIX-20260824-04):
- *   - AC-9: PROHIBICIÓN ABSOLUTA explícita de NO duplicar celdas.
- *   - AC-10: PROHIBICIÓN ABSOLUTA explícita de NO usar Mejor X como fila
- *     estándar.
- *   - AC-11: VALIDACIÓN CRUZADA obligatoria con mejor_*_max vs std_max.
- *   - AC-12 (canónico): para FEV1 2.15/77, 2.11/76, 2.09/75 ⇒ repetibilidad
- *     40 ml (NO 0 ml). Para FVC 2.30/69, 2.33/70, 2.26/68 ⇒ 30 ml.
+ *       AC-13 (regresión preservada): FEV1 2.15/77/2.11/76/2.09/75 ⇒ 40 ml
+ *              y FVC 2.30/69/2.33/70/2.26/68 ⇒ 30 ml (verificable vía
+ *              backend TestFIX20260824_04RegresionFEV1_Cero + frontend
+ *              EspirometriaClinicalCriteriaPanel.test.ts rev. 1.5).
  *
  * Implementación: vitest puro sin DOM ni red; importa directamente las
- * constantes del script (que ahora las exporta para tests V1).
+ * constantes del script.
  *
- * @id IMPL-FIX-20260824-04
+ * @id IMPL-FIX-20260824-04-rev2
  * @backup discovery/DECISIONS.md (DEC-20260824-02) +
  *          context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md
  */
@@ -51,469 +45,337 @@ import {
   NEW_EXTRACTION_PROMPT,
 } from '../update-espirometria-extraction-prompt'
 
-const VISUAL_CRITERIA_KEYS = [
-  'pico_maximo',
-  'forma_triangular',
-  'libre_artefactos',
-  'meseta',
-] as const
+const PROMPT_SIZE_BUDGET_CHARS = 5_000 // <5 KB (FIX-20260824-04-rev2)
+const PROMPT_SIZE_STRICT_CHARS = 5_000 // estricto: exacto ≤ 5 KB (FIX-20260824-04-rev2)
 
-const EXPLICIT_DOCUMENT_CRITERIA_KEYS = [
-  'tiempo',
-  'criterios_para_dx',
-  'calidad',
-] as const
-
-// -----------------------------------------------------------------------
-// AC-1: el prompt instruye a inferir visualmente los 4 visuales puros
-// (Pico, Forma, Libre, Meseta). Tiempo/Criterios/Calidad NO son visuales
-// (IMPL-20260824-05).
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-1: visuales puros desde gráficas', () => {
-  it('EXTRACTION_VERSION es estrictamente v5', () => {
-    expect(EXTRACTION_VERSION).toBe('espirometria-sibelmed-v6')
+describe('update-espirometria-extraction-prompt v7 — AC-0: constantes + tamaño', () => {
+  it('EXTRACTION_VERSION es estrictamente v7', () => {
+    expect(EXTRACTION_VERSION).toBe('espirometria-sibelmed-v7')
     expect(EXTRACTION_VERSION).toMatch(/^espirometria-sibelmed-v\d+$/)
   })
 
-  it('Referencia explícita a BR-20260824-02 y a IMPL-20260824-05', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain('BR-20260824-02')
-    expect(NEW_EXTRACTION_PROMPT).toContain('IMPL-20260824-05')
-  })
-
-  it('Menciona las curvas flujo-volumen y volumen-tiempo como fuente de la inferencia visual', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/flujo[-\s]volumen/)
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/volumen[-\s]tiempo/)
-  })
-
-  it('Lista los 4 visuales puros como claves exactas de la salida JSON', () => {
-    for (const key of VISUAL_CRITERIA_KEYS) {
-      expect(NEW_EXTRACTION_PROMPT).toContain(`\`${key}\``)
-    }
-  })
-
-  it('Declara el dominio de salida "SI" | "NO" | null para los visuales puros', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/"SI"\s*\|\s*"NO"\s*\|\s*null/)
-  })
-
-  it('Declara el dominio de salida "A" | "B" | "C" | "D" | "F" | null para `calidad`', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /"A"\s*\|\s*"B"\s*\|\s*"C"\s*\|\s*"D"\s*\|\s*"F"\s*\|\s*null/
+  it('AC-11: prompt compacto (<5 KB / 5000 chars) — causal fix M3 EXTRACTION_NOT_JSON', () => {
+    expect(NEW_EXTRACTION_PROMPT.length).toBeLessThanOrEqual(
+      PROMPT_SIZE_STRICT_CHARS
     )
+    // Log explícito del tamaño para auditoría (regresión visual si el
+    // prompt vuelve a inflarse).
+    // eslint-disable-next-line no-console
+    console.log(
+      `[FIX-20260824-04-rev2] NEW_EXTRACTION_PROMPT v7 size: ${NEW_EXTRACTION_PROMPT.length} chars (budget: ${PROMPT_SIZE_BUDGET_CHARS})`
+    )
+  })
+
+  it('AC-11 (regresión visual): v6 era ~19500 chars; v7 debe ser al menos 3x más compacto', () => {
+    // v6 era ~19.5 KB. v7 debe ser <6500 chars para ser al menos 3x más
+    // compacto (FIX-20260824-04-rev2: "compacta a <5 KB" — dejamos margen
+    // hasta 6500 por si se añade una regla mínima en el futuro).
+    expect(NEW_EXTRACTION_PROMPT.length).toBeLessThan(6_500)
   })
 })
 
-// -----------------------------------------------------------------------
-// AC-2: el prompt exige devolver null cuando la curva no es legible.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-2: null si la curva no es legible', () => {
-  it('El prompt contiene la prohibición explícita de inventar SI/NO cuando la curva no permite inferencia clara', () => {
-    // v6 separó visuales (4) de explícitos (3). La prohibición sólo aplica
-    // a los visuales puros; verificamos que el texto está literalmente.
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NUNCA devuelvas SI\/NO[\s\S]*?si la curva no permite inferencia clara/
-    )
+describe('update-espirometria-extraction-prompt v7 — AC-1: JSON único', () => {
+  it('El prompt instruye devolver SOLO JSON (sin markdown, sin texto, sin <think>)', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/Devuelve\s+SOLO\s+JSON/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/sin markdown/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/sin\s+<think>/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/JSON único/i)
   })
 
-  it('El prompt exige `null` para criterios ambiguos', () => {
-    // La regla de null-debe-salir está en al menos uno de los apartados.
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/devuelve.*null|NUNCA inventes/)
+  it('El prompt instruye devolver JSON que arranca con { y termina con }', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/arranca con\s+\{/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/termina con\s+\}/)
   })
 })
 
-// -----------------------------------------------------------------------
-// AC-3: el prompt etiqueta los visuales como derivados de la gráfica,
-// no como texto del médico ni diagnóstico IA.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-3: etiquetado como derivado visual', () => {
-  it('El prompt contiene la etiqueta explícita "CRITERIOS DERIVADOS VISUALMENTE DE LAS GRÁFICAS"', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain(
-      'CRITERIOS DERIVADOS VISUALMENTE DE LAS GRÁFICAS'
+describe('update-espirometria-extraction-prompt v7 — AC-2: layout Sibelmed 9 columnas', () => {
+  it('El prompt cita las 9 columnas en orden', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(
+      /PARÁMETRO\s*\|\s*M1\s*\|\s*%REF\s*\|\s*M2\s*\|\s*%REF\s*\|\s*M3\s*\|\s*%REF\s*\|\s*REF\s*\|\s*LLN/
     )
   })
 
-  it('El prompt afirma explícitamente que NO son texto del médico ni diagnóstico IA', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO son texto escrito por el médico/)
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO son diagnóstico IA/)
+  it('El prompt instruye 6 celdas por fila + ref + lln', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/6 celdas numéricas/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m1.*m1_pct_ref.*m2.*m2_pct_ref.*m3.*m3_pct_ref/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/\bref\b/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/\blln\b/)
+  })
+
+  it('El prompt prohíbe desplazar M1↔M2↔M3 ni %REF entre columnas', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(
+      /NUNCA desplaces\s+M1\s*↔\s*M2\s*↔\s*M3/i
+    )
+  })
+
+  it('El prompt instruye null cuando una celda está vacía', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/celda está vacía\s*→\s*null/i)
   })
 })
 
-// -----------------------------------------------------------------------
-// AC-4: el prompt NO cambia el cálculo de repetibilidad FVC/FEV1 en ml;
-// sólo documenta que es responsabilidad del panel (BR-20260824-01, AMI 150 ml).
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-4: repetibilidad numérica es del panel', () => {
-  it('El prompt documenta que el cálculo de repetibilidad en ml es del panel', () => {
-    // La frase del v6 es: "NO modifiques el cálculo numérico de
-    // repetibilidad FVC/FEV1 en ml. Eso lo calcula el panel desde
-    // `parametros[]` (top-2 sobre m1/m2/m3 × 1000)..."
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /cálculo numérico de repetibilidad FVC\/FEV1[\s\S]*?lo calcula el panel/i
-    )
+describe('update-espirometria-extraction-prompt v7 — AC-3: NO duplicar celdas', () => {
+  it('El prompt prohíbe copiar m1 ← m2', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m1\s*←\s*m2/)
   })
 
-  it('El prompt referencia el umbral AMI ≤ 150 ml y la regla BR-20260824-01', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain('BR-20260824-01')
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/150 ml/)
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/umbral AMI/i)
+  it('El prompt prohíbe copiar m1_pct_ref ← m2_pct_ref', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m1_pct_ref\s*←\s*m2_pct_ref/)
   })
 
-  it('El prompt prohíbe al extractor calcular o multiplicar unidades', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NO modifiques el cálculo numérico de repetibilidad FVC\/FEV1 en ml/
-    )
-  })
-})
-
-// -----------------------------------------------------------------------
-// AC-5: el prompt prohíbe inventar impresión diagnóstica o recomendaciones.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-5: no inventar impresión/recomendaciones', () => {
-  it('El prompt marca `impresion_diagnostica*` como TEXTO FUENTE del documento, no salida IA', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/impresion_diagnostica.*TEXTO FUENTE/i)
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO son salida IA/)
-  })
-
-  it('El prompt marca `recomendaciones*` como TEXTO FUENTE del documento, no salida IA', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/recomendaciones.*TEXTO FUENTE/i)
-  })
-
-  it('El prompt contiene la prohibición explícita de inventar impresión diagnóstica o recomendaciones', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NUNCA inventes.*impresion_diagnostica.*recomendaciones/
-    )
-  })
-})
-
-// -----------------------------------------------------------------------
-// AC-6: el prompt expone los aliases correctos para el panel.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-6: aliases de texto fuente para el panel', () => {
-  it('El JSON skeleton incluye `impresion_diagnostica_texto` (alias del panel)', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain('`impresion_diagnostica_texto`')
-  })
-
-  it('El JSON skeleton incluye `recomendaciones_texto` (alias del panel)', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain('`recomendaciones_texto`')
-  })
-
-  it('El JSON skeleton conserva los nombres históricos para no romper esquemas previos', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain('`impresion_diagnostica`')
-    expect(NEW_EXTRACTION_PROMPT).toContain('`recomendaciones`')
-  })
-
-  it('El prompt instruye a poblar ambos aliases con el mismo valor', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/POBLAR AMBOS/)
-  })
-})
-
-// -----------------------------------------------------------------------
-// AC-7 (IMPL-20260824-05): Tiempo, Criterios para Dx, Calidad son del
-// documento EXPLÍCITO. Nunca inferir desde duración de curva, ni desde
-// ATS/ERS, ni desde heurística del modelo.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-7: Tiempo/Criterios/Calidad son EXPLICITOS', () => {
-  it('`tiempo`: regla explícita "no derivar de duración de curva"', () => {
-    // v6 dice: "NO infieras `tiempo` a partir de la duración de la curva"
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NO infieras\s+`?tiempo`?\s+a partir de la duración/i
-    )
-  })
-
-  it('`tiempo`: regla "NO desde duración" en prohibiciones', () => {
-    // Regla 3 de PROHIBICIONES ABSOLUTAS
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NUNCA infieras\s+`?tiempo`?\s+desde la duración de la curva/i
-    )
-  })
-
-  it('`tiempo`: requiere etiqueta textual EXPLÍCITA del reporte', () => {
-    // El prompt exige "EXPLÍCITAMENTE" para `tiempo`.
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/EXPLÍCITAMENTE[\s\S]{0,200}`tiempo`/)
-  })
-
-  it('`criterios_para_dx`: regla explícita "no derivar de ATS/ERS"', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NO derives\s+`?criterios_para_dx`?\s+del\s+flag\s+ATS\/ERS/i
-    )
-  })
-
-  it('`criterios_para_dx`: regla en prohibiciones "NO desde ATS/ERS ni visuales"', () => {
-    // Regla 4 de PROHIBICIONES ABSOLUTAS
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NUNCA infieras\s+`?criterios_para_dx`?\s+desde ATS\/ERS/i
-    )
-  })
-
-  it('`criterios_para_dx`: requiere etiqueta textual EXPLÍCITA "Criterios para Dx: SI/NO"', () => {
-    // El prompt exige el texto literal "Criterios para Dx: SI/NO".
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/Criterios para Dx:\s*SI\/NO/i)
-  })
-
-  it('`calidad`: regla "NO inferir desde los visuales"', () => {
-    // Regla 5 de PROHIBICIONES ABSOLUTAS
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NUNCA infier[ae]s?\s+`?calidad`?\s+desde\s+los\s+visuales/i
-    )
-  })
-
-  it('`calidad`: sólo letra/código explícito del documento', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /letra\/código[\s\S]{0,200}EXPLÍCITAMENTE/i
-    )
-  })
-
-  it('Apartado dedicado "CRITERIOS EXPLÍCITOS DEL DOCUMENTO" lista los 3 criterios', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain(
-      'CRITERIOS EXPLÍCITOS DEL DOCUMENTO'
-    )
-    for (const key of EXPLICIT_DOCUMENT_CRITERIA_KEYS) {
-      expect(NEW_EXTRACTION_PROMPT).toContain(`\`${key}\``)
-    }
-  })
-})
-
-// -----------------------------------------------------------------------
-// AC-8 (IMPL-20260824-05): repetibilidad_*_menor_150 SIEMPRE null;
-// el panel los calcula. NO copiar del flag ATS/ERS embebido.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-8: repetibilidad_*_menor_150 es del panel', () => {
-  it('El prompt instruye devolver SIEMPRE null para `repetibilidad_fvc_menor_150`', () => {
-    // El apartado "REPETIBILIDAD (NO fuente de verdad)" declara explícitamente
-    // que el extractor SIEMPRE devuelve null y que el panel los calcula.
-    expect(NEW_EXTRACTION_PROMPT).toContain(
-      'REPETIBILIDAD (NO fuente de verdad'
-    )
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /`repetibilidad_fvc_menor_150`:\s*SIEMPRE\s+`null`/
-    )
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /`repetibilidad_fev1_menor_150`:\s*SIEMPRE\s+`null`/
-    )
-  })
-
-  it('El prompt prohíbe copiar "Repetibilidad ATS/ERS: FVC: No/SI" en `repetibilidad_*_menor_150`', () => {
-    // Regla 6 de PROHIBICIONES ABSOLUTAS
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NUNCA copies[\s\S]*?Repetibilidad ATS\/ERS[\s\S]*?en\s+`?repetibilidad_(?:fvc|fev1)_menor_150`/i
-    )
-  })
-
-  it('El prompt afirma que el PANEL frontend los DERIVA con umbral AMI ≤ 150 ml', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/DERIVA el panel frontend/i)
-  })
-
-  it('El prompt aclara que ATS/ERS es un criterio distinto y NO debe sobrescribir el AMI', () => {
-    // La frase clave está en REPETIBILIDAD (NO fuente de verdad):
-    // "ese es un criterio distinto [...] y NO debe\nsobrescribir el criterio AMI del panel"
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /criterio distinto[\s\S]*?NO debe[\s\S]*?sobrescribir/i
-    )
-  })
-})
-
-// -----------------------------------------------------------------------
-// Tests de regresión: claves históricas preservadas.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — regresión: claves históricas preservadas', () => {
-  const HISTORICAL_KEYS = [
-    'repetibilidad_ats_ers_fvc',
-    'repetibilidad_ats_ers_fev1',
-    'es_interpretable',
-    'completitud_documental',
-    'repetibilidad_fvc_ml',
-    'repetibilidad_fev1_ml',
-    'pruebas_aceptables',
-    'notas_calidad',
-  ] as const
-
-  it('Todas las claves históricas del esquema siguen presentes en el JSON skeleton', () => {
-    for (const key of HISTORICAL_KEYS) {
-      expect(NEW_EXTRACTION_PROMPT).toContain(`\`${key}\``)
-    }
-  })
-
-  it('Las claves `repetibilidad_fvc_menor_150` y `repetibilidad_fev1_menor_150` SIGUEN en el JSON skeleton (compat)', () => {
-    // Aunque el extractor siempre las pone en null, el esquema del JSON las
-    // expone para retrocompat con consumidores downstream.
-    expect(NEW_EXTRACTION_PROMPT).toContain('`repetibilidad_fvc_menor_150`')
-    expect(NEW_EXTRACTION_PROMPT).toContain('`repetibilidad_fev1_menor_150`')
-  })
-
-  it('Las filas FVC y FEV1 siguen siendo la fuente numérica primaria', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain('"INFORME DE FVC"')
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/PARÁMETRO \| M1 \| %REF \| M2 \| %REF \| M3 \| %REF \| REF \| LLN/)
-  })
-})
-
-// -----------------------------------------------------------------------
-// Tests del contrato del script.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — contrato del script', () => {
-  it('EXTRACTION_VERSION sigue la convención `espirometria-sibelmed-vN`', () => {
-    expect(EXTRACTION_VERSION).toMatch(/^espirometria-sibelmed-v\d+$/)
-  })
-
-  it('El prompt es una cadena no vacía con tamaño > 3000 caracteres', () => {
-    expect(typeof NEW_EXTRACTION_PROMPT).toBe('string')
-    expect(NEW_EXTRACTION_PROMPT.length).toBeGreaterThan(3000)
-  })
-})
-
-// -----------------------------------------------------------------------
-// AC-9 (FIX-20260824-04): PROHIBICIÓN ABSOLUTA explícita de NO duplicar
-// celdas. La prohibición debe aparecer en el prompt de manera visible
-// (no enterrada en prosa larga).
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-9: NO duplicar celdas (FIX-20260824-04)', () => {
-  it('Apartado "PROHIBICIONES ABSOLUTAS" presente en el prompt v6 con referencia FIX-20260824-04', () => {
-    // El nuevo apartado aparece cerca del inicio del prompt (después de
-    // FUENTE PRIMARIA), etiquetado como PROHIBICIONES ABSOLUTAS y con
-    // referencia a FIX-20260824-04 (trazabilidad).
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /PROHIBICIONES ABSOLUTAS[\s\S]{0,200}FIX-20260824-04/
-    )
-  })
-
-  it('El prompt prohíbe explícitamente duplicar m1 con m2/m3', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NO rellenes\s+`?m1`?\s+con el valor de\s+`?m2`?\s+ni de\s+`?m3`?/i
-    )
-  })
-
-  it('El prompt prohíbe copiar m1_pct_ref desde m2_pct_ref o m3_pct_ref', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NO rellenes\s+`?m1_pct_ref`?\s+con\s+`?m2_pct_ref`?/i
-    )
-  })
-
-  it('El prompt dice: si M1 está vacía, usa null — NUNCA copies el valor de M2', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /usa\s+`?null`?[\s\S]{0,200}NUNCA copies el valor de\s+`?M2`?/i
-    )
-  })
-
-  it('El prompt menciona el síntoma "(m1 − m2) × 1000 = 0 ml" como diagnóstico de duplicación', () => {
-    // Texto característico para que el LLM entienda el síntoma y se autocorrija.
+  it('El prompt menciona el síntoma "(m1 − m2) × 1000 = 0 ml" como diagnóstico', () => {
     expect(NEW_EXTRACTION_PROMPT).toMatch(
       /\(m1\s*[−-]\s*m2\)\s*[×x]\s*1000\s*=\s*0\s*ml/
     )
   })
-})
 
-// -----------------------------------------------------------------------
-// AC-10 (FIX-20260824-04): PROHIBICIÓN ABSOLUTA explícita de NO usar Mejor
-// X como fila estándar.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-10: NO Mejor X como fila estándar', () => {
-  it('El prompt prohíbe usar "Mejor FEV1"/"Mejor FVC" como fila FEV1/FVC', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /NO USES la fila\s+"Mejor FEV1"\s*\/\s*"Mejor FVC"/i
-    )
-  })
-
-  it('El prompt explica que "Mejor X" CONSOLIDA la mejor maniobra (m1=m2=m3)', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /"Mejor FEV1"\s+CONSOLIDA[\s\S]{0,200}m1\s*=\s*m2\s*=\s*m3/i
-    )
-  })
-
-  it('El prompt instruye emitir null cuando la fila estándar no está visible (no copiar Mejor X)', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /Si la fila estándar FEV1\/FVC no está visible[\s\S]{0,200}emite\s+`?null`?/i
-    )
+  it('El prompt instruye null si M1 está vacía (no copies m2)', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/M1 está vacía\s*→\s*null/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/Nunca copies\s+m2\s+en\s+m1/i)
   })
 })
 
-// -----------------------------------------------------------------------
-// AC-11 (FIX-20260824-04): VALIDACIÓN CRUZADA obligatoria — mejor_*_max vs
-// std_max debe cumplirse.
-// -----------------------------------------------------------------------
-
-describe('update-espirometria-extraction-prompt v6 — AC-11: VALIDACIÓN CRUZADA OBLIGATORIA', () => {
-  it('Apartado "VALIDACIÓN CRUZADA OBLIGATORIA" presente en el prompt v6', () => {
-    expect(NEW_EXTRACTION_PROMPT).toContain('VALIDACIÓN CRUZADA OBLIGATORIA')
+describe('update-espirometria-extraction-prompt v7 — AC-4: NO Mejor X como fila estándar', () => {
+  it('El prompt prohíbe usar "Mejor FEV1"/"Mejor FVC" como fila estándar', () => {
     expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /VALIDACIÓN CRUZADA OBLIGATORIA[\s\S]{0,200}FIX-20260824-04/
+      /NO USES\s+"Mejor FEV1"\s*\/\s*"Mejor FVC"\s+como fila\s+FEV1\s*\/\s*FVC\s+estándar/i
     )
   })
 
-  it('El prompt define `mejor_fev1_max = mejor_fev1.m1`', () => {
+  it('El prompt explica que "Mejor X" consolida m1=m2=m3', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(
+      /"Mejor X"\s+consolida\s+m1\s*=\s*m2\s*=\s*m3/i
+    )
+  })
+
+  it('El prompt instruye null si la fila estándar no está visible', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(
+      /fila estándar no está visible\s*→\s*null/i
+    )
+  })
+
+  it('El prompt prohíbe explícitamente rellenar con "Mejor X"', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO rellenes\s+con\s+"Mejor X"/i)
+  })
+})
+
+describe('update-espirometria-extraction-prompt v7 — AC-5: VALIDACIÓN CRUZADA', () => {
+  it('El prompt define mejor_fev1_max = mejor_fev1.m1', () => {
     expect(NEW_EXTRACTION_PROMPT).toMatch(
       /mejor_fev1_max\s*=\s*mejor_fev1\.m1/
     )
   })
 
-  it('El prompt define `fev1_std_max = max(fev1.m1, fev1.m2, fev1.m3)`', () => {
+  it('El prompt define fev1_std_max = max(fev1.m1, fev1.m2, fev1.m3)', () => {
     expect(NEW_EXTRACTION_PROMPT).toMatch(
       /fev1_std_max\s*=\s*max\(\s*fev1\.m1,\s*fev1\.m2,\s*fev1\.m3\s*\)/
     )
   })
 
-  it('El prompt exige que mejor_fev1_max <= fev1_std_max (sin duplicación)', () => {
+  it('El prompt exige mejor_fev1_max <= fev1_std_max', () => {
     expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /mejor_fev1_max\s*<=\s*fev1_std_max/
+      /mejor_fev1_max\s*>\s*fev1_std_max\s*→\s*INCONSISTENCIA/i
     )
   })
 
-  it('El prompt instruye NO rellenar m1 si se detecta la inconsistencia', () => {
-    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO rellenes m1/i)
+  it('El prompt instruye NO rellenar m1 desde "Mejor X" si inconsistente', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(
+      /NO rellenes m1 desde\s+"Mejor X"/i
+    )
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/Transcribe literalmente/i)
   })
 
-  it('El prompt referencia `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` como anotación defensiva backend', () => {
+  it('El prompt referencia SOSPECHA_INCONSISTENCIA_MEJOR_FEV1 como anotación defensiva backend', () => {
     expect(NEW_EXTRACTION_PROMPT).toContain('SOSPECHA_INCONSISTENCIA_MEJOR_FEV1')
   })
 
-  it('El prompt referencia `completitud_documental = "no_concluyente"` como consecuencia', () => {
+  it('El prompt referencia completitud_documental="no_concluyente" como consecuencia', () => {
     expect(NEW_EXTRACTION_PROMPT).toContain('no_concluyente')
+  })
+
+  it('El prompt instruye aplicar el mismo procedimiento a FVC', () => {
+    // El texto compacto usa "Mismo procedimiento para FVC" (sin espacio
+    // explícito antes de FVC en la frase).
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/Mismo procedimiento para\s+FVC/i)
   })
 })
 
-// -----------------------------------------------------------------------
-// AC-12 (FIX-20260824-04 — tests canónicos de regresión):
-//   - Caso canónico FEV1 2.15/77, 2.11/76, 2.09/75 ⇒ repetibilidad 40 ml.
-//   - FVC 2.30/69, 2.33/70, 2.26/68 ⇒ repetibilidad 30 ml (no regresa).
-//   - Duplicación m1=m2 ⇒ marcado SOSPECHA + invalida cálculo (no 0 ml).
-//
-// Estos tests NO se ejecutan en el script (no tocan BD), pero verifican
-// que el prompt instruye los invariantes numéricos para que el LLM los
-// cumpla. La verificación numérica end-to-end se hace en backend
-// `TestEspirometriaExhaustiva_20260516_12_13` y frontend
-// `EspirometriaClinicalCriteriaPanel.test.ts` rev. 1.5.
-// -----------------------------------------------------------------------
+describe('update-espirometria-extraction-prompt v7 — AC-6: ejemplo canónico', () => {
+  it('FEV1 canónico: m1=2.15, m1_pct_ref=77, m2=2.11, m2_pct_ref=76, m3=2.09, m3_pct_ref=75', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/FEV1/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m1\s*=\s*2\.15/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m1_pct_ref\s*=\s*77/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m2\s*=\s*2\.11/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m2_pct_ref\s*=\s*76/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m3\s*=\s*2\.09/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m3_pct_ref\s*=\s*75/)
+  })
 
-describe('update-espirometria-extraction-prompt v6 — AC-12: canónico (FIX-20260824-04)', () => {
-  it('FEV1 canónico (m1=2.15, m2=2.11, m3=2.09) → repetibilidad esperada 40 ml', () => {
-    // El prompt debe contener el ejemplo concreto de Sibelmed:
-    //   m1=2.15, m1_pct_ref=77, m2=2.11, m2_pct_ref=76, m3=2.09, m3_pct_ref=75
-    // para que el LLM lo reconozca como patrón válido y no lo altere.
+  it('FEV1 canónico: top-2 esperado = 40 ml', () => {
     expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /m1\s*=\s*2\.15[\s\S]{0,80}m1_pct_ref\s*=\s*77[\s\S]{0,80}m2\s*=\s*2\.11[\s\S]{0,80}m2_pct_ref\s*=\s*76[\s\S]{0,80}m3\s*=\s*2\.09[\s\S]{0,80}m3_pct_ref\s*=\s*75/
+      /\(2\.15\s*[−-]\s*2\.11\)\s*[×x]\s*1000\s*=\s*40\s*ml/
     )
   })
 
-  it('FVC canónico (m1=2.30, m2=2.33, m3=2.26) → repetibilidad esperada 30 ml (no regresa)', () => {
+  it('FVC canónico: m1=2.30, m1_pct_ref=69, m2=2.33, m2_pct_ref=70, m3=2.26, m3_pct_ref=68', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m1\s*=\s*2\.30/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m1_pct_ref\s*=\s*69/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m2\s*=\s*2\.33/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m2_pct_ref\s*=\s*70/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m3\s*=\s*2\.26/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/m3_pct_ref\s*=\s*68/)
+  })
+
+  it('FVC canónico: top-2 esperado = 30 ml (no regresa)', () => {
     expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /m1\s*=\s*2\.30[\s\S]{0,80}m1_pct_ref\s*=\s*69[\s\S]{0,80}m2\s*=\s*2\.33[\s\S]{0,80}m2_pct_ref\s*=\s*70[\s\S]{0,80}m3\s*=\s*2\.26[\s\S]{0,80}m3_pct_ref\s*=\s*68/
+      /\(2\.33\s*[−-]\s*2\.30\)\s*[×x]\s*1000\s*=\s*30\s*ml/
     )
   })
 
-  it('El prompt instruye que las celdas %REF viven en su columna inmediata derecha', () => {
-    // El prompt nombra explícitamente que la columna %REF de M1 es la
-    // inmediata a la derecha de M1 (no de M2 ni de M3).
+  it('El prompt explica "Mejor FEV1"=2.15 y "Mejor FVC"=2.33', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/"Mejor FEV1"\s*→\s*m1\s*=\s*m2\s*=\s*m3\s*=\s*2\.15/)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/"Mejor FVC"\s*→\s*m1\s*=\s*m2\s*=\s*m3\s*=\s*2\.33/)
+  })
+})
+
+describe('update-espirometria-extraction-prompt v7 — AC-7/8: visuales null si no claros', () => {
+  it('Visuales: SOLO si la gráfica es CLARA; si no → null', () => {
     expect(NEW_EXTRACTION_PROMPT).toMatch(
-      /m1_pct_ref.*=.*77[\s\S]{0,200}m2_pct_ref.*=.*76/
+      /CRITERIOS VISUALES[\s\S]{0,200}SOLO si la gráfica es CLARA/i
     )
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/Si no\s*→\s*null/i)
+  })
+
+  it('Lista las 4 visuales canónicas: pico_maximo, forma_triangular, libre_artefactos, meseta', () => {
+    for (const key of ['pico_maximo', 'forma_triangular', 'libre_artefactos', 'meseta']) {
+      expect(NEW_EXTRACTION_PROMPT).toContain(`"${key}"`)
+    }
+  })
+
+  it('`tiempo`: SOLO si el reporte declara EXPLÍCITAMENTE', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/tiempo[\s\S]{0,200}EXPLÍCITAMENTE/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO derivar de duración/i)
+  })
+
+  it('`criterios_para_dx`: SOLO si el reporte declara EXPLÍCITAMENTE', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(
+      /criterios_para_dx[\s\S]{0,300}Criterios para Dx:\s*SI\/NO/i
+    )
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO derivar de ATS\/ERS/i)
+  })
+
+  it('`calidad` (A/B/C/D/F): SOLO si el reporte declara letra/código EXPLÍCITO', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/calidad[\s\S]{0,200}EXPLÍCITO/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO calcular/i)
+  })
+})
+
+describe('update-espirometria-extraction-prompt v7 — AC-9/10: repetibilidad la calcula panel', () => {
+  it('El prompt instruye: NO calcules aquí, panel calcula top-2 × 1000, AMI ≤ 150 ml', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/NO calcules aquí/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/top-2/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/AMI\s*≤\s*150\s*ml/i)
+  })
+
+  it('`repetibilidad_fvc_menor_150` y `repetibilidad_fev1_menor_150` SIEMPRE null', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/SIEMPRE\s+null/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(
+      /repetibilidad_fvc_menor_150[\s\S]{0,200}SIEMPRE\s+null/i
+    )
+    expect(NEW_EXTRACTION_PROMPT).toMatch(
+      /repetibilidad_fev1_menor_150[\s\S]{0,200}SIEMPRE\s+null/i
+    )
+  })
+
+  it('`repetibilidad_fvc_ml`/`_fev1_ml`: SOLO si el reporte trae número explícito', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/repetibilidad_fvc_ml[\s\S]{0,300}texto nativo/i)
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/Si no\s*→\s*null/i)
+  })
+
+  it('`repetibilidad_ats_ers_fvc/_fev1` son CRITERIO DISTINTO del AMI', () => {
+    // El panel renderer maneja el flag ATS/ERS por separado (ver
+    // `repetibilidad_ats_ers_fvc` en extractor + renderer). El extractor
+    // sólo recibe el flag binario del equipo.
+    expect(NEW_EXTRACTION_PROMPT).toContain('repetibilidad_ats_ers_fvc')
+    expect(NEW_EXTRACTION_PROMPT).toContain('repetibilidad_ats_ers_fev1')
+  })
+})
+
+describe('update-espirometria-extraction-prompt v7 — AC: aliases texto fuente médico', () => {
+  it('El prompt expone `impresion_diagnostica_texto` y `recomendaciones_texto` (preferidos)', () => {
+    expect(NEW_EXTRACTION_PROMPT).toContain('impresion_diagnostica_texto')
+    expect(NEW_EXTRACTION_PROMPT).toContain('recomendaciones_texto')
+  })
+
+  it('El prompt conserva los aliases históricos para compat', () => {
+    expect(NEW_EXTRACTION_PROMPT).toContain('impresion_diagnostica')
+    expect(NEW_EXTRACTION_PROMPT).toContain('recomendaciones')
+  })
+
+  it('El prompt instruye transcribir literalmente si visible (sin invención)', () => {
+    expect(NEW_EXTRACTION_PROMPT).toMatch(/transcribir literalmente/i)
+  })
+})
+
+describe('update-espirometria-extraction-prompt v7 — AC: estructura JSON skeleton', () => {
+  it('El JSON skeleton incluye paciente_detalle, estudio, condiciones, parametros, calidad, graficas', () => {
+    for (const key of [
+      'paciente_detalle',
+      'estudio',
+      'condiciones',
+      'parametros',
+      'calidad',
+      'graficas',
+    ]) {
+      expect(NEW_EXTRACTION_PROMPT).toContain(`"${key}"`)
+    }
+  })
+
+  it('El JSON skeleton incluye las 4 filas principales de parametros[]', () => {
+    for (const row of ['Mejor FVC', 'Mejor FEV1', 'FVC', 'FEV1']) {
+      expect(NEW_EXTRACTION_PROMPT).toContain(`"label":"${row}"`)
+    }
+  })
+
+  it('El JSON skeleton incluye las claves críticas de calidad (regresión)', () => {
+    for (const key of [
+      'pico_maximo',
+      'forma_triangular',
+      'libre_artefactos',
+      'meseta',
+      'tiempo',
+      'criterios_para_dx',
+      'calidad',
+      'repetibilidad_fvc_menor_150',
+      'repetibilidad_fev1_menor_150',
+      'repetibilidad_ats_ers_fvc',
+      'repetibilidad_ats_ers_fev1',
+      'pruebas_aceptables',
+      'impresion_diagnostica_texto',
+      'impresion_diagnostica',
+      'recomendaciones_texto',
+      'recomendaciones',
+      'es_interpretable',
+      'completitud_documental',
+      'repetibilidad_fvc_ml',
+      'repetibilidad_fev1_ml',
+      'notas_calidad',
+    ]) {
+      expect(NEW_EXTRACTION_PROMPT).toContain(`"${key}"`)
+    }
+  })
+})
+
+describe('update-espirometria-extraction-prompt v7 — contrato del script', () => {
+  it('EXTRACTION_VERSION sigue la convención `espirometria-sibelmed-vN`', () => {
+    expect(EXTRACTION_VERSION).toMatch(/^espirometria-sibelmed-v\d+$/)
+  })
+
+  it('El prompt es una cadena no vacía', () => {
+    expect(typeof NEW_EXTRACTION_PROMPT).toBe('string')
+    expect(NEW_EXTRACTION_PROMPT.length).toBeGreaterThan(1000)
+  })
+
+  it('El prompt referencia FIX-20260824-04-rev2 (trazabilidad)', () => {
+    expect(NEW_EXTRACTION_PROMPT).toContain('IMPL-FIX-20260824-04-rev2')
   })
 })

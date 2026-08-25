@@ -400,3 +400,341 @@ también es revertible vía re-run con `EXTRACTION_VERSION='espirometria-sibelme
 objetivo (≤6 sesiones / ≤300 tool calls), V1 dirigida por corte, V2
 focal completa al cierre, sin V3 independiente (no aplica GEMINI/Playwright
 desde SOFIA — decisión de ATLAS).
+
+---
+
+# Corrección IMPL-FIX-20260824-04-rev2 — Compactación v6 → v7 contra EXTRACTION_NOT_JSON M3
+
+```
+ID intervención: IMPL-FIX-20260824-04-rev2
+ID tarea: FIX-20260824-04 (mismo incremento — corrección IMPLEMENTATION_DEFECT)
+Estado: READY_FOR_VERIFYING (rev. 2)
+SPEC activa: context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md
+             rev. 1.2 (sin cambios — corrección interna)
+Discovery refs: DEC-20260824-02, BR-20260824-01, BR-20260824-02, IMPL-FIX-20260824-04
+Origen funcional: Railway muestra `EXTRACTION_NOT_JSON` en dos uploads
+                  recientes de Espirometria. Frank confirmó que MiniMax
+                  M3 recibe `espirometria-sibelmed-v6` (~15 KB) y responde
+                  con `<think>...` sin alcanzar a devolver JSON.
+```
+
+## Causa raíz
+
+MiniMax M3 (`MiniMax-M3` vía `LiteLLM proxy` OpenAI-compatible):
+
+1. **Prompt v6 demasiado largo (~19.5 KB al expandirlo el SDK OpenAI en
+   tokens).** La conversación crece al incluir el bloque multimodal con
+   la imagen + system prompt + el JSON skeleton con todas las claves
+   (alrededor de 30 claves null por defecto en el ejemplo de salida).
+2. **`max_tokens=4096` insuficiente.** 4096 tokens caben la imagen
+   (~1k-3k tokens), el prompt de sistema + instrucciones (~5KB = ~1.5k
+   tokens) y el bloque `<think>...` del modelo, pero NO caben
+   simultáneamente un JSON estructurado con todas las claves del
+   prompt. El LLM responde con un bloque de razonamiento que consume
+   los tokens y termina sin devolver JSON.
+3. **`response_format` no se estaba pasando.** Sin `response_format`
+   explícito, M3 envuelve la salida ocasionalmente en ```json``` fences
+   o texto explicativo, reduciendo aún más el espacio para JSON.
+4. **El parser tolerante** (`_tolerant_json_parse` en `app/services/ai/base.py:579`)
+   ya recupera JSON de respuestas con texto extra, comas finales y
+   estrategias `json.JSONDecode` + substring. **Pero NO puede recuperar
+   JSON inexistente o truncado** — si el LLM no llegó a producir JSON,
+   no hay nada que parsear.
+
+## Solución aplicada — dos cambios mínimos y generales
+
+### 1) Compactación del prompt v6 → → v7 (<5 KB)
+
+`frontend/scripts/update-espirometria-extraction-prompt.ts`:
+
+- `EXTRACTION_VERSION`: `espirometria-sibelmed-v6` → → → **`espirometria-sibelmed-v7`**
+- `NEW_EXTRACTION_PROMPT`: **~19.5 KB → → → 4.8 KB** (4912 chars, <5 KB target).
+- Compactación: se eliminó prosa repetitiva, se consolidaron las 3
+  apariciones de las prohibiciones en un solo bloque, se compactó la
+  lista de claves del JSON skeleton a una línea por fila, y se removieron
+  detalles históricos que el LLM no necesita.
+- **Reglas críticas PRESERVADAS** (cada una verificada por test focal V1):
+
+| Regla crítica | Test V1 | Resultado |
+|---|---|---|
+| Salida JSON único, sin markdown, sin `<think>` | `test_v7_prompt_preserva_json_unico_sin_think` | PASS |
+| Tabla Sibelmed 9 columnas (PARÁMETRO\|M1\|%REF\|M2\|%REF\|M3\|%REF\|REF\|LLN) | `test_v7_prompt_preserva_layout_sibelmed_9` | PASS |
+| NO duplicar M1/M2/M3 (prohibición + síntoma `(m1−m2)×1000=0 ml`) | `test_v7_prompt_preserva_prohibicion_duplicar_celda` | PASS |
+| NO usar "Mejor FEV1"/"Mejor FVC" como fila estándar | `test_v7_prompt_preserva_prohibicion_mejor_x_como_fila_estandar` | PASS |
+| Validación cruzada `mejor_fev1_max = mejor_fev1.m1` vs `fev1_std_max = max(fev1.m1, fev1.m2, fev1.m3)` | `test_v7_prompt_preserva_validacion_cruzada` | PASS |
+| FEV1 canónico `m1=2.15, m1_pct_ref=77, m2=2.11, m2_pct_ref=76, m3=2.09, m3_pct_ref=75` | `test_v7_prompt_preserva_ejemplo_canonico` | PASS |
+| FVC canónico `m1=2.30, m1_pct_ref=69, m2=2.33, m2_pct_ref=70, m3=2.26, m3_pct_ref=68` | `test_v7_prompt_preserva_ejemplo_canonico` | PASS |
+| Top-2 esperado FEV1 `(2.15−2.11)×1000=40 ml` | `test_v7_prompt_preserva_ejemplo_canonico` | PASS |
+| Top-2 esperado FVC `(2.33−2.30)×1000=30 ml` | `test_v7_prompt_preserva_ejemplo_canonico` | PASS |
+| Visuales null si no claros (4 visuales) | `test_v7_prompt_visuales_null_si_no_claros` | PASS |
+| `tiempo`/`criterios_para_dx`/`calidad`: sólo EXPLÍCITOS del reporte | (cubierto por test JSON skeleton) | PASS |
+| NO calcular repetibilidad aquí (panel calcula top-2 × 1000) | `test_v7_prompt_no_calcula_repetibilidad_panel_si` | PASS |
+| `repetibilidad_*_menor_150` SIEMPRE null | `test_v7_prompt_no_calcula_repetibilidad_panel_si` | PASS |
+| Aliases `impresion_diagnostica_texto` + `recomendaciones_texto` | (cubierto por test JSON skeleton) | PASS |
+
+### 2) Parámetros del SDK M3: `max_tokens` 4096 → → 8192 + `response_format={"type":"json_object"}`
+
+`backend/app/services/ai/base.py::M3VisionBase.call_m3` (líneas ~790-810):
+
+- **`max_tokens` 4096 → → → 8192.** M3 (MiniMax-M3) soporta hasta **524,288
+  tokens** de salida según docs oficiales (platform.minimax.io). 4096 era
+  muy corto para una salida JSON estructurada con todas las claves del
+  prompt de Espirometría. 8192 tokens caben holgadamente con el prompt
+  v7 (<5 KB) y un JSON estructurado de <3 KB.
+- **`response_format={"type": "json_object"}`** añadido. **Soportado por
+  M3** (verificado en Fireworks MiniMax-M3 API params que reflejan el
+  contrato upstream; ver `modelparams.dev/models/fireworks/minimax-m3`).
+  Reduce la probabilidad de que el modelo envuelva la salida en fences
+  ```json``` o texto explicativo — pero **NO es garantía dura** (la doc
+  MiniMax lo dice textualmente), por eso el parser tolerante sigue
+  siendo necesario. NO oculta errores.
+- **NO se introdujeron reintentos ciegos.** El bloque `except` sigue
+  terminando con `raise` (propagación de la excepción al dispatcher para
+  que el catch-all la mapee a `error_code` accionable).
+- **NO se modificó `FeatherlessVisionBase` ni otros proveedores.** El
+  cambio aplica SOLO a `call_m3` (MiniMax M3), preservando el
+  comportamiento de los demás clientes.
+
+## Tests añadidos (FIX-20260824-04-rev2)
+
+**Frontend** — `frontend/scripts/__tests__/update-espirometria-extraction-prompt.test.ts`:
+47 tests (reescritos para v7, +6 nuevos AC explícitos vs v6):
+
+- AC-0: `EXTRACTION_VERSION = 'espirometria-sibelmed-v7'`, prompt
+  <5000 chars (budget), <6500 chars (regresión visual v6 era 19500).
+- AC-1: JSON único, sin markdown/<think>, JSON arranca con `{`.
+- AC-2: Layout Sibelmed 9 columnas.
+- AC-3: NO duplicar celda + síntoma.
+- AC-4: NO Mejor X como fila estándar.
+- AC-5: Validación cruzada mejor_*_max vs std_max.
+- AC-6: FEV1 canónico + FVC canónico + top-2 esperado 40 ml/30 ml.
+- AC-7: Visuales null si no claros.
+- AC-8: tiempo/criterios_para_dx/calidad sólo EXPLÍCITOS.
+- AC-9: NO calcular repetibilidad aquí (panel sí).
+- AC-10: `repetibilidad_*_menor_150` SIEMPRE null.
+- AC-11: Aliases texto fuente médico.
+- AC-12: Estructura JSON skeleton (paciente_detalle, estudio, condiciones,
+  parametros, calidad, graficas).
+- AC-13: Contrato del script (`espirometria-sibelmed-v\d+``, trazabilidad).
+
+**Backend** — `backend/tests/test_ai_pipeline.py`:
+
+- `TestFIX20260824_04Rev2PromptCompactoV7` (10 tests): mirror estático de
+  los ACs del prompt v7 (tamaño compacto, JSON único, layout Sibelmed,
+  prohibición duplicar, prohibición Mejor X, validación cruzada, ejemplo
+  canónico, repetibilidad la calcula el panel, visuales null si no
+  claros).
+- `TestFIX20260824_04Rev2M3Parameters` (4 tests):
+  - `call_m3` envía `max_tokens=8192` (verificación estática del archivo
+    `base.py`).
+  - `call_m3` envía `response_format={"type": "json_object"}`.
+  - `call_m3` NO agrega reintentos ciegos (sin `for attempt in`, sin
+    `retries`, sin `max_retries`; sigue propagando `raise`).
+  - El cambio se limita a `call_m3` (no se filtra `max_tokens=8192` fuera
+    del bloque).
+
+**Regresión preservada** (`TestFIX20260824_04RegresionFEV1_Cero` de rev. 1):
+6/6 PASS. FEV1 canónico 40 ml / FVC 30 ml / duplicación m1=m2 → marcado +
+invalidado. La defensa backend (rev. 1.5) NO se tocó — sigue marcando
+`SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`/`_FVC` y forzando
+`completitud_documental = "no_concluyente"`.
+
+## Validación ejecutada
+
+### Typecheck
+
+```
+$ cd frontend && npx tsc --noEmit
+exit=0
+
+$ cd frontend && npx tsc -p scripts/tsconfig.json --noEmit
+exit=0
+```
+
+### Vitest focal
+
+```
+$ cd frontend && npx vitest run scripts/__tests__ src/components/clinical/__tests__
+Test Files  7 passed (7)
+     Tests  168 passed (168)
+   · scripts/__tests__/update-espirometria-prediagnosis-prompt.test.ts (24)
+   · scripts/__tests__/update-espirometria-extraction-prompt.test.ts (47 — reescrito v7)
+   · src/components/clinical/__tests__/ExamenMedicoEstudio.test.ts (7)
+   · src/components/clinical/__tests__/ClinicalExtractionRenderer.fase5.test.ts (8)
+   · src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts (65)
+   · src/components/clinical/__tests__/StudyAIPrediagnosisPanel.open-details.test.ts (3)
+   · src/components/clinical/__tests__/StudyAIPrediagnosisPanel.dec-20260824-02.test.ts (14)
+```
+
+### Pytest focal
+
+```
+$ cd backend && python3 -m pytest \
+    tests/test_ai_pipeline.py::TestFIX20260824_04Rev2PromptCompactoV7 \
+    tests/test_ai_pipeline.py::TestFIX20260824_04Rev2M3Parameters \
+    -v
+========================= 14 passed in 0.98s =========================
+  ✓ test_v7_exporta_extraccion_version_v7
+  ✓ test_v7_prompt_compacto_menor_a_5kb
+  ✓ test_v7_prompt_preserva_json_unico_sin_think
+  ✓ test_v7_prompt_preserva_layout_sibelmed_9
+  ✓ test_v7_prompt_preserva_prohibicion_duplicar_celda
+  ✓ test_v7_prompt_preserva_prohibicion_mejor_x_como_fila_estandar
+  ✓ test_v7_prompt_preserva_validacion_cruzada
+  ✓ test_v7_prompt_preserva_ejemplo_canonico
+  ✓ test_v7_prompt_no_calcula_repetibilidad_panel_si
+  ✓ test_v7_prompt_visuales_null_si_no_claros
+  ✓ test_call_m3_envia_max_tokens_8192
+  ✓ test_call_m3_envia_response_format_json_object
+  ✓ test_call_m3_no_agrega_reintentos_ciegos
+  ✓ test_call_m3_no_modifica_featherless_o_otros
+```
+
+Regresión focal FIX-20260824-04 rev. 1:
+
+```
+$ cd backend && python3 -m pytest tests/test_ai_pipeline.py::TestFIX2026
+0824_04RegresionFEV1_Cero -v
+========================= 6 passed in 1.15s =========================
+  ✓ test_ac1_canonical_fev1_repetibilidad_40ml
+  ✓ test_ac2_canonical_fvc_repetibilidad_30ml_no_regress
+  ✓ test_ac3_duplicacion_m1_eq_m2_marks_inconsistent
+  ✓ test_ac4_guardrail_backend_declares_prohibiciones_y_consistencia
+  ✓ test_ac5_frontend_pantalla_invalida_calculo_espurio
+  ✓ test_ac6_backfill_feeds_root_but_row_stays_duplicated
+```
+
+Suite espirometría completa: 78 PASS, 4 pre-existing
+`M3_CREDENTIALS_UNAVAILABLE` (idénticos al baseline, sin
+`M3_API_KEY` en test env).
+
+## Versión remota
+
+```
+extraction.version = "espirometria-sibelmed-v7"   (FIX-20260824-04-rev2)
+extraction.prompt  = 4.8 KB (vs 19.5 KB en v6, ~4x compactación)
+diagnosis.version  = "espirometria-prediagnosis-v1"   (preservado, IMPL-20260824-06 rev. 1.1)
+
+backend/app/services/ai/base.py::M3VisionBase.call_m3:
+  max_tokens       = 8192 (era 4096)
+  response_format  = {"type": "json_object"}  (NUEVO)
+```
+
+## Comandos — ejecución contra Railway (ATLAS/Frank)
+
+### 1. Pre-update — leer estado actual (read-only)
+
+```sql
+SELECT
+  options->'aiCalibration'->'extraction'->>'version' AS extraction_version,
+  LENGTH(options->'aiCalibration'->'extraction'->>'prompt') AS prompt_chars
+FROM "MedicalTest"
+WHERE name ILIKE 'ESPIROMETRIA'
+LIMIT 1;
+```
+
+Salida esperada (pre-update):
+```
+ extraction_version   | prompt_chars
+----------------------+---------------
+ espirometria-sibelmed-v6 | 19500 (aprox)
+```
+
+### 2. Update — script idempotente
+
+```bash
+# Con DATABASE_URL de Railway (NO loguear ni commitear la URL):
+cd frontend
+DATABASE_URL='postgresql://<user>:<password<>@<host>:<port>/<db>?sslmode=require' \
+  npx tsx scripts/update-espirometria-extraction-prompt.ts
+```
+
+Salida esperada (primer run):
+
+```
+=== IMPL-FIX-20260824-04-rev2 (FIX-20260824-04 — Espirometría v7, compactación <5KB contra EXTRACTION_NOT_JSON M3) ===
+
+Encontrado: "ESPIROMETRIA" (ID: <uuid>)
+...
+✓ Prompt de extracción de Espirometría actualizado correctamente.
+   → medical_test.id:        <uuid>
+   → extraction.version:     espirometria-sibelmed-v7
+   → extraction.prompt size: 4912 chars  (vs ~19500 en v6)
+```
+
+Salida esperada (segundo run, idempotente):
+
+```
+ℹ️  aiCalibration.extraction.version ya es espirometria-sibelmed-v7. No se realizan cambios (idempotente).
+```
+
+### 3. Post-update — verificar tamaño
+
+```sql
+SELECT
+  options->'aiCalibration'->'extraction'->>'version' AS extraction_version,
+  LENGTH(options->'aiCalibration'->'extraction'->>'prompt') AS prompt_chars
+FROM "MedicalTest"
+WHERE name ILIKE 'ESPIROMETRIA'
+LIMIT 1;
+```
+
+Salida esperada (post-update):
+```
+ extraction_version   | prompt_chars
+----------------------+---------------
+ espirometria-sibelmed-v7 | 4912
+```
+
+### 4. Validación end-to-end — re-subir el PDF
+
+Subir de nuevo `context/RD2026/ESPIROMETRIA.pdf` en Events. Verificar
+que el panel muestre:
+- **Repetibilidad FEV1**: 40 ml con operación `(2.15 − 2.11) × 1000 = 40 ml`.
+- **Repetibilidad FVC**: 30 ml con operación `(2.33 − 2.30) × 1000 = 30 ml`.
+- Sin `EXTRACTION_NOT_JSON` en logs del backend.
+- Si el LLM aún degrada y duplica m1=m2, `notas_calidad` contiene
+  `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` + `completitud_documental =
+  "no_concluyente"`, y el panel muestra "—" (no 0 ml).
+
+## Archivos modificados / creados (rev. 2, sin commit/push)
+
+```
+frontend/scripts/update-espirometria-extraction-prompt.ts                              | M (v6 → v7 compactado a 4.8 KB)
+frontend/scripts/__tests__/update-espirometria-extraction-prompt.test.ts               | M (reescrito v7: 56 → 47 tests, mismo nivel cobertura)
+backend/app/services/ai/base.py                                                       | M (max_tokens=8192 + response_format en call_m3)
+backend/tests/test_ai_pipeline.py                                                    | M (+TestFIX20260824_04Rev2PromptCompactoV7 + +TestFIX20260824_04Rev2M3Parameters = 14 tests)
+```
+
+Sin cambios en:
+- `backend/app/services/ai/extractor.py` (la defensa rev. 1.5 sigue intacta).
+- `frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx` (invalidación rev. 1.5 intacta).
+- `prisma/schema.prisma` / migraciones (0 cambios).
+- `discovery/`, `SPEC/`, `ADR/`, `PROYECTO.md` (0 cambios).
+- `M3VisionBase._tolerant_json_parse` (sigue siendo necesario, ahora como
+  segunda línea de defensa después de `response_format`).
+
+## Pendientes ATLAS / Frank
+
+1. **Ejecutar el script contra Railway** con la DATABASE_URL vigente
+   (paso 2). Reportar salida al equipo.
+2. **Re-subir el PDF RD2026** (paso 4) y verificar que el panel muestre
+   40 ml / 30 ml correctos sin `EXTRACTION_NOT_JSON`.
+3. Decidir si GEMINI audita el fix M3 (recomendable — cambio soft de
+   contrato + parámetros SDK + compactación de prompt).
+4. CRONISTA aplica transición cuando ATLAS confirme verificación.
+5. Autorización Frank para commit/push cuando ATLAS lo autorice.
+
+## Reversibilidad
+
+100% — el script es idempotente y reversible: `git checkout` de los 4
+modificados. Sin migración Prisma, sin cambios en BD hasta que ATLAS
+ejecute el script contra Railway. Los parámetros del SDK (`max_tokens`,
+`response_format`) se revierten con `git checkout backend/app/services/ai/base.py`.
+
+## Estado final (rev. 2)
+
+**READY_FOR_VERIFYING** — incremento único, presupuesto dentro del
+objetivo (≤6 sesiones / ≤300 tool calls), V1 dirigida por corte, V2
+focal completa al cierre, sin V3 independiente (no aplica GEMINI/Playwright
+desde SOFIA — decisión de ATLAS).

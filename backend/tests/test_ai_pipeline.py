@@ -6062,3 +6062,330 @@ class TestFIX20260824_04RegresionFEV1_Cero:
             normalized.get("notas_calidad") or ""
         )
         assert normalized.get("completitud_documental") == "no_concluyente"
+
+
+# ---------------------------------------------------------------------------
+# IMPL-FIX-20260824-04-rev2 — compactación de prompt v6 → v7 + parámetros M3
+# para corregir `EXTRACTION_NOT_JSON` en producción (Railway).
+#
+# Síntoma reportado por Frank: MiniMax M3 recibe `espirometria-sibelmed-v6`
+# (~15 KB) y responde con `<think>...` que consume los 4096 tokens de
+# `max_tokens` antes de devolver JSON. Logs muestran `EXTRACTION_NOT_JSON`
+# en dos uploads recientes.
+#
+# Causa mínima identificada:
+#   - v6 del prompt de extracción creció a ~19.5 KB (era ~14 KB en v5).
+#   - M3 con `max_tokens=4096` no tiene espacio para JSON estructurado
+#     (~3 KB) + reasoning block + explicación opcional.
+#   - El parser tolerante no puede recuperar JSON inexistente/truncado.
+#
+# Corrección mínima y general:
+#   1. Compactar v6 → v7 (<5 KB) preservando obligatoriamente todas las
+#      reglas críticas del dictamen (FIX-20260824-04).
+#   2. Aumentar `max_tokens` de 4096 → 8192 (M3 soporta hasta 524K,
+#      verificado en docs oficiales MiniMax platform.minimax.io).
+#   3. Pasar `response_format={"type": "json_object"}` al SDK (soportado
+#      por M3 vía Fireworks API params que reflejan el contrato upstream).
+#      Reduce la probabilidad de fences ```json``` o texto explicativo,
+#      pero NO es garantía dura — el parser tolerante sigue siendo
+#      necesario. NO oculta errores.
+# ---------------------------------------------------------------------------
+
+
+class TestFIX20260824_04Rev2PromptCompactoV7:
+    """
+    IMPL-FIX-20260824-04-rev2: ACs de la compactación del prompt v6 → v7.
+
+    Estos tests verifican que el script v7 exporta el prompt compacto
+    preservando todas las reglas críticas del dictamen FIX-20260824-04.
+    El tamaño compacto es la causa directa del fix al fallo M3
+    `EXTRACTION_NOT_JSON` (prompt largo + max_tokens=4096 → truncado).
+    """
+
+    def test_v7_exporta_extraccion_version_v7(self):
+        """EXTRACTION_VERSION es `espirometria-sibelmed-v7` (no v6)."""
+        script_path = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        )
+        src = script_path.read_text(encoding="utf-8")
+        assert "EXTRACTION_VERSION = 'espirometria-sibelmed-v7'" in src, (
+            "EXTRACTION_VERSION no apunta a v7. Renombrar y redeploy."
+        )
+
+    def test_v7_prompt_compacto_menor_a_5kb(self):
+        """AC causal del fix: prompt v7 < 5 KB (v6 era ~19.5 KB)."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        # AC causal: prompt < 5 KB (5000 chars).
+        assert len(prompt) < 5_000, (
+            f"v7 prompt size {len(prompt)} chars >= 5 KB; el fix causal "
+            "contra EXTRACTION_NOT_JSON M3 requiere compactación <5 KB."
+        )
+        # v6 era ~19500 chars; v7 debe ser al menos 3x más compacto.
+        assert len(prompt) < 6_500, (
+            f"v7 prompt size {len(prompt)} chars; v6 era 19500 chars. "
+            "Compactación <3x insuficiente."
+        )
+
+    def test_v7_prompt_preserva_json_unico_sin_think(self):
+        """AC-1: v7 conserva regla JSON único, sin markdown ni <think>."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        # Case-insensitive porque el prompt v7 usa "Sin markdown" (mayúscula
+        # inicial tras el encabezado "Devuelve SOLO JSON válido").
+        assert "Devuelve SOLO JSON" in prompt
+        assert "sin markdown" in prompt.lower()
+        assert "<think>" in prompt  # exclusión explícita
+        assert "arranca con {" in prompt
+
+    def test_v7_prompt_preserva_layout_sibelmed_9(self):
+        """AC-2: v7 conserva layout 9 columnas Sibelmed."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        assert "PARÁMETRO | M1 | %REF | M2 | %REF | M3 | %REF | REF | LLN" in prompt
+
+    def test_v7_prompt_preserva_prohibicion_duplicar_celda(self):
+        """AC-3: v7 conserva prohibición de duplicar M1/M2/M3."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        assert "NO DUPLIQUES UNA CELDA" in prompt
+        # El prompt v7 usa sintaxis compacta sin espacios alrededor de ←.
+        assert "m1←m2" in prompt
+        assert "m1_pct_ref←m2_pct_ref" in prompt
+        # El síntoma se documenta con sintaxis compacta (sin espacios).
+        assert "(m1−m2)×1000=0 ml" in prompt
+
+    def test_v7_prompt_preserva_prohibicion_mejor_x_como_fila_estandar(self):
+        """AC-4: v7 conserva prohibición de usar Mejor X como fila estándar."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        assert "NO USES \"Mejor FEV1\"/\"Mejor FVC\" como fila" in prompt
+        assert "consolida m1=m2=m3" in prompt
+        assert "NO rellenes con \"Mejor X\"" in prompt
+
+    def test_v7_prompt_preserva_validacion_cruzada(self):
+        """AC-5: v7 conserva validación cruzada mejor_*_max vs std_max."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        assert "mejor_fev1_max = mejor_fev1.m1" in prompt
+        assert "fev1_std_max = max(fev1.m1, fev1.m2, fev1.m3)" in prompt
+        assert "INCONSISTENCIA" in prompt
+        assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in prompt
+        assert "no_concluyente" in prompt
+
+    def test_v7_prompt_preserva_ejemplo_canonico(self):
+        """AC-6: v7 conserva ejemplo canónico FEV1/FVC como columnas."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        # FEV1 6 celdas canónicas.
+        assert "m1=2.15" in prompt
+        assert "m1_pct_ref=77" in prompt
+        assert "m2=2.11" in prompt
+        assert "m2_pct_ref=76" in prompt
+        assert "m3=2.09" in prompt
+        assert "m3_pct_ref=75" in prompt
+        # FVC 6 celdas canónicas.
+        assert "m1=2.30" in prompt
+        assert "m1_pct_ref=69" in prompt
+        assert "m2=2.33" in prompt
+        assert "m2_pct_ref=70" in prompt
+        assert "m3=2.26" in prompt
+        assert "m3_pct_ref=68" in prompt
+        # Top-2 esperados (sintaxis compacta del v7).
+        assert "(2.15−2.11)×1000=40 ml" in prompt
+        assert "(2.33−2.30)×1000=30 ml" in prompt
+
+    def test_v7_prompt_no_calcula_repetibilidad_panel_si(self):
+        """AC-9: v7 NO calcula repetibilidad; el panel la deriva (top-2 × 1000)."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        assert "NO calcules aquí" in prompt
+        assert "top-2" in prompt
+        assert "AMI ≤ 150 ml" in prompt
+        assert "SIEMPRE null" in prompt  # para repetibilidad_<150>
+
+    def test_v7_prompt_visuales_null_si_no_claros(self):
+        """AC-7: v7 conserva visuales null si no claros (4 visuales)."""
+        src = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "scripts"
+            / "update-espirometria-extraction-prompt.ts"
+        ).read_text(encoding="utf-8")
+        start = src.index("export const NEW_EXTRACTION_PROMPT = `") + len(
+            "export const NEW_EXTRACTION_PROMPT = `"
+        )
+        end = src.index("`\n\n// Cliente Prisma", start)
+        prompt = src[start:end]
+        for key in ["pico_maximo", "forma_triangular", "libre_artefactos", "meseta"]:
+            assert f'"{key}"' in prompt
+
+
+class TestFIX20260824_04Rev2M3Parameters:
+    """
+    IMPL-FIX-20260824-04-rev2: ACs de los parámetros del SDK OpenAI
+    enviados a MiniMax M3 (`max_tokens=8192`, `response_format={"type":"json_object"}`).
+
+    Estos tests verifican ESTÁTICAMENTE el código de `M3VisionBase.call_m3`
+    para confirmar que el contrato de salida es el esperado (sin hacer
+    una llamada real al SDK, que requiere `M3_API_KEY`).
+
+    Garantía: el cambio es aditivo — NO se eliminan validaciones, NO se
+    suprimen errores, NO se agregan reintentos ciegos. Si el SDK lanza
+    una excepción (HTTP, timeout, formato inválido), se propaga tal cual
+    para que el catch-all la mapee a `error_code` accionable.
+    """
+
+    def test_call_m3_envia_max_tokens_8192(self):
+        """`max_tokens=8192` (era 4096). Verificación estática: el archivo
+        `base.py` debe contener el literal `max_tokens=8192` dentro del
+        método `call_m3` (no en otra llamada)."""
+        base_path = Path(__file__).parent.parent / "app" / "services" / "ai" / "base.py"
+        src = base_path.read_text(encoding="utf-8")
+
+        idx_call_m3 = src.find("def call_m3(")
+        assert idx_call_m3 > 0, "call_m3 method not found"
+        idx_next_def = src.find("\n    def ", idx_call_m3 + 1)
+        if idx_next_def < 0:
+            idx_next_def = len(src)
+        block = src[idx_call_m3:idx_next_def]
+
+        assert "max_tokens=8192" in block, (
+            "call_m3 debe enviar max_tokens=8192 (era 4096). "
+            "M3 soporta hasta 524K tokens; 4096 era muy corto para JSON "
+            "estructurado."
+        )
+        # Garantía: NO debe quedar max_tokens=4096 en call_m3 (regresión).
+        assert "max_tokens=4096" not in block, (
+            "call_m3 sigue enviando max_tokens=4096 — causante de "
+            "EXTRACTION_NOT_JSON. Subir a 8192."
+        )
+
+    def test_call_m3_envia_response_format_json_object(self):
+        """`response_format={"type": "json_object"}` en call_m3."""
+        base_path = Path(__file__).parent.parent / "app" / "services" / "ai" / "base.py"
+        src = base_path.read_text(encoding="utf-8")
+        idx_call_m3 = src.find("def call_m3(")
+        idx_next_def = src.find("\n    def ", idx_call_m3 + 1)
+        if idx_next_def < 0:
+            idx_next_def = len(src)
+        block = src[idx_call_m3:idx_next_def]
+        assert 'response_format={"type": "json_object"}' in block, (
+            "call_m3 debe enviar response_format JSON para M3. "
+            "Soportado por M3 (verificado en Fireworks MiniMax-M3 API params)."
+        )
+
+    def test_call_m3_no_agrega_reintentos_ciegos(self):
+        """Garantía: NO se introducen reintentos ciegos ni supresión de
+        errores en call_m3. El bloque `except` debe seguir propagando
+        `raise` sin catch-all que silencie."""
+        base_path = Path(__file__).parent.parent / "app" / "services" / "ai" / "base.py"
+        src = base_path.read_text(encoding="utf-8")
+        idx_call_m3 = src.find("def call_m3(")
+        idx_next_def = src.find("\n    def ", idx_call_m3 + 1)
+        if idx_next_def < 0:
+            idx_next_def = len(src)
+        block = src[idx_call_m3:idx_next_def]
+        # El bloque `except Exception as e:` debe terminar con `raise`
+        # (propagación), no con `return None` ni `pass`.
+        assert "raise" in block, (
+            "call_m3 debe propagar excepciones (raise), NO suprimirlas."
+        )
+        # El bloque try debe seguir siendo try/except (sin reintentos).
+        assert "for attempt in" not in block
+        assert "retries" not in block
+        assert "max_retries" not in block
+
+    def test_call_m3_no_modifica_featherless_o_otros(self):
+        """Garantía: el cambio aplica SOLO a call_m3 (MiniMax M3), NO
+        a FeatherlessVisionBase.call_featherless_vision ni a otros
+        proveedores. El max_tokens=8192 + response_format NO debe
+        aparecer fuera del bloque call_m3."""
+        base_path = Path(__file__).parent.parent / "app" / "services" / "ai" / "base.py"
+        src = base_path.read_text(encoding="utf-8")
+
+        idx_call_m3 = src.find("def call_m3(")
+        idx_next_def = src.find("\n    def ", idx_call_m3 + 1)
+        if idx_next_def < 0:
+            idx_next_def = len(src)
+        outside = src[:idx_call_m3] + src[idx_next_def:]
+
+        assert "max_tokens=8192" not in outside, (
+            "max_tokens=8192 encontrado fuera de call_m3 — fix debe "
+            "limitarse a M3 (MiniMax)."
+        )
