@@ -1,4 +1,28 @@
-# CURRENT — FIX-20260821-01 implementación SOFIA READY_FOR_VERIFYING
+# CURRENT — FEATURE-20260825-02 Audiometría / patrón multi-Event
+
+- **Actualizado:** 2026-08-25 13:24 CST
+- **WIP:** 1 — discovery de Audiometría activo
+- **Estado:** `VERIFYING` — implementación Audiometría entregada; V1/V2 PASS y V3 bloqueada por falta de entorno autenticado
+- **SPEC activa:** `context/SPECs/SPEC-FEATURE-20260825-02-AUDIOMETRIA-ENTREGABLE.md` en `READY_FOR_SOFIA`.
+- **Handoff:** `context/interconsultas/HANDOFF_SPEC-FEATURE-20260825-02_SOFIA.md`; reporte `IMPL-REPORT_FEATURE-20260825-02.md`; QA `context/reviews/QA-20260825-01-FEATURE-20260825-02.md`.
+- **Base existente:** calibración V3 `tested` no publicada; extracción especializada, renderer clínico, prediagnóstico derivado y parser XML directo ya existen.
+- **Próxima acción:** integrar la escala AMI y la referencia NOM-011 al contrato; la fórmula PTA ya quedó definida como PTA3 más PTA fuente separado.
+- **Límites:** no construir nada hasta cerrar Discovery; no publicar aún la calibración V3, no copiar criterios de Espirometría, no persistir documentos definitivamente y no cambiar producción sin SPEC.
+- **Hallazgos de entrada:** `DIFF-AUDIO.md`, `CIERRE-LOTE.md`, `SPEC_ARCH-20260715-02-RECALIBRACION-AUDIOMETRIA-CASO-REAL.md`.
+- **Regla transversal:** `BR-20260825-01` — flujo común entre Events con contenido particular por estudio.
+- **Pendientes conocidos:** muestra real sólo cubre 4/8 frecuencias; falta cerrar el contrato y definir el entregable PDF específico.
+- **Decisiones confirmadas:** `DEC-20260825-04` / `BR-20260825-05` — normalidad hasta 25 dB y TA=vía aérea, VO=vía ósea.
+- **Decisión adicional:** `DEC-20260825-05` / `BR-20260825-06` — PTA3 calculado más PTA fuente separado.
+- **Decisión adicional:** `DEC-20260825-06` / `BR-20260825-07` — capas separadas y etiquetadas para NOM, AMI y fuente del audiómetro.
+- **Decisión adicional:** `DEC-20260825-07` / `BR-20260825-08` — ecuación PTA visible con entradas, resultado y fuente, como en Espirometría.
+- **Insumos recibidos:** fuente del audiómetro (`FND-20260825-05`), documento final AMI (`FND-20260825-06`), cuestionario (`FND-20260825-07`) y programa/criterios AMI (`FND-20260825-08`).
+- **Decisiones confirmadas:** `DEC-20260825-03` / `BR-20260825-04` — combinación patrón+PTA, huecos como no concluyentes y 1000 Hz como frontera.
+- **Decisión vigente:** `DEC-20260825-02` / `BR-20260825-03` — una sola SPEC y una sola pasada de implementación después de recibir y aclarar todos los documentos.
+- **Decisión diferida:** `DEC-20260825-01` / `BR-20260825-02` — la persistencia definitiva deberá conservar conjuntamente el PDF fuente de cada Event y el PDF entregable validado; queda fuera del incremento actual.
+
+---
+
+# HISTÓRICO — FIX-20260821-01 implementación SOFIA READY_FOR_VERIFYING
 
 - **Actualizado:** 2026-08-21 11:23 CST
 - **WIP:** 0 — sesión SOFIA cerrada (entrega `READY_FOR_VERIFYING`); espera auditoría GEMINI

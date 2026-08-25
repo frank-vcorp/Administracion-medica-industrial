@@ -76,6 +76,12 @@ export const getEventById = async (id: string) => {
                                             doctorDiagnosis: true,
                                             doctorNotes: true,
                                             createdAt: true,
+                                            // IMPL-FEATURE-20260825-01: exponer estado del
+                                            // PDF validado al cliente (papeleta) para mostrar
+                                            // el botón de descarga o el error.
+                                            validatedPdfUrl: true,
+                                            validatedPdfGeneratedAt: true,
+                                            validatedPdfError: true,
                                         }
                                     }
                                 }

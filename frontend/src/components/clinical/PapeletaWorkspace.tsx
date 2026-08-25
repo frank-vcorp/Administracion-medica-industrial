@@ -57,6 +57,17 @@ import type {
   EspirometriaQuestionnairePayload,
 } from "@/schemas/clinical/espirometria-questionnaire.schema"
 import { ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/espirometria-questionnaire.schema"
+// IMPL-FEATURE-20260825-02: cuestionario auditivo de Audiometría + panel
+// clínico audiométrico (PTA3, ecuación, PTA fuente, capas NOM/AMI/fuente).
+// Persistencia paralela al cuestionario de Espirometría en
+// `EventTest.clinicalContext`.
+import AudiometriaQuestionnaireModal from "@/components/clinical/AudiometriaQuestionnaireModal"
+import AudiometriaQuestionnaireSummary from "@/components/clinical/AudiometriaQuestionnaireSummary"
+import AudiometriaClinicalCriteriaPanel from "@/components/clinical/AudiometriaClinicalCriteriaPanel"
+import type {
+  AudiometriaQuestionnairePayload,
+} from "@/schemas/clinical/audiometria-questionnaire.schema"
+import { AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/audiometria-questionnaire.schema"
 
 // --- Tipos locales ---
 
@@ -108,6 +119,9 @@ type StudyTest = {
       doctorDiagnosis: string | null
       doctorNotes: string | null
       createdAt: string
+      // IMPL-FEATURE-20260825-01: estado del PDF validado propagado al panel.
+      pdfGenerated?: boolean | null
+      pdfErrorMessage?: string | null
     } | null
   } | null
   // ARCH-20260326-05: Capa de extracción estructurada del estudio
@@ -122,7 +136,14 @@ type StudyTest = {
   // IMPL-FEATURE-20260824-02: contexto clínico estructurado del estudio
   // (cuestionario emergente de Espirometría, payload versionado). `null`
   // cuando no se ha contestado. NO es PII del encabezado.
-  clinicalContext?: EspirometriaQuestionnairePayload | null
+  // IMPL-FEATURE-20260825-02: union con el cuestionario auditivo de
+  // Audiometría. La rama se selecciona por `schemaVersion` en runtime;
+  // cualquier payload versionado futuro requerirá nueva versión + nuevo
+  // schema (mismo contrato que Espirometría).
+  clinicalContext?:
+    | EspirometriaQuestionnairePayload
+    | AudiometriaQuestionnairePayload
+    | null
 }
 
 type WorkerInfo = {
@@ -368,6 +389,11 @@ export default function PapeletaWorkspace({
   const [questionnaireEventTestId, setQuestionnaireEventTestId] = useState<
     string | null
   >(null)
+  // IMPL-FEATURE-20260825-02: estado paralelo para el cuestionario de
+  // Audiometría. Gestionado por separado para mantener el contrato
+  // inmutable del flujo de Espirometría.
+  const [audiometriaQuestionnaireEventTestId, setAudiometriaQuestionnaireEventTestId] =
+    useState<string | null>(null)
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
   const completedCount = localTests.filter(t =>
@@ -378,6 +404,11 @@ export default function PapeletaWorkspace({
   // `activeTest` si el usuario cambió de pestaña con el modal abierto).
   const questionnaireTargetTest = questionnaireEventTestId
     ? localTests.find(t => t.id === questionnaireEventTestId) ?? null
+    : null
+  // IMPL-FEATURE-20260825-02: estudio actualmente seleccionado para el
+  // modal del cuestionario de Audiometría.
+  const audiometriaQuestionnaireTargetTest = audiometriaQuestionnaireEventTestId
+    ? localTests.find(t => t.id === audiometriaQuestionnaireEventTestId) ?? null
     : null
 
   // ARCH-20260507-06: Determinar si la muestra del estudio activo ya fue tomada por grupo compartido
@@ -474,6 +505,10 @@ export default function PapeletaWorkspace({
       // capa extractiva M3 (FEATURE-20260824-02 §IA: no inventar ausentes,
       // no cambiar criterios AMI). Si está ausente o no aplica, el campo no
       // se envía y la IA procesa el documento sin contexto adicional.
+      // IMPL-FEATURE-20260825-02: el cuestionario auditivo de Audiometría
+      // se propaga al backend con el mismo contrato `clinical_context`. El
+      // backend decide cómo leerlo (consumirlo o no); si está ausente, el
+      // pipeline opera igual que antes.
       const targetTest = localTests.find(t => t.id === testId)
       if (
         targetTest &&
@@ -482,6 +517,18 @@ export default function PapeletaWorkspace({
         typeof targetTest.clinicalContext === 'object' &&
         (targetTest.clinicalContext as { schemaVersion?: string }).schemaVersion ===
           ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
+      ) {
+        formData.append(
+          'clinical_context',
+          JSON.stringify(targetTest.clinicalContext),
+        )
+      } else if (
+        targetTest &&
+        getCanonicalAIStudyType(targetTest) === 'Audiometria' &&
+        targetTest.clinicalContext &&
+        typeof targetTest.clinicalContext === 'object' &&
+        (targetTest.clinicalContext as { schemaVersion?: string }).schemaVersion ===
+          AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
       ) {
         formData.append(
           'clinical_context',
@@ -790,9 +837,13 @@ export default function PapeletaWorkspace({
               // IMPL-FEATURE-20260824-02: abrir el modal del cuestionario
               // de Espirometría (gestionado en el padre para acceder a
               // `localTests` y `setLocalTests`).
+              // IMPL-FEATURE-20260825-02: rama paralela para Audiometría.
               onOpenQuestionnaire={() => {
-                if (getCanonicalAIStudyType(activeTest) === 'Espirometria') {
+                const canon = getCanonicalAIStudyType(activeTest)
+                if (canon === 'Espirometria') {
                   setQuestionnaireEventTestId(activeTest.id)
+                } else if (canon === 'Audiometria') {
+                  setAudiometriaQuestionnaireEventTestId(activeTest.id)
                 }
               }}
             />
@@ -811,12 +862,49 @@ export default function PapeletaWorkspace({
           <EspirometriaQuestionnaireModal
             eventTestId={questionnaireTargetTest.id}
             eventId={eventId}
-            initialContext={questionnaireTargetTest.clinicalContext ?? null}
+            initialContext={
+              (questionnaireTargetTest.clinicalContext as
+                | EspirometriaQuestionnairePayload
+                | null
+                | undefined) ?? null
+            }
             onClose={() => setQuestionnaireEventTestId(null)}
             onSaved={payload => {
               // Actualización optimista local; el server action ya invoca
               // revalidatePath(`/events/${eventId}`).
               const savedTestId = questionnaireTargetTest.id
+              setLocalTests(prev =>
+                prev.map(t =>
+                  t.id === savedTestId
+                    ? { ...t, clinicalContext: payload }
+                    : t,
+                ),
+              )
+            }}
+          />
+        )}
+
+      {/* IMPL-FEATURE-20260825-02: modal del cuestionario de Audiometría.
+          Mismo patrón que el de Espirometría: montado por el padre para
+          acceder a `localTests` / `setLocalTests`. Sólo se monta cuando
+          el `eventTestId` apunta al estudio activo Y dicho estudio es de
+          tipo canónico Audiometría. */}
+      {audiometriaQuestionnaireEventTestId &&
+        audiometriaQuestionnaireTargetTest &&
+        getCanonicalAIStudyType(audiometriaQuestionnaireTargetTest) ===
+          'Audiometria' && (
+          <AudiometriaQuestionnaireModal
+            eventTestId={audiometriaQuestionnaireTargetTest.id}
+            eventId={eventId}
+            initialContext={
+              (audiometriaQuestionnaireTargetTest.clinicalContext as
+                | AudiometriaQuestionnairePayload
+                | null
+                | undefined) ?? null
+            }
+            onClose={() => setAudiometriaQuestionnaireEventTestId(null)}
+            onSaved={payload => {
+              const savedTestId = audiometriaQuestionnaireTargetTest.id
               setLocalTests(prev =>
                 prev.map(t =>
                   t.id === savedTestId
@@ -1345,9 +1433,18 @@ function StudyPanel({
                 Sólo aparece cuando el tipo canónico del estudio es
                 Espirometría. Muestra el resumen compacto si ya se guardó, o
                 el botón "Completar cuestionario" antes del upload. NO
-                bloquea el upload si está vacío (AC-6). */}
+                bloquea el upload si está vacío (AC-6).
+                IMPL-FEATURE-20260825-02: rama paralela para Audiometría.
+                */}
             {getCanonicalAIStudyType(test) === 'Espirometria' && (
               <EspirometriaQuestionnaireSection
+                test={test}
+                readonly={readonly}
+                onOpenModal={onOpenQuestionnaire}
+              />
+            )}
+            {getCanonicalAIStudyType(test) === 'Audiometria' && (
+              <AudiometriaQuestionnaireSection
                 test={test}
                 readonly={readonly}
                 onOpenModal={onOpenQuestionnaire}
@@ -1630,9 +1727,19 @@ function StudyPanel({
                 Espirometría y existe snapshot de extracción. Pasa el
                 `extractedData` raíz para que el panel pueda derivar
                 repetibilidad numérica desde `parametros[]` cuando no esté
-                pre-extraída en `calidad`. Tolerante a payload parcial. */}
+                pre-extraída en `calidad`. Tolerante a payload parcial.
+                IMPL-FEATURE-20260825-02: rama paralela para Audiometría
+                (PTA3, ecuación, PTA fuente, capas NOM/AMI/fuente). */}
             {getCanonicalAIStudyType(test) === 'Espirometria' && test.extractionSnapshot ? (
               <EspirometriaClinicalCriteriaPanel
+                extractedData={
+                  (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined) ?? null
+                }
+                version={test.extractionSnapshot.version}
+              />
+            ) : null}
+            {getCanonicalAIStudyType(test) === 'Audiometria' && test.extractionSnapshot ? (
+              <AudiometriaClinicalCriteriaPanel
                 extractedData={
                   (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined) ?? null
                 }
@@ -1653,6 +1760,11 @@ function StudyPanel({
                 eventId={eventId}
                 existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
                 readonly={readonly}
+                // IMPL-FEATURE-20260825-02: pasar el tipo canónico del
+                // estudio al panel para que el botón de descarga apunte a
+                // la ruta correcta (`/api/pdf/espirometry` o
+                // `/api/pdf/audiometry`).
+                studyType={getCanonicalAIStudyType(test)}
               />
             )}
           </div>
@@ -1763,6 +1875,72 @@ function EspirometriaQuestionnaireSection({
           onClick={onOpenModal}
           className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
           data-testid="espirometria-questionnaire-complete"
+        >
+          Completar cuestionario
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// AudiometriaQuestionnaireSection — sub-componente cliente que renderiza el
+// bloque "Cuestionario de Audiometría" arriba de la dropzone del estudio.
+//   - Si ya hay `clinicalContext`: muestra el resumen compacto + Editar.
+//   - Si no hay: muestra el call-to-action "Completar cuestionario".
+//   - Modo readonly: oculta el botón (no permite editar).
+//   - En cualquier caso NO bloquea el upload.
+//   - El cuestionario se considera válido sólo si `schemaVersion` coincide
+//     con `AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION` (defensa contra
+//     payloads de Espirometría u otras versiones futuras).
+// ──────────────────────────────────────────────────────────────────────────
+
+function AudiometriaQuestionnaireSection({
+  test,
+  readonly,
+  onOpenModal,
+}: {
+  test: StudyTest
+  readonly: boolean
+  onOpenModal: () => void
+}) {
+  const ctx = test.clinicalContext
+  const hasContext =
+    !!ctx &&
+    typeof ctx === 'object' &&
+    (ctx as { schemaVersion?: string }).schemaVersion ===
+      AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
+
+  if (hasContext) {
+    return (
+      <AudiometriaQuestionnaireSummary
+        payload={ctx as AudiometriaQuestionnairePayload}
+        onEdit={onOpenModal}
+      />
+    )
+  }
+
+  return (
+    <div
+      className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2"
+      data-testid="audiometria-questionnaire-cta"
+    >
+      <p className="text-sm font-bold text-amber-800 flex items-center gap-2">
+        <span aria-hidden="true">📋</span>
+        Cuestionario de Audiometría pendiente
+      </p>
+      <p className="text-xs text-amber-700">
+        Captura antecedentes auditivos y exploración física para
+        enriquecer el prediagnóstico IA. Puedes subir el PDF sin
+        contestar — el sistema seguirá funcionando, pero la IA recibirá
+        menos contexto.
+      </p>
+      {!readonly && (
+        <button
+          type="button"
+          onClick={onOpenModal}
+          className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+          data-testid="audiometria-questionnaire-complete"
         >
           Completar cuestionario
         </button>

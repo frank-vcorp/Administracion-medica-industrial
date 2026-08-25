@@ -137,6 +137,13 @@ interface StudyAIPrediagnosisPanelProps {
   existingReview?: DoctorReviewSummary | null
   /** Si true, solo lectura */
   readonly?: boolean
+  /**
+   * IMPL-FEATURE-20260825-02: tipo canónico del estudio. Determina qué
+   * ruta de descarga de PDF validado se ofrece al médico (Espirometría o
+   * Audiometría). Default = 'Espirometria' para preservar el
+   * comportamiento previo al incremento.
+   */
+  studyType?: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -443,6 +450,7 @@ export default function StudyAIPrediagnosisPanel({
   eventId,
   existingReview,
   readonly = false,
+  studyType = null,
 }: StudyAIPrediagnosisPanelProps) {
   const [reviewed, setReviewed] = useState(!!existingReview)
   const [showReviewForm, setShowReviewForm] = useState(false)
@@ -663,40 +671,58 @@ export default function StudyAIPrediagnosisPanel({
 
             {/* IMPL-FEATURE-20260825-01: botón de descarga del PDF validado.
                 Sólo aparece cuando la decisión aceptó o editó (no en
-                rechazo, que no genera PDF por contrato de la SPEC). */}
+                rechazo, que no genera PDF por contrato de la SPEC).
+                IMPL-FEATURE-20260825-02: la ruta de descarga se elige por
+                tipo canónico del estudio (Espirometría o Audiometría).
+                Estudios sin template propio NO muestran el botón. */}
             {(existingReview.doctorStatus === 'REVIEWED_ACCEPTED' ||
               existingReview.doctorStatus === 'REVIEWED_EDITED') && (
-              <div className="mt-3 pt-3 border-t border-slate-100" data-testid="espirometry-pdf-download-block">
-                {existingReview.pdfGenerated || !existingReview.pdfErrorMessage ? (
-                  <a
-                    href={`/api/pdf/espirometry/${existingReview.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 px-3 py-2 rounded-lg transition-colors"
-                    data-testid="espirometry-pdf-download-link"
-                  >
-                    <span>📄</span>
-                    <span>Descargar PDF validado</span>
-                  </a>
-                ) : (
+              (() => {
+                const pdfKind =
+                  studyType === 'Audiometria'
+                    ? 'audiometry'
+                    : studyType === 'Espirometria'
+                      ? 'espirometry'
+                      : null
+                if (!pdfKind) return null
+                const testIdPrefix = pdfKind
+                return (
                   <div
-                    className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
-                    data-testid="espirometry-pdf-error"
+                    className="mt-3 pt-3 border-t border-slate-100"
+                    data-testid={`${testIdPrefix}-pdf-download-block`}
                   >
-                    ⚠️ PDF no disponible.
-                    {existingReview.pdfErrorMessage ? (
-                      <span className="block mt-1">
-                        <strong>Motivo:</strong> {existingReview.pdfErrorMessage}
-                      </span>
+                    {existingReview.pdfGenerated || !existingReview.pdfErrorMessage ? (
+                      <a
+                        href={`/api/pdf/${pdfKind}/${existingReview.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 px-3 py-2 rounded-lg transition-colors"
+                        data-testid={`${testIdPrefix}-pdf-download-link`}
+                      >
+                        <span>📄</span>
+                        <span>Descargar PDF validado</span>
+                      </a>
                     ) : (
-                      <span className="block mt-1">
-                        Completa tu perfil médico (cédula y firma) y vuelve a aceptar/editar la
-                        revisión. <a href="/profile" className="underline">Ir al perfil</a>.
-                      </span>
+                      <div
+                        className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+                        data-testid={`${testIdPrefix}-pdf-error`}
+                      >
+                        ⚠️ PDF no disponible.
+                        {existingReview.pdfErrorMessage ? (
+                          <span className="block mt-1">
+                            <strong>Motivo:</strong> {existingReview.pdfErrorMessage}
+                          </span>
+                        ) : (
+                          <span className="block mt-1">
+                            Completa tu perfil médico (cédula y firma) y vuelve a aceptar/editar la
+                            revisión. <a href="/profile" className="underline">Ir al perfil</a>.
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
+                )
+              })()
             )}
           </div>
         )}

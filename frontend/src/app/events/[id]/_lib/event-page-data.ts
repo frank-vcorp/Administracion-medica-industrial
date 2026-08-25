@@ -257,6 +257,10 @@ export async function fetchEventPageData(input: {
           doctorDiagnosis: string | null
           doctorNotes: string | null
           createdAt: Date
+          // IMPL-FEATURE-20260825-01: estado del PDF validado.
+          validatedPdfUrl?: string | null
+          validatedPdfGeneratedAt?: Date | null
+          validatedPdfError?: string | null
         }>
       }>
     }>
@@ -288,7 +292,26 @@ export async function fetchEventPageData(input: {
                 clinicalCriteriaHash: latestPredx.clinicalCriteriaHash ?? null,
                 doctorReviews: latestPredx.doctorReviews ?? [],
               },
-              existingReview: latestPredx.doctorReviews?.[0] ?? null,
+              existingReview: latestPredx.doctorReviews?.[0]
+                ? {
+                    id: latestPredx.doctorReviews[0].id,
+                    doctorStatus: latestPredx.doctorReviews[0].doctorStatus,
+                    doctorDiagnosis: latestPredx.doctorReviews[0].doctorDiagnosis,
+                    doctorNotes: latestPredx.doctorReviews[0].doctorNotes,
+                    createdAt: latestPredx.doctorReviews[0].createdAt,
+                    // IMPL-FEATURE-20260825-01: sólo considerar PDF listo cuando
+                    // hay URL persistida Y NO hay error. `validatedPdfError`
+                    // puede estar presente en registros antiguos aún con URL
+                    // escrita por una corrida previa exitosa; mandamos `null`
+                    // en ese caso para no mostrar el banner de error.
+                    pdfGenerated: !!(
+                      latestPredx.doctorReviews[0].validatedPdfUrl &&
+                      !latestPredx.doctorReviews[0].validatedPdfError
+                    ),
+                    pdfErrorMessage:
+                      latestPredx.doctorReviews[0].validatedPdfError ?? null,
+                  }
+                : null,
               calibration_version_mismatch: !hasFrozenPredx,
             }
           : null

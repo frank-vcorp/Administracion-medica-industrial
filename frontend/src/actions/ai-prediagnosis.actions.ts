@@ -43,6 +43,15 @@ import {
   EspirometriaQuestionnairePayloadSchema,
   ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
 } from '@/schemas/clinical/espirometria-questionnaire.schema'
+// IMPL-FEATURE-20260825-02 (gap-fix): mismo patrón para el cuestionario
+// auditivo de Audiometría. El helper
+// `extractAndValidateClinicalContextAny` decide qué schema aplicar según
+// `schemaVersion` antes de aceptar el payload (defensa contra prompt
+// injection y contra drift evolutivo).
+import {
+  AudiometriaQuestionnairePayloadSchema,
+  AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
+} from '@/schemas/clinical/audiometria-questionnaire.schema'
 // IMPL-FEATURE-20260825-01: validación del perfil médico y generación del
 // PDF validado de Espirometría. El módulo `espirometry-pdf.tsx` no es un
 // server action (no lleva 'use server'); sólo provee funciones puras
@@ -52,6 +61,12 @@ import {
   buildEspirometryPdfData,
   resolveAmiLogoDataUrl,
 } from '@/lib/espirometry-pdf'
+// IMPL-FEATURE-20260825-02: generación del PDF validado de Audiometría.
+// Mismo patrón que Espirometría: helper puro fuera del server action.
+import {
+  generateAudiometriaValidatedPdf,
+  buildAudiometriaPdfData,
+} from '@/lib/audiometry-pdf'
 import { validateDoctorProfileForPdf } from '@/schemas/clinical/doctor-profile.schema'
 import { authOptions } from '@/auth'
 
@@ -165,10 +180,13 @@ export interface StudySnapshotsResult {
 }
 
 // ---------------------------------------------------------------------------
-// IMPL-FEATURE-20260824-02 gap fix — helper puro: extraer y validar el
-// `clinical_context` que `PapeletaWorkspace.handleFileUpload` adjunta al
-// FormData cuando hay un cuestionario de Espirometría versionado guardado
-// en `EventTest.clinicalContext`.
+// IMPL-FEATURE-20260824-02 gap fix + IMPL-FEATURE-20260825-02 — helper puro:
+// extraer y validar el `clinical_context` que
+// `PapeletaWorkspace.handleFileUpload` adjunta al FormData cuando hay un
+// cuestionario versionado guardado en `EventTest.clinicalContext`.
+//
+// Soporta DOS ramas (Espirometría y Audiometría) seleccionadas por
+// `schemaVersion`:
 //
 // Reglas:
 //   - Si el campo está ausente o vacío → `null` (compat: el backend corre
@@ -176,16 +194,17 @@ export interface StudySnapshotsResult {
 //   - Si está presente, parsear JSON. Si falla o no es un objeto → `null`
 //     (no rompemos el upload: el snapshot sigue siendo válido; sólo se
 //     omite el contexto para evitar prompt injection).
-//   - Si parsea, validar contra `EspirometriaQuestionnairePayloadSchema`.
-//     Si NO cumple → `null` + log warn (sin PII). Defensa en profundidad:
-//     el snapshot de `EventTest.clinicalContext` YA está validado por el
-//     server action de guardado, pero el FormData puede manipularse en
-//     cliente antes de llegar aquí.
+//   - Si parsea, validar contra el schema correspondiente al `schemaVersion`
+//     declarado. Si NO cumple → `null` + log warn (sin PII). Defensa en
+//     profundidad: el snapshot de `EventTest.clinicalContext` YA está
+//     validado por el server action de guardado, pero el FormData puede
+//     manipularse en cliente antes de llegar aquí.
 //   - Si cumple → devolver el payload re-serializado (string JSON) listo
 //     para enviar como campo FormData del backend.
 //
 // Privacidad: el cuestionario NO incluye PII del encabezado (la papeleta ya
-// lo aporta); sólo antecedentes clínicos y exploración física del estudio.
+// lo aporta); sólo antecedentes clínicos y exploración física del estudio
+// (Espirometría o Audiometría según el caso).
 // ---------------------------------------------------------------------------
 
 type ValidatedClinicalContext = {
@@ -193,11 +212,59 @@ type ValidatedClinicalContext = {
   serialized: string
   /** Versión del esquema (para audit/trazabilidad). */
   schemaVersion: string
+  /** Tipo canónico del estudio, para que el caller decida si propagarlo. */
+  studyType: 'Espirometria' | 'Audiometria'
   /** Indicador de presencia para que el caller lo agregue al audit. */
   present: true
 }
 
+/**
+ * Tipos de cuestionario soportados por el helper. Mantenerlo como
+ * conjunto cerrado facilita auditar las ramas y bloquear versiones
+ * futuras desconocidas.
+ */
+interface SupportedClinicalContext {
+  studyType: 'Espirometria' | 'Audiometria'
+  schema: (raw: unknown) => { success: true; data: unknown } | { success: false }
+}
+const SUPPORTED_CLINICAL_CONTEXT_VERSIONS: Record<
+  string,
+  SupportedClinicalContext
+> = {
+  [ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION]: {
+    studyType: 'Espirometria',
+    schema: (raw) =>
+      EspirometriaQuestionnairePayloadSchema.safeParse(raw) as {
+        success: true
+        data: unknown
+      } | { success: false },
+  },
+  [AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION]: {
+    studyType: 'Audiometria',
+    schema: (raw) =>
+      AudiometriaQuestionnairePayloadSchema.safeParse(raw) as {
+        success: true
+        data: unknown
+      } | { success: false },
+  },
+}
+
 function extractAndValidateClinicalContext(
+  formData: FormData,
+): ValidatedClinicalContext | null {
+  return extractAndValidateClinicalContextImpl(formData)
+}
+
+/**
+ * Variante exportada (con prefijo `_`) para que las pruebas V1 puedan
+ * cubrir las dos ramas del helper sin tener que mockear Prisma + fetch.
+ *
+ * NO se consume desde el código de producción (la action usa
+ * `extractAndValidateClinicalContext`, que es un thin wrapper sobre
+ * `_extractAndValidateClinicalContext`). El prefijo `_` deja claro que
+ * es un detalle de testing y NO es parte del contrato público del módulo.
+ */
+export function _extractAndValidateClinicalContextImpl(
   formData: FormData,
 ): ValidatedClinicalContext | null {
   const raw = formData.get('clinical_context')
@@ -208,42 +275,54 @@ function extractAndValidateClinicalContext(
     parsed = JSON.parse(raw)
   } catch {
     console.warn(
-      '[IMPL-FEATURE-20260824-02] clinical_context no es JSON válido; se omite sin bloquear el upload.',
+      '[IMPL-FEATURE-20260825-02] clinical_context no es JSON válido; se omite sin bloquear el upload.',
     )
     return null
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     console.warn(
-      '[IMPL-FEATURE-20260824-02] clinical_context no es un objeto; se omite sin bloquear el upload.',
+      '[IMPL-FEATURE-20260825-02] clinical_context no es un objeto; se omite sin bloquear el upload.',
     )
     return null
   }
 
-  // Defensa contra prompt injection: validar contra el schema versionado.
-  // Rechazamos versiones futuras desconocidas para evitar bypass evolutivos.
+  // Defensa contra prompt injection: validar contra el schema versionado
+  // correspondiente. Rechazamos versiones futuras desconocidas para
+  // evitar bypass evolutivos.
   const version = (parsed as { schemaVersion?: unknown }).schemaVersion
-  if (version !== ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION) {
+  const supported = SUPPORTED_CLINICAL_CONTEXT_VERSIONS[
+    typeof version === 'string' ? version : ''
+  ]
+  if (!supported) {
     console.warn(
-      `[IMPL-FEATURE-20260824-02] clinical_context.schemaVersion="${String(
+      `[IMPL-FEATURE-20260825-02] clinical_context.schemaVersion="${String(
         version,
       )}" no soportada; se omite sin bloquear el upload.`,
     )
     return null
   }
 
-  const validated = EspirometriaQuestionnairePayloadSchema.safeParse(parsed)
+  const validated = supported.schema(parsed)
   if (!validated.success) {
     console.warn(
-      '[IMPL-FEATURE-20260824-02] clinical_context no cumple el schema versionado; se omite sin bloquear el upload.',
+      '[IMPL-FEATURE-20260825-02] clinical_context no cumple el schema versionado; se omite sin bloquear el upload.',
     )
     return null
   }
 
   return {
     serialized: JSON.stringify(validated.data),
-    schemaVersion: validated.data.schemaVersion,
+    schemaVersion: (validated.data as { schemaVersion: string }).schemaVersion,
+    studyType: supported.studyType,
     present: true,
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+function extractAndValidateClinicalContextImpl(
+  formData: FormData,
+): ValidatedClinicalContext | null {
+  return _extractAndValidateClinicalContextImpl(formData)
 }
 
 // ---------------------------------------------------------------------------
@@ -922,21 +1001,20 @@ export async function submitDoctorStudyReview(
     })
 
     // ── IMPL-FEATURE-20260825-01: generación de PDF validado ────────────────
+    // ── IMPL-FEATURE-20260825-02: dispatch por tipo de estudio ────────────
     let pdfGenerated = false
     let pdfErrorMessage: string | null = null
     if (shouldGeneratePdf && snapshotFullName && snapshotLicense && snapshotSignatureUrl) {
       try {
         const eventTestData = snapshot.extractionSnapshot?.eventTest
         const worker = eventTestData?.event?.worker
+        const studyType =
+          (snapshot.extractionSnapshot?.studyType ?? '') as string
 
         // QA-20260825-01 P3-G: resolver el logo UNA VEZ por proceso (cacheado).
-        // Si la red está caída, devuelve null → el componente usa el fallback
-        // "AMI" sin abortar.
         const logoDataUrl = await resolveAmiLogoDataUrl()
 
-        // QA-20260825-01 P3-F + P2-D: helper puro compartido action/route;
-        // mismo contenido → mismo hash si las entradas no cambian.
-        const pdfData = buildEspirometryPdfData({
+        const baseInput = {
           reviewId: review.id,
           doctorStatus:
             doctorStatus === 'REVIEWED_ACCEPTED'
@@ -948,7 +1026,7 @@ export async function submitDoctorStudyReview(
           prediagnosisData: snapshot.prediagnosisData,
           extractionStructuredData: snapshot.extractionSnapshot?.structuredData,
           studyName: eventTestData?.testNameSnapshot ?? null,
-          studyType: snapshot.extractionSnapshot?.studyType ?? null,
+          studyType,
           patient: {
             firstName: worker?.firstName ?? '',
             lastName: worker?.lastName ?? '',
@@ -961,12 +1039,39 @@ export async function submitDoctorStudyReview(
             signatureImageUrl: snapshotSignatureUrl,
           },
           logoDataUrl,
-        })
+        }
 
-        const pdfResult = await generateEspirometryValidatedPdf({
-          reviewId: review.id,
-          data: pdfData,
-        })
+        // IMPL-FEATURE-20260825-02: dispatch por tipo. Espirometría conserva
+        // el flujo existente (IMPL-FEATURE-20260825-01). Audiometría usa el
+        // template propio con PTA3, PTA fuente, capas NOM/AMI/fuente.
+        let pdfResult:
+          | { url: string | null; hash: string; buffer: Buffer }
+          | null = null
+        const typedDoctorStatus =
+          doctorStatus === 'REVIEWED_ACCEPTED'
+            ? 'REVIEWED_ACCEPTED' as const
+            : 'REVIEWED_EDITED' as const
+        if (studyType === 'Audiometria') {
+          const pdfData = buildAudiometriaPdfData({
+            ...baseInput,
+            doctorStatus: typedDoctorStatus,
+          })
+          pdfResult = await generateAudiometriaValidatedPdf({
+            reviewId: review.id,
+            data: pdfData,
+          })
+        } else {
+          // Default: Espirometría (FEATURE-20260825-01). Otros estudios sin
+          // template propio: NO se genera PDF (contrato vigente).
+          const pdfData = buildEspirometryPdfData({
+            ...baseInput,
+            doctorStatus: typedDoctorStatus,
+          })
+          pdfResult = await generateEspirometryValidatedPdf({
+            reviewId: review.id,
+            data: pdfData,
+          })
+        }
 
         await prisma.doctorStudyReview.update({
           where: { id: review.id },
