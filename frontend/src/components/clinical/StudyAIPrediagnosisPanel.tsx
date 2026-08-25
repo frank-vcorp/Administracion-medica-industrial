@@ -104,6 +104,14 @@ interface DoctorReviewSummary {
   doctorDiagnosis: string | null
   doctorNotes: string | null
   createdAt: Date
+  /**
+   * IMPL-FEATURE-20260825-01: indica si el PDF validado quedó generado y
+   * referenciado. Si está ausente en un registro histórico (pre-incremento),
+   * se considera `false` para no romper la UI.
+   */
+  pdfGenerated?: boolean | null
+  /** Mensaje de error de generación del PDF (visible al usuario). */
+  pdfErrorMessage?: string | null
 }
 
 interface AIPrediagnosisSnapshot {
@@ -255,6 +263,16 @@ function DoctorReviewForm({
       })
 
       if (result.success) {
+        // IMPL-FEATURE-20260825-01: si la server action reporta que el PDF
+        // validado no pudo generarse (perfil incompleto o error de render),
+        // exponemos el mensaje al médico sin abortar la revisión.
+        if (result.pdfGenerated === false && result.pdfErrorMessage) {
+          setError(
+            `Revisión guardada, pero el PDF validado no se generó: ${result.pdfErrorMessage}`,
+          )
+        } else {
+          setError('')
+        }
         onSubmitted()
       } else {
         setError(result.error || 'Error al guardar la revisión')
@@ -641,6 +659,44 @@ export default function StudyAIPrediagnosisPanel({
             )}
             {existingReview.doctorNotes && (
               <p className="text-xs text-slate-500 mt-1 italic">{existingReview.doctorNotes}</p>
+            )}
+
+            {/* IMPL-FEATURE-20260825-01: botón de descarga del PDF validado.
+                Sólo aparece cuando la decisión aceptó o editó (no en
+                rechazo, que no genera PDF por contrato de la SPEC). */}
+            {(existingReview.doctorStatus === 'REVIEWED_ACCEPTED' ||
+              existingReview.doctorStatus === 'REVIEWED_EDITED') && (
+              <div className="mt-3 pt-3 border-t border-slate-100" data-testid="espirometry-pdf-download-block">
+                {existingReview.pdfGenerated || !existingReview.pdfErrorMessage ? (
+                  <a
+                    href={`/api/pdf/espirometry/${existingReview.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 px-3 py-2 rounded-lg transition-colors"
+                    data-testid="espirometry-pdf-download-link"
+                  >
+                    <span>📄</span>
+                    <span>Descargar PDF validado</span>
+                  </a>
+                ) : (
+                  <div
+                    className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+                    data-testid="espirometry-pdf-error"
+                  >
+                    ⚠️ PDF no disponible.
+                    {existingReview.pdfErrorMessage ? (
+                      <span className="block mt-1">
+                        <strong>Motivo:</strong> {existingReview.pdfErrorMessage}
+                      </span>
+                    ) : (
+                      <span className="block mt-1">
+                        Completa tu perfil médico (cédula y firma) y vuelve a aceptar/editar la
+                        revisión. <a href="/profile" className="underline">Ir al perfil</a>.
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
