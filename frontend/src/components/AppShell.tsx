@@ -55,24 +55,27 @@ function NavSection({ label, collapsed }: { label: string; collapsed?: boolean }
 function SidebarAccount({
   fullName,
   collapsed,
+  profileHref,
 }: {
   fullName?: string | null
   collapsed?: boolean
+  profileHref?: string
 }) {
   if (collapsed) {
-    return (
+    const account = (
       <div className="px-2 pb-3 pt-2 border-t border-slate-800">
         <div className="w-10 h-10 mx-auto rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
           {(fullName || 'U').trim().charAt(0).toUpperCase()}
         </div>
       </div>
     )
+    return profileHref ? <Link href={profileHref} title="Mi perfil médico">{account}</Link> : account
   }
 
-  return (
+  const account = (
     <div className="px-4 pb-4 pt-3 border-t border-slate-800">
       <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cuenta</p>
-      <div className="mt-2 flex items-center gap-3 rounded-xl bg-slate-800 border border-slate-700 px-3 py-2">
+      <div className={`mt-2 flex items-center gap-3 rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 ${profileHref ? 'hover:bg-slate-700 transition-colors cursor-pointer' : ''}`}>
         <div className="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-200 shrink-0">
           {(fullName || 'U').trim().charAt(0).toUpperCase()}
         </div>
@@ -83,6 +86,7 @@ function SidebarAccount({
       </div>
     </div>
   )
+  return profileHref ? <Link href={profileHref} aria-label="Abrir mi perfil médico">{account}</Link> : account
 }
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -113,6 +117,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showStaffItems = isLoading || (!isCompanyClient && !!role)
   const showAdminItems = isAdmin
   const showPortalItems = isCompanyClient
+  const canEditProfile = role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR'
   const isEventWorkspace = /^\/events\/[^/]+$/.test(pathname || '')
   const handleSignOut = () => {
     void signOut({ callbackUrl: '/login' })
@@ -153,6 +158,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <NavSection label="Médico" collapsed={isEventWorkspace} />
               <NavItem href="/events" icon="📁" label="Expedientes Activos" collapsed={isEventWorkspace} />
               <NavItem href="/validation" icon="✅" label="Validación" collapsed={isEventWorkspace} />
+              {/* IMPL-FEATURE-20260825-01 / QA-20260825-01 P1-B: ruta fuera
+                  de /admin/* (middleware bloqueaba DOCTOR_*). El page.tsx
+                  hace redirect al dashboard si el rol no aplica. */}
+              {(role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR') && (
+                <NavItem href="/profile" icon="🖋️" label="Mi perfil médico" collapsed={isEventWorkspace} />
+              )}
 
               <NavSection label="Empresas" collapsed={isEventWorkspace} />
               <NavItem href="/companies" icon="🏢" label="Empresas Cliente" collapsed={isEventWorkspace} />
@@ -200,7 +211,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
           )}
         </nav>
 
-        <SidebarAccount fullName={session?.user?.fullName} collapsed={isEventWorkspace} />
+        <SidebarAccount
+          fullName={session?.user?.fullName}
+          collapsed={isEventWorkspace}
+          profileHref={canEditProfile ? '/profile' : undefined}
+        />
       </aside>
 
       {/* Contenido principal */}
