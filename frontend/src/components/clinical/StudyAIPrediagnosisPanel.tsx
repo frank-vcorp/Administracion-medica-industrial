@@ -579,11 +579,14 @@ export default function StudyAIPrediagnosisPanel({
 
         {/* Limitaciones */}
         {(predxData.limitations ?? []).length > 0 && (
-          // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada.
+          // IMPL-20260824-01 (FEATURE-20260824-01): colapsada por defecto.
+          // El médico la expande cuando la necesite. Contenido accesible
+          // (sigue en el DOM, oculto por CSS hasta expandir).
           // DEC-20260824-02 / IMPL-20260824-06: reubicada antes de Justificación
           // para que el médico lea primero las restricciones técnicas antes
           // de la narrativa causal.
-          <details open data-testid="prediagnosis-section-limitaciones">
+          // FND-20260825-13: UX ajustada — sin atributo `open`.
+          <details data-testid="prediagnosis-section-limitaciones">
             <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700 select-none">
               Limitaciones ({predxData.limitations.length})
             </summary>
@@ -597,11 +600,12 @@ export default function StudyAIPrediagnosisPanel({
 
         {/* Justificación */}
         {(predxData.justification ?? []).length > 0 && (
-          // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada para que
-          // el médico vea la trazabilidad IA sin clicks extra. El usuario puede
-          // colapsarla manualmente; el contrato IA no cambia.
+          // IMPL-20260824-01 (FEATURE-20260824-01): colapsada por defecto.
+          // El contrato IA no cambia: el contenido sigue presente y
+          // accesible al expandir; el médico decide cuándo consultarlo.
           // DEC-20260824-02 / IMPL-20260824-06: reubicada después de Limitaciones.
-          <details open data-testid="prediagnosis-section-justificacion">
+          // FND-20260825-13: UX ajustada — sin atributo `open`.
+          <details data-testid="prediagnosis-section-justificacion">
             <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700 select-none">
               Justificación ({predxData.justification.length} razones)
             </summary>
@@ -615,8 +619,9 @@ export default function StudyAIPrediagnosisPanel({
 
         {/* Citas clínicas — IMPL-20260326-04: fuentes con URL conocida son enlaces clicables */}
         {(predxData.citations ?? []).length > 0 && (
-          // IMPL-20260824-01 (FEATURE-20260824-01): inicia desplegada.
-          <details open data-testid="prediagnosis-section-fuentes">
+          // IMPL-20260824-01 (FEATURE-20260824-01): colapsada por defecto.
+          // FND-20260825-13: UX ajustada — sin atributo `open`.
+          <details data-testid="prediagnosis-section-fuentes">
             <summary className="text-[11px] font-semibold text-slate-400 cursor-pointer hover:text-slate-600 select-none">
               Fuentes clínicas ({predxData.citations.length})
             </summary>

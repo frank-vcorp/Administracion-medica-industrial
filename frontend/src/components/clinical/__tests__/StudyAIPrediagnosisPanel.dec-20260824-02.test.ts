@@ -11,7 +11,8 @@
  *     y `recommended_actions` array. Si el snapshot no trae ninguno, la
  *     sección se OMITE (no se inventa contenido en frontend).
  *   - AC-DEC-02-3: las tres secciones de evidencia (Justificación, Limitaciones,
- *     Fuentes clínicas) siguen iniciando con `details open`.
+ *     Fuentes clínicas) existen con `data-testid` estable y contenido accesible;
+ *     tras el ajuste UX FND-20260825-13 inician COLLAPSADAS (sin atributo `open`).
  *   - AC-DEC-02-4: el orden DOM final del panel clínico es
  *       Hallazgo sugerido → Recomendaciones sugeridas → Confianza →
  *       Limitaciones → Justificación → Fuentes clínicas
@@ -266,16 +267,24 @@ describe('StudyAIPrediagnosisPanel — DEC-20260824-02 / IMPL-20260824-06', () =
     expect(html).not.toContain('Recomendaciones sugeridas')
   })
 
-  it('AC-DEC-02-3: Justificación, Limitaciones y Fuentes clínicas inician con `details open`', () => {
+  it('AC-DEC-02-3: Justificación, Limitaciones y Fuentes clínicas existen con `data-testid` y contenido accesible al expandir', () => {
     const html = renderToStaticMarkup(
       createElement(StudyAIPrediagnosisPanel, baseProps(FULL_PREDIAGNOSIS))
     )
-    const openDetailsMatches = html.match(/<details[^>]*\sopen\b/g) ?? []
-    expect(openDetailsMatches.length).toBeGreaterThanOrEqual(3)
-    // Testids presentes en cada sección.
+    // FND-20260825-13: ajuste UX — las tres secciones inician colapsadas.
+    expect(html).not.toMatch(/<details[^>]*\sopen\b/)
+    // Pero los contenedores `<details>` y sus `data-testid` siguen presentes,
+    // y el contenido sigue dentro del DOM (accesible al expandir).
     expect(html).toContain('data-testid="prediagnosis-section-limitaciones"')
     expect(html).toContain('data-testid="prediagnosis-section-justificacion"')
     expect(html).toContain('data-testid="prediagnosis-section-fuentes"')
+    expect(html).toContain(
+      'Sin valores LLN específicos por etnia/edad/sexo.',
+    )
+    expect(html).toContain(
+      'FEV1/FVC 0.66 (LLN 0.72) — debajo del límite inferior.',
+    )
+    expect(html).toContain('ATS/ERS 2022 — Standardization of Spirometry')
   })
 
   it('AC-DEC-02-4: orden DOM final = Hallazgo → Recomendaciones → Confianza → Limitaciones → Justificación → Fuentes', () => {

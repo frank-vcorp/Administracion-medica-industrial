@@ -1,14 +1,19 @@
 /**
- * Tests focales (V1) para StudyAIPrediagnosisPanel — cambio UI FEATURE-20260824-01.
+ * @file Tests focales (V1) para StudyAIPrediagnosisPanel — cambio UI FEATURE-20260824-01
+ *   y UX adjust FND-20260825-13.
  *
- * Cubre AC-4: Justificación, Limitaciones y Fuentes clínicas deben iniciar
- * desplegadas (`details open`) sin cambiar el contrato IA ni el modo sombra
- * clínica.
+ * Cubre AC-4: Justificación, Limitaciones y Fuentes clínicas deben existir
+ * con el contrato IA intacto y modo sombra clínica preservado.
+ *
+ * UX FND-20260825-13: las tres secciones inician COLAPSADAS (sin atributo
+ * `open`) — Frank. Antes iniciaban desplegadas (`details open`). El contenido
+ * sigue presente en el DOM (el navegador sólo lo oculta hasta expandir) y el
+ * médico puede desplegarlo manualmente. El contrato IA no cambia.
  *
  * Implementación: SSR puro con `renderToStaticMarkup` (sin DOM environment).
  * Consistente con `ClinicalExtractionRenderer.fase5.test.ts`.
  *
- * @id IMPL-20260824-01
+ * @id IMPL-20260824-01 / FND-20260825-13
  * @backup context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md
  */
 
@@ -25,8 +30,8 @@ const SNAPSHOT_BASE = {
   isSuperseded: false,
 }
 
-describe('StudyAIPrediagnosisPanel — AC-4 details open por defecto', () => {
-  it('Justificación, Limitaciones y Fuentes clínicas inician con atributo open', () => {
+describe('StudyAIPrediagnosisPanel — FND-20260825-13 details cerrados por defecto', () => {
+  it('Justificación, Limitaciones y Fuentes clínicas inician COLAPSADAS (sin atributo open)', () => {
     const html = renderToStaticMarkup(
       createElement(StudyAIPrediagnosisPanel, {
         prediagnosisSnapshotId: 'snap-1',
@@ -72,16 +77,26 @@ describe('StudyAIPrediagnosisPanel — AC-4 details open por defecto', () => {
     // Resumen IA y confianza siguen presentes
     expect(html).toContain('Sugerencia IA de prueba.')
 
-    // Los tres <details> deben iniciar con atributo open
-    // Contamos ocurrencias de "<details open>" para asegurar que las tres
-    // secciones (Justificación, Limitaciones, Fuentes clínicas) están abiertas
+    // FND-20260825-13: ningún `<details open>` debe quedar en el HTML
+    // de estas tres secciones — todas inician colapsadas.
     const openDetailsMatches = html.match(/<details[^>]*\sopen\b/g) ?? []
-    expect(openDetailsMatches.length).toBeGreaterThanOrEqual(3)
+    expect(openDetailsMatches.length).toBe(0)
 
-    // Texto visible de cada sección (no debe quedar contraído)
+    // Texto sigue presente en el DOM aunque esté colapsado (accesible al
+    // expandir). El navegador lo muestra al pulsar el `<summary>`.
     expect(html).toContain('FEV1/FVC ratio bajo respecto a la referencia.')
     expect(html).toContain('Documento sin sello ni firma del médico responsable.')
     expect(html).toContain('ATS/ERS 2022 — Standardization of Spirometry')
+
+    // El `<summary>` queda como trigger accesible por teclado y screen reader.
+    expect(html).toContain('Limitaciones (1)')
+    expect(html).toContain('Justificación (2 razones)')
+    expect(html).toContain('Fuentes clínicas (1)')
+
+    // data-testid intactos para V3 / Playwright / auditorías de regresión.
+    expect(html).toContain('data-testid="prediagnosis-section-limitaciones"')
+    expect(html).toContain('data-testid="prediagnosis-section-justificacion"')
+    expect(html).toContain('data-testid="prediagnosis-section-fuentes"')
   })
 
   it('Mantiene guardrail "Modo sombra clínica" y no convierte secciones en diagnóstico final', () => {
