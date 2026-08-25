@@ -1013,54 +1013,27 @@ export default function EspirometriaClinicalCriteriaPanel({
         </div>
       </div>
 
-      {/* === BLOQUE 4: notas de calidad — FEATURE-20260824-01 mini-corte ===
-          OCULTO visualmente del panel: `notas_calidad` se SIGUE leyendo del
-          snapshot en `resolveCriteria` (c.notasCalidad) para conservarlo en
-          auditoría / payload persistido, pero NO se renderiza aquí para
-          evitar duplicación con el resto de criterios cualitativos y
-          numéricos (Pico/Forma/Libre/Meseta/Tiempo/Criterios/Calidad).
-          Ver `IMPL-REPORT-FEATURE-20260824-01_ESPIROMETRIA-EVENT.md`. */}
+{/* === BLOQUE 4: notas de calidad — FEATURE-20260824-01 mini-corte ===
+           OCULTO visualmente del panel: `notas_calidad` se SIGUE leyendo del
+           snapshot en `resolveCriteria` (c.notasCalidad) para conservarlo en
+           auditoría / payload persistido, pero NO se renderiza aquí para
+           evitar duplicación con el resto de criterios cualitativos y
+           numéricos (Pico/Forma/Libre/Meseta/Tiempo/Criterios/Calidad).
+           Ver `IMPL-REPORT-FEATURE-20260824-01_ESPIROMETRIA-EVENT.md`. */}
 
-      {/* === BLOQUE 5: texto fuente del documento (NO IA) === */}
-      {c.impresionTexto || c.recomendacionesTexto ? (
-        <div
-          className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2"
-          data-criteria-group="fuente-texto"
-        >
-          <p
-            className="text-[10px] font-bold text-amber-800 uppercase tracking-wider"
-            style={headerStyle}
-          >
-            Texto fuente del documento (no es diagnóstico IA)
-          </p>
-          {c.impresionTexto ? (
-            <div data-criteria-key="Impresión diagnóstica (texto fuente)">
-              <p
-                className="text-[10px] font-semibold text-amber-700 uppercase"
-                style={headerStyle}
-              >
-                Impresión diagnóstica
-              </p>
-              <p className="text-xs text-amber-900 leading-relaxed">
-                {c.impresionTexto}
-              </p>
-            </div>
-          ) : null}
-          {c.recomendacionesTexto ? (
-            <div data-criteria-key="Recomendaciones (texto fuente)">
-              <p
-                className="text-[10px] font-semibold text-amber-700 uppercase"
-                style={headerStyle}
-              >
-                Recomendaciones
-              </p>
-              <p className="text-xs text-amber-900 leading-relaxed">
-                {c.recomendacionesTexto}
-              </p>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      {/* === BLOQUE 5 ELIMINADO (IMPL-FIX-20260824-XX rev. UI) ===
+           Anteriormente se renderizaba aquí un bloque amber con el
+           "Texto fuente del documento (NO es diagnóstico IA)" mostrando
+           `impresionTexto` y `recomendacionesTexto` del snapshot. Frank
+           confirmó que ya no debe aparecer en Criterios clínicos — los
+           datos del snapshot (`impresion_diagnostica_texto` /
+           `recomendaciones_texto`) SE SIGUEN leyendo del payload en
+           `resolveCriteria` y se exponen como `c.impresionTexto` /
+           `c.recomendacionesTexto` para auditoría (logs, QA, export del
+           JSON), pero NO se renderizan aquí. La impresión diagnóstica
+           sugerida ahora vive en el BLOQUE del prediagnóstico IA
+           (modo sombra, revisión médica), y las recomendaciones
+           ocupacionales contextualizadas también. */}
     </div>
   )
 }

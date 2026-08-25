@@ -264,10 +264,10 @@ describe('EspirometriaClinicalCriteriaPanel — AC-6 helper discriminador', () =
   })
 })
 
-// --- Texto fuente del documento (sin cambios desde rev. 1.0) ---
+// --- Texto fuente del documento ELIMINADO del panel UI (rev. UI Frank) ---
 
-describe('EspirometriaClinicalCriteriaPanel — texto fuente del documento', () => {
-  it('Cuando impresion_diagnostica_texto está presente, se renderiza con marbete explícito y NO se promueve como IA', () => {
+describe('EspirometriaClinicalCriteriaPanel — texto fuente del documento (eliminado del panel UI)', () => {
+  it('Cuando impresion_diagnostica_texto está presente, NO se renderiza en el panel UI (Frank confirmó)', () => {
     const html = renderToStaticMarkup(
       createElement(EspirometriaClinicalCriteriaPanel, {
         extractedData: {
@@ -281,15 +281,40 @@ describe('EspirometriaClinicalCriteriaPanel — texto fuente del documento', () 
         },
       })
     )
-    expect(html).toContain('Texto fuente del documento (no es diagnóstico IA)')
-    expect(html).toContain('Impresión diagnóstica')
-    expect(html).toContain('Recomendaciones')
-    expect(html).toContain('PATRÓN ESPIROMÉTRICO RESTRICTIVO FVC: 70%')
-    expect(html).toContain('INDICAR EJERCICIOS RESPIRATORIOS')
-    expect(html).toContain('data-criteria-group="fuente-texto"')
+    // El bloque amber "Texto fuente del documento" NO aparece en la UI.
+    expect(html).not.toContain('Texto fuente del documento (no es diagnóstico IA)')
+    expect(html).not.toContain('data-criteria-group="fuente-texto"')
+    // Las etiquetas "Impresión diagnóstica" / "Recomendaciones" como
+    // campos del snapshot NO aparecen en la UI (la impresión diagnóstica
+    // vive ahora en el bloque del prediagnóstico IA, modo sombra).
+    expect(html).not.toContain('Impresión diagnóstica (texto fuente)')
+    expect(html).not.toContain('Recomendaciones (texto fuente)')
+    // El texto del médico NO aparece tal cual en el panel.
+    expect(html).not.toContain('PATRÓN ESPIROMÉTRICO RESTRICTIVO FVC: 70%')
+    expect(html).not.toContain('INDICAR EJERCICIOS RESPIRATORIOS')
   })
 
-  it('Ausencia de texto fuente → no se renderiza el bloque amber', () => {
+  it('Los datos del snapshot siguen disponibles para auditoría (resolveCriteria)', () => {
+    // Aunque NO se renderiza, los datos del snapshot siguen expuestos en
+    // `ResolvedCriteria` para QA/export/auditoría.
+    const c = resolveCriteria({
+      calidad: {
+        impresion_diagnostica_texto:
+          'PATRÓN ESPIROMÉTRICO RESTRICTIVO FVC: 70%',
+        recomendaciones_texto:
+          'INDICAR EJERCICIOS RESPIRATORIOS. SE SUGIERE COMPLEMENTAR CON RADIOGRAFÍA DE TÓRAX.',
+      },
+      parametros: PARAMETROS_FIXTURE,
+    })
+    expect(c.impresionTexto).toBe(
+      'PATRÓN ESPIROMÉTRICO RESTRICTIVO FVC: 70%'
+    )
+    expect(c.recomendacionesTexto).toBe(
+      'INDICAR EJERCICIOS RESPIRATORIOS. SE SUGIERE COMPLEMENTAR CON RADIOGRAFÍA DE TÓRAX.'
+    )
+  })
+
+  it('Ausencia de texto fuente → no se renderiza el bloque (regresión preservada)', () => {
     const html = renderToStaticMarkup(
       createElement(EspirometriaClinicalCriteriaPanel, {
         extractedData: FULL_EXTRACTED,
