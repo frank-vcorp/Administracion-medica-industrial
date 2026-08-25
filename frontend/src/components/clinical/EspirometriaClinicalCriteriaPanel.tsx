@@ -51,6 +51,14 @@
  * @id IMPL-20260824-05 — Fix precedencia booleanos ≤150 (derivan SIEMPRE del numérico)
  * @id IMPL-20260824-06 — rev. 1.5 invalida repetibilidad cuando el backend marca
  *   `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`/`_FVC` (duplicación M2→M1 o pérdida de M1).
+ * @id IMPL-FIX-20260824-04-rev3 — ampliación de la detección de
+ *   inconsistencia: reconoce TANTO el código backend (rev. 1.5) COMO la
+ *   frase estructurada "Inconsistencia detectada ... Mejor <param> ...
+ *   fila estándar <param>" (caso Event v10). Helper exportado:
+ *   `detectParamInconsistency(notasCalidad, "FEV1"|"FVC")`. Cuando la
+ *   fila es inconsistente y la repetibilidad NO proviene del texto
+ *   nativo extraído (`source !== "extracted"`), el panel muestra `—`
+ *   para ml, operación y flag ≤150 — nunca 0.
  * @backup context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md (rev. 1.3)
  */
 import type { CSSProperties, ReactElement } from "react"
@@ -276,6 +284,54 @@ function normalizeSiNo(value: unknown): "SI" | "NO" | null {
   if (v.startsWith("SÍ") || v === "SI" || v === "S") return "SI"
   if (v === "NO" || v === "N") return "NO"
   return null
+}
+
+/**
+ * FIX-IMPL-FIX-20260824-04-rev3 — Detector robusto de inconsistencia por
+ * parámetro (FEV1 o FVC).
+ *
+ * Reconoce DOS formas equivalentes de la anotación:
+ *
+ *  1) Código explícito del normalizador backend (rev. 1.5+):
+ *       `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` / `SOSPECHA_INCONSISTENCIA_MEJOR_FVC`
+ *       (producido por `_normalize_espirometria_result` en
+ *       `backend/app/services/ai/extractor.py:602-702` cuando el máximo
+ *       de la fila estándar X es menor que la fila "Mejor X").
+ *
+ *  2) Frase estructurada (caso Event v10 reportado por Frank):
+ *       `Inconsistencia detectada entre fila 'Mejor FEV1' ... y fila
+ *        estándar FEV1 ... SOSPECHA_MAPEO`
+ *       El backend antiguo (o un proveedor que aún no emite el código)
+ *       usa esta prosa como narrativa. Se exige la combinación
+ *       EXPLÍCITA de las TRES señales referidas al MISMO parámetro:
+ *         - "inconsistencia" (case-insensitive)
+ *         - "Mejor <param>"
+ *         - "fila estándar <param>" (con o sin acento)
+ *       para NO ocultar cualquier nota genérica que sólo mencione una
+ *       de las palabras sueltas.
+ *
+ * Devuelve `true` sólo si alguna de las dos formas detecta el mismo
+ * parámetro. `false` en caso contrario (incluyendo string vacío).
+ *
+ * Esta función es EXPORTADA para tests V1 focales.
+ */
+export function detectParamInconsistency(
+  notasCalidad: string | null | undefined,
+  param: "FEV1" | "FVC"
+): boolean {
+  if (!notasCalidad) return false
+  const code = `SOSPECHA_INCONSISTENCIA_MEJOR_${param}`
+  // (1) Código explícito.
+  if (notasCalidad.includes(code)) return true
+  // (2) Frase estructurada. Tres condiciones, todas referidas al MISMO
+  //     parámetro. Regex tolerante a acentos y mayúsculas.
+  const hasInconsistency = /inconsistencia/i.test(notasCalidad)
+  const hasMejor = new RegExp(`\\bmejor\\s+${param}\\b`, "i").test(notasCalidad)
+  const hasFilaEstandar = new RegExp(
+    `\\bfila\\s+est[aá]ndar\\s+${param}\\b`,
+    "i"
+  ).test(notasCalidad)
+  return hasInconsistency && hasMejor && hasFilaEstandar
 }
 
 // --- Componentes de presentación ---
@@ -532,10 +588,8 @@ export function resolveCriteria(
   // FIX-FEATURE-20260824-01 rev. 1.5: invalidación por inconsistencia
   // tabular. Si el normalizador backend marcó la fila FEV1/FVC como
   // inconsistente frente a su fila "Mejor X" (duplicación de M2 como M1
-  // o pérdida de M1 — anotación `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` /
-  // `_FVC` en `notas_calidad`), NO presentamos un cálculo de
-  // repetibilidad espurio (p.ej. 0 ml de (2.11−2.11)×1000) sobre una fila
-  // no confiable.
+  // o pérdida de M1), NO presentamos un cálculo de repetibilidad espurio
+  // (p.ej. 0 ml de (2.11−2.11)×1000) sobre una fila no confiable.
   //
   //   - Ocultamos la operación visible (topTwoNative → null → la línea
   //     de operación muestra "—").
@@ -547,6 +601,15 @@ export function resolveCriteria(
   //     del layout tabular), la conservamos (es la verdad declarada por
   //     el reporte) pero ocultamos la operación espuria derivada de la
   //     fila duplicada.
+  //
+  // FIX-IMPL-FIX-20260824-04-rev3: la detección se amplía para reconocer
+  // TANTO el código backend (`SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`/`_FVC`)
+  // COMO la frase estructurada que aparece en Event v10:
+  //   `Inconsistencia detectada entre fila 'Mejor FEV1' ... y fila
+  //    estándar FEV1 ... SOSPECHA_MAPEO`
+  // Se exige combinación de Mejor + fila estándar + parámetro para el
+  // MISMO parámetro (no se oculta cualquier nota genérica). Helper
+  // exportado: `detectParamInconsistency`.
   const notasCalidadForInconsistency: string = [
     typeof extractedData?.notas_calidad === "string"
       ? (extractedData.notas_calidad as string)
@@ -555,30 +618,40 @@ export function resolveCriteria(
       ? (calidad.notas_calidad as string)
       : "",
   ].join(" ")
-  const fev1Inconsistent = notasCalidadForInconsistency.includes(
-    "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1"
+  const fev1Inconsistent = detectParamInconsistency(
+    notasCalidadForInconsistency,
+    "FEV1"
   )
-  const fvcInconsistent = notasCalidadForInconsistency.includes(
-    "SOSPECHA_INCONSISTENCIA_MEJOR_FVC"
+  const fvcInconsistent = detectParamInconsistency(
+    notasCalidadForInconsistency,
+    "FVC"
   )
   const fvcTopTwoFinal: [number, number] | null =
     fvcInconsistent ? null : fvcCalc.topTwoNative
   const fev1TopTwoFinal: [number, number] | null =
     fev1Inconsistent ? null : fev1Calc.topTwoNative
+  // FIX-IMPL-FIX-20260824-04-rev3 (snapshot v10 Frank): cuando la fila es
+  // inconsistente y NO existe un valor nativo extraído del texto fuente
+  // (`source !== "extracted"`), mostramos "—" (null) para el número, la
+  // operación y el flag ≤150 — NUNCA 0 ml. Si la repetibilidad provenía
+  // del cálculo (`source === "computed"`), se invalida el número. Si
+  // provenía de `missing`, ya era null desde el inicio. La única rama
+  // que conserva el valor numérico es `source === "extracted"` (texto
+  // nativo del reporte, fuente independiente del layout tabular).
   const fvcMlFinal: number | null =
-    fvcInconsistent && repetibilidadFvcSource === "computed"
+    fvcInconsistent && repetibilidadFvcSource !== "extracted"
       ? null
       : repetibilidadFvcMl
   const fev1MlFinal: number | null =
-    fev1Inconsistent && repetibilidadFev1Source === "computed"
+    fev1Inconsistent && repetibilidadFev1Source !== "extracted"
       ? null
       : repetibilidadFev1Ml
   const fvcMenor150Final: "SI" | "NO" | null =
-    fvcInconsistent && repetibilidadFvcSource === "computed"
+    fvcInconsistent && repetibilidadFvcSource !== "extracted"
       ? null
       : repetibilidadFvcMenor150
   const fev1Menor150Final: "SI" | "NO" | null =
-    fev1Inconsistent && repetibilidadFev1Source === "computed"
+    fev1Inconsistent && repetibilidadFev1Source !== "extracted"
       ? null
       : repetibilidadFev1Menor150
 

@@ -738,3 +738,228 @@ ejecute el script contra Railway. Los parámetros del SDK (`max_tokens`,
 objetivo (≤6 sesiones / ≤300 tool calls), V1 dirigida por corte, V2
 focal completa al cierre, sin V3 independiente (no aplica GEMINI/Playwright
 desde SOFIA — decisión de ATLAS).
+
+# Corrección IMPL-FIX-20260824-04-rev3 — Detección robusta de inconsistencia FEV1/FVC (Event v10)
+
+```
+ID intervención: IMPL-FIX-20260824-04-rev3
+ID tarea: FIX-20260824-04 (mismo incremento — corrección IMPLEMENTATION_DEFECT)
+Estado: READY_FOR_VERIFYING (rev. 3)
+SPEC activa: context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md
+             rev. 1.2 (sin cambios — corrección interna frontend-only)
+Discovery refs: DEC-20260824-02, BR-20260824-01, BR-20260824-02,
+                IMPL-FIX-20260824-04-rev1/rev2
+Origen funcional: Frank reportó que el payload real de Event v10 NO
+                  contiene exactamente `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`.
+                  Contiene una frase estructurada:
+                  "Inconsistencia detectada entre fila 'Mejor FEV1' ... y
+                   fila estándar FEV1 ... SOSPECHA_MAPEO".
+                  Por eso `EspirometriaClinicalCriteriaPanel.resolveCriteria`
+                  no invalidaba la operación `(2.11−2.11)=0 ml`.
+```
+
+## Causa raíz
+
+La detección frontend rev. 1.5 (`EspirometriaClinicalCriteriaPanel.tsx:558-563`)
+sólo buscaba la subcadena EXACTA `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`/`_FVC` en
+`notas_calidad`. El normalizador backend rev. 1.5 emite ese código, pero el
+proveedor extractor de Event v10 (u otra capa intermedia) está rindiendo
+el texto con prosa narrativa en lugar del token literal. Resultado:
+
+- `fev1Inconsistent = false` aunque la fila sea objetivamente inconsistente.
+- `fev1MlFinal` = `(2.11−2.11)×1000 = 0` (cálculo espurio sobre fila no
+  confiable).
+- `fev1TopTwoFinal` = `[2.11, 2.11]` (operación visible `(2.11−2.11)×1000`).
+- `fev1Menor150Final` = "SI" (porque 0 ≤ 150 — espurio).
+- En el DOM el médico ve "0 ml" como repetibilidad válida para FEV1.
+
+## Solución aplicada
+
+### 1) Helper `detectParamInconsistency` exportado
+
+`frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx`:
+
+```typescript
+export function detectParamInconsistency(
+  notasCalidad: string | null | undefined,
+  param: "FEV1" | "FVC"
+): boolean {
+  if (!notasCalidad) return false
+  const code = `SOSPECHA_INCONSISTENCIA_MEJOR_${param}`
+  // (1) Código explícito backend.
+  if (notasCalidad.includes(code)) return true
+  // (2) Frase estructurada. Tres condiciones, todas referidas al MISMO
+  //     parámetro. Regex tolerante a acentos y mayúsculas.
+  const hasInconsistency = /inconsistencia/i.test(notasCalidad)
+  const hasMejor = new RegExp(`\\bmejor\\s+${param}\\b`, "i").test(notasCalidad)
+  const hasFilaEstandar = new RegExp(
+    `\\bfila\\s+est[aá]ndar\\s+${param}\\b`,
+    "i"
+  ).test(notasCalidad)
+  return hasInconsistency && hasMejor && hasFilaEstandar
+}
+```
+
+Reconoce DOS formas equivalentes:
+
+1. **Código backend literal** (`SOSPECHA_INCONSISTENCIA_MEJOR_FEV1` /
+   `_FVC`) — compat rev. 1.5+.
+2. **Frase estructurada** (caso v10): combinación EXPLÍCITA de las
+   TRES señales referidas al MISMO parámetro (`\bmejor\s+FEV1\b`,
+   `\bfila\s+est[aá]ndar\s+FEV1\b`, `inconsistencia`). Word boundaries
+   `\b` evitan falsos positivos con subcadenas (p.ej. "FEV10" no
+   matchea "FEV1"). Acento opcional (`est[aá]ndar`).
+
+**Garantía de no-falso-positivo**: las tres condiciones son AND lógico
+sobre el MISMO parámetro. Una nota que sólo mencione "Inconsistencia"
+o sólo "Mejor FEV1" o sólo "fila estándar FEV1" NO dispara la
+invalidación.
+
+### 2) `resolveCriteria` usa el helper + condición numérica ampliada
+
+```typescript
+const fev1Inconsistent = detectParamInconsistency(
+  notasCalidadForInconsistency, "FEV1"
+)
+const fvcInconsistent = detectParamInconsistency(
+  notasCalidadForInconsistency, "FVC"
+)
+```
+
+Y la condición de invalidación numérica se amplía para cubrir AMBOS
+casos problemáticos (`source !== "extracted"` en lugar de sólo
+`source === "computed"`):
+
+```typescript
+// Antes (rev. 1.5):
+const fev1MlFinal = fev1Inconsistent && source === "computed"
+  ? null : fev1Ml
+
+// Ahora (rev. 3): source !== "extracted" cubre computed + missing
+const fev1MlFinal = fev1Inconsistent && source !== "extracted"
+  ? null : fev1Ml
+```
+
+Misma lógica simétrica para `topTwoNative`, `menor150` y FVC. Resultado:
+cuando la fila es inconsistente y NO hay valor nativo extraído del texto
+fuente, el panel muestra `—` (nunca 0).
+
+### 3) Comportamiento esperado para Event v10
+
+Con el texto exacto reportado por Frank:
+
+```text
+notas_calidad: "Inconsistencia detectada entre fila 'Mejor FEV1'
+ (valor consolidado 2.15) y fila estándar FEV1 (m1=2.11, m2=2.11,
+ m3=2.09). Posible duplicación de M2 como M1 o pérdida de M1.
+ Verifique el layout tabular. SOSPECHA_MAPEO."
+```
+
+El panel ahora renderiza:
+
+- **Repetibilidad FEV1**: `—` (placeholder, NO 0 ml).
+- **Operación FEV1**: `FEV1: —` (NO `(2.11−2.11)×1000 = 0 ml`).
+- **Repetibilidad FVC**: 30 ml + `(2.33−2.30)×1000 = 30 ml` (intacto).
+- **Calidad**: no_concluyente preservada si está en `calidad.completitud_documental`.
+
+## Validación ejecutada
+
+### Typecheck
+
+```
+$ cd frontend && npx tsc --noEmit
+exit=0
+```
+
+### Vitest focal
+
+```
+$ cd frontend && npx vitest run src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts
+
+Test Files  1 passed (1)
+     Tests  87 passed (87)   ← 65 pre-existentes + 22 nuevos para rev. 3
+```
+
+22 nuevos tests en 3 grupos:
+
+**Grupo A — `detectParamInconsistency` helper (12 tests):**
+- Detecta código backend literal (FEV1 + FVC).
+- Detecta código backend embebido en prosa (no exacto).
+- Detecta frase estructurada v10 (caso Frank).
+- Variante sin acento (`estandar`).
+- Variante mayúsculas/minúsculas mezcladas.
+- Selectividad FEV1 vs FVC (no cross-detección).
+- NO oculta nota genérica que sólo menciona "inconsistencia".
+- NO oculta nota que sólo menciona "Mejor FEV1" sin "fila estándar".
+- NO oculta nota que sólo menciona "fila estándar FEV1" sin "inconsistencia".
+- NO oculta "MEJOR FEV1" en mayúsculas sin contexto completo.
+- String vacío / null / undefined → false.
+- Word boundary evita matchear "FEV10" como si fuera "FEV1".
+
+**Grupo B — caso Event v10 (6 tests):**
+- v10 (texto en raíz): invalida FEV1 (sin 0 ml), FVC intacto.
+- v10 (texto en calidad.notas_calidad): mismo comportamiento — defensa
+   por canal.
+- v10 (texto en AMBOS canales): detección robusta.
+- v10 con `repetibilidad_fev1_ml=40` extraída del texto nativo:
+   conserva 40, oculta operación (fuente independiente del layout).
+- v10 render HTML: FEV1 muestra `—` (operación) y NO renderiza
+   `(2.11−2.11) = 0 ml`; FVC intacto 30 ml.
+- v10 con `calidad.completitud_documental="no_concluyente"`: panel
+   respeta ambas señales.
+
+**Grupo C — regresión preservada (4 tests):**
+- FEV1 canónico 2.15/77, 2.11/76, 2.09/75 → 40 ml + operación visible.
+- FVC canónico 2.30/69, 2.33/70, 2.26/68 → 30 ml + operación visible.
+- Duplicación m1=m2 con código backend → sigue marcando inconsistente.
+- Nota genérica SIN marcadores no marca inconsistencia.
+
+### Regresión focal full
+
+```
+$ cd frontend && npx vitest run scripts/__tests__ src/components/clinical/__tests__
+Test Files  7 passed (7)
+     Tests  190 passed (190)
+```
+
+## Archivos modificados (rev. 3, sin commit/push)
+
+```
+frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx                          | M (helper `detectParamInconsistency` + uso en `resolveCriteria` + condición numérica ampliada)
+frontend/src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts             | M (+22 tests en 3 grupos: helper / v10 / regresión)
+```
+
+**Sin cambios** (cumple restricción del usuario):
+- Prompt de extracción v7 — intacto.
+- Endpoint M3 (`https://api.minimax.io/v1`) — intacto.
+- Lógica de extracción backend (`_normalize_espirometria_result`) — intacta.
+- Schema Prisma / migraciones — sin cambios.
+- Scripts de calibración remota — sin cambios.
+- Parámetros SDK M3 (`max_tokens=32768`, `response_format`) — sin cambios.
+
+## Pendientes ATLAS
+
+1. Subir de nuevo `context/RD2026/ESPIROMETRIA.pdf` en Events v10 para
+   verificar que el panel ahora muestra `—` (no 0 ml) para FEV1 y
+   preserva 30 ml para FVC.
+2. Verificar que ningún otro estudio (Audiometría, Laboratorio, etc.)
+   genera falsos positivos por la nueva detección regex (la palabra
+   `mejor` es común en español — el word boundary `\b` +\bparam\b
+   evita matches accidentales).
+3. Decidir si GEMINI audita el cambio (recomendable — superficie UI
+   + nuevo helper exportado).
+4. CRONISTA aplica transición cuando ATLAS confirme verificación.
+5. Autorización Frank para commit/push cuando ATLAS lo autorice.
+
+## Reversibilidad
+
+100% — el cambio es frontend-only. `git checkout` del archivo modificado
++ test file modificado. Sin migración Prisma, sin cambios en BD, sin
+publicación V3.
+
+## Estado final (rev. 3)
+
+**READY_FOR_VERIFYING** — incremento único, presupuesto dentro del
+objetivo (≤6 sesiones / ≤300 tool calls), V1 dirigida por corte, V2
+focal completa al cierre, sin V3 independiente (no aplica GEMINI/Playwright
+desde SOFIA — decisión de ATLAS).
