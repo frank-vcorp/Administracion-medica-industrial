@@ -30,6 +30,14 @@ const BACKEND_URL = (
 ).replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // La firma autógrafa se envía como data URL al Server Action. El límite
+    // predeterminado de 1 MB rechaza firmas PNG/JPEG válidas antes de ejecutar
+    // la acción; se mantiene por debajo del límite de Vercel para funciones.
+    serverActions: {
+      bodySizeLimit: '4mb',
+    },
+  },
   async rewrites() {
     return [
       // Reglas V1 legacy (FIX-20260624-09). Mantener por compat y porque
