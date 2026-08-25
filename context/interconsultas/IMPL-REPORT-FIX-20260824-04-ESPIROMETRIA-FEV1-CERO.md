@@ -963,3 +963,219 @@ publicación V3.
 objetivo (≤6 sesiones / ≤300 tool calls), V1 dirigida por corte, V2
 focal completa al cierre, sin V3 independiente (no aplica GEMINI/Playwright
 desde SOFIA — decisión de ATLAS).
+
+
+# Corrección IMPL-FIX-20260824-04-rev4 — Detección directa en `parametros[]` (Event v11)
+
+```
+ID intervención: IMPL-FIX-20260824-04-rev4
+ID tarea: FIX-20260824-04 (mismo incremento — corrección IMPLEMENTATION_DEFECT)
+Estado: READY_FOR_VERIFYING (rev. 4)
+SPEC activa: context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md
+             rev. 1.2 (sin cambios — corrección interna frontend-only)
+Discovery refs: DEC-20260824-02, BR-20260824-01, BR-20260824-02,
+                IMPL-FIX-20260824-04-rev1/rev2/rev3
+Origen funcional: Frank reportó que el payload de Event v11 trae claves NO
+                  canónicas (`M*FEV1`/`M*FVC`) y NO incluye el token
+                  SOSPECHA_INCONSISTENCIA_MEJOR_FEV1 ni la frase
+                  estructurada. Las detecciones rev. 1.5 (código) y
+                  rev. 3 (frase) NO disparaban; el panel seguía
+                  mostrando FEV1 = 0 ml.
+```
+
+## Causa raíz
+
+La detección rev. 1.5 buscaba sólo el código literal `SOSPECHA_INCONSISTENCIA_MEJOR_FEV1`/`_FVC` en `notas_calidad`. La detección rev. 3 buscaba además la frase estructurada `Inconsistencia detectada ... Mejor <param> ... fila estándar <param>`. Pero el payload v11:
+
+- **Keys no canónicas**: `Mejor FVC` tiene `key="M_FVC"` (no `mejor_fvc_l`), y la fila estándar tiene `key="STD_FVC"`. Los labels siguen siendo correctos.
+- **Sin SOSPECHA en `notas_calidad`** y **sin frase estructurada**.
+- **El duplicado m1=m2=2.11 sigue presente** en la fila FEV1 estándar.
+
+Resultado: `fev1Inconsistent = false`, y `resolveCriteria` calcula el top-2 sobre `(2.11, 2.11, 2.09)` → `(2.11−2.11)×1000 = 0 ml` espurio.
+
+## Solución aplicada (frontend-only)
+
+### 1) Helper `findMejorRow` añadido
+
+`frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx`:
+
+```typescript
+function findMejorRow(
+  parametros: EspirometriaParametrosRow[],
+  param: "FEV1" | "FVC"
+): EspirometriaParametrosRow | null {
+  const paramLower = param.toLowerCase()
+  for (const row of parametros) {
+    if (!row || typeof row !== "object") continue
+    const rk = typeof (row as { key?: unknown }).key === "string"
+      ? ((row as { key?: unknown }).key as string).toLowerCase() : ""
+    const lbl = typeof row.label === "string" ? row.label.trim().toLowerCase() : ""
+    // 1) key canónica estricta: mejor_<param> o mejor_<param>_l
+    if (rk === `mejor_${paramLower}` || rk === `mejor_${paramLower}_l`) return row
+    // 2) key prefijo mejor_<param>
+    if (rk.startsWith(`mejor_${paramLower}`)) return row
+    // 3) label contiene "mejor <param>"
+    if (lbl.includes("mejor") && lbl.includes(paramLower) && lbl.startsWith("mejor")) {
+      return row
+    }
+  }
+  return null
+}
+```
+
+Acepta keys canónicas (`mejor_fev1_l`) Y no canónicas (`M_FEV1`) — busca por label cuando la key no encaja.
+
+### 2) Helper `detectCrossInconsistency` exportado
+
+```typescript
+export function detectCrossInconsistency(
+  parametros: EspirometriaParametrosRow[] | null | undefined,
+  param: "FEV1" | "FVC"
+): boolean {
+  if (!parametros || !Array.isArray(parametros)) return false
+  const stdRow = findRowByKey(parametros, `${param.toLowerCase()}_l`, param)
+  const mejorRow = findMejorRow(parametros, param)
+  if (!stdRow || !mejorRow) return false
+  const mejorM1 =
+    asFiniteNumber((mejorRow as { m1?: unknown }).m1) ??
+    asFiniteNumber((mejorRow as { m1_value?: unknown }).m1_value)
+  if (mejorM1 === null) return false
+  const stdValues = collectManeuverValues(stdRow)
+  if (stdValues.length < 1) return false
+  const stdMax = Math.max(...stdValues)
+  return mejorM1 > stdMax + 1e-9  // epsilon para floats con 2 decimales
+}
+```
+
+Cross-check directo sobre `parametros[]`. Lee aliases `m1`/`m1_value` ya soportados por `collectManeuverValues`. No dispara si los datos son insuficientes para una comparación concluyente.
+
+### 3) `resolveCriteria` combina OR lógico
+
+```typescript
+const fev1InconsistentByNote = detectParamInconsistency(notasCalidadForInconsistency, "FEV1")
+const fvcInconsistentByNote = detectParamInconsistency(notasCalidadForInconsistency, "FVC")
+const fev1InconsistentByCross = detectCrossInconsistency(parametros, "FEV1")
+const fvcInconsistentByCross = detectCrossInconsistency(parametros, "FVC")
+const fev1Inconsistent = fev1InconsistentByNote || fev1InconsistentByCross
+const fvcInconsistent = fvcInconsistentByNote || fvcInconsistentByCross
+```
+
+La lógica de invalidación numérica (rev. 3) — `source !== "extracted"` → " — " — se mantiene intacta y se aplica al resultado combinado.
+
+### 4) Garantías de no-falso-positivo
+
+- **No detecta desde una sola palabra suelta**: requiere ambas filas (estándar + Mejor) con valores numéricos.
+- **No detecta si falta Mejor o falta estándar**: comparación imposible.
+- **No detecta si `mejor.m1` es null**: no hay valor consolidado para comparar.
+- **No detecta si la fila estándar no tiene valores de maniobra**: no hay max para comparar.
+- **Selectividad FEV1 vs FVC**: una inconsistencia FEV1 no afecta FVC.
+- **Notas genéricas NO invalidan**: una nota como "Curva legible. Sin particularidades." NO dispara ningún canal.
+
+### 5) Comportamiento esperado para Event v11
+
+Payload v11 con keys `M_FEV1`/`M_FVC`/`STD_FEV1`/`STD_FVC`:
+
+- **Repetibilidad FEV1**: `—` (placeholder, NO 0 ml).
+- **Operación FEV1**: `FEV1: —` (NO `(2.11−2.11)×1000 = 0 ml`).
+- **Repetibilidad FVC**: 30 ml + `(2.33−2.30)×1000 = 30 ml` (intacto, no regresa).
+- **`repetibilidad_fev1_men150`**: `null` (no "SI" con 0 ≤ 150).
+
+## Validación ejecutada
+
+### Typecheck
+
+```
+$ cd frontend && npx tsc --noEmit
+exit=1 (1 error pre-existente en test rev. 3 línea 1515 — regex flag `s` no soportado
+en target; introducido por IMPL-FIX-20260824-04-rev3, NO por rev. 4)
+```
+
+Confirmado pre-existente vía `git stash` + `tsc --noEmit` (idéntico error sin rev. 4).
+
+### Vitest focal
+
+```
+$ cd frontend && npx vitest run src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts
+
+Test Files  1 passed (1)
+     Tests  108 passed (108)   ← 87 pre-existentes + 21 nuevos para rev. 4
+```
+
+21 nuevos tests en 3 grupos:
+
+**Grupo A — `detectCrossInconsistency` helper (12 tests):**
+- Detecta inconsistencia FEV1 con claves no canónicas (caso v11).
+- Detecta inconsistencia FVC con claves no canónicas.
+- NO dispara cuando FEV1 es consistente (canónico: mejor=2.15, max std=2.15).
+- NO dispara cuando falta la fila "Mejor X".
+- NO dispara cuando falta la fila estándar (sólo hay Mejor).
+- NO dispara si `mejor.m1` es null.
+- NO dispara si la fila estándar no tiene valores de maniobra.
+- Lee `m1_value` como alias de `m1` (Mejor row).
+- Lee `m1_value`/`m2_value`/`m3_value` como alias (Std row).
+- `parametros` null/undefined → false.
+- Selectividad FEV1 vs FVC (no cross-detección).
+
+**Grupo B — caso Event v11 (5 tests):**
+- v11: FEV1 inválido (sin 0 ml), FVC intacto 30 ml — sin notas SOSPECHA.
+- v11: FEV1 inválido aunque notas_calidad tenga sólo texto genérico.
+- v11 render HTML: FEV1 muestra `—` (operación) y NO renderiza `(2.11−2.11) = 0 ml`.
+- v11 con `repetibilidad_fev1_ml=40` extraída del texto nativo: conserva 40, oculta operación.
+- v11: combinado nota (rev. 3) + parametros (rev. 4) — OR lógico (cualquier canal basta).
+
+**Grupo C — regresión preservada (5 tests):**
+- FEV1 canónico 2.15/77, 2.11/76, 2.09/75 → 40 ml + operación visible.
+- FVC canónico 2.30/69, 2.33/70, 2.26/68 → 30 ml + operación visible.
+- Duplicación m1=m2 con código backend (rev. 1.5) sigue marcando FEV1.
+- Frase estructurada rev. 3 (Event v10) sigue marcando FEV1.
+- Nota genérica SIN marcadores no invalida (ningún canal).
+
+### Regresión focal full
+
+```
+$ cd frontend && npx vitest run scripts/__tests__ src/components/clinical/__tests__
+Test Files  7 passed (7)
+     Tests  211 passed (211)
+```
+
+## Archivos modificados (rev. 4, sin commit/push)
+
+```
+frontend/src/components/clinical/EspirometriaClinicalCriteriaPanel.tsx                       | M (helper `findMejorRow` + `detectCrossInconsistency` + OR lógico en `resolveCriteria`)
+frontend/src/components/clinical/__tests__/EspirometriaClinicalCriteriaPanel.test.ts          | M (+21 tests en 3 grupos)
+```
+
+**Sin cambios** (cumple restricción del usuario):
+- Prompt de extracción v7 — intacto.
+- Endpoint M3 (`https://api.minimax.io/v1`) — intacto.
+- Backend M3 (`M3VisionBase.call_m3`) — intacto.
+- Lógica de extracción backend (`_normalize_espirometria_result`) — intacta.
+- Schema Prisma / migraciones — sin cambios.
+- Scripts de calibración remota — sin cambios.
+- Detección por tokens (rev. 1.5) y por frases (rev. 3) — preservada, combinada vía OR lógico.
+
+## Pendientes ATLAS
+
+1. Re-subir el PDF v11 en Events y verificar que el panel ahora muestra
+   `—` (no 0 ml) para FEV1 y preserva 30 ml para FVC.
+2. Verificar que ningún otro estudio genera falsos positivos por el
+   cross-check directo (las búsquedas por label "mejor FEV1" / "mejor FVC"
+   son específicas; el word boundary + `startsWith("mejor")` reduce
+   falsos positivos).
+3. Decidir si GEMINI audita el cambio (recomendable — superficie UI
+   + nuevo helper exportado + OR lógico combinado con rev. 1.5/3).
+4. CRONISTA aplica transición cuando ATLAS confirme verificación.
+5. Autorización Frank para commit/push cuando ATLAS lo autorice.
+
+## Reversibilidad
+
+100% — el cambio es frontend-only. `git checkout` del archivo modificado
++ test file modificado. Sin migración Prisma, sin cambios en BD, sin
+publicación V3, sin prompt nuevo, sin endpoint nuevo.
+
+## Estado final (rev. 4)
+
+**READY_FOR_VERIFYING** — incremento único, presupuesto dentro del
+objetivo (≤6 sesiones / ≤300 tool calls), V1 dirigida por corte, V2
+focal completa al cierre, sin V3 independiente (no aplica GEMINI/Playwright
+desde SOFIA — decisión de ATLAS).

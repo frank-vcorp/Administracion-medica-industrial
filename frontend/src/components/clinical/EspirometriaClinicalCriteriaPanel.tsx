@@ -59,6 +59,14 @@
  *   fila es inconsistente y la repetibilidad NO proviene del texto
  *   nativo extraído (`source !== "extracted"`), el panel muestra `—`
  *   para ml, operación y flag ≤150 — nunca 0.
+ * @id IMPL-FIX-20260824-04-rev4 — cross-check DIRECTO sobre `parametros[]`
+ *   (caso Event v11): el payload trae claves no canónicas (`M*FEV1`/
+ *   `M*FVC`) y NO incluye token SOSPECHA. Helpers exportados:
+ *   `findMejorRow(parametros, "FEV1"|"FVC")` y
+ *   `detectCrossInconsistency(parametros, "FEV1"|"FVC")`. La detección
+ *   final es OR lógico: nota inconsistente OR parametros inconsistentes
+ *   → invalidar. FVC 30 ml intacto cuando consistente.
+ *   para ml, operación y flag ≤150 — nunca 0.
  * @backup context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md (rev. 1.3)
  */
 import type { CSSProperties, ReactElement } from "react"
@@ -145,6 +153,114 @@ function isMejorRow(row: EspirometriaParametrosRow): boolean {
   const rk = typeof row.key === "string" ? row.key.trim().toLowerCase() : ""
   if (rk.startsWith("mejor_")) return true
   return false
+}
+
+/**
+ * IMPL-FIX-20260824-04-rev4 (Event v11): localiza la fila "Mejor <param>"
+ * en `parametros[]`. Acepta keys canónicas Y no canónicas:
+ *   - key exacta: `mejor_fev1`, `mejor_fev1_l`, `mejor_fvc`, `mejor_fvc_l`
+ *   - key prefijo: `mejor_<param>` (case-insensitive)
+ *   - label: contiene `mejor <param>` (case-insensitive)
+ *
+ * Devuelve la PRIMERA fila coincidente o `null` si no hay ninguna.
+ * Caso Event v11: el payload trae keys no canónicas (`M*FEV1`/`M*FVC`) pero
+ * los labels siguen siendo `Mejor FEV1` / `Mejor FVC` — esta helper los
+ * encuentra por label cuando la key no encaja con `mejor_*`.
+ */
+function findMejorRow(
+  parametros: EspirometriaParametrosRow[],
+  param: "FEV1" | "FVC"
+): EspirometriaParametrosRow | null {
+  const paramLower = param.toLowerCase()
+  for (const row of parametros) {
+    if (!row || typeof row !== "object") continue
+    const rk =
+      typeof (row as { key?: unknown }).key === "string"
+        ? ((row as { key?: unknown }).key as string).toLowerCase()
+        : ""
+    const lbl =
+      typeof row.label === "string" ? row.label.trim().toLowerCase() : ""
+    // 1) key canónica estricta: mejor_<param> o mejor_<param>_l.
+    if (
+      rk === `mejor_${paramLower}` ||
+      rk === `mejor_${paramLower}_l`
+    ) {
+      return row
+    }
+    // 2) key prefijo mejor_<param> (captura variantes como mejor_fev1_pct_ref).
+    if (rk.startsWith(`mejor_${paramLower}`)) {
+      return row
+    }
+    // 3) label contiene "mejor <param>" (case-insensitive).
+    //    Acepta tanto "Mejor FEV1" como "Mejor de FEV1" / "Mejor valor FEV1".
+    if (lbl.includes(`mejor`) && lbl.includes(paramLower)) {
+      // Defensa adicional: el label NO debe ser la fila estándar
+      // (un label "Mejor FEV1" NO matchea "FEV1" como estándar por nuestro
+      // patrón `mejor + param`, pero podría haber un label raro como
+      // "FEV1 (mejor)". Aquí exigimos que el label EMPIECE con "mejor"
+      // para reducir falsos positivos).
+      if (lbl.startsWith("mejor")) {
+        return row
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * IMPL-FIX-20260824-04-rev4 (Event v11): detección directa en `parametros[]`
+ * de inconsistencia FEV1/FVC entre la fila estándar y la fila "Mejor X".
+ *
+ * Caso Event v11: el payload trae claves no canónicas (`M*FEV1`/`M*FVC`)
+ * y NO incluye el código SOSPECHA_INCONSISTENCIA_MEJOR_FEV1 en
+ * `notas_calidad`. Por eso las detecciones rev. 1.5 (código literal) y
+ * rev. 3 (frase estructurada) NO disparaban, y el panel seguía mostrando
+ * `(2.11−2.11)×1000 = 0 ml`.
+ *
+ * Esta helper hace el cross-check DIRECTAMENTE sobre la tabla:
+ *   1. Localiza la fila estándar FEV1 (excluyendo "Mejor X") por key
+ *      canónica o label exacto `FEV1`.
+ *   2. Localiza la fila "Mejor FEV1" por key (`mejor_fev1`, `mejor_fev1_l`)
+ *      o prefijo, o label que contiene `mejor FEV1`.
+ *   3. Lee `m1` de "Mejor FEV1" (consolidada en Sibelmed: m1=m2=m3=mejor
+ *      valor) y `max(m1, m2, m3)` de la fila estándar (con aliases
+ *      `m1_value`/`m2_value`/`m3_value` ya soportados por
+ *      `collectManeuverValues`).
+ *   4. Si `mejor.m1 > max(std) + epsilon`, marca INCONSISTENCIA.
+ *
+ * Devuelve `true` sólo si:
+ *   - Ambas filas existen.
+ *   - `mejor.m1` es numérico finito.
+ *   - La fila estándar tiene al menos un valor de maniobra.
+ *
+ * No dispara si los datos son insuficientes para una comparación
+ * concluyente. No modifica el payload; es sólo lectura.
+ *
+ * Exportada para tests V1 focales.
+ */
+export function detectCrossInconsistency(
+  parametros: EspirometriaParametrosRow[] | null | undefined,
+  param: "FEV1" | "FVC"
+): boolean {
+  if (!parametros || !Array.isArray(parametros)) return false
+  const stdRow = findRowByKey(
+    parametros,
+    `${param.toLowerCase()}_l`,
+    param
+  )
+  const mejorRow = findMejorRow(parametros, param)
+  if (!stdRow || !mejorRow) return false
+  // Mejor row: el valor consolidado está en `m1` (Sibelmed consolida m1=m2=m3).
+  const mejorM1 =
+    asFiniteNumber((mejorRow as { m1?: unknown }).m1) ??
+    asFiniteNumber((mejorRow as { m1_value?: unknown }).m1_value)
+  if (mejorM1 === null) return false
+  // Standard row: max(m1, m2, m3) usando aliases.
+  const stdValues = collectManeuverValues(stdRow)
+  if (stdValues.length < 1) return false
+  const stdMax = Math.max(...stdValues)
+  // Epsilon para floats con 2 decimales (1e-9).
+  return mejorM1 > stdMax + 1e-9
 }
 
 function collectManeuverValues(
@@ -610,6 +726,17 @@ export function resolveCriteria(
   // Se exige combinación de Mejor + fila estándar + parámetro para el
   // MISMO parámetro (no se oculta cualquier nota genérica). Helper
   // exportado: `detectParamInconsistency`.
+  //
+  // FIX-IMPL-FIX-20260824-04-rev4 (Event v11): AMPLIACIÓN adicional. El
+  // payload de Event v11 trae claves no canónicas (`M*FEV1`/`M*FVC`) y NO
+  // incluye el código SOSPECHA ni la frase estructurada — la detección
+  // por notas falla. Se añade un cross-check DIRECTO sobre `parametros[]`
+  // vía `detectCrossInconsistency`: localiza fila estándar y fila
+  // "Mejor <param>" por label/key, lee `m1` y `max(m1,m2,m3)`, y marca
+  // inconsistencia si `mejor.m1 > max(std) + epsilon`. Combinación
+  // final es OR lógico: nota marca inconsistente OR parametros marcan
+  // inconsistente → invalidar. Tests V1 cubren cada canal y el
+  // combinado.
   const notasCalidadForInconsistency: string = [
     typeof extractedData?.notas_calidad === "string"
       ? (extractedData.notas_calidad as string)
@@ -618,14 +745,18 @@ export function resolveCriteria(
       ? (calidad.notas_calidad as string)
       : "",
   ].join(" ")
-  const fev1Inconsistent = detectParamInconsistency(
+  const fev1InconsistentByNote = detectParamInconsistency(
     notasCalidadForInconsistency,
     "FEV1"
   )
-  const fvcInconsistent = detectParamInconsistency(
+  const fvcInconsistentByNote = detectParamInconsistency(
     notasCalidadForInconsistency,
     "FVC"
   )
+  const fev1InconsistentByCross = detectCrossInconsistency(parametros, "FEV1")
+  const fvcInconsistentByCross = detectCrossInconsistency(parametros, "FVC")
+  const fev1Inconsistent = fev1InconsistentByNote || fev1InconsistentByCross
+  const fvcInconsistent = fvcInconsistentByNote || fvcInconsistentByCross
   const fvcTopTwoFinal: [number, number] | null =
     fvcInconsistent ? null : fvcCalc.topTwoNative
   const fev1TopTwoFinal: [number, number] | null =

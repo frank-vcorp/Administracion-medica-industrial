@@ -38,6 +38,7 @@ import EspirometriaClinicalCriteriaPanel, {
   hasRenderableEspirometriaCriteria,
   computeRepetibilidadFromRow,
   detectParamInconsistency,
+  detectCrossInconsistency,
 } from '../EspirometriaClinicalCriteriaPanel'
 
 // --- Fixture alineada con `context/lote-nocturno-20260820-01/extraction-espirometria-rd2026.json` ---
@@ -1587,6 +1588,289 @@ describe('EspirometriaClinicalCriteriaPanel — IMPL-FIX-20260824-04-rev3 regres
 
   it('REGRESIÓN: nota genérica SIN marcadores no marca inconsistencia', () => {
     // Ningún código + ningún patrón completo = no marcar.
+    const c = resolveCriteria({
+      notas_calidad: 'Curva legible. Sin particularidades.',
+      parametros: PARAMETROS_FIXTURE,
+    })
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// IMPL-FIX-20260824-04-rev4 — Event v11: claves no canónicas, sin token.
+//
+// El payload real de Event v11 trae keys como `M*FEV1`/`M*FVC` (no
+// `mejor_fev1_l`/`fvc_l`/`fev1_l`) y NO incluye el código SOSPECHA ni la
+// frase estructurada. Las detecciones rev. 1.5 y rev. 3 fallaban; el panel
+// seguía mostrando `(2.11−2.11)×1000 = 0 ml`.
+//
+// Esta suite valida el nuevo cross-check DIRECTO sobre `parametros[]`:
+//   - Localiza fila estándar FEV1/FVC por key o label exacto, EXCLUYENDO
+//     filas "Mejor X".
+//   - Localiza fila "Mejor <param>" por label/key (incluye variantes no
+//     canónicas).
+//   - Compara `mejor.m1 > max(std.m1,std.m2,std.m3)` + epsilon.
+//   - Combina OR lógico con la detección por notas — invalida operación,
+//     resultado y flag cuando detecta inconsistencia por CUALQUIER canal.
+//   - FVC consistente sigue mostrando 30 ml (no regresión).
+//
+// @id IMPL-FIX-20260824-04-rev4
+// ---------------------------------------------------------------------------
+
+describe('EspirometriaClinicalCriteriaPanel — IMPL-FIX-20260824-04-rev4 helper detectCrossInconsistency', () => {
+  it('detecta inconsistencia FEV1 con claves no canónicas (caso v11)', () => {
+    const v11 = [
+      { label: 'Mejor FVC', key: 'M_FVC', unidad: 'L', m1: 2.33, m2: 2.33, m3: 2.33 },
+      { label: 'Mejor FEV1', key: 'M_FEV1', unidad: 'L', m1: 2.15, m2: 2.15, m3: 2.15 },
+      { label: 'FVC', key: 'STD_FVC', unidad: 'L', m1: 2.30, m2: 2.33, m3: 2.26 },
+      { label: 'FEV1', key: 'STD_FEV1', unidad: 'L', m1: 2.11, m2: 2.11, m3: 2.09 },
+    ]
+    expect(detectCrossInconsistency(v11, 'FEV1')).toBe(true)
+    // FVC consistente: mejor=2.33 == max(std)=2.33 → NO inconsistencia.
+    expect(detectCrossInconsistency(v11, 'FVC')).toBe(false)
+  })
+
+  it('detecta inconsistencia FVC con claves no canónicas', () => {
+    const v11FVC = [
+      { label: 'Mejor FVC', key: 'M_FVC', unidad: 'L', m1: 2.33, m2: 2.33, m3: 2.33 },
+      { label: 'Mejor FEV1', key: 'M_FEV1', unidad: 'L', m1: 2.15, m2: 2.15, m3: 2.15 },
+      { label: 'FVC', key: 'STD_FVC', unidad: 'L', m1: 2.20, m2: 2.25, m3: 2.22 },
+      { label: 'FEV1', key: 'STD_FEV1', unidad: 'L', m1: 2.15, m2: 2.11, m3: 2.09 },
+    ]
+    expect(detectCrossInconsistency(v11FVC, 'FVC')).toBe(true)
+    // FEV1 consistente: mejor=2.15 == max(std)=2.15 → NO.
+    expect(detectCrossInconsistency(v11FVC, 'FEV1')).toBe(false)
+  })
+
+  it('NO dispara cuando FEV1 es consistente (canónico: mejor=2.15, max std=2.15)', () => {
+    const canonical = [
+      { label: 'Mejor FVC', key: 'mejor_fvc_l', unidad: 'L', m1: 2.33, m2: 2.33, m3: 2.33 },
+      { label: 'Mejor FEV1', key: 'mejor_fev1_l', unidad: 'L', m1: 2.15, m2: 2.15, m3: 2.15 },
+      { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.30, m2: 2.33, m3: 2.26 },
+      { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.15, m2: 2.11, m3: 2.09 },
+    ]
+    expect(detectCrossInconsistency(canonical, 'FEV1')).toBe(false)
+    expect(detectCrossInconsistency(canonical, 'FVC')).toBe(false)
+  })
+
+  it('NO dispara cuando falta la fila "Mejor X"', () => {
+    const noMejor = [
+      { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.30, m2: 2.33, m3: 2.26 },
+      { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.15, m2: 2.11, m3: 2.09 },
+    ]
+    expect(detectCrossInconsistency(noMejor, 'FEV1')).toBe(false)
+    expect(detectCrossInconsistency(noMejor, 'FVC')).toBe(false)
+  })
+
+  it('NO dispara cuando falta la fila estándar (sólo hay Mejor)', () => {
+    const onlyMejor = [
+      { label: 'Mejor FEV1', key: 'mejor_fev1_l', unidad: 'L', m1: 2.15, m2: 2.15, m3: 2.15 },
+    ]
+    expect(detectCrossInconsistency(onlyMejor, 'FEV1')).toBe(false)
+  })
+
+  it('NO dispara si `mejor.m1` es null', () => {
+    const nullMejor = [
+      { label: 'Mejor FEV1', key: 'mejor_fev1_l', unidad: 'L', m1: null },
+      { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.15, m2: 2.11, m3: 2.09 },
+    ]
+    expect(detectCrossInconsistency(nullMejor, 'FEV1')).toBe(false)
+  })
+
+  it('NO dispara si la fila estándar no tiene valores de maniobra', () => {
+    const emptyStd = [
+      { label: 'Mejor FEV1', key: 'mejor_fev1_l', unidad: 'L', m1: 2.15 },
+      { label: 'FEV1', key: 'fev1_l', unidad: 'L' }, // sin m1/m2/m3
+    ]
+    expect(detectCrossInconsistency(emptyStd, 'FEV1')).toBe(false)
+  })
+
+  it('Lee m1_value como alias de m1 (Mejor row)', () => {
+    const aliasMejor = [
+      { label: 'Mejor FEV1', key: 'mejor_fev1', m1_value: 2.15 },
+      { label: 'FEV1', key: 'fev1_l', m1: 2.11, m2: 2.11, m3: 2.09 },
+    ]
+    expect(detectCrossInconsistency(aliasMejor, 'FEV1')).toBe(true)
+  })
+
+  it('Lee m1_value/m2_value/m3_value como alias de m1/m2/m3 (Std row)', () => {
+    const aliasStd = [
+      { label: 'Mejor FEV1', key: 'mejor_fev1', m1: 2.15 },
+      { label: 'FEV1', key: 'fev1_l', m1_value: 2.11, m2_value: 2.11, m3_value: 2.09 },
+    ]
+    expect(detectCrossInconsistency(aliasStd, 'FEV1')).toBe(true)
+  })
+
+  it('parametros null/undefined → false', () => {
+    expect(detectCrossInconsistency(null, 'FEV1')).toBe(false)
+    expect(detectCrossInconsistency(undefined, 'FEV1')).toBe(false)
+  })
+
+  it('Selectividad FEV1 vs FVC: una inconsistencia FEV1 no afecta FVC', () => {
+    const v11 = [
+      { label: 'Mejor FVC', key: 'M_FVC', m1: 2.33, m2: 2.33, m3: 2.33 },
+      { label: 'Mejor FEV1', key: 'M_FEV1', m1: 2.15, m2: 2.15, m3: 2.15 },
+      { label: 'FVC', key: 'STD_FVC', m1: 2.30, m2: 2.33, m3: 2.26 },
+      { label: 'FEV1', key: 'STD_FEV1', m1: 2.11, m2: 2.11, m3: 2.09 },
+    ]
+    expect(detectCrossInconsistency(v11, 'FEV1')).toBe(true)
+    expect(detectCrossInconsistency(v11, 'FVC')).toBe(false)
+  })
+})
+
+describe('EspirometriaClinicalCriteriaPanel — IMPL-FIX-20260824-04-rev4 caso Event v11 (Frank)', () => {
+  // Payload v11 con claves NO canónicas (`M*FEV1`/`M*FVC`).
+  // Sin SOSPECHA en notas_calidad; sin frase estructurada.
+  // FEV1 inconsistente: Mejor=2.15, max std=2.11 (m1=m2=2.11).
+  // FVC consistente: Mejor=2.33, max std=2.33 (m2=2.33).
+  const V11_PARAMETROS = [
+    { label: 'Mejor FVC', key: 'M_FVC', unidad: 'L', m1: 2.33, m1_pct_ref: 70, m2: 2.33, m2_pct_ref: 70, m3: 2.33, m3_pct_ref: 70 },
+    { label: 'Mejor FEV1', key: 'M_FEV1', unidad: 'L', m1: 2.15, m1_pct_ref: 77, m2: 2.15, m2_pct_ref: 77, m3: 2.15, m3_pct_ref: 77 },
+    { label: 'FVC', key: 'STD_FVC', unidad: 'L', m1: 2.30, m1_pct_ref: 69, m2: 2.33, m2_pct_ref: 70, m3: 2.26, m3_pct_ref: 68 },
+    { label: 'FEV1', key: 'STD_FEV1', unidad: 'L', m1: 2.11, m1_pct_ref: 76, m2: 2.11, m2_pct_ref: 76, m3: 2.09, m3_pct_ref: 75 },
+  ]
+
+  it('v11: FEV1 inválido (sin 0 ml), FVC intacto 30 ml — sin notas SOSPECHA', () => {
+    const c = resolveCriteria({
+      // Sin notas_calidad (no hay SOSPECHA ni frase estructurada).
+      parametros: V11_PARAMETROS,
+    })
+    // FEV1 inconsistente: ml=null, operación=null, flag=null.
+    expect(c.repetibilidadFev1Ml).toBe(null)
+    expect(c.fev1TopTwoNative).toBe(null)
+    expect(c.repetibilidadFev1Menor150).toBe(null)
+    // FEV1 NO debe mostrar 0 ml (regresión principal).
+    expect(c.repetibilidadFev1Ml).not.toBe(0)
+    // FVC consistente: 30 ml + operación visible (no regresa).
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    expect(c.fvcTopTwoNative).toEqual([2.33, 2.3])
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+  })
+
+  it('v11: FEV1 inválido aunque notas_calidad tenga sólo texto genérico (no SOSPECHA)', () => {
+    const c = resolveCriteria({
+      notas_calidad: 'Curva legible. Sin particularidades.',
+      parametros: V11_PARAMETROS,
+    })
+    expect(c.repetibilidadFev1Ml).toBe(null)
+    expect(c.fev1TopTwoNative).toBe(null)
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+  })
+
+  it('v11 render HTML: FEV1 muestra "—" (operación) y NO renderiza "(2.11−2.11) = 0 ml"', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: { parametros: V11_PARAMETROS },
+      })
+    )
+    expect(html).not.toMatch(/\(2\.11\s*[−-]\s*2\.11\)/)
+    expect(html).toContain('data-testid="repetibilidad-fev1-operacion"')
+    expect(html).toMatch(/FEV1:\s*—/)
+    // FVC consistente: 30 ml + operación visible.
+    expect(html).toMatch(
+      /FVC:\s*\(2\.33\s*[−-]\s*2\.30\)\s*[×x]\s*1000\s*=\s*30(?:\.00)?\s*ml/
+    )
+  })
+
+  it('v11 con repetibilidad_fev1_ml extraída del texto nativo: conserva 40, oculta operación', () => {
+    const c = resolveCriteria({
+      calidad: { repetibilidad_fev1_ml: 40 },
+      parametros: V11_PARAMETROS,
+    })
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.repetibilidadFev1Source).toBe('extracted')
+    expect(c.fev1TopTwoNative).toBe(null)
+    // FVC intacto.
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+  })
+
+  it('v11: combinado nota (rev. 3) + parametros (rev. 4) — OR lógico', () => {
+    // Si las notas tienen SOSPECHA pero los parametros son consistentes,
+    // igual debe invalidar (sólo notas disparan).
+    const c = resolveCriteria({
+      notas_calidad: 'SOSPECHA_INCONSISTENCIA_MEJOR_FEV1',
+      parametros: PARAMETROS_FIXTURE, // canónico consistente
+    })
+    expect(c.repetibilidadFev1Ml).toBe(null)
+
+    // Si los parametros son inconsistentes pero NO hay notas, debe
+    // invalidar (sólo parametros disparan — caso v11 puro).
+    const c2 = resolveCriteria({
+      notas_calidad: 'Sin particularidades.',
+      parametros: V11_PARAMETROS,
+    })
+    expect(c2.repetibilidadFev1Ml).toBe(null)
+
+    // Si ambos coinciden (notas SOSPECHA + parametros v11), debe
+    // invalidar con la misma lógica.
+    const c3 = resolveCriteria({
+      notas_calidad: 'SOSPECHA_INCONSISTENCIA_MEJOR_FEV1',
+      parametros: V11_PARAMETROS,
+    })
+    expect(c3.repetibilidadFev1Ml).toBe(null)
+  })
+})
+
+describe('EspirometriaClinicalCriteriaPanel — IMPL-FIX-20260824-04-rev4 regresión preservada', () => {
+  it('REGRESIÓN: FEV1 canónico 2.15/77, 2.11/76, 2.09/75 → 40 ml + operación visible', () => {
+    const c = resolveCriteria({
+      calidad: { ...CALIDAD_FIXTURE },
+      parametros: PARAMETROS_FIXTURE,
+    })
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.fev1TopTwoNative).toEqual([2.15, 2.11])
+    expect(c.repetibilidadFev1Menor150).toBe('SI')
+  })
+
+  it('REGRESIÓN: FVC canónico 2.30/69, 2.33/70, 2.26/68 → 30 ml + operación visible', () => {
+    const c = resolveCriteria({
+      calidad: { ...CALIDAD_FIXTURE },
+      parametros: PARAMETROS_FIXTURE,
+    })
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    expect(c.fvcTopTwoNative).toEqual([2.33, 2.3])
+    expect(c.repetibilidadFvcMenor150).toBe('SI')
+  })
+
+  it('REGRESIÓN: duplicación m1=m2 con código backend (rev. 1.5) sigue marcando FEV1', () => {
+    const INCONSISTENCIA_FEV1_NOTA =
+      'SOSPECHA_INCONSISTENCIA_MEJOR_FEV1: FEV1: max(m1,m2,m3)=2.11 de la fila ' +
+      'estándar < Mejor FEV1=2.15. El valor de la mejor maniobra no aparece entre ' +
+      'las maniobras de la fila estándar — posible duplicación de M2 como M1 o ' +
+      'pérdida de M1. (m1==m2 detectado). Extracción marcada no_concluyente: el ' +
+      'cálculo de repetibilidad sobre la(s) fila(s) afectada(s) no es confiable.'
+    const DUPLICATED_FEV1_PARAMETROS = [
+      { label: 'Mejor FVC', key: 'mejor_fvc_l', unidad: 'L', m1: 2.33, m2: 2.33, m3: 2.33 },
+      { label: 'Mejor FEV1', key: 'mejor_fev1_l', unidad: 'L', m1: 2.15, m2: 2.15, m3: 2.15 },
+      { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.3, m2: 2.33, m3: 2.26 },
+      { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.11, m2: 2.11, m3: 2.09 },
+    ]
+    const c = resolveCriteria({
+      calidad: { ...CALIDAD_FIXTURE, notas_calidad: INCONSISTENCIA_FEV1_NOTA },
+      parametros: DUPLICATED_FEV1_PARAMETROS,
+    })
+    expect(c.repetibilidadFev1Ml).toBe(null)
+    expect(c.fev1TopTwoNative).toBe(null)
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+  })
+
+  it('REGRESIÓN: frase estructurada rev. 3 (Event v10) sigue marcando FEV1', () => {
+    const v10Text =
+      "Inconsistencia detectada entre fila 'Mejor FEV1' ... y fila estándar FEV1"
+    const c = resolveCriteria({
+      notas_calidad: v10Text,
+      parametros: PARAMETROS_FIXTURE,
+    })
+    // La nota marca FEV1 como inconsistente (rev. 3) aunque los
+    // parametros canónicos son consistentes (mejor=2.15 == max std=2.15).
+    // OR lógico: cualquier canal basta para invalidar.
+    expect(c.repetibilidadFev1Ml).toBe(null)
+    expect(c.fev1TopTwoNative).toBe(null)
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+  })
+
+  it('REGRESIÓN: nota genérica SIN marcadores no invalida (cualquier canal)', () => {
     const c = resolveCriteria({
       notas_calidad: 'Curva legible. Sin particularidades.',
       parametros: PARAMETROS_FIXTURE,
