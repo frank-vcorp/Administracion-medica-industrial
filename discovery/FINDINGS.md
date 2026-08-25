@@ -255,3 +255,9 @@
 - **Hallazgo:** La lógica parcial existe, pero la referencia clínica que permite auditar por qué se obtuvo el resultado quedó oculta o incompleta en la interfaz.
 - **Corrección requerida:** mostrar una sección explícita de `Criterio audiométrico AMI` con normalidad, patrones por frecuencias, rangos de severidad y categorías etiológicas como referencia; separar el resultado derivado de cualquier diagnóstico médico final.
 - **Referencia:** FND-20260825-08, BR-20260825-05, SPEC-FEATURE-20260825-02.
+
+## FND-20260825-13 — La referencia AMI debe colapsarse en la interfaz clínica
+
+- **Estado:** candidate / UX
+- **Evidencia:** Frank observó que las tablas completas del criterio AMI ocupan demasiado espacio vertical cuando se muestran desplegadas en el panel.
+- **Propuesta:** renderizar `Criterio audiométrico AMI (referencia)` dentro de un acordeón cerrado por defecto; conservar el contenido completo disponible al expandir. El PDF mantiene la referencia completa desplegada por trazabilidad documental.

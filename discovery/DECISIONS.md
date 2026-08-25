@@ -205,3 +205,12 @@
 - **Alcance:** conservar únicamente antecedentes auditivos, exploración física y observaciones clínicas necesarias; los datos personales/laborales y la identidad de usuarios provienen de la papeleta/sesión.
 - **Supersede parcialmente:** `FND-20260825-07` en la sección de metadatos del formato y la versión inicial de la SPEC que incluía esos campos.
 - **Referencia:** BR-20260825-09, FND-20260825-11.
+
+## DEC-20260825-09 — Validar build de Vercel después de cada push
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión operativa de Frank:** Después de cada `push`, ejecutar una validación rápida del build/deployment en Vercel para confirmar que el commit no introdujo errores de compilación.
+- **Alcance:** esta validación es un smoke técnico del build; no sustituye V3 funcional, Playwright ni la verificación de producto en producción.
+- **Resultado esperado:** reportar commit, estado del build y error exacto si falla antes de continuar con otro incremento.
+- **Referencia:** BR-20260825-10.

@@ -107,6 +107,13 @@
 - **Fuente de identidad:** paciente/Event desde la papeleta; médico y usuario desde la sesión autenticada; datos documentales desde el archivo fuente.
 - **Estado:** confirmado por Frank, 2026-08-25.
 
+## BR-20260825-10 — Smoke de Vercel posterior al push
+
+- **Regla:** Todo push autorizado debe ir seguido de una comprobación rápida del build de Vercel.
+- **Objetivo:** detectar inmediatamente errores de compilación, tipos, rutas o Server Actions introducidos por el commit.
+- **Límite:** un build verde no confirma el comportamiento funcional; V3 y la validación de usuario permanecen separadas.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
 ## BR-20260824-02 — Inferencia visual de criterios de calidad desde las gráficas
 
 - **Actor:** Sistema extractivo, como apoyo para revisión del médico ocupacional.

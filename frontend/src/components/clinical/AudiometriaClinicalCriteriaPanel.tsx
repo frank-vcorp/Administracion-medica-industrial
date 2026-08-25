@@ -809,6 +809,13 @@ function readOidoVo(
 
 // ──────────────────────────────────────────────────────────────────────────
 // FND-20260825-12 — `AMIReferenceSection`
+// FND-20260825-13 — UX: la sección se envuelve en un acordeón nativo
+// `<details>`/`<summary>` CERRADO por defecto. El acordeón es accesible
+// por teclado (Tab + Space/Enter) y screen reader (gestión nativa de
+// `aria-expanded`). El PDF conserva la referencia desplegada completa
+// para trazabilidad (no se ve afectado por este cambio UX — ver
+// `frontend/src/components/pdf/AudiometriaValidatedPDF.tsx`,
+// `AmiReferencePdfSection`).
 //
 // Bloque explícito de la TABLA DE REFERENCIA del programa audiométrico
 // AMI. Es la contraparte administrativa del resultado derivado que el
@@ -825,151 +832,168 @@ function readOidoVo(
 //
 // Las tablas se renderizan a partir de las constantes
 // `AMI_*_REFERENCIA` declaradas al inicio del módulo, reutilizadas
-// también desde el PDF validado (ver
-// `frontend/src/components/pdf/AudiometriaValidatedPDF.tsx`).
+// también desde el PDF validado.
 // ──────────────────────────────────────────────────────────────────────────
 
 function AMIReferenceSection() {
   return (
-    <div
-      className="bg-slate-50 border border-slate-300 rounded-lg p-3 space-y-3"
+    <details
+      className="bg-slate-50 border border-slate-300 rounded-lg overflow-hidden group"
       data-testid="audiometria-ami-reference-section"
-      role="region"
       aria-label="Criterio audiométrico AMI (referencia)"
     >
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <summary
+        className="cursor-pointer select-none px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-100 transition-colors [&::-webkit-details-marker]:hidden"
+        data-testid="audiometria-ami-reference-summary"
+      >
         <div className="flex items-center gap-2">
           <span aria-hidden="true">📖</span>
           <p className="text-sm font-bold text-slate-800">
             Criterio audiométrico AMI (referencia)
           </p>
         </div>
-        <span
-          className="text-[10px] font-bold uppercase tracking-wider text-slate-500 border border-slate-300 rounded px-2 py-0.5 bg-white"
-          data-testid="audiometria-ami-reference-tag"
-        >
-          Referencia operativa
-        </span>
-      </div>
-      <p className="text-[11px] text-slate-600">
-        Tabla administrativa del programa audiométrico AMI. Esta sección
-        es de <strong>consulta</strong>: el resultado derivado del paciente
-        (PTA, criterio, patrón) está arriba; la impresión diagnóstica la
-        emite el médico firmante.
-      </p>
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[10px] font-bold uppercase tracking-wider text-slate-500 border border-slate-300 rounded px-2 py-0.5 bg-white"
+            data-testid="audiometria-ami-reference-tag"
+          >
+            Referencia operativa
+          </span>
+          <span
+            aria-hidden="true"
+            className="text-slate-500 text-xs transition-transform group-open:rotate-90"
+            data-testid="audiometria-ami-reference-toggle"
+          >
+            ▶
+          </span>
+        </div>
+      </summary>
+      <div
+        className="px-3 py-3 space-y-3 border-t border-slate-200"
+        data-testid="audiometria-ami-reference-body"
+        role="region"
+        aria-label="Contenido de la referencia audiométrica AMI"
+      >
+        <p className="text-[11px] text-slate-600">
+          Tabla administrativa del programa audiométrico AMI. Esta sección
+          es de <strong>consulta</strong>: el resultado derivado del paciente
+          (PTA, criterio, patrón) está arriba; la impresión diagnóstica la
+          emite el médico firmante.
+        </p>
 
-      {/* 1. Normalidad */}
-      <div data-testid="audiometria-ami-ref-normalidad">
-        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-          1. Normalidad (umbral AMI)
-        </p>
-        <p className="text-xs text-slate-700 font-mono">
-          PTA ≤ {AMI_NORMALIDAD_DB} dB HL → Normal
-        </p>
-      </div>
+        {/* 1. Normalidad */}
+        <div data-testid="audiometria-ami-ref-normalidad">
+          <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            1. Normalidad (umbral AMI)
+          </p>
+          <p className="text-xs text-slate-700 font-mono">
+            PTA ≤ {AMI_NORMALIDAD_DB} dB HL → Normal
+          </p>
+        </div>
 
-      {/* 2. Patrones nosológicos operativos */}
-      <div data-testid="audiometria-ami-ref-patrones">
-        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-          2. Patrón nosológico operativo
-        </p>
-        <div className="overflow-x-auto rounded border border-slate-200 bg-white">
-          <table className="min-w-full text-xs">
-            <thead className="bg-slate-100">
-              <tr>
-                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
-                  Patrón
-                </th>
-                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
-                  Frecuencias operativas
-                </th>
-                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
-                  Descripción
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {AMI_PATRONES_REFERENCIA.map(p => (
-                <tr key={p.id} data-testid={`audiometria-ami-ref-patron-${p.id.toLowerCase()}`}>
-                  <td className="px-2 py-1 font-medium text-slate-700">
-                    {p.etiqueta}
-                  </td>
-                  <td className="px-2 py-1 font-mono text-slate-600 whitespace-nowrap">
-                    {p.frecuenciasOperativas}
-                  </td>
-                  <td className="px-2 py-1 text-slate-600">
-                    {p.descripcion}
-                  </td>
+        {/* 2. Patrones nosológicos operativos */}
+        <div data-testid="audiometria-ami-ref-patrones">
+          <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            2. Patrón nosológico operativo
+          </p>
+          <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+            <table className="min-w-full text-xs">
+              <thead className="bg-slate-100">
+                <tr>
+                  <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                    Patrón
+                  </th>
+                  <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                    Frecuencias operativas
+                  </th>
+                  <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                    Descripción
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {AMI_PATRONES_REFERENCIA.map(p => (
+                  <tr key={p.id} data-testid={`audiometria-ami-ref-patron-${p.id.toLowerCase()}`}>
+                    <td className="px-2 py-1 font-medium text-slate-700">
+                      {p.etiqueta}
+                    </td>
+                    <td className="px-2 py-1 font-mono text-slate-600 whitespace-nowrap">
+                      {p.frecuenciasOperativas}
+                    </td>
+                    <td className="px-2 py-1 text-slate-600">
+                      {p.descripcion}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 3. Severidad */}
+        <div data-testid="audiometria-ami-ref-severidad">
+          <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            3. Severidad (por peor PTA, dB HL)
+          </p>
+          <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+            <table className="min-w-full text-xs">
+              <thead className="bg-slate-100">
+                <tr>
+                  <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                    Categoría
+                  </th>
+                  <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                    Rango
+                  </th>
+                  <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                    Descripción
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {AMI_SEVERIDAD_REFERENCIA.map(s => (
+                  <tr
+                    key={s.id}
+                    data-testid={`audiometria-ami-ref-severidad-${s.id.toLowerCase()}`}
+                  >
+                    <td className="px-2 py-1 font-medium text-slate-700">
+                      {s.etiqueta}
+                    </td>
+                    <td className="px-2 py-1 font-mono text-slate-600 whitespace-nowrap">
+                      {s.rangoDB}
+                    </td>
+                    <td className="px-2 py-1 text-slate-600">
+                      {s.descripcion}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 4. Categorías etiológicas */}
+        <div data-testid="audiometria-ami-ref-etiologias">
+          <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            4. Categorías etiológicas AMI (referencia administrativa)
+          </p>
+          <ul className="space-y-1">
+            {AMI_ETIOLOGIAS_REFERENCIA.map(e => (
+              <li
+                key={e.id}
+                className="bg-white border border-slate-200 rounded px-2 py-1"
+                data-testid={`audiometria-ami-ref-etiologia-${e.id.toLowerCase()}`}
+              >
+                <span className="text-xs font-bold text-slate-700">
+                  {e.etiqueta}
+                </span>
+                <span className="text-xs text-slate-600"> — {e.nota}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
-
-      {/* 3. Severidad */}
-      <div data-testid="audiometria-ami-ref-severidad">
-        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-          3. Severidad (por peor PTA, dB HL)
-        </p>
-        <div className="overflow-x-auto rounded border border-slate-200 bg-white">
-          <table className="min-w-full text-xs">
-            <thead className="bg-slate-100">
-              <tr>
-                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
-                  Categoría
-                </th>
-                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
-                  Rango
-                </th>
-                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
-                  Descripción
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {AMI_SEVERIDAD_REFERENCIA.map(s => (
-                <tr
-                  key={s.id}
-                  data-testid={`audiometria-ami-ref-severidad-${s.id.toLowerCase()}`}
-                >
-                  <td className="px-2 py-1 font-medium text-slate-700">
-                    {s.etiqueta}
-                  </td>
-                  <td className="px-2 py-1 font-mono text-slate-600 whitespace-nowrap">
-                    {s.rangoDB}
-                  </td>
-                  <td className="px-2 py-1 text-slate-600">
-                    {s.descripcion}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 4. Categorías etiológicas */}
-      <div data-testid="audiometria-ami-ref-etiologias">
-        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-          4. Categorías etiológicas AMI (referencia administrativa)
-        </p>
-        <ul className="space-y-1">
-          {AMI_ETIOLOGIAS_REFERENCIA.map(e => (
-            <li
-              key={e.id}
-              className="bg-white border border-slate-200 rounded px-2 py-1"
-              data-testid={`audiometria-ami-ref-etiologia-${e.id.toLowerCase()}`}
-            >
-              <span className="text-xs font-bold text-slate-700">
-                {e.etiqueta}
-              </span>
-              <span className="text-xs text-slate-600"> — {e.nota}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+    </details>
   )
 }
 

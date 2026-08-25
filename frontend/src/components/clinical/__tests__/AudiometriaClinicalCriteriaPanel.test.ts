@@ -351,3 +351,120 @@ describe('FND-20260825-12: AudiometriaClinicalCriteriaPanel renderiza la secció
     expect(html).not.toContain('Responsable médico')
   })
 })
+
+// ──────────────────────────────────────────────────────────────────────────
+// FND-20260825-13 — UX: la sección de referencia va envuelta en un
+// acordeón nativo `<details>` CERRADO por defecto. El PDF conserva la
+// referencia desplegada (no se ve afectado por este cambio UX).
+// ──────────────────────────────────────────────────────────────────────────
+
+describe('FND-20260825-13: acordeón nativo en la sección de referencia AMI', () => {
+  const html = renderToStaticMarkup(
+    createElement(AudiometriaClinicalCriteriaPanel, {
+      extractedData: {
+        oido_derecho: { va: { 500: 20, 1000: 25, 2000: 30 } },
+        oido_izquierdo: { va: { 500: 20, 1000: 25, 2000: 30 } },
+      },
+      version: 1,
+    }),
+  )
+
+  it('Envuelve la sección en un `<details>` nativo y accesible', () => {
+    // El contenedor de la sección ahora es `<details>`, no un `<div>`.
+    expect(html).toMatch(
+      /<details[^>]*data-testid="audiometria-ami-reference-section"/,
+    )
+  })
+
+  it('Cerrado por defecto (sin atributo `open`)', () => {
+    // SSR: si no hay `open`, el browser lo considera cerrado por defecto.
+    const detailsSection = html.match(
+      /<details[^>]*data-testid="audiometria-ami-reference-section"[^>]*>/,
+    )
+    expect(detailsSection).not.toBeNull()
+    expect(detailsSection![0]).not.toMatch(/\bopen(?:=|\s|>|")/)
+  })
+
+  it('Incluye `<summary>` con `data-testid` para el encabezado clickable', () => {
+    expect(html).toContain(
+      'data-testid="audiometria-ami-reference-summary"',
+    )
+    // Accesibilidad: el `<summary>` activa el toggle con teclado/aria-expanded
+    // de forma nativa (HTML disclosure widget).
+    expect(html).toMatch(
+      /<summary[^>]*data-testid="audiometria-ami-reference-summary"/,
+    )
+  })
+
+  it('El título "Criterio audiométrico AMI (referencia)" sigue visible dentro del summary', () => {
+    expect(html).toContain('Criterio audiométrico AMI (referencia)')
+    // El summary contiene el título (siempre visible, abierto o cerrado).
+    const summaryMatch = html.match(
+      /<summary[^>]*data-testid="audiometria-ami-reference-summary"[^>]*>[\s\S]*?<\/summary>/,
+    )
+    expect(summaryMatch).not.toBeNull()
+    expect(summaryMatch![0]).toContain('Criterio audiométrico AMI (referencia)')
+  })
+
+  it('La etiqueta "Referencia operativa" sigue visible dentro del summary', () => {
+    expect(html).toContain('data-testid="audiometria-ami-reference-tag"')
+  })
+
+  it('Conservar todo el contenido al expandir (data-testid por sub-tabla)', () => {
+    // El cuerpo del acordeón contiene las 4 secciones con sus data-testid.
+    expect(html).toContain('data-testid="audiometria-ami-reference-body"')
+    expect(html).toContain('data-testid="audiometria-ami-ref-normalidad"')
+    expect(html).toContain('data-testid="audiometria-ami-ref-patrones"')
+    expect(html).toContain('data-testid="audiometria-ami-ref-severidad"')
+    expect(html).toContain('data-testid="audiometria-ami-ref-etiologias"')
+  })
+
+  it('Conservar constantes clínicas: tabla de patrones operativa', () => {
+    expect(html).toContain('audiometria-ami-ref-patron-graves')
+    expect(html).toContain('audiometria-ami-ref-patron-neurosensorial_medias_agudas')
+    expect(html).toContain('audiometria-ami-ref-patron-mixta')
+    expect(html).toContain('audiometria-ami-ref-patron-fatiga')
+    expect(html).toContain('audiometria-ami-ref-patron-normal')
+  })
+
+  it('Conservar severidad completa con los 6 escalones', () => {
+    expect(html).toContain('audiometria-ami-ref-severidad-no_aplica')
+    expect(html).toContain('audiometria-ami-ref-severidad-leve')
+    expect(html).toContain('audiometria-ami-ref-severidad-moderada')
+    expect(html).toContain('audiometria-ami-ref-severidad-moderadamente_severa')
+    expect(html).toContain('audiometria-ami-ref-severidad-severa')
+    expect(html).toContain('audiometria-ami-ref-severidad-profunda')
+    expect(html).toContain('30–40 dB HL')
+    expect(html).toContain('≥ 95 dB HL')
+  })
+
+  it('Conservar etiologías completas (5 categorías)', () => {
+    expect(html).toContain('audiometria-ami-ref-etiologia-normal')
+    expect(html).toContain('audiometria-ami-ref-etiologia-trauma_acustico_cronico')
+    expect(html).toContain('audiometria-ami-ref-etiologia-presbiacusia')
+    expect(html).toContain(
+      'audiometria-ami-ref-etiologia-probable_vias_respiratorias_altas',
+    )
+    expect(html).toContain('audiometria-ami-ref-etiologia-etiologia_a_determinar')
+  })
+
+  it('Mantiene `aria-label` en el contenedor padre para lectores de pantalla', () => {
+    expect(html).toMatch(
+      /<details[^>]*aria-label="Criterio audiométrico AMI \(referencia\)"/,
+    )
+  })
+
+  it('El body usa `role="region"` para anunciarse como landmark secundario', () => {
+    expect(html).toContain('data-testid="audiometria-ami-reference-body"')
+    expect(html).toMatch(
+      /<div[^>]*data-testid="audiometria-ami-reference-body"[^>]*role="region"/,
+    )
+  })
+
+  it('Sigue fuera del flujo de "resultado derivado" — orden relativo a la advertencia', () => {
+    const idxRef = html.indexOf('audiometria-ami-reference-section')
+    const idxWarn = html.indexOf('Este panel NO replica el diagnóstico')
+    expect(idxRef).toBeGreaterThanOrEqual(0)
+    expect(idxWarn).toBeGreaterThan(idxRef)
+  })
+})
