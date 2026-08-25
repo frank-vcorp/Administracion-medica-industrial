@@ -916,11 +916,15 @@ describe('EspirometriaClinicalCriteriaPanel — operación exacta visible', () =
         },
       })
     )
-    // Sin repetibilidad numérica (no hay 2+ maniobras), el bloque no
-    // debería renderizar Repetibilidad numérica. Las operaciones no aparecen.
-    expect(html).not.toContain('Repetibilidad numérica')
-    expect(html).not.toContain('data-testid="repetibilidad-fvc-operacion"')
-    expect(html).not.toContain('data-testid="repetibilidad-fev1-operacion"')
+    // IMPL-20260824-XX (Frank): el bloque "Repetibilidad numérica" SÍ se
+    // renderiza con la línea de maniobras M1/M2/M3 (payload parcial visible
+    // para el médico); la operación top-2 muestra "—" (no inventa).
+    expect(html).toContain('Repetibilidad numérica')
+    // La operación muestra "—" (no se inventa fórmula).
+    expect(html).toContain('FVC: —')
+    expect(html).toContain('FEV1: —')
+    expect(html).not.toMatch(/FVC:\s*\([\d.]+\s*[−-]/)
+    expect(html).not.toMatch(/FEV1:\s*\([\d.]+\s*[−-]/)
   })
 
   it('La fórmula NO usa la unidad nativa si la fila está en l/s: "—" (no se mezcla)', () => {
@@ -1902,5 +1906,173 @@ describe('EspirometriaClinicalCriteriaPanel — IMPL-FIX-20260824-04-rev4 regres
     })
     expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
     expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// IMPL-20260824-XX (Frank) — REPETIBILIDAD NUMÉRICA muestra M1/M2/M3.
+//
+// La línea de maniobras aparece junto a la operación top-2 en formato:
+//   `FVC — M1: x.xx L · M2: x.xx L · M3: x.xx L`
+//
+// Soporta:
+//   - aliases `m1`/`m2`/`m3` y `m1_value`/`m2_value`/`m3_value`
+//   - payload parcial (maniobra faltante → `—`)
+//   - fila FEV1/FVC ausente (no renderiza esa línea)
+//   - key no canónica (también funciona por label `FEV1` / `FVC`)
+//
+// No se modifica la fórmula (top-2 × 1000), ni el umbral AMI, ni la
+// extracción, ni el prompt MedGemma, ni los criterios visuales.
+// ---------------------------------------------------------------------------
+
+describe('EspirometriaClinicalCriteriaPanel — IMPL-20260824-XX Maniobras M1/M2/M3', () => {
+  it('FVC canónico (m1=2.30, m2=2.33, m3=2.26) muestra M1/M2/M3 con 2 decimales', () => {
+    const c = resolveCriteria({
+      parametros: PARAMETROS_FIXTURE,
+    })
+    expect(c.fvcManeuverTripleNative).toEqual([2.3, 2.33, 2.26])
+  })
+
+  it('FEV1 canónico (m1=2.15, m2=2.11, m3=2.09) muestra M1/M2/M3 con 2 decimales', () => {
+    const c = resolveCriteria({
+      parametros: PARAMETROS_FIXTURE,
+    })
+    expect(c.fev1ManeuverTripleNative).toEqual([2.15, 2.11, 2.09])
+  })
+
+  it('FVC render HTML: muestra `FVC — M1: 2.30 L · M2: 2.33 L · M3: 2.26 L`', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: { parametros: PARAMETROS_FIXTURE },
+      })
+    )
+    expect(html).toContain('FVC — M1: 2.30 L · M2: 2.33 L · M3: 2.26 L')
+    expect(html).toContain('data-testid="repetibilidad-fvc-maniobras"')
+  })
+
+  it('FEV1 render HTML: muestra `FEV1 — M1: 2.15 L · M2: 2.11 L · M3: 2.09 L`', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: { parametros: PARAMETROS_FIXTURE },
+      })
+    )
+    expect(html).toContain('FEV1 — M1: 2.15 L · M2: 2.11 L · M3: 2.09 L')
+    expect(html).toContain('data-testid="repetibilidad-fev1-maniobras"')
+  })
+
+  it('Aliases m1_value/m2_value/m3_value funcionan igual que m1/m2/m3', () => {
+    const c = resolveCriteria({
+      parametros: [
+        { label: 'FVC', key: 'fvc_l', unidad: 'L', m1_value: 2.3, m2_value: 2.33, m3_value: 2.26 },
+        { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1_value: 2.15, m2_value: 2.11, m3_value: 2.09 },
+      ],
+    })
+    expect(c.fvcManeuverTripleNative).toEqual([2.3, 2.33, 2.26])
+    expect(c.fev1ManeuverTripleNative).toEqual([2.15, 2.11, 2.09])
+  })
+
+  it('Aliases `m1` tienen precedencia sobre `m1_value` cuando ambos presentes', () => {
+    const c = resolveCriteria({
+      parametros: [
+        { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.15, m1_value: 9.99 },
+      ],
+    })
+    expect(c.fev1ManeuverTripleNative).toEqual([2.15, null, null])
+  })
+
+  it('Payload parcial: maniobra faltante → `null` (no se inventa)', () => {
+    const c = resolveCriteria({
+      parametros: [
+        // Sólo M1 y M2; M3 ausente.
+        { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.30, m2: 2.33 },
+        { label: 'FEV1', key: 'fev1_l', unidad: 'L', m1: 2.15, m3: 2.09 },
+      ],
+    })
+    expect(c.fvcManeuverTripleNative).toEqual([2.3, 2.33, null])
+    expect(c.fev1ManeuverTripleNative).toEqual([2.15, null, 2.09])
+  })
+
+  it('Payload parcial HTML: renderiza `M2: — L` y `M3: — L` (no inventa)', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: {
+          parametros: [
+            { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.30, m2: 2.33 },
+          ],
+        },
+      })
+    )
+    expect(html).toContain('FVC — M1: 2.30 L · M2: 2.33 L · M3: — L')
+  })
+
+  it('Fila ausente → triple null (no renderiza la línea)', () => {
+    const c = resolveCriteria({
+      parametros: [
+        // Sólo FVC; sin FEV1.
+        { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 2.30, m2: 2.33, m3: 2.26 },
+      ],
+    })
+    expect(c.fvcManeuverTripleNative).toEqual([2.3, 2.33, 2.26])
+    expect(c.fev1ManeuverTripleNative).toBe(null)
+  })
+
+  it('Sin filas parametros[] → ambos triples null', () => {
+    const c = resolveCriteria({
+      parametros: [],
+    })
+    expect(c.fvcManeuverTripleNative).toBe(null)
+    expect(c.fev1ManeuverTripleNative).toBe(null)
+  })
+
+  it('Maniobras no numéricas → null por slot, no se inventa', () => {
+    const c = resolveCriteria({
+      parametros: [
+        { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 'abc', m2: null, m3: 2.26 },
+      ],
+    })
+    // m1='abc' (string no numérica) → null; m2=null → null; m3=2.26 → 2.26.
+    expect(c.fvcManeuverTripleNative).toEqual([null, null, 2.26])
+  })
+
+  it('M1/M2/M3 aparecen ANTES de la operación (orden DOM)', () => {
+    const html = renderToStaticMarkup(
+      createElement(EspirometriaClinicalCriteriaPanel, {
+        extractedData: { parametros: PARAMETROS_FIXTURE },
+      })
+    )
+    const idxFvcManiobras = html.indexOf('data-testid="repetibilidad-fvc-maniobras"')
+    const idxFvcOperacion = html.indexOf('data-testid="repetibilidad-fvc-operacion"')
+    const idxFev1Maniobras = html.indexOf('data-testid="repetibilidad-fev1-maniobras"')
+    const idxFev1Operacion = html.indexOf('data-testid="repetibilidad-fev1-operacion"')
+    expect(idxFvcManiobras).toBeGreaterThan(-1)
+    expect(idxFvcOperacion).toBeGreaterThan(-1)
+    expect(idxFvcManiobras).toBeLessThan(idxFvcOperacion)
+    expect(idxFev1Maniobras).toBeGreaterThan(-1)
+    expect(idxFev1Operacion).toBeGreaterThan(-1)
+    expect(idxFev1Maniobras).toBeLessThan(idxFev1Operacion)
+  })
+
+  it('No cambia la fórmula top-2 ni el resultado ml (regresión)', () => {
+    const c = resolveCriteria({
+      parametros: PARAMETROS_FIXTURE,
+    })
+    // Regresión: la fórmula y el resultado siguen intactos.
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    expect(c.fvcTopTwoNative).toEqual([2.33, 2.3])
+    expect(c.repetibilidadFev1Ml).toBeCloseTo(40, 5)
+    expect(c.fev1TopTwoNative).toEqual([2.15, 2.11])
+  })
+
+  it('No afecta repetibilidad_fvc_ml extraído del texto nativo (foco en audit)', () => {
+    // Aunque la repetibilidad venga del texto fuente (`extracted`), el triple
+    // sigue mostrándose desde la fila de parametros[] (independiente).
+    const c = resolveCriteria({
+      calidad: { repetibilidad_fvc_ml: 30, repetibilidad_fev1_ml: 40 },
+      parametros: PARAMETROS_FIXTURE,
+    })
+    expect(c.repetibilidadFvcSource).toBe('extracted')
+    expect(c.repetibilidadFvcMl).toBeCloseTo(30, 5)
+    expect(c.fvcManeuverTripleNative).toEqual([2.3, 2.33, 2.26])
+    expect(c.fev1ManeuverTripleNative).toEqual([2.15, 2.11, 2.09])
   })
 })

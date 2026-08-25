@@ -283,6 +283,39 @@ function collectManeuverValues(
 }
 
 /**
+ * Lee los tres valores de maniobra (M1, M2, M3) de una fila `parametros[]`
+ * preservando el orden y usando los aliases `m1`/`m1_value`, etc.
+ * Devuelve `[number | null, number | null, number | null]` — un null por
+ * cada maniobra ausente o no numérica. La función NO inventa ni interpola.
+ *
+ * IMPL-20260824-XX (Frank): requerido para mostrar las 3 maniobras
+ * absolutas en `REPETIBILIDAD NUMÉRICA` junto a la operación top-2, sin
+ * cambiar la fórmula de cálculo.
+ */
+function readManeuverTriple(
+  row: EspirometriaParametrosRow | null
+): [number | null, number | null, number | null] | null {
+  if (!row || typeof row !== "object") return null
+  const slotPairs: ReadonlyArray<readonly [string, string]> = [
+    ["m1", "m1_value"],
+    ["m2", "m2_value"],
+    ["m3", "m3_value"],
+  ]
+  const out: [number | null, number | null, number | null] = [null, null, null]
+  for (let i = 0; i < slotPairs.length; i++) {
+    const [shortSlot, longSlot] = slotPairs[i]
+    const v =
+      asFiniteNumber((row as Record<string, unknown>)[shortSlot]) ??
+      asFiniteNumber((row as Record<string, unknown>)[longSlot])
+    out[i] = v
+  }
+  // Si las tres son null (fila sin maniobras), devolvemos null para
+  // indicar "sin fila" y NO renderizar la línea.
+  if (out[0] === null && out[1] === null && out[2] === null) return null
+  return out
+}
+
+/**
  * Lee la unidad de una fila `parametros[]` desde los aliases `unidad`
  * (extractor) o `unit` (renderer/schema). Devuelve el valor normalizado
  * (`trim().toLowerCase()`) o string vacío si no hay unidad declarada.
@@ -572,6 +605,46 @@ function RepetibilidadOperationLine({
   )
 }
 
+/**
+ * IMPL-20260824-XX (Frank): línea visible con los 3 valores absolutos de
+ * maniobra para FVC/FEV1 (`M1`, `M2`, `M3`) tomados del mismo snapshot/filas
+ * que usa el cálculo. Aparece ANTES de la operación para que el médico
+ * pueda verificarla.
+ *
+ * Formato esperado:
+ *   `FVC — M1: x.xx L · M2: x.xx L · M3: x.xx L`
+ *
+ * Tolerancias:
+ *   - Si una maniobra es null o no numérica → `—` (no se inventa).
+ *   - Si el triple entero es null (fila ausente) → no renderiza.
+ *   - Soporta aliases `m1`/`m2`/`m3` y `m1_value`/`m2_value`/`m3_value`.
+ */
+function ManeuverTripleLine({
+  label,
+  triple,
+  unit,
+}: {
+  label: string
+  triple: [number | null, number | null, number | null] | null
+  unit: string
+}) {
+  if (!triple) return null
+  const formatVal = (v: number | null): string => {
+    if (v === null) return "—"
+    return Number.isInteger(v) ? v.toString() : v.toFixed(2)
+  }
+  return (
+    <p
+      className="text-[10px] text-slate-600 pl-1"
+      data-criteria-key={`${label} maniobras`}
+      data-testid={`repetibilidad-${label.toLowerCase()}-maniobras`}
+    >
+      {label} — M1: {formatVal(triple[0])} {unit} · M2:{" "}
+      {formatVal(triple[1])} {unit} · M3: {formatVal(triple[2])} {unit}
+    </p>
+  )
+}
+
 // --- Decisión de qué datos usar: extraído gana sobre calculado ---
 
 export interface ResolvedCriteria {
@@ -586,6 +659,13 @@ export interface ResolvedCriteria {
   fvcTopTwoNative: [number, number] | null
   /** Los 2 valores FEV1 más altos en la unidad nativa (L), o null. */
   fev1TopTwoNative: [number, number] | null
+  /** Las 3 maniobras absolutas de FVC en la unidad nativa (L),
+   *  preservando el orden M1/M2/M3. null por maniobra ausente
+   *  (no se inventa). null si la fila no existe. */
+  fvcManeuverTripleNative: [number | null, number | null, number | null] | null
+  /** Las 3 maniobras absolutas de FEV1 en la unidad nativa (L). */
+  fev1ManeuverTripleNative:
+    [number | null, number | null, number | null] | null
   picoMaximo: unknown
   formaTriangular: unknown
   libreArtefactos: unknown
@@ -629,6 +709,9 @@ export function resolveCriteria(
     fvcExtracted !== null ? fvcExtracted : fvcCalc.diffMl
   const repetibilidadFvcSource: ResolvedCriteria["repetibilidadFvcSource"] =
     fvcExtracted !== null ? "extracted" : fvcCalc.diffMl !== null ? "computed" : "missing"
+  // IMPL-20260824-XX (Frank): triple M1/M2/M3 de la misma fila que usa el
+  // cálculo, para que el médico pueda verificar la operación top-2.
+  const fvcManeuverTriple = readManeuverTriple(fvcRow)
 
   // --- Repetibilidad FEV1 ---
   const fev1Extracted = hasValue(calidad?.repetibilidad_fev1_ml)
@@ -640,6 +723,7 @@ export function resolveCriteria(
     fev1Extracted !== null ? fev1Extracted : fev1Calc.diffMl
   const repetibilidadFev1Source: ResolvedCriteria["repetibilidadFev1Source"] =
     fev1Extracted !== null ? "extracted" : fev1Calc.diffMl !== null ? "computed" : "missing"
+  const fev1ManeuverTriple = readManeuverTriple(fev1Row)
 
   // --- Booleanos ≤150 (Sí/No) — BR-20260824-01 ---
   // REGLA DE PRECEDENCIA (IMPL-20260824-05 — fix v6 captura Sibelmed):
@@ -800,6 +884,11 @@ export function resolveCriteria(
     // inconsistente (no mostrar operación espuria).
     fvcTopTwoNative: fvcTopTwoFinal,
     fev1TopTwoNative: fev1TopTwoFinal,
+    // IMPL-20260824-XX (Frank): triple M1/M2/M3 del mismo snapshot/fila
+    // que usa el cálculo. Visible en REPETIBILIDAD NUMÉRICA junto a la
+    // operación para que el médico verifique. null por maniobra ausente.
+    fvcManeuverTripleNative: fvcManeuverTriple,
+    fev1ManeuverTripleNative: fev1ManeuverTriple,
     picoMaximo: calidad?.pico_maximo ?? null,
     formaTriangular: calidad?.forma_triangular ?? null,
     libreArtefactos: calidad?.libre_artefactos ?? null,
@@ -905,8 +994,17 @@ export default function EspirometriaClinicalCriteriaPanel({
         Criterios extraídos del documento fuente o derivados de la tabla de maniobras. No sustituyen el criterio médico.
       </p>
 
-      {/* === BLOQUE 1 (orden §4 segunda imagen): repetibilidad numérica primero === */}
-      {(c.repetibilidadFvcMl !== null || c.repetibilidadFev1Ml !== null) ? (
+      {/* === BLOQUE 1 (orden §4 segunda imagen): repetibilidad numérica primero ===
+          IMPL-20260824-XX (Frank): muestra también los 3 valores absolutos
+          de maniobra (M1/M2/M3) por parámetro, ANTES de la operación top-2,
+          para que el médico pueda verificarla. Se renderiza siempre que
+          haya triple (incluso si `repetibilidad*Ml` es null por payload
+          parcial — la verificación de la maniobra es independiente del
+          resultado numérico). */}
+      {(c.repetibilidadFvcMl !== null ||
+        c.repetibilidadFev1Ml !== null ||
+        c.fvcManeuverTripleNative !== null ||
+        c.fev1ManeuverTripleNative !== null) ? (
         <div className="bg-white border border-sky-100 rounded-lg p-3 space-y-1">
           <p
             className="text-[10px] font-bold text-sky-700 uppercase tracking-wider pb-1"
@@ -929,6 +1027,11 @@ export default function EspirometriaClinicalCriteriaPanel({
               testId="repetibilidad-fvc-ml"
             />
           )}
+          <ManeuverTripleLine
+            label="FVC"
+            triple={c.fvcManeuverTripleNative}
+            unit="L"
+          />
           <RepetibilidadOperationLine
             label="FVC"
             topTwo={c.fvcTopTwoNative}
@@ -949,6 +1052,11 @@ export default function EspirometriaClinicalCriteriaPanel({
               testId="repetibilidad-fev1-ml"
             />
           )}
+          <ManeuverTripleLine
+            label="FEV1"
+            triple={c.fev1ManeuverTripleNative}
+            unit="L"
+          />
           <RepetibilidadOperationLine
             label="FEV1"
             topTwo={c.fev1TopTwoNative}
