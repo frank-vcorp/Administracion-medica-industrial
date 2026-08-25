@@ -78,6 +78,15 @@ model User {
   updatedAIProviderKeys     AIProviderKey[]           @relation("AIProviderKeyUpdater")
   // ARCH-20260809-05: Configuración runtime editable por UI (extraction_default_provider, etc.).
   appConfigUpdated          AppConfig[]               @relation("AppConfigUpdater")
+  // IMPL-FEATURE-20260825-01: perfil médico editable por Superadmin/Doctor.
+  // Aditivo, nullable: no rompe filas existentes. La firma NO se considera
+  // PII clínica del paciente, pero su acceso se limita a roles clínicos /
+  // SUPERADMIN en la capa de server actions. El snapshot al momento de la
+  // revisión médica se persiste en DoctorStudyReview (validatorSnapshot*)
+  // para que el PDF quede congelado aunque el médico edite su perfil
+  // después.
+  professionalLicense       String?
+  signatureImageUrl         String?
 
   @@map("users")
 }
@@ -797,6 +806,22 @@ model DoctorStudyReview {
   errorCategory          String?
   doctorFeedbackNote     String?
   createdAt              DateTime @default(now())
+  // IMPL-FEATURE-20260825-01: snapshot congelado de la identidad del médico
+  // que emite la revisión (para que el PDF firmado/descargable mantenga la
+  // firma y cédula efectiva aunque el médico edite su perfil después).
+  // Aditivos, nullable: null = revisión previa a este incremento.
+  validatorSnapshotFullName            String?
+  validatorSnapshotProfessionalLicense String?
+  validatorSnapshotSignatureUrl        String?
+  // Referencia al PDF validado descargable cuando doctorStatus es
+  // REVIEWED_ACCEPTED o REVIEWED_EDITED. Rejected NO genera PDF.
+  validatedPdfUrl        String?
+  validatedPdfGeneratedAt DateTime?
+  validatedPdfHash       String?
+  // Mensaje de error de generación visible al usuario; si está presente
+  // el PDF NO se considera listo (aún si validatedPdfUrl quedó escrito
+  // por una corrida parcial anterior).
+  validatedPdfError      String?
 
   prediagnosisSnapshot AIPrediagnosisSnapshot @relation(fields: [prediagnosisSnapshotId], references: [id], onDelete: Cascade)
   reviewedBy           User                   @relation(fields: [reviewedByUserId], references: [id])

@@ -12,11 +12,22 @@
  * GUARDRAIL: Las funciones de este archivo NO pueden usarse para poblar
  *   aptitud laboral, dictamen final ni firmar PDFs. El prediagnóstico IA
  *   es exclusivamente apoyo a la decisión clínica del médico.
+ *
+ * Seguridad (QA-20260825-01 P1-A):
+ *  - `submitDoctorStudyReview` NUNCA confía en `input.reviewedByUserId`.
+ *    El ID del médico se deriva SIEMPRE de `getServerSession(authOptions)`
+ *    y la sesión debe pertenecer a un rol autorizado
+ *    (SUPERADMIN | DOCTOR_GENERAL | DOCTOR_VALIDATOR). El valor recibido
+ *    del cliente se IGNORA (no se valida contra el ID de sesión: cualquier
+ *    valor externo se descarta). El PDF congelado y la firma/cédula
+ *    persistidas provienen del usuario en sesión, no de un parámetro
+ *    manipulable.
  */
 'use server'
 
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 // FIX-20260820-01-VERCEL-BUILD: helper síncrono vive ahora en el módulo
 // compartido (no en el archivo 'use server'); getPublishedVersionForSnapshot
@@ -32,6 +43,28 @@ import {
   EspirometriaQuestionnairePayloadSchema,
   ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
 } from '@/schemas/clinical/espirometria-questionnaire.schema'
+// IMPL-FEATURE-20260825-01: validación del perfil médico y generación del
+// PDF validado de Espirometría. El módulo `espirometry-pdf.tsx` no es un
+// server action (no lleva 'use server'); sólo provee funciones puras
+// reutilizables.
+import {
+  generateEspirometryValidatedPdf,
+  buildEspirometryPdfData,
+  resolveAmiLogoDataUrl,
+} from '@/lib/espirometry-pdf'
+import { validateDoctorProfileForPdf } from '@/schemas/clinical/doctor-profile.schema'
+import { authOptions } from '@/auth'
+
+/**
+ * QA-20260825-01 P1-A: roles autorizados para emitir revisión médica
+ * (y por tanto congelar firma/cédula en el PDF). Coincide con los roles
+ * que pueden editar el perfil médico (`doctor-profile.actions.ts`).
+ */
+const AUTHORIZED_REVIEWER_ROLES = new Set<string>([
+  'SUPERADMIN',
+  'DOCTOR_GENERAL',
+  'DOCTOR_VALIDATOR',
+])
 
 const PYTHON_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -87,6 +120,19 @@ export interface DoctorStudyReviewResult {
   success: boolean
   error?: string
   reviewId?: string
+  /**
+   * IMPL-FEATURE-20260825-01: indica si el PDF validado quedó generado y
+   * referenciado en la revisión (`true`) o si quedó pendiente por falta
+   * de datos del médico o por error de generación (`false`). El cliente
+   * usa este flag para mostrar el botón de descarga sólo cuando aplica.
+   */
+  pdfGenerated?: boolean
+  /**
+   * Mensaje legible cuando `pdfGenerated === false`: el cliente lo muestra
+   * como toast/error no bloqueante. La revisión médica YA quedó guardada;
+   * sólo el artefacto PDF requiere reintento.
+   */
+  pdfErrorMessage?: string | null
 }
 
 export interface StudySnapshotsResult {
@@ -744,7 +790,9 @@ export async function submitDoctorStudyReview(
     doctorStatus,
     doctorDiagnosis,
     doctorNotes,
-    reviewedByUserId,
+    // QA-20260825-01 P1-A: el `reviewedByUserId` enviado por el cliente se
+    // EXTRAE pero NO SE USA. El ID efectivo se deriva de la sesión.
+    reviewedByUserId: _clientReviewedByUserId,
     aiAgreementScore,
     aiUsefulnessScore,
     differenceType,
@@ -754,7 +802,7 @@ export async function submitDoctorStudyReview(
     eventId,
   } = input
 
-  if (!prediagnosisSnapshotId || !doctorStatus || !reviewedByUserId) {
+  if (!prediagnosisSnapshotId || !doctorStatus) {
     return { success: false, error: 'Faltan campos obligatorios en la revisión médica' }
   }
 
@@ -763,13 +811,88 @@ export async function submitDoctorStudyReview(
     return { success: false, error: `Estado de revisión inválido: ${doctorStatus}` }
   }
 
+  // ── QA-20260825-01 P1-A: binding de sesión ─────────────────────────────
+  // El ID del médico se toma SIEMPRE de `getServerSession`. El valor del
+  // cliente se ignora silenciosamente para no romper la firma del action
+  // (retrocompat con callers existentes que aún lo mandan).
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return { success: false, error: 'No autenticado' }
+  }
+  if (!AUTHORIZED_REVIEWER_ROLES.has(session.user.role)) {
+    return { success: false, error: 'Sin permisos para emitir revisión médica' }
+  }
+  const reviewedByUserId = session.user.id
+
   try {
-    // Verificar que el snapshot existe
+    // Verificar que el snapshot existe y traer su prediagnosisData + chain
+    // mínima para generar el PDF cuando aplique.
     const snapshot = await prisma.aIPrediagnosisSnapshot.findUnique({
       where: { id: prediagnosisSnapshotId },
+      include: {
+        extractionSnapshot: {
+          select: {
+            studyType: true,
+            structuredData: true,
+            eventTest: {
+              select: {
+                testNameSnapshot: true,
+                eventId: true,
+                event: {
+                  select: {
+                    worker: {
+                      select: {
+                        firstName: true,
+                        lastName: true,
+                        universalId: true,
+                        company: { select: { name: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     })
     if (!snapshot) {
       return { success: false, error: 'Snapshot de prediagnóstico no encontrado' }
+    }
+
+    // ── IMPL-FEATURE-20260825-01 ────────────────────────────────────────────
+    // Congelar identidad del médico en la revisión (sólo si la revisión va
+    // a generar PDF: ACCEPTED o EDITED). Para REJECTED la firma/cédula NO
+    // se persisten en el snapshot — el rechazo no genera PDF y el médico
+    // sigue siendo trazable por `reviewedByUserId` (de sesión).
+    const shouldGeneratePdf =
+      doctorStatus === 'REVIEWED_ACCEPTED' || doctorStatus === 'REVIEWED_EDITED'
+
+    let snapshotFullName: string | null = null
+    let snapshotLicense: string | null = null
+    let snapshotSignatureUrl: string | null = null
+    if (shouldGeneratePdf) {
+      const reviewer = await prisma.user.findUnique({
+        where: { id: reviewedByUserId },
+        select: { fullName: true, professionalLicense: true, signatureImageUrl: true },
+      })
+      if (!reviewer) {
+        return { success: false, error: 'Médico revisor no encontrado' }
+      }
+      const validationError = validateDoctorProfileForPdf({
+        fullName: reviewer.fullName,
+        professionalLicense: reviewer.professionalLicense,
+        signatureImageUrl: reviewer.signatureImageUrl,
+      })
+      if (validationError) {
+        return {
+          success: false,
+          error: validationError,
+        }
+      }
+      snapshotFullName = reviewer.fullName
+      snapshotLicense = reviewer.professionalLicense ?? null
+      snapshotSignatureUrl = reviewer.signatureImageUrl ?? null
     }
 
     const review = await prisma.doctorStudyReview.create({
@@ -785,6 +908,10 @@ export async function submitDoctorStudyReview(
         errorSeverity: errorSeverity ?? 'none',
         errorCategory: errorCategory ?? null,
         doctorFeedbackNote: doctorFeedbackNote ?? null,
+        // IMPL-FEATURE-20260825-01: snapshot congelado de identidad.
+        validatorSnapshotFullName: snapshotFullName,
+        validatorSnapshotProfessionalLicense: snapshotLicense,
+        validatorSnapshotSignatureUrl: snapshotSignatureUrl,
       },
     })
 
@@ -794,9 +921,93 @@ export async function submitDoctorStudyReview(
       data: { clinicalState: doctorStatus },
     })
 
+    // ── IMPL-FEATURE-20260825-01: generación de PDF validado ────────────────
+    let pdfGenerated = false
+    let pdfErrorMessage: string | null = null
+    if (shouldGeneratePdf && snapshotFullName && snapshotLicense && snapshotSignatureUrl) {
+      try {
+        const eventTestData = snapshot.extractionSnapshot?.eventTest
+        const worker = eventTestData?.event?.worker
+
+        // QA-20260825-01 P3-G: resolver el logo UNA VEZ por proceso (cacheado).
+        // Si la red está caída, devuelve null → el componente usa el fallback
+        // "AMI" sin abortar.
+        const logoDataUrl = await resolveAmiLogoDataUrl()
+
+        // QA-20260825-01 P3-F + P2-D: helper puro compartido action/route;
+        // mismo contenido → mismo hash si las entradas no cambian.
+        const pdfData = buildEspirometryPdfData({
+          reviewId: review.id,
+          doctorStatus:
+            doctorStatus === 'REVIEWED_ACCEPTED'
+              ? 'REVIEWED_ACCEPTED'
+              : 'REVIEWED_EDITED',
+          doctorDiagnosis,
+          doctorNotes,
+          reviewCreatedAt: review.createdAt,
+          prediagnosisData: snapshot.prediagnosisData,
+          extractionStructuredData: snapshot.extractionSnapshot?.structuredData,
+          studyName: eventTestData?.testNameSnapshot ?? null,
+          studyType: snapshot.extractionSnapshot?.studyType ?? null,
+          patient: {
+            firstName: worker?.firstName ?? '',
+            lastName: worker?.lastName ?? '',
+            universalId: worker?.universalId ?? null,
+            companyName: worker?.company?.name ?? null,
+          },
+          medico: {
+            fullName: snapshotFullName,
+            professionalLicense: snapshotLicense,
+            signatureImageUrl: snapshotSignatureUrl,
+          },
+          logoDataUrl,
+        })
+
+        const pdfResult = await generateEspirometryValidatedPdf({
+          reviewId: review.id,
+          data: pdfData,
+        })
+
+        await prisma.doctorStudyReview.update({
+          where: { id: review.id },
+          data: {
+            validatedPdfUrl: pdfResult.url,
+            validatedPdfGeneratedAt: new Date(),
+            validatedPdfHash: pdfResult.hash,
+            validatedPdfError: null,
+          },
+        })
+        pdfGenerated = true
+      } catch (pdfErr) {
+        // IMPL-FEATURE-20260825-01: error visible y la revisión NO queda
+        // marcada como PDF listo. Persistimos el mensaje para que la UI
+        // pueda mostrarlo en reintento.
+        pdfErrorMessage =
+          pdfErr instanceof Error
+            ? pdfErr.message
+            : 'Error desconocido al generar el PDF validado.'
+        try {
+          await prisma.doctorStudyReview.update({
+            where: { id: review.id },
+            data: { validatedPdfError: pdfErrorMessage },
+          })
+        } catch (persistErr) {
+          console.error(
+            '[IMPL-FEATURE-20260825-01] No se pudo persistir validatedPdfError:',
+            persistErr,
+          )
+        }
+      }
+    }
+
     revalidatePath(`/events/${eventId}`)
 
-    return { success: true, reviewId: review.id }
+    return {
+      success: true,
+      reviewId: review.id,
+      pdfGenerated,
+      pdfErrorMessage,
+    }
   } catch (error) {
     console.error('[IMPL-20260326-16] Error en submitDoctorStudyReview:', error)
     return {
