@@ -6298,8 +6298,14 @@ class TestFIX20260824_04Rev2PromptCompactoV7:
 
 class TestFIX20260824_04Rev2M3Parameters:
     """
-    IMPL-FIX-20260824-04-rev2: ACs de los parámetros del SDK OpenAI
-    enviados a MiniMax M3 (`max_tokens=8192`, `response_format={"type":"json_object"}`).
+    IMPL-FIX-20260824-04-rev2/rev3: ACs de los parámetros del SDK OpenAI
+    enviados a MiniMax M3 (`max_tokens=32768`, `response_format={"type":"json_object"}`).
+
+    rev.3 (FIX-20260824-04-rev3, 2026-08-24): Frank pidió margen explícito
+    para snapshots densos. Subimos de 8192 (rev. 2) a 32768. NO ilimitado
+    (la API requiere límite numérico; MiniMax soporta hasta 524K).
+    Endpoint `https://api.minimax.io/v1` y `response_format` preservados.
+    Otros proveedores NO modificados. Sin reintentos ciegos.
 
     Estos tests verifican ESTÁTICAMENTE el código de `M3VisionBase.call_m3`
     para confirmar que el contrato de salida es el esperado (sin hacer
@@ -6311,10 +6317,13 @@ class TestFIX20260824_04Rev2M3Parameters:
     para que el catch-all la mapee a `error_code` accionable.
     """
 
-    def test_call_m3_envia_max_tokens_8192(self):
-        """`max_tokens=8192` (era 4096). Verificación estática: el archivo
-        `base.py` debe contener el literal `max_tokens=8192` dentro del
-        método `call_m3` (no en otra llamada)."""
+    def test_call_m3_envia_max_tokens_32768(self):
+        """`max_tokens=32768` (era 8192, antes 4096). Verificación estática:
+        el archivo `base.py` debe contener el literal `max_tokens=32768`
+        dentro del método `call_m3` (no en otra llamada). NO ilimitado:
+        la API requiere límite numérico y MiniMax soporta un techo
+        mucho mayor (524K); 32768 deja margen explícito para snapshots
+        densos sin riesgo de truncado."""
         base_path = Path(__file__).parent.parent / "app" / "services" / "ai" / "base.py"
         src = base_path.read_text(encoding="utf-8")
 
@@ -6325,15 +6334,27 @@ class TestFIX20260824_04Rev2M3Parameters:
             idx_next_def = len(src)
         block = src[idx_call_m3:idx_next_def]
 
-        assert "max_tokens=8192" in block, (
-            "call_m3 debe enviar max_tokens=8192 (era 4096). "
+        assert "max_tokens=32768" in block, (
+            "call_m3 debe enviar max_tokens=32768 (era 8192, antes 4096). "
             "M3 soporta hasta 524K tokens; 4096 era muy corto para JSON "
-            "estructurado."
+            "estructurado. Frank pidió margen explícito: 32768 NO "
+            "ilimitado; la API requiere límite numérico."
         )
-        # Garantía: NO debe quedar max_tokens=4096 en call_m3 (regresión).
+        # Garantía: NO debe quedar max_tokens=8192 ni 4096 en call_m3
+        # (regresión). 8192 era el valor de rev. 2 (también insuficiente
+        # para snapshots densos).
+        assert "max_tokens=8192" not in block, (
+            "call_m3 sigue enviando max_tokens=8192 (rev. 2). Subir a "
+            "32768 — Frank pidió margen explícito."
+        )
         assert "max_tokens=4096" not in block, (
             "call_m3 sigue enviando max_tokens=4096 — causante de "
-            "EXTRACTION_NOT_JSON. Subir a 8192."
+            "EXTRACTION_NOT_JSON. Subir a 32768."
+        )
+        # Garantía: NO se introduce max_tokens=None / ilimitado.
+        assert "max_tokens=None" not in block, (
+            "max_tokens=None NO permitido — la API requiere límite "
+            "numérico. Frank explícitamente pidió NO ilimitado."
         )
 
     def test_call_m3_envia_response_format_json_object(self):
@@ -6374,7 +6395,7 @@ class TestFIX20260824_04Rev2M3Parameters:
     def test_call_m3_no_modifica_featherless_o_otros(self):
         """Garantía: el cambio aplica SOLO a call_m3 (MiniMax M3), NO
         a FeatherlessVisionBase.call_featherless_vision ni a otros
-        proveedores. El max_tokens=8192 + response_format NO debe
+        proveedores. El max_tokens=32768 + response_format NO debe
         aparecer fuera del bloque call_m3."""
         base_path = Path(__file__).parent.parent / "app" / "services" / "ai" / "base.py"
         src = base_path.read_text(encoding="utf-8")
@@ -6385,7 +6406,7 @@ class TestFIX20260824_04Rev2M3Parameters:
             idx_next_def = len(src)
         outside = src[:idx_call_m3] + src[idx_next_def:]
 
-        assert "max_tokens=8192" not in outside, (
-            "max_tokens=8192 encontrado fuera de call_m3 — fix debe "
+        assert "max_tokens=32768" not in outside, (
+            "max_tokens=32768 encontrado fuera de call_m3 — fix debe "
             "limitarse a M3 (MiniMax)."
         )

@@ -805,17 +805,21 @@ class M3VisionBase:
                     }
                 ],
                 temperature=0.1,
-                # FIX-20260824-04-rev2: M3 (MiniMax-M3) soporta hasta 524K
+                # FIX-20260824-04-rev3: M3 (MiniMax-M3) soporta hasta 524K
                 # tokens de salida (verificado en docs oficiales MiniMax
                 # platform.minimax.io). 4096 era muy corto para una salida
                 # JSON estructurada con todas las claves del prompt de
                 # Espirometría v6 (~15 KB de prompt + JSON de salida con
                 # ~30 claves), provocando que el LLM respondiera con
                 # `<think>...` y se quedara sin tokens antes de devolver
-                # JSON. 8192 tokens caben holgadamente con el prompt v7
-                # compactado (<5 KB) y un JSON estructurado de <3 KB. Sin
-                # reintentos ciegos: si la respuesta sigue truncada, el
-                # caller lo verá como EXTRACTION_NOT_JSON en logs.
+                # JSON. 8192 cabía holgadamente el prompt v7 (<5 KB) +
+                # JSON <3 KB, pero Frank pidió margen explícito para
+                # snapshots densos: subimos a 32768 (NO ilimitado; la API
+                # requiere límite numérico y MiniMax soporta un techo muy
+                # mayor — hasta 524288). Endpoint preservado
+                # (`https://api.minimax.io/v1`) y `response_format=
+                # {"type":"json_object"}` preservados. Otros proveedores
+                # NO modificados. Sin reintentos ciegos.
                 #
                 # `response_format={"type": "json_object"}` es soportado
                 # por M3 (verificado en Fireworks MiniMax-M3 API params
@@ -826,7 +830,7 @@ class M3VisionBase:
                 # tolerante sigue siendo necesario. NO oculta errores:
                 # cualquier excepción del SDK se propaga tal cual para que
                 # el catch-all la mapee a `error_code` accionable.
-                max_tokens=8192,
+                max_tokens=32768,
                 response_format={"type": "json_object"},
             )
         except Exception as e:
