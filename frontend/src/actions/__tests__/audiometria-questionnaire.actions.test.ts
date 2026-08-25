@@ -38,7 +38,10 @@ import { AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from '@/schemas/clinical/aud
 const VALID_PAYLOAD = {
   schemaVersion: AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
   capturedAt: '2026-08-25T14:00:00.000Z',
-  consentimiento: 'SI' as const,
+  // DEC-20260825-08 / BR-20260825-09: el payload guarda SÓLO
+  // antecedentes, exploración física y observaciones clínicas — los
+  // campos administrativos (patientId, consentimiento,
+  // responsableCaptura, responsableMedico) fueron RETIRADOS.
   antecedentes: {
     audiometria_previa: 'NO' as const,
     exposicion_ruido_laboral: 'NO' as const,

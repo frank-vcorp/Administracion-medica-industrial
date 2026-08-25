@@ -10,9 +10,17 @@
  *     cuando su pregunta padre tiene la respuesta adecuada.
  *   - Exploración física por estados Normal/Alterado/No realizado + observación
  *     opcional (faringe, CAD, CAI, MTD, MTI).
- *   - No incluye PII del encabezado (la papeleta ya lo aporta). Aquí sólo
- *     antecedentes auditivos, exploración física, Patient ID del estudio,
- *     responsables y consentimiento.
+ *   - NO incluye PII ni metadatos administrativos redundantes. La identidad
+ *     del paciente/Event viene de la papeleta; el médico y el usuario de
+ *     sesión se derivan de la sesión y del documento fuente — NO se
+ *     duplican aquí.
+ *
+ * DEC-20260825-08 / BR-20260825-09 (rectificación Frank) — la iteración
+ * previa incluía `Patient ID del formato`, `consentimiento`,
+ * `responsableCaptura` y `responsableMedico` como campos del payload.
+ * Esos campos fueron RETIRADOS completamente: ni aparecen en UI ni
+ * forman parte del payload/schema guardado. El cuestionario guarda SÓLO
+ * antecedentes auditivos, exploración física y observaciones clínicas.
  *
  * El schema es server-side enforced: el server action rechaza payloads que
  * no cumplan con `AudiometriaQuestionnairePayloadSchema` y devuelve un error
@@ -99,18 +107,6 @@ const optString = z
   .string()
   .trim()
   .max(500, 'Máximo 500 caracteres')
-  .optional()
-
-const optPatientId = z
-  .string()
-  .trim()
-  .max(120, 'Máximo 120 caracteres')
-  .optional()
-
-const optFirmaResponsable = z
-  .string()
-  .trim()
-  .max(120, 'Máximo 120 caracteres')
   .optional()
 
 /**
@@ -391,15 +387,24 @@ const ExploracionFisicaSchema = z.object({
  * `schemaVersion` igual a `AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION` para
  * permitir evolución futura sin romper contratos.
  *
- * Además de antecedentes/exploración/observaciones, el payload incluye
- * metadatos administrativos no clínicos:
- *   - `patientId` (Patient ID del formato)
- *   - `responsables` (responsable de captura y responsable médico)
- *   - `consentimiento` (consentimiento informado, Sí/No)
+ * DEC-20260825-08 / BR-20260825-09 — el payload guarda SÓLO:
+ *   - `antecedentes` (antecedentes auditivos del paciente).
+ *   - `exploracionFisica` (faringe / CAD / CAI / MTD / MTI).
+ *   - `observaciones` (texto libre controlado, opcional).
  *
- * Estos campos no son PII del encabezado: la papeleta ya aporta nombre,
- * empresa, etc.; aquí sólo lo necesario para la trazabilidad documental
- * específica del formato audiométrico.
+ * Quedan EXCLUIDOS por diseño y por rectificación (`DEC-20260825-08`):
+ *   - `Patient ID del formato` — la trazabilidad del paciente/Event la
+ *     aporta la papeleta, no el cuestionario.
+ *   - `consentimiento` — el consentimiento informado tiene su propio
+ *     punto de captura y no es un dato del cuestionario clínico.
+ *   - `responsableCaptura` / `responsableMedico` — la identidad del
+ *     médico y del usuario de captura se derivan de la sesión, no del
+ *     payload. El documento fuente audiométrico ya tiene su propia
+ *     cadena de responsabilidad.
+ *
+ * NO duplica PII del encabezado de la papeleta. La identidad clínica
+ * efectiva del médico firmante se congela en `DoctorStudyReview`
+ * (firma/cédula) en el momento de la revisión médica.
  */
 export const AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION =
   'audiometria-questionnaire-v1' as const
@@ -409,12 +414,6 @@ export const AudiometriaQuestionnairePayloadSchema = z.object({
   capturedAt: z.string().datetime({
     message: 'capturedAt debe ser un ISO 8601 válido.',
   }),
-  // Metadatos administrativos del formato
-  patientId: optPatientId,
-  responsableCaptura: optFirmaResponsable,
-  responsableMedico: optFirmaResponsable,
-  consentimiento: z.enum(['SI', 'NO']).optional(),
-  // Antecedentes + exploración + observaciones
   antecedentes: AntecedentesSchema,
   exploracionFisica: ExploracionFisicaSchema,
   observaciones: optString,

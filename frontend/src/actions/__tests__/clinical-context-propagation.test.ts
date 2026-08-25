@@ -54,10 +54,11 @@ const VALID_ESPIRO_CTX = {
 const VALID_AUDIO_CTX: AudiometriaQuestionnairePayload = {
   schemaVersion: AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
   capturedAt: '2026-08-25T14:00:00.000Z',
-  patientId: undefined,
-  responsableCaptura: undefined,
-  responsableMedico: undefined,
-  consentimiento: 'SI',
+  // DEC-20260825-08 / BR-20260825-09: el payload de Audiometría guarda
+  // SÓLO antecedentes, exploración física y observaciones clínicas — ya
+  // no incluye patientId, consentimiento, responsableCaptura ni
+  // responsableMedico. Esos campos estaban duplicados y fueron
+  // rectificados.
   antecedentes: {
     audiometria_previa: 'NO',
     exposicion_ruido_laboral: 'NO',

@@ -239,3 +239,19 @@
 - **Implicación:** normalidad `≤25 dB` queda confirmada por AMI; la fórmula de PTA debe documentarse como regla clínica adoptada y no atribuirse automáticamente a la NOM-011 si ésta no la prescribe.
 - **Decisión posterior:** se adoptará `PTA3 = (500 + 1000 + 2000) / 3` y se conservará el PTA fuente del audiómetro/AMI por separado.
 - **Decisión adicional:** NOM-011, AMI y fuente del audiómetro deberán aparecer como capas explícitamente etiquetadas, sin fusionar sus criterios.
+
+## FND-20260825-11 — El cuestionario renderiza campos administrativos redundantes
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT
+- **Evidencia:** captura de producción entregada por Frank el 2026-08-25; el modal muestra `Patient ID del formato`, consentimiento, responsable de captura y responsable médico.
+- **Hallazgo:** esos campos pertenecen al formato documental de AMI, pero no deben solicitarse nuevamente en el cuestionario clínico del Event porque duplican información de papeleta/sesión y agregan fricción.
+- **Corrección requerida:** retirar campos de UI, payload y schema; mantener sólo antecedentes auditivos, exploración física y observaciones.
+- **Referencia:** DEC-20260825-08, BR-20260825-09.
+
+## FND-20260825-12 — El panel muestra el umbral AMI pero no el criterio completo visible
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT
+- **Evidencia:** captura de producción entregada por Frank el 2026-08-25; el panel muestra la etiqueta `AMI criterio audiométrico` y `NORMAL (≤25 dB)`, pero no expone de forma legible el conjunto de criterios AMI del programa (patrones nosológicos, rangos de severidad y categorías etiológicas).
+- **Hallazgo:** La lógica parcial existe, pero la referencia clínica que permite auditar por qué se obtuvo el resultado quedó oculta o incompleta en la interfaz.
+- **Corrección requerida:** mostrar una sección explícita de `Criterio audiométrico AMI` con normalidad, patrones por frecuencias, rangos de severidad y categorías etiológicas como referencia; separar el resultado derivado de cualquier diagnóstico médico final.
+- **Referencia:** FND-20260825-08, BR-20260825-05, SPEC-FEATURE-20260825-02.

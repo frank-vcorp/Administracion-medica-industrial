@@ -13,6 +13,13 @@
  *     tinnitus, medicamentos).
  *   - Rechazo por `Otro` sin catálogo OTRO (en exposición laboral,
  *     recreativa, explosión, infecciones, medicamentos).
+ *   - DEC-20260825-08 / BR-20260825-09: el payload NO contiene los
+ *     campos administrativos `patientId`, `consentimiento`,
+ *     `responsableCaptura` ni `responsableMedico`. Si se reciben
+ *     payloads con esos campos, Zod los ignora (passthrough) o el
+ *     caller puede fallar por "propiedades desconocidas" en
+ *     `strictParse`. Nos aseguramos de que el schema SÓLO expone los
+ *     campos permitidos.
  *
  * @id IMPL-FEATURE-20260825-02
  * @backup context/SPECs/SPEC-FEATURE-20260825-02-AUDIOMETRIA-ENTREGABLE.md
@@ -26,10 +33,6 @@ import {
 const MIN_VALID: AudiometriaQuestionnairePayload = {
   schemaVersion: AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
   capturedAt: '2026-08-25T14:00:00.000Z',
-  patientId: undefined,
-  responsableCaptura: undefined,
-  responsableMedico: undefined,
-  consentimiento: undefined,
   antecedentes: {
     audiometria_previa: undefined,
     audiometria_previa_rango: undefined,
@@ -75,14 +78,14 @@ describe('AudiometriaQuestionnairePayloadSchema — payload mínimo', () => {
 })
 
 describe('AudiometriaQuestionnairePayloadSchema — payload completo', () => {
-  it('acepta un payload completo con metadatos y exploración alterada', () => {
+  it('acepta un payload completo de antecedentes y exploración alterada', () => {
     const payload: AudiometriaQuestionnairePayload = {
       schemaVersion: AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
       capturedAt: '2026-08-25T14:00:00.000Z',
-      patientId: 'PAT-001',
-      responsableCaptura: 'Tec. López',
-      responsableMedico: 'Dr. Ramírez',
-      consentimiento: 'SI',
+      // DEC-20260825-08: el payload NO incluye los campos administrativos
+      // retirados (patientId, consentimiento, responsableCaptura,
+      // responsableMedico). Sólo antecedentes, exploración física y
+      // observaciones clínicas.
       antecedentes: {
         audiometria_previa: 'SI',
         audiometria_previa_rango: 'MAS_5_ANIOS',

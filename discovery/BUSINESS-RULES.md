@@ -101,6 +101,12 @@
 - **Contenido mínimo:** frecuencias y valores utilizados por oído, fórmula `PTA3 = (TA500 + TA1000 + TA2000) / 3`, resultado, identificación como cálculo clínico adoptado y PTA original separado.
 - **Estado:** confirmado por Frank, 2026-08-25.
 
+## BR-20260825-09 — No duplicar metadatos administrativos en cuestionarios clínicos
+
+- **Regla:** El cuestionario de Audiometría sólo captura antecedentes, exploración física y observaciones clínicas. No muestra ni persiste Patient ID manual, consentimiento ni nombres de responsables.
+- **Fuente de identidad:** paciente/Event desde la papeleta; médico y usuario desde la sesión autenticada; datos documentales desde el archivo fuente.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
 ## BR-20260824-02 — Inferencia visual de criterios de calidad desde las gráficas
 
 - **Actor:** Sistema extractivo, como apoyo para revisión del médico ocupacional.

@@ -27,7 +27,10 @@ const NO_CONTEXT = null
 const EDIT_CONTEXT = {
   schemaVersion: AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
   capturedAt: '2026-08-25T14:00:00.000Z',
-  consentimiento: 'SI' as const,
+  // DEC-20260825-08 / BR-20260825-09: el payload SÓLO contiene
+  // antecedentes, exploración física y observaciones. NO incluye los
+  // campos administrativos retirados (patientId, consentimiento,
+  // responsableCaptura, responsableMedico).
   antecedentes: {
     audiometria_previa: 'SI' as const,
     audiometria_previa_rango: 'MAS_5_ANIOS' as const,
@@ -55,11 +58,17 @@ describe('AudiometriaQuestionnaireModal — render', () => {
     )
     expect(html).toContain('Cuestionario de Audiometría')
     expect(html).toContain('data-testid="audiometria-questionnaire-modal"')
-    // Datos del formato.
-    expect(html).toContain('Patient ID')
-    expect(html).toContain('Consentimiento')
-    expect(html).toContain('Responsable de captura')
-    expect(html).toContain('Responsable médico')
+    // DEC-20260825-08 / BR-20260825-09: los campos administrativos
+    // RETIRADOS (Patient ID del formato, consentimiento, responsable de
+    // captura, responsable médico) ya no aparecen en la UI.
+    expect(html).not.toContain('Patient ID del formato')
+    expect(html).not.toContain('Consentimiento informado')
+    expect(html).not.toContain('Responsable de captura')
+    expect(html).not.toContain('Responsable médico')
+    expect(html).not.toContain('data-testid="audiometria-patient-id"')
+    expect(html).not.toContain('data-testid="audiometria-consentimiento"')
+    expect(html).not.toContain('data-testid="audiometria-responsable-captura"')
+    expect(html).not.toContain('data-testid="audiometria-responsable-medico"')
     // Antecedentes.
     expect(html).toContain('Audiometría previa')
     expect(html).toContain('Dificultad auditiva')

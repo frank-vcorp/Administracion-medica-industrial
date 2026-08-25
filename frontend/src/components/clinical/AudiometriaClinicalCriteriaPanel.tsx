@@ -46,7 +46,196 @@ export const PTA3_FREQUENCIES_HZ = [500, 1000, 2000] as const
 export const FRECUENCIAS_GRAVES_HZ = [250, 500, 1000] as const
 export const FRECUENCIAS_AGUDAS_HZ = [2000, 3000, 4000, 6000, 8000] as const
 
-/** Resultado por oído de la interpretación audiométrica derivada. */
+// ──────────────────────────────────────────────────────────────────────────
+// FND-20260825-12 — Referencia del programa audiométrico AMI.
+//
+// Estas constantes representan la TABLA DE REFERENCIA del criterio
+// audiométrico AMI (BR-20260825-04 / DEC-20260825-05). NO son resultados
+// derivados del paciente: sirven para que el médico y el programa lean
+// la tabla de referencia y comparen con el resultado derivado del
+// paciente (que se calcula arriba de esta sección, en el panel clínico,
+// y en la sección III del PDF).
+//
+// DEFINICIONES (referencia operativa):
+//   - Normalidad:         PTA ≤ 25 dB
+//   - Patrones operativos (etiquetas nosológicas):
+//       NORMAL                            todos los umbrales dentro de rango
+//       GRAVES                            compromiso en 250/500/1000 Hz
+//       NEUROSENSORIAL_MEDIAS_AGUDAS      compromiso en 2000/3000/4000/6000/8000 Hz
+//                                         (predominio agudas con perfil neurosensorial)
+//       MIXTA                             compromiso simultáneo en graves y medias/agudas
+//       FATIGA                            caída de umbral > 10 dB al final del estudio
+//                                         (descenso sostenido, NO coclear)
+//   - Severidad (por peor PTA en dB HL):
+//       NO_APLICA         ≤ 25 dB
+//       LEVE              30–40 dB
+//       MODERADA          45–55 dB
+//       MODERADAMENTE_SEVERA 60–70 dB
+//       SEVERA            75–90 dB
+//       PROFUNDA          ≥ 95 dB
+//   - Categorías etiológicas AMI (REFERENCIA, selección administrativa):
+//       NORMAL
+//       TRAUMA_ACUSTICO_CRONICO        (TAC — exposición ocupacional/recreativa)
+//       PRESBIACUSIA                  (relacionada con edad)
+//       PROBABLE_VIAS_RESPIRATORIAS_ALTAS (CAI/MTI/tapón)
+//       ETIOLOGIA_A_DETERMINAR        (no clasificable con datos disponibles)
+//
+// REGLA: esta tabla NO convierte la referencia en diagnóstico automático.
+// El panel conserva su separación entre:
+//   1) Resultado derivado (PTA, criterio, patrón) — capa AMI interpretada.
+//   2) Impresión diagnóstica — decisión del médico firmante.
+// La sección de referencia es información administrativa que el clínico
+// consulta al emitir la impresión.
+// ──────────────────────────────────────────────────────────────────────────
+
+export type AmPatronNosologico =
+  | 'NORMAL'
+  | 'GRAVES'
+  | 'NEUROSENSORIAL_MEDIAS_AGUDAS'
+  | 'MIXTA'
+  | 'FATIGA'
+
+export type AmSeveridad =
+  | 'NO_APLICA'
+  | 'LEVE'
+  | 'MODERADA'
+  | 'MODERADAMENTE_SEVERA'
+  | 'SEVERA'
+  | 'PROFUNDA'
+
+export type AmEtiologia =
+  | 'NORMAL'
+  | 'TRAUMA_ACUSTICO_CRONICO'
+  | 'PRESBIACUSIA'
+  | 'PROBABLE_VIAS_RESPIRATORIAS_ALTAS'
+  | 'ETIOLOGIA_A_DETERMINAR'
+
+export interface AmiPatronReferencia {
+  id: AmPatronNosologico
+  etiqueta: string
+  descripcion: string
+  frecuenciasOperativas: string
+}
+
+export interface AmiSeveridadReferencia {
+  id: AmSeveridad
+  etiqueta: string
+  rangoDB: string
+  descripcion: string
+}
+
+export interface AmiEtiologiaReferencia {
+  id: AmEtiologia
+  etiqueta: string
+  nota: string
+}
+
+export const AMI_PATRONES_REFERENCIA: ReadonlyArray<AmiPatronReferencia> = [
+  {
+    id: 'NORMAL',
+    etiqueta: 'Normal',
+    descripcion:
+      'Todos los umbrales TA dentro de la banda de normalidad operativa.',
+    frecuenciasOperativas: '250–8000 Hz',
+  },
+  {
+    id: 'GRAVES',
+    etiqueta: 'Patrón de graves',
+    descripcion:
+      'Compromiso predominante en frecuencias graves (perfil conductivo o mixto bajo).',
+    frecuenciasOperativas: '250 / 500 / 1000 Hz',
+  },
+  {
+    id: 'NEUROSENSORIAL_MEDIAS_AGUDAS',
+    etiqueta: 'Neurosensorial medias/agudas',
+    descripcion:
+      'Compromiso predominante en medias y agudas (perfil neurosensorial alto).',
+    frecuenciasOperativas: '2000 / 3000 / 4000 / 6000 / 8000 Hz',
+  },
+  {
+    id: 'MIXTA',
+    etiqueta: 'Hipoacusia mixta',
+    descripcion:
+      'Compromiso simultáneo en graves y medias/agudas (componentes conductiva y neurosensorial).',
+    frecuenciasOperativas: '250–8000 Hz (ambas regiones)',
+  },
+  {
+    id: 'FATIGA',
+    etiqueta: 'Fatiga auditiva',
+    descripcion:
+      'Caída de umbral > 10 dB al final del estudio; NO coclear.',
+    frecuenciasOperativas: 'umbrales finales',
+  },
+]
+
+export const AMI_SEVERIDAD_REFERENCIA: ReadonlyArray<AmiSeveridadReferencia> = [
+  {
+    id: 'NO_APLICA',
+    etiqueta: 'No aplica',
+    rangoDB: 'PTA ≤ 25 dB HL',
+    descripcion: 'Umbrales dentro del rango de normalidad operativa.',
+  },
+  {
+    id: 'LEVE',
+    etiqueta: 'Leve',
+    rangoDB: '30–40 dB HL',
+    descripcion: 'Déficit leve en la inteligibilidad de la palabra.',
+  },
+  {
+    id: 'MODERADA',
+    etiqueta: 'Moderada',
+    rangoDB: '45–55 dB HL',
+    descripcion: 'Dificultad para la conversación en ambiente ruidoso.',
+  },
+  {
+    id: 'MODERADAMENTE_SEVERA',
+    etiqueta: 'Moderadamente severa',
+    rangoDB: '60–70 dB HL',
+    descripcion: 'Requiere amplificación; impacto laboral y social.',
+  },
+  {
+    id: 'SEVERA',
+    etiqueta: 'Severa',
+    rangoDB: '75–90 dB HL',
+    descripcion: 'Sólo percibe ruidos fuertes; requiere lectura labial.',
+  },
+  {
+    id: 'PROFUNDA',
+    etiqueta: 'Profunda',
+    rangoDB: '≥ 95 dB HL',
+    descripcion: 'Pérdida total o casi total; impacto funcional profundo.',
+  },
+]
+
+export const AMI_ETIOLOGIAS_REFERENCIA: ReadonlyArray<AmiEtiologiaReferencia> = [
+  {
+    id: 'NORMAL',
+    etiqueta: 'Normal',
+    nota: 'Sin hallazgos audiométricos operativos.',
+  },
+  {
+    id: 'TRAUMA_ACUSTICO_CRONICO',
+    etiqueta: 'Trauma acústico crónico',
+    nota:
+      'Antecedente de exposición ocupacional o recreativa reiterada a ruido.',
+  },
+  {
+    id: 'PRESBIACUSIA',
+    etiqueta: 'Presbiacusia',
+    nota: 'Pérdida asociada al envejecimiento del receptor coclear.',
+  },
+  {
+    id: 'PROBABLE_VIAS_RESPIRATORIAS_ALTAS',
+    etiqueta: 'Probable compromiso de vías respiratorias altas',
+    nota: 'Hallazgo reproducible en conducción aérea/ósea media.',
+  },
+  {
+    id: 'ETIOLOGIA_A_DETERMINAR',
+    etiqueta: 'Etiología a determinar',
+    nota:
+      'No clasificable con la evidencia actual; requiere correlación clínica.',
+  },
+]
 export interface OidoInterpretacion {
   oido: 'OD' | 'OI'
   ptaCalculado: number | null
@@ -578,6 +767,13 @@ export default function AudiometriaClinicalCriteriaPanel({
         </p>
       </div>
 
+      {/* FND-20260825-12 — Criterio audiométrico AMI (referencia).
+          Sección explícita y legible, SEPARADA del resultado derivado
+          (arriba) y de la decisión médica (abajo, fuera del panel).
+          El médico y el programa consultan esta tabla para emitir la
+          impresión diagnóstica. */}
+      <AMIReferenceSection />
+
       {/* Guardia clínica: el panel NO copia diagnóstico ni recomendación
           textual del PDF AMI como salida de IA (SPEC §3). */}
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -609,6 +805,172 @@ function readOidoVo(
 ): Record<number, number> {
   const r = readOido(extractedData ?? {}, side)
   return r.vo
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// FND-20260825-12 — `AMIReferenceSection`
+//
+// Bloque explícito de la TABLA DE REFERENCIA del programa audiométrico
+// AMI. Es la contraparte administrativa del resultado derivado que el
+// panel calcula arriba. NO realiza la clasificación del paciente ni
+// convierte el resultado en impresión diagnóstica: el clínico consulta
+// esta tabla para emitir su impresión.
+//
+// Capas diferenciadas:
+//   - Normalidad (≤ 25 dB).
+//   - Patrón nosológico operativo (graves, neurosensorial medias/agudas,
+//     mixta, normal, fatiga).
+//   - Severidad (rango de dB HL asociado al peor PTA).
+//   - Categorías etiológicas AMI (referencia administrativa).
+//
+// Las tablas se renderizan a partir de las constantes
+// `AMI_*_REFERENCIA` declaradas al inicio del módulo, reutilizadas
+// también desde el PDF validado (ver
+// `frontend/src/components/pdf/AudiometriaValidatedPDF.tsx`).
+// ──────────────────────────────────────────────────────────────────────────
+
+function AMIReferenceSection() {
+  return (
+    <div
+      className="bg-slate-50 border border-slate-300 rounded-lg p-3 space-y-3"
+      data-testid="audiometria-ami-reference-section"
+      role="region"
+      aria-label="Criterio audiométrico AMI (referencia)"
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span aria-hidden="true">📖</span>
+          <p className="text-sm font-bold text-slate-800">
+            Criterio audiométrico AMI (referencia)
+          </p>
+        </div>
+        <span
+          className="text-[10px] font-bold uppercase tracking-wider text-slate-500 border border-slate-300 rounded px-2 py-0.5 bg-white"
+          data-testid="audiometria-ami-reference-tag"
+        >
+          Referencia operativa
+        </span>
+      </div>
+      <p className="text-[11px] text-slate-600">
+        Tabla administrativa del programa audiométrico AMI. Esta sección
+        es de <strong>consulta</strong>: el resultado derivado del paciente
+        (PTA, criterio, patrón) está arriba; la impresión diagnóstica la
+        emite el médico firmante.
+      </p>
+
+      {/* 1. Normalidad */}
+      <div data-testid="audiometria-ami-ref-normalidad">
+        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+          1. Normalidad (umbral AMI)
+        </p>
+        <p className="text-xs text-slate-700 font-mono">
+          PTA ≤ {AMI_NORMALIDAD_DB} dB HL → Normal
+        </p>
+      </div>
+
+      {/* 2. Patrones nosológicos operativos */}
+      <div data-testid="audiometria-ami-ref-patrones">
+        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+          2. Patrón nosológico operativo
+        </p>
+        <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+          <table className="min-w-full text-xs">
+            <thead className="bg-slate-100">
+              <tr>
+                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                  Patrón
+                </th>
+                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                  Frecuencias operativas
+                </th>
+                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                  Descripción
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {AMI_PATRONES_REFERENCIA.map(p => (
+                <tr key={p.id} data-testid={`audiometria-ami-ref-patron-${p.id.toLowerCase()}`}>
+                  <td className="px-2 py-1 font-medium text-slate-700">
+                    {p.etiqueta}
+                  </td>
+                  <td className="px-2 py-1 font-mono text-slate-600 whitespace-nowrap">
+                    {p.frecuenciasOperativas}
+                  </td>
+                  <td className="px-2 py-1 text-slate-600">
+                    {p.descripcion}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 3. Severidad */}
+      <div data-testid="audiometria-ami-ref-severidad">
+        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+          3. Severidad (por peor PTA, dB HL)
+        </p>
+        <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+          <table className="min-w-full text-xs">
+            <thead className="bg-slate-100">
+              <tr>
+                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                  Categoría
+                </th>
+                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                  Rango
+                </th>
+                <th className="px-2 py-1 text-left font-semibold text-slate-600 border-b border-slate-200">
+                  Descripción
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {AMI_SEVERIDAD_REFERENCIA.map(s => (
+                <tr
+                  key={s.id}
+                  data-testid={`audiometria-ami-ref-severidad-${s.id.toLowerCase()}`}
+                >
+                  <td className="px-2 py-1 font-medium text-slate-700">
+                    {s.etiqueta}
+                  </td>
+                  <td className="px-2 py-1 font-mono text-slate-600 whitespace-nowrap">
+                    {s.rangoDB}
+                  </td>
+                  <td className="px-2 py-1 text-slate-600">
+                    {s.descripcion}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 4. Categorías etiológicas */}
+      <div data-testid="audiometria-ami-ref-etiologias">
+        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+          4. Categorías etiológicas AMI (referencia administrativa)
+        </p>
+        <ul className="space-y-1">
+          {AMI_ETIOLOGIAS_REFERENCIA.map(e => (
+            <li
+              key={e.id}
+              className="bg-white border border-slate-200 rounded px-2 py-1"
+              data-testid={`audiometria-ami-ref-etiologia-${e.id.toLowerCase()}`}
+            >
+              <span className="text-xs font-bold text-slate-700">
+                {e.etiqueta}
+              </span>
+              <span className="text-xs text-slate-600"> — {e.nota}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
 }
 
 function PTACard({

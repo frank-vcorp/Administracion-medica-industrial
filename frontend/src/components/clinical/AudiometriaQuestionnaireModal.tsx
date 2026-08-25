@@ -191,18 +191,11 @@ export default function AudiometriaQuestionnaireModal({
   const [observaciones, setObservaciones] = useState<string>(
     initialContext?.observaciones ?? '',
   )
-  const [patientId, setPatientId] = useState<string>(
-    initialContext?.patientId ?? '',
-  )
-  const [responsableCaptura, setResponsableCaptura] = useState<string>(
-    initialContext?.responsableCaptura ?? '',
-  )
-  const [responsableMedico, setResponsableMedico] = useState<string>(
-    initialContext?.responsableMedico ?? '',
-  )
-  const [consentimiento, setConsentimiento] = useState<'SI' | 'NO' | undefined>(
-    initialContext?.consentimiento,
-  )
+  // DEC-20260825-08 / BR-20260825-09 — los campos `Patient ID del
+  // formato`, `consentimiento`, `responsableCaptura` y `responsableMedico`
+  // fueron RETIRADOS del cuestionario y del payload por rectificación. La
+  // identidad del paciente/Event viene de la papeleta; el médico y el
+  // usuario de sesión se derivan de la sesión y/o del documento fuente.
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -307,14 +300,10 @@ export default function AudiometriaQuestionnaireModal({
     const payload = {
       schemaVersion: AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
       capturedAt: new Date().toISOString(),
-      patientId: patientId.trim() ? patientId.trim() : undefined,
-      responsableCaptura: responsableCaptura.trim()
-        ? responsableCaptura.trim()
-        : undefined,
-      responsableMedico: responsableMedico.trim()
-        ? responsableMedico.trim()
-        : undefined,
-      consentimiento,
+      // DEC-20260825-08 / BR-20260825-09: el payload guarda SÓLO
+      // antecedentes, exploración física y observaciones. Los campos
+      // administrativos (Patient ID, consentimiento, responsables) están
+      // RETIRADOS y NO se incluyen.
       antecedentes,
       exploracionFisica: exploracion,
       observaciones: observaciones.trim() ? observaciones.trim() : undefined,
@@ -386,49 +375,14 @@ export default function AudiometriaQuestionnaireModal({
         </header>
 
         <div className="px-6 py-4 space-y-6">
-          {/* ── METADATOS DEL FORMATO ── */}
-          <section>
-            <h3 className="text-sm font-bold text-slate-700 mb-3">
-              Datos del formato
-            </h3>
-            <Field label="Patient ID del formato">
-              <input
-                type="text"
-                maxLength={120}
-                value={patientId}
-                onChange={e => setPatientId(e.target.value)}
-                className="w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5"
-                data-testid="audiometria-patient-id"
-              />
-            </Field>
-            <Field label="¿Consentimiento informado firmado?">
-              <YesNo
-                value={consentimiento}
-                onChange={v => setConsentimiento(v)}
-                idPrefix="audiometria-consentimiento"
-              />
-            </Field>
-            <Field label="Responsable de captura">
-              <input
-                type="text"
-                maxLength={120}
-                value={responsableCaptura}
-                onChange={e => setResponsableCaptura(e.target.value)}
-                className="w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5"
-                data-testid="audiometria-responsable-captura"
-              />
-            </Field>
-            <Field label="Responsable médico">
-              <input
-                type="text"
-                maxLength={120}
-                value={responsableMedico}
-                onChange={e => setResponsableMedico(e.target.value)}
-                className="w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5"
-                data-testid="audiometria-responsable-medico"
-              />
-            </Field>
-          </section>
+          {/* DEC-20260825-08 / BR-20260825-09 — sección de metadatos del
+              formato RETIRADA por rectificación. Ya no se piden al médico
+              los campos administrativos: Patient ID del formato,
+              consentimiento, responsable de captura, responsable médico.
+              Esos datos los aporta la papeleta (paciente), la sesión
+              (médico/usuario) o el documento fuente (audiómetro/técnico).
+              El payload guarda SÓLO antecedentes, exploración física y
+              observaciones clínicas. */}
 
           {/* ── ANTECEDENTES ── */}
           <section>

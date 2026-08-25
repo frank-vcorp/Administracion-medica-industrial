@@ -196,3 +196,12 @@
 - **Decisión:** Igual que en Espirometría, el entregable de Audiometría mostrará la ecuación del PTA calculado, los valores de 500/1000/2000 Hz utilizados, el resultado y la fuente de la regla.
 - **Presentación esperada:** `PTA3 = (TA500 + TA1000 + TA2000) / 3 = resultado`, acompañado de una leyenda que indique que es el cálculo clínico adoptado, separado del `pta_fuente` reportado por el audiómetro/AMI.
 - **Referencia:** BR-20260825-08.
+
+## DEC-20260825-08 — Eliminar metadatos redundantes del cuestionario
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión de Frank:** El cuestionario de Audiometría no debe capturar `Patient ID del formato`, consentimiento, responsable de captura ni responsable médico. Esos datos son redundantes para el flujo actual y no deben duplicarse en el contexto clínico.
+- **Alcance:** conservar únicamente antecedentes auditivos, exploración física y observaciones clínicas necesarias; los datos personales/laborales y la identidad de usuarios provienen de la papeleta/sesión.
+- **Supersede parcialmente:** `FND-20260825-07` en la sección de metadatos del formato y la versión inicial de la SPEC que incluía esos campos.
+- **Referencia:** BR-20260825-09, FND-20260825-11.

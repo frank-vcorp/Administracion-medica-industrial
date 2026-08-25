@@ -34,7 +34,7 @@ Aplicar a Audiometría el ciclo validado de Espirometría: contexto clínico, ca
 
 ### 4.1 Cuestionario
 
-Persistir antecedentes de audiometría previa, dificultad auditiva, historial laboral, exposición recreativa/ruido, explosión o trauma, infecciones, tinnitus/mareos, medicamentos ototóxicos, exploración de faringe/CAD/CAI/MTD/MTI, responsables, Patient ID y consentimiento. Las respuestas deben ser estructuradas; las observaciones siguen siendo texto contextual, no diagnóstico.
+Persistir antecedentes de audiometría previa, dificultad auditiva, historial laboral, exposición recreativa/ruido, explosión o trauma, infecciones, tinnitus/mareos, medicamentos ototóxicos, exploración de faringe/CAD/CAI/MTD/MTI y observaciones clínicas. No solicitar Patient ID manual, consentimiento ni responsables: paciente/Event provienen de la papeleta y la identidad profesional de la sesión/documento fuente.
 
 ### 4.2 Documento fuente
 
@@ -70,6 +70,7 @@ La revisión médica debe editar/aceptar la interpretación derivada, limitacion
 - AC-9: La descarga no permite acceso cruzado entre usuarios.
 - AC-10: XML de Audiometría conserva su parser directo y no se envía innecesariamente al extractor IA.
 - AC-11: Cuando exista cuestionario guardado, `clinicalContext` de Audiometría se propaga al contexto de prediagnóstico igual que Espirometría; no se inventan respuestas ausentes.
+- AC-12: El panel y el PDF muestran una referencia explícita del criterio AMI (normalidad, patrones, severidad y etiologías) separada del resultado derivado y de la decisión médica.
 
 ## 6. Gates y validación
 

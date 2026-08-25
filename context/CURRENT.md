@@ -15,6 +15,8 @@
 - **Decisión adicional:** `DEC-20260825-05` / `BR-20260825-06` — PTA3 calculado más PTA fuente separado.
 - **Decisión adicional:** `DEC-20260825-06` / `BR-20260825-07` — capas separadas y etiquetadas para NOM, AMI y fuente del audiómetro.
 - **Decisión adicional:** `DEC-20260825-07` / `BR-20260825-08` — ecuación PTA visible con entradas, resultado y fuente, como en Espirometría.
+- **Gap funcional nuevo:** `DEC-20260825-08` / `BR-20260825-09` — retirar del cuestionario Patient ID, consentimiento y responsables; no duplicar datos administrativos.
+- **Gap funcional nuevo:** `FND-20260825-12` — mostrar el criterio AMI completo, no sólo la etiqueta `NORMAL (≤25 dB)`.
 - **Insumos recibidos:** fuente del audiómetro (`FND-20260825-05`), documento final AMI (`FND-20260825-06`), cuestionario (`FND-20260825-07`) y programa/criterios AMI (`FND-20260825-08`).
 - **Decisiones confirmadas:** `DEC-20260825-03` / `BR-20260825-04` — combinación patrón+PTA, huecos como no concluyentes y 1000 Hz como frontera.
 - **Decisión vigente:** `DEC-20260825-02` / `BR-20260825-03` — una sola SPEC y una sola pasada de implementación después de recibir y aclarar todos los documentos.
