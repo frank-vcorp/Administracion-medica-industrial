@@ -360,6 +360,11 @@ model EventTest {
   performedById       String?
   fileUrl             String? // IMPL-20260324-06: Upload atómico por estudio
   resultNotes         String? // IMPL-20260324-06: Notas del resultado
+  // IMPL-FEATURE-20260824-02: contexto clínico estructurado asociado al estudio
+  // (cuestionarios, antecedentes, exploración física). Payload versionado y
+  // validado server-side con Zod. Nullable para rollback aditivo sin perder
+  // estudios existentes. No duplica PII del encabezado de la papeleta.
+  clinicalContext     Json?
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
   event               MedicalEvent              @relation(fields: [eventId], references: [id], onDelete: Cascade)

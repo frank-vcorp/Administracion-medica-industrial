@@ -23,6 +23,15 @@ import { revalidatePath } from 'next/cache'
 // permanece en el actions file (es server action async legítimo).
 import { extractSnapshotVersioningFromBackendAudit } from '@/lib/calibration-v3-shared'
 import { getPublishedVersionForSnapshot } from './calibration-v3.actions'
+// IMPL-FEATURE-20260824-02 gap fix: validación defensiva del cuestionario
+// versionado de Espirometría antes de reenviarlo al backend IA. El schema
+// es la fuente única de verdad — el server action nunca debe aceptar un
+// payload que no cumpla el contrato (riesgo: prompt injection / datos
+// arbitrarios hacia MedGemma/DR7).
+import {
+  EspirometriaQuestionnairePayloadSchema,
+  ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
+} from '@/schemas/clinical/espirometria-questionnaire.schema'
 
 const PYTHON_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -110,6 +119,88 @@ export interface StudySnapshotsResult {
 }
 
 // ---------------------------------------------------------------------------
+// IMPL-FEATURE-20260824-02 gap fix — helper puro: extraer y validar el
+// `clinical_context` que `PapeletaWorkspace.handleFileUpload` adjunta al
+// FormData cuando hay un cuestionario de Espirometría versionado guardado
+// en `EventTest.clinicalContext`.
+//
+// Reglas:
+//   - Si el campo está ausente o vacío → `null` (compat: el backend corre
+//     sin contexto adicional, igual que antes de FEATURE-20260824-02).
+//   - Si está presente, parsear JSON. Si falla o no es un objeto → `null`
+//     (no rompemos el upload: el snapshot sigue siendo válido; sólo se
+//     omite el contexto para evitar prompt injection).
+//   - Si parsea, validar contra `EspirometriaQuestionnairePayloadSchema`.
+//     Si NO cumple → `null` + log warn (sin PII). Defensa en profundidad:
+//     el snapshot de `EventTest.clinicalContext` YA está validado por el
+//     server action de guardado, pero el FormData puede manipularse en
+//     cliente antes de llegar aquí.
+//   - Si cumple → devolver el payload re-serializado (string JSON) listo
+//     para enviar como campo FormData del backend.
+//
+// Privacidad: el cuestionario NO incluye PII del encabezado (la papeleta ya
+// lo aporta); sólo antecedentes clínicos y exploración física del estudio.
+// ---------------------------------------------------------------------------
+
+type ValidatedClinicalContext = {
+  /** JSON string listo para enviar como FormData. */
+  serialized: string
+  /** Versión del esquema (para audit/trazabilidad). */
+  schemaVersion: string
+  /** Indicador de presencia para que el caller lo agregue al audit. */
+  present: true
+}
+
+function extractAndValidateClinicalContext(
+  formData: FormData,
+): ValidatedClinicalContext | null {
+  const raw = formData.get('clinical_context')
+  if (typeof raw !== 'string' || raw.trim().length === 0) return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    console.warn(
+      '[IMPL-FEATURE-20260824-02] clinical_context no es JSON válido; se omite sin bloquear el upload.',
+    )
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    console.warn(
+      '[IMPL-FEATURE-20260824-02] clinical_context no es un objeto; se omite sin bloquear el upload.',
+    )
+    return null
+  }
+
+  // Defensa contra prompt injection: validar contra el schema versionado.
+  // Rechazamos versiones futuras desconocidas para evitar bypass evolutivos.
+  const version = (parsed as { schemaVersion?: unknown }).schemaVersion
+  if (version !== ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION) {
+    console.warn(
+      `[IMPL-FEATURE-20260824-02] clinical_context.schemaVersion="${String(
+        version,
+      )}" no soportada; se omite sin bloquear el upload.`,
+    )
+    return null
+  }
+
+  const validated = EspirometriaQuestionnairePayloadSchema.safeParse(parsed)
+  if (!validated.success) {
+    console.warn(
+      '[IMPL-FEATURE-20260824-02] clinical_context no cumple el schema versionado; se omite sin bloquear el upload.',
+    )
+    return null
+  }
+
+  return {
+    serialized: JSON.stringify(validated.data),
+    schemaVersion: validated.data.schemaVersion,
+    present: true,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // triggerStudyAIAnalysis
 // ---------------------------------------------------------------------------
 
@@ -184,6 +275,17 @@ export async function triggerStudyAIAnalysis(
     }
     if (aiCalibration) {
       uploadForm.append('ai_calibration_json', JSON.stringify(aiCalibration))
+    }
+    // IMPL-FEATURE-20260824-02 gap fix: reenviar el `clinical_context`
+    // (cuestionario versionado de Espirometría) al backend como FormData
+    // opcional. El backend lo lee en `/api/v2/studies/upload-and-analyze`
+    // y lo pasa al prompt de MedGemma/DR7 como contexto adicional
+    // estructurado. Si el payload está ausente o no es válido, el helper
+    // devuelve `null` y NO se reenvía — el upload sigue funcionando sin
+    // contexto adicional (compat con FEATURE-20260824-02 AC-6).
+    const clinicalContext = extractAndValidateClinicalContext(formData)
+    if (clinicalContext) {
+      uploadForm.append('clinical_context', clinicalContext.serialized)
     }
 
     const response = await fetch(`${PYTHON_API}/api/v2/studies/upload-and-analyze`, {
@@ -302,6 +404,13 @@ export async function triggerStudyAIAnalysis(
       ...(versioningV2.presentationSchemaSnapshot
         ? { presentation_schema_snapshot: versioningV2.presentationSchemaSnapshot }
         : {}),
+      // IMPL-FEATURE-20260824-02 gap fix: trazabilidad del cuestionario
+      // estructurado de Espirometría cuando fue reenviado al backend.
+      // Guardamos sólo el schemaVersion (no el payload completo: ya vive
+      // en EventTest.clinicalContext y es PII-mínimo por contrato).
+      ...(clinicalContext
+        ? { clinical_context_schema_version: clinicalContext.schemaVersion }
+        : {}),
     }
     const mergedExtractionSnapshot = {
       ...(result.extraction_snapshot ?? {}),
@@ -325,6 +434,12 @@ export async function triggerStudyAIAnalysis(
         : {}),
       ...(versioningV2.clinicalCriteriaHash
         ? { clinical_criteria_hash: versioningV2.clinicalCriteriaHash }
+        : {}),
+      // IMPL-FEATURE-20260824-02 gap fix: misma trazabilidad a nivel del
+      // prediagnóstico (consistente con extraction audit). El contenido del
+      // contexto NO se duplica en el snapshot: vive en EventTest.clinicalContext.
+      ...(clinicalContext
+        ? { clinical_context_schema_version: clinicalContext.schemaVersion }
         : {}),
     }
     const mergedPredxData = { ...predxData, audit: mergedPredxAudit }

@@ -224,6 +224,48 @@ PREDIAGNOSIS_SUPPORTED_TYPES = {
 }
 
 
+# IMPL-FEATURE-20260824-02 (gap fix): helper puro para renderizar el bloque
+# de contexto clínico estructurado que se inyecta al prompt del
+# prediagnóstico (MedGemma/DR7). El bloque:
+#   - Está envuelto en un fence `=== CONTEXTO CLÍNICO ===` para delimitar
+#     claramente que NO es parte de los parámetros extraídos del documento.
+#   - Incluye instrucciones explícitas al modelo para que use el cuestionario
+#     sólo como contexto corroborante, NO invente respuestas ausentes y NO
+#     sustituya los parámetros extraídos del documento.
+#   - NO incluye PII del encabezado de la papeleta (el cuestionario por
+#     contrato sólo contiene antecedentes clínicos y exploración física del
+#     estudio).
+#   - Si el contexto no es un objeto o no tiene `schemaVersion`, devuelve
+#     cadena vacía (defensa contra payloads arbitrarios / prompt injection).
+def _render_clinical_context_block(clinical_context: Dict[str, Any]) -> str:
+    if not isinstance(clinical_context, dict):
+        return ""
+    version = clinical_context.get("schemaVersion")
+    if not isinstance(version, str) or not version.strip():
+        return ""
+    try:
+        serialized = json.dumps(clinical_context, ensure_ascii=False, indent=2)
+    except (TypeError, ValueError):
+        return ""
+    return (
+        "=== CONTEXTO CLÍNICO DEL PACIENTE (cuestionario estructurado, NO es "
+        "resultado del documento) ===\n"
+        f"schemaVersion: {version}\n"
+        "Instrucciones al modelo:\n"
+        "  - Trata este bloque sólo como contexto corroborante del paciente.\n"
+        "  - NO inventes respuestas para campos ausentes en el cuestionario.\n"
+        "  - NO sustituyas los parámetros extraídos del documento por los "
+        "del cuestionario: el documento es la fuente primaria de parámetros "
+        "clínicos.\n"
+        "  - Si el cuestionario contradice el documento, mantén el documento "
+        "como fuente y refleja la discrepancia sólo si es clínicamente "
+        "relevante y con justificación.\n"
+        "=== INICIO BLOQUE ===\n"
+        f"{serialized}\n"
+        "=== FIN BLOQUE ==="
+    )
+
+
 class PrediagnosticService(GeminiBase):
     """
     Interpreta parámetros estructurados ya extraídos y genera un prediagnóstico IA.
@@ -796,6 +838,7 @@ Responde en JSON con esta estructura exacta:
         calibration_version: Any = None,
         ai_calibration: Optional[Dict[str, Any]] = None,
         medical_calibration: Optional[Dict[str, Any]] = None,  # DEPRECADO Fase 4
+        clinical_context: Optional[Dict[str, Any]] = None,
     ) -> AIPrediagnosisResult:
         """
         Genera prediagnóstico IA basado en parámetros ya extraídos.
@@ -811,6 +854,14 @@ Responde en JSON con esta estructura exacta:
             parámetro se conserva para no romper callers legacy pero se ignora;
             se loguea una sola vez por proceso si se recibe.
 
+        IMPL-FEATURE-20260824-02 (gap fix):
+          - `clinical_context`: cuestionario estructurado opcional del paciente
+            (p.ej. `espirometria-questionnaire-v1` con antecedentes
+            respiratorios y exploración física). Se inyecta al prompt del
+            prediagnóstico clínico (MedGemma/DR7) como contexto adicional;
+            NUNCA se reenvía a la capa extractiva M3. Si está ausente, el
+            comportamiento es idéntico al pre-FEATURE-20260824-02.
+
         Args:
             study_type:        Tipo de estudio (Audiometria, Laboratorio, etc.)
             extracted_data:    Dict con parámetros canónicos extraídos
@@ -820,6 +871,11 @@ Responde en JSON con esta estructura exacta:
                 contiene `diagnosis.prompt`, se usa como prompt clínico legacy
                 (prompt_source="ai_calibration") sin enriquecer con
                 `clinicalCriteria` (no hay V3 resuelta).
+            clinical_context:  Cuestionario estructurado opcional. Dict validado
+                por el frontend (`schemaVersion` + campos por Zod) que se
+                inyecta al prompt del prediagnóstico clínico como contexto
+                adicional. NO se reenvía al extractor. Ausencia es válida
+                y preserva el comportamiento legacy.
 
         Returns:
             AIPrediagnosisResult — siempre retorna un resultado; usa AI_NON_CONCLUSIVE si no hay datos.
@@ -1043,6 +1099,23 @@ Responde en JSON con esta estructura exacta:
             json.dumps(extracted_data, ensure_ascii=False, indent=2),
         )
 
+        # IMPL-FEATURE-20260824-02 (gap fix): inyectar el cuestionario
+        # clínico estructurado (`clinical_context`) como contexto adicional
+        # del paciente. Se añade al final del prompt, DESPUÉS del JSON
+        # extraído del documento, con instrucciones explícitas al modelo
+        # para que:
+        #   (a) use el cuestionario sólo como contexto corroborante,
+        #   (b) NO invente respuestas ausentes en el cuestionario,
+        #   (c) NO sustituya los parámetros extraídos del documento por los
+        #       del cuestionario — el documento es la fuente primaria.
+        # Esta capa NO se reenvía al extractor M3 (la extracción es puramente
+        # documental). El bloque se omite cuando `clinical_context` es None
+        # para preservar el comportamiento pre-FEATURE-20260824-02 al 100%.
+        if clinical_context and isinstance(clinical_context, dict):
+            clinical_context_block = _render_clinical_context_block(clinical_context)
+            if clinical_context_block:
+                prompt = f"{prompt}\n\n{clinical_context_block}"
+
         # IMPL-20260516-08: capturar el prompt renderizado antes de la llamada al modelo (ARCH-20260516-08)
         _rendered_prompt = prompt
 
@@ -1174,6 +1247,19 @@ Responde en JSON con esta estructura exacta:
                 result.limitations.append(
                     "Prompt clínico resuelto desde aiCalibration.clinicalCriteria.prompt publicada."
                 )
+            # IMPL-FEATURE-20260824-02 (gap fix): trazabilidad explícita de
+            # la presencia del cuestionario clínico estructurado cuando fue
+            # inyectado al prompt. NO se duplica el payload (vive en
+            # EventTest.clinicalContext); sólo se documenta la fuente.
+            if clinical_context and isinstance(clinical_context, dict):
+                _cc_version = clinical_context.get("schemaVersion")
+                if isinstance(_cc_version, str) and _cc_version.strip():
+                    result.limitations.append(
+                        f"Contexto clínico del paciente inyectado al prompt "
+                        f"(schemaVersion={_cc_version}); el modelo NO debe "
+                        f"inventar respuestas ausentes ni sustituir los "
+                        f"parámetros del documento por los del cuestionario."
+                    )
             # IMPL-20260516-08: poblar input_debug con payload de entrada (ARCH-20260516-08)
             # Solo datos clínicos: study_type, extracted_data, calibración y prompt renderizado.
             # GUARDRAIL: no se incluyen API keys ni secrets — la calibración es metadata clínica.

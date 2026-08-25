@@ -316,6 +316,11 @@ export async function fetchEventPageData(input: {
           status: et.status,
           fileUrl: et.fileUrl ?? null,
           resultNotes: et.resultNotes ?? null,
+          // IMPL-FEATURE-20260824-02: serializar el contexto clínico
+          // (cuestionario versionado de Espirometría) para que la UI del
+          // Event pueda mostrar el resumen y abrir el modal de edición.
+          // `null` cuando no se ha contestado el cuestionario.
+          clinicalContext: et.clinicalContext ?? null,
           test: et.test
             ? {
                 code: et.test.code,

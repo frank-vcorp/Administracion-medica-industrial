@@ -953,6 +953,14 @@ async def v2_upload_and_analyze(
     ai_calibration_json: Optional[str] = Form(default=None),
     extraction_provider_override: Optional[str] = Form(default=None),
     extraction_model_override: Optional[str] = Form(default=None),
+    # IMPL-FEATURE-20260824-02 (gap fix): cuestionario clínico estructurado
+    # opcional enviado por el frontend (FEATURE-20260824-02). Sólo se inyecta
+    # al contexto del prediagnóstico (capa MedGemma/DR7); NO se reenvía al
+    # extractor M3/extraction (la capa extractiva es documental pura, no
+    # recibe contexto adicional del paciente). Si está ausente o no es un
+    # objeto válido, el flujo corre sin contexto adicional (compat con
+    # snapshots pre-FEATURE-20260824-02).
+    clinical_context: Optional[str] = Form(default=None),
 ):
     """
     V2 Pipeline completo — upload, extracción pura y prediagnóstico en capas separadas.
@@ -962,6 +970,12 @@ async def v2_upload_and_analyze(
 
     ARCH-20260809-02: Acepta `extraction_provider_override` y `extraction_model_override`
     opcionales para A/B sin redeploys (selector multi-proveedor Gemini + MiniMax M3).
+
+    IMPL-FEATURE-20260824-02: Acepta `clinical_context` opcional (JSON
+    string) — cuestionario versionado `espirometria-questionnaire-v1`. Se
+    inyecta al prompt del prediagnóstico clínico como contexto adicional
+    estructurado; nunca al extractor (la capa extractiva es documental).
+    Payload ausente → el flujo corre sin contexto adicional.
 
     Retorna:
       - classification: tipo y confianza de clasificación
@@ -993,6 +1007,30 @@ async def v2_upload_and_analyze(
             print(
                 "⚠️ [ARCH-20260820-01 Fase 4] ai_calibration_json está deprecado; "
                 "preferir `medical_test_id` para resolver en proceso."
+            )
+
+    # IMPL-FEATURE-20260824-02 (gap fix): parsear `clinical_context` opcional.
+    # El frontend envía el cuestionario versionado de Espirometría (o cualquier
+    # cuestionario estructurado futuro) como JSON string. Lo validamos
+    # defensivamente: si no es JSON o no es un objeto, se ignora sin fallar
+    # (compat con FEATURE-20260824-02 AC-6 — el pipeline debe funcionar sin
+    # cuestionario). Nunca propagamos el contexto a la capa extractiva M3.
+    parsed_clinical_context: Optional[Dict[str, Any]] = None
+    if clinical_context:
+        try:
+            _ctx_obj = json.loads(clinical_context)
+        except (json.JSONDecodeError, ValueError) as _ctx_err:
+            print(
+                "⚠️ [IMPL-FEATURE-20260824-02] clinical_context no es JSON válido; "
+                f"se omite sin fallar el pipeline. err={type(_ctx_err).__name__}"
+            )
+            _ctx_obj = None
+        if _ctx_obj is not None and isinstance(_ctx_obj, dict):
+            parsed_clinical_context = _ctx_obj
+            print(
+                f"ℹ️ [IMPL-FEATURE-20260824-02] clinical_context recibido "
+                f"(schemaVersion={_ctx_obj.get('schemaVersion')!r}); "
+                f"se inyectará al prompt de prediagnóstico clínico (no a M3)."
             )
 
     # ARCH-20260820-01 Fase 4 (handoff §6.1): resolver V3 en proceso vía
@@ -1358,11 +1396,16 @@ async def v2_upload_and_analyze(
         predx_start = time.time()
         # ARCH-20260820-01 Fase 4 (handoff §6.3): consume `calibration_version`
         # (V3 resuelta en proceso) en lugar de `medical_calibration`.
+        # IMPL-FEATURE-20260824-02 (gap fix): inyecta `clinical_context`
+        # estructurado al prompt del prediagnóstico clínico (MedGemma/DR7).
+        # NO se reenvía al extractor (la capa extractiva es documental pura).
+        # Si está ausente, el comportamiento es idéntico al pre-FEATURE-20260824-02.
         prediagnosis = prediagnostic_svc.generate_prediagnosis(
             detected_type,
             extraction_dict,
             calibration_version=calibration_version,
             ai_calibration=ai_calibration,
+            clinical_context=parsed_clinical_context,
         )
         predx_seconds = round(time.time() - predx_start, 2)
         predx_prompt_source = getattr(prediagnosis, "prompt_source", None)
@@ -1474,6 +1517,23 @@ async def v2_upload_and_analyze(
                     "clinical_criteria_hash": _clinical_criteria_hash,
                     "calibration_version_id": _calibration_version_id_payload,
                     "calibration_version_number": _calibration_version_number_payload,
+                    # IMPL-FEATURE-20260824-02 (gap fix): trazabilidad de la
+                    # presencia del cuestionario estructurado inyectado al
+                    # prompt. NO se incluye el payload completo (vive en
+                    # EventTest.clinicalContext); sólo el schemaVersion y un
+                    # hash de la presencia para no inflar el audit.
+                    **(
+                        {
+                            "clinical_context_schema_version": (
+                                parsed_clinical_context.get("schemaVersion")
+                                if isinstance(parsed_clinical_context, dict)
+                                else None
+                            ),
+                            "clinical_context_present": True,
+                        }
+                        if parsed_clinical_context is not None
+                        else {}
+                    ),
                 },
                 # GUARDRAIL explícito en respuesta API
                 "_guardrail": "Este prediagnóstico NO autoriza firma digital, dictamen final ni aptitud laboral sin revisión médica explícita.",

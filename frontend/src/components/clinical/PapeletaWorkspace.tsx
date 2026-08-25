@@ -48,6 +48,15 @@ import TraceabilidadLigera from "@/components/clinical/TraceabilidadLigera"
 // mostrados en la columna derecha entre el visor y el panel IA. Sólo
 // presentación; consume el snapshot ya extraído sin recalcular ni reinterpretar.
 import EspirometriaClinicalCriteriaPanel from "@/components/clinical/EspirometriaClinicalCriteriaPanel"
+// IMPL-FEATURE-20260824-02: modal emergente del cuestionario de Espirometría
+// (Completar/Editar) y resumen compacto. Predominantemente seleccionable;
+// persiste en EventTest.clinicalContext vía server action atómica.
+import EspirometriaQuestionnaireModal from "@/components/clinical/EspirometriaQuestionnaireModal"
+import EspirometriaQuestionnaireSummary from "@/components/clinical/EspirometriaQuestionnaireSummary"
+import type {
+  EspirometriaQuestionnairePayload,
+} from "@/schemas/clinical/espirometria-questionnaire.schema"
+import { ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/espirometria-questionnaire.schema"
 
 // --- Tipos locales ---
 
@@ -110,6 +119,10 @@ type StudyTest = {
     missingFields: unknown
     rawPayload?: unknown
   } | null
+  // IMPL-FEATURE-20260824-02: contexto clínico estructurado del estudio
+  // (cuestionario emergente de Espirometría, payload versionado). `null`
+  // cuando no se ha contestado. NO es PII del encabezado.
+  clinicalContext?: EspirometriaQuestionnairePayload | null
 }
 
 type WorkerInfo = {
@@ -349,11 +362,23 @@ export default function PapeletaWorkspace({
   // ARCH-20260518-04: Estado para limpieza de archivo y análisis
   const [isClearingStudy, setIsClearingStudy] = useState(false)
   const [clearStudyError, setClearStudyError] = useState('')
+  // IMPL-FEATURE-20260824-02: estado del modal del cuestionario de
+  // Espirometría. `null` = cerrado. Cuando está abierto guarda el
+  // `eventTestId` para que el modal sepa qué estudio actualizar.
+  const [questionnaireEventTestId, setQuestionnaireEventTestId] = useState<
+    string | null
+  >(null)
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
   const completedCount = localTests.filter(t =>
     t.status === 'COMPLETED' || t.status === 'RESULT_REGISTERED'
   ).length
+  // IMPL-FEATURE-20260824-02: estudio actualmente seleccionado para el
+  // modal del cuestionario de Espirometría (puede ser distinto del
+  // `activeTest` si el usuario cambió de pestaña con el modal abierto).
+  const questionnaireTargetTest = questionnaireEventTestId
+    ? localTests.find(t => t.id === questionnaireEventTestId) ?? null
+    : null
 
   // ARCH-20260507-06: Determinar si la muestra del estudio activo ya fue tomada por grupo compartido
   const activeTestGroup = activeTest && isLabTest(activeTest) ? resolveSampleGroup(activeTest) : 'otro'
@@ -438,10 +463,31 @@ export default function PapeletaWorkspace({
     const t2 = setTimeout(() => { currentStage = 'extracting';    setUploadStage('extracting') },    7000)
     const t3 = setTimeout(() => { currentStage = 'prediagnosing'; setUploadStage('prediagnosing') }, 15000)
     const t4 = setTimeout(() => { currentStage = 'saving';        setUploadStage('saving') },        28000)
-    const formData = new FormData()
-    formData.append('eventTestId', testId)
-    formData.append('eventId', eventId)
-    formData.append('file', file)
+      const formData = new FormData()
+      formData.append('eventTestId', testId)
+      formData.append('eventId', eventId)
+      formData.append('file', file)
+      // IMPL-FEATURE-20260824-02: enviar el contexto clínico estructurado
+      // (cuestionario versionado de Espirometría) al pipeline IA. Sólo para
+      // estudios de Espirometría. El backend puede leerlo desde el form y,
+      // opcionalmente, añadirlo al prompt de prediagnóstico sin tocar la
+      // capa extractiva M3 (FEATURE-20260824-02 §IA: no inventar ausentes,
+      // no cambiar criterios AMI). Si está ausente o no aplica, el campo no
+      // se envía y la IA procesa el documento sin contexto adicional.
+      const targetTest = localTests.find(t => t.id === testId)
+      if (
+        targetTest &&
+        getCanonicalAIStudyType(targetTest) === 'Espirometria' &&
+        targetTest.clinicalContext &&
+        typeof targetTest.clinicalContext === 'object' &&
+        (targetTest.clinicalContext as { schemaVersion?: string }).schemaVersion ===
+          ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
+      ) {
+        formData.append(
+          'clinical_context',
+          JSON.stringify(targetTest.clinicalContext),
+        )
+      }
     try {
       // Tipo extendido para los nuevos campos estructurados de mismatch
       type UploadActionResult = {
@@ -741,10 +787,46 @@ export default function PapeletaWorkspace({
                 updateLocalStatus(activeTest.id, status as StudyStatus)
                 router.refresh()
               }}
+              // IMPL-FEATURE-20260824-02: abrir el modal del cuestionario
+              // de Espirometría (gestionado en el padre para acceder a
+              // `localTests` y `setLocalTests`).
+              onOpenQuestionnaire={() => {
+                if (getCanonicalAIStudyType(activeTest) === 'Espirometria') {
+                  setQuestionnaireEventTestId(activeTest.id)
+                }
+              }}
             />
           )}
         </div>
       </div>
+
+      {/* IMPL-FEATURE-20260824-02: modal del cuestionario de Espirometría.
+          Renderizado en el padre para tener acceso a `localTests` /
+          `setLocalTests` y al estado global del modal. Sólo se monta
+          cuando `questionnaireEventTestId` apunta al estudio activo Y
+          dicho estudio es de tipo canónico Espirometría. */}
+      {questionnaireEventTestId &&
+        questionnaireTargetTest &&
+        getCanonicalAIStudyType(questionnaireTargetTest) === 'Espirometria' && (
+          <EspirometriaQuestionnaireModal
+            eventTestId={questionnaireTargetTest.id}
+            eventId={eventId}
+            initialContext={questionnaireTargetTest.clinicalContext ?? null}
+            onClose={() => setQuestionnaireEventTestId(null)}
+            onSaved={payload => {
+              // Actualización optimista local; el server action ya invoca
+              // revalidatePath(`/events/${eventId}`).
+              const savedTestId = questionnaireTargetTest.id
+              setLocalTests(prev =>
+                prev.map(t =>
+                  t.id === savedTestId
+                    ? { ...t, clinicalContext: payload }
+                    : t,
+                ),
+              )
+            }}
+          />
+        )}
     </div>
   )
 }
@@ -1080,6 +1162,10 @@ function StudyPanel({
   clearStudyError,
   onClearStudy,
   onExamenMedicoStatusChange,
+  // IMPL-FEATURE-20260824-02: callback para abrir el modal del cuestionario
+  // de Espirometría. La gestión del modal vive en el padre (PapeletaWorkspace)
+  // porque también debe actualizar `localTests` al guardar.
+  onOpenQuestionnaire,
 }: {
   test: StudyTest
   eventId: string
@@ -1112,6 +1198,9 @@ function StudyPanel({
   clearStudyError: string
   onClearStudy: (id: string) => void
   onExamenMedicoStatusChange: (status: string) => void
+  // IMPL-FEATURE-20260824-02: callback para abrir el modal del
+  // cuestionario de Espirometría (gestionado en el padre).
+  onOpenQuestionnaire: () => void
 }) {
   // ARCH-20260518-04: confirmación local antes de ejecutar la limpieza destructiva
   const [isClearConfirming, setIsClearConfirming] = useState(false)
@@ -1251,6 +1340,19 @@ function StudyPanel({
 
           {/* ===== COLUMNA IZQUIERDA: OPERACIÓN CLÍNICA ===== */}
           <div className="space-y-3">
+
+            {/* IMPL-FEATURE-20260824-02: cuestionario emergente de Espirometría.
+                Sólo aparece cuando el tipo canónico del estudio es
+                Espirometría. Muestra el resumen compacto si ya se guardó, o
+                el botón "Completar cuestionario" antes del upload. NO
+                bloquea el upload si está vacío (AC-6). */}
+            {getCanonicalAIStudyType(test) === 'Espirometria' && (
+              <EspirometriaQuestionnaireSection
+                test={test}
+                readonly={readonly}
+                onOpenModal={onOpenQuestionnaire}
+              />
+            )}
 
             {/* Flujo de laboratorio */}
             {isLab && (
@@ -1606,3 +1708,66 @@ function StudyPanel({
     </div>
   )
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// EspirometriaQuestionnaireSection — sub-componente cliente que renderiza el
+// bloque "Cuestionario de Espirometría" arriba de la dropzone del estudio.
+//   - Si ya hay `clinicalContext`: muestra el resumen compacto + Editar.
+//   - Si no hay: muestra el call-to-action "Completar cuestionario".
+//   - Modo readonly: oculta el botón (no permite editar).
+//   - En cualquier caso NO bloquea el upload (AC-6).
+// ──────────────────────────────────────────────────────────────────────────
+
+function EspirometriaQuestionnaireSection({
+  test,
+  readonly,
+  onOpenModal,
+}: {
+  test: StudyTest
+  readonly: boolean
+  onOpenModal: () => void
+}) {
+  const hasContext =
+    !!test.clinicalContext &&
+    typeof test.clinicalContext === 'object' &&
+    (test.clinicalContext as { schemaVersion?: string }).schemaVersion ===
+      ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
+
+  if (hasContext) {
+    return (
+      <EspirometriaQuestionnaireSummary
+        payload={test.clinicalContext as EspirometriaQuestionnairePayload}
+        onEdit={onOpenModal}
+      />
+    )
+  }
+
+  return (
+    <div
+      className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2"
+      data-testid="espirometria-questionnaire-cta"
+    >
+      <p className="text-sm font-bold text-amber-800 flex items-center gap-2">
+        <span aria-hidden="true">📋</span>
+        Cuestionario de Espirometría pendiente
+      </p>
+      <p className="text-xs text-amber-700">
+        Captura antecedentes respiratorios y exploración física para
+        enriquecer el prediagnóstico IA. Puedes subir el PDF sin
+        contestar — el sistema seguirá funcionando, pero la IA recibirá
+        menos contexto.
+      </p>
+      {!readonly && (
+        <button
+          type="button"
+          onClick={onOpenModal}
+          className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+          data-testid="espirometria-questionnaire-complete"
+        >
+          Completar cuestionario
+        </button>
+      )}
+    </div>
+  )
+}
+
