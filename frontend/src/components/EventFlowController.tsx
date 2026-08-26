@@ -30,13 +30,21 @@ interface EventFlowControllerProps {
     examSummary?: {
         physicalExamData: Record<string, unknown>
     }
+    /**
+     * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
+     * `true` si ya existe `MedicalVerdict` emitido para el Event. Gate
+     * del CTA "Descargar Dictamen (PDF)" — sólo se muestra con verdict
+     * emitido. Por defecto `false` (defensa en profundidad).
+     */
+    hasMedicalVerdict?: boolean
 }
 
 export default function EventFlowController({
     eventId,
     currentStatus,
     verdictData,
-    examSummary
+    examSummary,
+    hasMedicalVerdict = false,
 }: EventFlowControllerProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
@@ -246,17 +254,31 @@ export default function EventFlowController({
                         </div>
                         <div>
                             <h3 className="text-3xl font-extrabold text-slate-900">¡Expediente Completado!</h3>
-                            <p className="text-slate-500 mt-2">El dictamen médico ha sido firmado y está listo para descarga.</p>
+                            <p className="text-slate-500 mt-2">
+                                {hasMedicalVerdict
+                                    ? 'El dictamen médico ha sido firmado y está listo para descarga.'
+                                    : 'Expediente cerrado. La descarga del dictamen se habilitará tras la firma médica.'}
+                            </p>
                         </div>
 
                         <div className="flex flex-col md:flex-row gap-4 justify-center pt-4">
-                            <a
-                                href={`/api/pdf/${eventId}`}
-                                target="_blank"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2"
-                            >
-                                ⬇️ Descargar Dictamen (PDF)
-                            </a>
+                            {/* IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 /
+                                BR-20260825-20): el CTA "Descargar Dictamen (PDF)"
+                                se muestra sólo cuando hay MedicalVerdict emitido.
+                                Sin verdict, el endpoint devuelve 404 y NO debemos
+                                exponer al usuario a un 404. */}
+                            {hasMedicalVerdict && (
+                                <a
+                                    href={`/api/pdf/${eventId}`}
+                                    target="_blank"
+                                    data-testid="dictamen-pdf-download-link"
+                                    data-implementacion="IMPL-FEATURE-20260825-03"
+                                    data-has-medical-verdict={String(hasMedicalVerdict)}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2"
+                                >
+                                    ⬇️ Descargar Dictamen (PDF)
+                                </a>
+                            )}
                             <button
                                 onClick={() => router.push('/reception')}
                                 className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-8 py-4 rounded-xl font-bold transition-all"
