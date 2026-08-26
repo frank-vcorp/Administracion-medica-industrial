@@ -334,3 +334,17 @@
 - **Evidencia:** descarga de PDF y ZIP devuelven `404: El dictamen aún no ha sido emitido` después de pulsar Completar.
 - **Causa:** `saveExamenMedicoPapeleta` persiste `MedicalExam` y `EventTest`, pero no crea `MedicalVerdict`; el flujo de validación/firma queda omitido y los CTAs se muestran prematuramente.
 - **Corrección:** completar debe llevar el Event al paso `VALIDATING`; el médico firma/emite el dictamen general y sólo entonces deben aparecer PDF y ZIP.
+
+## FND-20260825-23 — Completar no navega al panel de Validación
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT P1
+- **Evidencia:** después de completar, la pantalla muestra “Procede a firmar y emitir el dictamen general”, pero queda en vista de sólo lectura y no presenta el panel de firma.
+- **Causa probable:** el Event cambia a `VALIDATING`, pero la URL/vista permanece en `IN_PROGRESS`; el render condicional de `EventFlowController` exige que `activeView === event.status`.
+- **Corrección:** al completar, navegar/refrescar explícitamente a `?view=VALIDATING` y mostrar el flujo de firma.
+
+## FND-20260825-24 — Firma general envía un PDF de entrada inexistente
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT P1
+- **Evidencia:** al pulsar `Firmar y Emitir Dictamen`, backend devuelve `404: Archivo no encontrado: dictamen-<eventId>-<timestamp>.pdf`.
+- **Causa:** `signMedicalDictamPDF` construye el nombre de un PDF temporal y llama a `/api/v1/sign-pdf`, pero nunca renderiza ni escribe el dictamen general en ese archivo.
+- **Corrección:** renderizar/escribir el dictamen general antes de invocar la firma; conservar la salida firmada en el flujo de `MedicalVerdict` sin inventar archivos.

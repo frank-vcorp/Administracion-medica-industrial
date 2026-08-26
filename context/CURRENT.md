@@ -29,6 +29,8 @@
 - **Nuevo alcance:** `DEC-20260825-17` / `BR-20260825-18` / `FND-20260825-20` — generar ZIP con dictamen general, dictámenes por estudio y documentos fuente originales por Event.
 - **Decisiones ZIP:** `DEC-20260825-18` / `BR-20260825-19` / `FND-20260825-21` — sólo roles clínicos, carpetas por estudio y `manifest.txt` para fuentes faltantes.
 - **Gap crítico:** `DEC-20260825-19` / `BR-20260825-20` / `FND-20260825-22` — Completar debe llevar a VALIDATING; firmar/emiting MedicalVerdict habilita PDF y ZIP.
+- **Gap crítico adicional:** `DEC-20260825-20` / `BR-20260825-21` / `FND-20260825-23` — tras completar, navegar a la vista `VALIDATING` para mostrar la firma.
+- **Gap crítico adicional:** `FND-20260825-24` — la acción de firma debe generar el PDF general de entrada antes de llamar al firmador; actualmente envía una ruta inexistente.
 - **Nuevo incremento:** `FEATURE-20260825-04` — SPEC mínima y handoff creados para generar/descargar ZIP; validación deliberadamente mínima para prueba funcional de Frank.
 - **Regla de velocidad:** `DEC-20260825-12` / `BR-20260825-13` — cambios visuales menores se resuelven con delta mínimo y validación focal, sin ciclo completo.
 - **Insumos recibidos:** fuente del audiómetro (`FND-20260825-05`), documento final AMI (`FND-20260825-06`), cuestionario (`FND-20260825-07`) y programa/criterios AMI (`FND-20260825-08`).
