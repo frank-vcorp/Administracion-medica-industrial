@@ -281,6 +281,13 @@
 - **Estructura:** carpetas por estudio, con una carpeta `01_Dictamen_General/` y carpetas de cada estudio aplicable que contengan su dictamen y su fuente disponible.
 - **Referencia:** BR-20260825-19, FND-20260825-21.
 
+## DEC-20260825-19 — Completar inicia validación; firmar emite dictamen
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión:** El botón `Completar` no firma automáticamente ni crea un dictamen final. Debe dejar el Event en `VALIDATING`; el médico revisa y pulsa `Firmar y Emitir Dictamen`. PDF y ZIP sólo se habilitan con `MedicalVerdict` emitido.
+- **Referencia:** BR-20260825-20, FND-20260825-22.
+
 ## DEC-20260825-12 — Ruta rápida para cambios visuales menores
 
 - **Estado:** confirmed

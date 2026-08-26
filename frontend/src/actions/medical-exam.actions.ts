@@ -170,7 +170,16 @@ export async function updateExploracionFisica(eventId: string, rawData: unknown)
  * Guarda el Módulo 2 (médico) del Examen Médico dentro de la papeleta.
  * Persiste en physicalExamData (exploración + impresión + antecedentes médico).
  * Actualiza el estado del EventTest según el parámetro markComplete.
+ *
  * @id IMPL-20260325-01
+ * @id IMPL-FEATURE-20260825-03 (ronda 4 / DEC-20260825-19 / FND-20260825-22):
+ *   cuando `markComplete=true`, el MedicalEvent pasa a `VALIDATING`
+ *   (no firma, no auto-crea `MedicalVerdict`). El médico revisa y firma
+ *   desde el flujo existente "Firmar y Emitir Dictamen" en
+ *   `EventFlowController`. PDF y ZIP sólo se habilitan con verdict
+ *   emitido (BR-20260825-20). El `EventTest` del estudio se marca
+ *   `COMPLETED` (o `RESULT_REGISTERED` si no es completar) — sigue
+ *   siendo la unidad de captura del médico.
  */
 export async function saveExamenMedicoPapeleta(
   eventId: string,
@@ -191,11 +200,25 @@ export async function saveExamenMedicoPapeleta(
       create: { eventId, physicalExamData: data },
     })
 
-    const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
+    const newStudyStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
     await prisma.eventTest.update({
       where: { id: eventTestId },
-      data: { status: newStatus },
+      data: { status: newStudyStatus },
     })
+
+    // DEC-20260825-19 / FND-20260825-22 / BR-20260825-20:
+    // Completar NO firma ni emite MedicalVerdict. Sólo lleva el
+    // MedicalEvent al paso `VALIDATING`. El médico firma explícitamente
+    // desde `EventFlowController.handleSign` (saveVerdict +
+    // signMedicalDictamPDF). Mantenemos `EventTest.status` como `COMPLETED`
+    // porque ésa es la unidad de captura del estudio y debe reflejar
+    // que el médico terminó la captura del Examen Médico.
+    if (markComplete) {
+      await prisma.medicalEvent.update({
+        where: { id: eventId },
+        data: { status: 'VALIDATING' },
+      })
+    }
 
     const aiResult = await triggerStructuredStudyAIPrediagnosis({
       eventTestId,
@@ -228,9 +251,15 @@ export async function saveExamenMedicoPapeleta(
       title: markComplete ? 'Examen médico completado' : 'Examen médico guardado',
     })
 
+    // Devolvemos `status` (Event) además de `studyStatus` (EventTest) para
+    // que el caller (PapeletaWorkspace / ExamenMedicoEstudio) pueda
+    // refrescar el header del expediente sin tener que re-leer el event.
     return {
       success: true,
-      status: newStatus,
+      // Event status: 'VALIDATING' si completar, sin cambio si borrador.
+      // Usamos `null` para borrador porque no tocamos el Event.
+      status: markComplete ? 'VALIDATING' : null,
+      studyStatus: newStudyStatus,
       aiWarning: aiResult.success ? undefined : aiResult.error,
     }
   } catch (error: unknown) {

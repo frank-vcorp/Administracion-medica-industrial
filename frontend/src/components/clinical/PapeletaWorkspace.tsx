@@ -175,6 +175,13 @@ interface PapeletaWorkspaceProps {
   workerId?: string
   /** IMPL-20260326-18: ID del usuario que revisa el prediagnóstico IA (médico en sesión) */
   reviewerUserId?: string
+  /**
+   * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
+   * `true` si ya existe `MedicalVerdict` emitido para el Event. Se reenvía
+   * a `ExamenMedicoEstudio` para gate del CTA de descarga PDF (PDF y
+   * ZIP sólo con verdict emitido).
+   */
+  hasMedicalVerdict?: boolean
 }
 
 // --- Labels y estilos para estados V1 ---
@@ -360,6 +367,7 @@ export default function PapeletaWorkspace({
   longitudinalData = null,
   workerId,
   reviewerUserId = 'system',
+  hasMedicalVerdict = false,
 }: PapeletaWorkspaceProps) {
   const router = useRouter()
   const [activeTestId, setActiveTestId] = useState<string | null>(null)
@@ -846,6 +854,10 @@ export default function PapeletaWorkspace({
                   setAudiometriaQuestionnaireEventTestId(activeTest.id)
                 }
               }}
+              // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 /
+              // BR-20260825-20): gate del CTA PDF/ZIP dentro de
+              // ExamenMedicoEstudio. Verdict emitido → CTA visible.
+              hasMedicalVerdict={hasMedicalVerdict}
             />
           )}
         </div>
@@ -1254,6 +1266,9 @@ function StudyPanel({
   // de Espirometría. La gestión del modal vive en el padre (PapeletaWorkspace)
   // porque también debe actualizar `localTests` al guardar.
   onOpenQuestionnaire,
+  // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
+  // gate del CTA PDF/ZIP dentro de ExamenMedicoEstudio.
+  hasMedicalVerdict,
 }: {
   test: StudyTest
   eventId: string
@@ -1289,6 +1304,8 @@ function StudyPanel({
   // IMPL-FEATURE-20260824-02: callback para abrir el modal del
   // cuestionario de Espirometría (gestionado en el padre).
   onOpenQuestionnaire: () => void
+  // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20).
+  hasMedicalVerdict: boolean
 }) {
   // ARCH-20260518-04: confirmación local antes de ejecutar la limpieza destructiva
   const [isClearConfirming, setIsClearConfirming] = useState(false)
@@ -1416,6 +1433,7 @@ function StudyPanel({
             somatometryEventTestId={somatometryEventTestId}
             agudezaEventTestId={agudezaEventTestId}
             onStatusChange={onExamenMedicoStatusChange}
+            hasMedicalVerdict={hasMedicalVerdict}
           />
         </div>
       )}

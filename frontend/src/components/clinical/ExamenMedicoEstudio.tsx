@@ -102,21 +102,28 @@ export function examenMedicoPdfUrl(eventId: string): string {
 }
 
 /**
- * IMPL-FEATURE-20260825-03 ronda 3 (IMPLEMENTATION_DEFECT):
+ * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
  * Decide si el CTA de descarga del PDF consolidado debe mostrarse.
  *
  * Reglas (FEATURE-20260825-03 / SPEC §2 / ADR §R6):
  *   - Visible si y sólo si hay una aptitud médica NO vacía persistida
- *     (state local del componente o `physicalExamData.aptitud`).
+ *     (state local del componente o `physicalExamData.aptitud`) Y ya
+ *     existe `MedicalVerdict` emitido para el Event.
  *   - NO se muestra si falta aptitud (gate ADR R6 / P2-3 — el endpoint
  *     devuelve 409 cuando falta aptitud; no invitamos a un 409).
+ *   - NO se muestra si falta `MedicalVerdict` (BR-20260825-20 — la
+ *     descarga devolvería 404 "El dictamen aún no ha sido emitido";
+ *     ocultamos el CTA para no exponer al médico a un 404).
  *   - Pura y testeable sin DOM. Vive aquí para que cualquier llamada
  *     posterior (bot, enlace, atajo) use la misma lógica.
  */
 export function shouldShowExamenMedicoPdfCta(
-  aptitud: string | null | undefined
+  aptitud: string | null | undefined,
+  hasMedicalVerdict: boolean | null | undefined = false
 ): boolean {
-  return typeof aptitud === 'string' && aptitud.trim().length > 0
+  const aptitudOk =
+    typeof aptitud === 'string' && aptitud.trim().length > 0
+  return aptitudOk && hasMedicalVerdict === true
 }
 
 /**
@@ -131,14 +138,19 @@ export function clinicalClosureZipUrl(eventId: string): string {
 
 /**
  * IMPL-FEATURE-20260825-04: el CTA del ZIP comparte el gate de aptitud
- * del PDF individual (mismo evento, misma decisión médica). Mantener la
- * regla única evita inconsistencias visuales y previene 409/404/410
- * en el endpoint.
+ * + verdict del PDF individual (mismo evento, misma decisión médica).
+ * Mantener la regla única evita inconsistencias visuales y previene
+ * 409/404/410 en el endpoint.
+ *
+ * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
+ * incluye el gate de `hasMedicalVerdict` — el ZIP sólo se habilita con
+ * verdict emitido (paridad con `shouldShowExamenMedicoPdfCta`).
  */
 export function shouldShowClinicalClosureZipCta(
-  aptitud: string | null | undefined
+  aptitud: string | null | undefined,
+  hasMedicalVerdict: boolean | null | undefined = false
 ): boolean {
-  return shouldShowExamenMedicoPdfCta(aptitud)
+  return shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)
 }
 
 interface ExamenMedicoEstudioProps {
@@ -150,6 +162,15 @@ interface ExamenMedicoEstudioProps {
   readonly?: boolean
   /** Callback para actualizar estado local en el workspace padre */
   onStatusChange?: (status: string) => void
+  /**
+   * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
+   * `true` si ya existe `MedicalVerdict` emitido para el Event. Cuando
+   * es `false`, el CTA de descarga PDF NO se muestra aunque haya
+   * aptitud persistida — el dictamen aún no fue firmado por el médico
+   * y la ruta devolvería 404 (regla §R6 / BR-20260825-20). Por defecto
+   * `false` (defensa en profundidad: sin prop, no se muestra).
+   */
+  hasMedicalVerdict?: boolean
   /** ID del trabajador para CTA hacia Historial Clínico — ARCH-20260326-06 */
   workerId?: string
   /** ID del EventTest de Somatometría para actualizar su estado al guardar — ARCH-20260506-06 */
@@ -333,6 +354,7 @@ export default function ExamenMedicoEstudio({
   workerId,
   somatometryEventTestId,
   agudezaEventTestId,
+  hasMedicalVerdict = false,
 }: ExamenMedicoEstudioProps) {
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
   const initSomatometryData = (examData?.somatometryData ?? {}) as Record<string, unknown>
@@ -616,11 +638,21 @@ export default function ExamenMedicoEstudio({
       const payload = buildPayload()
       const res = await saveExamenMedicoPapeleta(eventId, eventTestId, payload, markComplete)
       if (res.success) {
-        setSaveMsg(markComplete ? '🏁 Examen Médico completado.' : '✅ Borrador guardado.')
+        // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / FND-20260825-22):
+        // cuando se marca como completado, el Event pasa a `VALIDATING` y
+        // se muestra el flujo "Firmar y Emitir Dictamen" en el workspace.
+        // Cuando es sólo borrador, NO tocamos el Event (res.status === null).
+        setSaveMsg(
+          markComplete
+            ? '🏁 Examen Médico completado. Procede a firmar y emitir el dictamen general.'
+            : '✅ Borrador guardado.',
+        )
         if (res.aiWarning) {
           setAiWarning(`La captura clínica se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`)
         }
-        onStatusChange?.(res.status ?? (markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'))
+        // Notificamos al padre el nuevo studyStatus siempre (el Event
+        // status sólo si cambió — null en borrador).
+        onStatusChange?.(res.studyStatus ?? (markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'))
       } else {
         setSaveError(res.error ?? 'Error al guardar')
       }
@@ -1714,48 +1746,67 @@ export default function ExamenMedicoEstudio({
             </div>
           )}
 
-          {/* CTA — Descarga PDF consolidado de Examen Médico (AMI).
-              IMPL-FEATURE-20260825-03 / IMPLEMENTATION_DEFECT ronda 3:
-              visible cuando hay aptitud persistida (state local
-              refleja `physicalExamData.aptitud`, por lo que el CTA
-              persiste tras recarga cuando la aptitud está guardada).
-              NO se muestra si falta aptitud (gate ADR R6 / P2-3). */}
-          {shouldShowExamenMedicoPdfCta(aptitud) && (
+          {/* CTA — Descarga PDF consolidado + ZIP de cierre clínico.
+              IMPL-FEATURE-20260825-03/04 ronda 4 (DEC-20260825-19 /
+              BR-20260825-20 / FND-20260825-22): visible sólo cuando
+              (a) hay aptitud persistida Y (b) existe MedicalVerdict
+              emitido. Sin verdict, los CTAs NO se muestran (BR-20260825-20)
+              — el endpoint devolvería 404 — y se reemplaza por un
+              mensaje informativo invitando a firmar el dictamen desde
+              el flujo "Firmar y Emitir Dictamen" del workspace. */}
+          {shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict) ? (
             <div className="bg-white border-2 border-teal-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <div className="flex-1">
                 <p className="text-sm font-bold text-teal-800">
-                  PDF consolidado de Examen Médico disponible
+                  Documentos clínicos disponibles
                 </p>
                 <p className="text-xs text-slate-600 mt-1">
-                  Descarga el documento AMI (4 secciones) con la
-                  identificación, antecedentes, exploración y dictamen
-                  firmados por el médico evaluador.
+                  Descarga el PDF consolidado AMI (4 secciones) o el ZIP
+                  de cierre clínico (dictamen general + carpetas por
+                  estudio + fuentes + manifest).
                 </p>
               </div>
-              <a
-                href={examenMedicoPdfUrl(eventId)}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid="examen-medico-pdf-download-link"
-                data-implementacion="IMPL-FEATURE-20260825-03"
-                className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
-              >
-                📄 Descargar PDF (Examen-Medico-AMI)
-              </a>
-              {/* IMPL-FEATURE-20260825-04: ZIP de cierre clínico por Event
-                  (dictamen general + carpetas por estudio + fuentes + manifest). */}
-              <a
-                href={clinicalClosureZipUrl(eventId)}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid="clinical-closure-zip-download-link"
-                data-implementacion="IMPL-FEATURE-20260825-04"
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
-              >
-                📦 Descargar ZIP de cierre
-              </a>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <a
+                  href={examenMedicoPdfUrl(eventId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="examen-medico-pdf-download-link"
+                  data-implementacion="IMPL-FEATURE-20260825-03"
+                  data-has-medical-verdict={String(hasMedicalVerdict)}
+                  className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+                >
+                  📄 PDF
+                </a>
+                {/* IMPL-FEATURE-20260825-04: ZIP de cierre clínico por Event
+                    (dictamen general + carpetas por estudio + fuentes + manifest).
+                    Comparte el gate del PDF individual. */}
+                <a
+                  href={clinicalClosureZipUrl(eventId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="clinical-closure-zip-download-link"
+                  data-implementacion="IMPL-FEATURE-20260825-04"
+                  data-has-medical-verdict={String(hasMedicalVerdict)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+                >
+                  📦 ZIP
+                </a>
+              </div>
             </div>
-          )}
+          ) : aptitud ? (
+            <div
+              className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800"
+              data-testid="examen-medico-pdf-pending-notice"
+              data-implementacion="IMPL-FEATURE-20260825-03"
+              data-has-medical-verdict={String(hasMedicalVerdict)}
+            >
+              ⏳ Captura guardada. La descarga del PDF y del ZIP se
+              habilitará después de <strong>Firmar y Emitir
+              Dictamen</strong> desde el panel del expediente (paso
+              <em> Validación</em>).
+            </div>
+          ) : null}
 
           {/* Acciones de guardado */}
           {!readonly && (

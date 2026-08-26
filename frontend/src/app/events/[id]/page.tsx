@@ -53,6 +53,7 @@ function EventView({ data }: EventViewProps) {
     receivedBy,
     canRegisterPayments,
     examSummary,
+    hasMedicalVerdict,
   } = data
 
   return (
@@ -189,6 +190,7 @@ function EventView({ data }: EventViewProps) {
           examData={serializedExam as Parameters<typeof PapeletaWorkspace>[0]['examData']}
           prefilledData={prefilledData ? JSON.parse(JSON.stringify(prefilledData)) : null}
           longitudinalData={longitudinalData ? JSON.parse(JSON.stringify(longitudinalData)) : null}
+          hasMedicalVerdict={hasMedicalVerdict}
         />
       )}
 
@@ -215,6 +217,7 @@ function EventView({ data }: EventViewProps) {
           currentStatus={serializedStatus}
           verdictData={serializedVerdict as Parameters<typeof EventFlowController>[0]['verdictData']}
           examSummary={examSummary ?? undefined}
+          hasMedicalVerdict={hasMedicalVerdict}
         />
       )}
     </div>

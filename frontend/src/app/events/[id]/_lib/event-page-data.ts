@@ -40,6 +40,16 @@ export type EventPageData = {
   serializedEventTests: unknown[]
   serializedVerdict: unknown
   /**
+   * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
+   * indica si ya existe un `MedicalVerdict` emitido para el Event.
+   * `true` cuando hay verdict en BD (sin importar el estado de la
+   * firma). Usado por `PapeletaWorkspace` y `EventFlowController`
+   * para gate de CTAs de descarga (PDF/ZIP) — sólo se muestran con
+   * verdict emitido. Reemplaza la heurística anterior que gateaba
+   * sólo con `event.status === 'COMPLETED'`.
+   */
+  hasMedicalVerdict: boolean
+  /**
    * IMPL-20260817-10-C2 (ARCH-20260817-02 DA-2): snapshot del examen
    * para auto-poblar el dictamen en EventFlowController. `null` si
    * el examen no tiene `physicalExamData` (caso legacy / examen sin
@@ -379,6 +389,7 @@ export async function fetchEventPageData(input: {
     serializedExam,
     serializedEventTests,
     serializedVerdict,
+    hasMedicalVerdict: Boolean(event.verdict),
     examSummary,
     serializedEventId: event.id,
     serializedStatus: event.status,

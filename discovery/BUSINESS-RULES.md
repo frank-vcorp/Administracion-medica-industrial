@@ -167,6 +167,12 @@
 - **Estructura mínima:** `01_Dictamen_General/dictamen-general.pdf`; `02_Audiometria/dictamen-audiometria.pdf` + fuente original si existe; `03_Espirometria/dictamen-espirometria.pdf` + fuente original si existe; y carpetas análogas para otros estudios aplicables.
 - **Estado:** confirmada por Frank, 2026-08-25.
 
+## BR-20260825-20 — Gate de emisión para descargas
+
+- **Regla:** Guardar/completar el formulario no equivale a emitir el dictamen. La emisión ocurre después de revisión y firma médica explícita.
+- **Descargas:** PDF general, PDF clínico y ZIP devuelven estado pendiente/no disponible mientras no exista `MedicalVerdict` emitido; la interfaz no debe mostrar CTAs accionables antes de ese estado.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
 ## BR-20260825-13 — Cambios visuales menores por ruta rápida
 
 - **Regla:** Un cambio visual local y reversible, sin lógica de negocio ni contrato técnico, se resuelve con edición mínima y validación dirigida; no requiere SPEC nueva, worker ni auditoría completa.

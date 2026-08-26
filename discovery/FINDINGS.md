@@ -327,3 +327,10 @@
 - **Estado:** confirmed / discovery
 - **Evidencia:** Frank confirmó estructura por carpetas, manifest para fuentes faltantes y acceso exclusivo a roles clínicos.
 - **Contrato inicial:** carpeta de dictamen general + carpeta por estudio con dictamen y fuente; `manifest.txt` declara ausencias; `COMPANY_CLIENT` no descarga el paquete clínico.
+
+## FND-20260825-22 — Completar Examen Médico no emite MedicalVerdict
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT P1
+- **Evidencia:** descarga de PDF y ZIP devuelven `404: El dictamen aún no ha sido emitido` después de pulsar Completar.
+- **Causa:** `saveExamenMedicoPapeleta` persiste `MedicalExam` y `EventTest`, pero no crea `MedicalVerdict`; el flujo de validación/firma queda omitido y los CTAs se muestran prematuramente.
+- **Corrección:** completar debe llevar el Event al paso `VALIDATING`; el médico firma/emite el dictamen general y sólo entonces deben aparecer PDF y ZIP.
