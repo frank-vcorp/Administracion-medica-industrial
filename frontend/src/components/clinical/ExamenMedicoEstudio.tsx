@@ -91,6 +91,34 @@ const VISUAL_FIELDS_NAMES = [
   'cercana_corregida_od', 'cercana_corregida_oi',
 ]
 
+/**
+ * IMPL-FEATURE-20260825-03 ronda 3 (IMPLEMENTATION_DEFECT):
+ * URL del PDF consolidado de Examen Médico. Pura + testeable sin DOM.
+ * Mantener como helper estable: el contrato del endpoint
+ * (`/api/pdf/examen-medico/[eventId]`) NO cambia con este fix.
+ */
+export function examenMedicoPdfUrl(eventId: string): string {
+  return `/api/pdf/examen-medico/${eventId}`
+}
+
+/**
+ * IMPL-FEATURE-20260825-03 ronda 3 (IMPLEMENTATION_DEFECT):
+ * Decide si el CTA de descarga del PDF consolidado debe mostrarse.
+ *
+ * Reglas (FEATURE-20260825-03 / SPEC §2 / ADR §R6):
+ *   - Visible si y sólo si hay una aptitud médica NO vacía persistida
+ *     (state local del componente o `physicalExamData.aptitud`).
+ *   - NO se muestra si falta aptitud (gate ADR R6 / P2-3 — el endpoint
+ *     devuelve 409 cuando falta aptitud; no invitamos a un 409).
+ *   - Pura y testeable sin DOM. Vive aquí para que cualquier llamada
+ *     posterior (bot, enlace, atajo) use la misma lógica.
+ */
+export function shouldShowExamenMedicoPdfCta(
+  aptitud: string | null | undefined
+): boolean {
+  return typeof aptitud === 'string' && aptitud.trim().length > 0
+}
+
 interface ExamenMedicoEstudioProps {
   eventId: string
   eventTestId: string
@@ -1661,6 +1689,37 @@ export default function ExamenMedicoEstudio({
           {aiWarning && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800 font-medium">
               ⚠️ {aiWarning}
+            </div>
+          )}
+
+          {/* CTA — Descarga PDF consolidado de Examen Médico (AMI).
+              IMPL-FEATURE-20260825-03 / IMPLEMENTATION_DEFECT ronda 3:
+              visible cuando hay aptitud persistida (state local
+              refleja `physicalExamData.aptitud`, por lo que el CTA
+              persiste tras recarga cuando la aptitud está guardada).
+              NO se muestra si falta aptitud (gate ADR R6 / P2-3). */}
+          {shouldShowExamenMedicoPdfCta(aptitud) && (
+            <div className="bg-white border-2 border-teal-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex-1">
+                <p className="text-sm font-bold text-teal-800">
+                  PDF consolidado de Examen Médico disponible
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  Descarga el documento AMI (4 secciones) con la
+                  identificación, antecedentes, exploración y dictamen
+                  firmados por el médico evaluador.
+                </p>
+              </div>
+              <a
+                href={examenMedicoPdfUrl(eventId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="examen-medico-pdf-download-link"
+                data-implementacion="IMPL-FEATURE-20260825-03"
+                className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+              >
+                📄 Descargar PDF (Examen-Medico-AMI)
+              </a>
             </div>
           )}
 
