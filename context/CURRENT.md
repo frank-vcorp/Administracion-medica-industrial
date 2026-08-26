@@ -20,6 +20,11 @@
 - **Regla operativa:** `DEC-20260825-09` / `BR-20260825-10` — después de cada push se ejecuta un smoke rápido del build de Vercel y se reporta su estado antes de continuar.
 - **Ajuste pendiente:** `DEC-20260825-10` / `BR-20260825-11` — retirar del PDF la sección IV de referencia AMI; conservarla sólo en el panel clínico.
 - **Ajuste pendiente:** `DEC-20260825-11` / `BR-20260825-12` — retirar del PDF la sección III de criterios derivados; conservar PTA/patrón sólo en el panel.
+- **Nuevo insumo recibido:** `FND-20260825-16` — PDF entregable de Examen Médico identificado; Audiometría permanece cerrada en implementación y Examen Médico queda como siguiente Discovery.
+- **Nuevo alcance confirmado:** `DEC-20260825-13` / `BR-20260825-14` / `FND-20260825-17` — el Examen Médico puede completarse con el PDF AMI, el perfil clínico del paciente y los datos del Event; listo para formalizar SPEC.
+- **Nuevo incremento:** `FEATURE-20260825-03` — ADR y SPEC de Examen Médico creadas; SPEC en `READY_FOR_SOFIA`, pendiente handoff/implementación.
+- **Gate QA:** `FND-20260825-18` / `QA-20260825-03` detectó P1: Company Client puede alcanzar PDF clínico completo; requiere corrección antes de verificar/publicar.
+- **Gate vigente:** `DEC-20260825-15` / `BR-20260825-16` — esperar verificación funcional de Frank antes de iniciar persistencias definitivas.
 - **Regla de velocidad:** `DEC-20260825-12` / `BR-20260825-13` — cambios visuales menores se resuelven con delta mínimo y validación focal, sin ciclo completo.
 - **Insumos recibidos:** fuente del audiómetro (`FND-20260825-05`), documento final AMI (`FND-20260825-06`), cuestionario (`FND-20260825-07`) y programa/criterios AMI (`FND-20260825-08`).
 - **Decisiones confirmadas:** `DEC-20260825-03` / `BR-20260825-04` — combinación patrón+PTA, huecos como no concluyentes y 1000 Hz como frontera.

@@ -231,6 +231,32 @@
 - **Razón:** El PDF final debe centrarse en evidencia documental, impresión diagnóstica y recomendación médica validada.
 - **Referencia:** BR-20260825-12, FND-20260825-15.
 
+## DEC-20260825-13 — Examen Médico se completa con el perfil clínico del paciente
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión de Frank:** El PDF de Examen Médico puede completarse con la información ya existente en el perfil clínico del paciente y los datos del Event; no se requiere otro documento funcional para cerrar el entregable.
+- **Alcance:** reutilizar datos personales, laborales, antecedentes y resultados disponibles en el perfil clínico; agregar exploración, impresión, aptitud y recomendaciones conforme al documento final AMI.
+- **Límite:** no duplicar captura de información que ya existe; validar origen, actualidad y pertenencia al paciente antes de incorporarla al PDF.
+- **Referencia:** BR-20260825-14, FND-20260825-17.
+
+## DEC-20260825-14 — Company Client no descarga PDF clínico completo
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión:** El PDF completo de Examen Médico sólo queda disponible para roles clínicos/autorizados. `COMPANY_CLIENT` no puede descargarlo; su portal conserva únicamente el dictamen de aptitud permitido.
+- **Razón:** El PDF contiene antecedentes, toxicomanías, APP, gineco-obstetricia, exploración, firma y otros datos clínicos protegidos.
+- **Referencia:** BR-20260825-15, FND-20260825-18.
+
+## DEC-20260825-15 — Verificación humana antes de persistencias
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión de Frank:** Primero verificará el entregable de Examen Médico en el entorno publicado. Las persistencias definitivas se iniciarán sólo después de que confirme que el flujo funciona correctamente.
+- **Secuencia:** verificación funcional de Frank → confirmación explícita → Discovery/SPEC de persistencias → implementación autorizada.
+- **Límite:** no diseñar ni implementar persistencia documental adicional antes de esa confirmación.
+- **Referencia:** BR-20260825-16.
+
 ## DEC-20260825-12 — Ruta rápida para cambios visuales menores
 
 - **Estado:** confirmed

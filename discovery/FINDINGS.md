@@ -273,3 +273,33 @@
 - **Estado:** confirmed / UX
 - **Evidencia:** Frank confirmó el 2026-08-25 que la sección III de criterios derivados tampoco es necesaria en el PDF.
 - **Decisión:** retirar PTA3, PTA fuente y patrón del PDF; conservarlos en el panel clínico.
+
+## FND-20260825-16 — PDF entregable de Examen Médico identificado
+
+- **Estado:** confirmed / discovery
+- **Fuente:** `context/PACIENTES/167555 - CARRAZCO SUAREZ ALVARO RX0001/CARRASCO SUAREZ ALVARO-161755-23-12-2025_04_18_25_2973.pdf`, entregado por Frank el 2026-08-25.
+- **Tipo:** documento final de `EXAMEN MEDICO`, categoría `INGRESO`, con empresa, puesto, historia clínica, aptitud, recomendaciones y firmas profesionales.
+- **Estructura observada — 4 páginas:**
+  1. Datos personales; empresa; fecha; puesto solicitado/área; historia laboral; factores de riesgo; antecedentes heredofamiliares; antecedentes no patológicos y toxicomanías.
+  2. Antecedentes personales patológicos; antecedentes reproductivos; inmunizaciones; somatometría y signos vitales; agudeza visual, visión corregida, reflejos, Ishihara y campimetría.
+  3. Exploración física general y neurológica; cabeza, piel, oídos, ojos, boca, nariz, faringe, CAD/CAI/MT, cuello, tórax, corazón, pulmones, abdomen, genitourinario, columna, extremidades y pruebas musculoesqueléticas; impresión diagnóstica.
+  4. Aptitud según hallazgos clínicos; nota de que la aptitud puede cambiar por estudios paraclínicos; resultado condicionado a seguimiento; recomendaciones; profesionales que realizaron/revisaron el examen, cédulas y firma.
+- **Contenido final relevante:** impresión sobre estado nutricional, agudeza visual, salud bucal y presión arterial; aptitud laboral marcada; recomendaciones de alimentación, ejercicio, odontología y valoración médica/visual anual.
+- **Modelo funcional:** este PDF es un entregable consolidado de Examen Médico, distinto de los documentos fuente por sección. Debe combinar historia clínica, exploración, resultados, impresión, aptitud y recomendaciones médicas validadas.
+- **Privacidad:** contiene datos personales, clínicos, laborales y de contacto; el futuro PDF debe derivar identidad desde el Event/paciente autenticado y proteger la descarga por autorización, sin copiar datos de otro paciente.
+- **Pendientes para contrato:** confirmar cuestionario/formulario de captura, documentos fuente de cada bloque, reglas de aptitud, quién realiza/revisa, firma, recomendaciones y si los estudios paraclínicos se integran dentro del mismo entregable o sólo se referencian.
+
+## FND-20260825-17 — Insumos funcionales suficientes para cerrar Discovery de Examen Médico
+
+- **Estado:** confirmed / discovery close candidate
+- **Evidencia:** Frank confirmó el 2026-08-25 que los datos faltantes del PDF final se encuentran en el perfil clínico del paciente.
+- **Hallazgo:** El PDF final recibido, el perfil clínico y los datos del Event cubren las fuentes necesarias para formalizar el entregable completo.
+- **Impacto:** La siguiente etapa puede ser contrato/SPEC e implementación; las preguntas restantes son técnicas y de mapeo, no nuevos insumos funcionales.
+- **Límite:** verificar cada origen y autorización antes de renderizar; no duplicar captura ni combinar pacientes.
+
+## FND-20260825-18 — Gate QA detecta exposición de PDF clínico a Company Client
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT P1
+- **Evidencia:** QA-20260825-03; la ruta nueva permite a `COMPANY_CLIENT` descargar el PDF completo, contradiciendo AC-10.
+- **Impacto:** exposición de antecedentes, toxicomanías, APP, gineco-obstetricia, exploración y firma; además existe una ruta legacy sin autenticación.
+- **Corrección:** negar el PDF clínico completo a `COMPANY_CLIENT` y exigir autenticación/scope en rutas legacy; el portal mantiene sólo el dictamen permitido.

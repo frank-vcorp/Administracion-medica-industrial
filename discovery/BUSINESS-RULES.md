@@ -126,6 +126,26 @@
 - **PDF conserva:** datos del estudio, evidencia documental fuente, impresión diagnóstica, recomendaciones validadas, notas e identidad/firma.
 - **Estado:** confirmado por Frank, 2026-08-25.
 
+## BR-20260825-14 — Perfil clínico como fuente de datos del Examen Médico
+
+- **Regla:** El entregable de Examen Médico debe combinar datos del perfil clínico del paciente, datos del Event, resultados de estudios y revisión médica, sin solicitar nuevamente información ya disponible.
+- **Trazabilidad:** cada bloque del PDF debe conservar su origen: perfil clínico, Event/estudio, exploración, cálculo, documento fuente o decisión médica.
+- **Privacidad:** sólo se incorporan datos del paciente autenticado/autorizado; no se mezclan perfiles ni se permiten valores por defecto silenciosos.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
+## BR-20260825-15 — Separación de dictamen corporativo y PDF clínico
+
+- **Regla:** `COMPANY_CLIENT` sólo recibe la clasificación/resultado de aptitud autorizado por el portal; no recibe el PDF clínico completo.
+- **Roles clínicos:** `SUPERADMIN`, `DOCTOR_GENERAL` y `DOCTOR_VALIDATOR` pueden descargar el PDF completo dentro de su autorización de sesión.
+- **Ruta legacy:** cualquier endpoint histórico de PDF debe mantener autenticación y scope; no se acepta una ruta pública como excepción.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
+## BR-20260825-16 — Gate humano previo a persistencias
+
+- **Regla:** La persistencia definitiva de documentos y snapshots sólo comienza después de una verificación funcional del Examen Médico realizada y confirmada por Frank.
+- **Estado actual:** en espera de confirmación; no bloquea la revisión manual del entregable.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
 ## BR-20260825-13 — Cambios visuales menores por ruta rápida
 
 - **Regla:** Un cambio visual local y reversible, sin lógica de negocio ni contrato técnico, se resuelve con edición mínima y validación dirigida; no requiere SPEC nueva, worker ni auditoría completa.
