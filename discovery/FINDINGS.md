@@ -261,3 +261,9 @@
 - **Estado:** candidate / UX
 - **Evidencia:** Frank observó que las tablas completas del criterio AMI ocupan demasiado espacio vertical cuando se muestran desplegadas en el panel.
 - **Propuesta:** renderizar `Criterio audiométrico AMI (referencia)` dentro de un acordeón cerrado por defecto; conservar el contenido completo disponible al expandir. El PDF mantiene la referencia completa desplegada por trazabilidad documental.
+
+## FND-20260825-14 — La referencia AMI sobra en el PDF validado
+
+- **Estado:** confirmed / UX
+- **Evidencia:** Frank confirmó el 2026-08-25 que la sección IV no es necesaria en el PDF.
+- **Decisión:** retirarla del PDF, manteniéndola sólo en el panel clínico como referencia consultable.

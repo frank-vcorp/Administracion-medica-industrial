@@ -214,3 +214,11 @@
 - **Alcance:** esta validación es un smoke técnico del build; no sustituye V3 funcional, Playwright ni la verificación de producto en producción.
 - **Resultado esperado:** reportar commit, estado del build y error exacto si falla antes de continuar con otro incremento.
 - **Referencia:** BR-20260825-10.
+
+## DEC-20260825-10 — Retirar referencia AMI del PDF
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión de Frank:** La sección `Criterio audiométrico AMI (referencia)` se elimina del PDF validado y se conserva únicamente en el panel clínico, donde permanece disponible en acordeón.
+- **Razón:** El PDF debe priorizar el resultado clínico validado y no crecer con tablas administrativas de referencia.
+- **Referencia:** BR-20260825-11, FND-20260825-14.

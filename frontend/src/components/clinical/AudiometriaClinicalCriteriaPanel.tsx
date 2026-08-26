@@ -810,12 +810,16 @@ function readOidoVo(
 // ──────────────────────────────────────────────────────────────────────────
 // FND-20260825-12 — `AMIReferenceSection`
 // FND-20260825-13 — UX: la sección se envuelve en un acordeón nativo
-// `<details>`/`<summary>` CERRADO por defecto. El acordeón es accesible
-// por teclado (Tab + Space/Enter) y screen reader (gestión nativa de
-// `aria-expanded`). El PDF conserva la referencia desplegada completa
-// para trazabilidad (no se ve afectado por este cambio UX — ver
-// `frontend/src/components/pdf/AudiometriaValidatedPDF.tsx`,
-// `AmiReferencePdfSection`).
+// `<details>`/`<summary>` CERRADO por defecto. Acordeón accesible por
+// teclado (Tab + Space/Enter) y screen reader (gestión nativa de
+// `aria-expanded`).
+// FND-20260825-14 / DEC-20260825-10 — esta referencia es el ÚNICO
+// contenedor canónico de las tablas AMI (normalidad, patrón
+// operativo, severidad, etiologías). El PDF validado RETIRÓ su
+// sección equivalente en este incremento y se enfoca sólo en
+// trazabilidad clínica del paciente (evidencia, criterios derivados,
+// impresión y firma). Las constantes `AMI_*_REFERENCIA` siguen
+// exportadas desde este módulo, pero el PDF ya no las importa.
 //
 // Bloque explícito de la TABLA DE REFERENCIA del programa audiométrico
 // AMI. Es la contraparte administrativa del resultado derivado que el

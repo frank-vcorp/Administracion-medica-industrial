@@ -114,6 +114,12 @@
 - **Límite:** un build verde no confirma el comportamiento funcional; V3 y la validación de usuario permanecen separadas.
 - **Estado:** confirmado por Frank, 2026-08-25.
 
+## BR-20260825-11 — PDF breve, panel AMI consultable
+
+- **Regla:** La referencia completa de criterios AMI se muestra en el panel clínico, pero no se incluye en el PDF validado.
+- **PDF conserva:** evidencia audiométrica, PTA calculado y fuente, interpretación, revisión médica, recomendación validada, identidad/firma y trazabilidad necesaria.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
 ## BR-20260824-02 — Inferencia visual de criterios de calidad desde las gráficas
 
 - **Actor:** Sistema extractivo, como apoyo para revisión del médico ocupacional.

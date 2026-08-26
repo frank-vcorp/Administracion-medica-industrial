@@ -70,7 +70,7 @@ La revisión médica debe editar/aceptar la interpretación derivada, limitacion
 - AC-9: La descarga no permite acceso cruzado entre usuarios.
 - AC-10: XML de Audiometría conserva su parser directo y no se envía innecesariamente al extractor IA.
 - AC-11: Cuando exista cuestionario guardado, `clinicalContext` de Audiometría se propaga al contexto de prediagnóstico igual que Espirometría; no se inventan respuestas ausentes.
-- AC-12: El panel y el PDF muestran una referencia explícita del criterio AMI (normalidad, patrones, severidad y etiologías) separada del resultado derivado y de la decisión médica.
+- AC-12: El panel muestra una referencia explícita del criterio AMI (normalidad, patrones, severidad y etiologías) separada del resultado derivado y de la decisión médica; el PDF no incluye esa tabla administrativa.
 
 ## 6. Gates y validación
 
