@@ -267,3 +267,9 @@
 - **Estado:** confirmed / UX
 - **Evidencia:** Frank confirmó el 2026-08-25 que la sección IV no es necesaria en el PDF.
 - **Decisión:** retirarla del PDF, manteniéndola sólo en el panel clínico como referencia consultable.
+
+## FND-20260825-15 — Los criterios derivados también deben quedar fuera del PDF
+
+- **Estado:** confirmed / UX
+- **Evidencia:** Frank confirmó el 2026-08-25 que la sección III de criterios derivados tampoco es necesaria en el PDF.
+- **Decisión:** retirar PTA3, PTA fuente y patrón del PDF; conservarlos en el panel clínico.

@@ -120,6 +120,19 @@
 - **PDF conserva:** evidencia audiométrica, PTA calculado y fuente, interpretación, revisión médica, recomendación validada, identidad/firma y trazabilidad necesaria.
 - **Estado:** confirmado por Frank, 2026-08-25.
 
+## BR-20260825-12 — PDF sin criterios derivados
+
+- **Regla:** El PTA3, PTA fuente y patrón audiométrico derivados permanecen en el panel clínico y no se incluyen en el PDF validado.
+- **PDF conserva:** datos del estudio, evidencia documental fuente, impresión diagnóstica, recomendaciones validadas, notas e identidad/firma.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
+## BR-20260825-13 — Cambios visuales menores por ruta rápida
+
+- **Regla:** Un cambio visual local y reversible, sin lógica de negocio ni contrato técnico, se resuelve con edición mínima y validación dirigida; no requiere SPEC nueva, worker ni auditoría completa.
+- **Validación mínima:** lint/test focal; si se publica, smoke rápido de Vercel posterior al push.
+- **Escalamiento:** si durante el cambio aparece lógica clínica, datos, auth, API, schema, infraestructura o impacto transversal, se detiene la ruta rápida y se enruta por el flujo normal.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
 ## BR-20260824-02 — Inferencia visual de criterios de calidad desde las gráficas
 
 - **Actor:** Sistema extractivo, como apoyo para revisión del médico ocupacional.

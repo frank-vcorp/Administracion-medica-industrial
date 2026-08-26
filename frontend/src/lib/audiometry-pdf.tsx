@@ -6,14 +6,20 @@
  * Patrón (paralelo a `espirometry-pdf.tsx`):
  *   - Toma los datos de la revisión + snapshot congelado + identidad
  *     congelada del médico (`DoctorStudyReview.validatorSnapshot*`).
- *   - Resuelve criterios audiométricos (PTA3 calculado, PTA fuente por
- *     separado, criterio AMI ≤25 dB) desde la presentación clínica
- *     estructurada de Audiometría. NO copia el diagnóstico textual AMI
- *     como IA.
+ *   - Resuelve la EVIDENCIA DOCUMENTAL (TA/VO por frecuencia y por
+ *     oído) desde la presentación clínica estructurada de Audiometría.
+ *     NO calcula ni renderiza criterios DERIVADOS (PTA3, criterio AMI,
+ *     patrón, completitud) — viven sólo en el panel clínico.
  *   - Renderiza `<AudiometriaValidatedPDF>` con `@react-pdf/renderer`.
  *   - Persiste el PDF a disco en `uploads/audiometry-pdfs/<reviewId>.pdf`
  *     y devuelve URL relativa + hash SHA-256 + bytes para que la server
  *     action los persista en `DoctorStudyReview`.
+ *
+ * Decisiones recientes (corregidas por Frank):
+ *   - FND-20260825-14: la sección IV "Criterio audiométrico AMI
+ *     (referencia)" se retiró del PDF; vive sólo en el panel.
+ *   - FND-20260825-15: la sección III "Criterios audiométricos
+ *     derivados" también se retiró del PDF; vive sólo en el panel.
  *
  * Advertencias operativas:
  *   - El filesystem local NO está disponible en Vercel serverless. Aquí
@@ -34,7 +40,6 @@ import path from 'node:path'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { AudiometriaValidatedPDF } from '@/components/pdf/AudiometriaValidatedPDF'
 import type { AudiometriaValidatedPDFData } from '@/components/pdf/AudiometriaValidatedPDF'
-import { resolveAudiometriaCriteria } from '@/components/clinical/AudiometriaClinicalCriteriaPanel'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -120,18 +125,35 @@ export function buildAudiometriaPdfData(
     input.doctorStatus,
   )
 
-  // Resolver criterios audiométricos desde el structuredData del snapshot
-  // de extracción. Soporta tanto `extracted_data` anidado como root.
+  // FND-20260825-15: el PDF ya NO computa PTA3 / criterio AMI / patrón /
+  // completitud. Sólo formamos la EVIDENCIA DOCUMENTAL (TA/VO por
+  // frecuencia y por oído) desde el snapshot estructurado de extracción.
+  // Soporta tanto `extracted_data` anidado como root.
   const sd =
     (input.extractionStructuredData as Record<string, unknown> | null) ?? {}
   const extracted =
     sd && typeof sd.extracted_data === 'object' && !Array.isArray(sd.extracted_data)
       ? (sd.extracted_data as Record<string, unknown>)
       : sd
-  const resolved = resolveAudiometriaCriteria(extracted)
+  // Frecuencias detectadas: unión simple de las claves presentes en
+  // `va` y `vo` de ambos oídos; sin invención.
+  const frecuenciasSet = new Set<number>()
+  for (const sideKey of ['oido_derecho', 'oido_izquierdo'] as const) {
+    const side = extracted?.[sideKey]
+    if (side && typeof side === 'object' && !Array.isArray(side)) {
+      for (const vaOrVo of ['va', 'vo']) {
+        const obj = (side as Record<string, unknown>)[vaOrVo]
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          for (const k of Object.keys(obj as Record<string, unknown>)) {
+            const freq = Number(k)
+            if (Number.isFinite(freq)) frecuenciasSet.add(freq)
+          }
+        }
+      }
+    }
+  }
+  const frecuencias = Array.from(frecuenciasSet).sort((a, b) => a - b)
 
-  // Frecuencias detectadas + TA/VO por oído
-  const frecuencias = resolved.frecuenciasDetectadas
   const od =
     extracted?.oido_derecho && typeof extracted.oido_derecho === 'object'
       ? (extracted.oido_derecho as Record<string, unknown>)
@@ -174,9 +196,6 @@ export function buildAudiometriaPdfData(
     return out
   }
 
-  const odInterp = resolved.oidos.find((o) => o.oido === 'OD') ?? null
-  const oiInterp = resolved.oidos.find((o) => o.oido === 'OI') ?? null
-
   const patientFullName = `${input.patient.firstName} ${input.patient.lastName}`.trim()
   const diagnosis = (input.doctorDiagnosis ?? '').trim()
 
@@ -201,22 +220,6 @@ export function buildAudiometriaPdfData(
     taOi: taMap(oi),
     voOd: voMap(od),
     voOi: voMap(oi),
-    criterios: {
-      ptaCalculadoOd: odInterp?.ptaCalculado ?? null,
-      ptaCalculadoOi: oiInterp?.ptaCalculado ?? null,
-      ptaCompletoOd: odInterp?.ptaCalculadoCompleto ?? false,
-      ptaCompletoOi: oiInterp?.ptaCalculadoCompleto ?? false,
-      ptaFuenteOd: odInterp?.ptaFuente ?? null,
-      ptaFuenteOi: oiInterp?.ptaFuente ?? null,
-      criterioAmiOd: odInterp?.criterioAmi ?? 'NO_CONCLUYENTE',
-      criterioAmiOi: oiInterp?.criterioAmi ?? 'NO_CONCLUYENTE',
-      patronOd: odInterp?.patronAmi ?? 'NO_CONCLUYENTE',
-      patronOi: oiInterp?.patronAmi ?? 'NO_CONCLUYENTE',
-      bilateralEstado: resolved.bilateral.estado,
-      bilateralNota: resolved.bilateral.nota,
-      completitud: resolved.completitudDocumental,
-      advertencias: resolved.advertencias,
-    },
     recomendacionesValidadas,
     medico: input.medico,
     logoUrl: input.logoDataUrl ?? '',

@@ -222,3 +222,20 @@
 - **Decisión de Frank:** La sección `Criterio audiométrico AMI (referencia)` se elimina del PDF validado y se conserva únicamente en el panel clínico, donde permanece disponible en acordeón.
 - **Razón:** El PDF debe priorizar el resultado clínico validado y no crecer con tablas administrativas de referencia.
 - **Referencia:** BR-20260825-11, FND-20260825-14.
+
+## DEC-20260825-11 — Retirar criterios derivados del PDF
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión de Frank:** La sección III `Criterios audiométricos derivados` —PTA3, PTA fuente y patrón— también se elimina del PDF validado y se conserva en el panel clínico.
+- **Razón:** El PDF final debe centrarse en evidencia documental, impresión diagnóstica y recomendación médica validada.
+- **Referencia:** BR-20260825-12, FND-20260825-15.
+
+## DEC-20260825-12 — Ruta rápida para cambios visuales menores
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión operativa de Frank:** Los cambios visuales menores, locales, reversibles y sin lógica de negocio, contrato, datos, auth o infraestructura no requieren el ciclo completo de análisis/delegación.
+- **Ruta:** aplicar el delta mínimo directamente, ejecutar lint o test focal, y reportar; el build de Vercel se valida sólo después del push autorizado.
+- **Exclusiones:** cualquier cambio que toque comportamiento clínico, schema, API, persistencia, permisos o arquitectura conserva el flujo completo.
+- **Referencia:** BR-20260825-13.

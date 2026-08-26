@@ -8,13 +8,13 @@
  *     PDF AMI como salida de IA (SPEC §3). La impresión diagnóstica del
  *     PDF refleja la decisión del médico firmante (`doctorDiagnosis`),
  *     no el texto del documento fuente.
- *   - El PDF conserva explícitamente cuatro secciones:
+ *   - El PDF conserva explícitamente TRES secciones de contenido + una
+ *     sección de identidad/firma:
  *       I.  Datos del estudio y paciente (NOM)
  *       II. Evidencia audiométrica por oído y frecuencia (Fuente)
- *       III. Criterios clínicos audiométricos (derivación AMI/sistema)
- *       IV. Impresión diagnóstica validada por el médico
- *       V.  Recomendaciones validadas (snapshot IA aceptado)
- *       VI. Notas clínicas
+ *       III. Impresión diagnóstica validada por el médico
+ *       IV. Recomendaciones validadas (snapshot IA aceptado)
+ *       V.  Notas clínicas
  *     + identidad (médico + cédula) + firma al final.
  *   - DEC-20260825-10 / BR-20260825-11 / FND-20260825-14 (rectificación
  *     Frank): la sección "Criterio audiométrico AMI (referencia)" —
@@ -22,14 +22,17 @@
  *     — fue RETIRADA del PDF. Esa referencia (información administrativa)
  *     vive ahora SÓLO en el panel clínico, dentro del acordeón nativo
  *     `<details>`/`<summary>` cerrado por defecto de
- *     `AudiometriaClinicalCriteriaPanel.tsx` (FND-20260825-13). El PDF
- *     se mantiene enfocado en trazabilidad clínica: evidencia, criterios
- *     DERIVADOS del paciente, impresión y firma del médico.
+ *     `AudiometriaClinicalCriteriaPanel.tsx` (FND-20260825-13).
+ *   - DEC-20260825-11 / BR-20260825-12 / FND-20260825-15 (rectificación
+ *     Frank): la sección "Criterios audiométricos derivados" (PTA3,
+ *     PTA fuente, criterio AMI, patrón, estado bilateral, completitud,
+ *     advertencias) también fue RETIRADA del PDF. El PDF se enfoca
+ *     ahora en datos del estudio, EVIDENCIA DOCUMENTAL (umbrales
+ *     TA/VO por frecuencia y por oído), impresión del médico,
+ *     recomendaciones validadas y notas. Los datos DERIVADOS (PTA3,
+ *     criterio, patrón) viven SÓLO en el panel clínico audiométrico.
  *   - TA = vía aérea; VO = vía ósea (sólo si están visibles en el
  *     documento).
- *   - PTA3 calculado = (TA500+TA1000+TA2000)/3 se muestra con la
- *     ECUACIÓN, las TRES ENTRADAS, el resultado y la fuente del cálculo,
- *     junto con el `pta_fuente` (PTA del documento) por separado.
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 
@@ -160,31 +163,14 @@ export interface AudiometriaValidatedPDFData {
   /** VO por oído y frecuencia (dB). Ausentes → null. */
   voOd: Record<number, number | null>
   voOi: Record<number, number | null>
-  /** Criterios audiométricos resueltos. */
-  criterios: {
-    ptaCalculadoOd: number | null
-    ptaCalculadoOi: number | null
-    ptaCompletoOd: boolean
-    ptaCompletoOi: boolean
-    ptaFuenteOd: number | null
-    ptaFuenteOi: number | null
-    criterioAmiOd: 'NORMAL' | 'ALTERADO' | 'NO_CONCLUYENTE'
-    criterioAmiOi: 'NORMAL' | 'ALTERADO' | 'NO_CONCLUYENTE'
-    patronOd: 'NORMAL' | 'GRAVES' | 'AGUDAS' | 'MIXTA' | 'NO_CONCLUYENTE'
-    patronOi: 'NORMAL' | 'GRAVES' | 'AGUDAS' | 'MIXTA' | 'NO_CONCLUYENTE'
-    bilateralEstado:
-      | 'NORMAL_BILATERAL'
-      | 'ALTERADO_BILATERAL'
-      | 'ASIMETRIA'
-      | 'NO_CONCLUYENTE'
-    bilateralNota: string
-    completitud:
-      | 'suficiente'
-      | 'parcial'
-      | 'no_concluyente'
-      | 'desconocida'
-    advertencias: string[]
-  }
+  /**
+   * FND-20260825-15: el campo `criterios` (PTA3, PTA fuente, criterio
+   * AMI, patrón, estado bilateral, completitud, advertencias) ya NO
+   * forma parte del PDF. Esos datos viven únicamente en el panel
+   * clínico audiométrico. El shape del PDF queda alineado con su
+   * contenido: evidencia documental + impresión + recomendaciones +
+   * notas + identidad/firma.
+   */
   /** Recomendaciones validadas (snapshot IA aceptado). */
   recomendacionesValidadas: string[]
   medico: {
@@ -212,49 +198,21 @@ const formatDb = (v: number | null | undefined) => {
   return `${v} dB`
 }
 
-const formatBool = (v: boolean | null | undefined) => {
-  if (v === true) return 'Sí'
-  if (v === false) return 'No'
-  return '—'
-}
+// FND-20260825-14 / FND-20260825-15 — Retiro de las secciones "Criterio
+// audiométrico AMI (referencia)" (DEC-20260825-10) y "Criterios
+// audiométricos derivados" (DEC-20260825-11) del PDF. Las constantes
+// `CRITERIO_AMI_LABEL`, `PATRON_AMI_LABEL` y `BILATERAL_LABEL` dejaron de
+// ser usadas y se eliminaron. `formatDb` se conserva porque sigue
+// dando formato a TA/VO en la sección II (evidencia documental).
 
-const CRITERIO_AMI_LABEL: Record<
-  'NORMAL' | 'ALTERADO' | 'NO_CONCLUYENTE',
-  string
-> = {
-  NORMAL: 'Normal (≤ 25 dB)',
-  ALTERADO: 'Alterado (> 25 dB)',
-  NO_CONCLUYENTE: 'No concluyente',
-}
-
-const PATRON_AMI_LABEL: Record<
-  'NORMAL' | 'GRAVES' | 'AGUDAS' | 'MIXTA' | 'NO_CONCLUYENTE',
-  string
-> = {
-  NORMAL: 'Normal',
-  GRAVES: 'Predomina en graves',
-  AGUDAS: 'Predomina en agudas',
-  MIXTA: 'Mixta (graves + agudas)',
-  NO_CONCLUYENTE: 'No concluyente',
-}
-
-const BILATERAL_LABEL: Record<
-  'NORMAL_BILATERAL' | 'ALTERADO_BILATERAL' | 'ASIMETRIA' | 'NO_CONCLUYENTE',
-  string
-> = {
-  NORMAL_BILATERAL: 'Normal bilateral',
-  ALTERADO_BILATERAL: 'Alterado bilateral',
-  ASIMETRIA: 'Asimetría OD/OI',
-  NO_CONCLUYENTE: 'No concluyente',
-}
-
-// DEC-20260825-10 — la sección IV de referencia del programa AMI vivió
-// aquí como `AmiReferencePdfSection` (FND-20260825-12). Fue RETIRADA por
-// rectificación de Frank: esa información administrativa vive SÓLO en el
-// panel clínico (acordeón nativo en `AudiometriaClinicalCriteriaPanel`).
-// El PDF se concentra en trazabilidad clínica: evidencia (II), criterios
-// DERIVADOS del paciente (III), impresión del médico (IV), recomendaciones
-// validadas (V) y notas (VI). Identidad + firma + cédula siguen al final.
+// DEC-20260825-10 / DEC-20260825-11 — la sección IV de referencia AMI
+// (FND-20260825-12) y la sección III "Criterios audiométricos derivados"
+// (FND-20260825-15) fueron RETIRADAS del PDF por rectificación de Frank.
+// Esa información (administrativa + derivada) vive SÓLO en el panel
+// clínico audiométrico (`AudiometriaClinicalCriteriaPanel`). El PDF se
+// concentra en: datos del estudio (I), evidencia documental fuente (II),
+// impresión del médico (III), recomendaciones validadas (IV) y notas (V).
+// Identidad + firma + cédula siguen al final.
 
 export const AudiometriaValidatedPDF = ({
   data,
@@ -365,105 +323,33 @@ export const AudiometriaValidatedPDF = ({
         )}
       </View>
 
-      {/* III. CRITERIOS DERIVADOS DEL PACIENTE (capa AMI/sistema) */}
+      {/* DEC-20260825-10 — sección III "Criterios audiométricos
+          DERIVADOS" RETIRADA del PDF (FND-20260825-15). Los datos
+          derivados del paciente (PTA3, PTA fuente, criterio AMI,
+          patrón, estado bilateral, completitud, advertencias) viven
+          SÓLO en el panel clínico audiométrico. La sección II del
+          PDF conserva la EVIDENCIA DOCUMENTAL del paciente (tabla
+          TA/VO por frecuencia y por oído).
+
+          Nota: la sección IV "Criterio audiométrico AMI (referencia)"
+          — tablas administrativas de patrones operativos, severidad y
+          etiologías — TAMBIÉN fue retirada en FND-20260825-14 (live
+          sólo en el acordeón nativo del panel, FND-20260825-13). */}
+
+      {/* III. IMPRESIÓN DIAGNÓSTICA VALIDADA */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
-          III. Criterios audiométricos derivados (criterio AMI ≤ 25 dB)
-        </Text>
-        <View style={styles.row}>
-          <Text style={styles.label}>PTA3 ecuación:</Text>
-          <Text style={styles.value}>PTA3 = (TA500 + TA1000 + TA2000) / 3</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>PTA OD calculado:</Text>
-          <Text style={styles.value}>
-            {formatDb(data.criterios.ptaCalculadoOd)}
-            {!data.criterios.ptaCompletoOd
-              ? ' (incompleto: faltan TA500/TA1000/TA2000)'
-              : ''}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>PTA OD fuente:</Text>
-          <Text style={styles.value}>
-            {formatDb(data.criterios.ptaFuenteOd)}
-            {' '}
-            {data.criterios.ptaFuenteOd === null ? '(no visible en formato)' : ''}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>PTA OI calculado:</Text>
-          <Text style={styles.value}>
-            {formatDb(data.criterios.ptaCalculadoOi)}
-            {!data.criterios.ptaCompletoOi
-              ? ' (incompleto: faltan TA500/TA1000/TA2000)'
-              : ''}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>PTA OI fuente:</Text>
-          <Text style={styles.value}>
-            {formatDb(data.criterios.ptaFuenteOi)}
-            {' '}
-            {data.criterios.ptaFuenteOi === null ? '(no visible en formato)' : ''}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Criterio AMI OD:</Text>
-          <Text style={styles.value}>
-            {CRITERIO_AMI_LABEL[data.criterios.criterioAmiOd]} · patrón:{' '}
-            {PATRON_AMI_LABEL[data.criterios.patronOd]}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Criterio AMI OI:</Text>
-          <Text style={styles.value}>
-            {CRITERIO_AMI_LABEL[data.criterios.criterioAmiOi]} · patrón:{' '}
-            {PATRON_AMI_LABEL[data.criterios.patronOi]}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Estado bilateral:</Text>
-          <Text style={styles.value}>
-            {BILATERAL_LABEL[data.criterios.bilateralEstado]} —{' '}
-            {data.criterios.bilateralNota}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Completitud:</Text>
-          <Text style={styles.value}>{data.criterios.completitud}</Text>
-        </View>
-        {data.criterios.advertencias.length > 0 ? (
-          <View style={styles.row}>
-            <Text style={styles.label}>Advertencias:</Text>
-            <Text style={styles.value}>
-              {data.criterios.advertencias.join(' · ')}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* DEC-20260825-10 — sección IV "Criterio audiométrico AMI
-          (referencia)" RETIRADA del PDF (FND-20260825-14). La
-          referencia administrativa vive SÓLO en el panel clínico
-          (acordeón nativo en AudiometriaClinicalCriteriaPanel).
-          Saltamos directo de III (criterios DERIVADOS) a IV
-          (impresión del médico). */}
-
-      {/* 4. IMPRESIÓN DIAGNÓSTICA VALIDADA */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          IV. Impresión diagnóstica (validada por el médico)
+          III. Impresión diagnóstica (validada por el médico)
         </Text>
         <View style={styles.verdictBox}>
           <Text style={styles.paragraph}>{data.doctorDiagnosis}</Text>
         </View>
       </View>
 
-      {/* 5. RECOMENDACIONES VALIDADAS */}
+      {/* IV. RECOMENDACIONES VALIDADAS */}
       {data.recomendacionesValidadas.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>V. Recomendaciones validadas</Text>
+          <Text style={styles.sectionTitle}>IV. Recomendaciones validadas</Text>
           {data.recomendacionesValidadas.map((r, i) => (
             <Text key={i} style={styles.bulletItem}>
               • {r}
@@ -472,10 +358,10 @@ export const AudiometriaValidatedPDF = ({
         </View>
       ) : null}
 
-      {/* 6. NOTAS */}
+      {/* V. NOTAS */}
       {data.doctorNotes ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>VI. Notas clínicas</Text>
+          <Text style={styles.sectionTitle}>V. Notas clínicas</Text>
           <Text style={styles.paragraph}>{data.doctorNotes}</Text>
         </View>
       ) : null}
@@ -511,6 +397,7 @@ export const AudiometriaValidatedPDF = ({
   </Document>
 )
 
-// `formatBool` exportado por si se requiere en futuras secciones (no se
-// usa actualmente; se conserva para simetría con el PDF de Espirometría).
-export { formatBool }
+// FND-20260825-15: `formatBool` ya NO se usa en este PDF (la sección
+// "Criterios audiométricos derivados" se retiró). Se elimina la
+// exportación que se conservaba por simetría con el PDF de Espirometría.
+// Si una futura sección la necesita, volver a declarar la función.
