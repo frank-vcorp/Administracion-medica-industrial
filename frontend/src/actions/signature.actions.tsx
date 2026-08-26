@@ -12,6 +12,14 @@ import {
   deriveEventShortId,
 } from '@/lib/dictamen-pdf'
 import { findSiblingEventsInAtencion } from '@/lib/event-atencion'
+import {
+  buildDictamenGeneralAmiConsolidado,
+  hasConsolidation,
+} from '@/lib/dictamen-general-ami'
+import {
+  buildExamenMedicoPdfData,
+  generateExamenMedicoValidatedPdf,
+} from '@/lib/examen-medico-pdf'
 
 /**
  * @id IMPL-20260225-03
@@ -467,5 +475,280 @@ export async function getMedicalDictamPDF(eventId: string) {
   } catch (error) {
     console.error('Error en getMedicalDictamPDF:', error)
     return { success: false, error: 'Error al obtener PDF' }
+  }
+}
+
+/**
+ * @id IMPL-20260826-08 (FIX FND-20260826-03)
+ * @finding discovery/FINDINGS.md FND-20260826-03
+ * @businessRule discovery/BUSINESS-RULES.md BR-20260825-17
+ * @businessRule discovery/BUSINESS-RULES.md BR-20260826-01
+ * @businessRule discovery/BUSINESS-RULES.md BR-20260826-02
+ * @backup context/SPECs/SPEC-FEATURE-20260826-01-EVENTS-POR-ATENCION.md
+ *
+ * Server Action para **re-emitir explícitamente** el dictamen general
+ * firmado usando el renderer AMI vigente
+ * (`ExamenMedicoValidatedPDF` / SPEC FEATURE-20260825-03) en lugar de
+ * `MedicalDictamenPDF` (renderer simplificado que se usó en la firma
+ * original).
+ *
+ * Caso de uso (FND-20260826-03):
+ *   El usuario descarga un PDF antiguo (firmado con
+ *   `MedicalDictamenPDF` o con un layout pre-AMI) porque
+ *   `MedicalVerdict.pdfUrl` apunta al `signedKey` de la firma original
+ *   sin regenerar el artefacto. Esta action genera una versión
+ *   fresca con el renderer AMI, conservando el acto de firma (la
+ *   identidad del médico, la fecha de firma original se preserva en
+ *   `MedicalVerdict.signedAt`) y RE-APLICANDO la firma digital sobre
+ *   el nuevo PDF. El `signedKey` anterior queda obsoleto en S3 (la UI
+ *   debe mostrar explícitamente que la versión descargable fue
+ *   sustituida).
+ *
+ * Garantías (FND-20260826-03 / DEC-20260826-01):
+ *   - NO inventa datos: usa el snapshot persistido de `MedicalEvent`,
+ *     `MedicalExam`, `MedicalVerdict`, `EventTest`, `LabRecord`,
+ *     `User` (validator).
+ *   - Conserva la identidad del firmante (NO crea un médico ficticio).
+ *   - Genera un nuevo `signedKey` (`dictamen-<eventId>-reemit-<ts>.pdf`)
+ *     para que `MedicalVerdict.pdfUrl` apunte al artefacto actualizado.
+ *   - Sólo accesible para roles clínicos (SUPERADMIN, DOCTOR_GENERAL,
+ *     DOCTOR_VALIDATOR). COMPANY_CLIENT NO puede re-emitir (es read-only
+ *     en el portal corporativo — FND-20260825-18 / P1-2).
+ *   - El ZIP de cierre clínico (`/api/zip/clinical-closure/[eventId]`)
+ *     usa EXACTAMENTE el mismo helper (`buildDictamenGeneralAmiConsolidado`)
+ *     para que el dictamen general del PDF y del ZIP estén consolidados
+ *     por los mismos Events hermanos del mismo `appointmentId + workerId`.
+ */
+export interface ReemitSignedDictamenResult {
+  success: boolean
+  /** Mensaje explícito para la UI: "Esta versión sustituye a la anterior". */
+  message?: string
+  /** Nuevo basename firmado (sustituye a `previousSignedKey`). */
+  fileName?: string
+  /** URL del endpoint para descargar el nuevo PDF. */
+  pdfUrl?: string
+  /** Fecha/hora del nuevo acto de firma. */
+  reemittedAt?: Date
+  /** basename firmado anterior (para que la UI muestre lo que sustituyó). */
+  previousSignedKey?: string | null
+  /** Si hubo consolidación por cita, cuántos Events hermanos incluye. */
+  siblingCount?: number
+  error?: string
+}
+
+export async function reemitSignedDictamen(
+  eventId: string,
+): Promise<ReemitSignedDictamenResult> {
+  try {
+    // ── 1) Sesión OBLIGATORIA + gate de rol clínico ─────────────────────
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return { success: false, error: 'No autorizado' }
+    }
+    const role = session.user.role
+    const isClinical =
+      role === 'SUPERADMIN' ||
+      role === 'DOCTOR_GENERAL' ||
+      role === 'DOCTOR_VALIDATOR'
+    if (!isClinical) {
+      return {
+        success: false,
+        error: 'Sin permisos para re-emitir el dictamen general.',
+      }
+    }
+
+    // ── 2) Construir el payload AMI consolidado (mismo que el ZIP). ──────
+    // Esta helper ya valida la existencia del Event + Verdict +
+    // Validador con `fullName`. Lanza Error si falta algo.
+    let consolidado
+    try {
+      consolidado = await buildDictamenGeneralAmiConsolidado(eventId, prisma)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      return { success: false, error: msg }
+    }
+
+    if (!consolidado.verdict) {
+      return {
+        success: false,
+        error: 'No hay Verdict previo para re-emitir.',
+      }
+    }
+    if (!consolidado.verdict.pdfUrl) {
+      return {
+        success: false,
+        error:
+          'El Verdict no tiene `pdfUrl`. No se puede re-emitir (¿el dictamen nunca fue firmado?).',
+      }
+    }
+    const previousSignedKey = consolidado.verdict.pdfUrl
+
+    // ── 3) Renderizar el PDF en MEMORIA (sin tocar disco). ──────────────
+    let buffer: Buffer
+    try {
+      const result = await generateExamenMedicoValidatedPdf({
+        data: buildExamenMedicoPdfData(consolidado.data),
+        eventId,
+      })
+      buffer = result.buffer
+    } catch (renderErr) {
+      console.error(
+        '[IMPL-20260826-08] Error renderizando dictamen general consolidado:',
+        renderErr,
+      )
+      return {
+        success: false,
+        error: 'No se pudo generar el PDF del dictamen consolidado.',
+      }
+    }
+
+    // ── 4) POST /api/v1/upload-only con basename reemit. ─────────────────
+    const nowMs = Date.now()
+    const inputFileName = `dictamen-${eventId}-reemit-${nowMs}-input.pdf`
+    const expectedSignedFileName = `dictamen-${eventId}-reemit-${nowMs}-signed.pdf`
+
+    const backendUrl = dictamenBackendUrl()
+
+    let uploadResponse: Response
+    try {
+      const formData = new FormData()
+      // Blob con ArrayBuffer para máxima compat con fetch de Node/Edge.
+      formData.append(
+        'file',
+        new Blob([new Uint8Array(buffer)], { type: 'application/pdf' }),
+        inputFileName,
+      )
+      formData.append('key', inputFileName)
+
+      uploadResponse = await fetch(`${backendUrl}/api/v1/upload-only`, {
+        method: 'POST',
+        body: formData,
+      })
+    } catch (uploadNetErr) {
+      console.error(
+        '[IMPL-20260826-08] Error de red llamando a /api/v1/upload-only:',
+        uploadNetErr,
+      )
+      return {
+        success: false,
+        error:
+          uploadNetErr instanceof Error
+            ? `No se pudo contactar al backend para subir el PDF: ${uploadNetErr.message}`
+            : 'No se pudo contactar al backend para subir el PDF.',
+      }
+    }
+
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.json().catch(() => ({}))
+      return {
+        success: false,
+        error:
+          errorData.error ||
+          errorData.detail ||
+          `Error del backend al subir PDF (${uploadResponse.status}): ${uploadResponse.statusText}`,
+      }
+    }
+
+    const uploadResult = await uploadResponse.json()
+    if (uploadResult.status && uploadResult.status !== 'success') {
+      return {
+        success: false,
+        error:
+          uploadResult.error ||
+          uploadResult.message ||
+          'El backend rechazó el upload del PDF.',
+      }
+    }
+
+    // ── 5) POST /api/v1/sign-pdf con el basename reemit. ────────────────
+    let signResponse: Response
+    try {
+      signResponse = await fetch(`${backendUrl}/api/v1/sign-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input_pdf: inputFileName,
+          output_pdf: expectedSignedFileName,
+          reason: 'Re-emisión Dictamen General AMI',
+          password: process.env.PDF_SIGN_PASSWORD || 'default1234',
+        }),
+      })
+    } catch (signNetErr) {
+      console.error(
+        '[IMPL-20260826-08] Error de red llamando a /api/v1/sign-pdf:',
+        signNetErr,
+      )
+      return {
+        success: false,
+        error:
+          signNetErr instanceof Error
+            ? `No se pudo contactar al firmador: ${signNetErr.message}`
+            : 'No se pudo contactar al firmador.',
+      }
+    }
+
+    if (!signResponse.ok) {
+      const errorData = await signResponse.json().catch(() => ({}))
+      return {
+        success: false,
+        error:
+          errorData.error ||
+          errorData.detail ||
+          `Error del firmador (${signResponse.status}): ${signResponse.statusText}`,
+      }
+    }
+
+    const signResult = await signResponse.json()
+    if (signResult.status !== 'success') {
+      return {
+        success: false,
+        error:
+          signResult.error ||
+          signResult.message ||
+          'El firmador rechazó la re-emisión.',
+      }
+    }
+
+    const signedKey =
+      typeof signResult.output_pdf === 'string' && signResult.output_pdf.length > 0
+        ? signResult.output_pdf
+        : expectedSignedFileName
+
+    // ── 6) Actualizar MedicalVerdict con el nuevo signedKey. ─────────────
+    // El `signedAt` se actualiza al momento de la re-emisión (acto de
+    // firma explícito). El validator.fullName NO se modifica — se
+    // preserva del Verdict original (no se inventa un médico).
+    const reemittedAt = new Date()
+
+    await prisma.medicalVerdict.update({
+      where: { eventId },
+      data: {
+        signatureHash: signResult.signature_hash || signedKey,
+        pdfUrl: signedKey,
+        signedAt: reemittedAt,
+      },
+    })
+
+    revalidatePath('/portal/events')
+    revalidatePath(`/events/${eventId}`)
+
+    return {
+      success: true,
+      message:
+        'Re-emisión exitosa con el renderer AMI vigente. Esta versión sustituye a la anterior versión descargable.',
+      fileName: signedKey,
+      pdfUrl: `/api/pdf/${eventId}`,
+      reemittedAt,
+      previousSignedKey,
+      siblingCount: hasConsolidation(consolidado.atencionResolution)
+        ? consolidado.atencionResolution.eventIds.length
+        : 1,
+    }
+  } catch (error) {
+    console.error('[IMPL-20260826-08] Error en reemitSignedDictamen:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconocido',
+    }
   }
 }

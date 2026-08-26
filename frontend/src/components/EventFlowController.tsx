@@ -2,7 +2,10 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { updateEventStatus, saveVerdict } from '@/actions/medical-event.actions'
-import { signMedicalDictamPDF } from '@/actions/signature.actions'
+import {
+  signMedicalDictamPDF,
+  reemitSignedDictamen,
+} from '@/actions/signature.actions'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 // IMPL-20260817-10-C2 (ARCH-20260817-02 Corte 3 — DA-2):
@@ -48,6 +51,16 @@ export default function EventFlowController({
 }: EventFlowControllerProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
+    // IMPL-20260826-08: estado para mostrar al usuario que la versión
+    // firmada anterior fue sustituida por la nueva re-emisión. NO
+    // ocultamos la firma vieja — el mensaje es explícito y muestra
+    // ambos basenames + la fecha.
+    const [reemitInfo, setReemitInfo] = useState<{
+        previousSignedKey: string | null
+        newSignedKey: string | null
+        reemittedAt: Date
+        siblingCount: number
+    } | null>(null)
     const router = useRouter()
     const { data: session } = useSession()
 
@@ -280,6 +293,23 @@ export default function EventFlowController({
                                     ⬇️ Descargar Dictamen (PDF)
                                 </a>
                             )}
+                            {/* IMPL-20260826-08 (FND-20260826-03): ZIP de cierre
+                                clínico consolidado por atención/cita (con
+                                dictamen general AMI + carpeta por Event/estudio
+                                + fuente Railway/S3). Visible siempre en
+                                COMPLETED — el rol ya está gateado por la
+                                ruta del ZIP (`COMPANY_CLIENT` ve portal
+                                equivalente). */}
+                            <a
+                                href={`/api/zip/clinical-closure/${eventId}`}
+                                target="_blank"
+                                rel="noopener"
+                                data-testid="zip-cierre-download-link"
+                                data-implementacion="IMPL-20260826-08"
+                                className="bg-sky-600 hover:bg-sky-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-sky-100 transition-all flex items-center justify-center gap-2"
+                            >
+                                📦 Descargar ZIP de cierre
+                            </a>
                             <button
                                 onClick={() => router.push('/reception')}
                                 className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-8 py-4 rounded-xl font-bold transition-all"
@@ -287,6 +317,78 @@ export default function EventFlowController({
                                 Volver a Recepción
                             </button>
                         </div>
+
+                        {/* IMPL-20260826-08 (FND-20260826-03): botón explícito
+                            de re-emisión del dictamen general con el renderer
+                            AMI vigente. Sólo para roles clínicos (NO para
+                            COMPANY_CLIENT). Deja claro que sustituye a la
+                            versión descargable y NO oculta una firma vieja
+                            como si fuera nueva. */}
+                        {hasMedicalVerdict && isClinicalRole(session?.user?.role) && (
+                            <div className="mt-2 pt-4 border-t border-slate-200 space-y-2">
+                                <p className="text-xs text-slate-500">
+                                    <strong>¿Necesitas re-emitir el dictamen?</strong>{' '}
+                                    El renderer AMI vigente actualiza el PDF con el formato
+                                    canónico (4 bloques) y la consolidación por atención/cita.
+                                    La versión firmada anterior queda sustituida en la descarga.
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        if (!confirm('¿Re-emitir el dictamen general con el renderer AMI? Esta acción sustituye la versión descargable.')) return
+                                        startTransition(async () => {
+                                            try {
+                                                const result = await reemitSignedDictamen(eventId)
+                                                if (result.success) {
+                                                    setReemitInfo({
+                                                        previousSignedKey: result.previousSignedKey ?? null,
+                                                        newSignedKey: result.fileName ?? null,
+                                                        reemittedAt: result.reemittedAt ?? new Date(),
+                                                        siblingCount: result.siblingCount ?? 1,
+                                                    })
+                                                    router.refresh()
+                                                } else {
+                                                    setError(result.error || 'Error al re-emitir')
+                                                }
+                                            } catch (err) {
+                                                setError(err instanceof Error ? err.message : 'Error desconocido')
+                                            }
+                                        })
+                                    }}
+                                    disabled={isPending}
+                                    data-testid="reemit-dictamen-button"
+                                    data-implementacion="IMPL-20260826-08"
+                                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-6 py-3 rounded-xl font-semibold transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 mx-auto"
+                                >
+                                    {isPending ? 'Re-emitiendo…' : '🔄 Re-emitir Dictamen General (formato AMI)'}
+                                </button>
+                                {reemitInfo && (
+                                    <div
+                                        data-testid="reemit-result"
+                                        className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg p-3 max-w-2xl mx-auto"
+                                    >
+                                        <p>
+                                            <strong>Re-emisión completada.</strong>{' '}
+                                            Esta versión sustituye a{' '}
+                                            <code className="bg-white px-1 rounded">
+                                                {reemitInfo.previousSignedKey ?? '(anterior)'}
+                                            </code>
+                                            {' '}por{' '}
+                                            <code className="bg-white px-1 rounded">
+                                                {reemitInfo.newSignedKey ?? '(nueva)'}
+                                            </code>
+                                            .
+                                        </p>
+                                        <p className="mt-1">
+                                            Fecha de re-emisión:{' '}
+                                            {reemitInfo.reemittedAt.toLocaleString('es-MX')}.
+                                            {reemitInfo.siblingCount > 1 && (
+                                                <> Incluye {reemitInfo.siblingCount} Events de la misma cita.</>
+                                            )}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -299,4 +401,13 @@ export default function EventFlowController({
             </div>
         </div>
     )
+}
+
+/**
+ * IMPL-20260826-08: gate de rol para la UI de re-emisión. Sólo roles
+ * clínicos ven el botón. COMPANY_CLIENT NO (es read-only en el portal
+ * corporativo — FND-20260825-18 / P1-2).
+ */
+function isClinicalRole(role: string | null | undefined): boolean {
+    return role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR'
 }

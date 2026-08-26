@@ -373,3 +373,12 @@
 - **Contradicción a resolver:** el contrato anterior modela el ZIP por un solo `eventId` (`BR-20260825-18`), mientras la aclaración actual exige consolidar “otros Events”. No se debe elegir silenciosamente si “otros Events” significa `EventTest` del mismo Event o Events independientes del mismo trabajador/atención.
 - **Impacto:** afecta modelo de selección, contenido del dictamen general, estructura del ZIP, nombres de archivos, fuentes remotas y seguridad de scope/paciente.
 - **Estado operativo:** BLOCKED para cerrar el contrato ampliado hasta resolver el alcance de “otros Events”; queda separado del defecto ya corregido de firma S3/pyHanko.
+
+## FND-20260826-03 — Descarga sirve artefacto firmado anterior
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT P1
+- **Evidencia:** captura de Frank, 2026-08-26. Al descargar desde un Event `COMPLETED`, el PDF conserva el contenido anterior aunque el renderer ya fue actualizado.
+- **Causa:** `/api/pdf/[eventId]` devuelve directamente `MedicalVerdict.pdfUrl` cuando existe; por tanto no regenera el PDF con el nuevo formato. Un PDF firmado no puede sustituirse silenciosamente sin volver a emitirlo.
+- **Impacto:** la nueva plantilla, hallazgos consolidados y estudios hermanos no aparecen en el artefacto ya firmado; el ZIP puede seguir reutilizando un renderer distinto.
+- **Corrección requerida:** ofrecer/requerir una reemisión explícita del dictamen con el renderer vigente antes de descargar el PDF/ZIP, y asegurar que ambos entregables reutilicen el mismo PDF general AMI consolidado.
+- **Referencia:** DEC-20260826-01, DEC-20260826-02, SPEC-FEATURE-20260826-01.

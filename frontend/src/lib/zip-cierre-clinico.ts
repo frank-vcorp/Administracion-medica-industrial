@@ -30,14 +30,18 @@
 import prisma from '@/lib/prisma'
 import { buildZip, type ZipEntry } from '@/lib/zip-store'
 import {
-  generateExamenMedicoValidatedPdf,
   buildExamenMedicoPdfData,
+  generateExamenMedicoValidatedPdf,
 } from '@/lib/examen-medico-pdf'
 import { dictamenBackendUrl } from '@/lib/dictamen-pdf'
 import {
   findSiblingEventsInAtencion,
   isEventInAtencion,
 } from '@/lib/event-atencion'
+import {
+  buildDictamenGeneralAmiConsolidado,
+  hasConsolidation,
+} from '@/lib/dictamen-general-ami'
 
 /** Roles clínicos autorizados (SPEC §Reglas). */
 export const CLINICAL_ROLES = new Set<string>([
@@ -444,182 +448,40 @@ export async function buildCierreClinicoZip(
   const validator = event.verdict.validator
   if (
     !validator ||
-    !validator.fullName ||
-    !validator.professionalLicense ||
-    !validator.signatureImageUrl
+    !validator.fullName
   ) {
+    // IMPL-20260826-08: el helper `buildDictamenGeneralAmiConsolidado`
+    // (debajo) maneja los fallbacks de `professionalLicense` /
+    // `signatureImageUrl` (pueden ser null sin impedir la firma). Aquí
+    // sólo exigimos `fullName` para mantener la identidad del firmante.
     throw new CierreClinicoError('validator_identity_incomplete', 410)
   }
 
-  const data = buildExamenMedicoPdfData({
-    folio: event.verdict.id,
-    signedAt: event.verdict.signedAt,
-    status: 'SIGNED',
-    worker: {
-      firstName: event.worker.firstName ?? '',
-      lastName: event.worker.lastName ?? '',
-      universalId: event.worker.universalId ?? '',
-      dob: event.worker.dob ?? null,
-      sexo: s(physicalExamData.sexo ?? dp.sexo),
-      identidadGenero: s(
-        physicalExamData.identidad_genero ?? dp.identidad_genero,
-      ),
-      empresa: event.worker.company?.name ?? null,
-      puesto: s(dp.puesto_actual),
-      area: s(dp.area_departamento),
-      tipoExamen: s(physicalExamData.tipo_examen),
-      direccion: s(dp.direccion),
-      estadoCivil: s(dp.estado_civil),
-      escolaridad: s(dp.escolaridad),
-      tipoSanguineo: s(apnp.grupo_y_rh),
-    },
-    ahf: {
-      diabetes: s(ahf.diabetes),
-      hipertension: s(ahf.has ?? ahf.hipertension),
-      epilepsia: s(ahf.epilepsia),
-      cardiopatia: s(ahf.cardiopatia),
-      renales: s(ahf.renales),
-      asma: s(ahf.asma),
-      cancer: s(ahf.cancer),
-      mentales: s(ahf.mentales),
-      otras:
-        s(ahf.otras) || s(ahf.otras_especifique)
-          ? `${s(ahf.otras)}${s(ahf.otras_especifique) ? ` (${s(ahf.otras_especifique)})` : ''}`
-          : null,
-    },
-    apnp: {
-      alcohol: s(apnp.alcohol),
-      tabaco: s(apnp.tabaco),
-      drogas: s(apnp.drogas_estimulantes),
-      ejercicio: s(apnp.ejercicio),
-      alimentacion: s(apnp.alimentacion),
-      tatuajes: s(apnp.tatuajes),
-    },
-    historiaOcupacional: {
-      empresa: event.worker.company?.name ?? null,
-      puesto: s(dp.puesto_actual),
-      area: s(dp.area_departamento),
-      narrativa: null,
-      riesgos: null,
-      epp: null,
-    },
-    app: { texto: appTexto },
-    historiaGineco: null,
-    inmunizaciones: null,
-    somatometria: {
-      peso: numOrStr(somatometry.peso_kg ?? vitalSigns.peso_kg),
-      talla: numOrStr(somatometry.talla_m ?? vitalSigns.talla_m),
-      imc: numOrStr(somatometry.imc ?? vitalSigns.imc),
-      cintura: numOrStr(
-        somatometry.perimetro_cintura ?? vitalSigns.perimetro_cintura,
-      ),
-      cadera: numOrStr(
-        somatometry.perimetro_cadera ?? vitalSigns.perimetro_cadera,
-      ),
-      ta,
-      fc: numOrStr(somatometry.fc_min ?? vitalSigns.fc_min),
-      fr: numOrStr(somatometry.fr_min ?? vitalSigns.fr_min),
-      temperatura: numOrStr(somatometry.temperatura ?? vitalSigns.temperatura),
-    },
-    agudezaVisual: {
-      visionLejanaOD: s(eyeAcuity.vision_lejana_od),
-      visionLejanaOI: s(eyeAcuity.vision_lejana_oi),
-      visionCercanaOD: s(eyeAcuity.vision_cercana_od),
-      visionCercanaOI: s(eyeAcuity.vision_cercana_oi),
-      lejanaCorregidaOD: s(eyeAcuity.lejana_corregida_od),
-      lejanaCorregidaOI: s(eyeAcuity.lejana_corregida_oi),
-      cercanaCorregidaOD: s(eyeAcuity.cercana_corregida_od),
-      cercanaCorregidaOI: s(eyeAcuity.cercana_corregida_oi),
-      reflejos: s(eyeAcuity.reflejos),
-      ishihara: s(eyeAcuity.test_ishihara),
-      campimetria: s(eyeAcuity.campimetria),
-    },
-    exploracion: {
-      neurologico: s(physicalExamData.neurologico),
-      cabeza: s(physicalExamData.cabeza),
-      piel_y_faneras: s(physicalExamData.piel_y_faneras),
-      oidos_cad: s(physicalExamData.oidos_cad),
-      oidos_cai: s(physicalExamData.oidos_cai),
-      ojos: s(physicalExamData.ojos),
-      boca_estado: s(physicalExamData.boca_estado),
-      boca_alineacion: s(physicalExamData.boca_alineacion),
-      nariz: s(physicalExamData.nariz),
-      faringe: s(physicalExamData.faringe),
-      cuello: s(physicalExamData.cuello),
-      torax: s(physicalExamData.torax),
-      corazon: s(physicalExamData.corazon),
-      campos_pulmonares: s(physicalExamData.campos_pulmonares),
-      abdomen: s(physicalExamData.abdomen),
-      genitourinario: s(physicalExamData.genitourinario),
-      columna_vertebral: s(physicalExamData.columna_vertebral),
-      test_adam: s(physicalExamData.test_adam),
-      ms_superiores: s(physicalExamData.ms_superiores),
-      fuerza_muscular_daniels_sup: s(
-        physicalExamData.fuerza_muscular_daniels_sup,
-      ),
-      ms_inferiores: s(physicalExamData.ms_inferiores),
-      fuerza_muscular_daniels_inf: s(
-        physicalExamData.fuerza_muscular_daniels_inf,
-      ),
-      circulacion_venosa: s(physicalExamData.circulacion_venosa),
-      arco_de_movilidad: s(physicalExamData.arco_de_movilidad),
-      tono_muscular: s(physicalExamData.tono_muscular),
-      coordinacion: s(physicalExamData.coordinacion),
-      test_romberg: s(physicalExamData.test_romberg),
-      signo_bragard: s(physicalExamData.signo_bragard),
-      prueba_finkelstein: s(physicalExamData.prueba_finkelstein),
-      signo_tinel: s(physicalExamData.signo_tinel),
-      prueba_phanel: s(physicalExamData.prueba_phanel),
-      prueba_lasegue: s(physicalExamData.prueba_lasegue),
-      presencia_quiste_sinovial: s(
-        physicalExamData.presencia_quiste_sinovial,
-      ),
-    },
-    impresionDiagnostica: s(event.verdict.finalDiagnosis),
-    aptitud,
-    restricciones: s(physicalExamData.restricciones),
-    observacionesFinales: s(physicalExamData.observaciones_finales),
-    notaCondicionamiento: null,
-    medico: {
-      fullName: validator.fullName,
-      professionalLicense: validator.professionalLicense,
-      signatureImageUrl: validator.signatureImageUrl,
-    },
-    slots: {
-      audiometria: s(physicalExamData.audiometria_texto),
-      espirometria: s(physicalExamData.espirometria_texto),
-      laboratorios: s(physicalExamData.laboratorios_texto),
-      radiografia: s(physicalExamData.radiografia_texto),
-      examenMedico: s(physicalExamData.examen_medico_texto),
-    },
-    ia: {
-      audiometriaClasificacion:
-        pickIaField(audioIa, ['clasificacion', 'classification']) ??
-        s(audioIa?.aiPrediction) ??
-        null,
-      espirometriaPatron:
-        pickIaField(espiroIa, ['patron', 'pattern']) ??
-        s(espiroIa?.aiPrediction) ??
-        null,
-      radiografiaHallazgo:
-        pickIaField(radioIa, ['hallazgo', 'finding']) ??
-        s(radioIa?.aiPrediction) ??
-        null,
-      laboratorioOutOfRange: null,
-    },
-    logoDataUrl: null,
-  })
+  // IMPL-20260826-08 (FND-20260826-03 / DEC-20260826-01): usamos el helper
+  // compartido `buildDictamenGeneralAmiConsolidado` para garantizar que
+  // el dictamen general del ZIP usa EXACTAMENTE la misma consolidación
+  // que la re-emisión del PDF (mismo renderer, misma helper, mismos
+  // Events hermanos). Antes: 165 líneas de mapeo inline.
+  const consolidado = await buildDictamenGeneralAmiConsolidado(event.id, prisma)
+  const data = consolidado.data
 
+  // IMPL-20260826-08: persistimos las recomendaciones normalizadas en el
+  // payload final (split por numeración ordinal) — mismo criterio que
+  // antes.
   const recomendacionesPersisted = s(event.verdict.recommendations)
+  // IMPL-20260826-08: las recomendaciones viven en `ExamenMedicoPDFData`
+  // (output de `buildExamenMedicoPdfData`), NO en `BuildExamenMedicoPdfInput`.
+  // Por eso primero transformamos el payload y luego persistimos.
+  const dataFinal = buildExamenMedicoPdfData(data)
   if (recomendacionesPersisted) {
-    data.recomendaciones = recomendacionesPersisted
+    dataFinal.recomendaciones = recomendacionesPersisted
       .split(/\s*\d+\.\-\s+/)
       .map((r) => r.trim())
       .filter((r) => r.length > 0)
   }
 
   const result = await generateExamenMedicoValidatedPdf({
-    data,
+    data: dataFinal,
     eventId: event.id,
   })
 

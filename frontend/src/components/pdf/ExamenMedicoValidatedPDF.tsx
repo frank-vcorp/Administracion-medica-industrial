@@ -282,6 +282,19 @@ export interface ExamenMedicoPDFData {
   }
   /** Logo AMI (URL pública canónica). Si falla, fallback texto "AMI". */
   logoUrl: string
+  /**
+   * IMPL-20260826-08 (FND-20260826-03 / DEC-20260826-01 / BR-20260826-01):
+   * Bloque consolidado por atención/cita. Lista los Events hermanos
+   * del mismo `appointmentId + workerId` (incluyendo el actual, marcado
+   * como `isCurrent=true`) con sus estudios y labs.
+   */
+  consolidatedEvents?: Array<{
+    eventId: string
+    eventShortId: string
+    isCurrent: boolean
+    studies: Array<{ serviceName: string; extractedData: unknown | null }>
+    labs: Array<{ serviceName: string; extractedData: unknown | null }>
+  }>
 }
 
 // ─── Helpers de presentación ──────────────────────────────────────────────────
@@ -997,6 +1010,85 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
           <Text style={styles.value}>{v(data.slots.examenMedico)}</Text>
         </View>
       </View>
+
+      {/* IMPL-20260826-08: Hallazgos de la Atención/Cita (consolidado por
+          Event hermanos del mismo appointmentId + workerId). Sólo se
+          renderiza si `consolidatedEvents` está presente y tiene > 0
+          elementos. NO inventa resultados: cada bloque sólo refleja el
+          snapshot del Event correspondiente. */}
+      {data.consolidatedEvents && data.consolidatedEvents.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            HALLAZGOS DE LA ATENCIÓN/CITA (EVENTS HERMANOS)
+          </Text>
+          <Text style={styles.sectionTitle}>
+            Estudios auxiliares de los Events del trabajador ligados a la
+            misma cita. Sólo se muestran los datos disponibles en cada
+            Event; los faltantes aparecen como PENDIENTE sin inventar
+            resultados.
+          </Text>
+          {data.consolidatedEvents.map((block) => {
+            const blockEntries: Array<{
+              serviceName: string
+              extractedData: unknown | null
+            }> = [
+              ...(block.studies ?? []),
+              ...(block.labs ?? []),
+            ]
+            return (
+              <View
+                key={block.eventId}
+                style={{
+                  marginBottom: 8,
+                  paddingLeft: 10,
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  borderLeftWidth: 2,
+                  borderLeftColor: block.isCurrent ? '#0f172a' : '#cbd5e1',
+                }}
+                wrap={false}
+              >
+                <Text style={{ fontSize: 9, fontWeight: 'bold' }}>
+                  • Event {block.eventShortId}
+                  {block.isCurrent && (
+                    <Text style={{ color: '#166534' }}>  [ACTUAL]</Text>
+                  )}
+                </Text>
+                {blockEntries.length === 0 ? (
+                  <Text style={{ fontSize: 8, color: '#64748b', fontStyle: 'italic' }}>
+                    Sin estudios auxiliares registrados para este Event.
+                  </Text>
+                ) : (
+                  blockEntries.map((s, sIdx) => {
+                    const hasData =
+                      s.extractedData !== null &&
+                      s.extractedData !== undefined &&
+                      typeof s.extractedData === 'object' &&
+                      !Array.isArray(s.extractedData) &&
+                      Object.keys(s.extractedData as Record<string, unknown>).length > 0
+                    return (
+                      <Text
+                        key={`${block.eventId}-${s.serviceName}-${sIdx}`}
+                        style={{ fontSize: 8, marginLeft: 14 }}
+                      >
+                        – {s.serviceName}:{' '}
+                        <Text
+                          style={{
+                            color: hasData ? '#166534' : '#92400e',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          {hasData ? 'APLICADO' : 'PENDIENTE'}
+                        </Text>
+                      </Text>
+                    )
+                  })
+                )}
+              </View>
+            )
+          })}
+        </View>
+      )}
 
       {/* FIRMA */}
       <View style={styles.signatureArea}>

@@ -289,6 +289,29 @@ export interface BuildExamenMedicoPdfInput {
   /** Resultados IA opcionales para alimentar las recomendaciones. */
   ia?: BuildExamenMedicoPdfIaInputs | null
   logoDataUrl: string | null
+  /**
+   * IMPL-20260826-08 (FND-20260826-03 / DEC-20260826-01 / BR-20260826-01):
+   * Bloque consolidado por atención/cita. Lista los Events hermanos del
+   * mismo `appointmentId + workerId` (incluyendo el actual, marcado como
+   * `isCurrent=true`) con sus estudios y labs. Si se omite, el renderer
+   * conserva el comportamiento legacy (un único Event).
+   *
+   * NO inventa hallazgos: cada bloque sólo refleja el snapshot del Event
+   * correspondiente (studies + labs con status APLICADO/PENDIENTE).
+   */
+  consolidatedEvents?: Array<{
+    eventId: string
+    eventShortId: string
+    isCurrent: boolean
+    studies: Array<{
+      serviceName: string
+      extractedData: unknown | null
+    }>
+    labs: Array<{
+      serviceName: string
+      extractedData: unknown | null
+    }>
+  }>
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -504,6 +527,9 @@ export function buildExamenMedicoPdfData(
       examenMedico: s(input.slots?.examenMedico) || null,
     },
     logoUrl: input.logoDataUrl ?? '',
+    // IMPL-20260826-08: pasamos consolidado al output tal cual (el renderer
+    // lo pinta o lo omite según presente). NO se aplica ninguna transformación.
+    consolidatedEvents: input.consolidatedEvents ?? [],
   }
 }
 
