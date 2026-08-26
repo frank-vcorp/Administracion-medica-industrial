@@ -13,6 +13,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
@@ -99,6 +100,32 @@ const VISUAL_FIELDS_NAMES = [
  */
 export function examenMedicoPdfUrl(eventId: string): string {
   return `/api/pdf/examen-medico/${eventId}`
+}
+
+/**
+ * IMPL-FEATURE-20260825-03 ronda 6 (FND-20260825-23):
+ * URL del expediente orientada a la vista de Validación (paso donde
+ * el médico firma/emite el dictamen general).
+ *
+ * Tras pulsar "Completar Examen Médico", `saveExamenMedicoPapeleta`
+ * cambia `MedicalEvent.status` a `VALIDATING`. Sin embargo, el cálculo
+ * de `activeView` en `event-page-data.ts` cae al valor actual de la
+ * URL (`?view=IN_PROGRESS` o `?view=CHECKED_IN`) cuando esa vista
+ * está por detrás de `currentStep`, y nunca salta a `VALIDATING`.
+ * Resultado: el usuario ve "sólo lectura" y no aparece el panel
+ * "Firmar y Emitir Dictamen".
+ *
+ * La solución es navegar explícitamente a `?view=VALIDATING` después
+ * de un Completar exitoso — así la URL y el render condicional
+ * (`activeView === event.status`) coinciden y `EventFlowController`
+ * muestra el flujo de firma.
+ *
+ * Pura + testeable sin DOM. Vive aquí para que `handleSave` y
+ * cualquier caller posterior (bot, atajo, deep-link) usen la misma
+ * URL canónica.
+ */
+export function navigateToValidatingView(eventId: string): string {
+  return `/events/${eventId}?view=VALIDATING`
 }
 
 /**
@@ -366,6 +393,10 @@ export default function ExamenMedicoEstudio({
   // en concreto `antecedentes_captured` (snapshot por cita) y `modulo1`
   // (sub-objeto Módulo 1). Sin este filtro, `String({...})` produce
   // `"[object Object]"` y revienta la validación Zod en `ExamenMedicoCompletoSchema`.
+  // IMPL-FEATURE-20260825-03 ronda 6 (FND-20260825-23): navegación
+  // explícita a `?view=VALIDATING` tras Completar exitoso (ver
+  // `navigateToValidatingView` helper puro arriba).
+  const router = useRouter()
   const [form, setForm] = useState<Record<string, string>>(() => {
     const isPrimitive = (v: unknown) =>
       v === null || v === undefined || typeof v === 'string' ||
@@ -653,6 +684,17 @@ export default function ExamenMedicoEstudio({
         // Notificamos al padre el nuevo studyStatus siempre (el Event
         // status sólo si cambió — null en borrador).
         onStatusChange?.(res.studyStatus ?? (markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'))
+
+        // IMPL-FEATURE-20260825-03 ronda 6 (FND-20260825-23):
+        // tras un Completar exitoso, navegar al panel de Validación
+        // (`?view=VALIDATING`) para que `activeView === event.status` y
+        // `EventFlowController` muestre el flujo "Firmar y Emitir Dictamen".
+        // Sin esto, la URL conserva `?view=IN_PROGRESS` y el médico ve
+        // sólo lectura. No tocamos la navegación en el caso de borrador
+        // (`res.status === null` o `markComplete === false`).
+        if (markComplete && res.status === 'VALIDATING') {
+          router.push(navigateToValidatingView(eventId))
+        }
       } else {
         setSaveError(res.error ?? 'Error al guardar')
       }
