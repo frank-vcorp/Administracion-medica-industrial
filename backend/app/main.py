@@ -293,6 +293,30 @@ def _upload_file_to_s3(contents: bytes, key: str) -> bool:
         return False
 
 
+def _download_file_from_s3(key: str) -> Optional[bytes]:
+    """
+    FIX-20260826-XX (defecto reproducible FEATURE-20260825-03 / IMPL-FEATURE-20260825-03 → ronda firma):
+    Descarga bytes desde el bucket S3-compat. Retorna None si S3 no está habilitado
+    o si la operación falla (404/key inexistente, red, etc.). No loguea secretos.
+
+    Usada por `/api/v1/sign-pdf` para recuperar el PDF de entrada cuando el
+    frontend lo subió sólo a S3 (vía `/api/v1/upload-only`) y el backend no
+    conserva copia local — caso de producción cuando STORAGE_S3_* está
+    configurado y UPLOAD_DIR apunta a un FS efímero (Vercel) o no compartido
+    con el worker de firma.
+    """
+    if not _s3_enabled or not _s3_client:
+        return None
+    try:
+        import io
+        buf = io.BytesIO()
+        _s3_client.download_fileobj(STORAGE_S3_BUCKET, key, buf)
+        return buf.getvalue()
+    except Exception as e:
+        print(f"⚠️ S3 download error key={key}: {_sanitize_error(str(e))}")
+        return None
+
+
 def _ai_unavailable_response(msg: str = "Servicios de IA no están disponibles") -> dict:
     """Respuesta estándar cuando IA no está disponible, con detalles de diagnóstico. ARCH-20260326-05."""
     current_api_key = _read_env_var("GEMINI_API_KEY")
@@ -702,64 +726,157 @@ def analyze_document(request: AnalyzeRequest):
 def sign_pdf(request: SignPdfRequest):
     """
     Endpoint para firmar un PDF con certificado X.509.
-    
+
     Aplica una firma digital avanzada a un documento PDF.
     Genera certificado autofirmado de prueba si no existe.
-    
-    Args:
-        input_pdf: Ruta del PDF a firmar
-        output_pdf: Ruta del PDF firmado (se genera automáticamente si no se proporciona)
-        reason: Razón de la firma
-        password: Contraseña del certificado
-    
-    IMPL-20260225-02: Firma Digital Avanzada
+
+    FIX-20260826-XX (defecto reproducible FEATURE-20260825-03 / IMPL-FEATURE-20260825-03 →
+    ronda firma): cuando STORAGE_S3_* está habilitado, el flujo canónico es
+    `/api/v1/upload-only` → S3, y `sign-pdf` ya no encuentra el input en
+    UPLOAD_DIR local → 404 "Archivo no encontrado". Esta versión:
+
+      1. Resuelve input y output como `basename` (defensa contra path traversal).
+      2. Si el input existe localmente → usa esa ruta. Si NO existe localmente
+         y S3 está habilitado → descarga los bytes a un tempfile LOCAL del
+         backend (nunca en /uploads expuesto a Vercel) y firma desde ahí.
+      3. Si el input NO existe ni local ni en S3 → 404 con detalle diagnóstico.
+      4. La firma SIEMPRE ocurre en un tempfile local seguro. NO se escribe en
+         Vercel. Si S3 está habilitado, el PDF firmado se sube al MISMO bucket
+         con la `output_pdf` key; si no, persiste en UPLOAD_DIR como fallback.
+      5. Devuelve `output_pdf` (basename) y `signature_hash` ("sha256:<hex>")
+         sobre los bytes firmados — contrato compatible con
+         `signature.actions.tsx` (IMPL-FEATURE-20260825-03).
+
+    IMPL-20260225-02: Firma Digital Avanzada.
     """
     if not signer:
         return {
             "status": "error",
             "error": "Servicio de firma no está disponible"
         }
-    
+
+    # Limpiar tempfile del input y del output pase lo que pase.
+    _tmp_input_path: Optional[str] = None
+    _tmp_output_path: Optional[str] = None
     try:
-        input_path = os.path.join(UPLOAD_DIR, os.path.basename(request.input_pdf))
-        
-        if not os.path.exists(input_path):
-            raise HTTPException(
-                status_code=404,
-                detail=f"Archivo no encontrado: {request.input_pdf}"
-            )
-        
-        # Generar nombre de salida si no se proporciona
+        # 1. Resolver keys seguras (basename) — defensa contra path traversal.
+        input_key = os.path.basename(request.input_pdf or "")
         if request.output_pdf:
-            safe_filename = os.path.basename(request.output_pdf)
-            output_path = os.path.join(UPLOAD_DIR, safe_filename)
+            output_key = os.path.basename(request.output_pdf)
         else:
-            base_name = os.path.splitext(os.path.basename(request.input_pdf))[0]
-            output_path = os.path.join(UPLOAD_DIR, f"{base_name}_signed.pdf")
-        
-        print(f"\n🔐 Firmando PDF: {os.path.basename(input_path)}")
+            base_name = os.path.splitext(input_key)[0]
+            output_key = f"{base_name}_signed.pdf"
+
+        if not input_key:
+            raise HTTPException(
+                status_code=400,
+                detail="input_pdf inválido",
+            )
+
+        # 2. Resolver la ruta local de INPUT. Prioridad: filesystem local primero.
+        local_input_path = os.path.join(UPLOAD_DIR, input_key)
+        _tmp_input_fd: Optional[int] = None
+        if os.path.isfile(local_input_path):
+            input_path = local_input_path
+            _input_source = "local"
+        else:
+            # No está local → intentar S3 cuando esté habilitado.
+            s3_bytes = _download_file_from_s3(input_key)
+            if s3_bytes is None:
+                # Ni local ni S3 → 404 diagnóstico.
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Archivo no encontrado: {input_key}",
+                )
+            _tmp_input_fd, _tmp_input_path = tempfile.mkstemp(
+                suffix=".pdf", prefix="sign_input_"
+            )
+            with os.fdopen(_tmp_input_fd, "wb") as _tf:
+                _tf.write(s3_bytes)
+            input_path = _tmp_input_path
+            _input_source = "s3"
+
+        # 3. Preparar la ruta local de OUTPUT. SIEMPRE tempfile para no
+        #    contaminar UPLOAD_DIR; el resultado se persiste luego en S3 o
+        #    local según `_s3_enabled`.
+        _tmp_output_fd, _tmp_output_path = tempfile.mkstemp(
+            suffix=".pdf", prefix="sign_output_"
+        )
+        os.close(_tmp_output_fd)
+        output_path = _tmp_output_path
+
+        print(
+            f"\n🔐 Firmando PDF: {input_key} (source={_input_source})"
+        )
         print(f"   → Certificado: {signer.cert_path}")
-        
-        result = signer.sign_pdf(
+
+        # 4. Ejecutar firma sobre archivos locales.
+        signer_result = signer.sign_pdf(
             input_pdf=input_path,
             output_pdf=output_path,
             reason=request.reason,
-            password=request.password
+            password=request.password,
         )
-        
-        if result["status"] == "success":
-            print(f"   ✓ PDF firmado exitosamente")
+
+        if signer_result.get("status") != "success":
+            print(f"   ❌ Error firmando: {signer_result.get('message')}")
+            return {
+                "status": "error",
+                "error": signer_result.get("message", "Error al firmar PDF"),
+            }
+
+        # 5. Leer los bytes firmados para hashear + (opcional) subir a S3.
+        with open(output_path, "rb") as _of:
+            signed_bytes = _of.read()
+        signature_hash = f"sha256:{hashlib.sha256(signed_bytes).hexdigest()}"
+
+        persisted_to_s3 = False
+        if _s3_enabled and _upload_file_to_s3(signed_bytes, output_key):
+            persisted_to_s3 = True
+            print(f"   ✓ PDF firmado + subido a S3: {output_key}")
         else:
-            print(f"   ❌ Error: {result.get('message')}")
-        
-        return result
-    
+            # Fallback local: persistir el tempfile en UPLOAD_DIR/output_key.
+            local_output_path = os.path.join(UPLOAD_DIR, output_key)
+            try:
+                with open(local_output_path, "wb") as _lf:
+                    _lf.write(signed_bytes)
+                print(f"   ✓ PDF firmado (local): {output_key}")
+            except Exception as persist_err:
+                print(
+                    f"   ⚠️ No se pudo persistir el PDF firmado localmente: "
+                    f"{_sanitize_error(str(persist_err))}"
+                )
+
+        # 6. Respuesta compatible con el contrato de FEATURE-20260825-03.
+        return {
+            "status": "success",
+            "message": "PDF firmado correctamente",
+            "output_pdf": output_key,
+            "signature_hash": signature_hash,
+            "signed_at": signer_result.get(
+                "signed_at", __import__("datetime").datetime.utcnow().isoformat()
+            ),
+            "signer": signer_result.get("signer", "AMI Test Signer"),
+            "reason": signer_result.get("reason", request.reason),
+            "storage": "s3" if persisted_to_s3 else "local",
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error en sign_pdf: {e}")
         return {
             "status": "error",
             "error": str(e)
         }
+    finally:
+        # Limpieza best-effort de los tempfile del backend (NO Vercel).
+        for _p in (_tmp_input_path, _tmp_output_path):
+            if _p and os.path.isfile(_p):
+                try:
+                    os.remove(_p)
+                except OSError:
+                    pass
 
 
 @app.post("/api/v1/verify-signature")
