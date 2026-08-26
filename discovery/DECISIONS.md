@@ -257,6 +257,30 @@
 - **Límite:** no diseñar ni implementar persistencia documental adicional antes de esa confirmación.
 - **Referencia:** BR-20260825-16.
 
+## DEC-20260825-16 — Generar dictamen general al completar el Examen Médico
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión:** El flujo de Examen Médico debe generar como entregable principal el dictamen general AMI de una página, consolidando los slots de estudios y la aptitud médica; el PDF clínico extenso queda como documento interno separado.
+- **Referencia:** BR-20260825-17, FND-20260825-19.
+
+## DEC-20260825-17 — Generar paquete ZIP documental al cierre
+
+- **Estado:** confirmed / discovery abierto
+- **Fecha:** 2026-08-25
+- **Decisión de Frank:** Al completar el flujo se debe generar el dictamen general y un ZIP que contenga el dictamen general, el dictamen independiente de cada estudio aplicable y el documento fuente analizado de cada estudio.
+- **Alcance conocido:** Audiometría y Espirometría son ejemplos obligatorios cuando estén presentes en el Event; el modelo debe soportar todos los estudios aplicables.
+- **Referencia:** BR-20260825-18, FND-20260825-20.
+
+## DEC-20260825-18 — Seguridad y estructura del ZIP de cierre
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Acceso:** sólo `SUPERADMIN`, `DOCTOR_GENERAL` y `DOCTOR_VALIDATOR` descargan el ZIP completo; `COMPANY_CLIENT` conserva únicamente el dictamen reducido autorizado.
+- **Faltantes:** si falta el documento fuente de un estudio, el ZIP se genera con un `manifest.txt` que lo declara; no se inventa ni se sustituye silenciosamente.
+- **Estructura:** carpetas por estudio, con una carpeta `01_Dictamen_General/` y carpetas de cada estudio aplicable que contengan su dictamen y su fuente disponible.
+- **Referencia:** BR-20260825-19, FND-20260825-21.
+
 ## DEC-20260825-12 — Ruta rápida para cambios visuales menores
 
 - **Estado:** confirmed

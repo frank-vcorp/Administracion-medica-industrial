@@ -119,6 +119,28 @@ export function shouldShowExamenMedicoPdfCta(
   return typeof aptitud === 'string' && aptitud.trim().length > 0
 }
 
+/**
+ * IMPL-FEATURE-20260825-04: URL del ZIP consolidado de cierre clínico.
+ * Pura + testeable sin DOM. El endpoint
+ * (`/api/zip/clinical-closure/[eventId]`) aplica los mismos gates
+ * (sesión + rol clínico + aptitud) que el PDF individual.
+ */
+export function clinicalClosureZipUrl(eventId: string): string {
+  return `/api/zip/clinical-closure/${eventId}`
+}
+
+/**
+ * IMPL-FEATURE-20260825-04: el CTA del ZIP comparte el gate de aptitud
+ * del PDF individual (mismo evento, misma decisión médica). Mantener la
+ * regla única evita inconsistencias visuales y previene 409/404/410
+ * en el endpoint.
+ */
+export function shouldShowClinicalClosureZipCta(
+  aptitud: string | null | undefined
+): boolean {
+  return shouldShowExamenMedicoPdfCta(aptitud)
+}
+
 interface ExamenMedicoEstudioProps {
   eventId: string
   eventTestId: string
@@ -1719,6 +1741,18 @@ export default function ExamenMedicoEstudio({
                 className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
               >
                 📄 Descargar PDF (Examen-Medico-AMI)
+              </a>
+              {/* IMPL-FEATURE-20260825-04: ZIP de cierre clínico por Event
+                  (dictamen general + carpetas por estudio + fuentes + manifest). */}
+              <a
+                href={clinicalClosureZipUrl(eventId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="clinical-closure-zip-download-link"
+                data-implementacion="IMPL-FEATURE-20260825-04"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+              >
+                📦 Descargar ZIP de cierre
               </a>
             </div>
           )}

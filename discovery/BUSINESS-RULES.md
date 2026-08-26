@@ -146,6 +146,27 @@
 - **Estado actual:** en espera de confirmación; no bloquea la revisión manual del entregable.
 - **Estado:** confirmado por Frank, 2026-08-25.
 
+## BR-20260825-17 — Dictamen general como salida principal
+
+- **Regla:** Al completar y validar el Examen Médico se consolida un dictamen general AMI con resumen por estudio, aptitud, observaciones/recomendaciones, médico, cédula y firma.
+- **Fuentes:** cada estudio conserva su dictamen independiente; el consolidado no inventa resultados faltantes y marca pendientes cuando aplique.
+- **Privacidad:** el dictamen general reducido se separa del PDF clínico completo; el acceso depende del rol y autorización.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
+## BR-20260825-18 — ZIP de cierre con dictámenes y fuentes
+
+- **Regla:** El paquete de cierre de un Event contiene: `dictamen-general.pdf`; un dictamen por cada estudio aplicable; y el documento fuente original utilizado por cada estudio.
+- **Trazabilidad:** cada archivo debe conservar asociación explícita con Event, estudio y paciente; una fuente ausente se marca como no disponible, no se reemplaza por un archivo inventado.
+- **Integridad:** la generación debe evitar mezclar archivos de otro paciente/Event y debe producir nombres deterministas y legibles.
+- **Estado:** confirmada por Frank, 2026-08-25; permisos, faltantes y estructura interna quedan por cerrar.
+
+## BR-20260825-19 — ZIP clínico restringido y trazable
+
+- **Permisos:** sólo roles clínicos autorizados descargan el paquete completo; `COMPANY_CLIENT` no recibe fuentes ni PDF clínico completo.
+- **Faltantes:** `manifest.txt` debe listar Event, estudio, tipo de archivo, estado `NO_DISPONIBLE` y razón conocida.
+- **Estructura mínima:** `01_Dictamen_General/dictamen-general.pdf`; `02_Audiometria/dictamen-audiometria.pdf` + fuente original si existe; `03_Espirometria/dictamen-espirometria.pdf` + fuente original si existe; y carpetas análogas para otros estudios aplicables.
+- **Estado:** confirmada por Frank, 2026-08-25.
+
 ## BR-20260825-13 — Cambios visuales menores por ruta rápida
 
 - **Regla:** Un cambio visual local y reversible, sin lógica de negocio ni contrato técnico, se resuelve con edición mínima y validación dirigida; no requiere SPEC nueva, worker ni auditoría completa.

@@ -31,6 +31,8 @@ import { describe, it, expect } from 'vitest'
 import {
   examenMedicoPdfUrl,
   shouldShowExamenMedicoPdfCta,
+  clinicalClosureZipUrl,
+  shouldShowClinicalClosureZipCta,
 } from '@/components/clinical/ExamenMedicoEstudio'
 
 describe('IMPL-FEATURE-20260825-03 ronda 3: CTA PDF consolidado Examen Médico', () => {
@@ -108,5 +110,47 @@ describe('IMPL-FEATURE-20260825-03 ronda 3: CTA PDF consolidado Examen Médico',
     // `/api/pdf/examen-medico/[eventId]` (paridad con QA-20260825-03
     // P1-1). El CTA es sólo UX.
     expect(shouldShowExamenMedicoPdfCta('APTO')).toBe(true)
+  })
+})
+
+describe('IMPL-FEATURE-20260825-04: CTA ZIP de cierre clínico', () => {
+  it('clinicalClosureZipUrl: construye /api/zip/clinical-closure/<eventId>', () => {
+    expect(clinicalClosureZipUrl('event-1')).toBe(
+      '/api/zip/clinical-closure/event-1',
+    )
+    expect(clinicalClosureZipUrl('event-1')).not.toMatch(/[?#]/)
+    expect(clinicalClosureZipUrl('event-1')).not.toMatch(/\/+$/)
+  })
+
+  it('clinicalClosureZipUrl: acepta UUIDs', () => {
+    const uuid = '7c6f1c2e-4f8b-4d2b-9b9c-1f9a4d6e7b21'
+    expect(clinicalClosureZipUrl(uuid)).toBe(
+      `/api/zip/clinical-closure/${uuid}`,
+    )
+  })
+
+  it('shouldShowClinicalClosureZipCta: true si y sólo si aptitud NO-vacía', () => {
+    expect(shouldShowClinicalClosureZipCta('APTO')).toBe(true)
+    expect(shouldShowClinicalClosureZipCta('APTO CONDICIONADO')).toBe(true)
+    expect(shouldShowClinicalClosureZipCta(undefined)).toBe(false)
+    expect(shouldShowClinicalClosureZipCta(null)).toBe(false)
+    expect(shouldShowClinicalClosureZipCta('')).toBe(false)
+    expect(shouldShowClinicalClosureZipCta('   ')).toBe(false)
+  })
+
+  it('paridad con CTA PDF: ZIP hereda el gate de aptitud canónica', () => {
+    // SPEC FEATURE-20260825-04 §Reglas: el ZIP requiere aptitud
+    // (mismo gate que el PDF individual). El CTA debe mostrar/ocultar
+    // de forma sincronizada con el PDF para no invitar a un 409/404.
+    for (const v of ['APTO', 'NO APTO', 'APTO CONDICIONADO']) {
+      expect(shouldShowClinicalClosureZipCta(v)).toBe(
+        shouldShowExamenMedicoPdfCta(v),
+      )
+    }
+    for (const v of [undefined, null, '', '  ']) {
+      expect(shouldShowClinicalClosureZipCta(v)).toBe(
+        shouldShowExamenMedicoPdfCta(v),
+      )
+    }
   })
 })

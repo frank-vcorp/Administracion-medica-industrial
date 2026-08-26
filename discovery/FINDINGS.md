@@ -303,3 +303,27 @@
 - **Evidencia:** QA-20260825-03; la ruta nueva permite a `COMPANY_CLIENT` descargar el PDF completo, contradiciendo AC-10.
 - **Impacto:** exposición de antecedentes, toxicomanías, APP, gineco-obstetricia, exploración y firma; además existe una ruta legacy sin autenticación.
 - **Corrección:** negar el PDF clínico completo a `COMPANY_CLIENT` y exigir autenticación/scope en rutas legacy; el portal mantiene sólo el dictamen permitido.
+
+## FND-20260825-19 — Dictamen general AMI confirmado como entregable separado
+
+- **Estado:** confirmed / discovery
+- **Fuente:** `context/datos AMI/informacion para revision/REPORTE DE EXAMEN MEDICO (APTITUD) EJEMPLO.pdf`, revisado el 2026-08-25.
+- **Identificación:** documento de una página titulado `REPORTE DE EXAMEN MEDICO`, distinto del PDF clínico extenso de Examen Médico.
+- **Estructura:** identificación del paciente/empresa/puesto/tipo de examen; resumen de Examen Médico; Audiometría; Espirometría; Laboratorios; Radiografía; tabla `DICTAMEN DE APTITUD`; observaciones/comentarios/recomendaciones; médico, cédula y firma.
+- **Regla de aptitud:** contiene opciones visibles `APTO`, `APTO CONDICIONADO`, `APTO CON RESTRICCIONES` y `NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO`, con una marca `XXX` en la decisión seleccionada.
+- **Modelo funcional:** el dictamen general consolida los dictámenes independientes de cada estudio y la decisión médica final; es el PDF que debe generarse al completar/validar el Examen Médico.
+- **Diferencia:** el PDF clínico completo contiene historia y exploración detalladas; el dictamen general es un documento reducido para aptitud y recomendaciones.
+
+## FND-20260825-20 — Entregable final debe incluir ZIP documental consolidado
+
+- **Estado:** confirmed / discovery
+- **Evidencia:** Frank indicó el 2026-08-25 que el cierre debe generar el dictamen general y un ZIP con el dictamen general, el dictamen de cada estudio y los documentos fuente analizados de cada estudio.
+- **Ejemplos explícitos:** Audiometría debe incluir su dictamen y el documento original analizado; Espirometría debe incluir su dictamen y el documento original analizado.
+- **Hallazgo:** El entregable no es sólo un PDF: es un paquete documental trazable que relaciona consolidado, resultados por estudio y fuentes originales.
+- **Impacto:** El ZIP requiere reglas de selección por Event, nombres/estructura interna, manejo de fuentes ausentes, seguridad, permisos y generación atómica.
+
+## FND-20260825-21 — ZIP clínico con carpetas, manifest y acceso restringido
+
+- **Estado:** confirmed / discovery
+- **Evidencia:** Frank confirmó estructura por carpetas, manifest para fuentes faltantes y acceso exclusivo a roles clínicos.
+- **Contrato inicial:** carpeta de dictamen general + carpeta por estudio con dictamen y fuente; `manifest.txt` declara ausencias; `COMPANY_CLIENT` no descarga el paquete clínico.

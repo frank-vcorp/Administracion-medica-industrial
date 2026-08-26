@@ -25,6 +25,10 @@
 - **Nuevo incremento:** `FEATURE-20260825-03` — ADR y SPEC de Examen Médico creadas; SPEC en `READY_FOR_SOFIA`, pendiente handoff/implementación.
 - **Gate QA:** `FND-20260825-18` / `QA-20260825-03` detectó P1: Company Client puede alcanzar PDF clínico completo; requiere corrección antes de verificar/publicar.
 - **Gate vigente:** `DEC-20260825-15` / `BR-20260825-16` — esperar verificación funcional de Frank antes de iniciar persistencias definitivas.
+- **Confirmación nueva:** `DEC-20260825-16` / `BR-20260825-17` / `FND-20260825-19` — el PDF objetivo al completar es el dictamen general AMI de una página; el PDF clínico extenso queda separado.
+- **Nuevo alcance:** `DEC-20260825-17` / `BR-20260825-18` / `FND-20260825-20` — generar ZIP con dictamen general, dictámenes por estudio y documentos fuente originales por Event.
+- **Decisiones ZIP:** `DEC-20260825-18` / `BR-20260825-19` / `FND-20260825-21` — sólo roles clínicos, carpetas por estudio y `manifest.txt` para fuentes faltantes.
+- **Nuevo incremento:** `FEATURE-20260825-04` — SPEC mínima y handoff creados para generar/descargar ZIP; validación deliberadamente mínima para prueba funcional de Frank.
 - **Regla de velocidad:** `DEC-20260825-12` / `BR-20260825-13` — cambios visuales menores se resuelven con delta mínimo y validación focal, sin ciclo completo.
 - **Insumos recibidos:** fuente del audiómetro (`FND-20260825-05`), documento final AMI (`FND-20260825-06`), cuestionario (`FND-20260825-07`) y programa/criterios AMI (`FND-20260825-08`).
 - **Decisiones confirmadas:** `DEC-20260825-03` / `BR-20260825-04` — combinación patrón+PTA, huecos como no concluyentes y 1000 Hz como frontera.
