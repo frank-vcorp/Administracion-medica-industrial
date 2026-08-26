@@ -5,6 +5,7 @@
 - **ADR:** `context/decisions/ADR-20260825-02-EXAMEN-MEDICO-ENTREGABLE.md`
 - **Fuentes:** `FND-20260825-16`, `FND-20260825-17`, `context/SPECs/SPEC_ARCH-20260819-01-ESPECIFICACION-ENTREGABLE-EXAMEN-MEDICO.md`
 - **Alcance cerrado:** completar el flujo existente y generar el PDF AMI consolidado; no rediseñar el perfil clínico.
+- **Addendum vigente:** `DEC-20260826-01` / `BR-20260826-01`. El consolidado debe integrar los Events de la misma atención/cita del trabajador y reproducir el formato visual del entregable AMI de referencia, incluyendo los bloques de estudios aplicables y sus hallazgos disponibles.
 
 ## 1. Resultado esperado
 
@@ -61,6 +62,8 @@ Generar un PDF firmado de Examen Médico con la estructura del documento AMI de 
 - AC-8: El PDF incluye médico, cédula, fecha, firma y membrete.
 - AC-9: La descarga está autorizada por sesión y pertenece al Event/paciente solicitado; las rutas legacy también exigen autenticación y scope.
 - AC-10: No se filtran datos clínicos hacia el portal corporativo; éste recibe sólo el dictamen permitido.
+- AC-11: El dictamen general muestra un bloque identificable por cada Event/estudio aplicable de la misma atención/cita, con hallazgos disponibles y `PENDIENTE` cuando falte información; no muestra sólo conclusión/recomendaciones.
+- AC-12: El membrete, jerarquía visual, secciones y tabla de aptitud del PDF general son coherentes con `REPORTE DE EXAMEN MEDICO (APTITUD)`; no se sustituye por una hoja genérica de resumen.
 
 ## 5. Validación y límites
 
