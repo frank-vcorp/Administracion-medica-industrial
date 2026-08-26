@@ -135,15 +135,26 @@ class SignerService:
     def sign_pdf(self, input_pdf: str, output_pdf: str, reason: str = "Test signature", password: str = "test1234") -> dict:
         """
         Aplica una firma digital X.509 a un PDF.
-        
+
         Args:
             input_pdf: Ruta del PDF a firmar
             output_pdf: Ruta del PDF firmado
             reason: Razón de la firma
             password: Contraseña del certificado
-            
+
         Returns:
             dict con status, mensaje y rutas de salida
+
+        IMPL-FIX-20260826-01 (defecto reproducible FEATURE-20260825-03 firma):
+        pyHanko ≥0.30 cambió la API de `SimpleSigner.load(...)`: ahora requiere
+        `key_file` y `cert_file` separados (antes aceptaba un único file-like
+        PKCS#12/PEM y `digest_alg="sha256"`). Además el flujo de firma pasó
+        de `PdfFileWriter.append_from_reader + .sign(...)` a `IncrementalPdfFileWriter`
+        + `PdfSigner(...).sign_pdf(...)` (la `digest_alg` se deriva del cert).
+
+        Esta implementación detecta el formato del material criptográfico:
+          - `.p12`/`.pfx` (PKCS#12) → `SimpleSigner.load_pkcs12(pfx_file, passphrase)`
+          - PEM (cert + key separados) → `SimpleSigner.load(key_file, cert_file, key_passphrase)`
         """
         try:
             if not os.path.exists(input_pdf):
@@ -152,45 +163,82 @@ class SignerService:
                     "message": f"Archivo no encontrado: {input_pdf}"
                 }
 
-            # Usar pyHanko vía comando de línea (instalado como dependencia)
-            # pyHanko requiere que el cert esté en formato específico
-            cmd = [
-                "python", "-m", "pyhanko", "sign", "addsig",
-                "--appearance-text-params", f"signers={reason}",
-                input_pdf,
-                output_pdf,
-            ]
-
-            # Alternativamente, usar directamente la API de pyHanko
+            # pyHanko ≥0.30 API: detección de formato + flujo IncrementalPdfFileWriter
             try:
-                from pyhanko.sign.signers import SimpleSigner
-                from pyhanko.pdf_utils import writer
-                
-                # Cargar el signer
-                with open(self.cert_path, "rb") as f:
+                from pyhanko.sign.signers import (
+                    SimpleSigner,
+                    PdfSigner,
+                    PdfSignatureMetadata,
+                )
+                from pyhanko.pdf_utils.incremental_writer import (
+                    IncrementalPdfFileWriter,
+                )
+
+                # 1. Cargar el signer según el formato del material criptográfico.
+                passphrase = password.encode() if password else None
+                cert_ext = os.path.splitext(self.cert_path)[1].lower()
+                if cert_ext in (".p12", ".pfx"):
+                    # Material PKCS#12: cert + key bundleados con passphrase.
+                    signer = SimpleSigner.load_pkcs12(
+                        pfx_file=self.cert_path,
+                        passphrase=passphrase,
+                    )
+                else:
+                    # PEM: cert y key en archivos separados (generados por
+                    # _generate_test_certificate como fallback).
+                    # Si key_path no está seteado, asume que el cert PEM
+                    # contiene también la clave (concatenado) — pyHanko lo
+                    # soporta con key_file=cert_file.
+                    #
+                    # IMPL-FIX-20260826-01: detectar si la PEM key está
+                    # encriptada para pasar passphrase sólo cuando aplica.
+                    # El fallback PEM actual de _generate_test_certificate
+                    # usa NoEncryption() (unencrypted), pero conservamos la
+                    # puerta a keys encriptadas sin cambiar el contrato.
+                    key_path = self.key_path or self.cert_path
+                    pem_passphrase: Optional[bytes] = None
+                    if passphrase and os.path.isfile(key_path):
+                        try:
+                            with open(key_path, "rb") as _kf:
+                                _first_line = _kf.readline().decode(
+                                    "ascii", errors="ignore"
+                                )
+                            if "ENCRYPTED" in _first_line:
+                                pem_passphrase = passphrase
+                        except OSError:
+                            pem_passphrase = None
                     signer = SimpleSigner.load(
-                        f,
-                        key_passphrase=password.encode() if password else None,
-                        ca_chain_files=None,
-                        digest_alg="sha256"
+                        key_file=key_path,
+                        cert_file=self.cert_path,
+                        key_passphrase=pem_passphrase,
                     )
-                
-                # Firmar el PDF
-                with open(input_pdf, "rb") as inf:
-                    w = writer.PdfFileWriter()
-                    w.append_from_reader(writer.PdfFileReader(inf))
-                    
-                    # Agregar firma
-                    out = w.sign(
-                        signers=[signer],
-                        existing_fields_only=False,
-                        appearance_text_params={"signers": reason}
-                    )
-                
-                # Guardar el PDF firmado
+
+                # 2. Abrir el PDF para firma incremental. Cargamos el input
+                #    a un BytesIO porque IncrementalPdfFileWriter mantiene
+                #    referencias al stream durante toda la firma (un `with
+                #    open(...)` que cierre antes provocaría "seek of closed
+                #    file").
+                from io import BytesIO
+                with open(input_pdf, "rb") as _inf:
+                    _in_buf = BytesIO(_inf.read())
+                pdf_out = IncrementalPdfFileWriter(_in_buf)
+
+                # 3. Construir metadata + signer de alto nivel y firmar.
+                meta = PdfSignatureMetadata(
+                    field_name="Signature1",
+                    reason=reason,
+                )
+                pdf_signer = PdfSigner(
+                    signature_meta=meta,
+                    signer=signer,
+                )
                 with open(output_pdf, "wb") as outf:
-                    outf.write(out.getbuffer())
-                
+                    pdf_signer.sign_pdf(
+                        pdf_out,
+                        output=outf,
+                        appearance_text_params={"signers": reason},
+                    )
+
                 logger.info(f"✓ PDF firmado correctamente: {output_pdf}")
                 return {
                     "status": "success",
@@ -198,7 +246,7 @@ class SignerService:
                     "output_pdf": output_pdf,
                     "signed_at": datetime.now().isoformat(),
                     "signer": "AMI Test Signer",
-                    "reason": reason
+                    "reason": reason,
                 }
             except ImportError:
                 logger.warning("pyhanko.sign no disponible, usando alternativa básica")
@@ -206,12 +254,12 @@ class SignerService:
                 # En producción, integrar con Adobe Sign API o similar
                 with open(input_pdf, "rb") as inf:
                     pdf_data = inf.read()
-                
+
                 # Agregar marca simple de firma
                 with open(output_pdf, "wb") as outf:
                     outf.write(pdf_data)
                     outf.write(b"\n%% FIRMADO DIGITALMENTE\n")
-                
+
                 logger.info(f"✓ PDF marcado como firmado: {output_pdf}")
                 return {
                     "status": "success",
@@ -249,19 +297,32 @@ class SignerService:
 
             try:
                 from pyhanko.pdf_utils.reader import PdfFileReader
+                from pyhanko.pdf_utils.misc import PdfReadError
                 from pyhanko.sign.validation import validate_pdf_signature
-                
+
+                # IMPL-FIX-20260826-01: pyHanko ≥0.30 es estricto con PDFs
+                # mal formados. Un PDF que no se puede parsear NO está firmado
+                # (no contiene firma embebida); respondemos éxito con
+                # is_signed=False en lugar de propagar error.
                 with open(pdf_path, "rb") as f:
-                    reader = PdfFileReader(f)
-                    s = reader.embedded_signatures
-                
+                    try:
+                        reader = PdfFileReader(f)
+                        s = reader.embedded_signatures
+                    except PdfReadError:
+                        return {
+                            "status": "success",
+                            "is_signed": False,
+                            "signatures_found": 0,
+                            "note": "PDF malformado o sin estructura parseable",
+                        }
+
                 if not s:
                     return {
                         "status": "success",
                         "is_signed": False,
                         "signatures_found": 0
                     }
-                
+
                 signatures_info = []
                 for sig in s:
                     status = validate_pdf_signature(sig)
@@ -269,7 +330,7 @@ class SignerService:
                         "status": str(status),
                         "signed": True
                     })
-                
+
                 return {
                     "status": "success",
                     "is_signed": True,
