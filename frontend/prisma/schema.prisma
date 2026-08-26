@@ -396,7 +396,14 @@ model MedicalEvent {
   checkInDate           DateTime?
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
-  appointmentId         String?                 @unique
+  appointmentId         String?
+  /// IMPL-20260826-06 / DEC-20260826-02 / ADR-20260826-01:
+  /// `appointmentId` ya NO es `@unique`. Una `Appointment` puede agrupar
+  /// múltiples `MedicalEvent` del mismo `workerId` (relación 1:N).
+  /// La consolidación por atención/cita (ZIP, dictamen) selecciona
+  /// siempre `appointmentId + workerId` para no mezclar Events de otros
+  /// pacientes que compartan cita.
+  appointment           Appointment?            @relation("MedicalEventAppointment", fields: [appointmentId], references: [id])
   billingCompanyId      String?
   /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
   intakeSource          IntakeSource?
@@ -407,7 +414,6 @@ model MedicalEvent {
   mobileUnit            MobileUnit?             @relation(fields: [mobileUnitId], references: [id], onDelete: SetNull)
   eventTests            EventTest[]
   labs                  LabRecord[]
-  appointment           Appointment?            @relation(fields: [appointmentId], references: [id])
   billingCompany        Company?                @relation("BillingCompany", fields: [billingCompanyId], references: [id])
   branch                Branch                  @relation(fields: [branchId], references: [id])
   project               Project?                @relation(fields: [projectId], references: [id])
@@ -528,7 +534,11 @@ model Appointment {
   serviceProfile           MedicalProfile?      @relation(fields: [serviceProfileId], references: [id])
   worker                   Worker               @relation(fields: [workerId], references: [id], onDelete: Cascade)
   identityVerifiedBy       User?                @relation("AppointmentIdentityVerifier", fields: [identityVerifiedByUserId], references: [id])
-  medicalEvents            MedicalEvent?
+  /// IMPL-20260826-06 / DEC-20260826-02 / ADR-20260826-01:
+  /// Relación 1:N con `MedicalEvent` (varios Events pueden agruparse
+  /// por una misma cita/atención). Nombre explícito para distinguir
+  /// de futuras relaciones con `Appointment`.
+  medicalEvents            MedicalEvent[]        @relation("MedicalEventAppointment")
   prefilledInvitation      PrefilledInvitation? // IMPL-20260324-07
 
   @@map("appointments")

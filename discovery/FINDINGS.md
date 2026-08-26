@@ -364,3 +364,12 @@
 - **Causa documental a verificar:** el dictamen general renderizado no está incluyendo los estudios/resúmenes requeridos por `BR-20260825-17`/`BR-20260825-18` y no reproduce el membrete/layout funcional del entregable AMI.
 - **Alcance:** corregir la vista post-firma y completar el dictamen general con membrete, estudios aplicables y datos disponibles sin inventar resultados. El ZIP conserva las carpetas; no deben confundirse con el PDF individual.
 - **Referencia:** BR-20260825-17, BR-20260825-18, FND-20260825-19, FND-20260825-20.
+
+## FND-20260826-02 — ZIP de cierre no consolida el paquete documental esperado
+
+- **Estado:** confirmed / DISCOVERY-GAP P1
+- **Evidencia:** nuevas capturas y aclaración de Frank, 2026-08-26. Existen dos ZIP/descargables que no presentan la misma salida visual del PDF; el paquete observado no contiene consistentemente carpetas ni PDFs adicionales. El dictamen general no muestra los hallazgos de los otros Events.
+- **Regla confirmada:** el cierre debe entregar un paquete documental único y trazable: dictamen general con el mismo formato visual AMI, hallazgos de todos los Events aplicables al trabajador/atención, y una carpeta con el dictamen PDF y la fuente de cada Event/estudio.
+- **Contradicción a resolver:** el contrato anterior modela el ZIP por un solo `eventId` (`BR-20260825-18`), mientras la aclaración actual exige consolidar “otros Events”. No se debe elegir silenciosamente si “otros Events” significa `EventTest` del mismo Event o Events independientes del mismo trabajador/atención.
+- **Impacto:** afecta modelo de selección, contenido del dictamen general, estructura del ZIP, nombres de archivos, fuentes remotas y seguridad de scope/paciente.
+- **Estado operativo:** BLOCKED para cerrar el contrato ampliado hasta resolver el alcance de “otros Events”; queda separado del defecto ya corregido de firma S3/pyHanko.

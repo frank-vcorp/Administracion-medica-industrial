@@ -220,6 +220,55 @@ describe('IMPL-FEATURE-20260825-04: zip-cierre-clinico — buildManifest', () =>
     expect(out).not.toMatch(/Firma/i)
     expect(out).not.toMatch(/12345678/)
   })
+
+  // ─── IMPL-20260826-06: atención consolidada ─────────────────────────
+  it('IMPL-20260826-06: lista los Events de la atención consolidada', () => {
+    const out = buildManifest({
+      eventId: 'event-root',
+      universalId: 'U-1',
+      workerName: 'Juan Pérez',
+      generatedAt: new Date('2026-08-25T20:00:00.000Z'),
+      dictamenGeneralPath: '01_Dictamen_General/dictamen-general.pdf',
+      studyEntries: [],
+      atencionEventIds: ['event-root', 'event-sibling-1', 'event-sibling-2'],
+      appointmentId: 'appt-1',
+    })
+    expect(out).toMatch(/Atención consolidada/)
+    expect(out).toMatch(/Cita \/ appointmentId: appt-1/)
+    expect(out).toMatch(/event-root/)
+    expect(out).toMatch(/event-sibling-1/)
+    expect(out).toMatch(/event-sibling-2/)
+    expect(out).toMatch(/Events incluidos \(3\)/)
+  })
+
+  it('IMPL-20260826-06: walk-in (sin cita) marca "(sin cita / walk-in)"', () => {
+    const out = buildManifest({
+      eventId: 'event-walkin',
+      universalId: 'U-1',
+      workerName: 'X',
+      generatedAt: new Date('2026-08-25T20:00:00.000Z'),
+      dictamenGeneralPath: 'x',
+      studyEntries: [],
+      atencionEventIds: ['event-walkin'],
+      appointmentId: null,
+    })
+    expect(out).toMatch(/\(sin cita \/ walk-in\)/)
+    expect(out).toMatch(/Events incluidos \(1\)/)
+  })
+
+  it('IMPL-20260826-06: omite sección "Atención consolidada" cuando no se proporciona', () => {
+    // Compat legacy: si el call-site no pasa los nuevos campos,
+    // el manifest conserva el formato original.
+    const out = buildManifest({
+      eventId: 'event-1',
+      universalId: 'U-1',
+      workerName: 'X',
+      generatedAt: new Date('2026-08-25T20:00:00.000Z'),
+      dictamenGeneralPath: 'x',
+      studyEntries: [],
+    })
+    expect(out).not.toMatch(/Atención consolidada/)
+  })
 })
 
 // ────────────────────────────────────────────────────────────────────────

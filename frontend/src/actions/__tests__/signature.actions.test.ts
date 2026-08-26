@@ -72,6 +72,9 @@ vi.mock('@/lib/dictamen-pdf', () => ({
   dictamenSignedFileName: (...a: unknown[]) =>
     mockDictamenSignedFileName(...a),
   dictamenBackendUrl: () => 'http://localhost:8000',
+  // IMPL-20260826-06: helper de folio corto para bloques consolidados.
+  deriveEventShortId: (id: string) =>
+    (id ?? '').split('-')[0]?.toUpperCase() ?? '',
 }))
 
 const mockFetch = vi.fn()

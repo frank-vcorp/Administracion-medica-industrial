@@ -9,7 +9,9 @@ import {
   dictamenInputFileName,
   dictamenSignedFileName,
   dictamenBackendUrl,
+  deriveEventShortId,
 } from '@/lib/dictamen-pdf'
+import { findSiblingEventsInAtencion } from '@/lib/event-atencion'
 
 /**
  * @id IMPL-20260225-03
@@ -146,6 +148,72 @@ export async function signMedicalDictamPDF(eventId: string) {
       }
     }
 
+    // 2.B IMPL-20260826-06 (DEC-20260826-01 / BR-20260826-01):
+    // Resolver los Events hermanos de la misma atención/cita para
+    // consolidar hallazgos en el PDF firmado. Defensa: si la cita tiene
+    // sólo el Event actual (schema @unique actual), la lista
+    // contendrá únicamente este Event — el render del PDF mostrará
+    // un único bloque marcado como `ACTUAL` y la sección III.B
+    // seguirá presente (no inventamos datos).
+    const atencionResolution = await findSiblingEventsInAtencion(
+      event.id,
+      prisma,
+    )
+    const siblingEventIds = atencionResolution.eventIds.filter(
+      (id) => id !== event.id,
+    )
+    const siblingEventsData = siblingEventIds.length > 0
+      ? await prisma.medicalEvent.findMany({
+          where: { id: { in: siblingEventIds } },
+          select: {
+            id: true,
+            studies: {
+              select: {
+                serviceName: true,
+                extractedData: true,
+              },
+            },
+            labs: {
+              select: {
+                serviceName: true,
+                extractedData: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+      : []
+    // Bloques para el renderer: primero el actual, luego los hermanos
+    // en orden cronológico.
+    const consolidatedBlocks = [
+      {
+        eventId: event.id,
+        eventShortId: deriveEventShortId(event.id),
+        isCurrent: true,
+        studies: (event.studies ?? []).map((s) => ({
+          serviceName: s.serviceName,
+          extractedData: s.extractedData,
+        })),
+        labs: (event.labs ?? []).map((l) => ({
+          serviceName: l.serviceName,
+          extractedData: l.extractedData,
+        })),
+      },
+      ...siblingEventsData.map((s) => ({
+        eventId: s.id,
+        eventShortId: deriveEventShortId(s.id),
+        isCurrent: false,
+        studies: (s.studies ?? []).map((st) => ({
+          serviceName: st.serviceName,
+          extractedData: st.extractedData,
+        })),
+        labs: (s.labs ?? []).map((lb) => ({
+          serviceName: lb.serviceName,
+          extractedData: lb.extractedData,
+        })),
+      })),
+    ]
+
     // 3. Renderizar el dictamen en MEMORIA (sin disco). Si el render
     // falla, NO seguimos (sería pasarle al firmador un buffer vacío).
     const nowMs = Date.now()
@@ -181,6 +249,8 @@ export async function signMedicalDictamPDF(eventId: string) {
             serviceName: l.serviceName,
             extractedData: l.extractedData,
           })),
+          // IMPL-20260826-06: bloques de hallazgos por atención/cita.
+          consolidatedEvents: consolidatedBlocks,
         },
       })
     } catch (renderErr) {

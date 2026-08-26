@@ -91,6 +91,35 @@ export interface BuildDictamenPayloadInput {
   studies?: Array<{ serviceName: string; extractedData?: unknown | null }>
   /** Laboratorios. */
   labs?: Array<{ serviceName: string; extractedData?: unknown | null }>
+  /**
+   * IMPL-20260826-06 (DEC-20260826-01 / BR-20260826-01):
+   * Bloques de hallazgos por cada Event de la misma atención/cita.
+   * Si se omite, el PDF conserva el comportamiento legacy (un único
+   * Event). El orquestador (server action o ZIP builder) los construye
+   * usando `findSiblingEventsInAtencion` y un `select` Prisma sobre
+   * cada Event hermano. Cada bloque incluye su propio `isCurrent`
+   * para que el renderer pueda marcar el Event firmado.
+   *
+   * NO se inventa: cada bloque sólo contiene los estudios/labs
+   * presentes en el snapshot del Event correspondiente.
+   */
+  consolidatedEvents?: Array<{
+    eventId: string
+    eventShortId: string
+    isCurrent: boolean
+    studies?: Array<{ serviceName: string; extractedData?: unknown | null }>
+    labs?: Array<{ serviceName: string; extractedData?: unknown | null }>
+  }>
+}
+
+/**
+ * IMPL-20260826-06: Helper puro que normaliza un `eventId` a un
+ * identificador legible de 8 caracteres para el renderer. Se usa
+ * para evitar mostrar UUIDs completos en el PDF.
+ */
+export function deriveEventShortId(eventId: string): string {
+  if (!eventId || typeof eventId !== 'string') return ''
+  return eventId.split('-')[0]?.toUpperCase() ?? ''
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -163,6 +192,23 @@ export function buildDictamenPdfPayload(
     labs: (input.labs ?? []).map((l) => ({
       serviceName: l.serviceName,
       extractedData: l.extractedData ?? null,
+    })),
+    // IMPL-20260826-06: bloques consolidados por atención/cita. Si el
+    // orquestador no los proporciona (compat legacy), se omiten en el
+    // payload — el renderer los trata como ausentes y conserva el
+    // comportamiento single-Event.
+    consolidatedEvents: (input.consolidatedEvents ?? []).map((block) => ({
+      eventId: block.eventId,
+      eventShortId: block.eventShortId,
+      isCurrent: block.isCurrent,
+      studies: (block.studies ?? []).map((s) => ({
+        serviceName: s.serviceName,
+        extractedData: s.extractedData ?? null,
+      })),
+      labs: (block.labs ?? []).map((l) => ({
+        serviceName: l.serviceName,
+        extractedData: l.extractedData ?? null,
+      })),
     })),
   }
 }

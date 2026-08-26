@@ -105,6 +105,25 @@ function deriveFolio(eventId: string, verdictId: string): string {
     return `DICT-${eventPart}-${verdictPart}`
 }
 
+/**
+ * IMPL-20260826-06 (DEC-20260826-01 / BR-20260826-01):
+ * Bloque consolidado de hallazgos por Event hermano de la misma
+ * atención/cita. Cada entrada es un Event del trabajador (distinto o
+ * igual al actual) con sus estudios + labs disponibles.
+ */
+interface ConsolidatedEventBlock {
+    /** ID del Event hermano (UUID). */
+    eventId: string
+    /** Identificador legible derivado del eventId (folio corto). */
+    eventShortId: string
+    /** Indica si este Event es el Event firmado actualmente. */
+    isCurrent: boolean
+    /** Estudios auxiliares del Event (snapshot). */
+    studies?: { serviceName: string; extractedData: unknown }[]
+    /** Laboratorios del Event (snapshot). */
+    labs?: { serviceName: string; extractedData: unknown }[]
+}
+
 export const MedicalDictamenPDF = ({ data }: {
     data: {
         signedAt: string | Date,
@@ -116,7 +135,19 @@ export const MedicalDictamenPDF = ({ data }: {
         validator: { fullName: string },
         id: string,
         studies?: { serviceName: string, extractedData: unknown }[],
-        labs?: { serviceName: string, extractedData: unknown }[]
+        labs?: { serviceName: string, extractedData: unknown }[],
+        /**
+         * IMPL-20260826-06 (DEC-20260826-01 / BR-20260826-01):
+         * Bloques de hallazgos por cada Event de la misma atención/cita.
+         * Si se omite o se pasa `[]`, el PDF conserva el comportamiento
+         * legacy (un único Event). Si se proporciona, el PDF renderiza
+         * una sub-sección "HALLAZGOS DE LA ATENCIÓN" con un bloque
+         * por Event hermano (incluyendo el actual, marcado como tal).
+         *
+         * NO se inventan datos: cada bloque sólo muestra los estudios
+         * y labs presentes en el snapshot del Event correspondiente.
+         */
+        consolidatedEvents?: ConsolidatedEventBlock[]
     }
 }) => {
     // IMPL-20260826-04: el resumen de estudios y el catálogo AMI baseline
@@ -233,6 +264,77 @@ export const MedicalDictamenPDF = ({ data }: {
                             </Text>
                         </View>
                     ))}
+                </View>
+            )}
+
+            {/* III.B HALLAZGOS CONSOLIDADOS POR ATENCIÓN/CITA
+                (IMPL-20260826-06 / DEC-20260826-01 / BR-20260826-01).
+                Una sub-sección por cada Event de la misma cita,
+                mostrando los estudios aplicados (con badge
+                APLICADO/PENDIENTE) y su resumen textual. NO inventa
+                resultados: cada bloque sólo refleja el snapshot del
+                Event correspondiente. Si `consolidatedEvents` está
+                vacío o no se proporciona, esta sección se omite
+                (comportamiento legacy intacto). */}
+            {data.consolidatedEvents && data.consolidatedEvents.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>III.B HALLAZGOS CONSOLIDADOS POR ATENCIÓN/CITA</Text>
+                    <Text style={{ fontSize: 9, color: '#64748b', marginBottom: 6 }}>
+                        Estudios auxiliares de los Events del trabajador ligados a la misma
+                        cita. Sólo se muestran los datos disponibles en cada Event; los
+                        faltantes aparecen como PENDIENTE sin inventar resultados.
+                    </Text>
+                    {data.consolidatedEvents.map((block) => {
+                        const blockEntries: DictamenStudyEntry[] = [
+                            ...(block.studies ?? []),
+                            ...(block.labs ?? []),
+                        ]
+                        const blockSummaries =
+                            buildDictamenStudySummary(blockEntries)
+                        return (
+                            <View key={block.eventId} style={{
+                                marginBottom: 10,
+                                paddingLeft: 10,
+                                paddingTop: 4,
+                                paddingBottom: 4,
+                                borderLeftWidth: 2,
+                                borderLeftColor: block.isCurrent ? '#0f172a' : '#cbd5e1',
+                            }}>
+                                <Text style={styles.studyName}>
+                                    • Event {block.eventShortId}
+                                    {block.isCurrent && (
+                                        <Text style={[styles.studyBadge, styles.studyBadgeAplicado]}>  ACTUAL  </Text>
+                                    )}
+                                </Text>
+                                {blockSummaries.length === 0 ? (
+                                    <Text style={styles.studyEmpty}>
+                                        Sin estudios auxiliares registrados para este Event.
+                                    </Text>
+                                ) : (
+                                    blockSummaries.map((s, sIdx) => {
+                                        const isAplicado = s.status === 'APLICADO'
+                                        const badgeStyle = isAplicado
+                                            ? styles.studyBadgeAplicado
+                                            : styles.studyBadgePendiente
+                                        return (
+                                            <View
+                                                key={`${block.eventId}-${s.serviceName}-${sIdx}`}
+                                                style={styles.studyRow}
+                                            >
+                                                <Text style={styles.studyName}>
+                                                    – {s.serviceName}
+                                                    <Text style={[styles.studyBadge, badgeStyle]}>  {s.label.toUpperCase()}  </Text>
+                                                </Text>
+                                                <Text style={styles.studySummary}>
+                                                    {s.dataSummary}
+                                                </Text>
+                                            </View>
+                                        )
+                                    })
+                                )}
+                            </View>
+                        )
+                    })}
                 </View>
             )}
 

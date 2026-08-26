@@ -34,6 +34,10 @@ import {
   buildExamenMedicoPdfData,
 } from '@/lib/examen-medico-pdf'
 import { dictamenBackendUrl } from '@/lib/dictamen-pdf'
+import {
+  findSiblingEventsInAtencion,
+  isEventInAtencion,
+} from '@/lib/event-atencion'
 
 /** Roles clínicos autorizados (SPEC §Reglas). */
 export const CLINICAL_ROLES = new Set<string>([
@@ -128,6 +132,11 @@ export function buildStudyDictamenText(input: {
  * Construye el contenido del manifest.txt a partir de los paths finales.
  * Siempre se incluye — si no hay entradas, sólo lista los placeholders
  * "NO_DISPONIBLE" por sección.
+ *
+ * IMPL-20260826-06 (DEC-20260826-01 / BR-20260826-01): acepta
+ * `atencionEventIds` para listar todos los Events del trabajador
+ * ligados a la misma cita que se consolidan en este ZIP. Si se omite
+ * (compat legacy), sólo se lista el `eventId` raíz.
  */
 export function buildManifest(input: {
   eventId: string
@@ -141,6 +150,10 @@ export function buildManifest(input: {
     dictamenPath: string
     sourcePath: string
   }>
+  /** IDs de los Events del trabajador que pertenecen a la misma atención/cita. */
+  atencionEventIds?: ReadonlyArray<string>
+  /** `appointmentId` que agrupa los Events (o `null` si es walk-in). */
+  appointmentId?: string | null
 }): string {
   const lines: string[] = []
   lines.push('Manifest — ZIP de cierre clínico')
@@ -152,6 +165,21 @@ export function buildManifest(input: {
     `Generado:        ${input.generatedAt.toISOString()}`,
   )
   lines.push(`Generador:       IMPL-FEATURE-20260825-04`)
+  if (
+    input.atencionEventIds &&
+    input.atencionEventIds.length > 0 &&
+    input.appointmentId !== undefined
+  ) {
+    lines.push('')
+    lines.push('Atención consolidada (DEC-20260826-01 / BR-20260826-01):')
+    lines.push(
+      `  Cita / appointmentId: ${input.appointmentId ?? '(sin cita / walk-in)'}`,
+    )
+    lines.push(`  Events incluidos (${input.atencionEventIds.length}):`)
+    for (const id of input.atencionEventIds) {
+      lines.push(`    - ${id}`)
+    }
+  }
   lines.push('')
   lines.push('Estructura:')
   lines.push(`  ${input.dictamenGeneralPath}`)
@@ -306,6 +334,47 @@ export async function buildCierreClinicoZip(
   if (!event.verdict) {
     throw new CierreClinicoError('verdict_missing', 404)
   }
+
+  // ── 1.5) IMPL-20260826-06 (DEC-20260826-01 / BR-20260826-01):
+  //       Resolver los Events hermanos de la misma atención/cita.
+  //       Con el schema actual (`appointmentId @unique`), esto devuelve
+  //       únicamente el Event actual — pero el helper queda listo para
+  //       la migración N:1 (varios Events por cita) sin más cambios.
+  // ────────────────────────────────────────────────────────────────────────
+  const atencionResolution = await findSiblingEventsInAtencion(
+    eventId,
+    prisma,
+  )
+  const atencionEventIds = atencionResolution.eventIds
+  // Cargar los datos de los Events hermanos (excluyendo el actual que
+  // ya tenemos cargado arriba).
+  const siblingEventIds = atencionEventIds.filter((id) => id !== eventId)
+  const siblingEventsRaw = siblingEventIds.length > 0
+    ? await prisma.medicalEvent.findMany({
+        where: { id: { in: siblingEventIds } },
+        select: {
+          id: true,
+          studies: {
+            select: {
+              serviceName: true,
+              aiPrediction: true,
+              extractedData: true,
+              fileUrl: true,
+              validatorNotes: true,
+            },
+          },
+          labs: {
+            select: {
+              serviceName: true,
+              aiPrediction: true,
+              extractedData: true,
+              fileUrl: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+    : []
 
   // ── 1) Dictamen general (reutiliza el helper FEATURE-20260825-03) ─────
   const aptitud = s(
@@ -554,8 +623,25 @@ export async function buildCierreClinicoZip(
     eventId: event.id,
   })
 
-  // ── 2) Carpetas por estudio (estudios + labs) ──────────────────────────
+  // ── 2) Carpetas por Event/estudio (IMPL-20260826-06) ─────────────────
+  //
+  // Estructura del ZIP:
+  //   01_Dictamen_General/dictamen-general.pdf
+  //   02_Event_<eventShort>/dictamen-<serviceSlug>.txt
+  //   02_Event_<eventShort>/fuente-<basename>.<ext>
+  //   03_Event_<eventShort>/... (si hay siblings)
+  //   manifest.txt
+  //
+  // Antes (rondas previas): una carpeta por estudio, mezclando studies +
+  // labs de un solo Event. Ahora: una carpeta por Event hermano de la
+  // cita, con sus estudios y labs adentro. Esto preserva la trazabilidad
+  // Event↔estudio que exige BR-20260826-01 y permite que el médico
+  // identifique a qué Event pertenece cada hallazgo.
+  // ────────────────────────────────────────────────────────────────────────
   type Item = {
+    eventId: string
+    eventShortId: string
+    isCurrent: boolean
     kind: 'STUDY' | 'LAB'
     serviceName: string
     aiPrediction: string | null
@@ -564,8 +650,18 @@ export async function buildCierreClinicoZip(
     slot: string | null
   }
 
+  // Construir la lista plana de items: primero el Event actual, luego
+  // los hermanos en orden cronológico. El slot (texto del examen físico)
+  // sólo aplica al Event actual (cada Event tiene su propio examen).
   const items: Item[] = [
     ...event.studies.map<Item>((st) => ({
+      eventId: event.id,
+      eventShortId: atencionEventIds.length > 1
+        ? atencionEventIds.indexOf(event.id).toString().padStart(2, '0') +
+          '_' +
+          event.id.split('-')[0].toUpperCase()
+        : event.id.split('-')[0].toUpperCase(),
+      isCurrent: true,
       kind: 'STUDY' as const,
       serviceName: st.serviceName,
       aiPrediction: st.aiPrediction,
@@ -574,6 +670,9 @@ export async function buildCierreClinicoZip(
       slot: pickSlot(physicalExamData, st.serviceName),
     })),
     ...event.labs.map<Item>((lb) => ({
+      eventId: event.id,
+      eventShortId: event.id.split('-')[0].toUpperCase(),
+      isCurrent: true,
       kind: 'LAB' as const,
       serviceName: lb.serviceName,
       aiPrediction: lb.aiPrediction,
@@ -581,6 +680,36 @@ export async function buildCierreClinicoZip(
       fileUrl: lb.fileUrl ?? null,
       slot: pickSlot(physicalExamData, lb.serviceName),
     })),
+    ...siblingEventsRaw.flatMap<Item>((sib, idx) => {
+      const sibEventShortId =
+        (idx + 2).toString().padStart(2, '0') +
+        '_' +
+        sib.id.split('-')[0].toUpperCase()
+      return [
+        ...sib.studies.map<Item>((st) => ({
+          eventId: sib.id,
+          eventShortId: sibEventShortId,
+          isCurrent: false,
+          kind: 'STUDY' as const,
+          serviceName: st.serviceName,
+          aiPrediction: st.aiPrediction,
+          validatorNotes: st.validatorNotes ?? null,
+          fileUrl: st.fileUrl ?? null,
+          slot: null, // slot sólo del Event actual; siblings no tienen
+        })),
+        ...sib.labs.map<Item>((lb) => ({
+          eventId: sib.id,
+          eventShortId: sibEventShortId,
+          isCurrent: false,
+          kind: 'LAB' as const,
+          serviceName: lb.serviceName,
+          aiPrediction: lb.aiPrediction,
+          validatorNotes: null,
+          fileUrl: lb.fileUrl ?? null,
+          slot: null,
+        })),
+      ]
+    }),
   ]
 
   const entries: ZipEntry[] = []
@@ -589,6 +718,7 @@ export async function buildCierreClinicoZip(
     serviceName: string
     dictamenPath: string
     sourcePath: string
+    eventId: string
   }> = []
   const folderMap = new Map<string, number>()
   let studyIndex = 0
@@ -596,7 +726,13 @@ export async function buildCierreClinicoZip(
     studyIndex += 1
     const slug = slugify(it.serviceName)
     folderMap.set(slug, (folderMap.get(slug) ?? 0) + 1)
-    const folder = folderName(studyIndex, it.serviceName)
+    // IMPL-20260826-06: carpetas por Event. Si el Event actual coincide
+    // con la cita y no hay siblings, mantener `02_<serviceName>` para
+    // retrocompat con consumers legacy del ZIP.
+    const folder =
+      atencionEventIds.length > 1
+        ? `${studyIndex.toString().padStart(2, '0')}_Event_${it.eventShortId}`
+        : folderName(studyIndex, it.serviceName)
     const dictamenPath = `${folder}/dictamen-${slug}.txt`
     const dictamenText = buildStudyDictamenText({
       serviceName: it.serviceName,
@@ -621,12 +757,14 @@ export async function buildCierreClinicoZip(
         serviceName: it.serviceName,
         dictamenPath,
         sourcePath,
+        eventId: it.eventId,
       })
     } else {
       // NO inventar: dejar un placeholder textual legible.
       const placeholder = `# Fuente original NO_DISPONIBLE\n\n` +
         `Service: ${it.serviceName}\n` +
         `Tipo:    ${it.kind === 'LAB' ? 'Laboratorio' : 'Estudio paraclínico'}\n` +
+        `Event:   ${it.eventId}\n` +
         `Path en BD: ${it.fileUrl ?? '(sin fileUrl)'}\n` +
         `Fecha de generación: ${new Date().toISOString()}\n\n` +
         `Razón: el archivo no se encontró en disco o no se subió.\n`
@@ -639,6 +777,7 @@ export async function buildCierreClinicoZip(
         serviceName: it.serviceName,
         dictamenPath,
         sourcePath: `${folder}/fuente-${slug}.txt (NO_DISPONIBLE)`,
+        eventId: it.eventId,
       })
     }
   }
@@ -662,6 +801,9 @@ export async function buildCierreClinicoZip(
     generatedAt: new Date(),
     dictamenGeneralPath,
     studyEntries: manifestStudies,
+    // IMPL-20260826-06: listar todos los Events de la cita consolidada.
+    atencionEventIds,
+    appointmentId: atencionResolution.appointmentId,
   })
   entries.push({ path: 'manifest.txt', data: new TextEncoder().encode(manifest) })
 

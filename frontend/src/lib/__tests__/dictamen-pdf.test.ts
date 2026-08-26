@@ -48,6 +48,7 @@ import {
   sanitizeEventId,
   renderDictamenInputToMemory,
   dictamenBackendUrl,
+  deriveEventShortId,
   type BuildDictamenPayloadInput,
 } from '@/lib/dictamen-pdf'
 import * as mod from '@/lib/dictamen-pdf'
@@ -192,6 +193,65 @@ describe('IMPL-FEATURE-20260825-03 ronda 8: builder del dictamen general', () =>
     const a = buildDictamenPdfPayload(input)
     const b = buildDictamenPdfPayload(input)
     expect(a).toEqual(b)
+  })
+
+  // ─── IMPL-20260826-06: bloques consolidados por atención/cita ─────
+  it('buildDictamenPdfPayload: consolidatedEvents vacío por default (compat)', () => {
+    // Si el orquestador (signature.actions o zip-cierre-clinico) no
+    // los pasa, el payload se construye igual que antes. El renderer
+    // omitirá la sección III.B.
+    const out = buildDictamenPdfPayload(baseInput())
+    expect(out.consolidatedEvents).toEqual([])
+  })
+
+  it('buildDictamenPdfPayload: consolidatedEvents preserva isCurrent y eventShortId', () => {
+    const out = buildDictamenPdfPayload(
+      baseInput({
+        consolidatedEvents: [
+          {
+            eventId: '7c6f1c2e-4f8b-4d2b-9b9c-1f9a4d6e7b21',
+            eventShortId: '7C6F1C2E',
+            isCurrent: true,
+            studies: [
+              { serviceName: 'Audiometría', extractedData: { oido: 'normal' } },
+            ],
+            labs: [],
+          },
+          {
+            eventId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+            eventShortId: 'AAAAAAAA',
+            isCurrent: false,
+            studies: [{ serviceName: 'Espirometría' }],
+            labs: [],
+          },
+        ],
+      }),
+    )
+    expect(out.consolidatedEvents).toHaveLength(2)
+    expect(out.consolidatedEvents[0].isCurrent).toBe(true)
+    expect(out.consolidatedEvents[0].eventShortId).toBe('7C6F1C2E')
+    expect(out.consolidatedEvents[1].isCurrent).toBe(false)
+    // Normalización: extractedData undefined → null.
+    expect(out.consolidatedEvents[1].studies[0].extractedData).toBeNull()
+  })
+
+  it('buildDictamenPdfPayload: NO inventa eventos — sólo refleja el input', () => {
+    // Pasamos consolidatedEvents=[] y verificamos que NO se rellena
+    // con eventos fantasma.
+    const out = buildDictamenPdfPayload(baseInput({ consolidatedEvents: [] }))
+    expect(out.consolidatedEvents).toEqual([])
+  })
+
+  it('deriveEventShortId: primeros 8 chars uppercase', () => {
+    expect(
+      deriveEventShortId('7c6f1c2e-4f8b-4d2b-9b9c-1f9a4d6e7b21'),
+    ).toBe('7C6F1C2E')
+  })
+
+  it('deriveEventShortId: defensa con input inválido', () => {
+    expect(deriveEventShortId('')).toBe('')
+    expect(deriveEventShortId(null as unknown as string)).toBe('')
+    expect(deriveEventShortId('xxx')).toBe('XXX')
   })
 
   // ─── dictamenBackendUrl ────────────────────────────────────────────────

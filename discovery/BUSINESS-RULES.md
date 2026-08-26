@@ -173,6 +173,17 @@
 - **Descargas:** PDF general, PDF clínico y ZIP devuelven estado pendiente/no disponible mientras no exista `MedicalVerdict` emitido; la interfaz no debe mostrar CTAs accionables antes de ese estado.
 - **Estado:** confirmado por Frank, 2026-08-25.
 
+## BR-20260825-21 — Validación visible después de completar
+
+- **Regla:** El cambio a `VALIDATING` debe reflejarse en la vista activa inmediatamente; la UI debe mostrar el panel de revisión/firma y no un estado de expediente cerrado sin acción disponible.
+- **Estado:** confirmado por Frank, 2026-08-25.
+
+## BR-20260825-22 — No usar filesystem local de Vercel para firma
+
+- **Regla:** Los PDFs de entrada/salida del firmador deben viajar por el contrato oficial de upload/archivos del backend; nunca depender de `/var/task`, `process.cwd()/uploads` u otro disco efímero de Vercel.
+- **Trazabilidad:** conservar nombres seguros, `pdfUrl`/key y relación con Event/MedicalVerdict.
+- **Estado:** confirmado por operación observada, 2026-08-25.
+
 ## BR-20260825-13 — Cambios visuales menores por ruta rápida
 
 - **Regla:** Un cambio visual local y reversible, sin lógica de negocio ni contrato técnico, se resuelve con edición mínima y validación dirigida; no requiere SPEC nueva, worker ni auditoría completa.
@@ -188,3 +199,18 @@
 - **Límite:** La inferencia debe etiquetarse como criterio derivado de la gráfica, no como texto escrito por el médico ni como diagnóstico IA. Si una curva o criterio no es legible, devolver `null`.
 - **Protección:** Repetibilidad FVC/FEV1 continúa calculándose únicamente desde los dos valores numéricos más altos y el umbral AMI de 150 ml.
 - **Confirmación:** Frank confirmó el 2026-08-24 que las gráficas mostradas son suficientemente claras para inferir esos criterios.
+
+## BR-20260826-01 — Cierre documental por atención/cita
+
+- **Regla:** El dictamen general y el ZIP de cierre deben incluir todos los Events del trabajador ligados a la misma atención o cita.
+- **Dictamen general:** debe usar el formato visual AMI de referencia e integrar los hallazgos disponibles de esos Events, sin inventar resultados ausentes.
+- **ZIP:** debe contener el dictamen general y una carpeta por cada Event/estudio aplicable, con su PDF/dictamen y la fuente original disponible; los faltantes se declaran en `manifest.txt`.
+- **Exclusiones:** no incluir Events históricos fuera de la atención/cita ni datos de otro trabajador.
+- **Confirmación:** Frank, 2026-08-26.
+
+## BR-20260826-02 — Events múltiples por atención/cita
+
+- **Regla técnica derivada:** una `Appointment` puede agrupar múltiples `MedicalEvent`; cada Event conserva su identidad, trabajador, estudios y trazabilidad.
+- **Consolidación:** el cierre por atención/cita selecciona sólo Events del mismo trabajador y Appointment, sin incluir histórico ajeno ni otros pacientes.
+- **Migración:** debe ser aditiva/no destructiva, conservar datos existentes y validarse antes de habilitar el consolidado.
+- **Confirmación:** Frank autorizó la migración 1:N, 2026-08-26.

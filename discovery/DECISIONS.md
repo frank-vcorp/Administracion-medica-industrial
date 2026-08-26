@@ -288,6 +288,20 @@
 - **Decisión:** El botón `Completar` no firma automáticamente ni crea un dictamen final. Debe dejar el Event en `VALIDATING`; el médico revisa y pulsa `Firmar y Emitir Dictamen`. PDF y ZIP sólo se habilitan con `MedicalVerdict` emitido.
 - **Referencia:** BR-20260825-20, FND-20260825-22.
 
+## DEC-20260825-20 — Navegar automáticamente a Validación
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión:** Al completar el Examen Médico, la interfaz debe llevar al usuario a la vista `VALIDATING` donde aparece `Firmar y Emitir Dictamen`; no dejarlo en la papeleta de sólo lectura.
+- **Referencia:** BR-20260825-21, FND-20260825-23.
+
+## DEC-20260825-21 — Firmar mediante upload oficial Railway
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-25
+- **Decisión:** La firma no dependerá del filesystem Vercel. El PDF general se renderiza en memoria, se sube al backend Railway mediante `upload-only`, se firma allí y la salida se sirve por la resolución oficial de archivos.
+- **Referencia:** BR-20260825-22, FND-20260825-25.
+
 ## DEC-20260825-12 — Ruta rápida para cambios visuales menores
 
 - **Estado:** confirmed
@@ -296,3 +310,19 @@
 - **Ruta:** aplicar el delta mínimo directamente, ejecutar lint o test focal, y reportar; el build de Vercel se valida sólo después del push autorizado.
 - **Exclusiones:** cualquier cambio que toque comportamiento clínico, schema, API, persistencia, permisos o arquitectura conserva el flujo completo.
 - **Referencia:** BR-20260825-13.
+
+## DEC-20260826-01 — Consolidación por atención/cita
+
+- **Estado:** confirmed
+- **Fecha:** 2026-08-26
+- **Decisión de Frank:** El dictamen general y el ZIP deben consolidar todos los Events del trabajador ligados a la misma atención o cita, no sólo el Event actualmente abierto ni todo el histórico.
+- **Entregable:** mismo formato visual AMI para el dictamen general; carpeta y PDF/fuente por cada Event/estudio aplicable dentro del ZIP.
+- **Referencia:** BR-20260826-01, FND-20260826-02, OQ-20260826-01.
+
+## DEC-20260826-02 — Relación Appointment–MedicalEvent 1:N
+
+- **Estado:** confirmed / autorización explícita de migración
+- **Fecha:** 2026-08-26
+- **Decisión de Frank:** Autorizar la migración del schema para permitir múltiples `MedicalEvent` asociados a una misma `Appointment` mediante `appointmentId` no único.
+- **Límites:** conservar registros existentes, no borrar datos, validar referencias antes/después y no ejecutar producción irreversible sin backup/verificación y gate autorizado.
+- **Referencia:** BR-20260826-01, OQ-20260826-02, FND-20260826-02.
