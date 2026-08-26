@@ -223,7 +223,8 @@ export default function EventFlowController({
                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Recomendaciones</label>
                                 <textarea
                                     ref={recRef}
-                                    className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                                    className="w-full min-h-[480px] border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-y"
+                                    rows={20}
                                     placeholder="Ej: Uso de protección auditiva..."
                                     defaultValue={verdictData?.recommendations}
                                     onChange={() => { userTouchedRecRef.current = true }}
