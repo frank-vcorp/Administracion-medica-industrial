@@ -5,15 +5,17 @@
  *     - `01_Dictamen_General/dictamen-general.pdf` ← ExamenMedicoValidatedPDF.
  *     - Una carpeta por estudio aplicable con:
  *         · `dictamen-<slug>.txt` ← texto estructurado (slot + IA + fuente).
- *         · `fuente-<basename>` ← archivo fuente original desde disco si existe.
+ *         · `fuente-<basename>` ← archivo fuente original resuelto
+ *           desde el backend oficial `/api/files/{key}` (Railway/S3).
  *     - `manifest.txt` con Event, archivos incluidos y fuentes ausentes.
  *
  *   El dictamen general se reutiliza desde `generateExamenMedicoValidatedPdf`
- *   (FEATURE-20260825-03). Las fuentes se leen desde `uploads/<fileUrl>` con
- *   la misma convención que el resto del repo (paridad con
- *   `/api/pdf/examen-medico/[eventId]`).
+ *   (FEATURE-20260825-03). Las fuentes se obtienen vía HTTP desde el
+ *   backend oficial (mismo path que el visor embebido), NO desde
+ *   filesystem local — Vercel no comparte filesystem con Railway/S3.
  *
  * @id IMPL-FEATURE-20260825-04
+ * @id IMPL-20260826-05 (FIX: fuente vía backend `/api/files`, no FS Vercel)
  * @backup context/SPECs/SPEC-FEATURE-20260825-04-ZIP-CIERRE-CLINICO.md
  *
  * Reglas (SPEC §Reglas):
@@ -21,17 +23,17 @@
  *   - Fuente ausente: manifestar `NO_DISPONIBLE`, no inventar.
  *   - Reutiliza helpers/rutas existentes; sin almacenamiento persistente nuevo.
  *   - Manifest siempre presente, aunque falten todas las fuentes.
+ *   - Defensa contra SSRF: `resolveBackendFileUrl` rechaza URLs con
+ *     esquema (http/https/s3) y paths con `..`. Sólo construye URLs
+ *     absolutas a partir de una `baseUrl` controlada por configuración.
  */
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
 import prisma from '@/lib/prisma'
 import { buildZip, type ZipEntry } from '@/lib/zip-store'
 import {
   generateExamenMedicoValidatedPdf,
   buildExamenMedicoPdfData,
 } from '@/lib/examen-medico-pdf'
-
-const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
+import { dictamenBackendUrl } from '@/lib/dictamen-pdf'
 
 /** Roles clínicos autorizados (SPEC §Reglas). */
 export const CLINICAL_ROLES = new Set<string>([
@@ -608,9 +610,10 @@ export async function buildCierreClinicoZip(
       data: new TextEncoder().encode(dictamenText),
     })
 
-    // Fuente original: intentar leer desde disco, si no → placeholder.
+    // Fuente original: intentar leer vía backend `/api/files/{key}`,
+    // si no → placeholder. IMPL-20260826-05 — sin filesystem Vercel.
     const sourcePath = `${folder}/fuente-${slug}${sourceExt(it.fileUrl)}`
-    const sourceBytes = await tryReadSource(it.fileUrl)
+    const sourceBytes = await tryReadSourceFromBackend(it.fileUrl)
     if (sourceBytes) {
       entries.push({ path: sourcePath, data: sourceBytes })
       manifestStudies.push({
@@ -687,16 +690,92 @@ function sourceExt(fileUrl: string | null | undefined): string {
   return '.bin'
 }
 
-/** Lee un archivo desde `uploads/<fileUrl>`. Si no existe, devuelve null. */
-async function tryReadSource(
+/**
+ * IMPL-20260826-05 (FIX ZIP cierre clínico):
+ * Resuelve un `fileUrl` (lo que viene persistido en `eventTest.fileUrl`)
+ * a una URL absoluta del backend oficial `/api/files/{key}`.
+ *
+ * Acepta y normaliza:
+ *   - `"/api/files/foo.pdf"`         → "<base>/api/files/foo.pdf"
+ *   - `"/uploads/foo.pdf"`           → "<base>/api/files/foo.pdf" (legacy)
+ *   - `"foo.pdf"`                    → "<base>/api/files/foo.pdf"
+ *   - `"subdir/foo.pdf"`             → "<base>/api/files/subdir/foo.pdf"
+ *
+ * Rechaza (devuelve `null`):
+ *   - URLs con esquema (`http://`, `https://`, `s3://`, etc.) — defensa SSRF.
+ *     Las presigned URLs ya consumidas no deben re-fetche-arse.
+ *   - Paths con `..` (path traversal).
+ *   - `null`/`undefined`/string vacío.
+ *   - Otros paths absolutos que no reconocemos (defensa).
+ *
+ * @param fileUrl   Valor de `eventTest.fileUrl` (o equivalente).
+ * @param baseUrl   URL base del backend (sin trailing slash). Por defecto
+ *                 `dictamenBackendUrl()` (lee `NEXT_PUBLIC_API_URL`).
+ * @returns URL absoluta segura para `fetch`, o `null` si es inválida.
+ */
+export function resolveBackendFileUrl(
   fileUrl: string | null | undefined,
+  baseUrl: string = dictamenBackendUrl(),
+): string | null {
+  if (!fileUrl || typeof fileUrl !== 'string') return null
+  const trimmed = fileUrl.trim()
+  if (trimmed.length === 0) return null
+
+  // Defensa SSRF: rechazar cualquier URL con esquema (incluye presigned
+  // S3 ya usadas — no se re-fetche-an). Sólo construimos paths relativos.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return null
+  // Defensa path traversal.
+  if (trimmed.includes('..')) return null
+
+  // baseUrl puede traer trailing slash; normalizamos.
+  const base = baseUrl.replace(/\/+$/, '')
+
+  if (trimmed.startsWith('/api/files/')) {
+    return `${base}${trimmed}`
+  }
+  if (trimmed.startsWith('/uploads/')) {
+    const key = trimmed.slice('/uploads/'.length)
+    return `${base}/api/files/${key}`
+  }
+  if (trimmed.startsWith('/')) {
+    // Otro path absoluto no reconocido — rechazar defensa.
+    return null
+  }
+  // Path relativo: tratarlo como key.
+  return `${base}/api/files/${trimmed}`
+}
+
+/**
+ * IMPL-20260826-05 (FIX ZIP cierre clínico):
+ * Lee los bytes de una fuente desde el backend oficial `/api/files/{key}`
+ * vía HTTP. Reemplaza la versión anterior que leía de filesystem
+ * local (`<repo>/uploads/`), la cual falla en Vercel (no comparte
+ * FS con Railway/S3).
+ *
+ * Devuelve `null` si:
+ *   - `fileUrl` es inválido (`resolveBackendFileUrl` lo rechaza).
+ *   - El backend responde 4xx/5xx (incluyendo 404 NoSuchKey).
+ *   - La red falla o el body no se puede leer.
+ *
+ * NO loguea URLs presigned ni keys; sólo registra `null` en el manifest
+ * para que el médico sepa que la fuente no se pudo recuperar.
+ *
+ * @param fileUrl   `eventTest.fileUrl`.
+ * @param baseUrl   URL base del backend. Por defecto `dictamenBackendUrl()`.
+ * @param fetchImpl Override para tests (inyección de dependencia). Por
+ *                  defecto `globalThis.fetch` (runtime estándar).
+ */
+export async function tryReadSourceFromBackend(
+  fileUrl: string | null | undefined,
+  baseUrl: string = dictamenBackendUrl(),
+  fetchImpl: typeof fetch = (...args) => globalThis.fetch(...args),
 ): Promise<Uint8Array | null> {
-  if (!fileUrl) return null
-  // Defensa: nunca aceptar paths absolutos ni con traversal.
-  if (fileUrl.startsWith('/') || fileUrl.includes('..')) return null
-  const filePath = path.join(REPO_UPLOAD_DIR, fileUrl)
+  const url = resolveBackendFileUrl(fileUrl, baseUrl)
+  if (!url) return null
   try {
-    const buf = await readFile(filePath)
+    const res = await fetchImpl(url, { cache: 'no-store' })
+    if (!res.ok) return null
+    const buf = await res.arrayBuffer()
     return new Uint8Array(buf)
   } catch {
     return null

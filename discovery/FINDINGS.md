@@ -355,3 +355,12 @@
 - **Evidencia:** producción devuelve `EROFS: read-only file system, open '/var/task/uploads/dictamen-...pdf'` al firmar.
 - **Causa:** el frontend Vercel y el backend firmador Railway no comparten filesystem; el helper intenta escribir en `/var/task/uploads`.
 - **Corrección:** renderizar en memoria, subir el PDF temporal al backend mediante el endpoint oficial `upload-only`, firmarlo allí y resolver la salida firmada mediante la ruta de archivos del backend.
+
+## FND-20260826-01 — Pantalla post-firma vacía y dictamen general incompleto
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT P1
+- **Evidencia:** captura de Frank, 2026-08-26. Después de firmar, la URL conserva `view=VALIDATING` mientras el Event queda `COMPLETED`; la sección de flujo desaparece. El PDF firmado muestra sólo identificación, conclusión y recomendaciones, sin membrete/estructura del entregable AMI ni resumen de los estudios adicionales.
+- **Causa UI:** `events/[id]/page.tsx` exige `activeView === event.status` para renderizar `EventFlowController`; tras firmar, `activeView=VALIDATING` y `event.status=COMPLETED`.
+- **Causa documental a verificar:** el dictamen general renderizado no está incluyendo los estudios/resúmenes requeridos por `BR-20260825-17`/`BR-20260825-18` y no reproduce el membrete/layout funcional del entregable AMI.
+- **Alcance:** corregir la vista post-firma y completar el dictamen general con membrete, estudios aplicables y datos disponibles sin inventar resultados. El ZIP conserva las carpetas; no deben confundirse con el PDF individual.
+- **Referencia:** BR-20260825-17, BR-20260825-18, FND-20260825-19, FND-20260825-20.

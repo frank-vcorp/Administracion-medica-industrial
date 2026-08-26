@@ -2,6 +2,7 @@
  * @file Tests focales V1 para los helpers puros de `zip-cierre-clinico`.
  *
  * @id IMPL-FEATURE-20260825-04
+ * @id IMPL-20260826-05 (FIX fuente vía backend `/api/files`, no FS Vercel)
  * @backup context/SPECs/SPEC-FEATURE-20260825-04-ZIP-CIERRE-CLINICO.md
  *
  * Cubre:
@@ -12,18 +13,27 @@
  *   - `buildManifest`: estructura estable, leyenda NO_DISPONIBLE,
  *     listado de studies, Event/universalId/workerName correctos.
  *   - `CLINICAL_ROLES`: SUPERADMIN/DOCTOR_GENERAL/DOCTOR_VALIDATOR.
+ *   - `resolveBackendFileUrl` (FIX IMPL-20260826-05): mapea
+ *     `/api/files/...`, `/uploads/...` y paths relativos a URL absoluta
+ *     del backend; rechaza URLs con esquema (defensa SSRF) y path
+ *     traversal.
+ *   - `tryReadSourceFromBackend` (FIX IMPL-20260826-05): lee bytes vía
+ *     `fetch`, devuelve `null` ante 4xx/5xx/red. Sustituye la versión
+ *     anterior basada en filesystem.
  *
- * NO se prueba aquí el builder completo (que requiere Prisma + FS);
+ * NO se prueba aquí el builder completo (que requiere Prisma);
  * la ruta se prueba por separado en
  * `frontend/src/app/api/zip/clinical-closure/[eventId]/__tests__/route.test.ts`.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   buildManifest,
   buildStudyDictamenText,
   CLINICAL_ROLES,
   folderName,
+  resolveBackendFileUrl,
   slugify,
+  tryReadSourceFromBackend,
 } from '@/lib/zip-cierre-clinico'
 
 describe('IMPL-FEATURE-20260825-04: zip-cierre-clinico — slugify', () => {
@@ -209,5 +219,203 @@ describe('IMPL-FEATURE-20260825-04: zip-cierre-clinico — buildManifest', () =>
     expect(out).not.toMatch(/C[eé]dula/i)
     expect(out).not.toMatch(/Firma/i)
     expect(out).not.toMatch(/12345678/)
+  })
+})
+
+// ────────────────────────────────────────────────────────────────────────
+// IMPL-20260826-05: FIX fuente ZIP vía backend `/api/files`, no FS Vercel.
+// ────────────────────────────────────────────────────────────────────────
+describe('IMPL-20260826-05: resolveBackendFileUrl', () => {
+  const BASE = 'https://api.medicaindustrial.com'
+
+  it('mapea /api/files/<key> a URL absoluta', () => {
+    expect(resolveBackendFileUrl('/api/files/foo.pdf', BASE))
+      .toBe('https://api.medicaindustrial.com/api/files/foo.pdf')
+  })
+
+  it('mapea /uploads/<key> (legacy) a /api/files/<key>', () => {
+    expect(resolveBackendFileUrl('/uploads/foo.pdf', BASE))
+      .toBe('https://api.medicaindustrial.com/api/files/foo.pdf')
+  })
+
+  it('mapea un basename/key relativo a /api/files/<key>', () => {
+    expect(resolveBackendFileUrl('foo.pdf', BASE))
+      .toBe('https://api.medicaindustrial.com/api/files/foo.pdf')
+  })
+
+  it('preserva subcarpetas dentro de /api/files/<subdir>/<key>', () => {
+    expect(resolveBackendFileUrl('/api/files/companies/public/x/c.pdf', BASE))
+      .toBe(
+        'https://api.medicaindustrial.com/api/files/companies/public/x/c.pdf',
+      )
+  })
+
+  it('preserva subcarpetas dentro de paths relativos', () => {
+    expect(resolveBackendFileUrl('espirometry-pdfs/review-1.pdf', BASE))
+      .toBe(
+        'https://api.medicaindustrial.com/api/files/espirometry-pdfs/review-1.pdf',
+      )
+  })
+
+  it('normaliza trailing slash en baseUrl', () => {
+    expect(resolveBackendFileUrl('/api/files/foo.pdf', BASE + '/'))
+      .toBe('https://api.medicaindustrial.com/api/files/foo.pdf')
+    expect(resolveBackendFileUrl('/api/files/foo.pdf', BASE + '///'))
+      .toBe('https://api.medicaindustrial.com/api/files/foo.pdf')
+  })
+
+  // ── Defensa SSRF: rechaza URLs absolutas con esquema ──────────────────
+  it('RECHAZA URLs absolutas http://, https://, s3://, etc. (defensa SSRF)', () => {
+    expect(resolveBackendFileUrl('https://bucket.s3.amazonaws.com/foo.pdf', BASE))
+      .toBeNull()
+    expect(resolveBackendFileUrl('http://localhost:8000/api/files/foo.pdf', BASE))
+      .toBeNull()
+    expect(resolveBackendFileUrl('s3://bucket/foo.pdf', BASE))
+      .toBeNull()
+    expect(resolveBackendFileUrl('file:///etc/passwd', BASE))
+      .toBeNull()
+    expect(resolveBackendFileUrl('ftp://evil.com/x', BASE))
+      .toBeNull()
+  })
+
+  // ── Defensa path traversal ────────────────────────────────────────────
+  it('RECHAZA paths con traversal ".."', () => {
+    expect(resolveBackendFileUrl('../etc/passwd', BASE)).toBeNull()
+    expect(resolveBackendFileUrl('/api/files/../etc/passwd', BASE)).toBeNull()
+    expect(resolveBackendFileUrl('/uploads/../etc/passwd', BASE)).toBeNull()
+  })
+
+  it('RECHAZA inputs vacíos / no-string', () => {
+    expect(resolveBackendFileUrl(null, BASE)).toBeNull()
+    expect(resolveBackendFileUrl(undefined, BASE)).toBeNull()
+    expect(resolveBackendFileUrl('', BASE)).toBeNull()
+    expect(resolveBackendFileUrl('   ', BASE)).toBeNull()
+  })
+
+  it('RECHAZA paths absolutos no reconocidos (defensa)', () => {
+    expect(resolveBackendFileUrl('/etc/passwd', BASE)).toBeNull()
+    expect(resolveBackendFileUrl('/random/path', BASE)).toBeNull()
+  })
+})
+
+describe('IMPL-20260826-05: tryReadSourceFromBackend', () => {
+  const BASE = 'https://api.medicaindustrial.com'
+
+  it('descarga bytes cuando el backend responde 200', async () => {
+    const fakeBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]) // %PDF
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(fakeBytes.buffer),
+    })
+    const result = await tryReadSourceFromBackend(
+      '/api/files/audiometria.pdf',
+      BASE,
+      fetchMock,
+    )
+    expect(result).not.toBeNull()
+    expect(Array.from(result!)).toEqual([0x25, 0x50, 0x44, 0x46])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    // Verificamos que llamó a la URL absoluta correcta.
+    expect(fetchMock.mock.calls[0][0])
+      .toBe('https://api.medicaindustrial.com/api/files/audiometria.pdf')
+  })
+
+  it('envía cache: "no-store" para evitar caché obsoleta del CDN', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    })
+    await tryReadSourceFromBackend(
+      '/api/files/x.pdf',
+      BASE,
+      fetchMock,
+    )
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect(init.cache).toBe('no-store')
+  })
+
+  it('devuelve null cuando el backend responde 404', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+    })
+    const result = await tryReadSourceFromBackend(
+      '/api/files/missing.pdf',
+      BASE,
+      fetchMock,
+    )
+    expect(result).toBeNull()
+  })
+
+  it('devuelve null cuando el backend responde 5xx', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+    })
+    const result = await tryReadSourceFromBackend(
+      '/api/files/x.pdf',
+      BASE,
+      fetchMock,
+    )
+    expect(result).toBeNull()
+  })
+
+  it('devuelve null cuando la red falla (fetch throw)', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'))
+    const result = await tryReadSourceFromBackend(
+      '/api/files/x.pdf',
+      BASE,
+      fetchMock,
+    )
+    expect(result).toBeNull()
+  })
+
+  it('NO intenta fetch si fileUrl es inválido (defensa SSRF)', async () => {
+    const fetchMock = vi.fn()
+    const result = await tryReadSourceFromBackend(
+      'https://bucket.s3.amazonaws.com/foo.pdf',
+      BASE,
+      fetchMock,
+    )
+    expect(result).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('NO intenta fetch si fileUrl es null/undefined', async () => {
+    const fetchMock = vi.fn()
+    expect(await tryReadSourceFromBackend(null, BASE, fetchMock)).toBeNull()
+    expect(await tryReadSourceFromBackend(undefined, BASE, fetchMock)).toBeNull()
+    expect(await tryReadSourceFromBackend('', BASE, fetchMock)).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('convierte /uploads/<key> legacy antes de fetch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    })
+    await tryReadSourceFromBackend(
+      '/uploads/legacy/foo.pdf',
+      BASE,
+      fetchMock,
+    )
+    expect(fetchMock.mock.calls[0][0])
+      .toBe('https://api.medicaindustrial.com/api/files/legacy/foo.pdf')
+  })
+
+  it('acepta keys relativas con subcarpetas', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    })
+    await tryReadSourceFromBackend(
+      'espirometry-pdfs/review-1.pdf',
+      BASE,
+      fetchMock,
+    )
+    expect(fetchMock.mock.calls[0][0])
+      .toBe(
+        'https://api.medicaindustrial.com/api/files/espirometry-pdfs/review-1.pdf',
+      )
   })
 })

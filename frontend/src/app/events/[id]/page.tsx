@@ -20,6 +20,7 @@ import {
   fetchEventPageData,
   type EventPageData,
 } from './_lib/event-page-data'
+import { shouldRenderEventFlowController } from './_lib/event-flow-visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -211,7 +212,15 @@ function EventView({ data }: EventViewProps) {
       )}
 
       {/* 4. Flow Controller Section (Fuera de Estudios, ya que Paso 3 ahora vive dentro de la papeleta) */}
-      {activeView === event.status && event.status !== 'IN_PROGRESS' && (
+      {/* IMPL-20260826-03 (FIX pantalla blanca post-firma, Frank 2026-08-26):
+          La lógica vive en `_lib/event-flow-visibility.ts` (test focal) para
+          poder cubrirla sin DOM ni Next runtime. Resumen del contrato:
+            * IN_PROGRESS → NUNCA (workspace ocupa el área).
+            * status=X, activeView=X → sí (legacy).
+            * status=COMPLETED, activeView=VALIDATING → sí (FIX: URL
+              desincronizada tras firmar). Cualquier otro activeView para
+              COMPLETED → no (usuario navegó hacia atrás). */}
+      {shouldRenderEventFlowController(activeView, event.status) && (
         <EventFlowController
           eventId={serializedEventId}
           currentStatus={serializedStatus}
