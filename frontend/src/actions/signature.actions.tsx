@@ -5,32 +5,45 @@ import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import {
-  renderDictamenInputToDisk,
+  renderDictamenInputToMemory,
   dictamenInputFileName,
   dictamenSignedFileName,
+  dictamenBackendUrl,
 } from '@/lib/dictamen-pdf'
 
 /**
  * @id IMPL-20260225-03
  * @fix FIX-20260225-03
+ *
  * Server Action para firmar un dictamen médico (PDF).
  *
- * IMPL-FEATURE-20260825-03 ronda 7 (FND-20260825-24):
- * corrige el flujo completo para que el PDF de entrada exista antes
- * de llamar al firmador backend (`/api/v1/sign-pdf`). Pasos:
+ * IMPL-FEATURE-20260825-03 ronda 8 (FND-20260825-25 / DEC-20260825-21 /
+ * BR-20260825-22): corrige el flujo completo para que NO se escriba
+ * en el filesystem de Vercel (`/var/task/uploads/`, read-only). El
+ * PDF de entrada se renderiza en memoria, se sube al backend Railway
+ * vía `POST /api/v1/upload-only` con FormData + key basename segura,
+ * y luego se firma vía `POST /api/v1/sign-pdf` con ese basename. El
+ * resultado se persiste como `MedicalVerdict.pdfUrl = signedKey`
+ * (basename) — la descarga legacy lo resuelve vía `GET /api/files/
+ * {key}` del backend (redirección a URL presigned en S3 o stream
+ * local).
+ *
+ * Pasos:
  *   1. Sesión activa OBLIGATORIA (auth). Sin sesión → 401.
  *   2. Resolver Event + Verdict + Estudios + Laboratorios + Validador
  *      desde Prisma (snapshot congelado).
- *   3. Validar que existe Verdict con `finalDiagnosis` persistido.
- *   4. Renderizar `<MedicalDictamenPDF>` con `renderToBuffer`.
- *   5. Escribir el PDF de entrada al directorio compartido con el
- *      backend (`<repo>/uploads/dictamen-<eventId>-<ts>.pdf`).
- *   6. POST a `/api/v1/sign-pdf` con `input_pdf=<basename>` y
- *      `output_pdf=<basename>` (el backend rechaza path traversal).
+ *   3. Validar que existe Verdict con `finalDiagnosis` y validador con
+ *      `fullName` (identidad congelada).
+ *   4. Renderizar `<MedicalDictamenPDF>` en memoria (sin disco).
+ *   5. POST `/api/v1/upload-only` con FormData(`file=<Blob>`,
+ *      `key=<inputBasename>`) → backend persiste.
+ *   6. POST `/api/v1/sign-pdf` con `input_pdf=<inputBasename>` y
+ *      `output_pdf=<outputBasename>` → backend firma y devuelve
+ *      `output_pdf` (signedKey).
  *   7. Si el backend responde `success`, actualizar
- *      `MedicalVerdict.signatureHash`, `MedicalVerdict.pdfUrl`,
- *      `MedicalVerdict.signedAt` y `MedicalEvent.status = COMPLETED`.
- *      NO se toca `MedicalExam.physicalExamData` ni otros snapshots.
+ *      `MedicalVerdict.signatureHash`, `MedicalVerdict.pdfUrl =
+ *      signedKey`, `MedicalVerdict.signedAt` y
+ *      `MedicalEvent.status = COMPLETED`.
  *   8. Limpiar errores en logs; devolver `{success, ...}` a la UI.
  *
  * Guardrails:
@@ -39,9 +52,9 @@ import {
  *   - No inventa identidad: `validator.fullName` se lee del User
  *     persistido en el Verdict (snapshot congelado por el flujo
  *     `saveVerdict`).
- *   - No toca Audiometría/Espirometría ni el endpoint
- *     `/api/pdf/[eventId]` (legacy) ni la nueva AMI
+ *   - No toca Audiometría/Espirometría ni el endpoint AMI
  *     `/api/pdf/examen-medico/[eventId]`.
+ *   - Sin escritura en filesystem (Vercel-safe).
  *   - Sin cambios en schema Prisma.
  */
 export async function signMedicalDictamPDF(eventId: string) {
@@ -133,19 +146,15 @@ export async function signMedicalDictamPDF(eventId: string) {
       }
     }
 
-    // 3. Renderizar el dictamen general y escribirlo al directorio
-    // compartido con el backend. Antes de este fix el nombre del
-    // archivo se construía pero NUNCA se escribía → 404.
+    // 3. Renderizar el dictamen en MEMORIA (sin disco). Si el render
+    // falla, NO seguimos (sería pasarle al firmador un buffer vacío).
     const nowMs = Date.now()
     const inputFileName = dictamenInputFileName(event.id, nowMs)
     const expectedSignedFileName = dictamenSignedFileName(event.id)
 
+    let pdfBuffer: Buffer
     try {
-      // IMPL-FEATURE-20260825-03 ronda 7 (FND-20260825-24): el render es
-      // obligatorio. Si el FS es read-only o el helper falla, NO
-      // llamamos al firmador (eso era el bug original: input inexistente
-      // → 404).
-      await renderDictamenInputToDisk({
+      pdfBuffer = await renderDictamenInputToMemory({
         payload: {
           eventId: event.id,
           verdictId: event.verdict.id,
@@ -173,15 +182,10 @@ export async function signMedicalDictamPDF(eventId: string) {
             extractedData: l.extractedData,
           })),
         },
-        nowMs,
-        inputFileName,
       })
     } catch (renderErr) {
-      // IMPL-FEATURE-20260825-03 ronda 7: este try/catch es la
-      // diferencia clave vs. el bug FND-20260825-24. Antes el código
-      // seguía y llamaba al firmador con un input inexistente.
       console.error(
-        '[IMPL-FEATURE-20260825-03] Error renderizando/escribiendo el dictamen:',
+        '[IMPL-FEATURE-20260825-03] Error renderizando el dictamen:',
         renderErr,
       )
       return {
@@ -193,13 +197,69 @@ export async function signMedicalDictamPDF(eventId: string) {
       }
     }
 
-    // 4. Llamar al backend para firmar. El backend (`/api/v1/sign-pdf`)
-    // lee el archivo desde `/uploads/<basename>` (montado como
-    // `<repo>/uploads/` en Docker).
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-    let response: Response
+    const backendUrl = dictamenBackendUrl()
+
+    // 4. Subir el PDF temporal al backend (FND-20260825-25 /
+    // DEC-20260825-21). FormData con Blob + key basename segura.
+    const formData = new FormData()
+    // `BlobPart` exige `Uint8Array | ArrayBuffer | Blob | string`. El
+    // `Buffer` de Node es `Uint8Array`-compatible, pero TS puede quejarse
+    // según versión; casteamos a `Uint8Array` explícito.
+    formData.append(
+      'file',
+      new Blob([new Uint8Array(pdfBuffer)], { type: 'application/pdf' }),
+      inputFileName,
+    )
+    formData.append('key', inputFileName)
+
+    let uploadResponse: Response
     try {
-      response = await fetch(`${backendUrl}/api/v1/sign-pdf`, {
+      uploadResponse = await fetch(`${backendUrl}/api/v1/upload-only`, {
+        method: 'POST',
+        // NO Content-Type — fetch lo genera automáticamente con el
+        // boundary correcto para FormData.
+        body: formData,
+      })
+    } catch (uploadNetErr) {
+      console.error(
+        '[IMPL-FEATURE-20260825-03] Error de red en upload-only:',
+        uploadNetErr,
+      )
+      return {
+        success: false,
+        error:
+          uploadNetErr instanceof Error
+            ? `No se pudo contactar al backend para subir el PDF: ${uploadNetErr.message}`
+            : 'No se pudo contactar al backend para subir el PDF.',
+      }
+    }
+
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.json().catch(() => ({}))
+      return {
+        success: false,
+        error:
+          errorData.error ||
+          errorData.detail ||
+          `Error del backend al subir PDF (${uploadResponse.status}): ${uploadResponse.statusText}`,
+      }
+    }
+
+    const uploadResult = await uploadResponse.json()
+    if (uploadResult.status && uploadResult.status !== 'success') {
+      return {
+        success: false,
+        error:
+          uploadResult.error ||
+          uploadResult.message ||
+          'El backend rechazó el upload del PDF',
+      }
+    }
+
+    // 5. Llamar al firmador backend con los basenames canónicos.
+    let signResponse: Response
+    try {
+      signResponse = await fetch(`${backendUrl}/api/v1/sign-pdf`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -211,42 +271,39 @@ export async function signMedicalDictamPDF(eventId: string) {
           password: process.env.PDF_SIGN_PASSWORD || 'default1234',
         }),
       })
-    } catch (fetchErr) {
+    } catch (signNetErr) {
       console.error(
         '[IMPL-FEATURE-20260825-03] Error de red llamando a /api/v1/sign-pdf:',
-        fetchErr,
+        signNetErr,
       )
       return {
         success: false,
         error:
-          fetchErr instanceof Error
-            ? `No se pudo contactar al firmador: ${fetchErr.message}`
+          signNetErr instanceof Error
+            ? `No se pudo contactar al firmador: ${signNetErr.message}`
             : 'No se pudo contactar al firmador.',
       }
     }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      // El backend ya tiene los códigos de error:
-      //   404 = input PDF no existe
-      //   500 = fallo del firmador
-      // El detalle viene en `errorData.error` o `errorData.detail`.
+    if (!signResponse.ok) {
+      const errorData = await signResponse.json().catch(() => ({}))
       return {
         success: false,
         error:
           errorData.error ||
           errorData.detail ||
-          `Error del firmador (${response.status}): ${response.statusText}`,
+          `Error del firmador (${signResponse.status}): ${signResponse.statusText}`,
       }
     }
 
-    const result = await response.json()
+    const result = await signResponse.json()
 
     if (result.status === 'success') {
-      // 5. Persistir el snapshot firmado en `MedicalVerdict`.
-      // `pdfUrl` apunta SOLO al basename (sin prefijo `uploads/`):
-      // la ruta legacy `/api/pdf/[eventId]` lee `path.join(<repo>/uploads, verdict.pdfUrl)`.
-      const signedFileName =
+      // 6. Persistir el snapshot firmado en `MedicalVerdict`.
+      // `pdfUrl` apunta SOLO al basename (signedKey) — la descarga
+      // legacy `/api/pdf/[eventId]` lo resuelve vía `GET /api/files/
+      // {key}` del backend (redirección a S3 presigned o stream local).
+      const signedKey =
         typeof result.output_pdf === 'string' && result.output_pdf.length > 0
           ? result.output_pdf
           : expectedSignedFileName
@@ -261,8 +318,8 @@ export async function signMedicalDictamPDF(eventId: string) {
       await prisma.medicalVerdict.update({
         where: { eventId },
         data: {
-          signatureHash: result.signature_hash || signedFileName,
-          pdfUrl: signedFileName,
+          signatureHash: result.signature_hash || signedKey,
+          pdfUrl: signedKey,
           signedAt: new Date(),
         },
       })
@@ -274,7 +331,7 @@ export async function signMedicalDictamPDF(eventId: string) {
         success: true,
         message: 'Dictamen firmado exitosamente',
         pdfUrl: `/api/pdf/${event.id}`,
-        fileName: signedFileName,
+        fileName: signedKey,
       }
     }
 

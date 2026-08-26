@@ -1,34 +1,38 @@
 /**
  * @file Tests focales (V1) para la server action `signMedicalDictamPDF`.
  *
- * @id IMPL-FEATURE-20260825-03 (ronda 7 / FND-20260825-24)
- * @finding discovery/FINDINGS.md FND-20260825-24
+ * @id IMPL-FEATURE-20260825-03 (ronda 8 / FND-20260825-25)
+ * @finding discovery/FINDINGS.md FND-20260825-25
+ * @decision discovery/DECISIONS.md DEC-20260825-21
+ * @businessRule discovery/BUSINESS-RULES.md BR-20260825-22
  *
- * Cubre (integration con Prisma + fetch mockeados):
+ * Cubre (integración con Prisma + fetch mockeados):
  *   - Sin sesión → `success:false, error:'No autorizado'` (no
  *     auto-firma).
- *   - Event inexistente → error 404-friendly.
+ *   - Event inexistente → error.
  *   - Event sin verdict → error 'No hay dictamen para firmar'.
  *   - Event con verdict sin identidad del validador → error.
- *   - Flujo feliz (FND-20260825-24 cerrado):
+ *   - **REGRESIÓN FND-20260825-25** (ronda 8 — contrato upload-only +
+ *     sign-pdf):
  *     1) `signMedicalDictamPDF` resuelve Event + Verdict + Validador.
- *     2) Llama al helper `renderDictamenInputToDisk` con el snapshot
- *        (mockeamos el helper para no tocar FS real en los tests).
- *     3) POST a `/api/v1/sign-pdf` con `input_pdf=<basename>` y
+ *     2) Renderiza `<MedicalDictamenPDF>` en MEMORIA
+ *        (`renderToBuffer` sin disco — Vercel-safe).
+ *     3) POST `/api/v1/upload-only` con FormData(`file=<Blob>`,
+ *        `key=<basename>`) — el backend persiste.
+ *     4) POST `/api/v1/sign-pdf` con `input_pdf=<basename>`,
  *        `output_pdf=<basename>`.
- *     4) Si el backend responde `success`, actualiza
- *        `MedicalVerdict.signatureHash`, `MedicalVerdict.pdfUrl`,
- *        `MedicalVerdict.signedAt` y `MedicalEvent.status=COMPLETED`.
- *     5) Devuelve `{ success:true, fileName }`.
- *   - Si el render falla (FS read-only, p.ej. Vercel serverless), la
- *     action NO llama al firmador (ésta es la regresión del fix
- *     FND-20260825-24: antes el código seguía con un input inexistente).
- *   - Si el backend responde 404 (input no encontrado), la action
- *     devuelve el error sin corromper `MedicalVerdict`.
- *   - Si el backend responde con error genérico, la action devuelve
- *     el error sin corromper `MedicalVerdict`.
- *   - `MedicalVerdict` queda intacto cuando el firmador falla
+ *     5) Si el backend responde `success`, actualiza
+ *        `MedicalVerdict.{signatureHash, pdfUrl, signedAt}` y
+ *        `MedicalEvent.status='COMPLETED'`.
+ *     6) Devuelve `{ success:true, fileName }`.
+ *   - Si el render falla, NO se hace upload ni sign (Vercel-safe).
+ *   - Si el upload-only falla, NO se llama al firmador.
+ *   - Si el firmador responde 404, la action devuelve el error sin
+ *     corromper `MedicalVerdict`.
+ *   - `MedicalVerdict` queda intacto cuando el flujo falla
  *     (no se hace update).
+ *   - El output PDF no se escribe en filesystem Vercel
+ *     (`<repo>/uploads/`) — todo va al backend vía HTTP.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -38,7 +42,7 @@ const mockMedicalEventFindUnique = vi.fn()
 const mockMedicalEventUpdate = vi.fn()
 const mockMedicalVerdictUpdate = vi.fn()
 const mockRevalidatePath = vi.fn()
-const mockRenderDictamenInputToDisk = vi.fn()
+const mockRenderDictamenInputToMemory = vi.fn()
 const mockDictamenInputFileName = vi.fn()
 const mockDictamenSignedFileName = vi.fn()
 
@@ -61,15 +65,15 @@ vi.mock('next/cache', () => ({
   revalidatePath: (...a: unknown[]) => mockRevalidatePath(...a),
 }))
 vi.mock('@/lib/dictamen-pdf', () => ({
-  renderDictamenInputToDisk: (...a: unknown[]) =>
-    mockRenderDictamenInputToDisk(...a),
+  renderDictamenInputToMemory: (...a: unknown[]) =>
+    mockRenderDictamenInputToMemory(...a),
   dictamenInputFileName: (...a: unknown[]) =>
     mockDictamenInputFileName(...a),
   dictamenSignedFileName: (...a: unknown[]) =>
     mockDictamenSignedFileName(...a),
+  dictamenBackendUrl: () => 'http://localhost:8000',
 }))
 
-// `global.fetch` ya existe en Node 20+; lo mockeamos.
 const mockFetch = vi.fn()
 
 // Importamos DESPUÉS de los mocks.
@@ -128,13 +132,12 @@ beforeEach(() => {
   mockMedicalEventUpdate.mockReset()
   mockMedicalVerdictUpdate.mockReset()
   mockRevalidatePath.mockReset()
-  mockRenderDictamenInputToDisk.mockReset()
+  mockRenderDictamenInputToMemory.mockReset()
   mockDictamenInputFileName.mockReset()
   mockDictamenSignedFileName.mockReset()
   mockFetch.mockReset()
 
-  // Helpers por defecto (los tests pueden sobrescribir con
-  // mockReturnValue).
+  // Helpers por defecto (los tests pueden sobrescribir con mockReturnValue).
   mockDictamenInputFileName.mockImplementation(
     (eventId: string, nowMs: number) =>
       `dictamen-${eventId}-${nowMs}.pdf`,
@@ -142,29 +145,14 @@ beforeEach(() => {
   mockDictamenSignedFileName.mockImplementation(
     (eventId: string) => `dictamen-${eventId}-signed.pdf`,
   )
-  mockRenderDictamenInputToDisk.mockResolvedValue({
-    buffer: Buffer.from('%PDF-1.4 mock'),
-    absolutePath: '/repo/uploads/dictamen-event-1-1700000000000.pdf',
-    fileName: 'dictamen-event-1-1700000000000.pdf',
-    payload: {
-      signedAt: new Date(),
-      eventId: 'event-1',
-      worker: { firstName: 'Juan', lastName: 'Pérez', universalId: 'U-001' },
-      company: { name: 'ACME S.A.' },
-      finalDiagnosis: 'Sano.',
-      recommendations: '1.- Hábitos.',
-      validator: { fullName: 'Dra. María González' },
-      id: 'verdict-1',
-      studies: [],
-      labs: [],
-    },
-  })
+  mockRenderDictamenInputToMemory.mockResolvedValue(
+    Buffer.from('%PDF-1.4 mock'),
+  )
 
-  // Stub global fetch.
   global.fetch = mockFetch as unknown as typeof fetch
 })
 
-describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-20260825-24)', () => {
+describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 8 (FND-20260825-25)', () => {
   // ─── Auth ─────────────────────────────────────────────────────────────
   it('sin sesión → 401 (no auto-firma)', async () => {
     setSession(null)
@@ -172,12 +160,12 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
     expect(res.success).toBe(false)
     expect(res.error).toBe('No autorizado')
     expect(mockMedicalEventFindUnique).not.toHaveBeenCalled()
-    expect(mockRenderDictamenInputToDisk).not.toHaveBeenCalled()
+    expect(mockRenderDictamenInputToMemory).not.toHaveBeenCalled()
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
   // ─── Lookup failures ──────────────────────────────────────────────────
-  it('event inexistente → error sin renderizar PDF ni llamar firmador', async () => {
+  it('event inexistente → error sin renderizar PDF ni llamar upload/sign', async () => {
     setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
     mockMedicalEventFindUnique.mockResolvedValue(null)
 
@@ -185,11 +173,11 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
 
     expect(res.success).toBe(false)
     expect(res.error).toBe('Evento no encontrado')
-    expect(mockRenderDictamenInputToDisk).not.toHaveBeenCalled()
+    expect(mockRenderDictamenInputToMemory).not.toHaveBeenCalled()
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('event sin verdict → error sin renderizar PDF ni llamar firmador', async () => {
+  it('event sin verdict → error sin renderizar PDF ni llamar upload/sign', async () => {
     setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
     mockMedicalEventFindUnique.mockResolvedValue(
       makeBaseEvent({ verdict: null }),
@@ -199,7 +187,7 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
 
     expect(res.success).toBe(false)
     expect(res.error).toBe('No hay dictamen para firmar')
-    expect(mockRenderDictamenInputToDisk).not.toHaveBeenCalled()
+    expect(mockRenderDictamenInputToMemory).not.toHaveBeenCalled()
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
@@ -218,23 +206,36 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
 
     expect(res.success).toBe(false)
     expect(res.error).toMatch(/identidad/i)
-    expect(mockRenderDictamenInputToDisk).not.toHaveBeenCalled()
+    expect(mockRenderDictamenInputToMemory).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  // ─── Regresión FND-20260825-24 (caso feliz) ────────────────────────────
-  it('REGRESIÓN FND-20260825-24: flujo feliz — renderiza input, firma, persiste MedicalVerdict', async () => {
+  // ─── REGRESIÓN FND-20260825-25 (caso feliz — upload + sign) ────────────
+  it('REGRESIÓN FND-20260825-25: flujo feliz — render memoria → upload-only → sign-pdf → MedicalVerdict', async () => {
     setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
     mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
-    mockFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => ({
-        status: 'success',
-        output_pdf: 'dictamen-event-1-signed.pdf',
-        signature_hash: 'sha256:abc',
-      }),
-    } as unknown as Response)
+    // upload-only responde success, sign-pdf responde success.
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          status: 'success',
+          key: 'dictamen-event-1-1700000000000.pdf',
+          file_url: '/api/files/dictamen-event-1-1700000000000.pdf',
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          status: 'success',
+          output_pdf: 'dictamen-event-1-signed.pdf',
+          signature_hash: 'sha256:abc',
+        }),
+      } as unknown as Response)
     mockMedicalEventUpdate.mockResolvedValue({ id: 'event-1' })
     mockMedicalVerdictUpdate.mockResolvedValue({ eventId: 'event-1' })
 
@@ -244,33 +245,43 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
     expect(res.fileName).toBe('dictamen-event-1-signed.pdf')
     expect(res.pdfUrl).toBe('/api/pdf/event-1')
 
-    // 1. Se llamó al helper de render.
-    expect(mockRenderDictamenInputToDisk).toHaveBeenCalledTimes(1)
-    const renderCall = mockRenderDictamenInputToDisk.mock.calls[0][0]
+    // 1. Render se llamó con el snapshot del Verdict.
+    expect(mockRenderDictamenInputToMemory).toHaveBeenCalledTimes(1)
+    const renderCall = mockRenderDictamenInputToMemory.mock.calls[0][0]
     expect(renderCall.payload.eventId).toBe('event-1')
     expect(renderCall.payload.verdictId).toBe('verdict-1')
     expect(renderCall.payload.validator.fullName).toBe(
       'Dra. María González',
     )
-    expect(renderCall.payload.worker.firstName).toBe('Juan')
-    expect(renderCall.payload.worker.lastName).toBe('Pérez')
 
-    // 2. Se llamó al firmador con el basename del input.
-    expect(mockFetch).toHaveBeenCalledTimes(1)
-    const [url, init] = mockFetch.mock.calls[0]
-    expect(url).toMatch(/\/api\/v1\/sign-pdf$/)
-    const body = JSON.parse(init.body)
-    expect(body.input_pdf).toMatch(/^dictamen-event-1-\d+\.pdf$/)
-    expect(body.output_pdf).toBe('dictamen-event-1-signed.pdf')
-    expect(body.reason).toBe('Dictamen Médico AMI')
+    // 2. fetch se llamó DOS veces: upload-only + sign-pdf.
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    const [uploadUrl, uploadInit] = mockFetch.mock.calls[0]
+    expect(uploadUrl).toMatch(/\/api\/v1\/upload-only$/)
+    expect(uploadInit.method).toBe('POST')
+    expect(uploadInit.body).toBeInstanceOf(FormData)
+    // El FormData lleva `file` (Blob) y `key` (basename).
+    const formData = uploadInit.body as FormData
+    expect(formData.get('key')).toMatch(/^dictamen-event-1-\d+\.pdf$/)
+    expect(formData.get('file')).toBeInstanceOf(Blob)
 
-    // 3. Se actualizó MedicalEvent.status='COMPLETED'.
+    // NO Content-Type manual — fetch lo genera con boundary.
+    expect(uploadInit.headers).toBeUndefined()
+
+    const [signUrl, signInit] = mockFetch.mock.calls[1]
+    expect(signUrl).toMatch(/\/api\/v1\/sign-pdf$/)
+    const signBody = JSON.parse(signInit.body)
+    expect(signBody.input_pdf).toMatch(/^dictamen-event-1-\d+\.pdf$/)
+    expect(signBody.output_pdf).toBe('dictamen-event-1-signed.pdf')
+    expect(signBody.reason).toBe('Dictamen Médico AMI')
+
+    // 3. MedicalEvent.status='COMPLETED'.
     expect(mockMedicalEventUpdate).toHaveBeenCalledWith({
       where: { id: 'event-1' },
       data: { status: 'COMPLETED' },
     })
 
-    // 4. Se actualizó MedicalVerdict con hash + pdfUrl + signedAt.
+    // 4. MedicalVerdict con hash + pdfUrl (basename firmado) + signedAt.
     expect(mockMedicalVerdictUpdate).toHaveBeenCalledTimes(1)
     const updateArg = mockMedicalVerdictUpdate.mock.calls[0][0]
     expect(updateArg.where).toEqual({ eventId: 'event-1' })
@@ -278,17 +289,17 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
     expect(updateArg.data.pdfUrl).toBe('dictamen-event-1-signed.pdf')
     expect(updateArg.data.signedAt).toBeInstanceOf(Date)
 
-    // 5. Se revalidaron las páginas.
+    // 5. Revalidación.
     expect(mockRevalidatePath).toHaveBeenCalledWith('/portal/events')
     expect(mockRevalidatePath).toHaveBeenCalledWith('/events/event-1')
   })
 
-  // ─── REGRESIÓN: si el render falla, NO se llama al firmador ──────────
-  it('REGRESIÓN FND-20260825-24: si el render FALLA, NO se llama al firmador', async () => {
+  // ─── REGRESIÓN: si el render falla, NO se hace upload ni sign ──────────
+  it('REGRESIÓN FND-20260825-25: si el render FALLA, NO se sube ni se firma', async () => {
     setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
     mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
-    mockRenderDictamenInputToDisk.mockRejectedValueOnce(
-      new Error('EROFS: read-only filesystem'),
+    mockRenderDictamenInputToMemory.mockRejectedValueOnce(
+      new Error('MedicalDictamenPDF props inválidas'),
     )
 
     const res = await signMedicalDictamPDF('event-1')
@@ -300,18 +311,79 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
     expect(mockMedicalEventUpdate).not.toHaveBeenCalled()
   })
 
-  // ─── Backend 404 (input no encontrado) ─────────────────────────────────
-  it('backend 404 → error devuelto sin corromper MedicalVerdict', async () => {
+  // ─── REGRESIÓN: si upload-only falla, NO se llama al firmador ──────────
+  it('REGRESIÓN FND-20260825-25: si upload-only FALLA, NO se llama al firmador', async () => {
     setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
     mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
-    mockFetch.mockResolvedValue({
+    mockFetch.mockResolvedValueOnce({
       ok: false,
-      status: 404,
-      statusText: 'Not Found',
+      status: 500,
+      statusText: 'Internal Server Error',
       json: async () => ({
-        detail: 'Archivo no encontrado: dictamen-event-1-1700000000000.pdf',
+        error: 'No se pudo persistir el archivo',
       }),
     } as unknown as Response)
+
+    const res = await signMedicalDictamPDF('event-1')
+
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/No se pudo persistir el archivo/)
+    // Sólo se llamó a upload-only; sign-pdf nunca se invoca.
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockMedicalVerdictUpdate).not.toHaveBeenCalled()
+  })
+
+  it('upload-only status="error" → error devuelto', async () => {
+    setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
+    mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        status: 'error',
+        error: 'key inválida (path traversal o absoluta no permitida)',
+      }),
+    } as unknown as Response)
+
+    const res = await signMedicalDictamPDF('event-1')
+
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/key inválida/)
+    expect(mockMedicalVerdictUpdate).not.toHaveBeenCalled()
+  })
+
+  it('upload-only network error → error devuelto', async () => {
+    setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
+    mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
+    mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED upload'))
+
+    const res = await signMedicalDictamPDF('event-1')
+
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/ECONNREFUSED|No se pudo contactar al backend/)
+    expect(mockMedicalVerdictUpdate).not.toHaveBeenCalled()
+  })
+
+  // ─── sign-pdf 404 (input no encontrado) ─────────────────────────────────
+  it('sign-pdf 404 → error devuelto sin corromper MedicalVerdict', async () => {
+    setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
+    mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ status: 'success', key: 'dictamen-event-1-1.pdf' }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        json: async () => ({
+          detail: 'Archivo no encontrado: dictamen-event-1-1.pdf',
+        }),
+      } as unknown as Response)
 
     const res = await signMedicalDictamPDF('event-1')
 
@@ -321,41 +393,26 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
     expect(mockMedicalEventUpdate).not.toHaveBeenCalled()
   })
 
-  // ─── Backend status=error ──────────────────────────────────────────────
-  it('backend status="error" → error devuelto sin corromper MedicalVerdict', async () => {
-    setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
-    mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
-    mockFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => ({
-        status: 'error',
-        error: 'Certificado autofirmado expirado',
-      }),
-    } as unknown as Response)
-
-    const res = await signMedicalDictamPDF('event-1')
-
-    expect(res.success).toBe(false)
-    expect(res.error).toBe('Certificado autofirmado expirado')
-    expect(mockMedicalVerdictUpdate).not.toHaveBeenCalled()
-  })
-
   // ─── Backend sin output_pdf (usa el fallback canónico) ────────────────
-  it('backend sin output_pdf → usa el fallback dictamen-<eventId>-signed.pdf', async () => {
+  it('sign-pdf sin output_pdf → usa el fallback dictamen-<eventId>-signed.pdf', async () => {
     setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
     mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
-    mockFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => ({
-        status: 'success',
-        signature_hash: 'sha256:fallback',
-        // sin output_pdf
-      }),
-    } as unknown as Response)
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ status: 'success', key: 'dictamen-event-1-1.pdf' }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          status: 'success',
+          signature_hash: 'sha256:fallback',
+        }),
+      } as unknown as Response)
     mockMedicalEventUpdate.mockResolvedValue({})
     mockMedicalVerdictUpdate.mockResolvedValue({})
 
@@ -368,22 +425,42 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 7 (FND-2026082
     )
   })
 
-  // ─── Network error ─────────────────────────────────────────────────────
-  it('error de red llamando al firmador → error devuelto', async () => {
+  // ─── Identity: no se inventa validator.fullName ────────────────────────
+  it('NO inventa identidad: validator.fullName del snapshot del Verdict', async () => {
     setSession({ id: 'doctor-1', role: 'DOCTOR_GENERAL' })
-    mockMedicalEventFindUnique.mockResolvedValue(makeBaseEvent())
-    mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'))
+    mockMedicalEventFindUnique.mockResolvedValue(
+      makeBaseEvent({
+        verdict: {
+          ...makeBaseEvent().verdict,
+          validator: {
+            ...makeBaseEvent().verdict.validator,
+            fullName: 'Dr. Snapshot Real',
+          },
+        },
+      }),
+    )
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'success',
+          output_pdf: 'dictamen-event-1-signed.pdf',
+          signature_hash: 'sha256:real',
+        }),
+      } as unknown as Response)
+    mockMedicalEventUpdate.mockResolvedValue({})
+    mockMedicalVerdictUpdate.mockResolvedValue({})
 
-    const res = await signMedicalDictamPDF('event-1')
+    await signMedicalDictamPDF('event-1')
 
-    expect(res.success).toBe(false)
-    expect(res.error).toMatch(/ECONNREFUSED|No se pudo contactar al firmador/)
-    expect(mockMedicalVerdictUpdate).not.toHaveBeenCalled()
-  })
-
-  // ─── Idempotencia: el helper de input filename usa timestamp ───────────
-  it('dictamenInputFileName se llama con eventId y timestamp (un nombre único)', () => {
-    mockDictamenInputFileName('event-1', 1700000000000)
-    expect(mockDictamenInputFileName).toHaveBeenCalledWith('event-1', 1700000000000)
+    const renderCall = mockRenderDictamenInputToMemory.mock.calls[0][0]
+    expect(renderCall.payload.validator.fullName).toBe('Dr. Snapshot Real')
+    expect(renderCall.payload.validator.fullName).not.toBe('Dr. Demo')
   })
 })

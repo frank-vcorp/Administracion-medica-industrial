@@ -1,28 +1,36 @@
 /**
  * @fileoverview Generador server-side del PDF del dictamen general
- *   (MedicalDictamenPDF), escritura en disco y builder del payload.
+ *   (MedicalDictamenPDF), builder del payload y nombres canónicos.
  *
- * @id IMPL-FEATURE-20260825-03 (ronda 7 / FND-20260825-24)
- * @finding discovery/FINDINGS.md FND-20260825-24
+ * @id IMPL-FEATURE-20260825-03 (ronda 8 / FND-20260825-25)
+ * @finding discovery/FINDINGS.md FND-20260825-25
+ * @decision discovery/DECISIONS.md DEC-20260825-21
+ * @businessRule discovery/BUSINESS-RULES.md BR-20260825-22
  *
- * IMPLEMENTATION_DEFECT observado en producción: `signMedicalDictamPDF`
- * construía el nombre del archivo temporal y llamaba a
- * `/api/v1/sign-pdf` sin haber renderizado el PDF, lo que provocaba
- * `404: Archivo no encontrado: dictamen-<eventId>-<timestamp>.pdf`.
+ * IMPLEMENTATION_DEFECT observado en producción (FND-20260825-25):
+ * la ronda 7 escribía el PDF temporal con `writeFile` en
+ * `<repo>/uploads/`, lo que funcionaba en local pero rompía en
+ * Vercel (`EROFS: read-only file system, open '/var/task/uploads/...'`).
+ * Vercel y Railway no comparten filesystem; el flujo de firma debe
+ * pasar por el contrato oficial del firmador:
  *
- * Corrección: este módulo concentra la lógica pura y testeable para
- * (1) construir el payload que necesita `MedicalDictamenPDF` desde los
- * snapshots de `MedicalEvent` + `MedicalVerdict`, (2) resolver los
- * nombres canónicos de archivos de entrada/salida (sin path
- * traversal), (3) renderizar a buffer y (4) escribir el PDF de
- * entrada al directorio compartido con el backend (`<repo>/uploads/`,
- * montado en Docker como `/uploads/`).
+ *   1. Renderizar el PDF en memoria (`renderToBuffer`).
+ *   2. POST `/api/v1/upload-only` con `FormData(file=<Blob>, key=<basename>)`
+ *      → backend persiste en su storage (local o S3, irrelevante
+ *      para el frontend).
+ *   3. POST `/api/v1/sign-pdf` con `input_pdf=<basename>` y
+ *      `output_pdf=<basename>` → backend firma y devuelve `output_pdf`
+ *      (signedKey).
+ *   4. La descarga legacy se resuelve vía `/api/files/{key}` del
+ *      backend (redirección a URL presigned en S3 o stream local).
+ *
+ * Este módulo NO escribe a disco. NO depende de `process.cwd()`.
  *
  * Patrón (paralelo a `examen-medico-pdf.tsx`, `espirometry-pdf.tsx`,
  * `audiometry-pdf.tsx`): helpers puros exportados + función async que
- * hace IO. El caller (`signature.actions.tsx`) orquesta el flujo
- * completo: helper → render → write → backend sign → persist
- * `MedicalVerdict.pdfUrl` (con el nombre firmado devuelto por el
+ * hace IO en memoria. El caller (`signature.actions.tsx`) orquesta
+ * el flujo completo: helper → upload-only → sign-pdf → persist
+ * `MedicalVerdict.pdfUrl` (con la key firmada devuelta por el
  * backend).
  *
  * Guardrails:
@@ -32,23 +40,20 @@
  *     snapshot de la sesión + User del Verdict (no inventa identidad).
  *   - NO toca Audiometría/Espirometría.
  *   - Sin cambios en schema Prisma.
+ *   - Sin escritura en filesystem (Vercel-safe).
  */
-import path from 'node:path'
-import { mkdir, writeFile } from 'node:fs/promises'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { MedicalDictamenPDF } from '@/components/pdf/MedicalDictamenPDF'
 
 /**
- * Directorio compartido con el backend (`/uploads/`). El backend en
- * Docker monta `<repo>/uploads/` como `/uploads/` y espera los PDFs
- * de entrada/salida en esa ruta. El frontend escribe/lee aquí para que
- * el backend pueda firmar y consumir el archivo firmado.
- *
- * Configurable vía `DICTAMEN_UPLOAD_DIR` para entornos serverless
- * (Vercel) donde `process.cwd()` no permite escapes a `../`.
+ * URL base del backend (Railway). Configurable vía
+ * `NEXT_PUBLIC_API_URL` (paridad con el resto del frontend).
+ * Fallback a localhost:8000 sólo para entornos de desarrollo local
+ * — en producción Vercel SIEMPRE se inyecta esta variable.
  */
-const REPO_UPLOAD_DIR =
-  process.env.DICTAMEN_UPLOAD_DIR ?? path.join(process.cwd(), '..', 'uploads')
+export function dictamenBackendUrl(): string {
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Tipos del builder
@@ -89,14 +94,14 @@ export interface BuildDictamenPayloadInput {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Helpers puros — testeables sin DOM ni FS
+// Helpers puros — testeables sin DOM ni FS ni red
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
  * Construye el nombre canónico del PDF temporal de entrada (sin
- * firmar). El backend (`/api/v1/sign-pdf`) busca este archivo en
- * `/uploads/<input_pdf>` y rechaza cualquier path que escape del
- * directorio compartido (security check en `os.path.basename`).
+ * firmar). El backend (`/api/v1/upload-only`) acepta la key como
+ * basename sin path traversal (defensa en `os.path.basename` y en
+ * `safe_key.startswith("/")` / `".." in safe_key.split("/")`).
  *
  * Formato: `dictamen-<eventId>-<timestampMs>.pdf`. El timestamp
  * garantiza unicidad cuando se firman varios eventos concurrentes.
@@ -131,9 +136,7 @@ export function sanitizeEventId(eventId: string): string {
 
 /**
  * Builder puro del payload que necesita `<MedicalDictamenPDF data={...}>`.
- * Concentrarlo aquí permite reutilizar desde la server action y desde
- * la ruta legacy `/api/pdf/[eventId]` si más adelante se quisiera
- * consolidar (paridad con `examen-medico-pdf.tsx`).
+ * Concentrarlo aquí permite reutilizar desde la server action.
  */
 export function buildDictamenPdfPayload(
   input: BuildDictamenPayloadInput,
@@ -164,85 +167,25 @@ export function buildDictamenPdfPayload(
   }
 }
 
-/**
- * Resuelve la ruta absoluta del directorio compartido (`<repo>/uploads/`
- * o el override `DICTAMEN_UPLOAD_DIR`). Pure wrapper para tests sin
- * tocar el FS.
- */
-export function dictamenSharedDir(): string {
-  return REPO_UPLOAD_DIR
-}
-
-/**
- * Resuelve la ruta absoluta del PDF de entrada. Helper para tests sin
- * FS.
- */
-export function dictamenInputPath(inputFileName: string): string {
-  return path.join(REPO_UPLOAD_DIR, inputFileName)
-}
-
-/**
- * Resuelve la ruta absoluta del PDF firmado. Helper para tests sin FS.
- */
-export function dictamenSignedPath(signedFileName: string): string {
-  return path.join(REPO_UPLOAD_DIR, signedFileName)
-}
-
 // ──────────────────────────────────────────────────────────────────────────
-// Render + persistencia (side effects)
+// Render (en memoria — sin disco)
 // ──────────────────────────────────────────────────────────────────────────
 
-export interface RenderDictamenInputToDiskInput {
+export interface RenderDictamenInputMemoryInput {
   /** Snapshot del evento + verdict ya resuelto por la server action. */
   payload: BuildDictamenPayloadInput
-  /** Timestamp ms para el nombre de archivo. */
-  nowMs: number
-  /** Nombre del archivo de entrada (default: `dictamenInputFileName(payload.eventId, nowMs)`). */
-  inputFileName?: string
-  /**
-   * Directorio compartido a usar (override para tests). Default:
-   * `dictamenSharedDir()` (`<repo>/uploads/`).
-   */
-  sharedDir?: string
-}
-
-export interface RenderDictamenInputToDiskResult {
-  /** Buffer PDF renderizado (útil para tests sin FS). */
-  buffer: Buffer
-  /** Ruta absoluta del archivo escrito. */
-  absolutePath: string
-  /** Sólo basename (lo que el backend acepta). */
-  fileName: string
-  /** Payload final pasado a `<MedicalDictamenPDF>` (para inspección). */
-  payload: ReturnType<typeof buildDictamenPdfPayload>
 }
 
 /**
- * Renderiza el dictamen general con `<MedicalDictamenPDF>` y lo escribe
- * al directorio compartido con el backend. El archivo queda listo
- * para que `/api/v1/sign-pdf` lo lea.
- *
- * Crea el directorio si no existe. Si el directorio está en un FS
- * read-only (Vercel serverless) lanza error — la caller decide si
- * persistir en otro backend o abortar.
+ * Renderiza el dictamen general con `<MedicalDictamenPDF>` en memoria.
+ * Devuelve el `Buffer` listo para subir al backend mediante
+ * `uploadOnlyDictamen` (FormData). No toca el filesystem.
  */
-export async function renderDictamenInputToDisk(
-  input: RenderDictamenInputToDiskInput,
-): Promise<RenderDictamenInputToDiskResult> {
-  const sharedDir = input.sharedDir ?? REPO_UPLOAD_DIR
-  const fileName = input.inputFileName
-    ?? dictamenInputFileName(input.payload.eventId, input.nowMs)
-
+export async function renderDictamenInputToMemory(
+  input: RenderDictamenInputMemoryInput,
+): Promise<Buffer> {
   const payload = buildDictamenPdfPayload(input.payload)
-  const buffer = await renderToBuffer(
-    <MedicalDictamenPDF data={payload} />,
-  )
-
-  const absolutePath = path.join(sharedDir, fileName)
-  await mkdir(sharedDir, { recursive: true })
-  await writeFile(absolutePath, buffer)
-
-  return { buffer, absolutePath, fileName, payload }
+  return await renderToBuffer(<MedicalDictamenPDF data={payload} />)
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -250,6 +193,5 @@ export async function renderDictamenInputToDisk(
 // ──────────────────────────────────────────────────────────────────────────
 
 export const __test__ = {
-  REPO_UPLOAD_DIR,
   buildDictamenPdfPayload,
 }

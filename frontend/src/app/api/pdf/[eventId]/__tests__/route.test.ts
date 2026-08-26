@@ -27,7 +27,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 // ─── Mock state ─────────────────────────────────────────────────────────────
 const mockMedicalVerdictFindUnique = vi.fn()
 const mockGetServerSession = vi.fn()
-const mockReadFile = vi.fn()
+const mockFetch = vi.fn()
 const mockRenderToStream = vi.fn()
 
 vi.mock('next-auth', () => ({
@@ -42,9 +42,6 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: (...a: unknown[]) => mockMedicalVerdictFindUnique(...a),
     },
   },
-}))
-vi.mock('node:fs/promises', () => ({
-  readFile: (...a: unknown[]) => mockReadFile(...a),
 }))
 vi.mock('@react-pdf/renderer', async () => {
   const actual = await vi.importActual<typeof import('@react-pdf/renderer')>(
@@ -108,10 +105,14 @@ const VERDICT_BASE = {
 beforeEach(() => {
   mockMedicalVerdictFindUnique.mockReset()
   mockGetServerSession.mockReset()
-  mockReadFile.mockReset()
+  mockFetch.mockReset()
   mockRenderToStream
     .mockReset()
     .mockResolvedValue({} as unknown as ReadableStream)
+  // Stub global fetch — la ruta legacy ahora redirige a /api/files/{key}
+  // del backend (FND-20260825-25). El mock por defecto devuelve 404 para
+  // que el camino "no hay pdfUrl" siga siendo el fallback de regenerar.
+  global.fetch = mockFetch as unknown as typeof fetch
 })
 
 describe('REGRESIÓN P1-2 / FND-20260825-18: GET /api/pdf/[eventId] — auth/IDOR legacy', () => {
@@ -230,20 +231,101 @@ describe('REGRESIÓN P1-2 / FND-20260825-18: GET /api/pdf/[eventId] — auth/IDO
     expect(res.status).toBe(404)
   })
 
-  it('fast-path: si verdict.pdfUrl existe en disco, se sirve SIN regenerar', async () => {
+  it('fast-path: si verdict.pdfUrl existe, resuelve vía /api/files/{key} SIN regenerar', async () => {
+    // FND-20260825-25 (ronda 8): la descarga legacy ya NO toca
+    // filesystem Vercel; hace proxy/redirect al backend
+    // `/api/files/{key}`. Este test verifica que el backend 200 →
+    // stream inline (200, no regenerar) y que el backend 302 →
+    // redirect propagado.
     setSession({ id: 'doctor-X', role: 'DOCTOR_GENERAL' })
     mockMedicalVerdictFindUnique.mockResolvedValue({
       ...VERDICT_BASE,
       pdfUrl: 'dictamen-event-1-signed.pdf',
     })
-    mockReadFile.mockResolvedValue(Buffer.from('%PDF-1.4 disk'))
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      arrayBuffer: async () =>
+        new Uint8Array(Buffer.from('%PDF-1.4 from backend')).buffer,
+    } as unknown as Response)
 
     const res = await GET(makeRequest() as never, {
       params: Promise.resolve({ eventId: 'event-1' }),
     })
 
     expect(res.status).toBe(200)
-    expect(mockReadFile).toHaveBeenCalledTimes(1)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    const [url] = mockFetch.mock.calls[0]
+    expect(String(url)).toMatch(/\/api\/files\/dictamen-event-1-signed\.pdf$/)
     expect(mockRenderToStream).not.toHaveBeenCalled()
+  })
+
+  it('REGRESIÓN FND-20260825-25: el backend devuelve 302 → redirect propagado', async () => {
+    // S3 presigned URL: backend hace 302 a URL absoluta externa.
+    setSession({ id: 'doctor-X', role: 'DOCTOR_GENERAL' })
+    mockMedicalVerdictFindUnique.mockResolvedValue({
+      ...VERDICT_BASE,
+      pdfUrl: 'dictamen-event-1-signed.pdf',
+    })
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 302,
+      statusText: 'Found',
+      headers: new Headers({
+        location: 'https://s3.amazonaws.com/ami-bucket/dictamen-event-1-signed.pdf?X-Amz-...',
+      }),
+    } as unknown as Response)
+
+    const res = await GET(makeRequest() as never, {
+      params: Promise.resolve({ eventId: 'event-1' }),
+    })
+
+    expect(res.status).toBe(302)
+    const location = res.headers.get('location')
+    expect(location).toMatch(/^https:\/\/s3\.amazonaws\.com\//)
+  })
+
+  it('REGRESIÓN FND-20260825-25: el backend falla (502) → NO cae a filesystem local', async () => {
+    // Sin verdict.pdfUrl → regenera; con pdfUrl pero backend 502 →
+    // propagamos el error (NO fallback a `<repo>/uploads` — eso era
+    // el bug Vercel).
+    setSession({ id: 'doctor-X', role: 'DOCTOR_GENERAL' })
+    mockMedicalVerdictFindUnique.mockResolvedValue({
+      ...VERDICT_BASE,
+      pdfUrl: 'dictamen-event-1-signed.pdf',
+    })
+    mockFetch.mockRejectedValue(new Error('ECONNREFUSED'))
+
+    const res = await GET(makeRequest() as never, {
+      params: Promise.resolve({ eventId: 'event-1' }),
+    })
+
+    expect(res.status).toBe(502)
+    expect(mockRenderToStream).not.toHaveBeenCalled()
+  })
+
+  it('basenameSafe: elimina prefijos de directorio (defensa path traversal)', async () => {
+    // Caso de seguridad: si verdict.pdfUrl viene con path traversal,
+    // el proxy extrae sólo el basename. El backend vuelve 404 (no
+    // existe esa key) → propagamos 502.
+    setSession({ id: 'doctor-X', role: 'DOCTOR_GENERAL' })
+    mockMedicalVerdictFindUnique.mockResolvedValue({
+      ...VERDICT_BASE,
+      pdfUrl: '../../../etc/passwd',
+    })
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    } as unknown as Response)
+
+    const res = await GET(makeRequest() as never, {
+      params: Promise.resolve({ eventId: 'event-1' }),
+    })
+
+    expect(res.status).toBe(502)
+    const [url] = mockFetch.mock.calls[0]
+    expect(String(url)).toMatch(/\/api\/files\/passwd$/)
   })
 })

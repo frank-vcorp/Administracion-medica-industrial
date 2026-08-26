@@ -348,3 +348,10 @@
 - **Evidencia:** al pulsar `Firmar y Emitir Dictamen`, backend devuelve `404: Archivo no encontrado: dictamen-<eventId>-<timestamp>.pdf`.
 - **Causa:** `signMedicalDictamPDF` construye el nombre de un PDF temporal y llama a `/api/v1/sign-pdf`, pero nunca renderiza ni escribe el dictamen general en ese archivo.
 - **Corrección:** renderizar/escribir el dictamen general antes de invocar la firma; conservar la salida firmada en el flujo de `MedicalVerdict` sin inventar archivos.
+
+## FND-20260825-25 — Vercel no puede escribir el PDF temporal de firma
+
+- **Estado:** confirmed / IMPLEMENTATION_DEFECT P1
+- **Evidencia:** producción devuelve `EROFS: read-only file system, open '/var/task/uploads/dictamen-...pdf'` al firmar.
+- **Causa:** el frontend Vercel y el backend firmador Railway no comparten filesystem; el helper intenta escribir en `/var/task/uploads`.
+- **Corrección:** renderizar en memoria, subir el PDF temporal al backend mediante el endpoint oficial `upload-only`, firmarlo allí y resolver la salida firmada mediante la ruta de archivos del backend.

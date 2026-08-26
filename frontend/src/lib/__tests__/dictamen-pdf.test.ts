@@ -1,12 +1,15 @@
 /**
- * @file Tests focalales (V1) para el builder del dictamen general
+ * @file Tests focales (V1) para el builder del dictamen general
  *   (`buildDictamenPdfPayload`, `dictamenInputFileName`,
- *   `dictamenSignedFileName`, `sanitizeEventId`).
+ *   `dictamenSignedFileName`, `sanitizeEventId`,
+ *   `renderDictamenInputToMemory`).
  *
- * @id IMPL-FEATURE-20260825-03 (ronda 7 / FND-20260825-24)
- * @finding discovery/FINDINGS.md FND-20260825-24
+ * @id IMPL-FEATURE-20260825-03 (ronda 8 / FND-20260825-25)
+ * @finding discovery/FINDINGS.md FND-20260825-25
+ * @decision discovery/DECISIONS.md DEC-20260825-21
+ * @businessRule discovery/BUSINESS-RULES.md BR-20260825-22
  *
- * Cubre (helper puro — sin DOM, sin FS):
+ * Cubre (helper puro — sin DOM, sin FS, sin red):
  *   - Nombres canónicos de archivos (`dictamen-<eventId>-<ts>.pdf`,
  *     `dictamen-<eventId>-signed.pdf`) — el backend acepta sólo
  *     basenames sin path traversal.
@@ -17,15 +20,37 @@
  *     `<MedicalDictamenPDF>`.
  *   - El shape producido satisface el contrato del componente
  *     (`studies`/`labs` con `extractedData: unknown` no-undefined).
+ *
+ * REGRESIÓN FND-20260825-25: el helper NO escribe en filesystem.
+ * `renderDictamenInputToDisk` (ronda 7) se eliminó en favor de
+ * `renderDictamenInputToMemory` (ronda 8). Verificamos que el
+ * contrato sigue disponible.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Mockear @react-pdf/renderer para evitar DOM/FS en tests.
+const mockRenderToBuffer = vi.fn()
+vi.mock('@react-pdf/renderer', () => ({
+  renderToBuffer: (...a: unknown[]) => mockRenderToBuffer(...a),
+  // Componentes `<X />` que no se renderizan en runtime puro:
+  Document: () => null,
+  Page: () => null,
+  Text: () => null,
+  View: () => null,
+  StyleSheet: { create: (s: unknown) => s },
+  Image: () => null,
+}))
+
 import {
   buildDictamenPdfPayload,
   dictamenInputFileName,
   dictamenSignedFileName,
   sanitizeEventId,
+  renderDictamenInputToMemory,
+  dictamenBackendUrl,
   type BuildDictamenPayloadInput,
 } from '@/lib/dictamen-pdf'
+import * as mod from '@/lib/dictamen-pdf'
 
 function baseInput(
   overrides: Partial<BuildDictamenPayloadInput> = {},
@@ -47,7 +72,7 @@ function baseInput(
   }
 }
 
-describe('IMPL-FEATURE-20260825-03 ronda 7: builder del dictamen general', () => {
+describe('IMPL-FEATURE-20260825-03 ronda 8: builder del dictamen general', () => {
   // ─── dictamenInputFileName / dictamenSignedFileName ──────────────────────
   it('dictamenInputFileName: dictamen-<eventId>-<timestamp>.pdf', () => {
     expect(dictamenInputFileName('event-1', 1700000000000)).toBe(
@@ -114,21 +139,17 @@ describe('IMPL-FEATURE-20260825-03 ronda 7: builder del dictamen general', () =>
   })
 
   it('buildDictamenPdfPayload: company=null → undefined (shape compatible)', () => {
-    const out = buildDictamenPdfPayload(
-      baseInput({ company: null }),
-    )
+    const out = buildDictamenPdfPayload(baseInput({ company: null }))
     expect(out.company).toBeUndefined()
   })
 
   it('buildDictamenPdfPayload: recommendations=null → undefined', () => {
-    const out = buildDictamenPdfPayload(
-      baseInput({ recommendations: null }),
-    )
+    const out = buildDictamenPdfPayload(baseInput({ recommendations: null }))
     expect(out.recommendations).toBeUndefined()
   })
 
   it('buildDictamenPdfPayload: studies normaliza extractedData (sin undefined)', () => {
-    // FND-20260825-24 / contrato de MedicalDictamenPDF: `extractedData`
+    // FND-20260825-25 / contrato de MedicalDictamenPDF: `extractedData`
     // debe ser `unknown` (required), no `undefined`. El builder
     // neutraliza entradas parciales.
     const out = buildDictamenPdfPayload(
@@ -159,9 +180,6 @@ describe('IMPL-FEATURE-20260825-03 ronda 7: builder del dictamen general', () =>
   })
 
   it('buildDictamenPdfPayload: NO inventa identidad — validator.fullName viene del caller', () => {
-    // Sin validator → falla explícitamente en runtime (no auto-firma).
-    // En TS no podemos quitar el campo required, así que validamos que
-    // el builder respeta exactamente lo que recibe.
     const out = buildDictamenPdfPayload(
       baseInput({ validator: { fullName: 'Dr. Snapshot' } }),
     )
@@ -174,5 +192,56 @@ describe('IMPL-FEATURE-20260825-03 ronda 7: builder del dictamen general', () =>
     const a = buildDictamenPdfPayload(input)
     const b = buildDictamenPdfPayload(input)
     expect(a).toEqual(b)
+  })
+
+  // ─── dictamenBackendUrl ────────────────────────────────────────────────
+  it('dictamenBackendUrl: lee NEXT_PUBLIC_API_URL o fallback localhost', () => {
+    const original = process.env.NEXT_PUBLIC_API_URL
+    delete process.env.NEXT_PUBLIC_API_URL
+    expect(dictamenBackendUrl()).toBe('http://localhost:8000')
+    process.env.NEXT_PUBLIC_API_URL = 'https://api.medicaindustrial.com'
+    expect(dictamenBackendUrl()).toBe('https://api.medicaindustrial.com')
+    if (original) process.env.NEXT_PUBLIC_API_URL = original
+  })
+
+  // ─── renderDictamenInputToMemory (Vercel-safe — sin FS) ────────────────
+  beforeEach(() => {
+    mockRenderToBuffer.mockReset()
+    mockRenderToBuffer.mockResolvedValue(
+      Buffer.from('%PDF-1.4 memory'),
+    )
+  })
+
+  it('renderDictamenInputToMemory: devuelve un Buffer sin tocar FS', async () => {
+    const buf = await renderDictamenInputToMemory({
+      payload: baseInput(),
+    })
+    expect(Buffer.isBuffer(buf)).toBe(true)
+    expect(mockRenderToBuffer).toHaveBeenCalledTimes(1)
+  })
+
+  it('renderDictamenInputToMemory: propaga error del render sin caer a FS', async () => {
+    mockRenderToBuffer.mockRejectedValueOnce(
+      new Error('MedicalDictamenPDF props inválidas'),
+    )
+    await expect(
+      renderDictamenInputToMemory({ payload: baseInput() }),
+    ).rejects.toThrow(/props inválidas/)
+  })
+
+  it('REGRESIÓN FND-20260825-25: el módulo NO exporta writeFile ni FS helpers', () => {
+    // El helper debe permanecer libre de IO. Verificamos que el
+    // barrel NO expone helpers de filesystem que pudieran usarse por
+    // accidente en producción Vercel.
+    const exportedKeys = Object.keys(
+      // Re-evaluar el módulo vía el import top-level no funciona
+      // porque Vitest ya lo cacheó, pero `Object.keys` sobre el
+      // namespace import muestra exactamente las exports nombradas.
+      mod as unknown as Record<string, unknown>,
+    )
+    expect(exportedKeys).not.toContain('writeFile')
+    expect(exportedKeys).not.toContain('mkdir')
+    expect(exportedKeys).not.toContain('REPO_UPLOAD_DIR')
+    expect(exportedKeys).not.toContain('renderDictamenInputToDisk')
   })
 })
