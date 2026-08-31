@@ -14,7 +14,7 @@ const cleanNum = z.coerce.number().nonnegative().optional();
 // @spec SPEC_ARCH-20260817-01 §4.1
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Escala Snellen de agudeza visual (10 valores canónicos ZIN). */
+/** Escala Snellen de agudeza visual (11 valores — CAMPIMETRÍA.xlsx + ZIN). */
 export const VISION_SNELLEN_VALUES = [
   '20/200',
   '20/100',
@@ -25,6 +25,7 @@ export const VISION_SNELLEN_VALUES = [
   '20/25',
   '20/20',
   '20/15',
+  '20/13',
   '20/10',
 ] as const
 
@@ -40,9 +41,9 @@ export const REFLEJOS_VALUES = [
 
 export type ReflejosValue = (typeof REFLEJOS_VALUES)[number]
 
-/** Campimetría — 4 opciones (default `CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES`). */
+/** Campimetría — 4 opciones; default clínico = normal (texto CAMPIMETRÍA.xlsx CAMPI). */
 export const CAMPIMETRIA_VALUES = [
-  'CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES',
+  'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES',
   'ALTERADOS',
   'NO APLICA',
   'VER ESTUDIO ANEXO',
@@ -50,9 +51,9 @@ export const CAMPIMETRIA_VALUES = [
 
 export type CampimetriaValue = (typeof CAMPIMETRIA_VALUES)[number]
 
-/** Test de Ishihara — 3 opciones (default `NORMAL (LEE 12,8,6,29,57,45)`). */
+/** Test de Ishihara — 3 opciones; default clínico = normal (AYUDA CAMPI en CAMPIMETRÍA.xlsx). */
 export const TEST_ISHIHARA_VALUES = [
-  'NORMAL (LEE 12,8,6,29,57,45)',
+  'NORMAL (LEE 12, 8, 6, 29, 57, 45)',
   'ALTERADO',
   'NO APLICA',
 ] as const
@@ -408,7 +409,7 @@ export const SomatometriaVitalesSchema = z.object({
 // ----------------------------------------------------------------------
 // 8. AGUDEZA VISUAL (Imagen 7)
 // IMPL-20260817-01-C1: 11 campos con catálogo ZIN + refine tolerante (DA-1).
-// 8 visión (Snellen 10 valores) + reflejos (4) + test_ishihara (3) +
+// 8 visión (Snellen 11 valores) + reflejos (4) + test_ishihara (3) +
 // campimetria (4). UI usa <select>; schema preserva registros legacy.
 // ----------------------------------------------------------------------
 export const AgudezaVisualSchema = z.object({
@@ -421,8 +422,12 @@ export const AgudezaVisualSchema = z.object({
   cercana_corregida_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
   cercana_corregida_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
   reflejos: tolerantZinEnum(REFLEJOS_VALUES).default('PRESENTES Y NORMOREFLECTICOS'),
-  test_ishihara: tolerantZinEnum(TEST_ISHIHARA_VALUES).optional(),
-  campimetria: tolerantZinEnum(CAMPIMETRIA_VALUES).optional(),
+  test_ishihara: tolerantZinEnum(TEST_ISHIHARA_VALUES).default(
+    'NORMAL (LEE 12, 8, 6, 29, 57, 45)',
+  ),
+  campimetria: tolerantZinEnum(CAMPIMETRIA_VALUES).default(
+    'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES',
+  ),
 });
 
 // ----------------------------------------------------------------------

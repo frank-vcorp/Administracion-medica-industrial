@@ -487,15 +487,21 @@ export default function ExamenMedicoEstudio({
   )
 
   // ── Estado Agudeza Visual (pestaña 3) ─────────────────────────────────────
-  const [agudezaForm, setAgudezaForm] = useState<Record<string, string>>(() => ({
-    ...Object.fromEntries(VISUAL_FIELDS_NAMES.map(f => [f, NO_APLICA])),
-    reflejos: 'PRESENTES Y NORMOREFLECTICOS',
-    campimetria: '',
-    test_ishihara: '',
-    ...Object.fromEntries(
-      Object.entries(initEyeAcuityData).map(([k, v]) => [k, String(v ?? '')])
-    ),
-  }))
+  const [agudezaForm, setAgudezaForm] = useState<Record<string, string>>(() => {
+    const base: Record<string, string> = {
+      ...Object.fromEntries(VISUAL_FIELDS_NAMES.map(f => [f, NO_APLICA])),
+      reflejos: REFLEJOS_VALUES[0],
+      campimetria: CAMPIMETRIA_VALUES[0],
+      test_ishihara: TEST_ISHIHARA_VALUES[0],
+      ...Object.fromEntries(
+        Object.entries(initEyeAcuityData).map(([k, v]) => [k, String(v ?? '')]),
+      ),
+    }
+    if (!base.campimetria.trim()) base.campimetria = CAMPIMETRIA_VALUES[0]
+    if (!base.test_ishihara.trim()) base.test_ishihara = TEST_ISHIHARA_VALUES[0]
+    if (!base.reflejos.trim()) base.reflejos = REFLEJOS_VALUES[0]
+    return base
+  })
   const [isSavingAgudeza, setIsSavingAgudeza] = useState(false)
   const [agudezaSaveMsg, setAgudezaSaveMsg] = useState('')
   const [agudezaCompleted, setAgudezaCompleted] = useState<boolean>(
@@ -991,19 +997,18 @@ export default function ExamenMedicoEstudio({
             <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Pruebas Complementarias</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {([
-                { name: 'campimetria', label: 'Campimetría', options: CAMPIMETRIA_VALUES, placeholder: true },
-                { name: 'test_ishihara', label: 'Test Ishihara', options: TEST_ISHIHARA_VALUES, placeholder: true },
-                { name: 'reflejos', label: 'Reflejos', options: REFLEJOS_VALUES, placeholder: false },
-              ] as { name: string; label: string; options: readonly string[]; placeholder: boolean }[]).map(({ name, label, options, placeholder }) => (
+                { name: 'campimetria', label: 'Campimetría', options: CAMPIMETRIA_VALUES },
+                { name: 'test_ishihara', label: 'Test Ishihara', options: TEST_ISHIHARA_VALUES },
+                { name: 'reflejos', label: 'Reflejos', options: REFLEJOS_VALUES },
+              ] as { name: string; label: string; options: readonly string[] }[]).map(({ name, label, options }) => (
                 <div key={name}>
                   <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{label}</label>
                   <select
-                    value={agudezaForm[name] || (placeholder ? '' : options[0])}
+                    value={agudezaForm[name] || options[0]}
                     onChange={e => setAgudezaForm(prev => ({ ...prev, [name]: e.target.value }))}
                     disabled={readonly}
                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm disabled:opacity-60"
                   >
-                    {placeholder && <option value="">SELECCIONAR</option>}
                     {options.map(v => (
                       <option key={v} value={v}>{v}</option>
                     ))}

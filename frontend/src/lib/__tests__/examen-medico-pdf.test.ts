@@ -99,8 +99,8 @@ function baseInput(
       cercanaCorregidaOD: '20/20',
       cercanaCorregidaOI: '20/20',
       reflejos: 'PRESENTES Y NORMOREFLECTICOS',
-      ishihara: 'NORMAL (LEE 12,8,6,29,57,45)',
-      campimetria: 'CAMPOS VISUALES DENTRO DE PARÁMETROS NORMALES',
+      ishihara: 'NORMAL (LEE 12, 8, 6, 29, 57, 45)',
+      campimetria: 'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES',
     },
     exploracion: {
       neurologico: 'Alerta, orientado',

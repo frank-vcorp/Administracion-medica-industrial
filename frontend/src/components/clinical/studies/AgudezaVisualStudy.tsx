@@ -49,15 +49,21 @@ export default function AgudezaVisualStudy({
   readonly = false,
   onStatusChange,
 }: AgudezaVisualStudyProps) {
-  const [formData, setFormData] = useState<Record<string, string>>(() => ({
-    ...Object.fromEntries(VISUAL_FIELDS.map(f => [f.name, NO_APLICA])),
-    reflejos: 'PRESENTES Y NORMOREFLECTICOS',
-    campimetria: '',
-    test_ishihara: '',
-    ...Object.fromEntries(
-      Object.entries(initialData ?? {}).map(([k, v]) => [k, String(v ?? '')])
-    ),
-  }))
+  const [formData, setFormData] = useState<Record<string, string>>(() => {
+    const base: Record<string, string> = {
+      ...Object.fromEntries(VISUAL_FIELDS.map(f => [f.name, NO_APLICA])),
+      reflejos: REFLEJOS_VALUES[0],
+      campimetria: CAMPIMETRIA_VALUES[0],
+      test_ishihara: TEST_ISHIHARA_VALUES[0],
+      ...Object.fromEntries(
+        Object.entries(initialData ?? {}).map(([k, v]) => [k, String(v ?? '')]),
+      ),
+    }
+    if (!base.campimetria.trim()) base.campimetria = CAMPIMETRIA_VALUES[0]
+    if (!base.test_ishihara.trim()) base.test_ishihara = TEST_ISHIHARA_VALUES[0]
+    if (!base.reflejos.trim()) base.reflejos = REFLEJOS_VALUES[0]
+    return base
+  })
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [aiWarning, setAiWarning] = useState("")
@@ -120,12 +126,11 @@ export default function AgudezaVisualStudy({
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Campimetría</label>
             <select
-              value={formData.campimetria || ''}
+              value={formData.campimetria || CAMPIMETRIA_VALUES[0]}
               onChange={e => handleChange('campimetria', e.target.value)}
               disabled={readonly}
               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
             >
-              <option value="">SELECCIONAR</option>
               {CAMPIMETRIA_VALUES.map(v => (
                 <option key={v} value={v}>{v}</option>
               ))}
@@ -134,12 +139,11 @@ export default function AgudezaVisualStudy({
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Test Ishihara</label>
             <select
-              value={formData.test_ishihara || ''}
+              value={formData.test_ishihara || TEST_ISHIHARA_VALUES[0]}
               onChange={e => handleChange('test_ishihara', e.target.value)}
               disabled={readonly}
               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
             >
-              <option value="">SELECCIONAR</option>
               {TEST_ISHIHARA_VALUES.map(v => (
                 <option key={v} value={v}>{v}</option>
               ))}
@@ -148,7 +152,7 @@ export default function AgudezaVisualStudy({
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Reflejos</label>
             <select
-              value={formData.reflejos || 'PRESENTES Y NORMOREFLECTICOS'}
+              value={formData.reflejos || REFLEJOS_VALUES[0]}
               onChange={e => handleChange('reflejos', e.target.value)}
               disabled={readonly}
               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
