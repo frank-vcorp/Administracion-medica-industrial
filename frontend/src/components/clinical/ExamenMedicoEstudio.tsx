@@ -19,6 +19,7 @@ import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
 // PRIMERA sub-pestaña dentro de "Examen Médico" (componente controlado).
 import { AntecedentesCaptura } from "@/components/clinical/AntecedentesCaptura"
+import { VitalSignsPrediagnosisPanel } from "@/components/clinical/VitalSignsPrediagnosisPanel"
 // IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): catálogos ZIN para los
 // 8 campos de visión + 3 pruebas complementarias en pestaña 3 "Agudeza
 // Visual". Ver SPEC §4.1.
@@ -923,6 +924,11 @@ export default function ExamenMedicoEstudio({
               />
             </div>
           </div>
+
+          <VitalSignsPrediagnosisPanel
+            vitals={vitalsForm}
+            sexo={modulo1['m1_sexo'] || String(form.sexo ?? '') || undefined}
+          />
 
           <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3 flex-wrap">
             <p className="text-sm font-medium text-slate-500">{vitalsSaveMsg}</p>
