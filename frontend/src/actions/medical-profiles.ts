@@ -22,6 +22,10 @@ import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
+import {
+  buildPbProfileNameFromTests,
+  ensurePbProfileName,
+} from '@/lib/public-general-profile-name'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA ZOD
@@ -250,10 +254,82 @@ export async function createMedicalProfile(
     })
     revalidatePath('/admin/profiles')
     revalidateCompanyProfilePath(parsed.data.companyId)
+    revalidatePath('/publico-general')
     return { success: true }
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error creando perfil:', e)
     return { success: false, error: 'Error al crear el perfil médico' }
+  }
+}
+
+const QuickPublicProfileSchema = z.object({
+  companyId: z.string().uuid('Empresa inválida'),
+  testIds: z.array(z.string().uuid()).min(1, 'Selecciona al menos una prueba'),
+  name: z.string().max(200).optional().nullable(),
+})
+
+async function resolveUniquePbProfileName(
+  companyId: string,
+  baseName: string
+): Promise<string> {
+  let candidate = baseName
+  let n = 2
+  while (
+    await prisma.medicalProfile.findFirst({
+      where: { companyId, name: candidate },
+      select: { id: true },
+    })
+  ) {
+    candidate = `${baseName} (${n})`
+    n += 1
+  }
+  return candidate
+}
+
+/** Perfil rápido en mostrador: prefijo PB + nombre auto por abreviaturas de pruebas. */
+export async function createPublicGeneralQuickProfile(input: {
+  companyId: string
+  testIds: string[]
+  name?: string | null
+}): Promise<ActionResult<{ id: string; name: string }>> {
+  const parsed = QuickPublicProfileSchema.safeParse(input)
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  const tests = await prisma.medicalTest.findMany({
+    where: { id: { in: parsed.data.testIds } },
+    select: { id: true, code: true, name: true },
+  })
+
+  if (tests.length !== parsed.data.testIds.length) {
+    return { success: false, error: 'Una o más pruebas seleccionadas no existen' }
+  }
+
+  const autoName = buildPbProfileNameFromTests(tests)
+  const rawName = ensurePbProfileName(parsed.data.name, autoName)
+  const finalName = await resolveUniquePbProfileName(parsed.data.companyId, rawName)
+
+  try {
+    const profile = await prisma.medicalProfile.create({
+      data: {
+        name: finalName,
+        companyId: parsed.data.companyId,
+        tests: {
+          create: parsed.data.testIds.map((testId) => ({ testId })),
+        },
+      },
+      select: { id: true, name: true },
+    })
+
+    revalidatePath('/admin/profiles')
+    revalidatePath('/publico-general')
+    revalidateCompanyProfilePath(parsed.data.companyId)
+
+    return { success: true, data: profile }
+  } catch (e: unknown) {
+    console.error('[MedicalProfiles] Error creando perfil rápido PB:', e)
+    return { success: false, error: 'Error al crear el perfil rápido' }
   }
 }
 

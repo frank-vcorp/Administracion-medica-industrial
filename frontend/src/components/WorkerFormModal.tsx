@@ -7,6 +7,11 @@ import { createWorker, updateWorker } from '@/actions/worker.actions'
 import { useRouter } from 'next/navigation'
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 import { isPublicGeneralCompany } from '@/lib/public-general-company'
+import { createPublicGeneralQuickProfile } from '@/actions/medical-profiles'
+import PublicGeneralProfilePicker, {
+  type AvailableTestOption,
+  type ProfileMode,
+} from '@/components/public-general/PublicGeneralProfilePicker'
 
 interface CompanyOption {
     id: string
@@ -60,6 +65,8 @@ interface WorkerFormModalProps {
     defaultCompanyId?: string
     /** Oculta el botón trigger por defecto (el padre abre con isOpen). */
     hideDefaultTrigger?: boolean
+    /** Catálogo de pruebas para perfil rápido (solo publicGeneralMode). */
+    availableTests?: AvailableTestOption[]
 }
 
 function profilesForCompany(
@@ -80,6 +87,7 @@ export default function WorkerFormModal({
     publicGeneralMode = false,
     defaultCompanyId,
     hideDefaultTrigger = false,
+    availableTests = [],
 }: WorkerFormModalProps) {
     const isControlled = isOpenProp !== undefined
     const [internalOpen, setInternalOpen] = useState(false)
@@ -93,6 +101,9 @@ export default function WorkerFormModal({
     const [selectedMedicalProfileId, setSelectedMedicalProfileId] = useState('')
     const [contactEmail, setContactEmail] = useState('')
     const [contactPhone, setContactPhone] = useState('')
+    const [pgProfileMode, setPgProfileMode] = useState<ProfileMode>('existing')
+    const [pgQuickTestIds, setPgQuickTestIds] = useState<string[]>([])
+    const [pgCustomProfileName, setPgCustomProfileName] = useState('')
     const router = useRouter()
 
     const isCreateMode = !workerToEdit
@@ -118,6 +129,9 @@ export default function WorkerFormModal({
             setSelectedMedicalProfileId('')
             setContactEmail('')
             setContactPhone('')
+            setPgProfileMode('existing')
+            setPgQuickTestIds([])
+            setPgCustomProfileName('')
         }
     }, [modalOpen, publicGeneralMode, defaultCompanyId, workerToEdit])
 
@@ -145,6 +159,9 @@ export default function WorkerFormModal({
         setSelectedMedicalProfileId('')
         setContactEmail('')
         setContactPhone('')
+        setPgProfileMode('existing')
+        setPgQuickTestIds([])
+        setPgCustomProfileName('')
     }
 
     function handleClose() {
@@ -171,7 +188,42 @@ export default function WorkerFormModal({
                         setError(result.error || 'Error al guardar')
                     }
                 } else {
-                    const result = await createWorker(formData) as {
+                    let submitFormData = formData
+
+                    if (publicGeneralMode && defaultCompanyId) {
+                        if (pgProfileMode === 'quick') {
+                            if (pgQuickTestIds.length === 0) {
+                                setError('Selecciona al menos una prueba para el perfil rápido')
+                                return
+                            }
+                            const profileResult = await createPublicGeneralQuickProfile({
+                                companyId: defaultCompanyId,
+                                testIds: pgQuickTestIds,
+                                name: pgCustomProfileName.trim() || null,
+                            })
+                            if (!profileResult.success) {
+                                setError(profileResult.error || 'No se pudo crear el perfil rápido')
+                                return
+                            }
+                            if (!profileResult.data) {
+                                setError('No se pudo crear el perfil rápido')
+                                return
+                            }
+                            submitFormData = new FormData()
+                            for (const [key, value] of formData.entries()) {
+                                if (key !== 'medicalProfileId') {
+                                    submitFormData.append(key, value)
+                                }
+                            }
+                            submitFormData.set('medicalProfileId', profileResult.data.id)
+                            setSelectedMedicalProfileId(profileResult.data.id)
+                        } else if (!selectedMedicalProfileId) {
+                            setError('Selecciona un perfil médico existente')
+                            return
+                        }
+                    }
+
+                    const result = await createWorker(submitFormData) as {
                         success: boolean
                         status?: string
                         worker?: WorkerRef
@@ -331,7 +383,7 @@ export default function WorkerFormModal({
 
             {modalOpen && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                    <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md border border-slate-100 relative overflow-hidden">
+                    <div className={`bg-white p-8 rounded-3xl shadow-2xl w-full border border-slate-100 relative overflow-hidden ${publicGeneralMode && isCreateMode ? 'max-w-lg max-h-[90vh] overflow-y-auto' : 'max-w-md'}`}>
                         <div className={`absolute top-0 left-0 w-full h-2 ${accentBarClass}`} />
 
                         <div className="flex justify-between items-center mb-8">
@@ -409,51 +461,74 @@ export default function WorkerFormModal({
                             )}
 
                             {publicGeneralMode && !workerToEdit ? (
-                                <input type="hidden" name="companyId" value={selectedCompanyId} />
+                                <>
+                                    <input type="hidden" name="companyId" value={selectedCompanyId} />
+                                    <div className="rounded-xl border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
+                                        Empresa fija: <strong>Público General</strong>
+                                    </div>
+                                    {pgProfileMode === 'existing' && (
+                                        <input type="hidden" name="medicalProfileId" value={selectedMedicalProfileId} />
+                                    )}
+                                    <PublicGeneralProfilePicker
+                                        companyId={selectedCompanyId}
+                                        medicalProfiles={medicalProfiles}
+                                        availableTests={availableTests}
+                                        selectedProfileId={selectedMedicalProfileId}
+                                        onProfileIdChange={setSelectedMedicalProfileId}
+                                        selectedTestIds={pgQuickTestIds}
+                                        onTestIdsChange={setPgQuickTestIds}
+                                        customProfileName={pgCustomProfileName}
+                                        onCustomProfileNameChange={setPgCustomProfileName}
+                                        mode={pgProfileMode}
+                                        onModeChange={setPgProfileMode}
+                                    />
+                                </>
                             ) : (
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
-                                    <select
-                                        name="companyId"
-                                        value={selectedCompanyId}
-                                        onChange={e => {
-                                            setSelectedCompanyId(e.target.value)
-                                            setSelectedMedicalProfileId('')
-                                        }}
-                                        className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none appearance-none"
-                                    >
-                                        <option value="">-- Seleccionar Empresa --</option>
-                                        {companies.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
+                                <>
+                                    {!publicGeneralMode || workerToEdit ? (
+                                        publicGeneralMode && workerToEdit ? (
+                                            <input type="hidden" name="companyId" value={selectedCompanyId} />
+                                        ) : (
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
+                                                <select
+                                                    name="companyId"
+                                                    value={selectedCompanyId}
+                                                    onChange={e => {
+                                                        setSelectedCompanyId(e.target.value)
+                                                        setSelectedMedicalProfileId('')
+                                                    }}
+                                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none appearance-none"
+                                                >
+                                                    <option value="">-- Seleccionar Empresa --</option>
+                                                    {companies.map(c => (
+                                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )
+                                    ) : null}
 
-                            {publicGeneralMode && !workerToEdit && (
-                                <div className="rounded-xl border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
-                                    Empresa fija: <strong>Público General</strong>
-                                </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Perfil Médico</label>
+                                        <select
+                                            name="medicalProfileId"
+                                            value={selectedMedicalProfileId}
+                                            onChange={e => setSelectedMedicalProfileId(e.target.value)}
+                                            disabled={!selectedCompanyId}
+                                            required={!!selectedCompanyId}
+                                            className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-500 p-3 rounded-xl text-sm outline-none appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <option value="">
+                                                {selectedCompanyId ? '-- Seleccionar Perfil --' : '← Selecciona primero una empresa'}
+                                            </option>
+                                            {filteredMedicalProfiles.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </>
                             )}
-
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Perfil Médico</label>
-                                <select
-                                    name="medicalProfileId"
-                                    value={selectedMedicalProfileId}
-                                    onChange={e => setSelectedMedicalProfileId(e.target.value)}
-                                    disabled={!selectedCompanyId}
-                                    required={!!selectedCompanyId}
-                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-500 p-3 rounded-xl text-sm outline-none appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <option value="">
-                                        {selectedCompanyId ? '-- Seleccionar Perfil --' : '← Selecciona primero una empresa'}
-                                    </option>
-                                    {filteredMedicalProfiles.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                            </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">

@@ -5,6 +5,8 @@ import WorkerFormModal from '@/components/WorkerFormModal'
 import WorkersPageClient from '@/components/workers/WorkersPageClient'
 import type { SelectableWorker } from '@/components/workers/WorkerSelectableGrid'
 
+import type { AvailableTestOption } from '@/components/public-general/PublicGeneralProfilePicker'
+
 interface Props {
   workers: SelectableWorker[]
   publicGeneralCompany: {
@@ -16,6 +18,7 @@ interface Props {
     defaultBranchId: string | null
   }
   medicalProfiles: Array<{ id: string; name: string; companyId: string | null }>
+  availableTests: AvailableTestOption[]
   isSuperAdmin: boolean
 }
 
@@ -23,6 +26,7 @@ export default function PublicGeneralPageClient({
   workers,
   publicGeneralCompany,
   medicalProfiles,
+  availableTests,
   isSuperAdmin,
 }: Props) {
   const [search, setSearch] = useState('')
@@ -99,6 +103,7 @@ export default function PublicGeneralPageClient({
       <WorkerFormModal
         companies={companyOptions}
         medicalProfiles={medicalProfiles}
+        availableTests={availableTests}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         publicGeneralMode
