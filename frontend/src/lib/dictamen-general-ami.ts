@@ -35,6 +35,7 @@
 
 import type { PrismaClient } from '@prisma/client'
 import { findSiblingEventsInAtencion, type AtencionResolution } from '@/lib/event-atencion'
+import { readHeredoFamiliaresDisplay } from '@/lib/antecedentes-fields'
 import { buildExamenMedicoPdfData, type BuildExamenMedicoPdfInput } from '@/lib/examen-medico-pdf'
 
 /**
@@ -263,17 +264,15 @@ export async function buildDictamenGeneralAmiConsolidado(
       tipoSanguineo: s(apnp.grupo_y_rh),
     },
     ahf: {
-      diabetes: s(ahf.diabetes),
-      hipertension: s(ahf.has ?? ahf.hipertension),
-      epilepsia: s(ahf.epilepsia),
-      cardiopatia: s(ahf.cardiopatia),
-      renales: s(ahf.renales),
-      asma: s(ahf.asma),
-      cancer: s(ahf.cancer),
-      mentales: s(ahf.mentales),
-      otras: s(ahf.otras) || s(ahf.otras_especifique)
-        ? `${s(ahf.otras) ?? ''}${s(ahf.otras_especifique) ? ` (${s(ahf.otras_especifique)})` : ''}`
-        : null,
+      diabetes: readHeredoFamiliaresDisplay(ahf, 'diabetes') || null,
+      hipertension: readHeredoFamiliaresDisplay(ahf, 'has') || readHeredoFamiliaresDisplay(ahf, 'hipertension') || null,
+      epilepsia: readHeredoFamiliaresDisplay(ahf, 'epilepsia') || null,
+      cardiopatia: readHeredoFamiliaresDisplay(ahf, 'cardiopatia') || null,
+      renales: readHeredoFamiliaresDisplay(ahf, 'renales') || null,
+      asma: readHeredoFamiliaresDisplay(ahf, 'asma') || null,
+      cancer: readHeredoFamiliaresDisplay(ahf, 'cancer') || null,
+      mentales: s(ahf.mentales) || null,
+      otras: readHeredoFamiliaresDisplay(ahf, 'otras') || null,
     },
     apnp: {
       alcohol: s(apnp.alcohol),

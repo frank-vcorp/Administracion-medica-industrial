@@ -36,6 +36,8 @@ import {
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
   HISTORIA_LABORAL_EXPOSICIONES,
   HEREDOFAMILIARES_DESCRIPCIONES,
+  emptyHeredoFamiliaresRecord,
+  heredoFamiliaresEspecifiqueKey,
   NO_PATOLOGICOS_DESCRIPCIONES,
   PATOLOGICOS_DESCRIPCIONES,
   TURNO_OPTIONS,
@@ -147,11 +149,9 @@ export function AntecedentesForm({
   // key INDEPENDIENTE del select `otras`. Antes compartían state y al primer
   // carácter tipeado en el input, `otras` cambiaba de 'OTROS' al texto y el
   // input se auto-destruía (ver commit fix).
-  const [heredofamiliares, setHeredofamiliares] = useState<Record<string, string>>({
-    diabetes: '', has: '', epilepsia: '', cardiopatia: '',
-    renales: '', asma: '', cancer: '', mentales: '',
-    otras: '', otras_especifique: '',
-  })
+  const [heredofamiliares, setHeredofamiliares] = useState<Record<string, string>>(
+    () => emptyHeredoFamiliaresRecord(),
+  )
 
   // ── Estado: No Patológicos ────────────────────────────────────────────────
   const [noPatologicos, setNoPatologicos] = useState<Record<string, string>>({
@@ -588,9 +588,10 @@ export function AntecedentesForm({
                   // `mentales` con SI/NO/NO APLICA, `otras` con combo + input "Especifique"
                   // condicional cuando value === 'OTROS'. Ver SPEC §4.4.
                   const isMentales = item.field === 'mentales'
-                  const isOtras = item.field === 'otras'
                   const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
                   const currentValue = heredofamiliares[item.field as keyof typeof heredofamiliares] ?? ''
+                  const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
+                  const showEspecifique = !isMentales && currentValue === 'OTROS'
                   return (
                     <div key={item.field}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -607,16 +608,12 @@ export function AntecedentesForm({
                           <option key={v} value={v}>{v}</option>
                         ))}
                       </select>
-                      {isOtras && currentValue === 'OTROS' && (
-                        // IMPL-20260817-02 (FIX L2): el input lee/escribe
-                        // `otras_especifique` (state key independiente del
-                        // select). Antes compartía `item.field` y se
-                        // auto-destruía al tipear.
+                      {showEspecifique && (
                         <input
                           type="text"
-                          value={heredofamiliares.otras_especifique ?? ''}
-                          onChange={(e) => handleHeredofamiliaresChange('otras_especifique', e.target.value)}
-                          placeholder="Especifique (ej: TÍO PATERNO)"
+                          value={heredofamiliares[especifiqueKey] ?? ''}
+                          onChange={(e) => handleHeredofamiliaresChange(especifiqueKey, e.target.value)}
+                          placeholder="Especifique (ej: TÍO PATERNO, cáncer de mama)"
                           className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                         />
                       )}

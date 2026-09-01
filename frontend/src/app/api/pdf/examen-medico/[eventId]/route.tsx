@@ -48,6 +48,7 @@ import {
   buildHistoriaReproductivaModulo1Text,
   buildInmunizacionesFromPhysicalExam,
 } from '@/lib/clinical/modulo1-text'
+import { readHeredoFamiliaresDisplay } from '@/lib/antecedentes-fields'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -312,18 +313,15 @@ export async function GET(
         tipoSanguineo: str(apnp.grupo_y_rh),
       },
       ahf: {
-        diabetes: str(ahf.diabetes),
-        hipertension: str(ahf.has ?? ahf.hipertension),
-        epilepsia: str(ahf.epilepsia),
-        cardiopatia: str(ahf.cardiopatia),
-        renales: str(ahf.renales),
-        asma: str(ahf.asma),
-        cancer: str(ahf.cancer),
-        mentales: str(ahf.mentales),
-        otras:
-          str(ahf.otras) || str(ahf.otras_especifique)
-            ? `${str(ahf.otras)}${str(ahf.otras_especifique) ? ` (${str(ahf.otras_especifique)})` : ''}`
-            : null,
+        diabetes: readHeredoFamiliaresDisplay(ahf, 'diabetes') || null,
+        hipertension: readHeredoFamiliaresDisplay(ahf, 'has') || readHeredoFamiliaresDisplay(ahf, 'hipertension') || null,
+        epilepsia: readHeredoFamiliaresDisplay(ahf, 'epilepsia') || null,
+        cardiopatia: readHeredoFamiliaresDisplay(ahf, 'cardiopatia') || null,
+        renales: readHeredoFamiliaresDisplay(ahf, 'renales') || null,
+        asma: readHeredoFamiliaresDisplay(ahf, 'asma') || null,
+        cancer: readHeredoFamiliaresDisplay(ahf, 'cancer') || null,
+        mentales: str(ahf.mentales) || null,
+        otras: readHeredoFamiliaresDisplay(ahf, 'otras') || null,
       },
       apnp: {
         alcohol: str(apnp.alcohol),

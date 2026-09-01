@@ -125,6 +125,49 @@ export const HEREDOFAMILIARES_DESCRIPCIONES: CampoDescripcion[] = [
   { field: 'otras',         label: 'Otras',                   help: 'Otra enfermedad hereditaria o frecuente en su familia. Anote brevemente.' },
 ]
 
+/** Campos Heredo-Familiares con catálogo ZIN de 8 opciones (incluye OTROS). */
+export const HEREDOFAMILIARES_CATALOGO_FIELDS = HEREDOFAMILIARES_DESCRIPCIONES.filter(
+  item => item.field !== 'mentales',
+).map(item => item.field)
+
+/** State key del texto libre cuando el select ZIN = OTROS (ej. `cancer_especifique`). */
+export function heredoFamiliaresEspecifiqueKey(field: string): string {
+  return `${field}_especifique`
+}
+
+/** Formato PDF/display: `OTROS` + detalle → `OTROS (TÍO PATERNO)`. */
+export function formatHeredoFamiliaresValor(
+  value: string | null | undefined,
+  especifique: string | null | undefined,
+): string {
+  const v = (value ?? '').trim()
+  if (!v) return ''
+  const e = (especifique ?? '').trim()
+  if (v === 'OTROS' && e) return `OTROS (${e})`
+  return v
+}
+
+/** Lee un campo Heredo-Familiares con su especifique opcional desde snapshot/maestro. */
+export function readHeredoFamiliaresDisplay(
+  data: Record<string, unknown>,
+  field: string,
+): string {
+  return formatHeredoFamiliaresValor(
+    String(data[field] ?? ''),
+    String(data[heredoFamiliaresEspecifiqueKey(field)] ?? ''),
+  )
+}
+
+/** Estado vacío inicial para Heredo-Familiares (select + especifique por campo catálogo). */
+export function emptyHeredoFamiliaresRecord(): Record<string, string> {
+  const hf: Record<string, string> = { mentales: '' }
+  for (const field of HEREDOFAMILIARES_CATALOGO_FIELDS) {
+    hf[field] = ''
+    hf[heredoFamiliaresEspecifiqueKey(field)] = ''
+  }
+  return hf
+}
+
 /**
  * Antecedentes Personales Patológicos agrupados por sistema.
  * `subs` es vacío porque cada campo es un único select SI/NEGADO.

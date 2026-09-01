@@ -106,26 +106,29 @@ export type HistoriaLaboral = z.infer<typeof HistoriaLaboralSchema>;
 // ----------------------------------------------------------------------
 // 3. ANTECEDENTES HEREDO-FAMILIARES (Imagen 1)
 // @id IMPL-20260817-02
-// FIX L2 (QA-20260817-01-C2 observación): campo `otras` se separa en dos
-// state keys independientes — `otras` (catálogo ZIN: NEGADOS/PADRE/.../OTROS)
-// y `otras_especifique` (texto libre condicional cuando `otras === 'OTROS'`).
-// Antes el input "Especifique" compartía state con el select, causando que al
-// primer carácter tipeado el input se auto-destruyera (`otras` cambiaba de
-// 'OTROS' al texto tipeado, perdiendo la condición que lo mostraba).
-// DA-1 (tolerancia legacy): campo nuevo con default '', registros legacy sin
-// este campo parsean sin error.
+// FIX L2 (QA-20260817-01-C2): cada campo catálogo ZIN usa `{field}_especifique`
+// independiente cuando el select = OTROS (antes sólo `otras` lo tenía).
 // ----------------------------------------------------------------------
+const heredoEspecifiqueOptional = z.string().trim().max(250).optional()
+
 export const HeredoFamiliaresSchema = z.object({
   diabetes: z.string().trim().max(500).optional(),     // ej: "AB MA", "PADRE", etc.
+  diabetes_especifique: heredoEspecifiqueOptional,
   has: z.string().trim().max(500).optional(),          // Hipertensión
+  has_especifique: heredoEspecifiqueOptional,
   epilepsia: z.string().trim().max(500).optional(),
+  epilepsia_especifique: heredoEspecifiqueOptional,
   cardiopatia: z.string().trim().max(500).optional(),
+  cardiopatia_especifique: heredoEspecifiqueOptional,
   renales: z.string().trim().max(500).optional(),
+  renales_especifique: heredoEspecifiqueOptional,
   asma: z.string().trim().max(500).optional(),
+  asma_especifique: heredoEspecifiqueOptional,
   cancer: z.string().trim().max(500).optional(),
+  cancer_especifique: heredoEspecifiqueOptional,
   mentales: z.string().trim().max(500).optional(),
   otras: z.string().trim().max(1000).optional(),       // Catálogo ZIN (HEREDOFAMILIARES_VALUES)
-  otras_especifique: z.string().trim().max(250).default('')  // Texto libre condicional (FIX L2)
+  otras_especifique: z.string().trim().max(250).default(''),  // Texto libre condicional (FIX L2)
 });
 
 // ----------------------------------------------------------------------

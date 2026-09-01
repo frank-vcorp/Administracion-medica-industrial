@@ -52,6 +52,8 @@ import {
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
   HISTORIA_LABORAL_EXPOSICIONES,
   HEREDOFAMILIARES_DESCRIPCIONES,
+  emptyHeredoFamiliaresRecord,
+  heredoFamiliaresEspecifiqueKey,
   NO_PATOLOGICOS_DESCRIPCIONES,
   PATOLOGICOS_DESCRIPCIONES,
   TURNO_OPTIONS,
@@ -180,11 +182,7 @@ function buildEmptySections(): {
     accidentes_descripcion: '',
     enfermedades_descripcion: '',
   }
-  const hf: Record<string, string> = {
-    diabetes: '', has: '', epilepsia: '', cardiopatia: '',
-    renales: '', asma: '', cancer: '', mentales: '',
-    otras: '', otras_especifique: '',
-  }
+  const hf: Record<string, string> = emptyHeredoFamiliaresRecord()
   const np: Record<string, string> = {
     alcohol: 'NEGADO', alcohol_edad_comienzo: '', alcohol_frecuencia: '',
     alcohol_suspendido: 'NEGADO', alcohol_tiempo_suspendido: '',
@@ -578,9 +576,10 @@ export function AntecedentesCaptura({
               // `mentales` con HEREDOFAMILIARES_MENTALES_VALUES (3 opciones),
               // `otras` con combo + input "Especifique" condicional. DA-6 espejo AntecedentesForm.
               const isMentales = item.field === 'mentales'
-              const isOtras = item.field === 'otras'
               const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
               const currentValue = form.heredo_familiares[item.field] ?? ''
+              const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
+              const showEspecifique = !isMentales && currentValue === 'OTROS'
               return (
                 <FieldRow
                   key={item.field}
@@ -599,17 +598,13 @@ export function AntecedentesCaptura({
                       <option key={v} value={v}>{v}</option>
                     ))}
                   </select>
-                  {isOtras && currentValue === 'OTROS' && (
-                    // IMPL-20260817-02 (FIX L2): el input lee/escribe
-                    // `form.heredo_familiares.otras_especifique` (state key
-                    // independiente del select). Antes compartía `item.field`
-                    // y se auto-destruía al tipear.
+                  {showEspecifique && (
                     <input
                       type="text"
-                      value={form.heredo_familiares.otras_especifique ?? ''}
-                      onChange={e => setField('heredo_familiares', 'otras_especifique', e.target.value)}
+                      value={form.heredo_familiares[especifiqueKey] ?? ''}
+                      onChange={e => setField('heredo_familiares', especifiqueKey, e.target.value)}
                       disabled={readonly}
-                      placeholder="Especifique (ej: TÍO PATERNO)"
+                      placeholder="Especifique (ej: TÍO PATERNO, cáncer de mama)"
                       className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                     />
                   )}
