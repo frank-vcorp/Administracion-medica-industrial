@@ -90,6 +90,7 @@ interface Props {
       selectedNames: Array<{ id: string; fullName: string; universalId: string }>
     }
   ) => void
+  hideCompanyColumn?: boolean
 }
 
 export default function WorkerSelectableGrid({
@@ -100,6 +101,7 @@ export default function WorkerSelectableGrid({
   selectable,
   selectedIds,
   onSelectionChange,
+  hideCompanyColumn = false,
 }: Props) {
   const [workerToEdit, setWorkerToEdit] = useState<WorkerForEdit | null>(null)
   // IMPL-20260808-04 (Opción A): el lightbox ahora se alimenta de los datos
@@ -172,6 +174,7 @@ export default function WorkerSelectableGrid({
   }, [workers, onSelectionChange, selectedIds])
 
   const allSelected = workers.length > 0 && workers.every((w) => selectedIds.has(w.id))
+  const columnCount = (selectable ? 1 : 0) + 7 + (hideCompanyColumn ? 0 : 1)
 
   // IMPL-20260808-04 (Opción A): handler del placeholder "🪪 Ver INE".
   // Llama al server action `getWorkerIdentityImage` on-demand, valida la
@@ -226,7 +229,7 @@ export default function WorkerSelectableGrid({
               {/* IMPL-20260808-04: miniatura de identificación. Oculta en móvil
                   (<768px) para no romper el layout responsive del listado. */}
               <th className="px-6 py-4 hidden md:table-cell">Identificación</th>
-              <th className="px-6 py-4">Empresa</th>
+              {!hideCompanyColumn && <th className="px-6 py-4">Empresa</th>}
               <th className="px-6 py-4">Perfil Médico</th>
               <th className="px-6 py-4">Correo</th>
               <th className="px-6 py-4">Teléfono</th>
@@ -237,7 +240,7 @@ export default function WorkerSelectableGrid({
             {workers.length === 0 && (
               <tr>
                 <td
-                  colSpan={selectable ? 9 : 8}
+                  colSpan={columnCount}
                   className="p-8 text-center text-slate-400"
                 >
                   Sin trabajadores registrados
@@ -321,6 +324,7 @@ export default function WorkerSelectableGrid({
                       </div>
                     )}
                   </td>
+                  {!hideCompanyColumn && (
                   <td className="px-6 py-4">
                     {w.company ? (
                       <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100 w-fit inline-block">
@@ -330,6 +334,7 @@ export default function WorkerSelectableGrid({
                       <span className="text-slate-400 text-xs italic">Sin Empresa</span>
                     )}
                   </td>
+                  )}
                   <td className="px-6 py-4">
                     {w.medicalProfile ? (
                       <span className="bg-teal-50 text-teal-700 px-2 py-1 rounded text-xs font-bold border border-teal-100 w-fit inline-block">

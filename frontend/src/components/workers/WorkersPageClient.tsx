@@ -17,6 +17,8 @@ interface Props {
   medicalProfiles: Array<{ id: string; name: string; companyId: string | null }>
   initialEditWorkerId?: string
   isSuperAdmin: boolean
+  /** Oculta columna Empresa (p. ej. pantalla Público General). */
+  hideCompanyColumn?: boolean
 }
 
 export default function WorkersPageClient({
@@ -25,6 +27,7 @@ export default function WorkersPageClient({
   medicalProfiles,
   initialEditWorkerId,
   isSuperAdmin,
+  hideCompanyColumn = false,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedNames, setSelectedNames] = useState<
@@ -66,6 +69,7 @@ export default function WorkersPageClient({
         selectable={selectable}
         selectedIds={selectedIds}
         onSelectionChange={handleSelectionChange}
+        hideCompanyColumn={hideCompanyColumn}
       />
 
       {selectable && (

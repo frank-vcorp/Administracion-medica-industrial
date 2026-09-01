@@ -38,7 +38,13 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
 
     const branches = branchesResult.status === 'fulfilled' ? branchesResult.value : []
 
-    const companyOptions = companies.value.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))
+    const companyOptions = companies.value.map((c: { id: string; name: string; email?: string | null; phone?: string | null; rfc?: string | null }) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email ?? null,
+        phone: c.phone ?? null,
+        rfc: c.rfc ?? null,
+    }))
     const branchOptions = branches.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name }))
 
     // Cast al shape que consume WorkerSelectableGrid (subset de lo que devuelve getWorkers).
@@ -57,7 +63,7 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
                     <BulkWorkerImportModal companies={companyOptions} branches={branchOptions} />
                     {/* Azul: Clínica Física (sin proyecto, intakeSource=CLINIC_WALK_IN_MASS) */}
                     <BulkClinicWalkInImportModal branches={branchOptions} />
-                    <WorkerFormModal companies={companies.value} medicalProfiles={medicalProfiles.value} />
+                    <WorkerFormModal companies={companyOptions} medicalProfiles={medicalProfiles.value} />
                 </div>
             </div>
 

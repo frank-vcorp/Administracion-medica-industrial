@@ -6,8 +6,15 @@ import { useState, useTransition, useEffect } from 'react'
 import { createWorker, updateWorker } from '@/actions/worker.actions'
 import { useRouter } from 'next/navigation'
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
+import { isPublicGeneralCompany } from '@/lib/public-general-company'
 
-interface CompanyOption { id: string; name: string }
+interface CompanyOption {
+    id: string
+    name: string
+    email?: string | null
+    phone?: string | null
+    rfc?: string | null
+}
 interface MedicalProfileOption { id: string; name: string; companyId: string | null }
 
 /** Datos básicos del trabajador existente cuando se detecta duplicado */
@@ -47,6 +54,12 @@ interface WorkerFormModalProps {
     isOpen?: boolean
     /** Solo en modo controlado (edición): callback para cerrar el modal. */
     onClose?: () => void
+    /** Alta fija en empresa Público General (oculta selector de empresa). */
+    publicGeneralMode?: boolean
+    /** Empresa preseleccionada al abrir (p. ej. Público General). */
+    defaultCompanyId?: string
+    /** Oculta el botón trigger por defecto (el padre abre con isOpen). */
+    hideDefaultTrigger?: boolean
 }
 
 function profilesForCompany(
@@ -64,6 +77,9 @@ export default function WorkerFormModal({
     workerToEdit,
     isOpen: isOpenProp,
     onClose,
+    publicGeneralMode = false,
+    defaultCompanyId,
+    hideDefaultTrigger = false,
 }: WorkerFormModalProps) {
     const isControlled = isOpenProp !== undefined
     const [internalOpen, setInternalOpen] = useState(false)
@@ -75,13 +91,47 @@ export default function WorkerFormModal({
     const [duplicateWorker, setDuplicateWorker] = useState<DuplicateWorker | null>(null)
     const [selectedCompanyId, setSelectedCompanyId] = useState('')
     const [selectedMedicalProfileId, setSelectedMedicalProfileId] = useState('')
+    const [contactEmail, setContactEmail] = useState('')
+    const [contactPhone, setContactPhone] = useState('')
     const router = useRouter()
+
+    const isCreateMode = !workerToEdit
+    const accentBarClass = workerToEdit ? 'bg-amber-500' : publicGeneralMode ? 'bg-teal-500' : 'bg-blue-500'
+    const submitButtonClass = workerToEdit
+        ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100'
+        : publicGeneralMode
+            ? 'bg-teal-600 hover:bg-teal-700 shadow-teal-100'
+            : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'
 
     /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- hidratación controlada al cambiar `workerToEdit`. */
     useEffect(() => {
         setSelectedCompanyId(workerToEdit?.companyId || '')
         setSelectedMedicalProfileId(workerToEdit?.medicalProfileId || '')
+        setContactEmail(workerToEdit?.email || '')
+        setContactPhone(workerToEdit?.phone || '')
     }, [workerToEdit?.id])
+
+    useEffect(() => {
+        if (!modalOpen || workerToEdit) return
+        if (publicGeneralMode && defaultCompanyId) {
+            setSelectedCompanyId(defaultCompanyId)
+            setSelectedMedicalProfileId('')
+            setContactEmail('')
+            setContactPhone('')
+        }
+    }, [modalOpen, publicGeneralMode, defaultCompanyId, workerToEdit])
+
+    useEffect(() => {
+        if (!isCreateMode || publicGeneralMode || !selectedCompanyId) return
+        const company = companies.find((c) => c.id === selectedCompanyId)
+        if (!company || isPublicGeneralCompany(company)) {
+            setContactEmail('')
+            setContactPhone('')
+            return
+        }
+        setContactEmail(company.email || '')
+        setContactPhone(company.phone || '')
+    }, [selectedCompanyId, companies, isCreateMode, publicGeneralMode])
 
     const filteredMedicalProfiles = selectedCompanyId
         ? profilesForCompany(medicalProfiles, selectedCompanyId)
@@ -91,8 +141,10 @@ export default function WorkerFormModal({
         setInternalOpen(true)
         setError(null)
         setDuplicateWorker(null)
-        setSelectedCompanyId('')
+        setSelectedCompanyId(publicGeneralMode && defaultCompanyId ? defaultCompanyId : '')
         setSelectedMedicalProfileId('')
+        setContactEmail('')
+        setContactPhone('')
     }
 
     function handleClose() {
@@ -132,7 +184,11 @@ export default function WorkerFormModal({
                     }
                     if (result.success) {
                         router.refresh()
-                        setSuccessData(result)
+                        if (isControlled) {
+                            onClose?.()
+                        } else {
+                            setSuccessData(result)
+                        }
                     } else {
                         setError(result.error || 'Error al guardar')
                     }
@@ -241,10 +297,16 @@ export default function WorkerFormModal({
                             🗓️ Agendar Consulta Aquí
                         </button>
                         <button
-                            onClick={() => { setSuccessData(null); setInternalOpen(false) }}
+                            onClick={() => {
+                                setSuccessData(null)
+                                setInternalOpen(false)
+                                if (publicGeneralMode) {
+                                    router.push('/publico-general')
+                                }
+                            }}
                             className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all"
                         >
-                            Ver Padrón
+                            {publicGeneralMode ? 'Ver listado' : 'Ver Padrón'}
                         </button>
                     </div>
                 </div>
@@ -254,27 +316,39 @@ export default function WorkerFormModal({
 
     return (
         <>
-            {!isControlled && (
+            {!isControlled && !hideDefaultTrigger && (
                 <button
                     onClick={handleOpen}
-                    className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-slate-200 flex items-center gap-2"
+                    className={`${publicGeneralMode
+                        ? 'bg-teal-600 hover:bg-teal-700 shadow-teal-200'
+                        : 'bg-slate-900 hover:bg-black shadow-slate-200'
+                    } text-white px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg flex items-center gap-2`}
                 >
-                    <span className="text-lg">+</span> Registrar Trabajador
+                    <span className="text-lg">+</span>{' '}
+                    {publicGeneralMode ? 'Alta público general' : 'Registrar Trabajador'}
                 </button>
             )}
 
             {modalOpen && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                     <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md border border-slate-100 relative overflow-hidden">
-                        <div className={`absolute top-0 left-0 w-full h-2 ${workerToEdit ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                        <div className={`absolute top-0 left-0 w-full h-2 ${accentBarClass}`} />
 
                         <div className="flex justify-between items-center mb-8">
                             <div>
                                 <h3 className="text-xl font-black text-slate-800">
-                                    {workerToEdit ? 'Editar Trabajador' : 'Nuevo Trabajador'}
+                                    {workerToEdit
+                                        ? 'Editar Trabajador'
+                                        : publicGeneralMode
+                                            ? 'Alta público general'
+                                            : 'Nuevo Trabajador'}
                                 </h3>
                                 <p className="text-[10px] text-slate-400 uppercase font-extrabold tracking-widest mt-1">
-                                    {workerToEdit ? 'Actualizar datos en Padrón AMI' : 'Alta en Padrón AMI'}
+                                    {workerToEdit
+                                        ? 'Actualizar datos en Padrón AMI'
+                                        : publicGeneralMode
+                                            ? 'Paciente particular · Público General'
+                                            : 'Alta en Padrón AMI'}
                                 </p>
                             </div>
                             <button onClick={handleClose} className="text-slate-300 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-full">
@@ -334,23 +408,33 @@ export default function WorkerFormModal({
                                 </div>
                             )}
 
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
-                                <select
-                                    name="companyId"
-                                    value={selectedCompanyId}
-                                    onChange={e => {
-                                        setSelectedCompanyId(e.target.value)
-                                        setSelectedMedicalProfileId('')
-                                    }}
-                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none appearance-none"
-                                >
-                                    <option value="">-- Seleccionar Empresa --</option>
-                                    {companies.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            {publicGeneralMode && !workerToEdit ? (
+                                <input type="hidden" name="companyId" value={selectedCompanyId} />
+                            ) : (
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
+                                    <select
+                                        name="companyId"
+                                        value={selectedCompanyId}
+                                        onChange={e => {
+                                            setSelectedCompanyId(e.target.value)
+                                            setSelectedMedicalProfileId('')
+                                        }}
+                                        className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none appearance-none"
+                                    >
+                                        <option value="">-- Seleccionar Empresa --</option>
+                                        {companies.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            {publicGeneralMode && !workerToEdit && (
+                                <div className="rounded-xl border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
+                                    Empresa fija: <strong>Público General</strong>
+                                </div>
+                            )}
 
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Perfil Médico</label>
@@ -378,7 +462,9 @@ export default function WorkerFormModal({
                                         name="email"
                                         placeholder="email@ejemplo.com"
                                         type="email"
-                                        defaultValue={workerToEdit?.email || ''}
+                                        value={isCreateMode ? contactEmail : undefined}
+                                        defaultValue={!isCreateMode ? (workerToEdit?.email || '') : undefined}
+                                        onChange={isCreateMode ? (e) => setContactEmail(e.target.value) : undefined}
                                         className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none"
                                     />
                                 </div>
@@ -387,7 +473,9 @@ export default function WorkerFormModal({
                                     <input
                                         name="phone"
                                         placeholder="10 dígitos"
-                                        defaultValue={workerToEdit?.phone || ''}
+                                        value={isCreateMode ? contactPhone : undefined}
+                                        defaultValue={!isCreateMode ? (workerToEdit?.phone || '') : undefined}
+                                        onChange={isCreateMode ? (e) => setContactPhone(e.target.value) : undefined}
                                         className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none"
                                     />
                                 </div>
@@ -412,12 +500,15 @@ export default function WorkerFormModal({
                             <button
                                 type="submit"
                                 disabled={isPending}
-                                className={`w-full ${workerToEdit
-                                    ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100'
-                                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'
-                                } text-white py-4 rounded-2xl font-black shadow-lg transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 mt-4`}
+                                className={`w-full ${submitButtonClass} text-white py-4 rounded-2xl font-black shadow-lg transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 mt-4`}
                             >
-                                {isPending ? 'Procesando...' : workerToEdit ? 'Actualizar Trabajador' : 'Guardar Trabajador'}
+                                {isPending
+                                    ? 'Procesando...'
+                                    : workerToEdit
+                                        ? 'Actualizar Trabajador'
+                                        : publicGeneralMode
+                                            ? 'Guardar paciente particular'
+                                            : 'Guardar Trabajador'}
                             </button>
                         </form>
                     </div>

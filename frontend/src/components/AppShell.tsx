@@ -152,6 +152,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               {/* Vista de 3 agendas simultáneas como acceso secundario */}
               <NavItem href="/appointments/overview" icon="🗓️" label="Vista 3 Agendas" secondary collapsed={isEventWorkspace} />
               <NavItem href="/workers" icon="👥" label="Listado de pacientes" collapsed={isEventWorkspace} />
+              <NavItem href="/publico-general" icon="🧍" label="Público general" collapsed={isEventWorkspace} />
               <NavItem href="/reception" icon="🏥" label="Proceso de atención clínica" collapsed={isEventWorkspace} />
               <NavItem href="/dashboard" icon="📊" label="Agenda" collapsed={isEventWorkspace} />
 

@@ -7,6 +7,10 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import {
+    PUBLIC_GENERAL_COMPANY_NAME,
+    PUBLIC_GENERAL_COMPANY_RFC,
+} from '@/lib/public-general-company'
 
 // --- COMPANIES ---
 /**
@@ -107,6 +111,66 @@ export async function createCompany(formData: FormData) {
         console.error('Error creating company:', error)
         return { success: false, error: error.message || 'Error al crear la empresa' }
     }
+}
+
+/**
+ * Garantiza la empresa interna Público General (particulares / mostrador).
+ */
+export async function ensurePublicGeneralCompany() {
+    const existing = await prisma.company.findFirst({
+        where: {
+            OR: [
+                { rfc: PUBLIC_GENERAL_COMPANY_RFC },
+                { name: { equals: PUBLIC_GENERAL_COMPANY_NAME, mode: 'insensitive' } },
+            ],
+        },
+        select: {
+            id: true,
+            name: true,
+            rfc: true,
+            email: true,
+            phone: true,
+            defaultBranchId: true,
+        },
+    })
+
+    if (existing) return existing
+
+    const tenant = await prisma.tenant.findFirst()
+    const branches = tenant
+        ? await prisma.branch.findMany({
+              where: { tenantId: tenant.id },
+              select: { id: true },
+              orderBy: { createdAt: 'asc' },
+          })
+        : []
+    const branchIds = branches.map((b) => b.id)
+
+    const created = await prisma.company.create({
+        data: {
+            name: PUBLIC_GENERAL_COMPANY_NAME,
+            rfc: PUBLIC_GENERAL_COMPANY_RFC,
+            estado: 'HABILITADO',
+            enabledAt: new Date(),
+            origen: 'MANUAL',
+            defaultBranchId: branchIds[0] ?? null,
+            allowedBranches: branchIds.length
+                ? { connect: branchIds.map((id) => ({ id })) }
+                : undefined,
+        },
+        select: {
+            id: true,
+            name: true,
+            rfc: true,
+            email: true,
+            phone: true,
+            defaultBranchId: true,
+        },
+    })
+
+    revalidatePath('/companies')
+    revalidatePath('/publico-general')
+    return created
 }
 
 // --- BRANCHES ---

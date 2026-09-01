@@ -23,8 +23,9 @@ import { authOptions } from '@/auth'
 // para que el listado sepa si debe mostrar el placeholder "🪪 Ver INE".
 // Prisma 5.x no permite combinar `select` + `include` al mismo nivel; los
 // relations se incluyen como `select` anidados con sus propios campos.
-export async function getWorkers() {
+export async function getWorkers(options?: { companyId?: string }) {
     return await prisma.worker.findMany({
+        where: options?.companyId ? { companyId: options.companyId } : undefined,
         select: {
             id: true,
             universalId: true,
@@ -212,6 +213,7 @@ export async function createWorker(formData: FormData) {
             }
         })
         revalidatePath('/workers')
+        revalidatePath('/publico-general')
         // Retornamos también el Id de la empresa y Sucursal Default si la tiene para redirecciones
         const company = await prisma.company.findUnique({
             where: { id: companyId },
@@ -270,6 +272,7 @@ export async function updateWorker(id: string, formData: FormData) {
             }
         })
         revalidatePath('/workers')
+        revalidatePath('/publico-general')
         return { success: true }
     } catch (e: unknown) {
         const error = e as Error
@@ -308,6 +311,7 @@ export async function updateWorkerContactData(
             }
         })
         revalidatePath('/workers')
+        revalidatePath('/publico-general')
         return { success: true }
     } catch (e: unknown) {
         const error = e as Error
@@ -353,6 +357,7 @@ export async function updateWorkerCorroboratedName(
         })
 
         revalidatePath('/workers')
+        revalidatePath('/publico-general')
         revalidatePath('/appointments')
         return { success: true }
     } catch (e: unknown) {
@@ -865,6 +870,7 @@ export async function createExternalWorkerIntake(input: {
         })
 
         revalidatePath('/workers')
+        revalidatePath('/publico-general')
         return { success: true, status: 'created', workerId: created.id }
     } catch (error) {
         console.error('[createExternalWorkerIntake]', error)
@@ -1103,6 +1109,7 @@ export async function addWorkerReportEmail(
             select: { id: true },
         })
         revalidatePath('/workers')
+        revalidatePath('/publico-general')
         revalidatePath(`/workers/${workerId}`)
         return { success: true, data: { id: created.id } }
     } catch (e: unknown) {
@@ -1127,6 +1134,7 @@ export async function removeWorkerReportEmail(emailId: string): Promise<ActionRe
         if (!row) return { success: false, error: 'Correo no encontrado' }
         await prisma.workerReportEmail.delete({ where: { id: emailId } })
         revalidatePath('/workers')
+        revalidatePath('/publico-general')
         revalidatePath(`/workers/${row.workerId}`)
         return { success: true }
     } catch (e: unknown) {
@@ -1205,6 +1213,7 @@ export async function deleteWorkersAction(args: {
 
     if (result.ok) {
         revalidatePath('/workers')
+        revalidatePath('/publico-general')
     }
     return result
 }
