@@ -44,6 +44,10 @@ import {
   buildExamenMedicoPdfData,
   resolveAmiLogoDataUrl,
 } from '@/lib/examen-medico-pdf'
+import {
+  buildHistoriaReproductivaModulo1Text,
+  buildInmunizacionesFromPhysicalExam,
+} from '@/lib/clinical/modulo1-text'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -356,8 +360,8 @@ export async function GET(
       app: {
         texto: appTexto,
       },
-      historiaGineco: buildHistoriaGinecoText(physicalExamData),
-      inmunizaciones: buildInmunizacionesText(physicalExamData),
+      historiaGineco: buildHistoriaReproductivaModulo1Text(physicalExamData),
+      inmunizaciones: buildInmunizacionesFromPhysicalExam(physicalExamData),
       somatometria: {
         peso: numOrStr(somatometry.peso_kg ?? vitalSigns.peso_kg),
         talla: numOrStr(somatometry.talla_m ?? vitalSigns.talla_m),
@@ -594,49 +598,6 @@ function pickIaFieldBool(
     if (typeof v === 'boolean') return v
   }
   return null
-}
-
-/** Construye la historia gineco-obstétrica (12 campos del módulo 1). */
-function buildHistoriaGinecoText(ped: Record<string, unknown>): string | null {
-  const fields = [
-    ['Menarca', ped.m1_gine_menarca],
-    ['FUM', ped.m1_gine_fum],
-    ['IVS', ped.m1_gine_ivs],
-    ['Ritmo', ped.m1_gine_ritmo],
-    ['Gesta', ped.m1_gine_gesta],
-    ['Aborto', ped.m1_gine_aborto],
-    ['Parto', ped.m1_gine_parto],
-    ['Cesárea', ped.m1_gine_cesarea],
-    ['DOC', ped.m1_gine_doc],
-    ['FUP/FUC', ped.m1_gine_fup_uc],
-    ['Exp. mamaria', ped.m1_gine_exp_mamaria],
-    ['MPF', ped.m1_gine_mpf],
-  ] as const
-  const lines: string[] = []
-  for (const [label, val] of fields) {
-    const v = str(val)
-    if (v) lines.push(`${label}: ${v}`)
-  }
-  return lines.length > 0 ? lines.join(' · ') : null
-}
-
-/** Construye el bloque de inmunizaciones desde el módulo 1. */
-function buildInmunizacionesText(ped: Record<string, unknown>): string | null {
-  const fields = [
-    ['Rubéola', ped.m1_vac_rubeola],
-    ['Neumococo', ped.m1_vac_neumococo],
-    ['Sarampión', ped.m1_vac_sarampion],
-    ['Influenza', ped.m1_vac_influenza],
-    ['Toxoide tetánico', ped.m1_vac_toxoide],
-    ['Hepatitis B', ped.m1_vac_hepatitisb],
-    ['Otras', ped.m1_vac_otras],
-  ] as const
-  const lines: string[] = []
-  for (const [label, val] of fields) {
-    const v = str(val)
-    if (v && v !== 'NEGADO' && v !== 'NO APLICA') lines.push(`${label}: ${v}`)
-  }
-  return lines.length > 0 ? lines.join(' · ') : null
 }
 
 /**

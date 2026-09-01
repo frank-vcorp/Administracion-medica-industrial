@@ -332,6 +332,18 @@ export const AG_ABORTO_VALUES = ['SI', 'NO'] as const
 
 export type AgAbortoValue = (typeof AG_ABORTO_VALUES)[number]
 
+/** Módulo 1 — Antecedentes reproductivos masculinos: M.P.F. (ZIN `ddlARMPF`). */
+export const AR_MPF_VALUES = [
+  'NINGUNO',
+  'PRESERVATIVO',
+  'VASECTOMIA',
+  'HORMONAL(Pareja)',
+  'DIU(Pareja)',
+  'OTB(Pareja)',
+] as const
+
+export type ArMpfValue = (typeof AR_MPF_VALUES)[number]
+
 /** Módulo 1 — Vacunas — acordeón Sí/No/No aplica (alias semántico de SI_NO_NA_VALUES). */
 export const VAC_SI_NO_VALUES = SI_NO_NA_VALUES
 

@@ -50,6 +50,7 @@ import {
   AG_VSA_VALUES,
   AG_NUMERIC_0_11,
   AG_ABORTO_VALUES,
+  AR_MPF_VALUES,
   VAC_SI_NO_VALUES,
   SI_NO_NA_VALUES,
   // IMPL-20260817-08 (ARCH-20260817-02): 5 valores PDF para aptitud +
@@ -1019,6 +1020,13 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
       expect(v).toBeGreaterThanOrEqual(0)
       expect(v).toBeLessThanOrEqual(11)
     }
+  })
+
+  it('58. AR_MPF_VALUES expone catálogo ZIN masculino (6 opciones)', () => {
+    expect(AR_MPF_VALUES).toHaveLength(6)
+    expect(AR_MPF_VALUES[0]).toBe('NINGUNO')
+    expect(AR_MPF_VALUES).toContain('VASECTOMIA')
+    expect(AR_MPF_VALUES).toContain('PRESERVATIVO')
   })
 
   // ────────────────────────────────────────────────────────────────────────

@@ -554,7 +554,15 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
       {/* GO + Inmunizaciones */}
       <View style={styles.grid2}>
         <View style={[styles.gridCol, { paddingRight: 8 }]}>
-          <Text style={styles.subTitle}>Historia gineco-obstétrica</Text>
+          <Text style={styles.subTitle}>
+            {String(data.worker.sexo ?? '')
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .toLowerCase()
+              .startsWith('m')
+              ? 'Antecedentes reproductivos'
+              : 'Historia gineco-obstétrica'}
+          </Text>
           <Text style={styles.paragraph}>{v(data.historiaGineco)}</Text>
         </View>
         <View style={styles.gridCol}>

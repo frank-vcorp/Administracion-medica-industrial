@@ -55,6 +55,7 @@ import {
   AG_VSA_VALUES,
   AG_NUMERIC_0_11,
   AG_ABORTO_VALUES,
+  AR_MPF_VALUES,
   VAC_SI_NO_VALUES,
   type PlantillaEfKey,
 } from "@/schemas/clinical/exam.schema"
@@ -84,7 +85,7 @@ type OuterTab = 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'examen_m
 /** Sub-pestañas del Examen Médico clínico (pestaña 4) — IMPL-20260809-02: 'antecedentes'
  *  se añade como PRIMERA inner-tab dentro de "Examen Médico" (sub-pestaña, no outer-tab). */
 type InnerTab = 'antecedentes' | 'declarativa' | 'exploracion' | 'impresion'
-type M1Tab = 'gine' | 'inmuno'
+type M1Tab = 'gine' | 'repro' | 'inmuno'
 
 const VISUAL_FIELDS_NAMES = [
   'vision_lejana_od', 'vision_lejana_oi',
@@ -243,12 +244,12 @@ const LONGITUDINAL_SECTIONS: [string, string][] = [
  * Mantenemos text para fechas para no invalidar fechas legacy.
  * Ver SPEC §4.6.
  */
-type GineKind = 'select' | 'number' | 'date' | 'text'
+type M1FieldKind = 'select' | 'number' | 'date' | 'text'
 
-type GineField = {
+type M1FieldDef = {
   name: string
   label: string
-  kind: GineKind
+  kind: M1FieldKind
   /** Catálogo ZIN cuando kind === 'select'. */
   values?: readonly (string | number)[]
   /** min/max para kind === 'number'. */
@@ -256,7 +257,7 @@ type GineField = {
   max?: number
 }
 
-const GINE_FIELDS_TYPES: GineField[] = [
+const GINE_FIELDS_TYPES: M1FieldDef[] = [
   { name: 'm1_gine_menarca', label: 'Menarca', kind: 'number', min: 0, max: 30 },
   { name: 'm1_gine_fum', label: 'FUM', kind: 'date' },
   { name: 'm1_gine_ivs', label: 'IVS', kind: 'select', values: AG_IVS_VALUES },
@@ -270,6 +271,103 @@ const GINE_FIELDS_TYPES: GineField[] = [
   { name: 'm1_gine_exp_mamaria', label: 'Exp. Mamaria', kind: 'text' },
   { name: 'm1_gine_mpf', label: 'MPF', kind: 'select', values: AG_NUMERIC_0_11 },
 ]
+
+/** Módulo 1 — Antecedentes reproductivos masculinos (ZIN `PanelAtecedentesRepro`). */
+const REPRO_FIELDS_TYPES: M1FieldDef[] = [
+  { name: 'm1_repro_ivs', label: 'I.V.S', kind: 'text' },
+  { name: 'm1_repro_vsa', label: 'V.S.A', kind: 'select', values: AG_IVS_VALUES },
+  { name: 'm1_repro_doc_prostata', label: 'D.O.C. Próstata (Salud prostática)', kind: 'text' },
+  { name: 'm1_repro_mpf', label: 'M.P.F', kind: 'select', values: AR_MPF_VALUES },
+]
+
+function renderModulo1FieldGrid(
+  fields: M1FieldDef[],
+  modulo1: Record<string, string>,
+  setM1Field: (name: string, value: string) => void,
+  readonly: boolean,
+) {
+  const baseInputClass =
+    'w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60'
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {fields.map(field => {
+        const currentValue = modulo1[field.name] ?? ''
+        if (field.kind === 'select' && field.values) {
+          const isLegacy =
+            currentValue !== '' && !field.values.includes(currentValue as never)
+          return (
+            <div key={field.name}>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <select
+                value={isLegacy ? '__legacy__' : currentValue}
+                onChange={e => {
+                  if (e.target.value === '__legacy__') return
+                  setM1Field(field.name, e.target.value)
+                }}
+                disabled={readonly}
+                className={baseInputClass}
+              >
+                <option value="">—</option>
+                {isLegacy && (
+                  <option value="__legacy__">{currentValue} (legacy)</option>
+                )}
+                {field.values.map(v => (
+                  <option key={String(v)} value={String(v)}>
+                    {String(v)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        }
+        if (field.kind === 'number') {
+          return (
+            <div key={field.name}>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <input
+                type="number"
+                min={field.min}
+                max={field.max}
+                value={currentValue}
+                onChange={e => setM1Field(field.name, e.target.value)}
+                disabled={readonly}
+                className={baseInputClass}
+              />
+            </div>
+          )
+        }
+        if (field.kind === 'date') {
+          return (
+            <div key={field.name}>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <input
+                type="text"
+                value={currentValue}
+                onChange={e => setM1Field(field.name, e.target.value)}
+                disabled={readonly}
+                placeholder="DD/MM/AAAA"
+                className={baseInputClass}
+              />
+            </div>
+          )
+        }
+        return (
+          <div key={field.name} className={field.name.includes('doc_prost') ? 'col-span-full' : undefined}>
+            <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+            <input
+              type="text"
+              value={currentValue}
+              onChange={e => setM1Field(field.name, e.target.value)}
+              disabled={readonly}
+              className={baseInputClass}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 /**
  * IMPL-20260817-07 — Módulo 1 Vacunas → acordeón Sí/No + 'especifique'.
@@ -719,7 +817,12 @@ export default function ExamenMedicoEstudio({
     { id: 'examen_medico', label: 'Examen Médico', icon: '🩺', done: hasAptitud, locked: !canAccessExamen },
   ]
   const modulo1Tabs: [M1Tab, string, string][] = [
-    ...(modulo1['m1_sexo'] === 'Femenino' ? [['gine', '♀️', 'Ginecológicos'] as [M1Tab, string, string]] : []),
+    ...(modulo1['m1_sexo'] === 'Femenino'
+      ? [['gine', '♀️', 'Ginecológicos'] as [M1Tab, string, string]]
+      : []),
+    ...(modulo1['m1_sexo'] === 'Masculino'
+      ? [['repro', '♂️', 'Salud prostática'] as [M1Tab, string, string]]
+      : []),
     ['inmuno', '💉', 'Inmunizaciones'],
   ]
 
@@ -1243,87 +1346,7 @@ export default function ExamenMedicoEstudio({
           {m1Tab === 'gine' && modulo1['m1_sexo'] === 'Femenino' && (
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Antecedentes Ginecológicos</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {/* IMPL-20260817-07: 9 ginecológicos a <select> con catálogo ZIN
-                    + menarca a input numérico 0-30. Mantener fechas y
-                    exp_mamaria como texto libre. Ver SPEC §4.6. */}
-                {GINE_FIELDS_TYPES.map(field => {
-                  const currentValue = modulo1[field.name] ?? ''
-                  const baseInputClass = "w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60"
-                  if (field.kind === 'select' && field.values) {
-                    // DA-1: si el valor legacy no está en el catálogo, mostrar
-                    // opción "— otro (legacy) —" para que el médico lo vea
-                    // y pueda re-seleccionar sin perderlo.
-                    const isLegacy = currentValue !== '' && !field.values.includes(currentValue as never)
-                    return (
-                      <div key={field.name}>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
-                        <select
-                          value={isLegacy ? '__legacy__' : currentValue}
-                          onChange={e => {
-                            if (e.target.value === '__legacy__') return // no-op
-                            setM1Field(field.name, e.target.value)
-                          }}
-                          disabled={readonly}
-                          className={baseInputClass}
-                        >
-                          <option value="">—</option>
-                          {isLegacy && (
-                            <option value="__legacy__">{currentValue} (legacy)</option>
-                          )}
-                          {field.values.map(v => (
-                            <option key={String(v)} value={String(v)}>{String(v)}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )
-                  }
-                  if (field.kind === 'number') {
-                    return (
-                      <div key={field.name}>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
-                        <input
-                          type="number"
-                          min={field.min}
-                          max={field.max}
-                          value={currentValue}
-                          onChange={e => setM1Field(field.name, e.target.value)}
-                          disabled={readonly}
-                          className={baseInputClass}
-                        />
-                      </div>
-                    )
-                  }
-                  if (field.kind === 'date') {
-                    return (
-                      <div key={field.name}>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
-                        <input
-                          type="text"
-                          value={currentValue}
-                          onChange={e => setM1Field(field.name, e.target.value)}
-                          disabled={readonly}
-                          placeholder="DD/MM/AAAA"
-                          className={baseInputClass}
-                        />
-                      </div>
-                    )
-                  }
-                  // text
-                  return (
-                    <div key={field.name}>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
-                      <input
-                        type="text"
-                        value={currentValue}
-                        onChange={e => setM1Field(field.name, e.target.value)}
-                        disabled={readonly}
-                        className={baseInputClass}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
+              {renderModulo1FieldGrid(GINE_FIELDS_TYPES, modulo1, setM1Field, readonly)}
               <div className="flex items-center gap-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">VSA</label>
                 <button onClick={() => setM1Field('m1_gine_vsa', modulo1['m1_gine_vsa'] === 'SI' ? 'NO' : 'SI')} disabled={readonly}
@@ -1331,6 +1354,18 @@ export default function ExamenMedicoEstudio({
                   {modulo1['m1_gine_vsa'] || 'NO'}
                 </button>
               </div>
+            </div>
+          )}
+
+          {m1Tab === 'repro' && modulo1['m1_sexo'] === 'Masculino' && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Antecedentes Reproductivos — Salud Prostática
+              </p>
+              <p className="text-[10px] text-slate-500">
+                Captura ZIN: I.V.S, V.S.A, D.O.C. próstata y método de planificación familiar (M.P.F.).
+              </p>
+              {renderModulo1FieldGrid(REPRO_FIELDS_TYPES, modulo1, setM1Field, readonly)}
             </div>
           )}
 
