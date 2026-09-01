@@ -55,6 +55,7 @@ import {
   // IMPL-20260817-07: catálogos ZIN Módulo 1 (ginecológicos + vacunas)
   AG_IVS_VALUES,
   AG_VSA_VALUES,
+  AG_GINE_MPF_VALUES,
   AG_NUMERIC_0_11,
   AG_ABORTO_VALUES,
   AR_MPF_VALUES,
@@ -1079,6 +1080,16 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
       expect(v).toBeGreaterThanOrEqual(0)
       expect(v).toBeLessThanOrEqual(11)
     }
+  })
+
+  it('57b. AG_GINE_MPF_VALUES expone métodos de planificación familiar femenina', () => {
+    expect(AG_GINE_MPF_VALUES.length).toBeGreaterThanOrEqual(8)
+    expect(AG_GINE_MPF_VALUES[0]).toBe('NINGUNO')
+    expect(AG_GINE_MPF_VALUES).toContain('DE BARRERA')
+    expect(AG_GINE_MPF_VALUES).toContain('HORMONAL ORAL')
+    expect(AG_GINE_MPF_VALUES).toContain('DIU')
+    expect(AG_GINE_MPF_VALUES).toContain('OTB')
+    expect(AG_GINE_MPF_VALUES).toContain('OTRO')
   })
 
   it('58. AR_MPF_VALUES expone catálogo ZIN masculino (6 opciones)', () => {

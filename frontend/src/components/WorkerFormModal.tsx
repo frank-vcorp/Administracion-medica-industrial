@@ -1,14 +1,14 @@
 'use client'
 
-// IMPL-20260318-01: WorkerFormModal — modo dual (crear/editar) con selector dinámico de Puesto de Trabajo
-// IMPL-20260318-09: Manejo explícito de duplicate_found
+// IMPL-20260318-01: WorkerFormModal — modo dual (crear/editar)
+// Perfil médico por empresa (sustituye puesto de trabajo en alta de paciente)
 import { useState, useTransition, useEffect } from 'react'
 import { createWorker, updateWorker } from '@/actions/worker.actions'
 import { useRouter } from 'next/navigation'
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
 interface CompanyOption { id: string; name: string }
-interface JobPositionOption { id: string; name: string; companyId: string | null }
+interface MedicalProfileOption { id: string; name: string; companyId: string | null }
 
 /** Datos básicos del trabajador existente cuando se detecta duplicado */
 interface DuplicateWorker {
@@ -30,7 +30,7 @@ export interface WorkerForEdit {
     email?: string | null
     phone?: string | null
     companyId?: string | null
-    jobPositionId?: string | null
+    medicalProfileId?: string | null
 }
 
 interface WorkerRef {
@@ -40,7 +40,7 @@ interface WorkerRef {
 
 interface WorkerFormModalProps {
     companies: CompanyOption[]
-    jobPositions: JobPositionOption[]
+    medicalProfiles: MedicalProfileOption[]
     /** Si se provee junto con isOpen/onClose, el modal opera en modo edición (controlado por el padre). */
     workerToEdit?: WorkerForEdit | null
     /** Solo en modo controlado (edición): estado de visibilidad que maneja el padre. */
@@ -49,9 +49,18 @@ interface WorkerFormModalProps {
     onClose?: () => void
 }
 
+function profilesForCompany(
+    profiles: MedicalProfileOption[],
+    companyId: string
+): MedicalProfileOption[] {
+    return profiles.filter(
+        (p) => p.companyId === companyId || p.companyId === null
+    )
+}
+
 export default function WorkerFormModal({
     companies,
-    jobPositions,
+    medicalProfiles,
     workerToEdit,
     isOpen: isOpenProp,
     onClose,
@@ -65,18 +74,17 @@ export default function WorkerFormModal({
     const [error, setError] = useState<string | null>(null)
     const [duplicateWorker, setDuplicateWorker] = useState<DuplicateWorker | null>(null)
     const [selectedCompanyId, setSelectedCompanyId] = useState('')
-    const [selectedJobPositionId, setSelectedJobPositionId] = useState('')
+    const [selectedMedicalProfileId, setSelectedMedicalProfileId] = useState('')
     const router = useRouter()
 
-    // Sincroniza los selects controlados cuando cambia el trabajador en edición
-    /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- hidratación controlada al cambiar `workerToEdit` (controlled selects pattern); se omite `workerToEdit.companyId`/`jobPositionId` en deps para evitar renders espurios. */
+    /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- hidratación controlada al cambiar `workerToEdit`. */
     useEffect(() => {
         setSelectedCompanyId(workerToEdit?.companyId || '')
-        setSelectedJobPositionId(workerToEdit?.jobPositionId || '')
+        setSelectedMedicalProfileId(workerToEdit?.medicalProfileId || '')
     }, [workerToEdit?.id])
 
-    const filteredJobPositions = selectedCompanyId
-        ? jobPositions.filter(jp => jp.companyId === selectedCompanyId)
+    const filteredMedicalProfiles = selectedCompanyId
+        ? profilesForCompany(medicalProfiles, selectedCompanyId)
         : []
 
     function handleOpen() {
@@ -84,7 +92,7 @@ export default function WorkerFormModal({
         setError(null)
         setDuplicateWorker(null)
         setSelectedCompanyId('')
-        setSelectedJobPositionId('')
+        setSelectedMedicalProfileId('')
     }
 
     function handleClose() {
@@ -118,7 +126,6 @@ export default function WorkerFormModal({
                         existingWorker?: DuplicateWorker
                         error?: string
                     }
-                    // IMPL-20260318-09: Manejar duplicate_found explícitamente
                     if (result.status === 'duplicate_found' && result.existingWorker) {
                         setDuplicateWorker(result.existingWorker)
                         return
@@ -136,7 +143,6 @@ export default function WorkerFormModal({
         })
     }
 
-    // Pantalla de duplicado — solo en modo creación (no controlado)
     if (!isControlled && duplicateWorker) {
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
@@ -202,7 +208,6 @@ export default function WorkerFormModal({
         )
     }
 
-    // Pantalla de éxito solo para modo creación
     if (!isControlled && successData) {
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
@@ -249,7 +254,6 @@ export default function WorkerFormModal({
 
     return (
         <>
-            {/* Botón trigger — solo en modo no controlado (creación) */}
             {!isControlled && (
                 <button
                     onClick={handleOpen}
@@ -280,12 +284,7 @@ export default function WorkerFormModal({
                             </button>
                         </div>
 
-                        {/*
-                          key en el form: fuerza re-montaje cuando cambia el trabajador en edición,
-                          garantizando que los defaultValue de los inputs uncontrolled se actualicen.
-                        */}
                         <form key={workerToEdit?.id || 'new'} action={handleSubmit} className="space-y-4">
-                            {/* Nombre y Apellidos */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Nombre(s)</label>
@@ -309,7 +308,6 @@ export default function WorkerFormModal({
                                 </div>
                             </div>
 
-                            {/* DOB + Género: solo en creación (género necesario para generar universalId) */}
                             {!workerToEdit ? (
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
@@ -336,7 +334,6 @@ export default function WorkerFormModal({
                                 </div>
                             )}
 
-                            {/* Empresa (controlado — dispara filtrado de puestos) */}
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
                                 <select
@@ -344,7 +341,7 @@ export default function WorkerFormModal({
                                     value={selectedCompanyId}
                                     onChange={e => {
                                         setSelectedCompanyId(e.target.value)
-                                        setSelectedJobPositionId('')
+                                        setSelectedMedicalProfileId('')
                                     }}
                                     className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none appearance-none"
                                 >
@@ -355,26 +352,25 @@ export default function WorkerFormModal({
                                 </select>
                             </div>
 
-                            {/* Puesto de Trabajo (dinámico según empresa seleccionada) */}
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Puesto de Trabajo</label>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Perfil Médico</label>
                                 <select
-                                    name="jobPositionId"
-                                    value={selectedJobPositionId}
-                                    onChange={e => setSelectedJobPositionId(e.target.value)}
+                                    name="medicalProfileId"
+                                    value={selectedMedicalProfileId}
+                                    onChange={e => setSelectedMedicalProfileId(e.target.value)}
                                     disabled={!selectedCompanyId}
-                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                    required={!!selectedCompanyId}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-500 p-3 rounded-xl text-sm outline-none appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <option value="">
-                                        {selectedCompanyId ? '-- Seleccionar Puesto --' : '← Selecciona primero una empresa'}
+                                        {selectedCompanyId ? '-- Seleccionar Perfil --' : '← Selecciona primero una empresa'}
                                     </option>
-                                    {filteredJobPositions.map(jp => (
-                                        <option key={jp.id} value={jp.id}>{jp.name}</option>
+                                    {filteredMedicalProfiles.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Email y Teléfono */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Email</label>
@@ -397,7 +393,6 @@ export default function WorkerFormModal({
                                 </div>
                             </div>
 
-                            {/* Banner ID (solo creación) */}
                             {!workerToEdit && (
                                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
                                     <div className="flex items-center gap-3">

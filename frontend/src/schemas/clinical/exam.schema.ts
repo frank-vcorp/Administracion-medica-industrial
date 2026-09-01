@@ -381,7 +381,23 @@ export const AG_VSA_VALUES = [
 
 export type AgVsaValue = (typeof AG_VSA_VALUES)[number]
 
-/** Módulo 1 — Helper numérico 0-11 (gesta/parto/cesárea/MPF). */
+/** Módulo 1 — Antecedentes ginecológicos: M.P.F. (planificación familiar femenina). */
+export const AG_GINE_MPF_VALUES = [
+  'NINGUNO',
+  'DE BARRERA',
+  'HORMONAL ORAL',
+  'INYECTABLE',
+  'IMPLANTE',
+  'DIU',
+  'OTB',
+  'RITMO',
+  'LAM',
+  'OTRO',
+] as const
+
+export type AgGineMpfValue = (typeof AG_GINE_MPF_VALUES)[number]
+
+/** Módulo 1 — Helper numérico 0-11 (gesta/parto/cesárea). */
 export const AG_NUMERIC_0_11 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const
 
 export type AgNumeric0_11 = (typeof AG_NUMERIC_0_11)[number]

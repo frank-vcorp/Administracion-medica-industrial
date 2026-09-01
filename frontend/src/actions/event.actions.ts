@@ -10,14 +10,50 @@ import { authOptions } from "@/auth"
 import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
 
-export async function getEventsKanban() {
+/** Límites del día local (YYYY-MM-DD) para filtrar eventos del kanban. */
+function localDayBounds(dateStr: string): { start: Date; end: Date } {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    if (!y || !m || !d) {
+        const now = new Date()
+        return {
+            start: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0),
+            end: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
+        }
+    }
+    return {
+        start: new Date(y, m - 1, d, 0, 0, 0, 0),
+        end: new Date(y, m - 1, d, 23, 59, 59, 999),
+    }
+}
+
+function todayLocalDateString(): string {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+export async function getEventsKanban(date?: string) {
     try {
+        const dateStr = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayLocalDateString()
+        const { start, end } = localDayBounds(dateStr)
+
         const events = await prisma.medicalEvent.findMany({
+            where: {
+                status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'VALIDATING'] },
+                OR: [
+                    { checkInDate: { gte: start, lte: end } },
+                    { checkInDate: null, createdAt: { gte: start, lte: end } },
+                ],
+            },
             select: {
                 id: true,
                 status: true,
                 intakeSource: true,
                 appointmentId: true,
+                checkInDate: true,
+                createdAt: true,
                 worker: {
                     include: { company: true }
                 },

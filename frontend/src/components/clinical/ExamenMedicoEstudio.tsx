@@ -54,6 +54,7 @@ import {
   // IMPL-20260817-07: catálogos ZIN para Módulo 1 (ginecológicos + vacunas).
   // Ver SPEC §4.6.
   AG_VSA_VALUES,
+  AG_GINE_MPF_VALUES,
   AG_NUMERIC_0_11,
   AG_ABORTO_VALUES,
   AR_MPF_VALUES,
@@ -268,7 +269,7 @@ const GINE_FIELDS_TYPES: M1FieldDef[] = [
   { name: 'm1_gine_doc', label: 'DOC', kind: 'select', values: AG_VSA_VALUES },
   { name: 'm1_gine_fup_uc', label: 'FUP/FUC', kind: 'date' },
   { name: 'm1_gine_exp_mamaria', label: 'Exp. Mamaria', kind: 'text' },
-  { name: 'm1_gine_mpf', label: 'MPF', kind: 'select', values: AG_NUMERIC_0_11 },
+  { name: 'm1_gine_mpf', label: 'MPF', kind: 'select', values: AG_GINE_MPF_VALUES },
 ]
 
 /** Módulo 1 — Antecedentes reproductivos masculinos (ZIN `PanelAtecedentesRepro`). */

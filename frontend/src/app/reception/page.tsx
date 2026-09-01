@@ -7,6 +7,7 @@ import { getWorkers } from "@/actions/worker.actions"
 import CheckInModal from "@/components/CheckInModal"
 import QRScannerModal from "@/components/QRScannerModal"
 import StatusUpdateButton from "@/components/StatusUpdateButton"
+import ReceptionDayFilter from "@/components/reception/ReceptionDayFilter"
 import prisma from "@/lib/prisma"
 import Link from "next/link"
 
@@ -15,6 +16,25 @@ export const dynamic = 'force-dynamic'
 type IntakeSourceBadge = {
     label: string
     tone: string
+}
+
+function todayLocalDateString(): string {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+function formatDayLabel(dateStr: string): string {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const date = new Date(y, m - 1, d)
+    return date.toLocaleDateString('es-MX', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+    })
 }
 
 function getIntakeSourceBadge(event: { intakeSource?: string | null, appointmentId?: string | null }): IntakeSourceBadge {
@@ -36,8 +56,16 @@ function getIntakeSourceBadge(event: { intakeSource?: string | null, appointment
     }
 }
 
-export default async function ReceptionPage() {
-    const { scheduled, inProgress, completed } = await getEventsKanban()
+export default async function ReceptionPage(props: { searchParams: Promise<{ date?: string }> }) {
+    const searchParams = await props.searchParams
+    const selectedDate =
+        searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date)
+            ? searchParams.date
+            : todayLocalDateString()
+
+    const { scheduled, inProgress, completed } = await getEventsKanban(selectedDate)
+    const totalCount = scheduled.length + inProgress.length + completed.length
+
     const [allWorkers, branches] = await Promise.all([
         getWorkers(),
         prisma.branch.findMany({
@@ -48,32 +76,56 @@ export default async function ReceptionPage() {
 
     return (
         <div className="space-y-8 h-[calc(100vh-100px)] flex flex-col pb-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                 <div>
-                    {/* IMPL-20260630-02: rename "Centro de Control" → "Flujo de pacientes en tiempo real" (doc Renombramiento de catálogos línea 23) */}
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight">Flujo de pacientes en tiempo real</h2>
-                    <p className="text-sm text-slate-500 font-medium">Recepción, Triage y Flujo de Pacientes en Tiempo Real.</p>
+                    <p className="text-sm text-slate-500 font-medium">
+                        Recepción, triaje y flujo clínico ·{' '}
+                        <span className="capitalize text-slate-700">{formatDayLabel(selectedDate)}</span>
+                        {' · '}
+                        <span className="font-bold text-slate-600">{totalCount} paciente{totalCount !== 1 ? 's' : ''}</span>
+                    </p>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                    <ReceptionDayFilter selectedDate={selectedDate} />
                     <QRScannerModal />
                     <CheckInModal workers={allWorkers} branches={branches} />
                 </div>
             </div>
 
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-hidden">
-                {/* IMPL-20260624-02-RENOMBRES-FASE2-NAV-LANE: Lane 'Registro de pruebas' (primer estado del flujo Kanban) */}
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-hidden min-h-0">
                 <Lane title="Registro de pruebas" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
-                    {scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" nextStatus="IN_PROGRESS" />)}
+                    {scheduled.length === 0 ? (
+                        <EmptyLane message="Sin pacientes en registro para este día" />
+                    ) : (
+                        scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" nextStatus="IN_PROGRESS" />)
+                    )}
                 </Lane>
                 <Lane title="en proceso de prueba" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
-                    {inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" />)}
+                    {inProgress.length === 0 ? (
+                        <EmptyLane message="Nadie en proceso para este día" />
+                    ) : (
+                        inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" />)
+                    )}
                 </Lane>
                 <Lane title="Por dictaminar" count={completed.length} color="bg-emerald-50/30" borderColor="border-emerald-100" icon="🛡️">
-                    {completed.map(e => <PatientCard key={e.id} event={e} status="done" />)}
+                    {completed.length === 0 ? (
+                        <EmptyLane message="Sin expedientes por dictaminar hoy" />
+                    ) : (
+                        completed.map(e => <PatientCard key={e.id} event={e} status="done" />)
+                    )}
                 </Lane>
             </div>
         </div>
+    )
+}
+
+function EmptyLane({ message }: { message: string }) {
+    return (
+        <p className="text-center text-slate-400 text-xs font-medium italic py-8 px-2">
+            {message}
+        </p>
     )
 }
 
@@ -99,6 +151,7 @@ function PatientCard({ event, status, nextStatus }: {
         id: string,
         intakeSource?: string | null,
         appointmentId?: string | null,
+        checkInDate?: Date | null,
         worker: { firstName: string, lastName: string, company: { name: string } | null }
     },
     status: 'waiting' | 'progress' | 'done',
@@ -107,8 +160,9 @@ function PatientCard({ event, status, nextStatus }: {
     const workerName = event.worker ? `${event.worker.firstName} ${event.worker.lastName}` : "Desconocido"
     const companyName = event.worker?.company?.name || 'Empresa Vinculada'
     const intakeBadge = getIntakeSourceBadge(event)
-    // Mock company name visual as it's not eager loaded deep in this quick implementation, or we can assume worker has it.
-    // For MVP we just show the name.
+    const checkInTime = event.checkInDate
+        ? new Date(event.checkInDate).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+        : null
 
     return (
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-slate-200/50 hover:border-indigo-200 transition-all duration-300 relative overflow-hidden group">
@@ -118,7 +172,10 @@ function PatientCard({ event, status, nextStatus }: {
                 <span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{workerName}</span>
                 <span className="text-[10px] font-black text-slate-300 font-mono">#{event.id.slice(0, 4)}</span>
             </div>
-            <p className="text-[11px] font-bold text-slate-400 mb-4">{companyName}</p>
+            <p className="text-[11px] font-bold text-slate-400 mb-1">{companyName}</p>
+            {checkInTime && (
+                <p className="text-[10px] text-slate-400 mb-3">Ingreso {checkInTime}</p>
+            )}
             <div className="mb-4">
                 <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${intakeBadge.tone}`}>
                     {intakeBadge.label}

@@ -266,6 +266,7 @@ export async function fetchEventPageData(input: {
           doctorStatus: string
           doctorDiagnosis: string | null
           doctorNotes: string | null
+          doctorRecommendations?: string | null
           createdAt: Date
           // IMPL-FEATURE-20260825-01: estado del PDF validado.
           validatedPdfUrl?: string | null
@@ -308,6 +309,7 @@ export async function fetchEventPageData(input: {
                     doctorStatus: latestPredx.doctorReviews[0].doctorStatus,
                     doctorDiagnosis: latestPredx.doctorReviews[0].doctorDiagnosis,
                     doctorNotes: latestPredx.doctorReviews[0].doctorNotes,
+                    doctorRecommendations: latestPredx.doctorReviews[0].doctorRecommendations ?? null,
                     createdAt: latestPredx.doctorReviews[0].createdAt,
                     // IMPL-FEATURE-20260825-01: sólo considerar PDF listo cuando
                     // hay URL persistida Y NO hay error. `validatedPdfError`

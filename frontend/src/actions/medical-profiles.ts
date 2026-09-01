@@ -141,6 +141,14 @@ export async function getTestCategories() {
   })
 }
 
+/** Opciones ligeras para selects de alta/edición de paciente. */
+export async function getMedicalProfileOptions() {
+  return await prisma.medicalProfile.findMany({
+    select: { id: true, name: true, companyId: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
 export async function getMedicalProfilesForCompany(companyId: string) {
   return await prisma.medicalProfile.findMany({
     where: {

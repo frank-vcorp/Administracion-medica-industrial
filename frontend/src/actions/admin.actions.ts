@@ -60,12 +60,25 @@ export async function createCompany(formData: FormData) {
         const name = formData.get('name') as string
         const rfc = formData.get('rfc') as string
         const defaultBranchId = formData.get('defaultBranchId') as string
+        const allowedBranchIds = formData.getAll('allowedBranchIds').map(String).filter(Boolean)
         // IMPL-20260623-02: vendedor asignado + habilitado (Ficha Cliente v2)
         const sellerId = (formData.get('sellerId') as string) || (formData.get('sellerIdSelect') as string) || null
         const enabled = ((formData.get('enabled') as string) ?? (formData.get('enabledCheckbox') ? 'true' : 'false')) === 'true'
 
         if (!name || !rfc) {
             return { success: false, error: 'Nombre y RFC son obligatorios' }
+        }
+
+        let branchIds = allowedBranchIds
+        if (branchIds.length === 0) {
+            const tenant = await prisma.tenant.findFirst()
+            if (tenant) {
+                const allBranches = await prisma.branch.findMany({
+                    where: { tenantId: tenant.id },
+                    select: { id: true },
+                })
+                branchIds = allBranches.map((b) => b.id)
+            }
         }
 
         const company = await prisma.company.create({
@@ -76,12 +89,15 @@ export async function createCompany(formData: FormData) {
                 contactName: formData.get('contactName') as string,
                 email: formData.get('email') as string,
                 phone: formData.get('phone') as string,
-                defaultBranchId: defaultBranchId || null,
+                defaultBranchId: defaultBranchId || branchIds[0] || null,
                 sellerId: sellerId || null,
                 sellerAssignedAt: sellerId ? new Date() : null,
                 enabledAt: enabled ? new Date() : null,
                 origen: 'MANUAL',
                 estado: enabled ? 'HABILITADO' : 'PENDIENTE_REVISION',
+                allowedBranches: branchIds.length > 0
+                    ? { connect: branchIds.map((id) => ({ id })) }
+                    : undefined,
             }
         })
         revalidatePath('/companies')

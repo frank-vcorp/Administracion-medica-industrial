@@ -18,6 +18,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   extractValidatedRecommendationsFromPredx,
+  resolveValidatedRecommendations,
   extractRepetibilidadFromExtraction,
   resolveRepetibilidadForPdf,
   buildEspirometryPdfData,
@@ -79,6 +80,35 @@ describe('extractValidatedRecommendationsFromPredx — QA-20260825-01 P3-F', () 
   it('snapshot vacío no rompe', () => {
     expect(extractValidatedRecommendationsFromPredx(null, 'REVIEWED_ACCEPTED')).toEqual([])
     expect(extractValidatedRecommendationsFromPredx({}, 'REVIEWED_ACCEPTED')).toEqual([])
+  })
+})
+
+describe('resolveValidatedRecommendations — recomendaciones del médico', () => {
+  it('prioriza texto del médico sobre snapshot IA', () => {
+    const out = resolveValidatedRecommendations(
+      { recommendation: 'Sugerencia IA' },
+      'REVIEWED_ACCEPTED',
+      'Control en 2 semanas.\nEvitar polvo.',
+    )
+    expect(out).toEqual(['Control en 2 semanas.', 'Evitar polvo.'])
+  })
+
+  it('EDITED usa recomendaciones del médico aunque IA tenga sugerencias', () => {
+    const out = resolveValidatedRecommendations(
+      { recommendation: 'Sugerencia IA descartada' },
+      'REVIEWED_EDITED',
+      'Seguimiento ocupacional en 6 meses.',
+    )
+    expect(out).toEqual(['Seguimiento ocupacional en 6 meses.'])
+  })
+
+  it('sin texto médico conserva fallback IA en ACCEPTED', () => {
+    const out = resolveValidatedRecommendations(
+      { recommendation: 'Reposo relativo.' },
+      'REVIEWED_ACCEPTED',
+      '',
+    )
+    expect(out).toEqual(['Reposo relativo.'])
   })
 })
 

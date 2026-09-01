@@ -39,9 +39,9 @@ export interface SelectableWorker {
   phone: string | null
   dob: Date | null
   companyId: string | null
-  jobPositionId: string | null
+  medicalProfileId: string | null
   company: { name: string; defaultBranchId: string | null } | null
-  jobPosition: { id: string; name: string; defaultProfileId: string | null } | null
+  medicalProfile: { id: string; name: string } | null
   // IMPL-20260808-04: campos de última identificación (persistidos en
   // closeReceptionCorroboration). Opcionales para no romper consumidores
   // legados. En el listado `getWorkers()` actual siempre retorna
@@ -56,7 +56,7 @@ export interface SelectableWorker {
 }
 
 interface CompanyOption { id: string; name: string }
-interface JobPositionOption { id: string; name: string; companyId: string | null }
+interface MedicalProfileOption { id: string; name: string; companyId: string | null }
 
 // IMPL-20260808-04 (Opción A): shape de los datos que necesita el lightbox.
 // Se construyen tras la respuesta de `getWorkerIdentityImage`.
@@ -79,7 +79,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 interface Props {
   workers: SelectableWorker[]
   companies: CompanyOption[]
-  jobPositions: JobPositionOption[]
+  medicalProfiles: MedicalProfileOption[]
   initialEditWorkerId?: string
   /** Si true, renderiza checkboxes y permite selección. */
   selectable: boolean
@@ -95,7 +95,7 @@ interface Props {
 export default function WorkerSelectableGrid({
   workers,
   companies,
-  jobPositions,
+  medicalProfiles,
   initialEditWorkerId,
   selectable,
   selectedIds,
@@ -121,7 +121,7 @@ export default function WorkerSelectableGrid({
       email: w.email,
       phone: w.phone,
       companyId: w.companyId,
-      jobPositionId: w.jobPositionId,
+      medicalProfileId: w.medicalProfileId,
     }
   }
 
@@ -227,7 +227,7 @@ export default function WorkerSelectableGrid({
                   (<768px) para no romper el layout responsive del listado. */}
               <th className="px-6 py-4 hidden md:table-cell">Identificación</th>
               <th className="px-6 py-4">Empresa</th>
-              <th className="px-6 py-4">Puesto</th>
+              <th className="px-6 py-4">Perfil Médico</th>
               <th className="px-6 py-4">Correo</th>
               <th className="px-6 py-4">Teléfono</th>
               <th className="px-6 py-4 text-right">Acciones</th>
@@ -331,9 +331,9 @@ export default function WorkerSelectableGrid({
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    {w.jobPosition ? (
-                      <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-xs font-bold border border-amber-100 w-fit inline-block">
-                        {w.jobPosition.name}
+                    {w.medicalProfile ? (
+                      <span className="bg-teal-50 text-teal-700 px-2 py-1 rounded text-xs font-bold border border-teal-100 w-fit inline-block">
+                        {w.medicalProfile.name}
                       </span>
                     ) : (
                       <span className="text-slate-400 text-xs italic">—</span>
@@ -380,7 +380,7 @@ export default function WorkerSelectableGrid({
       {workerToEdit && (
         <WorkerFormModal
           companies={companies}
-          jobPositions={jobPositions}
+          medicalProfiles={medicalProfiles}
           workerToEdit={workerToEdit}
           isOpen={true}
           onClose={handleCloseEditModal}

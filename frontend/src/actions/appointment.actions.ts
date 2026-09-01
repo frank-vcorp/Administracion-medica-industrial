@@ -89,6 +89,22 @@ export async function createAppointment(data: {
       }
     });
 
+    // Perfil clínico: explícito en la cita, o heredado del paciente / puesto legacy
+    let resolvedServiceProfileId = data.serviceProfileId || null
+    if (!resolvedServiceProfileId) {
+      const workerProfile = await prisma.worker.findUnique({
+        where: { id: data.workerId },
+        select: {
+          medicalProfileId: true,
+          jobPosition: { select: { defaultProfileId: true } },
+        },
+      })
+      resolvedServiceProfileId =
+        workerProfile?.medicalProfileId ??
+        workerProfile?.jobPosition?.defaultProfileId ??
+        null
+    }
+
     // IMPL-20260519-10: QR operativo mínimo — payload AMI|NOMBRE=...|FN=YYYY-MM-DD
     // Independiente del QR de check-in; orientado a recaptura en estaciones
     const workerForQr = await prisma.worker.findUnique({
@@ -117,7 +133,7 @@ export async function createAppointment(data: {
         expedientId,
         qrCode,
         qrOperativo,  // IMPL-20260519-10
-        serviceProfileId: data.serviceProfileId || null,
+        serviceProfileId: resolvedServiceProfileId,
       },
       include: {
         worker: {
@@ -229,6 +245,159 @@ export async function getAppointments(date?: string, branchId?: string) {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Error al obtener citas',
+    }
+  }
+}
+
+async function buildAppointmentQrPayloads(workerId: string, scheduledDate: Date, expedientId: string) {
+  const qrData = JSON.stringify({
+    exp: expedientId,
+    uid: workerId,
+    date: scheduledDate.toISOString(),
+  })
+
+  const qrCode = await QRCode.toDataURL(qrData, {
+    errorCorrectionLevel: 'H',
+    margin: 2,
+    scale: 8,
+    color: { dark: '#000000', light: '#ffffff' },
+  })
+
+  const workerForQr = await prisma.worker.findUnique({
+    where: { id: workerId },
+    select: { firstName: true, lastName: true, dob: true },
+  })
+  const qrOperativoPayload = workerForQr
+    ? `AMI|NOMBRE=${(workerForQr.firstName + ' ' + workerForQr.lastName).toUpperCase()}|FN=${workerForQr.dob ? workerForQr.dob.toISOString().slice(0, 10) : ''}`
+    : `AMI|NOMBRE=SIN_NOMBRE|FN=`
+  const qrOperativo = await QRCode.toDataURL(qrOperativoPayload, {
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    scale: 6,
+    color: { dark: '#1e293b', light: '#ffffff' },
+  })
+
+  return { qrCode, qrOperativo }
+}
+
+/**
+ * Reagenda una cita pendiente: nueva cita SCHEDULED + cita anterior RESCHEDULED (libera cupo).
+ */
+export async function rescheduleAppointment(
+  appointmentId: string,
+  data: { date: string; time: string }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return { success: false, error: 'Usuario no autenticado' }
+    }
+
+    if (!data.date?.trim() || !data.time?.trim()) {
+      return { success: false, error: 'Fecha y hora son obligatorias' }
+    }
+
+    const scheduledAt = new Date(`${data.date}T${data.time}:00`)
+    if (Number.isNaN(scheduledAt.getTime())) {
+      return { success: false, error: 'Fecha u hora inválida' }
+    }
+
+    const existing = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        medicalEvents: { select: { id: true }, take: 1 },
+      },
+    })
+
+    if (!existing) {
+      return { success: false, error: 'Cita no encontrada' }
+    }
+
+    if (!['SCHEDULED', 'CONFIRMED'].includes(existing.status)) {
+      return { success: false, error: 'Solo se pueden reagendar citas pendientes (sin check-in)' }
+    }
+
+    if (existing.medicalEvents.length > 0) {
+      return { success: false, error: 'Esta cita ya tiene atención clínica iniciada' }
+    }
+
+    if (!existing.companyId) {
+      return { success: false, error: 'La cita no tiene empresa asociada' }
+    }
+
+    const operativa = await isCompanyOperativa(existing.companyId)
+    if (!operativa) {
+      return { success: false, error: 'CLIENTE_DESHABILITADO' }
+    }
+
+    const expedientId = await generateExpedientId(prisma)
+    const { qrCode, qrOperativo } = await buildAppointmentQrPayloads(
+      existing.workerId,
+      scheduledAt,
+      expedientId
+    )
+
+    const rescheduleNote = existing.expedientId
+      ? `Reagendada desde ${existing.expedientId}`
+      : 'Reagendada'
+
+    const result = await prisma.$transaction(async (tx) => {
+      const newAppointment = await tx.appointment.create({
+        data: {
+          workerId: existing.workerId,
+          companyId: existing.companyId,
+          branchId: existing.branchId,
+          scheduledAt,
+          notes: existing.notes ? `${existing.notes} · ${rescheduleNote}` : rescheduleNote,
+          source: existing.source,
+          status: 'SCHEDULED',
+          expedientId,
+          qrCode,
+          qrOperativo,
+          serviceProfileId: existing.serviceProfileId,
+        },
+        include: {
+          worker: {
+            select: { id: true, firstName: true, lastName: true, phone: true },
+          },
+          branch: { select: { id: true, name: true, address: true } },
+        },
+      })
+
+      await tx.appointment.update({
+        where: { id: appointmentId },
+        data: { status: 'RESCHEDULED' },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          userId: session.user!.id,
+          action: 'RESCHEDULE',
+          entity: 'Appointment',
+          entityId: appointmentId,
+          details: {
+            previousAppointmentId: appointmentId,
+            previousExpedientId: existing.expedientId,
+            newAppointmentId: newAppointment.id,
+            newExpedientId: newAppointment.expedientId,
+            previousScheduledAt: existing.scheduledAt.toISOString(),
+            newScheduledAt: scheduledAt.toISOString(),
+          },
+        },
+      })
+
+      return newAppointment
+    })
+
+    revalidatePath('/appointments')
+    revalidatePath('/dashboard')
+
+    return { success: true, appointment: result }
+  } catch (error) {
+    console.error('[RESCHEDULE APPOINTMENT ERROR]:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al reagendar la cita',
     }
   }
 }
@@ -346,7 +515,7 @@ export async function checkInAppointment(appointmentId: string) {
       throw new Error('Cita no encontrada')
     }
 
-    if (appointmentSnapshot.medicalEvents) {
+    if (appointmentSnapshot.medicalEvents.length > 0) {
       throw new Error('Esta cita ya tiene un evento médico asociado')
     }
 
@@ -382,7 +551,7 @@ export async function checkInAppointment(appointmentId: string) {
         throw new Error('Cita no encontrada')
       }
 
-      if (currentAppointment.medicalEvents) {
+      if (currentAppointment.medicalEvents.length > 0) {
         throw new Error('Esta cita ya tiene un evento médico asociado')
       }
 
@@ -578,6 +747,7 @@ export async function getAppointmentForCorroboration(appointmentId: string) {
         status: true,
         scheduledAt: true,
         expedientId: true,
+        serviceProfileId: true,
         worker: {
           select: {
             id: true,
@@ -605,6 +775,13 @@ export async function getAppointmentForCorroboration(appointmentId: string) {
 
     if (!appointment) {
       return { success: false, error: 'Cita no encontrada' }
+    }
+
+    if (!appointment.serviceProfileId) {
+      return {
+        success: false,
+        error: 'La cita no tiene perfil médico asignado. Edita la cita o asigna un perfil al paciente antes del check-in.',
+      }
     }
 
     return { success: true, appointment }
@@ -846,6 +1023,7 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
     }
 
     revalidatePath('/appointments')
+    revalidatePath('/reception')
     revalidatePath('/dashboard')
 
     return {

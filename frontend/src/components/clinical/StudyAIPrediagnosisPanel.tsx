@@ -103,6 +103,7 @@ interface DoctorReviewSummary {
   doctorStatus: string
   doctorDiagnosis: string | null
   doctorNotes: string | null
+  doctorRecommendations?: string | null
   createdAt: Date
   /**
    * IMPL-FEATURE-20260825-01: indica si el PDF validado quedó generado y
@@ -227,15 +228,19 @@ function DoctorReviewForm({
   prediagnosisSnapshotId,
   reviewerUserId,
   eventId,
+  suggestedRecommendations,
   onSubmitted,
 }: {
   prediagnosisSnapshotId: string
   reviewerUserId: string
   eventId: string
+  /** Texto sugerido por IA (solo placeholder / referencia visual). */
+  suggestedRecommendations?: string | null
   onSubmitted: () => void
 }) {
   const [status, setStatus] = useState<'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED' | 'REVIEWED_REJECTED'>('REVIEWED_ACCEPTED')
   const [doctorDiagnosis, setDoctorDiagnosis] = useState('')
+  const [doctorRecommendations, setDoctorRecommendations] = useState('')
   const [doctorNotes, setDoctorNotes] = useState('')
   const [aiAgreement, setAiAgreement] = useState<number | undefined>(undefined)
   const [aiUsefulness, setAiUsefulness] = useState<number | undefined>(undefined)
@@ -259,6 +264,7 @@ function DoctorReviewForm({
         prediagnosisSnapshotId,
         doctorStatus: status,
         doctorDiagnosis: doctorDiagnosis || undefined,
+        doctorRecommendations: doctorRecommendations || undefined,
         doctorNotes: doctorNotes || undefined,
         reviewedByUserId: reviewerUserId,
         aiAgreementScore: aiAgreement,
@@ -327,6 +333,27 @@ function DoctorReviewForm({
             onChange={(e) => setDoctorDiagnosis(e.target.value)}
             rows={2}
             placeholder="Describa el diagnóstico o hallazgo desde su perspectiva clínica..."
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 outline-none resize-none"
+          />
+        </div>
+      )}
+
+      {/* Recomendaciones validadas por el médico */}
+      {(status === 'REVIEWED_ACCEPTED' || status === 'REVIEWED_EDITED') && (
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">
+            Recomendaciones (opcional)
+          </label>
+          {suggestedRecommendations && (
+            <p className="text-[10px] text-slate-400 mb-1">
+              Sugerencia IA: {suggestedRecommendations}
+            </p>
+          )}
+          <textarea
+            value={doctorRecommendations}
+            onChange={(e) => setDoctorRecommendations(e.target.value)}
+            rows={3}
+            placeholder="Indique recomendaciones clínicas para el paciente (seguimiento, medidas, restricciones temporales...)"
             className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 outline-none resize-none"
           />
         </div>
@@ -670,6 +697,11 @@ export default function StudyAIPrediagnosisPanel({
                 <strong>Diagnóstico médico:</strong> {existingReview.doctorDiagnosis}
               </p>
             )}
+            {existingReview.doctorRecommendations && (
+              <p className="text-xs text-slate-600 mt-1">
+                <strong>Recomendaciones:</strong> {existingReview.doctorRecommendations}
+              </p>
+            )}
             {existingReview.doctorNotes && (
               <p className="text-xs text-slate-500 mt-1 italic">{existingReview.doctorNotes}</p>
             )}
@@ -747,6 +779,11 @@ export default function StudyAIPrediagnosisPanel({
                 prediagnosisSnapshotId={prediagnosisSnapshotId}
                 reviewerUserId={reviewerUserId}
                 eventId={eventId}
+                suggestedRecommendations={
+                  recommendationsList?.length
+                    ? recommendationsList.join(' · ')
+                    : null
+                }
                 onSubmitted={() => {
                   setReviewed(true)
                   setShowReviewForm(false)

@@ -51,6 +51,8 @@ export default function CompanyFormModal(props?: {
     const [successData, setSuccessData] = useState<{ success: boolean, company?: { id: string, name: string } } | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [branches, setBranches] = useState<{ id: string, name: string }[]>([])
+    const [selectedBranchIds, setSelectedBranchIds] = useState<Set<string>>(new Set())
+    const [defaultBranchId, setDefaultBranchId] = useState<string>('')
     const [sellers, setSellers] = useState<{ id: string, fullName: string, email: string }[]>([])
     const [sellerId, setSellerId] = useState<string>('')
     const [enabled, setEnabled] = useState<boolean>(true)
@@ -63,7 +65,12 @@ export default function CompanyFormModal(props?: {
 
     useEffect(() => {
         if (isOpen) {
-            getBranches().then((data) => setBranches(data))
+            getBranches().then((data) => {
+                setBranches(data)
+                const allIds = data.map((b) => b.id)
+                setSelectedBranchIds(new Set(allIds))
+                setDefaultBranchId((prev) => prev || allIds[0] || '')
+            })
             listActiveSellersAction().then((data) => setSellers(data))
         }
     }, [isOpen])
@@ -77,6 +84,8 @@ export default function CompanyFormModal(props?: {
                 // habilitado se aplican después vía updateCompany extendido (vía modal de edición).
                 formData.set('sellerId', sellerId)
                 formData.set('enabled', enabled ? 'true' : 'false')
+                formData.set('defaultBranchId', defaultBranchId)
+                selectedBranchIds.forEach((id) => formData.append('allowedBranchIds', id))
                 const result = (await createCompany(formData)) as {
                     success: boolean
                     company?: { id: string, name: string }
@@ -313,9 +322,53 @@ export default function CompanyFormModal(props?: {
                                 </div>
                             </div>
 
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursales permitidas</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {branches.map((b) => {
+                                        const checked = selectedBranchIds.has(b.id)
+                                        return (
+                                            <label
+                                                key={b.id}
+                                                className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none ${
+                                                    checked
+                                                        ? 'border-indigo-500 bg-indigo-50'
+                                                        : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    onChange={() => {
+                                                        setSelectedBranchIds((prev) => {
+                                                            const next = new Set(prev)
+                                                            if (next.has(b.id)) next.delete(b.id)
+                                                            else next.add(b.id)
+                                                            return next
+                                                        })
+                                                    }}
+                                                    className="w-4 h-4 accent-indigo-600 flex-shrink-0"
+                                                />
+                                                <span className={`text-sm font-bold ${checked ? 'text-indigo-800' : 'text-slate-700'}`}>
+                                                    {b.name}
+                                                </span>
+                                            </label>
+                                        )
+                                    })}
+                                </div>
+                                {branches.length === 0 && (
+                                    <p className="text-[10px] text-slate-400 ml-1">No hay sucursales registradas.</p>
+                                )}
+                            </div>
+
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal Predeterminada</label>
-                                <select name="defaultBranchId" className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none">
+                                <select
+                                    name="defaultBranchId"
+                                    value={defaultBranchId}
+                                    onChange={(e) => setDefaultBranchId(e.target.value)}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none"
+                                >
                                     <option value="">Seleccionar Sucursal...</option>
                                     {branches.map((b) => (
                                         <option key={b.id} value={b.id}>{b.name}</option>

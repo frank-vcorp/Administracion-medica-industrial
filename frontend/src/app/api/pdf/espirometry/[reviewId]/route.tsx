@@ -68,6 +68,7 @@ export async function GET(
       doctorStatus: true,
       doctorDiagnosis: true,
       doctorNotes: true,
+      doctorRecommendations: true,
       createdAt: true,
       reviewedByUserId: true,
       validatedPdfUrl: true,
@@ -185,6 +186,7 @@ export async function GET(
           : 'REVIEWED_EDITED',
       doctorDiagnosis: review.doctorDiagnosis,
       doctorNotes: review.doctorNotes,
+      doctorRecommendations: review.doctorRecommendations,
       reviewCreatedAt: review.validatedPdfGeneratedAt ?? review.createdAt,
       prediagnosisData: review.prediagnosisSnapshot?.prediagnosisData,
       extractionStructuredData:

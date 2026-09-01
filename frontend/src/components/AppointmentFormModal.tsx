@@ -14,7 +14,10 @@ interface Worker {
     firstName: string
     lastName: string
     companyId: string | null
+    medicalProfileId?: string | null
     company?: { name: string, defaultBranchId: string | null } | null
+    medicalProfile?: { id: string; name: string } | null
+    /** @deprecated legacy — fallback si medicalProfileId no está poblado */
     jobPosition?: { id: string; name: string; defaultProfileId: string | null } | null
 }
 
@@ -128,10 +131,12 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                             if (!selectedBranchId && company?.defaultBranchId) {
                                 setSelectedBranchId(company.defaultBranchId)
                             }
-                            // Auto-cargar y seleccionar perfil del jobPosition
+                            // Auto-seleccionar perfil del paciente
                             const pData = await getMedicalProfilesForCompany(companyIdToUse)
                             setProfiles(pData)
-                            if (worker.jobPosition?.defaultProfileId) {
+                            if (worker.medicalProfileId) {
+                                setSelectedProfileId(worker.medicalProfileId)
+                            } else if (worker.jobPosition?.defaultProfileId) {
                                 setSelectedProfileId(worker.jobPosition.defaultProfileId)
                             }
                         }
@@ -218,8 +223,10 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         setSelectedWorker(worker)
         setSelectedProfileId('')
 
-        // Auto-seleccionar perfil por puesto de trabajo
-        if (worker?.jobPosition?.defaultProfileId) {
+        // Auto-seleccionar perfil del paciente
+        if (worker?.medicalProfileId) {
+            setSelectedProfileId(worker.medicalProfileId)
+        } else if (worker?.jobPosition?.defaultProfileId) {
             setSelectedProfileId(worker.jobPosition.defaultProfileId)
         }
     }
@@ -445,9 +452,9 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                             <div className="space-y-1">
                                 <div className="flex items-center justify-between ml-1 mb-0.5">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase">Perfil Médico</label>
-                                    {selectedWorker?.jobPosition?.defaultProfileId && selectedProfileId === selectedWorker.jobPosition.defaultProfileId && (
+                                    {selectedWorker?.medicalProfileId && selectedProfileId === selectedWorker.medicalProfileId && (
                                         <span className="text-[9px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">
-                                            ✦ Auto por puesto: {selectedWorker.jobPosition.name}
+                                            ✦ Auto por paciente: {selectedWorker.medicalProfile?.name || profiles.find(p => p.id === selectedProfileId)?.name}
                                         </span>
                                     )}
                                 </div>

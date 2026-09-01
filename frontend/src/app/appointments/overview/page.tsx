@@ -35,6 +35,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; text: string }> = 
     COMPLETED: { label: 'Completada', bg: 'bg-emerald-100', text: 'text-emerald-700' },
     CANCELLED: { label: 'Cancelada', bg: 'bg-red-100', text: 'text-red-700' },
     NO_SHOW: { label: 'Ausente', bg: 'bg-slate-100', text: 'text-slate-600' },
+    RESCHEDULED: { label: 'Reagendada', bg: 'bg-orange-100', text: 'text-orange-700' },
 }
 
 export default function AppointmentsOverviewPage() {

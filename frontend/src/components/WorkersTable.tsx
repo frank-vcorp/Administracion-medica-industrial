@@ -16,18 +16,18 @@ interface WorkerRow {
     phone: string | null
     dob: Date | null
     companyId: string | null
-    jobPositionId: string | null
+    medicalProfileId: string | null
     company: { name: string; defaultBranchId: string | null } | null
-    jobPosition: { id: string; name: string; defaultProfileId: string | null } | null
+    medicalProfile: { id: string; name: string } | null
 }
 
 interface CompanyOption { id: string; name: string }
-interface JobPositionOption { id: string; name: string; companyId: string | null }
+interface MedicalProfileOption { id: string; name: string; companyId: string | null }
 
 interface WorkersTableProps {
     workers: WorkerRow[]
     companies: CompanyOption[]
-    jobPositions: JobPositionOption[]
+    medicalProfiles: MedicalProfileOption[]
     initialEditWorkerId?: string
 }
 
@@ -35,7 +35,7 @@ interface WorkersTableProps {
  * @id ARCH-20260318-09
  * @see context/handoffs/HANDOFF-ARCH-20260318-08-CORRECTIVO-SOFIA.md
  */
-export default function WorkersTable({ workers, companies, jobPositions, initialEditWorkerId }: WorkersTableProps) {
+export default function WorkersTable({ workers, companies, medicalProfiles, initialEditWorkerId }: WorkersTableProps) {
     const [workerToEdit, setWorkerToEdit] = useState<WorkerForEdit | null>(null)
     const router = useRouter()
     const pathname = usePathname()
@@ -49,7 +49,7 @@ export default function WorkersTable({ workers, companies, jobPositions, initial
             email: w.email,
             phone: w.phone,
             companyId: w.companyId,
-            jobPositionId: w.jobPositionId,
+            medicalProfileId: w.medicalProfileId,
         }
     }
 
@@ -79,7 +79,7 @@ export default function WorkersTable({ workers, companies, jobPositions, initial
                             <th className="px-6 py-4">ID</th>
                             <th className="px-6 py-4">Nombre Completo</th>
                             <th className="px-6 py-4">Empresa</th>
-                            <th className="px-6 py-4">Puesto</th>
+                            <th className="px-6 py-4">Perfil Médico</th>
                             <th className="px-6 py-4">Correo</th>
                             <th className="px-6 py-4">Teléfono</th>
                             <th className="px-6 py-4 text-right">Acciones</th>
@@ -105,9 +105,9 @@ export default function WorkersTable({ workers, companies, jobPositions, initial
                                     )}
                                 </td>
                                 <td className="px-6 py-4">
-                                    {w.jobPosition ? (
-                                        <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-xs font-bold border border-amber-100 w-fit inline-block">
-                                            {w.jobPosition.name}
+                                    {w.medicalProfile ? (
+                                        <span className="bg-teal-50 text-teal-700 px-2 py-1 rounded text-xs font-bold border border-teal-100 w-fit inline-block">
+                                            {w.medicalProfile.name}
                                         </span>
                                     ) : (
                                         <span className="text-slate-400 text-xs italic">—</span>
@@ -138,7 +138,7 @@ export default function WorkersTable({ workers, companies, jobPositions, initial
             {workerToEdit && (
                 <WorkerFormModal
                     companies={companies}
-                    jobPositions={jobPositions}
+                    medicalProfiles={medicalProfiles}
                     workerToEdit={workerToEdit}
                     isOpen={true}
                     onClose={handleCloseEditModal}

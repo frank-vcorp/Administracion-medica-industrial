@@ -108,6 +108,7 @@ export interface DoctorStudyReviewInput {
   doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED' | 'REVIEWED_REJECTED'
   doctorDiagnosis?: string
   doctorNotes?: string
+  doctorRecommendations?: string
   reviewedByUserId: string
   aiAgreementScore?: number
   aiUsefulnessScore?: number
@@ -160,6 +161,7 @@ export interface StudySnapshotsResult {
         doctorStatus: string
         doctorDiagnosis: string | null
         doctorNotes: string | null
+        doctorRecommendations: string | null
         createdAt: Date
       }>
     }>
@@ -733,6 +735,7 @@ export async function submitDoctorStudyReview(
     doctorStatus,
     doctorDiagnosis,
     doctorNotes,
+    doctorRecommendations,
     // QA-20260825-01 P1-A: el `reviewedByUserId` enviado por el cliente se
     // EXTRAE pero NO SE USA. El ID efectivo se deriva de la sesión.
     reviewedByUserId: _clientReviewedByUserId,
@@ -844,6 +847,7 @@ export async function submitDoctorStudyReview(
         doctorStatus,
         doctorDiagnosis: doctorDiagnosis ?? null,
         doctorNotes: doctorNotes ?? null,
+        doctorRecommendations: doctorRecommendations ?? null,
         reviewedByUserId,
         aiAgreementScore: aiAgreementScore ?? null,
         aiUsefulnessScore: aiUsefulnessScore ?? null,
@@ -886,6 +890,7 @@ export async function submitDoctorStudyReview(
               : 'REVIEWED_EDITED',
           doctorDiagnosis,
           doctorNotes,
+          doctorRecommendations,
           reviewCreatedAt: review.createdAt,
           prediagnosisData: snapshot.prediagnosisData,
           extractionStructuredData: snapshot.extractionSnapshot?.structuredData,
@@ -1018,6 +1023,7 @@ export async function getStudyAISnapshots(
                 doctorStatus: true,
                 doctorDiagnosis: true,
                 doctorNotes: true,
+                doctorRecommendations: true,
                 createdAt: true,
               },
             },
@@ -1061,6 +1067,7 @@ export async function getLatestStudyExtractionSnapshot(eventTestId: string) {
                 doctorStatus: true,
                 doctorDiagnosis: true,
                 doctorNotes: true,
+                doctorRecommendations: true,
                 createdAt: true,
               },
             },

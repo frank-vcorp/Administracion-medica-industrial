@@ -13,7 +13,11 @@ import { generateInvitation } from '@/actions/prefilled-invitation.actions'
 import { useRouter } from 'next/navigation'
 import AppointmentFormModal from '@/components/AppointmentFormModal'
 import CorroborationModal from '@/components/CorroborationModal'
+import RescheduleAppointmentModal from '@/components/RescheduleAppointmentModal'
 import Link from 'next/link'
+
+/** Citas que ocupan cupo visible en la agenda del día. */
+const AGENDA_SLOT_STATUSES = new Set(['SCHEDULED', 'CONFIRMED'])
 
 /**
  * Vista de Agenda de Citas Premium v2.2
@@ -62,6 +66,8 @@ export default function AppointmentsPage() {
         return `${year}-${month}-${day}`
     })
     const [error, setError] = useState<string | null>(null)
+    const [checkInError, setCheckInError] = useState<string | null>(null)
+    const [rescheduleApt, setRescheduleApt] = useState<AppointmentWithWorker | null>(null)
     // IMPL-20260325-01: Estado del modal de invitación de prellenado
     const [inviteAptId, setInviteAptId] = useState<string | null>(null)
     const [inviteLink, setInviteLink] = useState<string | null>(null)
@@ -106,8 +112,10 @@ export default function AppointmentsPage() {
         }
     }, [selectedDate, selectedBranchId])
 
-    // Agrupar citas por hora (Filtrando localmente para asegurar que coincidan con el día seleccionado)
-    const groupedAppointments = appointments.reduce((acc, apt) => {
+    const agendaAppointments = appointments.filter((a) => AGENDA_SLOT_STATUSES.has(a.status))
+
+    // Agrupar citas por hora (solo citas que ocupan cupo en la agenda)
+    const groupedAppointments = agendaAppointments.reduce((acc, apt) => {
         const aptDate = new Date(apt.scheduledAt);
         // Construir fecha local YYYY-MM-DD para comparar con selectedDate
         const aptDateString = `${aptDate.getFullYear()}-${String(aptDate.getMonth() + 1).padStart(2, '0')}-${String(aptDate.getDate()).padStart(2, '0')}`;
@@ -145,14 +153,14 @@ export default function AppointmentsPage() {
     }
 
     const handleCheckIn = async (id: string) => {
-        // IMPL-20260318-08: Abrir corroboración antes de crear el MedicalEvent
+        setCheckInError(null)
         setCheckingIn(id)
         const res = await getAppointmentForCorroboration(id)
         if (res.success && res.appointment) {
             setCorroborationData(res.appointment as Parameters<typeof CorroborationModal>[0]['appointment'])
-            setSelectedApt(null) // cerrar ticket si estaba abierto
+            setSelectedApt(null)
         } else {
-            setError(res.error || 'No se pudo cargar datos para corroboración')
+            setCheckInError(res.error || 'No se pudo iniciar el check-in')
         }
         setCheckingIn(null)
     }
@@ -223,8 +231,24 @@ export default function AppointmentsPage() {
             </div>
 
             {/* Stats Summary */}
+            {checkInError && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-between gap-3">
+                    <span>⚠️ {checkInError}</span>
+                    <button
+                        type="button"
+                        onClick={() => setCheckInError(null)}
+                        className="text-amber-600 hover:text-amber-900 font-bold text-xs"
+                    >
+                        Cerrar
+                    </button>
+                </div>
+            )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="completar con pacientes citados" value={appointments.length} color="blue" />
+                <StatCard label="completar con pacientes citados" value={agendaAppointments.filter(a => {
+                    const aptDate = new Date(a.scheduledAt)
+                    const aptDateString = `${aptDate.getFullYear()}-${String(aptDate.getMonth() + 1).padStart(2, '0')}-${String(aptDate.getDate()).padStart(2, '0')}`
+                    return aptDateString === selectedDate
+                }).length} color="blue" />
                 {/* IMPL-20260630-02: rename "Pendientes" → "Pruebas pendientes" (doc Renombramiento de catálogos línea 51) */}
                 <StatCard label="Pruebas pendientes" value={appointments.filter(a => a.status === 'SCHEDULED').length} color="amber" />
                 <StatCard label="Atención completa" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
@@ -294,6 +318,15 @@ export default function AppointmentsPage() {
                                                             >
                                                                 🎫
                                                             </button>
+                                                            {apt.status === 'SCHEDULED' && (
+                                                                <button
+                                                                    onClick={() => setRescheduleApt(apt)}
+                                                                    className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                    title="Reagendar"
+                                                                >
+                                                                    📅
+                                                                </button>
+                                                            )}
                                                             {apt.status === 'SCHEDULED' && (
                                                                 <button
                                                                     onClick={() => handleGenerateInvite(apt.id)}
@@ -389,12 +422,21 @@ export default function AppointmentsPage() {
                 </div>
             )}
 
+            {rescheduleApt && (
+                <RescheduleAppointmentModal
+                    appointment={rescheduleApt}
+                    onClose={() => setRescheduleApt(null)}
+                    onSuccess={loadData}
+                />
+            )}
+
             {/* IMPL-20260318-09: Modal de Corroboración — montado y funcional antes del check-in */}
             {corroborationData && (
                 <CorroborationModal
                     appointment={corroborationData}
                     onClose={() => {
                         setCorroborationData(null)
+                        setCheckInError(null)
                         loadData()
                     }}
                 />
@@ -523,6 +565,7 @@ function StatusBadge({ status }: { status: string }) {
         COMPLETED: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Completada', icon: '✨' },
         CANCELLED: { bg: 'bg-red-100', text: 'text-red-700', label: 'Cancelada', icon: '✕' },
         NO_SHOW: { bg: 'bg-slate-100', text: 'text-slate-700', label: 'Ausente', icon: '👤' },
+        RESCHEDULED: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Reagendada', icon: '↪' },
     }
     const current = variants[status] || variants.SCHEDULED
 

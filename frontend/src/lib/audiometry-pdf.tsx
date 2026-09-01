@@ -51,51 +51,20 @@ export {
 } from '@/lib/espirometry-pdf'
 
 // ──────────────────────────────────────────────────────────────────────────
-// Helpers puros — testeables y reutilizables desde la API route
+// Helpers puros — reutilizados desde espirometry-pdf (misma semántica)
 // ──────────────────────────────────────────────────────────────────────────
 
-/**
- * Recomendaciones validadas: si el médico ACEPTA tal cual, conservamos
- * las del snapshot IA (`recommendation` singular + `recommendations[]` +
- * `recommended_actions[]`); si EDITA, NO se renderizan las
- * recomendaciones IA (para no contaminar el documento firmado con texto
- * que el médico NO avaló).
- *
- * NOTA: el SPEC §3 prohíbe copiar el diagnóstico nosológico ni la
- * recomendación textual del PDF AMI como salida IA. El extractor NO
- * genera recomendaciones diagnósticas etiológicas (sólo patrón +
- * criterio AMI), por lo que la única fuente de recomendaciones es el
- * snapshot IA. El helper replica el patrón defensivo de Espirometría.
- */
-export function extractValidatedRecommendationsFromPredx(
-  predxData: Record<string, unknown> | null,
-  doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED',
-): string[] {
-  if (doctorStatus !== 'REVIEWED_ACCEPTED') return []
-  const data = predxData ?? {}
-  const result: string[] = []
-  const recSingular =
-    typeof data.recommendation === 'string' ? data.recommendation.trim() : ''
-  if (recSingular) result.push(recSingular)
-  const arrKeys = ['recommendations', 'recommended_actions'] as const
-  for (const key of arrKeys) {
-    const arr = data[key]
-    if (Array.isArray(arr)) {
-      for (const r of arr) {
-        if (typeof r === 'string' && r.trim().length > 0) {
-          result.push(r.trim())
-        }
-      }
-    }
-  }
-  return Array.from(new Set(result))
-}
+export {
+  extractValidatedRecommendationsFromPredx,
+  resolveValidatedRecommendations,
+} from '@/lib/espirometry-pdf'
 
 export interface BuildAudiometriaPdfInput {
   reviewId: string
   doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
   doctorDiagnosis: string | null | undefined
   doctorNotes: string | null | undefined
+  doctorRecommendations?: string | null | undefined
   reviewCreatedAt: Date
   prediagnosisData: unknown
   extractionStructuredData: unknown
@@ -120,9 +89,10 @@ export function buildAudiometriaPdfData(
 ): AudiometriaValidatedPDFData {
   const predxData =
     (input.prediagnosisData as Record<string, unknown> | null) ?? {}
-  const recomendacionesValidadas = extractValidatedRecommendationsFromPredx(
+  const recomendacionesValidadas = resolveValidatedRecommendations(
     predxData,
     input.doctorStatus,
+    input.doctorRecommendations,
   )
 
   // FND-20260825-15: el PDF ya NO computa PTA3 / criterio AMI / patrón /

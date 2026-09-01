@@ -200,9 +200,12 @@ model Worker {
   clinicalHistory          ClinicalHistory?
   medicalHistory           MedicalEvent[]
   jobPositionId            String?
+  /// Perfil médico asignado al paciente (reemplaza puesto de trabajo en alta).
+  medicalProfileId         String?
   branch                   Branch?             @relation(fields: [branchId], references: [id])
   company                  Company?            @relation(fields: [companyId], references: [id])
   jobPosition              JobPosition?        @relation(fields: [jobPositionId], references: [id])
+  medicalProfile           MedicalProfile?     @relation(fields: [medicalProfileId], references: [id])
   // IMPL-20260519-10: Referencia a última identificación válida reutilizable (ARCH-20260519-10)
   lastIdentityDocumentType String? // IdentityDocumentType catalog
   lastIdentityFrontFileUrl String?
@@ -324,6 +327,7 @@ model MedicalProfile {
   createdAt    DateTime                    @default(now())
   updatedAt    DateTime                    @updatedAt
   appointments Appointment[]
+  workers      Worker[]
   company      Company?                    @relation(fields: [companyId], references: [id])
   jobPositions JobPosition[]
   tests        ProfileTest[]
@@ -683,6 +687,7 @@ enum AppointmentStatus {
   CANCELLED
   NO_SHOW
   COMPLETED
+  RESCHEDULED
 }
 
 // IMPL-20260324-07: Estados del portal de prellenado temporal (SPEC ARCH-20260324-09)
@@ -804,6 +809,8 @@ model DoctorStudyReview {
   doctorStatus           String
   doctorDiagnosis        String?
   doctorNotes            String?
+  /// Recomendaciones clínicas validadas por el médico (texto libre, multilínea).
+  doctorRecommendations  String?
   reviewedByUserId       String
   // Feedback comparativo IA vs médico
   aiAgreementScore       Int? // 0-100: 100 = concordancia total

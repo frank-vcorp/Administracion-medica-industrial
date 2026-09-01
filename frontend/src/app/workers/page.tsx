@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { getWorkers } from "@/actions/worker.actions"
-import { getCompanies, getJobPositions, getBranches } from "@/actions/admin.actions"
+import { getCompanies, getBranches } from "@/actions/admin.actions"
+import { getMedicalProfileOptions } from "@/actions/medical-profiles"
 import WorkerFormModal from "@/components/WorkerFormModal"
 import BulkWorkerImportModal from "@/components/BulkWorkerImportModal"
 import BulkClinicWalkInImportModal from "@/components/BulkClinicWalkInImportModal"
@@ -24,14 +25,14 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
     const session = await getServerSession(authOptions)
     const isSuperAdmin = (session?.user as { role?: string } | undefined)?.role === 'SUPERADMIN'
 
-    const [workers, companies, jobPositions, branchesResult] = await Promise.allSettled([
+    const [workers, companies, medicalProfiles, branchesResult] = await Promise.allSettled([
         getWorkers(),
         getCompanies(),
-        getJobPositions(),
+        getMedicalProfileOptions(),
         getBranches(),
     ])
 
-    if (workers.status !== 'fulfilled' || companies.status !== 'fulfilled' || jobPositions.status !== 'fulfilled') {
+    if (workers.status !== 'fulfilled' || companies.status !== 'fulfilled' || medicalProfiles.status !== 'fulfilled') {
         throw new Error('No se pudo cargar el padrón de trabajadores')
     }
 
@@ -56,14 +57,14 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
                     <BulkWorkerImportModal companies={companyOptions} branches={branchOptions} />
                     {/* Azul: Clínica Física (sin proyecto, intakeSource=CLINIC_WALK_IN_MASS) */}
                     <BulkClinicWalkInImportModal branches={branchOptions} />
-                    <WorkerFormModal companies={companies.value} jobPositions={jobPositions.value} />
+                    <WorkerFormModal companies={companies.value} medicalProfiles={medicalProfiles.value} />
                 </div>
             </div>
 
             <WorkersPageClient
                 workers={selectableWorkers}
                 companies={companies.value}
-                jobPositions={jobPositions.value}
+                medicalProfiles={medicalProfiles.value}
                 initialEditWorkerId={searchParams.edit}
                 isSuperAdmin={isSuperAdmin}
             />

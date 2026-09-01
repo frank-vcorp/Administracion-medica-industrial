@@ -13,7 +13,7 @@ import { logAudit } from "@/actions/audit.actions"
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 
-// Get all workers with their company name and jobPosition (includes defaultProfileId for auto-selection)
+// Get all workers with their company name and medical profile
 // @id IMPL-20260313-07
 // IMPL-20260808-04 (Opción A): se usa `select` explícito para EXCLUIR los
 // dataURL base64 de la INE (`lastIdentityFrontFileUrl`,
@@ -39,6 +39,7 @@ export async function getWorkers() {
             updatedAt: true,
             branchId: true,
             jobPositionId: true,
+            medicalProfileId: true,
             intakeSource: true,
             // Identidad: solo el tipo (string pequeño) para decidir placeholder.
             lastIdentityDocumentType: true,
@@ -52,6 +53,9 @@ export async function getWorkers() {
             },
             jobPosition: {
                 select: { id: true, name: true, defaultProfileId: true }
+            },
+            medicalProfile: {
+                select: { id: true, name: true }
             }
         },
         orderBy: { createdAt: 'desc' }
@@ -121,10 +125,25 @@ export async function getWorkersByCompany(companyId: string) {
             },
             jobPosition: {
                 select: { id: true, name: true, defaultProfileId: true }
+            },
+            medicalProfile: {
+                select: { id: true, name: true }
             }
         },
         orderBy: { lastName: 'asc' }
     })
+}
+
+async function validateMedicalProfileForCompany(
+    medicalProfileId: string,
+    companyId: string
+): Promise<boolean> {
+    const profile = await prisma.medicalProfile.findUnique({
+        where: { id: medicalProfileId },
+        select: { companyId: true },
+    })
+    if (!profile) return false
+    return profile.companyId === null || profile.companyId === companyId
 }
 
 export async function createWorker(formData: FormData) {
@@ -170,7 +189,14 @@ export async function createWorker(formData: FormData) {
 
         const universalId = generateUniversalId({ firstName, lastName, dob, gender })
 
-        const jobPositionId = formData.get('jobPositionId') as string
+        const medicalProfileId = formData.get('medicalProfileId') as string
+
+        if (companyId && medicalProfileId) {
+            const valid = await validateMedicalProfileForCompany(medicalProfileId, companyId)
+            if (!valid) {
+                return { success: false, error: 'El perfil médico no corresponde a la empresa seleccionada' }
+            }
+        }
 
         const worker = await prisma.worker.create({
             data: {
@@ -182,7 +208,7 @@ export async function createWorker(formData: FormData) {
                 email: formData.get('email') as string,
                 phone: formData.get('phone') as string,
                 companyId: companyId || null,
-                jobPositionId: jobPositionId || null,
+                medicalProfileId: medicalProfileId || null,
             }
         })
         revalidatePath('/workers')
@@ -221,8 +247,15 @@ export async function updateWorker(id: string, formData: FormData) {
         }
 
         const companyId = formData.get('companyId') as string
-        const jobPositionId = formData.get('jobPositionId') as string
+        const medicalProfileId = formData.get('medicalProfileId') as string
         const dob = formData.get('dob') as string
+
+        if (companyId && medicalProfileId) {
+            const valid = await validateMedicalProfileForCompany(medicalProfileId, companyId)
+            if (!valid) {
+                return { success: false, error: 'El perfil médico no corresponde a la empresa seleccionada' }
+            }
+        }
 
         await prisma.worker.update({
             where: { id },
@@ -233,7 +266,7 @@ export async function updateWorker(id: string, formData: FormData) {
                 email: (formData.get('email') as string) || null,
                 phone: (formData.get('phone') as string) || null,
                 companyId: companyId || null,
-                jobPositionId: jobPositionId || null,
+                medicalProfileId: medicalProfileId || null,
             }
         })
         revalidatePath('/workers')
@@ -252,16 +285,26 @@ export async function updateWorker(id: string, formData: FormData) {
  */
 export async function updateWorkerContactData(
     workerId: string,
-    updates: { phone?: string; email?: string; companyId?: string; jobPositionId?: string }
+    updates: { phone?: string; email?: string; companyId?: string; medicalProfileId?: string }
 ) {
     try {
+        if (updates.companyId && updates.medicalProfileId) {
+            const valid = await validateMedicalProfileForCompany(
+                updates.medicalProfileId,
+                updates.companyId
+            )
+            if (!valid) {
+                return { success: false, error: 'El perfil médico no corresponde a la empresa seleccionada' }
+            }
+        }
+
         await prisma.worker.update({
             where: { id: workerId },
             data: {
                 ...(updates.phone !== undefined ? { phone: updates.phone || null } : {}),
                 ...(updates.email !== undefined ? { email: updates.email || null } : {}),
                 ...(updates.companyId !== undefined ? { companyId: updates.companyId || null } : {}),
-                ...(updates.jobPositionId !== undefined ? { jobPositionId: updates.jobPositionId || null } : {}),
+                ...(updates.medicalProfileId !== undefined ? { medicalProfileId: updates.medicalProfileId || null } : {}),
             }
         })
         revalidatePath('/workers')
@@ -336,6 +379,8 @@ const BulkWorkerRowSchema = z.object({
     gender: z.enum(['M', 'F']).optional(),
     email: z.union([z.string().email(), z.literal('')]).optional(),
     phone: z.string().max(15).optional(),
+    medicalProfileName: z.string().optional(),
+    /** @deprecated legacy Excel column "Puesto" */
     jobPositionName: z.string().optional(),
     _rowIndex: z.number(),
 })
@@ -361,6 +406,8 @@ const QuickWorkerRowSchema = z.object({
     nationalId: z.string().max(18).optional(),
     dob: z.string().optional(),
     phone: z.string().max(15).optional(),
+    medicalProfileName: z.string().optional(),
+    /** @deprecated legacy Excel column "Puesto" */
     jobPositionName: z.string().optional(),
     _rowIndex: z.number(),
 })
@@ -420,9 +467,11 @@ export async function bulkImportWorkers(
 
     const result: BulkImportResult = { created: 0, duplicates: [], warnings: [], errors: [] }
 
-    // 4. Precargar puestos de trabajo de la empresa para resolución por nombre
-    const jobPositions = await prisma.jobPosition.findMany({
-        where: { companyId },
+    // 4. Precargar perfiles médicos de la empresa para resolución por nombre
+    const medicalProfiles = await prisma.medicalProfile.findMany({
+        where: {
+            OR: [{ companyId }, { companyId: null }],
+        },
         select: { id: true, name: true },
     })
 
@@ -523,10 +572,10 @@ export async function bulkImportWorkers(
                 gender: row.gender,
             })
 
-            // Resolver jobPositionId por nombre (case-insensitive)
-            const matchedPosition = row.jobPositionName
-                ? jobPositions.find(
-                      (jp) => jp.name.toLowerCase() === row.jobPositionName!.toLowerCase()
+            const profileName = row.medicalProfileName || row.jobPositionName
+            const matchedProfile = profileName
+                ? medicalProfiles.find(
+                      (p) => p.name.toLowerCase() === profileName.toLowerCase()
                   )
                 : null
 
@@ -540,7 +589,7 @@ export async function bulkImportWorkers(
                     email: row.email?.trim() || null,
                     phone: row.phone?.trim() || null,
                     companyId,
-                    jobPositionId: matchedPosition?.id ?? null,
+                    medicalProfileId: matchedProfile?.id ?? null,
                     // ARCH-20260708-01: Huella de origen — distingue unidad móvil (con proyecto)
                     intakeSource: 'UNIT_MOBILE_MASS',
                     // gender NO se incluye — no existe columna gender en Worker
@@ -638,7 +687,7 @@ export async function quickRegisterWorkersSameDay(
             nationalId: parsed.data.nationalId,
             dob: parsed.data.dob,
             phone: parsed.data.phone,
-            jobPositionName: parsed.data.jobPositionName,
+            medicalProfileName: parsed.data.medicalProfileName ?? parsed.data.jobPositionName,
             _rowIndex: parsed.data._rowIndex,
         })
     }
@@ -837,6 +886,8 @@ const ClinicWalkInRowSchema = z.object({
     dob: z.string().optional(),
     phone: z.string().max(15).optional(),
     email: z.union([z.string().email(), z.literal('')]).optional(),
+    medicalProfileName: z.string().optional(),
+    /** @deprecated legacy Excel column "Puesto" */
     jobPositionName: z.string().optional(),
     _rowIndex: z.number(),
 })
@@ -871,9 +922,9 @@ export async function bulkRegisterClinicWalkIn(
     const addedBy = (session.user as { id?: string }).id ?? null
     const result: BulkImportResult = { created: 0, duplicates: [], warnings: [], errors: [] }
 
-    // Cargar puestos de la empresa si hubieran (no exigidos para clínica walk-in)
-    const jobPositions = await prisma.jobPosition.findMany({
-        select: { id: true, name: true },
+    // Cargar perfiles médicos globales y por empresa (clínica walk-in sin companyId fijo)
+    const medicalProfiles = await prisma.medicalProfile.findMany({
+        select: { id: true, name: true, companyId: true },
     })
 
     for (const rawRow of rows) {
@@ -942,9 +993,10 @@ export async function bulkRegisterClinicWalkIn(
                 lastName: row.lastName,
                 dob: dobDate,
             })
-            const matchedPosition = row.jobPositionName
-                ? jobPositions.find(
-                      (jp) => jp.name.toLowerCase() === row.jobPositionName!.toLowerCase()
+            const profileName = row.medicalProfileName || row.jobPositionName
+            const matchedProfile = profileName
+                ? medicalProfiles.find(
+                      (p) => p.name.toLowerCase() === profileName.toLowerCase()
                   )
                 : null
 
@@ -958,7 +1010,7 @@ export async function bulkRegisterClinicWalkIn(
                     email: row.email?.trim() || null,
                     phone: row.phone?.trim() || null,
                     companyId: null,
-                    jobPositionId: matchedPosition?.id ?? null,
+                    medicalProfileId: matchedProfile?.id ?? null,
                     branchId: branchId ?? null,
                     // Huella: alta masiva para clínica física (sin proyecto)
                     intakeSource: 'CLINIC_WALK_IN_MASS',

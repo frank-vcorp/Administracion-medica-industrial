@@ -154,7 +154,10 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
 
       if (result.success) {
         onClose()
-        router.push(`/events/${result.medicalEvent?.id}`)
+        const today = new Date()
+        const dateParam = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+        router.push(`/reception?date=${dateParam}`)
+        router.refresh()
       } else {
         setError(result.error || 'Error en el cierre de recepción.')
       }

@@ -20,6 +20,7 @@ interface DoctorReview {
   doctorStatus: string
   doctorDiagnosis: string | null
   doctorNotes: string | null
+  doctorRecommendations?: string | null
   aiAgreementScore: number | null
   aiUsefulnessScore: number | null
   differenceType: string | null
@@ -392,6 +393,12 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-xs font-semibold text-green-700 mb-1">Diagnóstico médico</p>
                 <p className="text-sm text-slate-800">{review.doctorDiagnosis}</p>
+              </div>
+            )}
+            {review.doctorRecommendations && (
+              <div className="p-3 bg-teal-50 border border-teal-200 rounded-lg">
+                <p className="text-xs font-semibold text-teal-700 mb-1">Recomendaciones</p>
+                <p className="text-sm text-slate-800 whitespace-pre-wrap">{review.doctorRecommendations}</p>
               </div>
             )}
             {review.doctorFeedbackNote && (

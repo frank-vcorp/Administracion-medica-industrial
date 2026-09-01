@@ -136,6 +136,31 @@ export function extractValidatedRecommendationsFromPredx(
   return Array.from(new Set(result))
 }
 
+/** Convierte texto multilínea del médico en lista de recomendaciones. */
+export function parseDoctorRecommendationsLines(
+  text: string | null | undefined,
+): string[] {
+  if (!text?.trim()) return []
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-•*]\s*/, '').trim())
+    .filter(Boolean)
+}
+
+/**
+ * Recomendaciones para PDF: prioriza lo capturado por el médico; si está
+ * vacío, conserva las del snapshot IA sólo cuando ACEPTA la sugerencia.
+ */
+export function resolveValidatedRecommendations(
+  predxData: Record<string, unknown> | null,
+  doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED',
+  doctorRecommendations: string | null | undefined,
+): string[] {
+  const doctorLines = parseDoctorRecommendationsLines(doctorRecommendations)
+  if (doctorLines.length > 0) return doctorLines
+  return extractValidatedRecommendationsFromPredx(predxData, doctorStatus)
+}
+
 /**
  * QA-20260825-01 P2-D: extrae los valores de repetibilidad del
  * `structuredData` del snapshot de extracción (mismo cálculo que usa el
@@ -267,6 +292,7 @@ export interface BuildEspirometryPdfInput {
   doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
   doctorDiagnosis: string | null | undefined
   doctorNotes: string | null | undefined
+  doctorRecommendations?: string | null | undefined
   reviewCreatedAt: Date
   prediagnosisData: unknown
   extractionStructuredData: unknown
@@ -291,9 +317,10 @@ export function buildEspirometryPdfData(
   input: BuildEspirometryPdfInput,
 ): EspirometryValidatedPDFData {
   const predxData = (input.prediagnosisData as Record<string, unknown> | null) ?? {}
-  const recomendacionesValidadas = extractValidatedRecommendationsFromPredx(
+  const recomendacionesValidadas = resolveValidatedRecommendations(
     predxData,
     input.doctorStatus,
+    input.doctorRecommendations,
   )
   const repetibilidad = resolveRepetibilidadForPdf(
     extractRepetibilidadFromExtraction(input.extractionStructuredData),
