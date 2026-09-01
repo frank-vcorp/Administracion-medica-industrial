@@ -39,8 +39,8 @@ export default function DoctorExamForm({ eventId, initialData, readonly = false 
     { name: "oidos_cad", label: "Oídos CAD" },
     { name: "oidos_cai", label: "Oídos CAI" },
     { name: "ojos", label: "Ojos" },
-    { name: "boca_estado", label: "Boca (Estado)" },
-    { name: "boca_alineacion", label: "Boca (Alineación)" },
+    { name: "boca_alineacion", label: "Cavidad Bucal" },
+    { name: "boca_estado", label: "Salud bucal" },
     { name: "nariz", label: "Nariz" },
     { name: "faringe", label: "Faringe" },
     { name: "cuello", label: "Cuello" },
@@ -65,8 +65,7 @@ export default function DoctorExamForm({ eventId, initialData, readonly = false 
     { name: "signo_tinel", label: "Signo Tinel" },
     { name: "prueba_phanel", label: "Prueba Phanel" },
     { name: "prueba_lasegue", label: "Prueba Lasegue" },
-    { name: "presencia_quiste_sinovial", label: "Quiste Sinovial (Presencia)" },
-    { name: "especificar_quiste", label: "Especificar Quiste" }
+    { name: "presencia_quiste_sinovial", label: "Quiste Sinovial" },
   ]
 
   return (

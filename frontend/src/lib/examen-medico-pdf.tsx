@@ -61,6 +61,7 @@ import {
   type ExamForHallazgos,
   type IaResultsForHallazgos,
 } from '@/lib/clinical/recommendations'
+import { formatQuisteDisplay } from '@/schemas/clinical/exam.schema'
 
 // Reutiliza el cache del logo AMI (una descarga por proceso). Si la red
 // falla al boot, el logo queda null y el PDF cae al fallback "AMI".
@@ -266,6 +267,7 @@ export interface BuildExamenMedicoPdfInput {
     prueba_phanel?: string | null
     prueba_lasegue?: string | null
     presencia_quiste_sinovial?: string | null
+    especificar_quiste?: string | null
   }
   /** Texto de impresión diagnóstica validada por el médico (no auto). */
   impresionDiagnostica: string
@@ -497,8 +499,10 @@ export function buildExamenMedicoPdfData(
       signo_tinel: s(input.exploracion?.signo_tinel) || null,
       prueba_phanel: s(input.exploracion?.prueba_phanel) || null,
       prueba_lasegue: s(input.exploracion?.prueba_lasegue) || null,
-      presencia_quiste_sinovial:
-        s(input.exploracion?.presencia_quiste_sinovial) || null,
+      presencia_quiste_sinovial: formatQuisteDisplay({
+        presencia_quiste_sinovial: input.exploracion?.presencia_quiste_sinovial,
+        especificar_quiste: input.exploracion?.especificar_quiste,
+      }) || null,
     },
     pruebasMusculo: {
       arcoMovilidad: s(input.exploracion?.arco_de_movilidad) || null,
@@ -511,7 +515,10 @@ export function buildExamenMedicoPdfData(
       tinel: s(input.exploracion?.signo_tinel) || null,
       phanel: s(input.exploracion?.prueba_phanel) || null,
       lasegue: s(input.exploracion?.prueba_lasegue) || null,
-      quisteSinovial: s(input.exploracion?.presencia_quiste_sinovial) || null,
+      quisteSinovial: formatQuisteDisplay({
+        presencia_quiste_sinovial: input.exploracion?.presencia_quiste_sinovial,
+        especificar_quiste: input.exploracion?.especificar_quiste,
+      }) || null,
     },
     impresionDiagnostica: s(input.impresionDiagnostica) || '',
     aptitud: s(input.aptitud) || '',

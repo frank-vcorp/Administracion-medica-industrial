@@ -34,8 +34,10 @@ import {
   ARCO_MOVILIDAD_VALUES,
   TONO_MUSCULAR_VALUES,
   COORDINACION_VALUES,
-  TEST_ADAM_VALUES,
-  PRESENCIA_QUISTE_SINOVIAL_VALUES,
+  TEST_ADAM_LATERAL_VALUES,
+  normalizeTestAdamEstado,
+  QUISTE_SINOVIAL_CAPTURA_VALUES,
+  normalizeQuisteEstado,
   TEST_ROMBERG_VALUES,
   SIGNO_BRAGARD_VALUES,
   SIGNO_TINEL_VALUES,
@@ -411,8 +413,8 @@ const EXPLORACION_FIELDS: ExplField[] = [
   { name: "oidos_cad", label: "Oídos CAD", kind: "plantilla" },
   { name: "oidos_cai", label: "Oídos CAI", kind: "plantilla" },
   { name: "ojos", label: "Ojos", kind: "plantilla" },
-  { name: "boca_estado", label: "Boca (Estado)", kind: "select", values: SALUD_BUCAL_VALUES },
-  { name: "boca_alineacion", label: "Boca (Alineación)", kind: "text" },
+  { name: "boca_estado", label: "Salud bucal", kind: "select", values: SALUD_BUCAL_VALUES },
+  { name: "boca_alineacion", label: "Cavidad Bucal", kind: "text" },
   { name: "nariz", label: "Nariz", kind: "plantilla" },
   { name: "faringe", label: "Faringe", kind: "plantilla" },
   { name: "cuello", label: "Cuello", kind: "plantilla" },
@@ -422,7 +424,6 @@ const EXPLORACION_FIELDS: ExplField[] = [
   { name: "abdomen", label: "Abdomen", kind: "plantilla" },
   { name: "genitourinario", label: "Genitourinario", kind: "plantilla" },
   { name: "columna_vertebral", label: "Columna Vertebral", kind: "plantilla" },
-  { name: "test_adam", label: "Test Adam", kind: "select", values: TEST_ADAM_VALUES },
   { name: "ms_superiores", label: "MMSS", kind: "plantilla" },
   { name: "fuerza_muscular_daniels_sup", label: "Fuerza (Daniels Sup)", kind: "text" },
   { name: "ms_inferiores", label: "MMII", kind: "plantilla" },
@@ -437,8 +438,7 @@ const EXPLORACION_FIELDS: ExplField[] = [
   { name: "signo_tinel", label: "Signo Tinel", kind: "select", values: SIGNO_TINEL_VALUES },
   { name: "prueba_phanel", label: "Prueba Phanel", kind: "select", values: PRUEBA_LATERALIDAD_VALUES },
   { name: "prueba_lasegue", label: "Prueba Lasegue", kind: "select", values: PRUEBA_LATERALIDAD_VALUES },
-  { name: "presencia_quiste_sinovial", label: "Quiste Sinovial", kind: "select", values: PRESENCIA_QUISTE_SINOVIAL_VALUES },
-  { name: "especificar_quiste", label: "Especificar Quiste", kind: "text" },
+  { name: "presencia_quiste_sinovial", label: "Quiste Sinovial", kind: "select", values: QUISTE_SINOVIAL_CAPTURA_VALUES },
 ]
 
 // IMPL-20260817-08-C7 (ARCH-20260817-02 DA-1): 5 valores canónicos del PDF de
@@ -631,8 +631,11 @@ export default function ExamenMedicoEstudio({
   ] as const
   const hasPositiveEF = POSITIVE_EF_FIELDS.some(f => {
     const v = form[f]
+    if (f === 'test_adam') {
+      return normalizeTestAdamEstado(v) === 'SI'
+    }
     return typeof v === 'string' && v.toUpperCase().includes('POSITIVO')
-  })
+  }) || normalizeQuisteEstado(form.presencia_quiste_sinovial) === 'POSITIVO'
 
   const longitudinalReference = prefilledData ?? longitudinalData ?? null
   const hasLongitudinalReference = !!longitudinalReference && Object.keys(longitudinalReference).length > 0
@@ -1474,6 +1477,165 @@ export default function ExamenMedicoEstudio({
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {EXPLORACION_FIELDS.map(field => {
+                if (field.name === 'boca_alineacion') return null
+
+                // Cavidad Bucal + Salud bucal anidada.
+                if (field.name === 'boca_estado') {
+                  return (
+                    <div key="cavidad_bucal" className="sm:col-span-2 lg:col-span-1 border border-slate-100 rounded-lg p-3 bg-white">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        Cavidad Bucal
+                      </label>
+                      <input
+                        type="text"
+                        value={form.boca_alineacion ?? ''}
+                        onChange={e => handleField('boca_alineacion', e.target.value)}
+                        disabled={readonly}
+                        placeholder="Dentadura completa"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                      />
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                          Salud bucal
+                        </label>
+                        <select
+                          value={form.boca_estado ?? ''}
+                          onChange={e => handleField('boca_estado', e.target.value)}
+                          disabled={readonly}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                        >
+                          <option value="">— Seleccionar —</option>
+                          {SALUD_BUCAL_VALUES.map(v => (
+                            <option key={v} value={v}>{v}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )
+                }
+
+                // Columna Vertebral + Test Adam anidado (SI → lateral + Otros).
+                if (field.name === 'columna_vertebral') {
+                  const testAdamEstado = normalizeTestAdamEstado(form.test_adam)
+                  return (
+                    <div key={field.name} className="sm:col-span-2 lg:col-span-1 border border-slate-100 rounded-lg p-3 bg-white">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        {field.label}
+                      </label>
+                      <input
+                        type="text"
+                        value={form.columna_vertebral ?? ''}
+                        onChange={e => handleField('columna_vertebral', e.target.value)}
+                        disabled={readonly}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                      />
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Test Adam</p>
+                        <div className="flex gap-1 mb-2">
+                          {(['NEGADO', 'SI'] as const).map(opt => (
+                            <button
+                              key={opt}
+                              type="button"
+                              disabled={readonly}
+                              onClick={() => {
+                                handleField('test_adam', opt)
+                                if (opt === 'NEGADO') {
+                                  handleField('test_adam_lateral', '')
+                                  handleField('test_adam_otros', '')
+                                }
+                              }}
+                              className={`px-2 py-1 rounded text-[10px] font-bold border transition ${
+                                testAdamEstado === opt
+                                  ? 'bg-blue-100 border-blue-400 text-blue-700'
+                                  : 'bg-white border-slate-200 text-slate-500'
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                        {testAdamEstado === 'SI' && (
+                          <div className="space-y-2">
+                            <div>
+                              <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                                Lateralidad
+                              </label>
+                              <select
+                                value={form.test_adam_lateral ?? ''}
+                                onChange={e => handleField('test_adam_lateral', e.target.value)}
+                                disabled={readonly}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60"
+                              >
+                                <option value="">— Seleccionar —</option>
+                                {TEST_ADAM_LATERAL_VALUES.map(v => (
+                                  <option key={v} value={v}>{v}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                                Otros
+                              </label>
+                              <input
+                                type="text"
+                                value={form.test_adam_otros ?? ''}
+                                onChange={e => handleField('test_adam_otros', e.target.value)}
+                                disabled={readonly}
+                                placeholder="Detalle adicional del Test Adam"
+                                maxLength={500}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                }
+
+                // Quiste sinovial — NEGATIVO/POSITIVO + especificar si POSITIVO.
+                if (field.name === 'presencia_quiste_sinovial') {
+                  const quisteEstado = normalizeQuisteEstado(form.presencia_quiste_sinovial)
+                  return (
+                    <div key={field.name} className="border border-slate-100 rounded-lg p-3 bg-white">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        {field.label}
+                      </label>
+                      <select
+                        value={quisteEstado}
+                        onChange={e => {
+                          handleField('presencia_quiste_sinovial', e.target.value)
+                          if (e.target.value !== 'POSITIVO') {
+                            handleField('especificar_quiste', '')
+                          }
+                        }}
+                        disabled={readonly}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                      >
+                        {QUISTE_SINOVIAL_CAPTURA_VALUES.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                      {quisteEstado === 'POSITIVO' && (
+                        <div className="mt-2">
+                          <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                            Especifique
+                          </label>
+                          <input
+                            type="text"
+                            value={form.especificar_quiste ?? ''}
+                            onChange={e => handleField('especificar_quiste', e.target.value)}
+                            disabled={readonly}
+                            placeholder="Ubicación o detalle del quiste"
+                            maxLength={500}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
                 // IMPL-20260817-01-C2: render condicional por `kind`.
                 // - `select` → <select> con valores ZIN (DA-1).
                 // - `plantilla` / `text` → <input> con valor inicial (plantilla ZIN o default).
@@ -1519,7 +1681,7 @@ export default function ExamenMedicoEstudio({
 
           {/* IMPL-20260817-01-C2: acordeón EF-Especificar (txtEFEspecificar).
               Aparece cuando alguna prueba de exploración física tiene valor POSITIVO
-              (test_adam, test_romberg, signo_bragard, prueba_finkelstein, signo_tinel,
+              (Test Adam en Columna Vertebral, test_romberg, signo_bragard, prueba_finkelstein, signo_tinel,
               prueba_phanel, prueba_lasegue). Ver SPEC §4.5 + análisis ZIN §B. */}
           {hasPositiveEF && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -1528,7 +1690,7 @@ export default function ExamenMedicoEstudio({
                   ⚠️ Especifique hallazgos positivos
                 </span>
                 <p className="text-[10px] text-amber-700 mt-0.5 mb-2">
-                  Detalle los hallazgos positivos en <code>test_adam</code>,{' '}
+                  Detalle los hallazgos positivos en{' '}
                   <code>test_romberg</code>, <code>signo_bragard</code>,{' '}
                   <code>prueba_finkelstein</code>, <code>signo_tinel</code>,{' '}
                   <code>prueba_phanel</code>, <code>prueba_lasegue</code>.

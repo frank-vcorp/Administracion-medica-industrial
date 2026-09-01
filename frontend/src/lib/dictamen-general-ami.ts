@@ -36,6 +36,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { findSiblingEventsInAtencion, type AtencionResolution } from '@/lib/event-atencion'
 import { readHeredoFamiliaresDisplay, readTatuajesDisplay, readTratamientoMedicoActualDisplay } from '@/lib/antecedentes-fields'
+import { formatTestAdamDisplay, formatQuisteDisplay } from '@/schemas/clinical/exam.schema'
 import { buildExamenMedicoPdfData, type BuildExamenMedicoPdfInput } from '@/lib/examen-medico-pdf'
 
 /**
@@ -340,7 +341,7 @@ export async function buildDictamenGeneralAmiConsolidado(
       abdomen: s(physicalExamData.abdomen) ?? '',
       genitourinario: s(physicalExamData.genitourinario) ?? '',
       columna_vertebral: s(physicalExamData.columna_vertebral) ?? '',
-      test_adam: s(physicalExamData.test_adam) ?? '',
+      test_adam: formatTestAdamDisplay(physicalExamData) || null,
       ms_superiores: s(physicalExamData.ms_superiores) ?? '',
       fuerza_muscular_daniels_sup: s(physicalExamData.fuerza_muscular_daniels_sup) ?? '',
       ms_inferiores: s(physicalExamData.ms_inferiores) ?? '',
@@ -355,7 +356,7 @@ export async function buildDictamenGeneralAmiConsolidado(
       signo_tinel: s(physicalExamData.signo_tinel) ?? '',
       prueba_phanel: s(physicalExamData.prueba_phanel) ?? '',
       prueba_lasegue: s(physicalExamData.prueba_lasegue) ?? '',
-      presencia_quiste_sinovial: s(physicalExamData.presencia_quiste_sinovial) ?? '',
+      presencia_quiste_sinovial: formatQuisteDisplay(physicalExamData) || null,
     },
     impresionDiagnostica: s(event.verdict.finalDiagnosis) ?? '',
     aptitud: aptitud ?? '',

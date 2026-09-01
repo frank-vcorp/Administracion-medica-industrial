@@ -731,12 +731,12 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
               <Text style={styles.value}>{v(data.exploracion.ojos)}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.label}>Boca (estado):</Text>
-              <Text style={styles.value}>{v(data.exploracion.boca_estado)}</Text>
+              <Text style={styles.label}>Cavidad bucal:</Text>
+              <Text style={styles.value}>{v(data.exploracion.boca_alineacion)}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.label}>Boca (alineación):</Text>
-              <Text style={styles.value}>{v(data.exploracion.boca_alineacion)}</Text>
+              <Text style={styles.label}>Salud bucal:</Text>
+              <Text style={styles.value}>{v(data.exploracion.boca_estado)}</Text>
             </View>
             <View style={styles.row}>
               <Text style={styles.label}>Nariz:</Text>

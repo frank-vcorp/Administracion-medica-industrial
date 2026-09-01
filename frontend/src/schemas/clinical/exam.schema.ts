@@ -132,21 +132,75 @@ export const COORDINACION_VALUES = ['NORMAL', 'ALTERADA'] as const
 
 export type CoordinacionValue = (typeof COORDINACION_VALUES)[number]
 
-/** Exploración Física — Test de Adam (escoliosis) (2 opciones). */
+/** Exploración Física — Test de Adam (escoliosis), captura anidada en Columna Vertebral. */
+export const TEST_ADAM_CAPTURA_VALUES = ['NEGADO', 'SI'] as const
+
+export type TestAdamCapturaValue = (typeof TEST_ADAM_CAPTURA_VALUES)[number]
+
+/** Lateralidad del Test Adam cuando es SI. */
+export const TEST_ADAM_LATERAL_VALUES = ['DERECHA', 'IZQUIERDA'] as const
+
+export type TestAdamLateralValue = (typeof TEST_ADAM_LATERAL_VALUES)[number]
+
+/** @deprecated Legacy ZIN — conservado solo para DA-1 en schema. Preferir TEST_ADAM_CAPTURA_VALUES. */
 export const TEST_ADAM_VALUES = ['NEGATIVO', 'POSITIVO'] as const
 
 export type TestAdamValue = (typeof TEST_ADAM_VALUES)[number]
 
-/** Exploración Física — Presencia Quiste Sinovial (4 opciones). */
-export const PRESENCIA_QUISTE_SINOVIAL_VALUES = [
+/** Normaliza test_adam legacy (NEGATIVO/POSITIVO) al par NEGADO/SI de la UI. */
+export function normalizeTestAdamEstado(raw: unknown): 'NEGADO' | 'SI' {
+  const v = String(raw ?? '').trim().toUpperCase()
+  if (v === 'SI' || v === 'POSITIVO' || v.includes('POSITIV')) return 'SI'
+  return 'NEGADO'
+}
+
+/** Texto consolidado Test Adam para PDF / dictamen. */
+export function formatTestAdamDisplay(data: Record<string, unknown>): string {
+  const estado = normalizeTestAdamEstado(data.test_adam)
+  if (estado !== 'SI') return 'NEGADO'
+  const parts: string[] = ['SI']
+  const lateral = String(data.test_adam_lateral ?? '').trim()
+  if (lateral) parts.push(lateral)
+  const otros = String(data.test_adam_otros ?? '').trim()
+  if (otros) parts.push(`Otros: ${otros}`)
+  return parts.join(' — ')
+}
+
+/** Exploración Física — Quiste sinovial, captura NEGATIVO/POSITIVO (+ especificar si POSITIVO). */
+export const QUISTE_SINOVIAL_CAPTURA_VALUES = ['NEGATIVO', 'POSITIVO'] as const
+
+export type QuisteSinovialCapturaValue = (typeof QUISTE_SINOVIAL_CAPTURA_VALUES)[number]
+
+/** @deprecated Legacy ZIN erróneo — conservado solo para DA-1 en schema. */
+export const PRESENCIA_QUISTE_SINOVIAL_LEGACY_VALUES = [
   'NORMAL',
   'DISMINUIDA',
   'DISMINUIDA CORREGIDA',
   'AUSENTE',
 ] as const
 
+export const PRESENCIA_QUISTE_SINOVIAL_VALUES = [
+  ...QUISTE_SINOVIAL_CAPTURA_VALUES,
+  ...PRESENCIA_QUISTE_SINOVIAL_LEGACY_VALUES,
+] as const
+
 export type PresenciaQuisteSinovialValue =
   (typeof PRESENCIA_QUISTE_SINOVIAL_VALUES)[number]
+
+/** Normaliza quiste sinovial legacy al par NEGATIVO/POSITIVO de la UI. */
+export function normalizeQuisteEstado(raw: unknown): 'NEGATIVO' | 'POSITIVO' {
+  const v = String(raw ?? '').trim().toUpperCase()
+  if (v === 'POSITIVO' || v.includes('POSITIV')) return 'POSITIVO'
+  return 'NEGATIVO'
+}
+
+/** Texto consolidado quiste sinovial para PDF / dictamen. */
+export function formatQuisteDisplay(data: Record<string, unknown>): string {
+  const estado = normalizeQuisteEstado(data.presencia_quiste_sinovial)
+  if (estado !== 'POSITIVO') return 'NEGATIVO'
+  const espec = String(data.especificar_quiste ?? '').trim()
+  return espec ? `POSITIVO — ${espec}` : 'POSITIVO'
+}
 
 /** Exploración Física — Test Romberg (4 opciones). */
 export const TEST_ROMBERG_VALUES = [
@@ -158,8 +212,13 @@ export const TEST_ROMBERG_VALUES = [
 
 export type TestRombergValue = (typeof TEST_ROMBERG_VALUES)[number]
 
-/** Exploración Física — Signo Bragard (2 opciones). */
-export const SIGNO_BRAGARD_VALUES = ['NEGATIVO', 'POSITIVO'] as const
+/** Exploración Física — Signo Bragard (4 opciones: negativo + lateralidad). */
+export const SIGNO_BRAGARD_VALUES = [
+  'NEGATIVO',
+  'POSITIVO DERECHO',
+  'POSITIVO IZQUIERDO',
+  'POSITIVO BILATERAL',
+] as const
 
 export type SignoBragardValue = (typeof SIGNO_BRAGARD_VALUES)[number]
 
@@ -385,7 +444,9 @@ export type PlantillaEfKey = keyof typeof PLANTILLAS_EF
 /** Valores predeterminados de combos ZIN en Exploración Física (opción “normal”). */
 const EXPLORACION_SELECT_DEFAULTS: Record<string, string> = {
   boca_estado: 'SIN DATOS',
-  test_adam: 'NEGATIVO',
+  test_adam: 'NEGADO',
+  test_adam_lateral: '',
+  test_adam_otros: '',
   circulacion_venosa: 'C0: SIN SIGNOS VISIBLES NI PALPABLES',
   arco_de_movilidad: 'PRESENTES Y NORMALES',
   tono_muscular: 'NORMAL',
@@ -396,12 +457,12 @@ const EXPLORACION_SELECT_DEFAULTS: Record<string, string> = {
   signo_tinel: 'NEGATIVO',
   prueba_phanel: 'NEGATIVO',
   prueba_lasegue: 'NEGATIVO',
-  presencia_quiste_sinovial: 'NORMAL',
+  presencia_quiste_sinovial: 'NEGATIVO',
 }
 
 /** Texto libre EF sin plantilla ZIN (placeholder histórico → valor inicial). */
 const EXPLORACION_TEXT_DEFAULTS: Record<string, string> = {
-  boca_alineacion: 'Normal',
+  boca_alineacion: 'Dentadura completa',
   fuerza_muscular_daniels_sup: '5/5',
   fuerza_muscular_daniels_inf: '5/5',
   especificar_quiste: '',
@@ -434,6 +495,34 @@ export function applyExploracionFisicaDefaults(
     if (!String(next[key] ?? '').trim()) {
       next[key] = defaultValue
     }
+  }
+  const rawAdam = String(next.test_adam ?? '').trim()
+  if (!rawAdam) {
+    next.test_adam = 'NEGADO'
+  } else {
+    const upper = rawAdam.toUpperCase()
+    if (upper === 'NEGATIVO') next.test_adam = 'NEGADO'
+    else if (upper === 'POSITIVO') next.test_adam = 'SI'
+  }
+  if (next.test_adam !== 'SI') {
+    next.test_adam_lateral = ''
+    next.test_adam_otros = ''
+  }
+  const rawQuiste = String(next.presencia_quiste_sinovial ?? '').trim()
+  if (!rawQuiste) {
+    next.presencia_quiste_sinovial = 'NEGATIVO'
+  } else {
+    const upper = rawQuiste.toUpperCase()
+    if (upper === 'POSITIVO' || upper.includes('POSITIV')) {
+      next.presencia_quiste_sinovial = 'POSITIVO'
+    } else if (
+      ['NORMAL', 'DISMINUIDA', 'DISMINUIDA CORREGIDA', 'AUSENTE'].includes(upper)
+    ) {
+      next.presencia_quiste_sinovial = 'NEGATIVO'
+    }
+  }
+  if (next.presencia_quiste_sinovial !== 'POSITIVO') {
+    next.especificar_quiste = ''
   }
   return next
 }
@@ -522,7 +611,9 @@ export const ExploracionFisicaSchema = z.object({
   abdomen: cleanString,
   genitourinario: cleanString,
   columna_vertebral: cleanString,
-  test_adam: tolerantZinEnum(TEST_ADAM_VALUES),
+  test_adam: tolerantZinEnum([...TEST_ADAM_CAPTURA_VALUES, ...TEST_ADAM_VALUES]),
+  test_adam_lateral: tolerantZinEnum(TEST_ADAM_LATERAL_VALUES).optional(),
+  test_adam_otros: cleanString.optional(),
   ms_superiores: cleanString,
   fuerza_muscular_daniels_sup: cleanString,
   ms_inferiores: cleanString,

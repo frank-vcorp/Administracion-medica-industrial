@@ -37,6 +37,7 @@ import {
   COORDINACION_VALUES,
   TEST_ADAM_VALUES,
   PRESENCIA_QUISTE_SINOVIAL_VALUES,
+  QUISTE_SINOVIAL_CAPTURA_VALUES,
   TEST_ROMBERG_VALUES,
   SIGNO_BRAGARD_VALUES,
   SIGNO_TINEL_VALUES,
@@ -47,6 +48,10 @@ import {
   PLANTILLAS_EF,
   applyExploracionFisicaDefaults,
   getExploracionFieldDefault,
+  formatTestAdamDisplay,
+  formatQuisteDisplay,
+  normalizeTestAdamEstado,
+  normalizeQuisteEstado,
   // IMPL-20260817-07: catálogos ZIN Módulo 1 (ginecológicos + vacunas)
   AG_IVS_VALUES,
   AG_VSA_VALUES,
@@ -384,12 +389,12 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
 
   it('16. ExploracionFisicaSchema acepta strings legacy como DA-1 (no rechaza)', () => {
     // Registros legacy con valores arbitrarios en BD cargan sin error.
-    const legacyPayload = {
+    const legacyPayload = applyExploracionFisicaDefaults({
       test_adam: 'positivo bilateral',
       boca_estado: 'caries múltiples',
       arco_de_movilidad: 'movilidad reducida',
       tono_muscular: 'eutrófico',
-    }
+    })
     expect(() => ExploracionFisicaSchema.parse(legacyPayload)).not.toThrow()
     const parsed = ExploracionFisicaSchema.parse(legacyPayload)
     expect(parsed.test_adam).toBe('positivo bilateral')
@@ -399,13 +404,33 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
   it('17. ExploracionFisicaSchema acepta especifique_positivos opcional (acordeón EF)', () => {
     // IMPL-20260817-01-C2: cuando hay hallazgos POSITIVO, el acordeón
     // txtEFEspecificar se expande con este campo opcional.
-    const payload = {
+    const payload = applyExploracionFisicaDefaults({
       test_adam: 'POSITIVO',
       especifique_positivos: 'Giba dorsal derecha a nivel T8-T10, asimetría escapular.',
-    }
+    })
     expect(() => ExploracionFisicaSchema.parse(payload)).not.toThrow()
     const parsed = ExploracionFisicaSchema.parse(payload)
     expect(parsed.especifique_positivos).toBe('Giba dorsal derecha a nivel T8-T10, asimetría escapular.')
+  })
+
+  it('17b. ExploracionFisicaSchema acepta test_adam anidado (SI + lateral + otros)', () => {
+    const parsed = ExploracionFisicaSchema.parse(applyExploracionFisicaDefaults({
+      test_adam: 'SI',
+      test_adam_lateral: 'IZQUIERDA',
+      test_adam_otros: 'Escoliosis leve',
+    }))
+    expect(parsed.test_adam).toBe('SI')
+    expect(parsed.test_adam_lateral).toBe('IZQUIERDA')
+    expect(parsed.test_adam_otros).toBe('Escoliosis leve')
+  })
+
+  it('17c. ExploracionFisicaSchema acepta quiste sinovial anidado (POSITIVO + especificar)', () => {
+    const parsed = ExploracionFisicaSchema.parse(applyExploracionFisicaDefaults({
+      presencia_quiste_sinovial: 'POSITIVO',
+      especificar_quiste: 'Muñeca derecha',
+    }))
+    expect(parsed.presencia_quiste_sinovial).toBe('POSITIVO')
+    expect(parsed.especificar_quiste).toBe('Muñeca derecha')
   })
 
   it('18. PLANTILLAS_EF expone los 17 literales verbatim del NOTA MEDICA EJEMPLO.pdf', () => {
@@ -433,16 +458,29 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
   it('18b. applyExploracionFisicaDefaults prellena plantillas y combos normales', () => {
     const filled = applyExploracionFisicaDefaults({})
     expect(filled.neurologico).toBe(PLANTILLAS_EF.neurologico)
-    expect(filled.test_adam).toBe('NEGATIVO')
+    expect(filled.test_adam).toBe('NEGADO')
     expect(filled.boca_estado).toBe('SIN DATOS')
+    expect(filled.boca_alineacion).toBe('Dentadura completa')
+    expect(filled.presencia_quiste_sinovial).toBe('NEGATIVO')
     expect(filled.fuerza_muscular_daniels_sup).toBe('5/5')
     const preserved = applyExploracionFisicaDefaults({
       neurologico: 'Paciente somnoliento',
       test_adam: '',
     })
     expect(preserved.neurologico).toBe('Paciente somnoliento')
-    expect(preserved.test_adam).toBe('NEGATIVO')
+    expect(preserved.test_adam).toBe('NEGADO')
     expect(getExploracionFieldDefault('campos_pulmonares')).toBe(PLANTILLAS_EF.campos_pulmonares)
+    expect(formatTestAdamDisplay({
+      test_adam: 'SI',
+      test_adam_lateral: 'DERECHA',
+      test_adam_otros: 'Giba dorsal',
+    })).toBe('SI — DERECHA — Otros: Giba dorsal')
+    expect(normalizeTestAdamEstado('POSITIVO')).toBe('SI')
+    expect(formatQuisteDisplay({
+      presencia_quiste_sinovial: 'POSITIVO',
+      especificar_quiste: 'Rodilla izquierda',
+    })).toBe('POSITIVO — Rodilla izquierda')
+    expect(normalizeQuisteEstado('NORMAL')).toBe('NEGATIVO')
   })
 
   it('19. ImpresiónAptitudSchema acepta estado_nutricional + salud_bucal con ZIN enum', () => {
@@ -493,7 +531,7 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
   it('23. ExamenMedicoCompletoSchema acepta payload Corte 2 completo (exploración + resumen)', () => {
     // Cobertura de extremo a extremo: la captura del médico con todos los
     // nuevos enums ZIN parsea OK.
-    const payload = {
+    const payload = applyExploracionFisicaDefaults({
       neurologico: 'Alerta, orientado en tiempo, lugar y persona. Cooperador.',
       test_adam: 'NEGATIVO',
       arco_de_movilidad: 'PRESENTES Y NORMALES',
@@ -509,10 +547,10 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
         no_patologicos: { alcohol: 'NEGADO' as const, tabaco: 'NEGADO' as const },
         patologicos: { diabetes: 'NEGADO' as const },
       },
-    }
+    })
     expect(() => ExamenMedicoCompletoSchema.parse(payload)).not.toThrow()
     const parsed = ExamenMedicoCompletoSchema.parse(payload)
-    expect(parsed.test_adam).toBe('NEGATIVO')
+    expect(parsed.test_adam).toBe('NEGADO')
     expect(parsed.estado_nutricional).toBe('NORMAL')
     expect(parsed.antecedentes_captured?.heredo_familiares?.diabetes).toBe('PADRE')
   })
@@ -520,7 +558,7 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
   it('24. ExamenMedicoCompletoSchema acepta legacy mixto (Corte 1 + Corte 2 ligibles)', () => {
     // Regresión DA-1: integración de datos legacy con strings arbitrarios
     // en los nuevos campos Corte 2.
-    const payload = {
+    const payload = applyExploracionFisicaDefaults({
       test_adam: 'positivo bilateral',
       estado_nutricional: 'sobrepeso II',
       salud_bucal: 'mala higiene',
@@ -531,7 +569,7 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
         no_patologicos: {},
         patologicos: {},
       },
-    }
+    })
     expect(() => ExamenMedicoCompletoSchema.parse(payload)).not.toThrow()
     const parsed = ExamenMedicoCompletoSchema.parse(payload)
     expect(parsed.test_adam).toBe('positivo bilateral')
@@ -547,9 +585,13 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
     expect(COORDINACION_VALUES).toHaveLength(2)
     expect(TEST_ADAM_VALUES).toHaveLength(2)
     expect(TEST_ADAM_VALUES).toContain('NEGATIVO')
-    expect(PRESENCIA_QUISTE_SINOVIAL_VALUES).toHaveLength(4)
+    expect(PRESENCIA_QUISTE_SINOVIAL_VALUES).toHaveLength(6)
+    expect(QUISTE_SINOVIAL_CAPTURA_VALUES).toEqual(['NEGATIVO', 'POSITIVO'])
     expect(TEST_ROMBERG_VALUES).toHaveLength(4)
-    expect(SIGNO_BRAGARD_VALUES).toHaveLength(2)
+    expect(SIGNO_BRAGARD_VALUES).toHaveLength(4)
+    expect(SIGNO_BRAGARD_VALUES).toContain('POSITIVO DERECHO')
+    expect(SIGNO_BRAGARD_VALUES).toContain('POSITIVO IZQUIERDO')
+    expect(SIGNO_BRAGARD_VALUES).toContain('POSITIVO BILATERAL')
     expect(SIGNO_TINEL_VALUES).toHaveLength(4)
     expect(PRUEBA_LATERALIDAD_VALUES).toHaveLength(4)
     expect(CIRCULACION_VENOSA_VALUES).toHaveLength(7)

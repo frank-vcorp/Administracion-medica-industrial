@@ -49,6 +49,7 @@ import {
   buildInmunizacionesFromPhysicalExam,
 } from '@/lib/clinical/modulo1-text'
 import { readHeredoFamiliaresDisplay, readTatuajesDisplay, readTratamientoMedicoActualDisplay } from '@/lib/antecedentes-fields'
+import { formatTestAdamDisplay, formatQuisteDisplay } from '@/schemas/clinical/exam.schema'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -407,7 +408,7 @@ export async function GET(
         abdomen: str(physicalExamData.abdomen),
         genitourinario: str(physicalExamData.genitourinario),
         columna_vertebral: str(physicalExamData.columna_vertebral),
-        test_adam: str(physicalExamData.test_adam),
+        test_adam: formatTestAdamDisplay(physicalExamData) || null,
         ms_superiores: str(physicalExamData.ms_superiores),
         fuerza_muscular_daniels_sup: str(physicalExamData.fuerza_muscular_daniels_sup),
         ms_inferiores: str(physicalExamData.ms_inferiores),
@@ -422,7 +423,7 @@ export async function GET(
         signo_tinel: str(physicalExamData.signo_tinel),
         prueba_phanel: str(physicalExamData.prueba_phanel),
         prueba_lasegue: str(physicalExamData.prueba_lasegue),
-        presencia_quiste_sinovial: str(physicalExamData.presencia_quiste_sinovial),
+        presencia_quiste_sinovial: formatQuisteDisplay(physicalExamData) || null,
       },
       impresionDiagnostica: str(event.verdict.finalDiagnosis),
       aptitud: str(physicalExamData.aptitud),
