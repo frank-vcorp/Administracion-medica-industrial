@@ -555,7 +555,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
       <View style={styles.grid2}>
         <View style={[styles.gridCol, { paddingRight: 8 }]}>
           <Text style={styles.subTitle}>
-            {String(data.worker.sexo ?? '')
+            {String(data.paciente.sexo ?? '')
               .normalize('NFD')
               .replace(/[\u0300-\u036f]/g, '')
               .toLowerCase()
