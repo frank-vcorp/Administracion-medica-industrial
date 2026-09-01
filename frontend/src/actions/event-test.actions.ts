@@ -21,7 +21,6 @@ import { extractSnapshotVersioningFromBackendAudit } from "@/lib/calibration-v3-
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import { writeTimelineEntry } from "@/lib/timeline.service"
 import { TimelineEntryType } from "@prisma/client"
-import { ensureEspirometrySourceCrop } from '@/lib/espirometry-source-crop'
 
 async function maybeCropEspirometrySourceAfterUpload(
   eventTestId: string,
@@ -33,6 +32,7 @@ async function maybeCropEspirometrySourceAfterUpload(
   if (!isEspirometry) return
   if (!fileName.toLowerCase().endsWith('.pdf')) return
   try {
+    const { ensureEspirometrySourceCrop } = await import('@/lib/espirometry-source-crop')
     await ensureEspirometrySourceCrop(eventTestId)
   } catch (err) {
     console.warn('[event-test] Recorte espirometría no disponible:', err)

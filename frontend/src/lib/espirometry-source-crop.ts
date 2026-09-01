@@ -7,9 +7,9 @@ import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import sharp from 'sharp'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
+import { cropPngTop } from '@/lib/png-crop-top'
 import {
   resolveBackendFileUrl,
 } from '@/lib/zip-cierre-clinico'
@@ -96,18 +96,7 @@ export async function cropEspirometrySourceTopFromPdf(
 
     const pngPath = `${prefix}-1.png`
     const fullPage = await readFile(pngPath)
-    const meta = await sharp(fullPage).metadata()
-    const width = meta.width ?? 0
-    const height = meta.height ?? 0
-    if (width <= 0 || height <= 0) {
-      throw new Error('No se pudo leer la página del PDF fuente')
-    }
-
-    const cropHeight = Math.max(1, Math.round(height * cropRatio))
-    return await sharp(fullPage)
-      .extract({ left: 0, top: 0, width, height: cropHeight })
-      .png()
-      .toBuffer()
+    return cropPngTop(fullPage, cropRatio)
   } finally {
     await rm(tempDir, { recursive: true, force: true })
   }
