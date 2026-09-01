@@ -42,7 +42,7 @@ export interface SerializedWorker {
     nationalId: string | null
     dob: string | null
     companyId: string | null
-    jobPositionId: string | null
+    medicalProfileId: string | null
     company: { id: string; name: string } | null
     lastIdentityDocumentType: string | null
     lastIdentityFrontFileUrl: string | null
@@ -57,8 +57,8 @@ export interface SerializedWorker {
     }>
 }
 
-interface CompanyOption { id: string; name: string }
-interface JobPositionOption { id: string; name: string; companyId: string | null }
+interface CompanyOption { id: string; name: string; email?: string | null; phone?: string | null; rfc?: string | null }
+interface MedicalProfileOption { id: string; name: string; companyId: string | null }
 
 /** Payload del historial clínico (lo que ya viene en historyResult.data). */
 export interface HistoryPayload {
@@ -73,7 +73,7 @@ interface Props {
     worker: SerializedWorker
     historyResult: HistoryPayload
     companies: CompanyOption[]
-    jobPositions: JobPositionOption[]
+    medicalProfiles: MedicalProfileOption[]
 }
 
 // ────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ export default function WorkerDetailClient({
     worker,
     historyResult,
     companies,
-    jobPositions,
+    medicalProfiles,
 }: Props) {
     const router = useRouter()
     const [showEditModal, setShowEditModal] = useState(false)
@@ -351,7 +351,7 @@ export default function WorkerDetailClient({
             {/* Modal Editar Perfil */}
             <WorkerFormModal
                 companies={companies}
-                jobPositions={jobPositions}
+                medicalProfiles={medicalProfiles}
                 workerToEdit={{
                     id: worker.id,
                     firstName: worker.firstName,
@@ -360,7 +360,7 @@ export default function WorkerDetailClient({
                     email: worker.email,
                     phone: worker.phone,
                     companyId: worker.companyId,
-                    jobPositionId: worker.jobPositionId,
+                    medicalProfileId: worker.medicalProfileId,
                 }}
                 isOpen={showEditModal}
                 onClose={() => setShowEditModal(false)}

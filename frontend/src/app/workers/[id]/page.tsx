@@ -10,7 +10,8 @@
  */
 import { getWorkerById } from '@/services/worker.service'
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
-import { getCompanies, getJobPositions } from '@/actions/admin.actions'
+import { getCompanies } from '@/actions/admin.actions'
+import { getMedicalProfileOptions } from '@/actions/medical-profiles'
 import { notFound } from 'next/navigation'
 import WorkerDetailClient, {
     type SerializedWorker,
@@ -25,10 +26,10 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
         notFound()
     }
 
-    const [historyResult, companies, jobPositions] = await Promise.all([
+    const [historyResult, companies, medicalProfiles] = await Promise.all([
         getWorkerClinicalHistory(id),
         getCompanies(),
-        getJobPositions(),
+        getMedicalProfileOptions(),
     ])
 
     // Serialización Date → ISO string para cruzar el server/client boundary.
@@ -43,7 +44,7 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
         nationalId: worker.nationalId,
         dob: worker.dob ? worker.dob.toISOString() : null,
         companyId: worker.companyId,
-        jobPositionId: worker.jobPositionId,
+        medicalProfileId: worker.medicalProfileId,
         company: worker.company ? { id: worker.company.id, name: worker.company.name } : null,
         lastIdentityDocumentType: worker.lastIdentityDocumentType,
         lastIdentityFrontFileUrl: worker.lastIdentityFrontFileUrl,
@@ -60,14 +61,17 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
         })),
     }
 
-    const companyOptions = companies.map((c: { id: string; name: string }) => ({
+    const companyOptions = companies.map((c: { id: string; name: string; email?: string | null; phone?: string | null; rfc?: string | null }) => ({
         id: c.id,
         name: c.name,
+        email: c.email ?? null,
+        phone: c.phone ?? null,
+        rfc: c.rfc ?? null,
     }))
-    const jobPositionOptions = jobPositions.map((j: { id: string; name: string; companyId: string | null }) => ({
-        id: j.id,
-        name: j.name,
-        companyId: j.companyId,
+    const medicalProfileOptions = medicalProfiles.map((p: { id: string; name: string; companyId: string | null }) => ({
+        id: p.id,
+        name: p.name,
+        companyId: p.companyId,
     }))
 
     const historyPayload: HistoryPayload = {
@@ -85,7 +89,7 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
             worker={serialized}
             historyResult={historyPayload}
             companies={companyOptions}
-            jobPositions={jobPositionOptions}
+            medicalProfiles={medicalProfileOptions}
         />
     )
 }

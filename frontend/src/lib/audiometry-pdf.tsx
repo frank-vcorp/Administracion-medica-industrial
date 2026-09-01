@@ -43,21 +43,20 @@ import type { AudiometriaValidatedPDFData } from '@/components/pdf/AudiometriaVa
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
-// Reutiliza el cache del logo AMI (una descarga por proceso). Si la red
-// falla al boot, el logo queda null y el PDF cae al fallback "AMI".
-export {
+// Reutiliza helpers del PDF de espirometría (misma semántica de recomendaciones).
+import {
   resolveAmiLogoDataUrl,
   AMI_LOGO_URL,
-} from '@/lib/espirometry-pdf'
-
-// ──────────────────────────────────────────────────────────────────────────
-// Helpers puros — reutilizados desde espirometry-pdf (misma semántica)
-// ──────────────────────────────────────────────────────────────────────────
-
-export {
   extractValidatedRecommendationsFromPredx,
   resolveValidatedRecommendations,
 } from '@/lib/espirometry-pdf'
+
+export {
+  resolveAmiLogoDataUrl,
+  AMI_LOGO_URL,
+  extractValidatedRecommendationsFromPredx,
+  resolveValidatedRecommendations,
+}
 
 export interface BuildAudiometriaPdfInput {
   reviewId: string
