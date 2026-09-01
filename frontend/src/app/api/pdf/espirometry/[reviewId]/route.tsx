@@ -27,7 +27,7 @@ import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import {
   generateEspirometryValidatedPdf,
-  buildEspirometryPdfData,
+  buildEspirometryPdfDataAsync,
   resolveAmiLogoDataUrl,
 } from '@/lib/espirometry-pdf'
 
@@ -86,6 +86,8 @@ export async function GET(
               structuredData: true,
               eventTest: {
                 select: {
+                  id: true,
+                  clinicalContext: true,
                   testNameSnapshot: true,
                   eventId: true,
                   event: {
@@ -178,7 +180,7 @@ export async function GET(
     const logoDataUrl = await resolveAmiLogoDataUrl()
     // QA-20260825-01 P3-F: helper puro compartido action/route → mismo
     // contenido → mismo hash.
-    const data = buildEspirometryPdfData({
+    const data = await buildEspirometryPdfDataAsync({
       reviewId: review.id,
       doctorStatus:
         review.doctorStatus === 'REVIEWED_ACCEPTED'
@@ -194,6 +196,8 @@ export async function GET(
       studyName: eventTest?.testNameSnapshot ?? null,
       studyType:
         review.prediagnosisSnapshot?.extractionSnapshot?.studyType ?? null,
+      eventTestId: eventTest?.id ?? null,
+      clinicalContext: eventTest?.clinicalContext,
       patient: {
         firstName: worker?.firstName ?? '',
         lastName: worker?.lastName ?? '',

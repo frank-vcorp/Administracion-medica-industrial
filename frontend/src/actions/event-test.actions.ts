@@ -21,6 +21,23 @@ import { extractSnapshotVersioningFromBackendAudit } from "@/lib/calibration-v3-
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import { writeTimelineEntry } from "@/lib/timeline.service"
 import { TimelineEntryType } from "@prisma/client"
+import { ensureEspirometrySourceCrop } from '@/lib/espirometry-source-crop'
+
+async function maybeCropEspirometrySourceAfterUpload(
+  eventTestId: string,
+  fileName: string,
+  studyType: string | null | undefined,
+): Promise<void> {
+  const isEspirometry =
+    studyType === 'Espirometria' || studyType === 'Espirometría'
+  if (!isEspirometry) return
+  if (!fileName.toLowerCase().endsWith('.pdf')) return
+  try {
+    await ensureEspirometrySourceCrop(eventTestId)
+  } catch (err) {
+    console.warn('[event-test] Recorte espirometría no disponible:', err)
+  }
+}
 
 /**
  * @id ARCH-20260326-01
@@ -1021,17 +1038,22 @@ export async function uploadEventTestFile(formData: FormData) {
     try {
       const v2Result = await triggerStudyAIAnalysis(formData)
       if (v2Result.success) {
-        await prisma.eventTest.update({
-          where: { id: eventTestId },
-          data: {
-            resultNotes: buildAIResultNote({
-              success: true,
-              summary: v2Result.summary ?? null,
-              clinicalState: v2Result.clinicalState ?? null,
-            }),
-          },
-        })
-        const extractionSnapshotData = v2Result.extractionSnapshotId
+          await prisma.eventTest.update({
+            where: { id: eventTestId },
+            data: {
+              resultNotes: buildAIResultNote({
+                success: true,
+                summary: v2Result.summary ?? null,
+                clinicalState: v2Result.clinicalState ?? null,
+              }),
+            },
+          })
+          await maybeCropEspirometrySourceAfterUpload(
+            eventTestId,
+            file.name,
+            (formData.get('study_type') as string) || canonicalTypeForXml,
+          )
+          const extractionSnapshotData = v2Result.extractionSnapshotId
           ? {
               id: v2Result.extractionSnapshotId,
               version: v2Result.extractionSnapshotVersion ?? 1,
@@ -1140,6 +1162,13 @@ export async function uploadEventTestFile(formData: FormData) {
         resultNotes,
       }
     })
+    if (fileUrl) {
+      await maybeCropEspirometrySourceAfterUpload(
+        eventTestId,
+        file.name,
+        canonicalTypeForXml ?? (formData.get('study_type') as string) ?? null,
+      )
+    }
     revalidatePath(`/events/${eventId}`)
     return fileUrl
       ? { success: true, fileUrl, aiAnalysis: null }

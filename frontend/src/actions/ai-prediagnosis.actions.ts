@@ -45,9 +45,10 @@ import { getPublishedVersionForSnapshot } from './calibration-v3.actions'
 // reutilizables.
 import {
   generateEspirometryValidatedPdf,
-  buildEspirometryPdfData,
+  buildEspirometryPdfDataAsync,
   resolveAmiLogoDataUrl,
 } from '@/lib/espirometry-pdf'
+import { ensureEspirometrySourceCrop } from '@/lib/espirometry-source-crop'
 // IMPL-FEATURE-20260825-02: generación del PDF validado de Audiometría.
 // Mismo patrón que Espirometría: helper puro fuera del server action.
 import {
@@ -782,6 +783,8 @@ export async function submitDoctorStudyReview(
             structuredData: true,
             eventTest: {
               select: {
+                id: true,
+                clinicalContext: true,
                 testNameSnapshot: true,
                 eventId: true,
                 event: {
@@ -932,9 +935,20 @@ export async function submitDoctorStudyReview(
         } else {
           // Default: Espirometría (FEATURE-20260825-01). Otros estudios sin
           // template propio: NO se genera PDF (contrato vigente).
-          const pdfData = buildEspirometryPdfData({
+          const eventTestId = eventTestData?.id ?? null
+          if (studyType === 'Espirometria' && eventTestId) {
+            try {
+              await ensureEspirometrySourceCrop(eventTestId)
+            } catch (cropErr) {
+              console.warn('[espirometry-pdf] Recorte en validación:', cropErr)
+            }
+          }
+
+          const pdfData = await buildEspirometryPdfDataAsync({
             ...baseInput,
             doctorStatus: typedDoctorStatus,
+            eventTestId,
+            clinicalContext: eventTestData?.clinicalContext,
           })
           pdfResult = await generateEspirometryValidatedPdf({
             reviewId: review.id,

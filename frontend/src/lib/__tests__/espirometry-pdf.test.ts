@@ -214,10 +214,10 @@ describe('buildEspirometryPdfData — integración P3-F + P2-D', () => {
       logoDataUrl: null,
     })
     expect(data.recomendacionesValidadas).toEqual(['Reposo 24 h.'])
-    const rep = data.repetibilidad as Exclude<typeof data.repetibilidad, null | undefined>
-    expect(rep).not.toBeNull()
-    expect(rep.fvc?.diferenciaMl).toBe(30)
-    expect(rep.fev1?.diferenciaMl).toBe(40)
+    expect(data.amiSection.repetibilidadFvcMl).toBe(30)
+    expect(data.amiSection.repetibilidadFev1Ml).toBe(40)
+    expect(data.amiSection.repetibilidadFvcMenor200).toBe('SI')
+    expect(data.amiSection.repetibilidadFev1Menor200).toBe('SI')
   })
 
   it('para REVIEWED_EDITED omite recomendaciones IA aunque el snapshot las tenga', () => {
