@@ -34,7 +34,6 @@ export function buildHistoriaGinecoText(m1: Record<string, unknown>): string | n
   return joinFields(m1, [
     ['Menarca', m1.m1_gine_menarca],
     ['FUM', m1.m1_gine_fum],
-    ['IVS', m1.m1_gine_ivs],
     ['Ritmo', m1.m1_gine_ritmo],
     ['Gesta', m1.m1_gine_gesta],
     ['Aborto', m1.m1_gine_aborto],
@@ -44,7 +43,6 @@ export function buildHistoriaGinecoText(m1: Record<string, unknown>): string | n
     ['FUP/FUC', m1.m1_gine_fup_uc],
     ['Exp. mamaria', m1.m1_gine_exp_mamaria],
     ['MPF', m1.m1_gine_mpf],
-    ['VSA', m1.m1_gine_vsa],
   ] as const)
 }
 
@@ -54,8 +52,6 @@ export function buildHistoriaReproductivaMasculinaText(
 ): string | null {
   const docProstata = str(m1.m1_repro_doc_prostata) || str(m1.doc_prostata)
   return joinFields(m1, [
-    ['I.V.S', m1.m1_repro_ivs],
-    ['V.S.A', m1.m1_repro_vsa],
     ['D.O.C. próstata', docProstata],
     ['M.P.F', m1.m1_repro_mpf],
   ] as const)

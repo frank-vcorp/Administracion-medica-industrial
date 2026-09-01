@@ -354,9 +354,8 @@ export type VacSiNoValue = (typeof VAC_SI_NO_VALUES)[number]
  * Extraídas verbatim del `NOTA MEDICA EJEMPLO.pdf` (ver análisis ZIN §B).
  * Frank: "Lo copia igualito que el ZIN" → sin paráfrasis, sin normalización.
  *
- * Se usan como `defaultValue` en `<input>` (el médico puede editar caso
- * a caso). El schema Zod sigue siendo `cleanString` (string libre) — el
- * plan es **mostrar** la plantilla por defecto, no **forzar** el valor.
+ * Se usan como valor predeterminado en Exploración Física (editable caso a caso).
+ * El schema Zod sigue siendo `cleanString` (string libre).
  *
  * @id IMPL-20260817-01-C2
  * @spec SPEC_ARCH-20260817-01 §4.3
@@ -382,6 +381,62 @@ export const PLANTILLAS_EF = {
 } as const
 
 export type PlantillaEfKey = keyof typeof PLANTILLAS_EF
+
+/** Valores predeterminados de combos ZIN en Exploración Física (opción “normal”). */
+const EXPLORACION_SELECT_DEFAULTS: Record<string, string> = {
+  boca_estado: 'SIN DATOS',
+  test_adam: 'NEGATIVO',
+  circulacion_venosa: 'C0: SIN SIGNOS VISIBLES NI PALPABLES',
+  arco_de_movilidad: 'PRESENTES Y NORMALES',
+  tono_muscular: 'NORMAL',
+  coordinacion: 'NORMAL',
+  test_romberg: 'NEGATIVO',
+  signo_bragard: 'NEGATIVO',
+  prueba_finkelstein: 'NEGATIVO',
+  signo_tinel: 'NEGATIVO',
+  prueba_phanel: 'NEGATIVO',
+  prueba_lasegue: 'NEGATIVO',
+  presencia_quiste_sinovial: 'NORMAL',
+}
+
+/** Texto libre EF sin plantilla ZIN (placeholder histórico → valor inicial). */
+const EXPLORACION_TEXT_DEFAULTS: Record<string, string> = {
+  boca_alineacion: 'Normal',
+  fuerza_muscular_daniels_sup: '5/5',
+  fuerza_muscular_daniels_inf: '5/5',
+  especificar_quiste: '',
+}
+
+/** Default canónico de un campo de Hallazgos por aparato y sistema. */
+export function getExploracionFieldDefault(fieldName: string): string {
+  if (fieldName in PLANTILLAS_EF) {
+    return PLANTILLAS_EF[fieldName as PlantillaEfKey]
+  }
+  return EXPLORACION_SELECT_DEFAULTS[fieldName]
+    ?? EXPLORACION_TEXT_DEFAULTS[fieldName]
+    ?? ''
+}
+
+/**
+ * Prellena campos EF vacíos con plantillas/combos normales (persiste al guardar).
+ * No sobrescribe valores ya capturados en BD.
+ */
+export function applyExploracionFisicaDefaults(
+  persisted: Record<string, string>,
+): Record<string, string> {
+  const next = { ...persisted }
+  const allDefaults: Record<string, string> = {
+    ...PLANTILLAS_EF,
+    ...EXPLORACION_SELECT_DEFAULTS,
+    ...EXPLORACION_TEXT_DEFAULTS,
+  }
+  for (const [key, defaultValue] of Object.entries(allDefaults)) {
+    if (!String(next[key] ?? '').trim()) {
+      next[key] = defaultValue
+    }
+  }
+  return next
+}
 
 // ----------------------------------------------------------------------
 // 6. ANTECEDENTES REPRODUCTIVOS e INMUNIZACIONES (Imágenes 4 y 5)

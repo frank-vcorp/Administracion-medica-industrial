@@ -12,7 +12,6 @@ describe('modulo1-text', () => {
     const ped = {
       modulo1: {
         m1_repro_doc_prostata: 'Sin datos patológicos',
-        m1_repro_vsa: 'NO ACTIVA',
       },
     }
     expect(modulo1FromPhysicalExam(ped).m1_repro_doc_prostata).toBe('Sin datos patológicos')
@@ -21,10 +20,10 @@ describe('modulo1-text', () => {
 
   it('prioriza gineco sobre reproductivos masculinos si ambos existieran', () => {
     const m1 = {
-      m1_gine_ivs: 'ACTIVA',
+      m1_gine_menarca: '12',
       m1_repro_doc_prostata: 'legacy',
     }
-    expect(buildHistoriaReproductivaModulo1Text({ modulo1: m1 })).toContain('IVS: ACTIVA')
+    expect(buildHistoriaReproductivaModulo1Text({ modulo1: m1 })).toContain('Menarca: 12')
     expect(buildHistoriaReproductivaModulo1Text({ modulo1: m1 })).not.toContain('próstata')
   })
 
@@ -48,9 +47,14 @@ describe('modulo1-text', () => {
     expect(text).not.toContain('Neumococo')
   })
 
-  it('gineco incluye VSA cuando está capturado', () => {
-    const text = buildHistoriaGinecoText({ m1_gine_vsa: 'SI', m1_gine_menarca: '12' })
+  it('gineco no incluye IVS/VSA retirados del examen', () => {
+    const text = buildHistoriaGinecoText({
+      m1_gine_ivs: 'ACTIVA',
+      m1_gine_vsa: 'SI',
+      m1_gine_menarca: '12',
+    })
     expect(text).toContain('Menarca: 12')
-    expect(text).toContain('VSA: SI')
+    expect(text).not.toContain('IVS')
+    expect(text).not.toContain('VSA')
   })
 })

@@ -45,6 +45,8 @@ import {
   SALUD_BUCAL_VALUES,
   ESTADO_NUTRICIONAL_VALUES,
   PLANTILLAS_EF,
+  applyExploracionFisicaDefaults,
+  getExploracionFieldDefault,
   // IMPL-20260817-07: catálogos ZIN Módulo 1 (ginecológicos + vacunas)
   AG_IVS_VALUES,
   AG_VSA_VALUES,
@@ -426,6 +428,21 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
     expect(PLANTILLAS_EF.columna_vertebral).toBe('Clínicamente alineada.')
     expect(PLANTILLAS_EF.ms_superiores).toBe('Íntegros, fuerza y sensibilidad conservada.')
     expect(PLANTILLAS_EF.ms_inferiores).toBe('Íntegros, sensibilidad conservada.')
+  })
+
+  it('18b. applyExploracionFisicaDefaults prellena plantillas y combos normales', () => {
+    const filled = applyExploracionFisicaDefaults({})
+    expect(filled.neurologico).toBe(PLANTILLAS_EF.neurologico)
+    expect(filled.test_adam).toBe('NEGATIVO')
+    expect(filled.boca_estado).toBe('SIN DATOS')
+    expect(filled.fuerza_muscular_daniels_sup).toBe('5/5')
+    const preserved = applyExploracionFisicaDefaults({
+      neurologico: 'Paciente somnoliento',
+      test_adam: '',
+    })
+    expect(preserved.neurologico).toBe('Paciente somnoliento')
+    expect(preserved.test_adam).toBe('NEGATIVO')
+    expect(getExploracionFieldDefault('campos_pulmonares')).toBe(PLANTILLAS_EF.campos_pulmonares)
   })
 
   it('19. ImpresiónAptitudSchema acepta estado_nutricional + salud_bucal con ZIN enum', () => {

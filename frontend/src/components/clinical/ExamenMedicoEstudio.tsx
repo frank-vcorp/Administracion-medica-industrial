@@ -48,16 +48,14 @@ import {
   APTITUD_VALUES,
   AGUDEZA_VISUAL_RESUMEN_VALUES,
   PRESION_ARTERIAL_RESUMEN_VALUES,
-  PLANTILLAS_EF,
+  applyExploracionFisicaDefaults,
   // IMPL-20260817-07: catálogos ZIN para Módulo 1 (ginecológicos + vacunas).
   // Ver SPEC §4.6.
-  AG_IVS_VALUES,
   AG_VSA_VALUES,
   AG_NUMERIC_0_11,
   AG_ABORTO_VALUES,
   AR_MPF_VALUES,
   VAC_SI_NO_VALUES,
-  type PlantillaEfKey,
 } from "@/schemas/clinical/exam.schema"
 // IMPL-20260817-09-C4 (ARCH-20260817-02 corte 2 DA-7): helper de
 // auto-poblamiento para las recomendaciones del dictamen (catalogo
@@ -260,7 +258,6 @@ type M1FieldDef = {
 const GINE_FIELDS_TYPES: M1FieldDef[] = [
   { name: 'm1_gine_menarca', label: 'Menarca', kind: 'number', min: 0, max: 30 },
   { name: 'm1_gine_fum', label: 'FUM', kind: 'date' },
-  { name: 'm1_gine_ivs', label: 'IVS', kind: 'select', values: AG_IVS_VALUES },
   { name: 'm1_gine_ritmo', label: 'Ritmo', kind: 'select', values: AG_VSA_VALUES },
   { name: 'm1_gine_gesta', label: 'Gesta', kind: 'select', values: AG_NUMERIC_0_11 },
   { name: 'm1_gine_aborto', label: 'Aborto', kind: 'select', values: AG_ABORTO_VALUES },
@@ -274,8 +271,6 @@ const GINE_FIELDS_TYPES: M1FieldDef[] = [
 
 /** Módulo 1 — Antecedentes reproductivos masculinos (ZIN `PanelAtecedentesRepro`). */
 const REPRO_FIELDS_TYPES: M1FieldDef[] = [
-  { name: 'm1_repro_ivs', label: 'I.V.S', kind: 'text' },
-  { name: 'm1_repro_vsa', label: 'V.S.A', kind: 'select', values: AG_IVS_VALUES },
   { name: 'm1_repro_doc_prostata', label: 'D.O.C. Próstata (Salud prostática)', kind: 'text' },
   { name: 'm1_repro_mpf', label: 'M.P.F', kind: 'select', values: AR_MPF_VALUES },
 ]
@@ -397,9 +392,8 @@ const RESUMEN_CLINICO_FIELDS: [string, string][] = [
 // ─── Campos de Exploración Física (de ExploracionFisicaSchema) ───────────────
 // IMPL-20260817-01-C2: cada campo declara su `kind` para el render correcto.
 // - `select` → combo con valores ZIN (13 campos).
-// - `plantilla` → input text con defaultValue = PLANTILLAS_EF[name] (17 campos).
-// - `text` → input text libre (4 campos: fuerza_muscular_daniels_sup/inf,
-//   boca_alineacion, especificar_quiste). Ver SPEC §4.2, §4.3.
+// - `plantilla` → input text prellenado con PLANTILLAS_EF[name].
+// - `text` → input text libre con default canónico (4 campos).
 type ExplKind = 'select' | 'plantilla' | 'text'
 
 type ExplField = {
@@ -500,9 +494,11 @@ export default function ExamenMedicoEstudio({
     const isPrimitive = (v: unknown) =>
       v === null || v === undefined || typeof v === 'string' ||
       typeof v === 'number' || typeof v === 'boolean'
-    return Object.fromEntries(
-      Object.entries(physicalExamData).filter(([, v]) => isPrimitive(v))
-        .map(([k, v]) => [k, String(v ?? '')])
+    return applyExploracionFisicaDefaults(
+      Object.fromEntries(
+        Object.entries(physicalExamData).filter(([, v]) => isPrimitive(v))
+          .map(([k, v]) => [k, String(v ?? '')]),
+      ),
     )
   })
   const [aptitud, setAptitud] = useState<string>(
@@ -1347,13 +1343,6 @@ export default function ExamenMedicoEstudio({
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Antecedentes Ginecológicos</p>
               {renderModulo1FieldGrid(GINE_FIELDS_TYPES, modulo1, setM1Field, readonly)}
-              <div className="flex items-center gap-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">VSA</label>
-                <button onClick={() => setM1Field('m1_gine_vsa', modulo1['m1_gine_vsa'] === 'SI' ? 'NO' : 'SI')} disabled={readonly}
-                  className={`px-3 py-1 text-xs font-bold rounded-lg border-2 ${modulo1['m1_gine_vsa'] === 'SI' ? 'bg-teal-100 border-teal-400 text-teal-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                  {modulo1['m1_gine_vsa'] || 'NO'}
-                </button>
-              </div>
             </div>
           )}
 
@@ -1363,7 +1352,7 @@ export default function ExamenMedicoEstudio({
                 Antecedentes Reproductivos — Salud Prostática
               </p>
               <p className="text-[10px] text-slate-500">
-                Captura ZIN: I.V.S, V.S.A, D.O.C. próstata y método de planificación familiar (M.P.F.).
+                Captura ZIN: D.O.C. próstata y método de planificación familiar (M.P.F.).
               </p>
               {renderModulo1FieldGrid(REPRO_FIELDS_TYPES, modulo1, setM1Field, readonly)}
             </div>
@@ -1487,9 +1476,7 @@ export default function ExamenMedicoEstudio({
               {EXPLORACION_FIELDS.map(field => {
                 // IMPL-20260817-01-C2: render condicional por `kind`.
                 // - `select` → <select> con valores ZIN (DA-1).
-                // - `plantilla` → <input> con defaultValue = PLANTILLAS_EF[name],
-                //   texto libre editable (Frank: "lo copia igualito").
-                // - `text` → <input> libre (casos especiales).
+                // - `plantilla` / `text` → <input> con valor inicial (plantilla ZIN o default).
                 const currentValue = form[field.name] ?? ''
                 if (field.kind === 'select' && field.values) {
                   return (
@@ -1511,11 +1498,7 @@ export default function ExamenMedicoEstudio({
                     </div>
                   )
                 }
-                // `plantilla` o `text` → input text.
-                const isPlantilla = field.kind === 'plantilla'
-                const plantilla = isPlantilla
-                  ? PLANTILLAS_EF[field.name as PlantillaEfKey]
-                  : undefined
+                // `plantilla` o `text` → input text (valor ya prellenado en `form`).
                 return (
                   <div key={field.name}>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
@@ -1526,7 +1509,6 @@ export default function ExamenMedicoEstudio({
                       value={currentValue}
                       onChange={e => handleField(field.name, e.target.value)}
                       disabled={readonly}
-                      placeholder={isPlantilla ? (plantilla ?? 'Normal') : 'Normal'}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                     />
                   </div>
