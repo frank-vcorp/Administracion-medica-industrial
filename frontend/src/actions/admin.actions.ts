@@ -134,7 +134,33 @@ export async function ensurePublicGeneralCompany() {
         },
     })
 
-    if (existing) return existing
+    if (existing) {
+        if (!existing.defaultBranchId) {
+            const tenant = await prisma.tenant.findFirst()
+            const firstBranch = tenant
+                ? await prisma.branch.findFirst({
+                      where: { tenantId: tenant.id },
+                      select: { id: true },
+                      orderBy: { createdAt: 'asc' },
+                  })
+                : null
+            if (firstBranch) {
+                return await prisma.company.update({
+                    where: { id: existing.id },
+                    data: { defaultBranchId: firstBranch.id },
+                    select: {
+                        id: true,
+                        name: true,
+                        rfc: true,
+                        email: true,
+                        phone: true,
+                        defaultBranchId: true,
+                    },
+                })
+            }
+        }
+        return existing
+    }
 
     const tenant = await prisma.tenant.findFirst()
     const branches = tenant

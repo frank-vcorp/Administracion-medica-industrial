@@ -19,6 +19,7 @@ interface Props {
   }
   medicalProfiles: Array<{ id: string; name: string; companyId: string | null }>
   availableTests: AvailableTestOption[]
+  branches: Array<{ id: string; name: string }>
   isSuperAdmin: boolean
 }
 
@@ -27,6 +28,7 @@ export default function PublicGeneralPageClient({
   publicGeneralCompany,
   medicalProfiles,
   availableTests,
+  branches,
   isSuperAdmin,
 }: Props) {
   const [search, setSearch] = useState('')
@@ -49,6 +51,7 @@ export default function PublicGeneralPageClient({
         email: publicGeneralCompany.email,
         phone: publicGeneralCompany.phone,
         rfc: publicGeneralCompany.rfc,
+        defaultBranchId: publicGeneralCompany.defaultBranchId,
       },
     ],
     [publicGeneralCompany]
@@ -104,6 +107,8 @@ export default function PublicGeneralPageClient({
         companies={companyOptions}
         medicalProfiles={medicalProfiles}
         availableTests={availableTests}
+        branches={branches}
+        defaultBranchId={publicGeneralCompany.defaultBranchId}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         publicGeneralMode

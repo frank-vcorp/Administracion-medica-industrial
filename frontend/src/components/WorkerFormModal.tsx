@@ -19,7 +19,9 @@ interface CompanyOption {
     email?: string | null
     phone?: string | null
     rfc?: string | null
+    defaultBranchId?: string | null
 }
+interface BranchOption { id: string; name: string }
 interface MedicalProfileOption { id: string; name: string; companyId: string | null }
 
 /** Datos básicos del trabajador existente cuando se detecta duplicado */
@@ -47,6 +49,7 @@ export interface WorkerForEdit {
 
 interface WorkerRef {
     id: string
+    branchId?: string | null
     company?: { id: string; defaultBranchId: string | null } | null
 }
 
@@ -67,6 +70,10 @@ interface WorkerFormModalProps {
     hideDefaultTrigger?: boolean
     /** Catálogo de pruebas para perfil rápido (solo publicGeneralMode). */
     availableTests?: AvailableTestOption[]
+    /** Sucursales AMI para alta público general. */
+    branches?: BranchOption[]
+    /** Sucursal default de la empresa (p. ej. Público General). */
+    defaultBranchId?: string | null
 }
 
 function profilesForCompany(
@@ -88,6 +95,8 @@ export default function WorkerFormModal({
     defaultCompanyId,
     hideDefaultTrigger = false,
     availableTests = [],
+    branches = [],
+    defaultBranchId,
 }: WorkerFormModalProps) {
     const isControlled = isOpenProp !== undefined
     const [internalOpen, setInternalOpen] = useState(false)
@@ -104,6 +113,7 @@ export default function WorkerFormModal({
     const [pgProfileMode, setPgProfileMode] = useState<ProfileMode>('existing')
     const [pgQuickTestIds, setPgQuickTestIds] = useState<string[]>([])
     const [pgCustomProfileName, setPgCustomProfileName] = useState('')
+    const [selectedBranchId, setSelectedBranchId] = useState('')
     const router = useRouter()
 
     const isCreateMode = !workerToEdit
@@ -132,8 +142,14 @@ export default function WorkerFormModal({
             setPgProfileMode('existing')
             setPgQuickTestIds([])
             setPgCustomProfileName('')
+            const initialBranch =
+                defaultBranchId ||
+                companies.find((c) => c.id === defaultCompanyId)?.defaultBranchId ||
+                branches[0]?.id ||
+                ''
+            setSelectedBranchId(initialBranch)
         }
-    }, [modalOpen, publicGeneralMode, defaultCompanyId, workerToEdit])
+    }, [modalOpen, publicGeneralMode, defaultCompanyId, workerToEdit, defaultBranchId, companies, branches])
 
     useEffect(() => {
         if (!isCreateMode || publicGeneralMode || !selectedCompanyId) return
@@ -162,6 +178,14 @@ export default function WorkerFormModal({
         setPgProfileMode('existing')
         setPgQuickTestIds([])
         setPgCustomProfileName('')
+        setSelectedBranchId(
+            defaultBranchId ||
+            (publicGeneralMode && defaultCompanyId
+                ? companies.find((c) => c.id === defaultCompanyId)?.defaultBranchId
+                : null) ||
+            branches[0]?.id ||
+            ''
+        )
     }
 
     function handleClose() {
@@ -191,6 +215,10 @@ export default function WorkerFormModal({
                     let submitFormData = formData
 
                     if (publicGeneralMode && defaultCompanyId) {
+                        if (!selectedBranchId) {
+                            setError('Selecciona la sucursal de atención')
+                            return
+                        }
                         if (pgProfileMode === 'quick') {
                             if (pgQuickTestIds.length === 0) {
                                 setError('Selecciona al menos una prueba para el perfil rápido')
@@ -221,9 +249,20 @@ export default function WorkerFormModal({
                             setError('Selecciona un perfil médico existente')
                             return
                         }
+                        submitFormData = submitFormData ?? formData
+                        if (!(submitFormData instanceof FormData) || submitFormData === formData) {
+                            submitFormData = new FormData()
+                            for (const [key, value] of formData.entries()) {
+                                submitFormData.append(key, value)
+                            }
+                        }
+                        submitFormData.set('branchId', selectedBranchId)
+                        submitFormData.set('publicGeneralAlta', 'true')
                     }
 
-                    const result = await createWorker(submitFormData) as {
+                    const result = await createWorker(
+                        submitFormData instanceof FormData ? submitFormData : formData
+                    ) as {
                         success: boolean
                         status?: string
                         worker?: WorkerRef
@@ -333,13 +372,14 @@ export default function WorkerFormModal({
                                 const w = successData.worker
                                 setSuccessData(null)
                                 setInternalOpen(false)
+                                const branchForAppt = w?.branchId || w?.company?.defaultBranchId
                                 const params = new URLSearchParams()
                                 params.set('action', 'new-appointment')
                                 if (w?.id) params.set('workerId', w.id)
-                                if (w?.company?.defaultBranchId) params.set('branchId', w.company.defaultBranchId)
+                                if (branchForAppt) params.set('branchId', branchForAppt)
                                 if (w?.company?.id) params.set('companyId', w.company.id)
                                 const event = new CustomEvent<OpenAppointmentModalDetail>(EVENTS.OPEN_APPOINTMENT_MODAL, {
-                                    detail: { workerId: w?.id, branchId: w?.company?.defaultBranchId || undefined, companyId: w?.company?.id || undefined }
+                                    detail: { workerId: w?.id, branchId: branchForAppt || undefined, companyId: w?.company?.id || undefined }
                                 })
                                 window.dispatchEvent(event)
                                 router.push(`/appointments?${params.toString()}`)
@@ -466,6 +506,26 @@ export default function WorkerFormModal({
                                     <div className="rounded-xl border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
                                         Empresa fija: <strong>Público General</strong>
                                     </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+                                            Sucursal
+                                        </label>
+                                        <select
+                                            name="branchId"
+                                            value={selectedBranchId}
+                                            onChange={(e) => setSelectedBranchId(e.target.value)}
+                                            required
+                                            className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-500 p-3 rounded-xl text-sm outline-none appearance-none"
+                                        >
+                                            <option value="">-- Seleccionar sucursal --</option>
+                                            {branches.map((b) => (
+                                                <option key={b.id} value={b.id}>
+                                                    {b.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <input type="hidden" name="publicGeneralAlta" value="true" />
                                     {pgProfileMode === 'existing' && (
                                         <input type="hidden" name="medicalProfileId" value={selectedMedicalProfileId} />
                                     )}

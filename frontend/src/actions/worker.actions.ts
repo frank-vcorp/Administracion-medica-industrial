@@ -191,6 +191,23 @@ export async function createWorker(formData: FormData) {
         const universalId = generateUniversalId({ firstName, lastName, dob, gender })
 
         const medicalProfileId = formData.get('medicalProfileId') as string
+        const branchIdRaw = formData.get('branchId') as string | null
+        const branchId = branchIdRaw?.trim() || null
+        const isPublicGeneralAlta = formData.get('publicGeneralAlta') === 'true'
+
+        if (isPublicGeneralAlta && !branchId) {
+            return { success: false, error: 'La sucursal es obligatoria para público general' }
+        }
+
+        if (branchId) {
+            const branch = await prisma.branch.findUnique({
+                where: { id: branchId },
+                select: { id: true },
+            })
+            if (!branch) {
+                return { success: false, error: 'La sucursal seleccionada no es válida' }
+            }
+        }
 
         if (companyId && medicalProfileId) {
             const valid = await validateMedicalProfileForCompany(medicalProfileId, companyId)
@@ -210,6 +227,8 @@ export async function createWorker(formData: FormData) {
                 phone: formData.get('phone') as string,
                 companyId: companyId || null,
                 medicalProfileId: medicalProfileId || null,
+                branchId,
+                ...(isPublicGeneralAlta ? { intakeSource: 'DIRECT_RECEPTION' as const } : {}),
             }
         })
         revalidatePath('/workers')
@@ -225,7 +244,7 @@ export async function createWorker(formData: FormData) {
             status: 'created',
             worker: { 
                 ...worker, 
-                company: company ? { id: company.id, defaultBranchId: company.defaultBranchId } : null 
+                company: company ? { id: company.id, defaultBranchId: company.defaultBranchId } : null,
             } 
         }
     } catch (e: unknown) {

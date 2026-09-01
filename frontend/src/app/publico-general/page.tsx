@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
-import { ensurePublicGeneralCompany } from '@/actions/admin.actions'
+import { ensurePublicGeneralCompany, getBranches } from '@/actions/admin.actions'
 import { getWorkers } from '@/actions/worker.actions'
 import { getMedicalProfileOptions, getMedicalTests } from '@/actions/medical-profiles'
 import PublicGeneralPageClient from '@/components/public-general/PublicGeneralPageClient'
@@ -13,11 +13,16 @@ export default async function PublicGeneralPage() {
   const isSuperAdmin = (session?.user as { role?: string } | undefined)?.role === 'SUPERADMIN'
 
   const publicGeneralCompany = await ensurePublicGeneralCompany()
-  const [workers, medicalProfiles, availableTests] = await Promise.all([
+  const [workers, medicalProfiles, availableTests, branchesResult] = await Promise.all([
     getWorkers({ companyId: publicGeneralCompany.id }),
     getMedicalProfileOptions(),
     getMedicalTests(),
+    getBranches(),
   ])
+  const branches = branchesResult.map((b: { id: string; name: string }) => ({
+    id: b.id,
+    name: b.name,
+  }))
 
   return (
     <PublicGeneralPageClient
@@ -25,6 +30,7 @@ export default async function PublicGeneralPage() {
       publicGeneralCompany={publicGeneralCompany}
       medicalProfiles={medicalProfiles}
       availableTests={availableTests}
+      branches={branches}
       isSuperAdmin={isSuperAdmin}
     />
   )
