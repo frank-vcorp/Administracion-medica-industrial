@@ -135,6 +135,7 @@ const NP_ENUM_KEYS = [
   'drogas_estimulantes',
   'ejercicio',
   'tatuajes',
+  'tratamiento_medico_actual',
   'alimentacion',
 ] as const
 
@@ -191,7 +192,9 @@ function buildEmptySections(): {
     drogas_estimulantes: 'NEGADO', drogas_especifique: '',
     drogas_frecuencia: '', drogas_ultimo_consumo: '',
     ejercicio: 'NEGADO', ejercicio_especifique: '', ejercicio_frecuencia: '',
-    alimentacion: 'BUENA', grupo_y_rh: 'DESCONOCE',
+    alimentacion: 'BUENA',
+    tratamiento_medico_actual: 'NEGADO', tratamiento_medico_actual_especifique: '',
+    grupo_y_rh: 'DESCONOCE',
     tatuajes: 'NEGADO', tatuajes_especifique: '',
   }
   // IMPL-20260817-04: cada enfermedad (incl. `otras`) inicializa como
@@ -662,8 +665,8 @@ export function AntecedentesCaptura({
             )
           })}
         </div>
-        {/* Alimentación / Grupo RH / Tatuajes — campos planos adicionales */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t border-slate-100">
+        {/* Alimentación / Tratamiento médico / Grupo RH / Tatuajes */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Alimentación</label>
             <select
@@ -674,6 +677,38 @@ export function AntecedentesCaptura({
             >
               {ALIMENTACION_OPTIONS.map(o => <option key={o}>{o}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tratamiento médico actual</label>
+            <p className="text-[9px] text-slate-400 mb-1">Medicamentos o terapias que toma actualmente de forma regular.</p>
+            <div className="flex gap-1">
+              {SI_NEGADO.map(opt => (
+                <button key={opt} type="button" disabled={readonly}
+                  onClick={() => setField('no_patologicos', 'tratamiento_medico_actual', opt)}
+                  className={`px-2 py-1 rounded text-[10px] font-bold border transition ${
+                    form.no_patologicos.tratamiento_medico_actual === opt
+                      ? 'bg-blue-100 border-blue-400 text-blue-700'
+                      : 'bg-white border-slate-200 text-slate-500'
+                  }`}
+                >{opt}</button>
+              ))}
+            </div>
+            {form.no_patologicos.tratamiento_medico_actual === 'SI' && (
+              <div className="mt-2">
+                <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                  Especifique
+                </label>
+                <input
+                  type="text"
+                  value={form.no_patologicos.tratamiento_medico_actual_especifique ?? ''}
+                  onChange={e => setField('no_patologicos', 'tratamiento_medico_actual_especifique', e.target.value)}
+                  disabled={readonly}
+                  placeholder="ej: Metformina 850 mg, Losartán 50 mg"
+                  maxLength={500}
+                  className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                />
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Grupo y RH</label>
@@ -691,6 +726,7 @@ export function AntecedentesCaptura({
           </div>
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tatuajes</label>
+            <p className="text-[9px] text-slate-400 mb-1">Indique si tiene tatuajes visibles. Algunos puestos lo requieren declarar.</p>
             <div className="flex gap-1">
               {SI_NEGADO.map(opt => (
                 <button key={opt} type="button" disabled={readonly}
@@ -703,6 +739,22 @@ export function AntecedentesCaptura({
                 >{opt}</button>
               ))}
             </div>
+            {form.no_patologicos.tatuajes === 'SI' && (
+              <div className="mt-2">
+                <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                  Ubicación
+                </label>
+                <input
+                  type="text"
+                  value={form.no_patologicos.tatuajes_especifique ?? ''}
+                  onChange={e => setField('no_patologicos', 'tatuajes_especifique', e.target.value)}
+                  disabled={readonly}
+                  placeholder="ej: brazo derecho, espalda, tobillo"
+                  maxLength={500}
+                  className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                />
+              </div>
+            )}
           </div>
         </div>
       </fieldset>

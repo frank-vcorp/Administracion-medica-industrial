@@ -201,6 +201,7 @@ export interface BuildExamenMedicoPdfInput {
     drogas?: string | null
     ejercicio?: string | null
     alimentacion?: string | null
+    tratamientoMedicoActual?: string | null
     tatuajes?: string | null
   }
   historiaOcupacional: BuildExamenMedicoPdfHistoriaOcupacionalInput
@@ -431,6 +432,7 @@ export function buildExamenMedicoPdfData(
       drogas: s(input.apnp.drogas) || null,
       ejercicio: s(input.apnp.ejercicio) || null,
       alimentacion: s(input.apnp.alimentacion) || null,
+      tratamientoMedicoActual: s(input.apnp.tratamientoMedicoActual) || null,
       tatuajes: s(input.apnp.tatuajes) || null,
     },
     app: s(input.app?.texto) || '',

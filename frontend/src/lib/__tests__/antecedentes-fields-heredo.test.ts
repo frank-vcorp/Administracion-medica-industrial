@@ -3,6 +3,8 @@ import {
   formatHeredoFamiliaresValor,
   heredoFamiliaresEspecifiqueKey,
   readHeredoFamiliaresDisplay,
+  readTatuajesDisplay,
+  readTratamientoMedicoActualDisplay,
 } from '../antecedentes-fields'
 import { HeredoFamiliaresSchema } from '@/schemas/clinical/history.schema'
 
@@ -31,5 +33,36 @@ describe('heredo-familiares OTROS + especifique', () => {
     })
     expect(parsed.cancer).toBe('OTROS')
     expect(parsed.cancer_especifique).toBe('Próstata — padre')
+  })
+})
+
+describe('tratamiento médico actual en No Patológicos', () => {
+  it('lee SI con especifique', () => {
+    expect(
+      readTratamientoMedicoActualDisplay({
+        tratamiento_medico_actual: 'SI',
+        tratamiento_medico_actual_especifique: 'Metformina 850 mg',
+      }),
+    ).toBe('SI — Metformina 850 mg')
+  })
+
+  it('NEGADO por defecto', () => {
+    expect(readTratamientoMedicoActualDisplay({})).toBe('NEGADO')
+  })
+})
+
+describe('tatuajes en No Patológicos', () => {
+  it('lee SI con ubicación desde tatuajes_especifique', () => {
+    expect(
+      readTatuajesDisplay({ tatuajes: 'SI', tatuajes_especifique: 'Brazo derecho' }),
+    ).toBe('SI — Brazo derecho')
+  })
+
+  it('SI sin ubicación', () => {
+    expect(readTatuajesDisplay({ tatuajes: 'SI' })).toBe('SI')
+  })
+
+  it('NEGADO por defecto sin datos', () => {
+    expect(readTatuajesDisplay({})).toBe('NEGADO')
   })
 })

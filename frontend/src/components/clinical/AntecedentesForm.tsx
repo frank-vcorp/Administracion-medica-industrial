@@ -162,7 +162,9 @@ export function AntecedentesForm({
     drogas_estimulantes: 'NEGADO', drogas_especifique: '',
     drogas_frecuencia: '', drogas_ultimo_consumo: '',
     ejercicio: 'NEGADO', ejercicio_especifique: '', ejercicio_frecuencia: '',
-    alimentacion: 'BUENA', grupo_y_rh: 'DESCONOCE',
+    alimentacion: 'BUENA',
+    tratamiento_medico_actual: 'NEGADO', tratamiento_medico_actual_especifique: '',
+    grupo_y_rh: 'DESCONOCE',
     tatuajes: 'NEGADO', tatuajes_especifique: '',
   })
 
@@ -669,7 +671,7 @@ export function AntecedentesForm({
                 )}
               </div>
             ))}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Alimentación</label>
                 <p className="text-xs text-gray-500 mb-1">¿Cómo considera su alimentación diaria? BUENA = balanceada · REGULAR = mejorable · MALA = muy desequilibrada.</p>
@@ -680,6 +682,31 @@ export function AntecedentesForm({
                 >
                   {['BUENA', 'REGULAR', 'MALA'].map(o => <option key={o}>{o}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tratamiento médico actual</label>
+                <p className="text-xs text-gray-500 mb-1">Medicamentos o terapias que toma actualmente de forma regular.</p>
+                <div className="flex gap-2 mt-1">
+                  {['NEGADO', 'SI'].map(opt => (
+                    <button key={opt} type="button"
+                      onClick={() => setNoPatologicos(p => ({ ...p, tratamiento_medico_actual: opt }))}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition ${noPatologicos.tratamiento_medico_actual === opt ? 'bg-blue-100 border-blue-400 text-blue-700' : 'bg-white border-gray-200 text-gray-500'}`}
+                    >{opt}</button>
+                  ))}
+                </div>
+                {noPatologicos.tratamiento_medico_actual === 'SI' && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Especifique</label>
+                    <input
+                      type="text"
+                      value={noPatologicos.tratamiento_medico_actual_especifique ?? ''}
+                      onChange={e => setNoPatologicos(p => ({ ...p, tratamiento_medico_actual_especifique: e.target.value }))}
+                      placeholder="ej: Metformina 850 mg, Losartán 50 mg"
+                      maxLength={500}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Grupo y RH</label>
@@ -697,7 +724,7 @@ export function AntecedentesForm({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tatuajes</label>
-                <p className="text-xs text-gray-500 mb-1">Indique si tiene tatuajes visibles o no. Algunos puestos lo requieren declarar.</p>
+                <p className="text-xs text-gray-500 mb-1">Indique si tiene tatuajes visibles. Algunos puestos lo requieren declarar.</p>
                 <div className="flex gap-2 mt-1">
                   {['NEGADO', 'SI'].map(opt => (
                     <button key={opt} type="button"
@@ -706,6 +733,19 @@ export function AntecedentesForm({
                     >{opt}</button>
                   ))}
                 </div>
+                {noPatologicos.tatuajes === 'SI' && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Ubicación</label>
+                    <input
+                      type="text"
+                      value={noPatologicos.tatuajes_especifique ?? ''}
+                      onChange={e => setNoPatologicos(p => ({ ...p, tatuajes_especifique: e.target.value }))}
+                      placeholder="ej: brazo derecho, espalda, tobillo"
+                      maxLength={500}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

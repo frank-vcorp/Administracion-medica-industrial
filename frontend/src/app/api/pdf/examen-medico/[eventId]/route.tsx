@@ -48,7 +48,7 @@ import {
   buildHistoriaReproductivaModulo1Text,
   buildInmunizacionesFromPhysicalExam,
 } from '@/lib/clinical/modulo1-text'
-import { readHeredoFamiliaresDisplay } from '@/lib/antecedentes-fields'
+import { readHeredoFamiliaresDisplay, readTatuajesDisplay, readTratamientoMedicoActualDisplay } from '@/lib/antecedentes-fields'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -225,6 +225,10 @@ export async function GET(
       (clinicalHistoryData.heredo_familiares as Record<string, unknown>) ?? {}
     const apnp =
       (clinicalHistoryData.no_patologicos as Record<string, unknown>) ?? {}
+    const captured =
+      (physicalExamData.antecedentes_captured as Record<string, unknown> | null) ?? {}
+    const apnpForNoPatologicos =
+      (captured.no_patologicos as Record<string, unknown> | undefined) ?? apnp
 
     // APP: texto consolidado de los slots por prueba (mismo fallback que
     // `buildVerdictFromExam`).
@@ -329,7 +333,8 @@ export async function GET(
         drogas: str(apnp.drogas_estimulantes),
         ejercicio: str(apnp.ejercicio),
         alimentacion: str(apnp.alimentacion),
-        tatuajes: str(apnp.tatuajes),
+        tratamientoMedicoActual: readTratamientoMedicoActualDisplay(apnpForNoPatologicos) || null,
+        tatuajes: readTatuajesDisplay(apnpForNoPatologicos) || null,
       },
       historiaOcupacional: {
         empresa: event.worker.company?.name ?? null,

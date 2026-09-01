@@ -158,6 +158,10 @@ export const NoPatologicosSchema = z.object({
   ejercicio_frecuencia: z.string().trim().max(200).optional(),
 
   alimentacion: z.enum(['BUENA', 'REGULAR', 'MALA']).default('BUENA'),
+
+  tratamiento_medico_actual: SiNegado,
+  tratamiento_medico_actual_especifique: z.string().trim().max(500).optional(),
+
   // IMPL-20260817-03: ZIN combo con 9 valores canónicos (select en UI).
   // DA-1: `tolerantZinEnum` sigue aceptando strings legacy no-vacíos.
   grupo_y_rh: tolerantZinEnum(GRUPO_RH_VALUES).default('DESCONOCE'),

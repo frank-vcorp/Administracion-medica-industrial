@@ -35,7 +35,7 @@
 
 import type { PrismaClient } from '@prisma/client'
 import { findSiblingEventsInAtencion, type AtencionResolution } from '@/lib/event-atencion'
-import { readHeredoFamiliaresDisplay } from '@/lib/antecedentes-fields'
+import { readHeredoFamiliaresDisplay, readTatuajesDisplay, readTratamientoMedicoActualDisplay } from '@/lib/antecedentes-fields'
 import { buildExamenMedicoPdfData, type BuildExamenMedicoPdfInput } from '@/lib/examen-medico-pdf'
 
 /**
@@ -231,6 +231,10 @@ export async function buildDictamenGeneralAmiConsolidado(
   const dp = (physicalExamData.datos_personales as Record<string, unknown> | null) ?? {}
   const ahf = (physicalExamData.antecedentes_heredofamiliares as Record<string, unknown> | null) ?? {}
   const apnp = (physicalExamData.antecedentes_personales_no_patologicos as Record<string, unknown> | null) ?? {}
+  const captured =
+    (physicalExamData.antecedentes_captured as Record<string, unknown> | null) ?? {}
+  const apnpForNoPatologicos =
+    (captured.no_patologicos as Record<string, unknown> | undefined) ?? apnp
 
   const aptitud = s(physicalExamData.aptitud)
   const ta = s(physicalExamData.ta ?? vitalSigns.ta) ?? s(physicalExamData.tension_arterial ?? vitalSigns.tension_arterial)
@@ -280,7 +284,8 @@ export async function buildDictamenGeneralAmiConsolidado(
       drogas: s(apnp.drogas_estimulantes),
       ejercicio: s(apnp.ejercicio),
       alimentacion: s(apnp.alimentacion),
-      tatuajes: s(apnp.tatuajes),
+      tratamientoMedicoActual: readTratamientoMedicoActualDisplay(apnpForNoPatologicos) || null,
+      tatuajes: readTatuajesDisplay(apnpForNoPatologicos) || null,
     },
     historiaOcupacional: {
       empresa: event.worker.company?.name ?? null,

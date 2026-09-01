@@ -199,6 +199,7 @@ export interface ExamenMedicoPDFData {
     drogas?: string | null
     ejercicio?: string | null
     alimentacion?: string | null
+    tratamientoMedicoActual?: string | null
     tatuajes?: string | null
   }
 
@@ -508,6 +509,10 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
             <View style={styles.row}>
               <Text style={styles.label}>Alimentación:</Text>
               <Text style={styles.value}>{v(data.apnp.alimentacion)}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Tratamiento médico actual:</Text>
+              <Text style={styles.value}>{v(data.apnp.tratamientoMedicoActual)}</Text>
             </View>
             <View style={styles.row}>
               <Text style={styles.label}>Tatuajes:</Text>

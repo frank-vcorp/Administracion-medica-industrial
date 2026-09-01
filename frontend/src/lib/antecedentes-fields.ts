@@ -207,6 +207,39 @@ export const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
   ],
 }
 
+/** Texto para PDF: toggle SI/NEGADO + campo libre condicional en no_patologicos. */
+export function readSiEspecifiqueDisplay(
+  noPatologicos: Record<string, unknown> | null | undefined,
+  toggleKey: string,
+  especifiqueKey: string,
+): string {
+  const np = noPatologicos ?? {}
+  const estado = String(np[toggleKey] ?? '').trim()
+  if (estado === 'SI') {
+    const detalle = String(np[especifiqueKey] ?? '').trim()
+    return detalle ? `SI — ${detalle}` : 'SI'
+  }
+  return estado || 'NEGADO'
+}
+
+/** Texto para PDF / dictamen desde no_patologicos.tatuajes + tatuajes_especifique. */
+export function readTatuajesDisplay(
+  noPatologicos: Record<string, unknown> | null | undefined,
+): string {
+  return readSiEspecifiqueDisplay(noPatologicos, 'tatuajes', 'tatuajes_especifique')
+}
+
+/** Tratamiento médico actual (no patológicos). */
+export function readTratamientoMedicoActualDisplay(
+  noPatologicos: Record<string, unknown> | null | undefined,
+): string {
+  return readSiEspecifiqueDisplay(
+    noPatologicos,
+    'tratamiento_medico_actual',
+    'tratamiento_medico_actual_especifique',
+  )
+}
+
 /**
  * Antecedentes Personales No Patológicos / Toxicomanías.
  * Cada item tiene un toggle SI/NEGADO y, si es SI, se muestran sub-campos.
@@ -280,6 +313,13 @@ export function getNoPatologicosAllFields(): string[] {
     for (const [sk] of item.subs) result.push(sk)
   }
   // Campos planos adicionales definidos en NoPatologicosSchema que no son subs:
-  result.push('alimentacion', 'grupo_y_rh', 'tatuajes', 'tatuajes_especifique')
+  result.push(
+    'alimentacion',
+    'tratamiento_medico_actual',
+    'tratamiento_medico_actual_especifique',
+    'grupo_y_rh',
+    'tatuajes',
+    'tatuajes_especifique',
+  )
   return result
 }
