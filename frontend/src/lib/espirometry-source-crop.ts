@@ -1,6 +1,7 @@
 /**
  * Recorte fijo de la zona superior del PDF Sibelmed W20s (tabla + gráficas).
- * @see context/RD2026/ESPIROMETRIA.pdf
+ * Producción: Railway vía /api/v2/event-tests/espirometry-source-crop (poppler).
+ * Desarrollo local: fallback con pdftoppm + pngjs.
  */
 import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises'
@@ -10,9 +11,7 @@ import { promisify } from 'node:util'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { cropPngTop } from '@/lib/png-crop-top'
-import {
-  resolveBackendFileUrl,
-} from '@/lib/zip-cierre-clinico'
+import { resolveBackendFileUrl } from '@/lib/zip-cierre-clinico'
 
 const execFileAsync = promisify(execFile)
 
@@ -22,6 +21,7 @@ const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
 export type EspirometrySourceCropMeta = {
   relativePath: string
+  fileUrl?: string
   templateId: 'sibelmed-w20s'
   generatedAt: string
 }
@@ -71,8 +71,8 @@ export async function readEventTestSourcePdfBytes(
   }
 }
 
-/** Recorta la parte superior (equipo) de la primera página del PDF fuente. */
-export async function cropEspirometrySourceTopFromPdf(
+/** Recorte local (solo dev / entornos con pdftoppm). */
+export async function cropEspirometrySourceTopFromPdfLocal(
   pdfBuffer: Buffer,
   cropRatio = SIBELMED_W20S_TOP_CROP_RATIO,
 ): Promise<Buffer> {
@@ -102,6 +102,66 @@ export async function cropEspirometrySourceTopFromPdf(
   }
 }
 
+async function cropViaBackend(
+  eventTestId: string,
+  fileUrl: string,
+): Promise<EspirometrySourceCropMeta | null> {
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    ''
+
+  const endpoint = apiBase
+    ? `${apiBase.replace(/\/+$/, '')}/api/v2/event-tests/espirometry-source-crop`
+    : '/api/v2/event-tests/espirometry-source-crop'
+
+  try {
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'AMI-Espirometry-Crop/1.0',
+      },
+      body: JSON.stringify({
+        event_test_id: eventTestId,
+        file_url: fileUrl,
+      }),
+    })
+
+    if (!resp.ok) {
+      console.warn(
+        '[espirometry-crop] Backend respondió',
+        resp.status,
+        await resp.text().catch(() => ''),
+      )
+      return null
+    }
+
+    const payload = (await resp.json()) as {
+      status?: string
+      relative_path?: string
+      file_url?: string
+      template_id?: string
+      generated_at?: string
+    }
+
+    if (payload.status !== 'success' || !payload.relative_path) {
+      return null
+    }
+
+    return {
+      relativePath: payload.relative_path,
+      fileUrl: payload.file_url ?? `/api/files/${payload.relative_path}`,
+      templateId: 'sibelmed-w20s',
+      generatedAt: payload.generated_at ?? new Date().toISOString(),
+    }
+  } catch (err) {
+    console.warn('[espirometry-crop] Backend no disponible:', err)
+    return null
+  }
+}
+
 export async function persistEspirometrySourceCropPng(
   eventTestId: string,
   pngBuffer: Buffer,
@@ -110,19 +170,36 @@ export async function persistEspirometrySourceCropPng(
   await mkdir(dir, { recursive: true })
   const filename = `${eventTestId}.png`
   await writeFile(path.join(dir, filename), pngBuffer)
+  const relativePath = `${ESPIROMETRY_CROP_SUBDIR}/${filename}`
   return {
-    relativePath: `${ESPIROMETRY_CROP_SUBDIR}/${filename}`,
+    relativePath,
+    fileUrl: `/api/files/${relativePath}`,
     templateId: 'sibelmed-w20s',
     generatedAt: new Date().toISOString(),
   }
 }
 
 export async function loadEspirometrySourceCropDataUrl(
-  relativePath: string,
+  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
 ): Promise<string | null> {
   try {
-    const abs = path.join(REPO_UPLOAD_DIR, relativePath)
+    const abs = path.join(REPO_UPLOAD_DIR, meta.relativePath)
     const buf = await readFile(abs)
+    return `data:image/png;base64,${buf.toString('base64')}`
+  } catch {
+    // Producción: PNG en Railway/S3
+  }
+
+  const fileRef = meta.fileUrl ?? `/api/files/${meta.relativePath}`
+  const remoteUrl = resolveBackendFileUrl(fileRef)
+  if (!remoteUrl) return null
+
+  try {
+    const resp = await fetch(remoteUrl, {
+      headers: { 'User-Agent': 'AMI-Espirometry-Crop/1.0' },
+    })
+    if (!resp.ok) return null
+    const buf = Buffer.from(await resp.arrayBuffer())
     return `data:image/png;base64,${buf.toString('base64')}`
   } catch {
     return null
@@ -143,6 +220,7 @@ function mergeClinicalContext(
 /** Genera y persiste el recorte superior si hay PDF fuente de espirometría. */
 export async function ensureEspirometrySourceCrop(
   eventTestId: string,
+  options?: { force?: boolean },
 ): Promise<EspirometrySourceCropMeta | null> {
   const eventTest = await prisma.eventTest.findUnique({
     where: { id: eventTestId },
@@ -150,8 +228,6 @@ export async function ensureEspirometrySourceCrop(
       id: true,
       fileUrl: true,
       clinicalContext: true,
-      testNameSnapshot: true,
-      test: { select: { code: true, category: { select: { name: true } } } },
     },
   })
 
@@ -159,8 +235,9 @@ export async function ensureEspirometrySourceCrop(
 
   const ctx = eventTest.clinicalContext as Record<string, unknown> | null
   const existing = ctx?.espirometrySourceCrop as EspirometrySourceCropMeta | undefined
-  if (existing?.relativePath) {
-    return existing
+  if (existing?.relativePath && !options?.force) {
+    const preview = await loadEspirometrySourceCropDataUrl(existing)
+    if (preview) return existing
   }
 
   const fileUrl = eventTest.fileUrl
@@ -168,11 +245,21 @@ export async function ensureEspirometrySourceCrop(
     return null
   }
 
-  const pdfBytes = await readEventTestSourcePdfBytes(fileUrl)
-  if (!pdfBytes) return null
+  let meta =
+    (await cropViaBackend(eventTestId, fileUrl)) ??
+    (await (async () => {
+      const pdfBytes = await readEventTestSourcePdfBytes(fileUrl)
+      if (!pdfBytes) return null
+      try {
+        const pngBuffer = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
+        return await persistEspirometrySourceCropPng(eventTestId, pngBuffer)
+      } catch (err) {
+        console.warn('[espirometry-crop] Recorte local falló:', err)
+        return null
+      }
+    })())
 
-  const pngBuffer = await cropEspirometrySourceTopFromPdf(pdfBytes)
-  const meta = await persistEspirometrySourceCropPng(eventTestId, pngBuffer)
+  if (!meta) return null
 
   await prisma.eventTest.update({
     where: { id: eventTestId },

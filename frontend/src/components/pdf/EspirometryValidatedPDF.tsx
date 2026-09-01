@@ -1,11 +1,11 @@
 /**
  * Plantilla PDF validado de Espirometría — layout AMI híbrido.
- * Parte superior: recorte fiel del PDF del espirómetro (tabla + gráficas).
- * Parte inferior: bloque AMI generado (calidad, impresión, recomendaciones, firma).
+ * Membrete AMI + recorte Sibelmed (tabla/gráficas) + bloque clínico inferior.
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import type { EspirometryAmiSectionData } from '@/lib/espirometry-ami-section'
 import { formatAmiSectionMl } from '@/lib/espirometry-ami-section'
+import { AMI_LOGO_URL } from '@/lib/ami-brand'
 
 const styles = StyleSheet.create({
   page: {
@@ -14,9 +14,52 @@ const styles = StyleSheet.create({
     color: '#000000',
     paddingBottom: 72,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    paddingTop: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0f766e',
+  },
+  headerLeft: {
+    flexDirection: 'column',
+    flex: 1,
+  },
+  brand: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#0f766e',
+  },
+  brandSub: {
+    fontSize: 7,
+    color: '#475569',
+    marginTop: 2,
+  },
+  headerRight: {
+    width: 120,
+    alignItems: 'flex-end',
+  },
+  logoImage: {
+    width: 110,
+    height: 42,
+    objectFit: 'contain',
+  },
+  logoFallback: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0f766e',
+  },
   sourceImage: {
     width: '100%',
     objectFit: 'contain',
+    marginTop: 4,
+  },
+  sourceFallback: {
+    paddingHorizontal: 28,
+    paddingVertical: 8,
   },
   amiBlock: {
     paddingHorizontal: 28,
@@ -124,18 +167,6 @@ export interface EspirometryValidatedPDFData {
   logoUrl: string
 }
 
-const formatDate = (d: string | Date) => {
-  const date = d instanceof Date ? d : new Date(d)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('es-MX', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function MetricItem({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.metricItem}>
@@ -193,6 +224,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
     data.recomendacionesValidadas.length > 0
       ? data.recomendacionesValidadas.join(' ')
       : '—'
+  const logoSrc = data.logoUrl || AMI_LOGO_URL
 
   return (
     <Document
@@ -201,11 +233,27 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
       subject="Estudio de Espirometría validado"
     >
       <Page size="LETTER" style={styles.page}>
+        <View style={styles.header} fixed>
+          <View style={styles.headerLeft}>
+            <Text style={styles.brand}>Administración Médica Industrial</Text>
+            <Text style={styles.brandSub}>
+              Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía
+            </Text>
+          </View>
+          <View style={styles.headerRight}>
+            {logoSrc ? (
+              <Image style={styles.logoImage} src={logoSrc} />
+            ) : (
+              <Text style={styles.logoFallback}>AMI</Text>
+            )}
+          </View>
+        </View>
+
         {data.sourceCropDataUrl ? (
           <Image style={styles.sourceImage} src={data.sourceCropDataUrl} />
         ) : (
-          <View style={{ padding: 28 }}>
-            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>ESTUDIO DE ESPIROMETRIA</Text>
+          <View style={styles.sourceFallback}>
+            <Text style={{ fontSize: 10, fontWeight: 'bold' }}>ESTUDIO DE ESPIROMETRIA</Text>
             <Text style={{ fontSize: 8, color: '#64748b', marginTop: 4 }}>
               (Recorte del equipo no disponible — ver archivo fuente en la papeleta)
             </Text>
@@ -231,9 +279,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
 
         <View style={styles.signatureRow}>
           <View style={styles.signatureLeft}>
-            <Text>
-              Realizó EM: {data.medico.fullName.toUpperCase()}
-            </Text>
+            <Text>Realizó EM: {data.medico.fullName.toUpperCase()}</Text>
             <Text>Ced. Prof.: {data.medico.professionalLicense}</Text>
           </View>
           <View style={styles.signatureRight}>

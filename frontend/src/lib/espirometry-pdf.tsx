@@ -54,9 +54,7 @@ import {
   loadEspirometrySourceCropDataUrl,
   type EspirometrySourceCropMeta,
 } from '@/lib/espirometry-source-crop'
-
-export const AMI_LOGO_URL =
-  'https://medicaindustrial.com/sites/default/files/logo-2023.fw_.png'
+import { AMI_LOGO_URL } from '@/lib/ami-brand'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -334,16 +332,24 @@ export async function resolveEspirometrySourceCropDataUrl(input: {
   const ctx = input.clinicalContext as Record<string, unknown> | null
   let meta = ctx?.espirometrySourceCrop as EspirometrySourceCropMeta | undefined
 
-  if (!meta?.relativePath && input.eventTestId) {
+  if (meta?.relativePath) {
+    const cached = await loadEspirometrySourceCropDataUrl(meta)
+    if (cached) return cached
+  }
+
+  if (input.eventTestId) {
     try {
-      meta = (await ensureEspirometrySourceCrop(input.eventTestId)) ?? undefined
+      meta =
+        (await ensureEspirometrySourceCrop(input.eventTestId, {
+          force: Boolean(meta?.relativePath),
+        })) ?? undefined
     } catch (err) {
       console.warn('[espirometry-pdf] No se pudo generar recorte fuente:', err)
     }
   }
 
   if (!meta?.relativePath) return null
-  return await loadEspirometrySourceCropDataUrl(meta.relativePath)
+  return await loadEspirometrySourceCropDataUrl(meta)
 }
 
 export function buildEspirometryPdfData(
@@ -378,7 +384,7 @@ export function buildEspirometryPdfData(
     recomendacionesValidadas,
     sourceCropDataUrl: input.sourceCropDataUrl ?? null,
     medico: input.medico,
-    logoUrl: input.logoDataUrl ?? '',
+    logoUrl: input.logoDataUrl || AMI_LOGO_URL,
   }
 }
 
@@ -436,3 +442,4 @@ export async function generateEspirometryValidatedPdf(
  * el mismo hash.
  */
 export { resolveAmiLogoDataUrl }
+export { AMI_LOGO_URL } from '@/lib/ami-brand'

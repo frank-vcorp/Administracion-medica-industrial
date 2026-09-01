@@ -938,7 +938,7 @@ export async function submitDoctorStudyReview(
           const eventTestId = eventTestData?.id ?? null
           if (studyType === 'Espirometria' && eventTestId) {
             try {
-              await ensureEspirometrySourceCrop(eventTestId)
+              await ensureEspirometrySourceCrop(eventTestId, { force: true })
             } catch (cropErr) {
               console.warn('[espirometry-pdf] Recorte en validación:', cropErr)
             }
