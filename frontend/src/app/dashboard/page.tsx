@@ -75,7 +75,7 @@ export default function DashboardPage() {
                     description="Agenda diaria"
                 />
                 <StatCard
-                    title="En Espera / Consulta"
+                    title="Pacientes en espera"
                     value={kpis.activeEvents}
                     icon="⚡"
                     color="amber"

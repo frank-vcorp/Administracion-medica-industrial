@@ -5,7 +5,7 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import type { EspirometryAmiSectionData } from '@/lib/espirometry-ami-section'
 import { formatAmiSectionMl } from '@/lib/espirometry-ami-section'
-import { AMI_LOGO_URL } from '@/lib/ami-brand'
+import { SME_LOGO_FALLBACK_TEXT } from '@/lib/brand-constants'
 
 const styles = StyleSheet.create({
   page: {
@@ -224,7 +224,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
     data.recomendacionesValidadas.length > 0
       ? data.recomendacionesValidadas.join(' ')
       : '—'
-  const logoSrc = data.logoUrl || AMI_LOGO_URL
+  const logoSrc = data.logoUrl
 
   return (
     <Document
@@ -244,7 +244,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
             {logoSrc ? (
               <Image style={styles.logoImage} src={logoSrc} />
             ) : (
-              <Text style={styles.logoFallback}>AMI</Text>
+              <Text style={styles.logoFallback}>{SME_LOGO_FALLBACK_TEXT}</Text>
             )}
           </View>
         </View>

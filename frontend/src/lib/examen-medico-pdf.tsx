@@ -63,9 +63,8 @@ import {
 } from '@/lib/clinical/recommendations'
 import { formatQuisteDisplay } from '@/schemas/clinical/exam.schema'
 
-// Reutiliza el cache del logo AMI (una descarga por proceso). Si la red
-// falla al boot, el logo queda null y el PDF cae al fallback "AMI".
-export { resolveAmiLogoDataUrl } from '@/lib/espirometry-pdf'
+export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl } from '@/lib/ami-brand'
+import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -213,8 +212,7 @@ export interface BuildExamenMedicoPdfInput {
     peso?: string | null
     talla?: string | null
     imc?: string | null
-    cintura?: string | null
-    cadera?: string | null
+    saturacionOxigeno?: string | null
     ta?: string | null
     fc?: string | null
     fr?: string | null
@@ -444,8 +442,7 @@ export function buildExamenMedicoPdfData(
       peso: s(input.somatometria?.peso) || null,
       talla: s(input.somatometria?.talla) || null,
       imc: s(input.somatometria?.imc) || null,
-      cintura: s(input.somatometria?.cintura) || null,
-      cadera: s(input.somatometria?.cadera) || null,
+      saturacionOxigeno: s(input.somatometria?.saturacionOxigeno) || null,
       ta: s(input.somatometria?.ta) || null,
       fc: s(input.somatometria?.fc) || null,
       fr: s(input.somatometria?.fr) || null,
@@ -629,8 +626,10 @@ export interface GenerateExamenMedicoPdfInput {
 export async function generateExamenMedicoValidatedPdf(
   input: GenerateExamenMedicoPdfInput
 ): Promise<GenerateExamenMedicoPdfResult> {
+  const logoUrl = input.data.logoUrl || (await resolveSmeLogoDataUrl()) || ''
+  const data = { ...input.data, logoUrl }
   const buffer = await renderToBuffer(
-    <ExamenMedicoValidatedPDF data={input.data} />
+    <ExamenMedicoValidatedPDF data={data} />
   )
   const hash = `sha256:${createHash('sha256').update(buffer).digest('hex')}`
 

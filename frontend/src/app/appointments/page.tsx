@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 /**
- * Vista de Agenda de Citas Premium v2.3
+ * Vista de Gestión de citas Premium v2.3
  * @description Agenda diaria con expedientes EXP, QR y acceso a Portal de Prellenado
  * @id IMPL-20260325-01
  */
@@ -20,7 +20,7 @@ import Link from 'next/link'
 const AGENDA_SLOT_STATUSES = new Set(['SCHEDULED', 'CONFIRMED'])
 
 /**
- * Vista de Agenda de Citas Premium v2.2
+ * Vista de Gestión de citas Premium v2.2
  * @description Implementa vista de calendario diario con expedientes EXP y QR
  */
 
@@ -191,7 +191,7 @@ export default function AppointmentsPage() {
             {/* Header Area */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">Agenda de Citas</h1>
+                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">Gestión de citas</h1>
                     <p className="text-slate-500 text-sm">Panel de control de ingresos y expedientes EXP</p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -244,14 +244,13 @@ export default function AppointmentsPage() {
                 </div>
             )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="completar con pacientes citados" value={agendaAppointments.filter(a => {
+                <StatCard label="Pacientes citados" value={agendaAppointments.filter(a => {
                     const aptDate = new Date(a.scheduledAt)
                     const aptDateString = `${aptDate.getFullYear()}-${String(aptDate.getMonth() + 1).padStart(2, '0')}-${String(aptDate.getDate()).padStart(2, '0')}`
                     return aptDateString === selectedDate
                 }).length} color="blue" />
-                {/* IMPL-20260630-02: rename "Pendientes" → "Pruebas pendientes" (doc Renombramiento de catálogos línea 51) */}
-                <StatCard label="Pruebas pendientes" value={appointments.filter(a => a.status === 'SCHEDULED').length} color="amber" />
-                <StatCard label="Atención completa" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
+                <StatCard label="Pacientes con pruebas pendientes" value={appointments.filter(a => a.status === 'SCHEDULED').length} color="amber" />
+                <StatCard label="Pacientes con atención completa" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
                 <StatCard label="no se presentó" value={appointments.filter(a => a.status === 'NO_SHOW').length} color="slate" />
             </div>
 

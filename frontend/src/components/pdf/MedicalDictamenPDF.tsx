@@ -1,10 +1,11 @@
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import {
     AMI_STUDIES_BASELINE,
     amiBaselineStudiesNotApplied,
     buildDictamenStudySummary,
     type DictamenStudyEntry,
 } from '@/lib/dictamen-summary'
+import { SME_BRAND_LINE } from '@/lib/brand-constants'
 
 const styles = StyleSheet.create({
     page: { padding: 40, fontFamily: 'Helvetica' },
@@ -24,6 +25,18 @@ const styles = StyleSheet.create({
     membreteBrand: {
         flexDirection: 'column',
         maxWidth: '60%',
+    },
+    membreteLogo: {
+        height: 44,
+        width: 180,
+        objectFit: 'contain',
+        marginBottom: 8,
+    },
+    membreteLogoFallback: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: '#0f172a',
+        marginBottom: 8,
     },
     membreteBrandTitle: {
         fontSize: 22,
@@ -148,6 +161,8 @@ export const MedicalDictamenPDF = ({ data }: {
          * y labs presentes en el snapshot del Event correspondiente.
          */
         consolidatedEvents?: ConsolidatedEventBlock[]
+        /** Logo SME (data-URL) para membrete; opcional. */
+        logoUrl?: string | null
     }
 }) => {
     // IMPL-20260826-04: el resumen de estudios y el catálogo AMI baseline
@@ -167,12 +182,15 @@ export const MedicalDictamenPDF = ({ data }: {
             {/* MEMBRETE (IMPL-20260826-04) */}
             <View style={styles.membrete}>
                 <View style={styles.membreteBrand}>
+                    {data.logoUrl ? (
+                        <Image style={styles.membreteLogo} src={data.logoUrl} />
+                    ) : (
+                        <Text style={styles.membreteLogoFallback}>SME</Text>
+                    )}
                     <Text style={styles.membreteBrandTitle}>DICTAMEN MÉDICO DE APTITUD LABORAL</Text>
-                    <Text style={styles.membreteBrandSubtitle}>
-                        Administración Médica Industrial (AMI)
-                    </Text>
+                    <Text style={styles.membreteBrandSubtitle}>{SME_BRAND_LINE}</Text>
                     <Text style={styles.membreteBrandSystem}>
-                        Sistema Residente Digital · Subsistema de Dictaminación
+                        Administración Médica Industrial (AMI) · Sistema Residente Digital
                     </Text>
                 </View>
                 <View style={styles.membreteFolio}>

@@ -240,7 +240,7 @@ export const AudiometriaValidatedPDF = ({
           {data.logoUrl ? (
             <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
-            <Text style={styles.logoFallback}>AMI</Text>
+            <Text style={styles.logoFallback}>SME</Text>
           )}
         </View>
       </View>

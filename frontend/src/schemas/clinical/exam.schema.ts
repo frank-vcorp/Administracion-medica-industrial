@@ -391,7 +391,6 @@ export const AG_GINE_MPF_VALUES = [
   'DIU',
   'OTB',
   'RITMO',
-  'LAM',
   'OTRO',
 ] as const
 
@@ -454,6 +453,9 @@ export const PLANTILLAS_EF = {
   ms_superiores: 'Íntegros, fuerza y sensibilidad conservada.',
   ms_inferiores: 'Íntegros, sensibilidad conservada.',
 } as const
+
+/** Texto columna vertebral cuando Test Adam es positivo (minuta AMI-SR F-017 #10). */
+export const COLUMNA_VERTEBRAL_DESVIADA = 'Clínicamente desviada.' as const
 
 export type PlantillaEfKey = keyof typeof PLANTILLAS_EF
 
@@ -573,6 +575,7 @@ export const SomatometriaVitalesSchema = z.object({
   talla_m: cleanNum,
   perimetro_cadera: cleanNum,
   fr_min: cleanNum,
+  saturacion_oxigeno: cleanNum,
   temperatura: z.coerce.number().gt(30).lt(45).optional(),
   imc: cleanNum,               
   complexion: z.enum(['BAJO PESO', 'NORMAL', 'SOBREPESO', 'OBESIDAD', 'OBESIDAD SEVERA']).optional()

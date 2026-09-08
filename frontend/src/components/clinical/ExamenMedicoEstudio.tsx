@@ -59,6 +59,8 @@ import {
   AG_ABORTO_VALUES,
   AR_MPF_VALUES,
   VAC_SI_NO_VALUES,
+  COLUMNA_VERTEBRAL_DESVIADA,
+  PLANTILLAS_EF,
 } from "@/schemas/clinical/exam.schema"
 // IMPL-20260817-09-C4 (ARCH-20260817-02 corte 2 DA-7): helper de
 // auto-poblamiento para las recomendaciones del dictamen (catalogo
@@ -1011,25 +1013,14 @@ export default function ExamenMedicoEstudio({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Cintura (cm)</label>
+              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Sat. Oxígeno (%)</label>
               <input
-                type="number" step="0.1" min={0} max={300}
-                value={vitalsForm.perimetro_cintura || ''}
-                onChange={e => setVitalsForm(prev => ({ ...prev, perimetro_cintura: e.target.value }))}
+                type="number" min={0} max={100}
+                value={vitalsForm.saturacion_oxigeno || ''}
+                onChange={e => setVitalsForm(prev => ({ ...prev, saturacion_oxigeno: e.target.value }))}
                 disabled={readonly}
                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 text-center font-mono disabled:opacity-60"
-                placeholder="cm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Cadera (cm)</label>
-              <input
-                type="number" step="0.1" min={0} max={300}
-                value={vitalsForm.perimetro_cadera || ''}
-                onChange={e => setVitalsForm(prev => ({ ...prev, perimetro_cadera: e.target.value }))}
-                disabled={readonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 text-center font-mono disabled:opacity-60"
-                placeholder="cm"
+                placeholder="%"
               />
             </div>
           </div>
@@ -1543,6 +1534,9 @@ export default function ExamenMedicoEstudio({
                                 if (opt === 'NEGADO') {
                                   handleField('test_adam_lateral', '')
                                   handleField('test_adam_otros', '')
+                                  handleField('columna_vertebral', PLANTILLAS_EF.columna_vertebral)
+                                } else {
+                                  handleField('columna_vertebral', COLUMNA_VERTEBRAL_DESVIADA)
                                 }
                               }}
                               className={`px-2 py-1 rounded text-[10px] font-bold border transition ${

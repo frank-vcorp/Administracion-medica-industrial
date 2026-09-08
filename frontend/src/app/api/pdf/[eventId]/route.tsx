@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { renderToStream } from '@react-pdf/renderer'
 import { MedicalDictamenPDF } from "@/components/pdf/MedicalDictamenPDF"
+import { resolveSmeLogoDataUrl } from "@/lib/ami-brand"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/auth"
 
@@ -205,7 +206,8 @@ export async function GET(
             }))
         }
 
-        const stream = await renderToStream(<MedicalDictamenPDF data={data} />)
+        const logoUrl = await resolveSmeLogoDataUrl()
+        const stream = await renderToStream(<MedicalDictamenPDF data={{ ...data, logoUrl }} />)
 
         return new NextResponse(stream as unknown as ReadableStream, {
             headers: {

@@ -22,6 +22,7 @@ import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { ReactNode } from 'react'
 import { isAdminLike, isSuperAdmin } from '@/lib/auth/roles'
+import { BrandLogo } from '@/components/BrandLogo'
 
 function NavItem({ href, icon, label, secondary, collapsed }: { href: string; icon: string; label: string; secondary?: boolean; collapsed?: boolean }) {
   return (
@@ -129,12 +130,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <aside className={`${isEventWorkspace ? 'w-20' : 'w-64'} bg-slate-900 text-white hidden md:flex md:flex-col flex-shrink-0 transition-all duration-200`}>
         <div className={`${isEventWorkspace ? 'p-4' : 'p-6'} flex-shrink-0`}>
           {isEventWorkspace ? (
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center text-xl font-bold">
-              AMI
-            </div>
+            <BrandLogo collapsed className="mx-auto" />
           ) : (
             <>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">
+              <BrandLogo className="mb-3 max-h-12 w-auto" />
+              <h1 className="text-lg font-bold text-slate-100 leading-tight">
                 Residente Digital
               </h1>
               <p className="text-xs text-slate-400 mt-1">Administración Médica v0.1</p>
@@ -147,8 +147,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {/* IMPL-20260624-02-RENOMBRES-FASE2-NAV-LANE: reorden aprobado (Citas → Listado → Proceso → Agenda, Vista 3 Agendas secondary bajo Citas) */}
           {showStaffItems && (
             <>
-              {/* IMPL-20260630-02: rename "Gestión de Citas" → "Agenda de Citas" (doc Renombramiento de catálogos línea 41) */}
-              <NavItem href="/appointments" icon="📅" label="Agenda de Citas" collapsed={isEventWorkspace} />
+              {/* Renombramiento catálogos 2: "Agenda de Citas" → "Gestión de citas" (solo label) */}
+              <NavItem href="/appointments" icon="📅" label="Gestión de citas" collapsed={isEventWorkspace} />
               {/* Vista de 3 agendas simultáneas como acceso secundario */}
               <NavItem href="/appointments/overview" icon="🗓️" label="Vista 3 Agendas" secondary collapsed={isEventWorkspace} />
               <NavItem href="/workers" icon="👥" label="Listado de pacientes" collapsed={isEventWorkspace} />
@@ -193,6 +193,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <NavItem href="/admin/profiles" icon="🩻" label="Perfiles Médicos" collapsed={isEventWorkspace} />
               {/* IMPL-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES: el catálogo de unidades se accede desde /operations/mobile-units (NavItem único arriba). Mantenemos acceso admin directo por si hay deep-links o atajos. */}
               <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" collapsed={isEventWorkspace} />
+              <NavItem href="/admin/settings" icon="⚙️" label="Configuración" collapsed={isEventWorkspace} />
               {/* IMPL-20260809-06 — ARCH-20260809-03: gestión runtime de API Keys IA.
                   Visible solo para SUPERADMIN (FRANK rota keys sin redeploys).
                   ADMIN no ve el enlace (aunque puede llegar por URL, el gate

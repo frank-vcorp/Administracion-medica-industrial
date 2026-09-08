@@ -44,6 +44,7 @@
  */
 import { renderToBuffer } from '@react-pdf/renderer'
 import { MedicalDictamenPDF } from '@/components/pdf/MedicalDictamenPDF'
+import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
 
 /**
  * URL base del backend (Railway). Configurable vía
@@ -231,7 +232,10 @@ export async function renderDictamenInputToMemory(
   input: RenderDictamenInputMemoryInput,
 ): Promise<Buffer> {
   const payload = buildDictamenPdfPayload(input.payload)
-  return await renderToBuffer(<MedicalDictamenPDF data={payload} />)
+  const logoUrl = await resolveSmeLogoDataUrl()
+  return await renderToBuffer(
+    <MedicalDictamenPDF data={{ ...payload, logoUrl }} />,
+  )
 }
 
 // ──────────────────────────────────────────────────────────────────────────

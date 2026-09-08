@@ -10,6 +10,7 @@
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { FormEvent, useState, Suspense } from 'react'
+import { BrandLogo } from '@/components/BrandLogo'
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -53,8 +54,11 @@ function LoginForm() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-center text-gray-900 mb-8">
-          Administración Médica Industrial
+        <div className="flex justify-center mb-6">
+          <BrandLogo className="max-h-16 w-auto" />
+        </div>
+        <h1 className="text-xl font-bold text-center text-gray-900 mb-8">
+          Residente Digital
         </h1>
 
         {error && (

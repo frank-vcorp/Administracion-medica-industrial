@@ -176,27 +176,16 @@ export default function SomatometriaStudy({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Cintura (cm)</label>
+            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Sat. Oxígeno (%)</label>
             <input
               type="number"
-              step="0.1"
-              value={formData.perimetro_cintura || ''}
-              onChange={e => handleChange('perimetro_cintura', e.target.value)}
+              min={0}
+              max={100}
+              value={formData.saturacion_oxigeno || ''}
+              onChange={e => handleChange('saturacion_oxigeno', e.target.value)}
               disabled={readonly}
               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-center font-mono disabled:opacity-60"
-              placeholder="cm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Cadera (cm)</label>
-            <input
-              type="number"
-              step="0.1"
-              value={formData.perimetro_cadera || ''}
-              onChange={e => handleChange('perimetro_cadera', e.target.value)}
-              disabled={readonly}
-              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-center font-mono disabled:opacity-60"
-              placeholder="cm"
+              placeholder="%"
             />
           </div>
         </div>

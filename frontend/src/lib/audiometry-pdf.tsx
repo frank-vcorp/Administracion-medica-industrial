@@ -45,18 +45,12 @@ const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
 // Reutiliza helpers del PDF de espirometría (misma semántica de recomendaciones).
 import {
-  resolveAmiLogoDataUrl,
-  AMI_LOGO_URL,
   extractValidatedRecommendationsFromPredx,
   resolveValidatedRecommendations,
 } from '@/lib/espirometry-pdf'
+import { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl } from '@/lib/ami-brand'
 
-export {
-  resolveAmiLogoDataUrl,
-  AMI_LOGO_URL,
-  extractValidatedRecommendationsFromPredx,
-  resolveValidatedRecommendations,
-}
+export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl }
 
 export interface BuildAudiometriaPdfInput {
   reviewId: string
@@ -215,8 +209,10 @@ export interface GenerateAudiometriaPdfInput {
 export async function generateAudiometriaValidatedPdf(
   input: GenerateAudiometriaPdfInput,
 ): Promise<GenerateAudiometriaPdfResult> {
+  const logoUrl = input.data.logoUrl || (await resolveSmeLogoDataUrl()) || ''
+  const data = { ...input.data, logoUrl }
   const buffer = await renderToBuffer(
-    <AudiometriaValidatedPDF data={input.data} />,
+    <AudiometriaValidatedPDF data={data} />,
   )
   const hash = `sha256:${createHash('sha256').update(buffer).digest('hex')}`
 

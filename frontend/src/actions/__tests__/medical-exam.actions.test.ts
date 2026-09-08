@@ -1090,6 +1090,7 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
     expect(AG_GINE_MPF_VALUES).toContain('DIU')
     expect(AG_GINE_MPF_VALUES).toContain('OTB')
     expect(AG_GINE_MPF_VALUES).toContain('OTRO')
+    expect(AG_GINE_MPF_VALUES).not.toContain('LAM')
   })
 
   it('58. AR_MPF_VALUES expone catálogo ZIN masculino (6 opciones)', () => {

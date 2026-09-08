@@ -19,10 +19,8 @@
  *     (recomendado Coolify/Contabo). Aquí escribimos al filesystem del
  *     runtime Node; si la escritura falla, devolvemos sólo el buffer
  *     + hash y la API route lo regenera en cada descarga.
- *   - QA-20260825-01 P3-G: el logo AMI se descarga UNA VEZ al server start
- *     (cacheado en memoria) y se incrusta como data-URL en el PDF. Si la
- *     red está caída al boot, se sustituye por texto "AMI" sin abortar la
- *     generación.
+ *   - QA-20260825-01 P3-G: el logo SME se lee del filesystem local
+ *     (cacheado en memoria) e incrusta como data-URL en el PDF.
  *
  * Privacidad:
  *   - El PDF incluye datos clínicos del paciente (PII). La URL del archivo
@@ -54,7 +52,7 @@ import {
   loadEspirometrySourceCropDataUrl,
   type EspirometrySourceCropMeta,
 } from '@/lib/espirometry-source-crop'
-import { AMI_LOGO_URL } from '@/lib/ami-brand'
+import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -64,47 +62,6 @@ const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
  * AMI que exige el panel clínico.
  */
 export const REPETIBILIDAD_UMBRAL_ML = 150
-
-// ── QA-20260825-01 P3-G: cache de logo con fallback ─────────────────────────
-/**
- * Cache en memoria del logo AMI como data-URL PNG. Se descarga una sola vez
- * por proceso Node; si la red falla al boot, `amiLogoDataUrl` queda null y
- * el PDF cae al fallback de texto "AMI" sin lanzar excepción.
- *
- * Esto evita (a) que `@react-pdf/renderer` falle en build-time cuando la
- * red está caída, (b) re-descargar el logo en cada generación de PDF.
- */
-let amiLogoCache: string | null = null
-let amiLogoResolved = false
-
-async function resolveAmiLogoDataUrl(): Promise<string | null> {
-  if (amiLogoResolved) return amiLogoCache
-  amiLogoResolved = true
-  try {
-    const resp = await fetch(AMI_LOGO_URL, {
-      // headers mínimos para evitar bloqueos por UA o referrer
-      headers: { 'User-Agent': 'AMI-PDF-Generator/1.0' },
-    })
-    if (!resp.ok) {
-      console.warn(
-        `[IMPL-FEATURE-20260825-01] Logo AMI no disponible: HTTP ${resp.status}`,
-      )
-      amiLogoCache = null
-      return null
-    }
-    const ct = resp.headers.get('content-type') || 'image/png'
-    const buf = Buffer.from(await resp.arrayBuffer())
-    amiLogoCache = `data:${ct};base64,${buf.toString('base64')}`
-    return amiLogoCache
-  } catch (err) {
-    console.warn(
-      `[IMPL-FEATURE-20260825-01] Logo AMI no descargable:`,
-      err instanceof Error ? err.message : err,
-    )
-    amiLogoCache = null
-    return null
-  }
-}
 
 // ── QA-20260825-01 P3-F: helper puro compartido action/route ───────────────
 
@@ -315,7 +272,7 @@ export interface BuildEspirometryPdfInput {
     professionalLicense: string
     signatureImageUrl: string
   }
-  /** Data-URL del logo AMI (si fue descargable) o null para fallback texto. */
+  /** Data-URL del logo SME (si fue legible) o null para fallback texto. */
   logoDataUrl: string | null
   sourceCropDataUrl?: string | null
   eventTestId?: string | null
@@ -384,7 +341,7 @@ export function buildEspirometryPdfData(
     recomendacionesValidadas,
     sourceCropDataUrl: input.sourceCropDataUrl ?? null,
     medico: input.medico,
-    logoUrl: input.logoDataUrl || AMI_LOGO_URL,
+    logoUrl: input.logoDataUrl ?? '',
   }
 }
 
@@ -408,7 +365,9 @@ export async function buildEspirometryPdfDataAsync(
 export async function generateEspirometryValidatedPdf(
   input: GenerateEspirometryPdfInput,
 ): Promise<GenerateEspirometryPdfResult> {
-  const buffer = await renderToBuffer(<EspirometryValidatedPDF data={input.data} />)
+  const logoUrl = input.data.logoUrl || (await resolveSmeLogoDataUrl()) || ''
+  const data = { ...input.data, logoUrl }
+  const buffer = await renderToBuffer(<EspirometryValidatedPDF data={data} />)
   const hash = `sha256:${createHash('sha256').update(buffer).digest('hex')}`
 
   // Persistencia opcional en disco (cache para descargas subsecuentes).
@@ -436,10 +395,5 @@ export async function generateEspirometryValidatedPdf(
   return { buffer, hash, url, absolutePath }
 }
 
-/**
- * Resuelve el logo AMI una sola vez por proceso. Lo expone para que tanto
- * la action como la API route usen la misma data-URL cacheada y produzcan
- * el mismo hash.
- */
-export { resolveAmiLogoDataUrl }
-export { AMI_LOGO_URL } from '@/lib/ami-brand'
+export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl } from '@/lib/ami-brand'
+export { AMI_LOGO_URL } from '@/lib/brand-constants'

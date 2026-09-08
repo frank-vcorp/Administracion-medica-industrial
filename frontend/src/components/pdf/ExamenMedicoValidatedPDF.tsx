@@ -209,13 +209,12 @@ export interface ExamenMedicoPDFData {
   historiaGineco?: string | null
   /** Inmunizaciones (concatenación). */
   inmunizaciones?: string | null
-  /** Somatometría / signos vitales (peso/talla/IMC/cintura/cadera/TA/FC/FR/T). */
+  /** Somatometría / signos vitales (peso/talla/IMC/SpO2/TA/FC/FR/T). */
   somatometria: {
     peso?: string | null
     talla?: string | null
     imc?: string | null
-    cintura?: string | null
-    cadera?: string | null
+    saturacionOxigeno?: string | null
     ta?: string | null
     fc?: string | null
     fr?: string | null
@@ -353,7 +352,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
           {data.logoUrl ? (
             <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
-            <Text style={styles.logoFallback}>AMI</Text>
+            <Text style={styles.logoFallback}>SME</Text>
           )}
         </View>
       </View>
@@ -543,7 +542,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
           {data.logoUrl ? (
             <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
-            <Text style={styles.logoFallback}>AMI</Text>
+            <Text style={styles.logoFallback}>SME</Text>
           )}
         </View>
       </View>
@@ -594,12 +593,8 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
               <Text style={styles.value}>{v(data.somatometria.imc)}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.label}>Cintura (cm):</Text>
-              <Text style={styles.value}>{v(data.somatometria.cintura)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cadera (cm):</Text>
-              <Text style={styles.value}>{v(data.somatometria.cadera)}</Text>
+              <Text style={styles.label}>Sat. oxígeno (%):</Text>
+              <Text style={styles.value}>{v(data.somatometria.saturacionOxigeno)}</Text>
             </View>
           </View>
           <View style={styles.gridCol}>
@@ -697,7 +692,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
           {data.logoUrl ? (
             <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
-            <Text style={styles.logoFallback}>AMI</Text>
+            <Text style={styles.logoFallback}>SME</Text>
           )}
         </View>
       </View>
@@ -895,7 +890,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
           {data.logoUrl ? (
             <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
-            <Text style={styles.logoFallback}>AMI</Text>
+            <Text style={styles.logoFallback}>SME</Text>
           )}
         </View>
       </View>
