@@ -10,7 +10,7 @@ export async function GET() {
     return new NextResponse('Logo no disponible', { status: 404 })
   }
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': mime,
       'Cache-Control': 'public, max-age=300',
