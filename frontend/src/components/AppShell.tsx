@@ -227,7 +227,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
     pathname?.startsWith('/login') ||
     pathname?.startsWith('/demo') ||
     pathname?.startsWith('/solicitar-alta') ||
-    pathname?.startsWith('/auto-alta')
+    pathname?.startsWith('/auto-alta') ||
+    pathname?.startsWith('/feedback')
   if (isChromeFreePage) {
     return <>{children}</>
   }

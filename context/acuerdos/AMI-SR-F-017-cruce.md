@@ -62,8 +62,8 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 | R-07 | 8 | **TA siempre** en diagnóstico | Francisco | 08/09 | ⏸️ Ver §Decisiones — dictamen final, no examen médico |
 | R-08 | 9 | Parámetros **agudeza visual** para clasificar | Jaqueline → enviar | 04/09 | Esperar parámetros clínicos |
 | R-09 | 12 | **Consentimiento** en Check-in | Jaqueline envía | 04/09 | Texto legal + momento del flujo |
-| R-10 | 13 | Mensaje para **calificar servicio** al finalizar | Francisco | 08/09 | Canal (WhatsApp/SMS/in-app) |
-| R-11 | 14 | **Encuesta satisfacción** pacientes | Francisco | 08/09 | Contenido + integración |
+| R-10 | 13 | Mensaje para **calificar servicio** al finalizar | Francisco | 08/09 | ✅ Hecho — prompt en expediente COMPLETED + WhatsApp/copiar |
+| R-11 | 14 | **Encuesta satisfacción** pacientes | Francisco | 08/09 | ✅ Hecho — `/feedback/satisfaction` + audit log |
 | R-12 | 15 | Cargar pruebas: campimetría, ECG, consulta, certificado | Francisco | 08/09 | Catálogo + precios + combos |
 | R-13 | 16 | Cargar exámenes **Flowserve y Sodexo** | Francisco | 08/09 | Paquetes por empresa; datos fuente |
 | ~~R-14~~ | ~~19~~ | ~~Pre-presentación **capacitación** plataforma~~ | — | — | ❌ Fuera de alcance — no es de este proyecto |
