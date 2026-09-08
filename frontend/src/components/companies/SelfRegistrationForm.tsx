@@ -187,9 +187,9 @@ function InvalidTokenView({ state }: { state: InvalidState }) {
   }
   const m = messages[state.status]
   return (
-    <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-      <h1 className="text-2xl font-black text-slate-800">{m.title}</h1>
-      <div className="mt-3 text-slate-600 text-sm">{m.body}</div>
+    <div className="max-w-xl mx-auto bg-white p-8 rounded-[24px] shadow-sm border border-[#592c82]/10">
+      <h1 className="text-2xl font-bold text-[#592c82]">{m.title}</h1>
+      <div className="mt-3 text-[#636569] text-sm">{m.body}</div>
     </div>
   )
 }
@@ -590,13 +590,13 @@ function SelfRegistrationFormActive({
 
   if (success) {
     return (
-      <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center">
-        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-4xl">✓</div>
-        <h1 className="text-2xl font-black text-slate-800 mt-4">¡Registro recibido!</h1>
-        <p className="text-slate-600 mt-2 text-sm">
+      <div className="max-w-xl mx-auto bg-white p-8 rounded-[24px] shadow-sm border border-[#592c82]/10 text-center">
+        <div className="w-16 h-16 bg-[#00afaa]/15 text-[#00afaa] rounded-full flex items-center justify-center mx-auto text-2xl font-bold">✓</div>
+        <h1 className="text-2xl font-bold text-[#592c82] mt-4">¡Registro recibido!</h1>
+        <p className="text-[#636569] mt-2 text-sm">
           Hemos recibido tu información. Un vendedor revisará los datos y te contactará para finalizar el alta.
         </p>
-        <p className="text-xs text-slate-400 mt-3">Folio interno: {success.companyId.slice(0, 8)}</p>
+        <p className="text-xs text-[#636569]/70 mt-3">Folio interno: {success.companyId.slice(0, 8)}</p>
       </div>
     )
   }
@@ -614,9 +614,11 @@ function SelfRegistrationFormActive({
         />
       )}
       <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-6 pb-12">
-      <header className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <h1 className="text-2xl font-black text-slate-800">Alta de Cliente</h1>
-        <p className="text-sm text-slate-500 mt-1">
+      <header className="bg-white p-6 rounded-[24px] border border-[#592c82]/10 shadow-sm">
+        <h1 className="text-2xl font-bold text-[#636569]">
+          Alta de <span className="text-[#592c82]">Cliente</span>
+        </h1>
+        <p className="text-sm text-[#636569] mt-1">
           Completa las 10 secciones. El link expira el{' '}
           <strong>{initial.expiresAtLabel}</strong>.
         </p>
@@ -773,7 +775,7 @@ function SelfRegistrationFormActive({
             ] as const).map(([code, label]) => {
               const checked = form.dias.includes(code)
               return (
-                <label key={code} className={`cursor-pointer select-none px-3 py-1.5 rounded-lg text-xs font-bold border ${checked ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>
+                <label key={code} className={`cursor-pointer select-none px-3 py-1.5 rounded-full text-xs font-bold border ${checked ? 'bg-[#592c82] text-white border-[#592c82]' : 'bg-white text-[#636569] border-[#592c82]/20 hover:border-[#592c82]/50'}`}>
                   <input
                     type="checkbox"
                     checked={checked}
@@ -981,7 +983,7 @@ function SelfRegistrationFormActive({
             type="checkbox"
             checked={form.terminos}
             onChange={(e) => setField('terminos', e.target.checked)}
-            className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            className="w-5 h-5 rounded border-slate-300 text-[#00afaa] focus:ring-[#00afaa]"
           />
           <span className="text-sm text-slate-700">
             Acepto los términos estipulados en la presente "Alta de Cliente"
@@ -995,11 +997,11 @@ function SelfRegistrationFormActive({
         </div>
       )}
 
-      <div className="sticky bottom-0 bg-white p-4 rounded-2xl border border-slate-200 shadow-lg flex justify-end gap-2">
+      <div className="sticky bottom-0 bg-white p-4 rounded-[24px] border border-[#592c82]/10 shadow-lg flex justify-end gap-2">
         <button
           type="submit"
           disabled={isPending}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black shadow-lg shadow-indigo-100 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50"
+          className="bg-[#00afaa] hover:bg-[#00928e] text-white px-8 py-3 rounded-full font-semibold shadow-[0_4px_12px_#00afaa4d] transition-all disabled:opacity-50"
         >
           {isPending ? 'Enviando…' : 'Enviar solicitud de alta'}
         </button>
@@ -1009,12 +1011,12 @@ function SelfRegistrationFormActive({
   )
 }
 
-const inputClass = 'w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3 rounded-lg text-sm transition-all outline-none'
+const inputClass = 'w-full bg-[#f9fafb] border-2 border-gray-200 focus:border-[#00afaa] focus:bg-white focus:ring-4 focus:ring-[#00afaa]/20 p-3 rounded-2xl text-sm text-[#592c82] transition-all outline-none'
 
 function Section({ title, required, children }: { title: string; required?: boolean; children: React.ReactNode }) {
   return (
-    <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-      <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">{title}{required && <span className="text-red-500"> *</span>}</h2>
+    <section className="bg-white p-6 rounded-[24px] border border-[#592c82]/10 shadow-sm space-y-3">
+      <h2 className="text-sm font-bold text-[#592c82] uppercase tracking-wider">{title}{required && <span className="text-red-500"> *</span>}</h2>
       {children}
     </section>
   )
@@ -1023,9 +1025,9 @@ function Section({ title, required, children }: { title: string; required?: bool
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="text-[11px] font-bold text-slate-500 uppercase">{label}</label>
+      <label className="text-[11px] font-bold text-[#592c82] uppercase">{label}</label>
       {children}
-      {hint && <p className="text-[10px] text-slate-400">{hint}</p>}
+      {hint && <p className="text-[10px] text-[#636569]/70">{hint}</p>}
     </div>
   )
 }
@@ -1078,15 +1080,15 @@ function FileUploadField({
   // satisfacer `@typescript-eslint/no-unused-vars`.
   void _seccion
   return (
-    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+    <div className="flex items-center gap-3 p-3 bg-[#f9fafb] rounded-2xl border border-[#592c82]/10">
       <div className="flex-1">
-        <p className="text-sm font-bold text-slate-700">{label}</p>
+        <p className="text-sm font-bold text-[#592c82]">{label}</p>
         {current ? (
-          <p className="text-xs text-emerald-600 mt-1">
+          <p className="text-xs text-[#00afaa] mt-1">
             ✓ {current.filename} ({(current.size / 1024).toFixed(0)} KB)
           </p>
         ) : (
-          <p className="text-xs text-slate-400 mt-1">Pendiente</p>
+          <p className="text-xs text-[#636569]/70 mt-1">Pendiente</p>
         )}
       </div>
       {current ? (
@@ -1098,7 +1100,7 @@ function FileUploadField({
           Quitar
         </button>
       ) : (
-        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold">
+        <label className="cursor-pointer bg-[#00afaa]/10 hover:bg-[#00afaa]/20 text-[#00afaa] px-4 py-1.5 rounded-full text-xs font-bold">
           {isUploading ? 'Subiendo…' : 'Subir'}
           <input
             type="file"
