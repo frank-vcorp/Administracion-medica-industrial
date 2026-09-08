@@ -49,7 +49,7 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 | ID | Origen | Acción | Por qué revisar | Pregunta clave |
 |---|---|---|---|---|
 | R-01 | 🔗 Word + Minuta #5 | **Listado pacientes citados día siguiente** | Word solo renombró KPI; minuta pide listado nuevo | ✅ Hecho — columna «Día siguiente» en Gestión de citas |
-| R-02 | 🔗 Word + Minuta #18 | **Clic en pendientes → ir al paciente** con prueba pendiente | Implica navegación y filtro por estudio | ¿A expediente, papeleta o estudio específico? |
+| R-02 | 🔗 Word + Minuta #18 | **Clic en pendientes → ir al paciente** con prueba pendiente | Implica navegación y filtro por estudio | ✅ Hecho — KPI clicable + modal → `/events/[id]?view=IN_PROGRESS` |
 | R-03 | 🔗 Word + Minuta #4 | **Barra de búsqueda general** | Word pide combinar listados; minuta pide búsqueda global | ✅ Hecho — barra en header; pacientes + expedientes + empresas (admin) |
 | R-04 | 🔗 Word + Minuta #17 | **Usuarios personalizados** / roles | Sin enum "Coordinador Médico" hoy | ⏸️ Diferido en `context/roles/` |
 
@@ -151,6 +151,6 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 | Tema | Word | Minuta | Roles |
 |---|---|---|---|
 | Pacientes citados | KPI rename ✅ | #5 listado día siguiente ✅ | Recepción / Coord. Médico |
-| Pruebas pendientes | KPI rename ✅ | #18 clic → paciente | Recepción / Coord. Médico |
+| Pruebas pendientes | KPI rename ✅ | #18 clic → paciente ✅ | Recepción / Coord. Médico |
 | Búsqueda / listados | Combinar listados ✅ | #4 barra general ✅ | — |
 | Usuarios | Roles columna | #17 personalizados | `context/roles/` |
