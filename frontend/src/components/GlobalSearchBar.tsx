@@ -88,17 +88,31 @@ function saveRecent(item: GlobalSearchResult) {
   window.localStorage.setItem(RECENT_KEY, JSON.stringify(next))
 }
 
-export function GlobalSearchBar({ className = '' }: { className?: string }) {
+export function GlobalSearchBar({
+  className = '',
+  layout = 'dropdown',
+  autoFocus = false,
+  onDismiss,
+}: {
+  className?: string
+  layout?: 'dropdown' | 'panel'
+  autoFocus?: boolean
+  onDismiss?: () => void
+}) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<GlobalSearchResult[]>([])
   const [recent, setRecent] = useState<GlobalSearchResult[]>([])
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(layout === 'panel')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeIndex, setActiveIndex] = useState(-1)
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const isPanel = layout === 'panel'
+  const panelOpen = isPanel || open
 
   const trimmedQuery = query.trim()
   const isSearching = trimmedQuery.length >= 2
@@ -128,14 +142,21 @@ export function GlobalSearchBar({ className = '' }: { className?: string }) {
   }, [])
 
   useEffect(() => {
-    if (!open) return
+    if (!panelOpen) return
     const timer = window.setTimeout(() => {
       void runSearch(query)
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [query, open, runSearch])
+  }, [query, panelOpen, runSearch])
 
   useEffect(() => {
+    if (!isPanel || !autoFocus) return
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 0)
+    return () => window.clearTimeout(timer)
+  }, [isPanel, autoFocus])
+
+  useEffect(() => {
+    if (isPanel) return
     const onDocClick = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) {
         setOpen(false)
@@ -144,7 +165,7 @@ export function GlobalSearchBar({ className = '' }: { className?: string }) {
     }
     document.addEventListener('mousedown', onDocClick)
     return () => document.removeEventListener('mousedown', onDocClick)
-  }, [])
+  }, [isPanel])
 
   const groups = useMemo(() => groupResults(results), [results])
   const flatResults = useMemo(() => flattenResults(groups), [groups])
@@ -178,16 +199,21 @@ export function GlobalSearchBar({ className = '' }: { className?: string }) {
       setOpen(false)
       setQuery('')
       setActiveIndex(-1)
+      onDismiss?.()
       router.push(item.href)
     },
-    [router],
+    [router, onDismiss],
   )
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!open) return
+    if (!panelOpen) return
 
     if (e.key === 'Escape') {
-      setOpen(false)
+      if (isPanel) {
+        onDismiss?.()
+      } else {
+        setOpen(false)
+      }
       setActiveIndex(-1)
       return
     }
@@ -217,10 +243,11 @@ export function GlobalSearchBar({ className = '' }: { className?: string }) {
           🔍
         </span>
         <input
+          ref={inputRef}
           id="global-search-input"
           type="search"
           role="combobox"
-          aria-expanded={open}
+          aria-expanded={panelOpen}
           aria-controls="global-search-listbox"
           aria-autocomplete="list"
           aria-activedescendant={
@@ -239,12 +266,16 @@ export function GlobalSearchBar({ className = '' }: { className?: string }) {
         />
       </div>
 
-      {open && (
+      {panelOpen && (
         <div
           id="global-search-listbox"
           ref={listRef}
           role="listbox"
-          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(24rem,70vh)] overflow-y-auto rounded-xl border border-slate-200 bg-white py-2 shadow-lg"
+          className={
+            isPanel
+              ? 'mt-3'
+              : 'absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(24rem,70vh)] overflow-y-auto rounded-xl border border-slate-200 bg-white py-2 shadow-lg'
+          }
         >
           {!isSearching && (
             <div className="px-4 py-2">

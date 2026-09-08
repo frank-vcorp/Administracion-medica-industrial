@@ -23,7 +23,7 @@ import { signOut, useSession } from 'next-auth/react'
 import { ReactNode, useEffect, useState } from 'react'
 import { isAdminLike, isSuperAdmin } from '@/lib/auth/roles'
 import { BrandLogo } from '@/components/BrandLogo'
-import { GlobalSearchBar } from '@/components/GlobalSearchBar'
+import { GlobalSearchLauncher } from '@/components/GlobalSearchLauncher'
 
 function NavItem({
   href,
@@ -315,38 +315,26 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {/* Contenido principal */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Barra superior móvil — hamburguesa + logo */}
-        <header className="flex h-14 flex-shrink-0 flex-col border-b border-slate-200 bg-white shadow-sm md:hidden">
-          <div className="flex items-center justify-between px-4 py-2">
-            <button
-              type="button"
-              aria-label="Abrir menú de navegación"
-              aria-expanded={mobileNavOpen}
-              onClick={() => setMobileNavOpen(true)}
-              className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
-            >
-              <span className="text-xl leading-none">☰</span>
-            </button>
-            <BrandLogo className="max-h-8 w-auto" />
-            <span className="w-10" aria-hidden="true" />
-          </div>
-          {showGlobalSearch && !isEventWorkspace && (
-            <div className="px-4 pb-3">
-              <GlobalSearchBar />
-            </div>
-          )}
+        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm md:hidden">
+          <button
+            type="button"
+            aria-label="Abrir menú de navegación"
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen(true)}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+          >
+            <span className="text-xl leading-none">☰</span>
+          </button>
+          <BrandLogo className="max-h-8 w-auto" />
+          <span className="w-10" aria-hidden="true" />
         </header>
 
         {!isEventWorkspace && (
-          <header className="hidden h-16 flex-shrink-0 items-center gap-6 border-b border-slate-200 bg-white px-8 shadow-sm md:flex">
-            <div className="min-w-0 shrink-0">
+          <header className="hidden h-16 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-8 shadow-sm md:flex">
+            <div>
               <h2 className="text-lg font-medium text-slate-700">Panel de Control</h2>
             </div>
-            {showGlobalSearch && (
-              <div className="mx-auto w-full max-w-xl flex-1">
-                <GlobalSearchBar />
-              </div>
-            )}
-            <div className="flex shrink-0 items-center gap-4">
+            <div className="flex items-center gap-4">
               <span className="text-sm text-slate-500">
                 {session?.user?.fullName || 'Usuario'}
               </span>
@@ -365,6 +353,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <div className={`flex-1 overflow-y-auto ${isEventWorkspace ? 'p-3 md:p-4' : 'p-4 md:p-8'}`}>
           {children}
         </div>
+        {showGlobalSearch && <GlobalSearchLauncher />}
       </main>
     </div>
   )
