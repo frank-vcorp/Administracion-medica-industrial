@@ -8,7 +8,7 @@
  * @intervention ARCH-20260326-10
  * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  */
-import { getWorkerById } from '@/services/worker.service'
+import { getWorkerById, getWorkerInformedConsentHistory } from '@/services/worker.service'
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { getCompanies } from '@/actions/admin.actions'
 import { getMedicalProfileOptions } from '@/actions/medical-profiles'
@@ -16,6 +16,7 @@ import { notFound } from 'next/navigation'
 import WorkerDetailClient, {
     type SerializedWorker,
     type HistoryPayload,
+    type InformedConsentHistoryPayload,
 } from './WorkerDetailClient'
 
 export default async function WorkerDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,10 +27,11 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
         notFound()
     }
 
-    const [historyResult, companies, medicalProfiles] = await Promise.all([
+    const [historyResult, companies, medicalProfiles, informedConsents] = await Promise.all([
         getWorkerClinicalHistory(id),
         getCompanies(),
         getMedicalProfileOptions(),
+        getWorkerInformedConsentHistory(id),
     ])
 
     // Serialización Date → ISO string para cruzar el server/client boundary.
@@ -84,10 +86,20 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
         error: historyResult.success ? undefined : (historyResult as { error?: string }).error,
     }
 
+    const informedConsentHistory: InformedConsentHistoryPayload = informedConsents.map((c) => ({
+        appointmentId: c.appointmentId,
+        expedientId: c.expedientId,
+        pdfUrl: c.pdfUrl,
+        signedAt: c.signedAt.toISOString(),
+        scheduledAt: c.scheduledAt.toISOString(),
+        branchName: c.branchName,
+    }))
+
     return (
         <WorkerDetailClient
             worker={serialized}
             historyResult={historyPayload}
+            informedConsentHistory={informedConsentHistory}
             companies={companyOptions}
             medicalProfiles={medicalProfileOptions}
         />

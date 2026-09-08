@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Search, X } from 'lucide-react'
 import { GlobalSearchBar } from '@/components/GlobalSearchBar'
 
 export function GlobalSearchLauncher() {
@@ -50,7 +51,7 @@ export function GlobalSearchLauncher() {
               onClick={() => setOpen(false)}
               className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
             >
-              ✕
+              <X className="h-4 w-4 stroke-[1.5]" />
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -68,9 +69,9 @@ export function GlobalSearchLauncher() {
         aria-label="Abrir búsqueda general"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-teal-600 bg-teal-600 text-2xl text-white shadow-lg transition hover:bg-teal-700 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 sm:bottom-6 sm:right-6"
+        className="fixed bottom-4 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-ami-primary bg-ami-primary text-2xl text-white shadow-[0_4px_12px_#00afaa4d] transition hover:bg-ami-primary-hover hover:shadow-[0_6px_16px_#00afaa66] focus:outline-none focus:ring-2 focus:ring-ami-primary focus:ring-offset-2 sm:bottom-6 sm:right-6"
       >
-        {open ? '✕' : '🔍'}
+        {open ? <X className="h-5 w-5 stroke-[1.5]" /> : <Search className="h-5 w-5 stroke-[1.5]" />}
       </button>
     </>
   )

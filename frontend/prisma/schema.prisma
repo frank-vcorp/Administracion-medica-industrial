@@ -211,6 +211,9 @@ model Worker {
   lastIdentityFrontFileUrl String?
   lastIdentityBackFileUrl  String?
   lastIdentityVerifiedAt   DateTime?
+  /// Consentimiento informado firmado en el último check-in.
+  lastInformedConsentPdfUrl    String?
+  lastInformedConsentSignedAt  DateTime?
   // IMPL-20260519-14: Participación en proyectos de visita médica (ARCH-20260519-12)
   projectWorkers           ProjectWorker[]
   // IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder (ARCH-20260701-03)
@@ -533,6 +536,9 @@ model Appointment {
   identityEvidenceMode     String? // IdentityEvidenceMode: NEW_CAPTURE | REUSED_PREVIOUS | EXCEPTION_WITHOUT_CAPTURE
   corroborationResult      String? // CorroborationResult catalog
   qrOperativo              String? // QR operativo mínimo AMI|NOMBRE=...|FN=...
+  /// Consentimiento informado firmado en recepción (PDF en storage).
+  informedConsentPdfUrl    String?
+  informedConsentSignedAt  DateTime?
   branch                   Branch               @relation(fields: [branchId], references: [id])
   company                  Company?             @relation(fields: [companyId], references: [id])
   serviceProfile           MedicalProfile?      @relation(fields: [serviceProfileId], references: [id])

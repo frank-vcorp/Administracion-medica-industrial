@@ -38,6 +38,46 @@ export const getWorkerByUniversalId = async (universalId: string) => {
     })
 }
 
+/** Consentimiento informado firmado en check-in (una fila por cita). */
+export type WorkerInformedConsentRecord = {
+    appointmentId: string
+    expedientId: string | null
+    pdfUrl: string
+    signedAt: Date
+    scheduledAt: Date
+    branchName: string | null
+}
+
+export const getWorkerInformedConsentHistory = async (
+    workerId: string,
+): Promise<WorkerInformedConsentRecord[]> => {
+    const rows = await prisma.appointment.findMany({
+        where: {
+            workerId,
+            informedConsentPdfUrl: { not: null },
+            informedConsentSignedAt: { not: null },
+        },
+        select: {
+            id: true,
+            expedientId: true,
+            scheduledAt: true,
+            informedConsentPdfUrl: true,
+            informedConsentSignedAt: true,
+            branch: { select: { name: true } },
+        },
+        orderBy: { informedConsentSignedAt: 'desc' },
+    })
+
+    return rows.map((row) => ({
+        appointmentId: row.id,
+        expedientId: row.expedientId,
+        pdfUrl: row.informedConsentPdfUrl!,
+        signedAt: row.informedConsentSignedAt!,
+        scheduledAt: row.scheduledAt,
+        branchName: row.branch?.name ?? null,
+    }))
+}
+
 export const createWorker = async (data: Prisma.WorkerCreateInput) => {
     return await prisma.worker.create({
         data

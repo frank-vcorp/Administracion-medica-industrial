@@ -1,12 +1,25 @@
 @import "tailwindcss";
 
+/* Identidad AMI — extraída del sitio institucional ami-theme */
+@theme {
+  --color-ami-primary: #00afaa;
+  --color-ami-primary-hover: #00928e;
+  --color-ami-secondary: #592c82;
+  --color-ami-secondary-hover: #43215f;
+  --color-ami-accent: #dede19;
+  --color-ami-accent-hover: #cbc817;
+  --color-ami-gray: #636569;
+  --color-ami-surface: #f9fafb;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
+  --foreground-rgb: 99, 101, 105;
+  --background-start-rgb: 249, 250, 251;
   --background-end-rgb: 255, 255, 255;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: white;
+  color: #636569;
+  background: #f9fafb;
 }

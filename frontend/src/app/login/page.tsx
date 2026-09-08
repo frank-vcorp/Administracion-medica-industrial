@@ -3,6 +3,7 @@
  * @author SOFIA - Builder
  * @id IMPL-20260225-01
  * @backup context/checkpoints/CHK_FIX-20260306-03-FULL-REVIEW.md
+ * ARCH-20260908-01 — identidad visual AMI institucional
  */
 
 'use client'
@@ -19,7 +20,6 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // FIX REFERENCE: FIX-20260324-01 — aterrizar en dashboard post-login
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -38,7 +38,6 @@ function LoginForm() {
       if (result?.error) {
         setError(result.error)
       } else if (result?.ok) {
-        // Fuerza navegación completa para que el middleware lea la cookie recién emitida.
         window.location.assign(result.url || callbackUrl)
         return
       } else {
@@ -52,67 +51,78 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
-        <div className="flex justify-center mb-6">
-          <BrandLogo className="max-h-16 w-auto" />
+    <div className="flex min-h-screen flex-col bg-white">
+      <div className="border-b border-[#f0f0f0] px-6 py-3">
+        <p className="text-center text-sm font-bold text-ami-primary">AMI Salud Responsable</p>
+      </div>
+      <div className="border-t-2 border-b-[6px] border-t-ami-secondary border-b-ami-primary bg-white px-6 py-4">
+        <div className="mx-auto flex max-w-5xl items-center justify-center">
+          <BrandLogo className="max-h-14 w-auto" />
         </div>
-        <h1 className="text-xl font-bold text-center text-gray-900 mb-8">
-          Residente Digital
-        </h1>
+      </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            {error}
-          </div>
-        )}
+      <div className="flex flex-1 items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md rounded-[24px] border border-ami-secondary/10 bg-white p-8 shadow-[0_8px_24px_#592c8226]">
+          <h1 className="mb-2 text-center text-2xl font-bold text-ami-gray">
+            Residente <span className="text-ami-secondary">Digital</span>
+          </h1>
+          <p className="mb-8 text-center text-sm text-ami-gray">
+            Acceso al sistema de salud ocupacional
+          </p>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Correo Electrónico
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@correo.com"
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-            />
-          </div>
+          {error && (
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Contraseña
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-ami-secondary">
+                Correo Electrónico
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tu@correo.com"
+                required
+                className="w-full rounded-2xl border-2 border-gray-200 bg-ami-surface px-4 py-3 text-ami-secondary outline-none transition focus:border-ami-primary focus:bg-white focus:ring-4 focus:ring-ami-primary/20"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-2 rounded-lg transition duration-200"
-          >
-            {loading ? 'Cargando...' : 'Iniciar Sesión'}
-          </button>
-        </form>
+            <div>
+              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-ami-secondary">
+                Contraseña
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full rounded-2xl border-2 border-gray-200 bg-ami-surface px-4 py-3 text-ami-secondary outline-none transition focus:border-ami-primary focus:bg-white focus:ring-4 focus:ring-ami-primary/20"
+              />
+            </div>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          ¿No tienes cuenta? Contacta a tu administrador.
-        </p>
-        <p className="mt-2 text-center text-xs text-gray-400">
-          © 2026 Administración Médica Industrial. Todos los derechos reservados.
-        </p>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-full bg-ami-primary py-3 font-semibold text-white shadow-[0_4px_12px_#00afaa4d] transition hover:bg-ami-primary-hover disabled:bg-ami-primary/40"
+            >
+              {loading ? 'Cargando...' : 'Iniciar Sesión'}
+            </button>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-ami-gray">
+            ¿No tienes cuenta? Contacta a tu administrador.
+          </p>
+          <p className="mt-2 text-center text-xs text-ami-gray/70">
+            © 2026 AMI Salud Responsable. Todos los derechos reservados.
+          </p>
+        </div>
       </div>
     </div>
   )
