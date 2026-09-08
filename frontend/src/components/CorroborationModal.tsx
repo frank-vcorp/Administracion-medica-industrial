@@ -22,6 +22,7 @@ import {
 } from '@/actions/appointment.actions'
 import { useRouter } from 'next/navigation'
 import IdentityLightbox from '@/components/IdentityLightbox'
+import SignaturePad, { type SignaturePadHandle } from '@/components/reception/SignaturePad'
 
 // ── Etiquetas de catálogos ──────────────────────────────────────────────────
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -84,6 +85,8 @@ function fileToDataUrl(file: File): Promise<string> {
 export default function CorroborationModal({ appointment, onClose }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [step, setStep] = useState<1 | 2>(1)
+  const signaturePadRef = useRef<SignaturePadHandle>(null)
   const router = useRouter()
 
   // ── Nombre
@@ -138,6 +141,12 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
   function handleConfirm() {
     setError(null)
     startTransition(async () => {
+      const signatureDataUrl = signaturePadRef.current?.toDataURL()
+      if (!signatureDataUrl) {
+        setError('Debes firmar el consentimiento informado con autógrafo.')
+        return
+      }
+
       const result = await closeReceptionCorroboration({
         appointmentId: appointment.id,
         workerId: worker.id,
@@ -150,6 +159,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
         reuseLastEvidence: evidenceMode === 'REUSED_PREVIOUS' ? reuseConfirmed : undefined,
         exceptionReason: evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE' ? (exceptionReason as IdentityExceptionReason) || undefined : undefined,
         exceptionComment: evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE' ? exceptionComment : undefined,
+        informedConsentSignatureDataUrl: signatureDataUrl,
       })
 
       if (result.success) {
@@ -164,8 +174,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
     })
   }
 
-  // ── Validación local: ¿puede confirmar? ─────────────────────────────────
-  const canConfirm = (() => {
+  // ── Validación local: ¿puede continuar al paso 2? ───────────────────────
+  const canProceedToConsent = (() => {
     if (evidenceMode === 'NEW_CAPTURE') return !!frontDataUrl
     if (evidenceMode === 'REUSED_PREVIOUS') return reuseConfirmed
     if (evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE') {
@@ -174,6 +184,19 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
     return false
   })()
 
+  const patientDisplayName = `${corroboratedFirstName.trim()} ${corroboratedLastName.trim()}`
+  const consentDateLabel = new Date().toLocaleDateString('es-MX', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+
+  function handleGoToConsent() {
+    setError(null)
+    if (!canProceedToConsent) return
+    setStep(2)
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[95vh] flex flex-col">
@@ -181,16 +204,24 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
         {/* Header */}
         <div className="bg-amber-500 px-8 py-6 text-white flex-shrink-0">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">🪪</span>
+            <span className="text-3xl">{step === 1 ? '🪪' : '📄'}</span>
             <div>
-              <h2 className="text-lg font-black">Corroboración de Identidad</h2>
-              <p className="text-amber-100 text-xs font-medium">Verifica la identidad antes del check-in · Sprint 1 Recepción Operativa</p>
+              <h2 className="text-lg font-black">
+                {step === 1 ? 'Corroboración de Identidad' : 'Consentimiento Informado'}
+              </h2>
+              <p className="text-amber-100 text-xs font-medium">
+                {step === 1
+                  ? 'Paso 1 de 2 · Verifica la identidad antes del check-in'
+                  : 'Paso 2 de 2 · Firma autógrafa obligatoria para completar el check-in'}
+              </p>
             </div>
           </div>
         </div>
 
         <div className="overflow-y-auto flex-1 p-8 space-y-6">
 
+          {step === 1 && (
+            <>
           {/* IMPL-20260808-04: referencia compacta de la identificación previa
               del paciente. Siempre visible cuando hay evidencia registrada,
               independientemente del modo elegido. Sirve de ayuda visual sin
@@ -496,6 +527,58 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
               </div>
             </section>
           )}
+            </>
+          )}
+
+          {step === 2 && (
+            <section className="space-y-5">
+              <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 space-y-2">
+                <p className="text-xs font-bold text-violet-800">Datos que se incluirán en el PDF</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-[10px] font-bold text-violet-600 uppercase">Paciente</p>
+                    <p className="font-semibold text-slate-900">{patientDisplayName}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-violet-600 uppercase">Fecha</p>
+                    <p className="font-semibold text-slate-900">{consentDateLabel}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-2">
+                  Documento oficial
+                </p>
+                <iframe
+                  title="Consentimiento informado"
+                  src="/templates/consentimiento-informado.pdf"
+                  className="w-full h-56 rounded-xl border border-slate-200 bg-slate-50"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-slate-600">
+                    Firma autógrafa del paciente <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => signaturePadRef.current?.clear()}
+                    className="text-[10px] font-bold text-slate-500 hover:text-slate-700 underline"
+                  >
+                    Limpiar firma
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Use el lápiz/tableta de firmas (Wacom, Topaz, etc.) o el dedo en pantalla táctil.
+                </p>
+                <div className="rounded-xl border-2 border-dashed border-violet-200 overflow-hidden">
+                  <SignaturePad ref={signaturePadRef} height={160} />
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Error */}
           {error && (
@@ -507,20 +590,41 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
 
         {/* Acciones */}
         <div className="flex gap-3 p-6 border-t border-slate-100 flex-shrink-0">
-          <button
-            onClick={onClose}
-            disabled={isPending}
-            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-2xl font-bold text-sm transition-all disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={isPending || !canConfirm}
-            className="flex-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-6 rounded-2xl font-black text-sm transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isPending ? '⏳ Procesando...' : '✅ Confirmar y Hacer Check-In'}
-          </button>
+          {step === 1 ? (
+            <>
+              <button
+                onClick={onClose}
+                disabled={isPending}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-2xl font-bold text-sm transition-all disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGoToConsent}
+                disabled={isPending || !canProceedToConsent}
+                className="flex-2 bg-amber-500 hover:bg-amber-600 text-white py-3 px-6 rounded-2xl font-black text-sm transition-all shadow-lg shadow-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continuar al consentimiento →
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => { setStep(1); setError(null) }}
+                disabled={isPending}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-2xl font-bold text-sm transition-all disabled:opacity-50"
+              >
+                ← Volver
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={isPending}
+                className="flex-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-6 rounded-2xl font-black text-sm transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isPending ? '⏳ Procesando...' : '✅ Firmar y Hacer Check-In'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

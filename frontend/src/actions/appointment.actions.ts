@@ -28,6 +28,11 @@ import {
   type IdentityEvidenceMode,
   type IdentityExceptionReason,
 } from '@/lib/reception-corroboration'
+import {
+  buildInformedConsentPdf,
+  informedConsentFileKey,
+} from '@/lib/informed-consent-pdf'
+import { uploadPdfBuffer } from '@/lib/upload-pdf-buffer'
 import QRCode from 'qrcode'
 
 /**
@@ -973,6 +978,8 @@ export interface CloseReceptionInput {
   // Excepción / comentario operativo (obligatorio cuando no hay captura normal)
   exceptionReason?: IdentityExceptionReason
   exceptionComment?: string
+  /** PNG data URL de la firma autógrafa del consentimiento informado. */
+  informedConsentSignatureDataUrl: string
 }
 
 /**
@@ -1006,7 +1013,12 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
       reuseLastEvidence,
       exceptionReason,
       exceptionComment,
+      informedConsentSignatureDataUrl,
     } = input
+
+    if (!informedConsentSignatureDataUrl?.trim()) {
+      return { success: false, error: 'La firma del consentimiento informado es obligatoria.' }
+    }
 
     // ── Validaciones de frontera ─────────────────────────────────────────────
     if (evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE') {
@@ -1071,6 +1083,29 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
     const previousName = `${worker.firstName} ${worker.lastName}`
     const newFirstName = correctedFirstName?.trim() || worker.firstName
     const newLastName = correctedLastName?.trim() || worker.lastName
+    const patientFullName = `${newFirstName} ${newLastName}`
+    const signedAt = new Date()
+
+    // ── Generar y subir consentimiento informado firmado ─────────────────────
+    let consentPdfKey: string
+    try {
+      const pdfBuffer = await buildInformedConsentPdf({
+        patientFullName,
+        signedAt,
+        signatureDataUrl: informedConsentSignatureDataUrl,
+      })
+      consentPdfKey = informedConsentFileKey(workerId, appointmentId)
+      const uploadResult = await uploadPdfBuffer(pdfBuffer, consentPdfKey)
+      if (!uploadResult.success) {
+        return { success: false, error: uploadResult.error || 'No se pudo guardar el consentimiento firmado.' }
+      }
+    } catch (consentErr) {
+      console.error('[INFORMED_CONSENT_PDF ERROR]:', consentErr)
+      return {
+        success: false,
+        error: consentErr instanceof Error ? consentErr.message : 'Error al generar el consentimiento informado.',
+      }
+    }
 
     // ── Transacción principal ────────────────────────────────────────────────
     const result = await prisma.$transaction(async (tx) => {
@@ -1092,7 +1127,17 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
             lastIdentityFrontFileUrl: resolvedFront,
             lastIdentityBackFileUrl: resolvedBack,
             lastIdentityVerifiedAt: new Date(),
+            lastInformedConsentPdfUrl: consentPdfKey,
+            lastInformedConsentSignedAt: signedAt,
           }
+        })
+      } else {
+        await tx.worker.update({
+          where: { id: workerId },
+          data: {
+            lastInformedConsentPdfUrl: consentPdfKey,
+            lastInformedConsentSignedAt: signedAt,
+          },
         })
       }
 
@@ -1109,6 +1154,8 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
           identityExceptionComment: exceptionComment ?? null,
           identityEvidenceMode:     evidenceMode,
           corroborationResult:      corroborationResult,
+          informedConsentPdfUrl:    consentPdfKey,
+          informedConsentSignedAt:  signedAt,
         }
       })
 
@@ -1131,6 +1178,7 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
             newName: nameWillChange ? `${newFirstName} ${newLastName}` : undefined,
             hasException: evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE',
             exceptionReason: exceptionReason ?? null,
+            informedConsentPdfUrl: consentPdfKey,
             timestamp: new Date().toISOString(),
           }
         }
@@ -1152,6 +1200,7 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
     revalidatePath('/appointments')
     revalidatePath('/reception')
     revalidatePath('/dashboard')
+    revalidatePath(`/workers/${workerId}`)
 
     return {
       success: true,

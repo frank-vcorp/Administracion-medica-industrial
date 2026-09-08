@@ -26,6 +26,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import WorkerFormModal from '@/components/WorkerFormModal'
 import WorkerIdentityCard from '@/components/workers/WorkerIdentityCard'
+import WorkerInformedConsentCard, {
+    type InformedConsentHistoryItem,
+} from '@/components/workers/WorkerInformedConsentCard'
 
 // ────────────────────────────────────────────────────────────
 // Tipos — explícitos para evitar `any` en server→client boundary
@@ -69,9 +72,12 @@ export interface HistoryPayload {
     error?: string
 }
 
+export type InformedConsentHistoryPayload = InformedConsentHistoryItem[]
+
 interface Props {
     worker: SerializedWorker
     historyResult: HistoryPayload
+    informedConsentHistory: InformedConsentHistoryPayload
     companies: CompanyOption[]
     medicalProfiles: MedicalProfileOption[]
 }
@@ -90,6 +96,7 @@ type PrefillBase = {
 export default function WorkerDetailClient({
     worker,
     historyResult,
+    informedConsentHistory,
     companies,
     medicalProfiles,
 }: Props) {
@@ -227,6 +234,12 @@ export default function WorkerDetailClient({
                         lastIdentityFrontFileUrl={worker.lastIdentityFrontFileUrl}
                         lastIdentityBackFileUrl={worker.lastIdentityBackFileUrl}
                         lastIdentityVerifiedAt={worker.lastIdentityVerifiedAt}
+                    />
+
+                    <WorkerInformedConsentCard
+                        firstName={worker.firstName}
+                        lastName={worker.lastName}
+                        consents={informedConsentHistory}
                     />
 
                     {/* Card Historial Clínico Longitudinal — slate contenedor, accent azul */}
