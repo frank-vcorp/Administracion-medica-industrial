@@ -4,9 +4,8 @@ import prisma from "@/lib/prisma"
 import Link from "next/link"
 
 async function getValidationQueue() {
-    // For demo purposes, we show all events so the user can see the flow immediately.
-    // In production: where: { status: 'VALIDATING' }
     return await prisma.medicalEvent.findMany({
+        where: { status: 'VALIDATING' },
         include: {
             worker: {
                 include: { company: true }
