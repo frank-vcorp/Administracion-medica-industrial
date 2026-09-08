@@ -68,7 +68,7 @@ import type {
   AudiometriaQuestionnairePayload,
 } from "@/schemas/clinical/audiometria-questionnaire.schema"
 import { AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/audiometria-questionnaire.schema"
-import { formatStudyStatusLine } from '@/lib/clinical/study-status-display'
+import { buildStudyInterpretationFromSnapshot, formatStudyStatusLine } from '@/lib/clinical/study-status-display'
 import { StudyStatusBadge } from '@/components/clinical/StudyStatusBadge'
 
 // --- Tipos locales ---
@@ -718,7 +718,7 @@ export default function PapeletaWorkspace({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <StudyStatusBadge status={test.status} />
+                    <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} />
                     <span className="text-slate-400 group-hover:text-teal-600 text-sm">→</span>
                   </div>
                 </div>
@@ -752,7 +752,10 @@ export default function PapeletaWorkspace({
         >
           {visibleTests.map(t => (
             <option key={t.id} value={t.id}>
-              {t.testNameSnapshot} — {formatStudyStatusLine(t.status)}
+              {t.testNameSnapshot} — {formatStudyStatusLine(
+                t.status,
+                buildStudyInterpretationFromSnapshot(t.aiSnapshot),
+              )}
             </option>
           ))}
         </select>
@@ -777,7 +780,7 @@ export default function PapeletaWorkspace({
               }`}
             >
               <p className="text-xs font-semibold truncate">{t.testNameSnapshot}</p>
-              <StudyStatusBadge status={t.status} variant="compact" className="items-start mt-1" />
+              <StudyStatusBadge status={t.status} aiSnapshot={t.aiSnapshot} variant="compact" className="items-start mt-1" />
             </button>
           ))}
         </nav>
@@ -1330,7 +1333,7 @@ function StudyPanel({
             </span>
           </div>
         </div>
-        <StudyStatusBadge status={test.status} className="shrink-0" />
+        <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} className="shrink-0" />
       </div>
 
       <hr className="border-slate-100" />

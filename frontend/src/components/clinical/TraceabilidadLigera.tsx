@@ -12,6 +12,7 @@
 import { useState, useEffect } from "react"
 import {
   BUSINESS_STATUS_LABELS,
+  buildStudyInterpretationFromSnapshot,
   formatStudyStatusLine,
   getBusinessStatusBadgeClass,
   toBusinessStudyStatus,
@@ -25,6 +26,7 @@ type TrazTest = {
   id: string
   testNameSnapshot: string
   status: StudyStatus
+  aiSnapshot?: Parameters<typeof buildStudyInterpretationFromSnapshot>[0]
 }
 
 /** Peso para determinar "más avanzado" sin timestamps */
@@ -258,7 +260,10 @@ export default function TraceabilidadLigera({
                 {ultimoMovimiento.testNameSnapshot}
               </p>
               <p className="text-[10px] text-slate-500 mt-0.5">
-                {formatStudyStatusLine(ultimoMovimiento.status)}
+                {formatStudyStatusLine(
+                  ultimoMovimiento.status,
+                  buildStudyInterpretationFromSnapshot(ultimoMovimiento.aiSnapshot),
+                )}
               </p>
             </>
           ) : (
@@ -276,7 +281,10 @@ export default function TraceabilidadLigera({
                 {siguientePaso.testNameSnapshot}
               </p>
               <p className="text-[10px] text-slate-500 mt-0.5">
-                {formatStudyStatusLine(siguientePaso.status)}
+                {formatStudyStatusLine(
+                  siguientePaso.status,
+                  buildStudyInterpretationFromSnapshot(siguientePaso.aiSnapshot),
+                )}
               </p>
             </>
           ) : (

@@ -40,8 +40,8 @@ Adoptar **modelo de dos capas**:
 | `PENDING` | Pendiente | — |
 | `IN_PROGRESS` | Pendiente | En proceso |
 | `SAMPLE_TAKEN` | Pendiente | Muestra tomada · esperando laboratorio |
-| `RESULT_REGISTERED` | Realizado | Resultado registrado |
-| `COMPLETED` | Realizado | Pendiente de envío |
+| `RESULT_REGISTERED` | Realizado | Pendiente de interpretación / Prueba interpretada |
+| `COMPLETED` | Realizado | Pendiente de interpretación / Prueba interpretada |
 | `SKIPPED` | No realizado | Omitido |
 | `CANCELLED` | No realizado | Cancelado |
 
@@ -61,7 +61,7 @@ Adoptar **modelo de dos capas**:
 ## Fuera de alcance (por ahora)
 
 - Renombrar “Papeleta electrónica” → “Módulo de pruebas clínicas” (R-16)
-- Estatus de **interpretación** vs **envío** (R-18)
+- Estatus de **interpretación** vs **envío** (R-18) — ✅ interpretación en subtexto (Word R-18); envío fuera de alcance
 - Selector manual de estatus de negocio (solo derivación automática hoy)
 - Cambios en cronograma admin (`PapeletaCronograma`) más allá de labels de timeline
 

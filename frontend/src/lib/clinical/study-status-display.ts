@@ -30,6 +30,54 @@ export const BUSINESS_STATUS_BADGE: Record<BusinessStudyStatus, string> = {
   NO_REALIZADO: 'bg-slate-100 text-slate-600',
 }
 
+export type StudyInterpretationInput = {
+  clinicalState?: string | null
+  doctorStatus?: string | null
+}
+
+const INTERPRETED_STATES = new Set([
+  'REVIEWED_ACCEPTED',
+  'REVIEWED_EDITED',
+])
+
+/** Deriva contexto de interpretación desde el snapshot IA del EventTest. */
+export function buildStudyInterpretationFromSnapshot(
+  aiSnapshot?: {
+    snapshot?: { clinicalState?: string } | null
+    existingReview?: { doctorStatus?: string } | null
+  } | null,
+): StudyInterpretationInput | null {
+  if (!aiSnapshot) return null
+  return {
+    clinicalState: aiSnapshot.snapshot?.clinicalState ?? null,
+    doctorStatus: aiSnapshot.existingReview?.doctorStatus ?? null,
+  }
+}
+
+export function isStudyInterpreted(
+  interpretation?: StudyInterpretationInput | null,
+): boolean {
+  if (!interpretation) return false
+  if (interpretation.doctorStatus && INTERPRETED_STATES.has(interpretation.doctorStatus)) {
+    return true
+  }
+  if (interpretation.clinicalState && INTERPRETED_STATES.has(interpretation.clinicalState)) {
+    return true
+  }
+  return false
+}
+
+/** Estatus de interpretación clínica (Word R-18) para pruebas con resultado. */
+export function getInterpretationDetail(
+  status: EventTestPipelineStatus,
+  interpretation?: StudyInterpretationInput | null,
+): string | null {
+  if (status !== 'COMPLETED' && status !== 'RESULT_REGISTERED') return null
+  return isStudyInterpreted(interpretation)
+    ? 'Prueba interpretada'
+    : 'Pendiente de interpretación'
+}
+
 /** Mapeo pipeline → estatus de negocio (Word R-17 + laboratorio). */
 export function toBusinessStudyStatus(
   status: EventTestPipelineStatus,
@@ -39,19 +87,19 @@ export function toBusinessStudyStatus(
   return 'PENDIENTE'
 }
 
-/** Detalle operativo opcional (p. ej. muestra de laboratorio). */
+/** Detalle operativo opcional (laboratorio, interpretación clínica, etc.). */
 export function getOperationalDetail(
   status: EventTestPipelineStatus,
+  interpretation?: StudyInterpretationInput | null,
 ): string | null {
+  const interpretationDetail = getInterpretationDetail(status, interpretation)
+  if (interpretationDetail) return interpretationDetail
+
   switch (status) {
     case 'IN_PROGRESS':
       return 'En proceso'
     case 'SAMPLE_TAKEN':
       return 'Muestra tomada · esperando laboratorio'
-    case 'RESULT_REGISTERED':
-      return 'Resultado registrado'
-    case 'COMPLETED':
-      return 'Pendiente de envío'
     case 'SKIPPED':
       return 'Omitido'
     case 'CANCELLED':
@@ -61,9 +109,12 @@ export function getOperationalDetail(
   }
 }
 
-export function formatStudyStatusLine(status: EventTestPipelineStatus): string {
+export function formatStudyStatusLine(
+  status: EventTestPipelineStatus,
+  interpretation?: StudyInterpretationInput | null,
+): string {
   const label = BUSINESS_STATUS_LABELS[toBusinessStudyStatus(status)]
-  const detail = getOperationalDetail(status)
+  const detail = getOperationalDetail(status, interpretation)
   return detail ? `${label} · ${detail}` : label
 }
 
