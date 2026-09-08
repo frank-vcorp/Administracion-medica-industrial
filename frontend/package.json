@@ -17,6 +17,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@yudiel/react-qr-scanner": "^2.5.1",
     "bcryptjs": "^3.0.3",
+    "lucide-react": "^1.43.0",
     "next": "16.1.6",
     "next-auth": "^4.24.13",
     "pngjs": "^7.0.0",

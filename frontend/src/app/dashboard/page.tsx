@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { ArrowRight, Calendar, CircleCheck, Clock, Users } from 'lucide-react'
 import { getDashboardKPIs } from '@/actions/dashboard.actions'
 
 /**
@@ -86,29 +87,25 @@ export default function DashboardPage() {
                 <StatCard
                     title="Citas de Hoy"
                     value={kpis.appointmentsToday}
-                    icon="📅"
-                    color="sky"
+                    icon={<Calendar className="h-5 w-5 stroke-[1.5]" />}
                     description="Agenda diaria"
                 />
                 <StatCard
                     title="Pacientes en espera"
                     value={kpis.activeEvents}
-                    icon="⚡"
-                    color="amber"
+                    icon={<Clock className="h-5 w-5 stroke-[1.5]" />}
                     description="Pacientes en sede"
                 />
                 <StatCard
                     title="Completados"
                     value={kpis.completedEvents}
-                    icon="✅"
-                    color="emerald"
+                    icon={<CircleCheck className="h-5 w-5 stroke-[1.5]" />}
                     description="Reporte médico de aptitud"
                 />
                 <StatCard
                     title="Total Padron"
                     value={kpis.totalWorkers}
-                    icon="👥"
-                    color="indigo"
+                    icon={<Users className="h-5 w-5 stroke-[1.5]" />}
                     description="Pacientes atendidos"
                 />
             </div>
@@ -154,11 +151,15 @@ export default function DashboardPage() {
                         <h3 className="text-lg font-bold mb-4 relative z-10">Acciones Rápidas</h3>
                         <div className="space-y-3 relative z-10">
                             <button className="w-full bg-white/10 hover:bg-white/20 text-white text-left p-4 rounded-2xl transition-all border border-white/10 group">
-                                <p className="text-sm font-bold group-hover:translate-x-1 transition-transform">➡️ Nueva Empresa</p>
+                                <p className="text-sm font-bold group-hover:translate-x-1 transition-transform flex items-center gap-2">
+                                    <ArrowRight className="h-4 w-4 stroke-[1.5]" /> Nueva Empresa
+                                </p>
                                 <p className="text-xs text-white/50">Dar de alta convenio</p>
                             </button>
                             <button className="w-full bg-white/10 hover:bg-white/20 text-white text-left p-4 rounded-2xl transition-all border border-white/10 group">
-                                <p className="text-sm font-bold group-hover:translate-x-1 transition-transform">➡️ Registro Trabajador</p>
+                                <p className="text-sm font-bold group-hover:translate-x-1 transition-transform flex items-center gap-2">
+                                    <ArrowRight className="h-4 w-4 stroke-[1.5]" /> Registro Trabajador
+                                </p>
                                 <p className="text-xs text-white/50">Cargar padrón</p>
                             </button>
                         </div>
@@ -169,18 +170,11 @@ export default function DashboardPage() {
     )
 }
 
-function StatCard({ title, value, icon, color, description }: { title: string, value: number, icon: string, color: 'sky' | 'amber' | 'emerald' | 'indigo', description: string }) {
-    const variants: Record<string, string> = {
-        sky: "bg-ami-primary/10 text-ami-primary border-ami-primary/20",
-        amber: "bg-ami-accent/40 text-ami-secondary border-ami-accent",
-        emerald: "bg-ami-primary/10 text-ami-primary-hover border-ami-primary/20",
-        indigo: "bg-ami-secondary/10 text-ami-secondary border-ami-secondary/20"
-    }
-
+function StatCard({ title, value, icon, description }: { title: string, value: number, icon: ReactNode, description: string }) {
     return (
-        <div className={`bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40 hover:scale-[1.02] transition-all group cursor-default`}>
+        <div className="bg-white p-6 rounded-[2rem] border border-ami-secondary/10 shadow-sm hover:border-ami-secondary/20 transition-all group cursor-default">
             <div className="flex items-start justify-between">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl transition-colors ${variants[color]}`}>
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-ami-secondary/10 text-ami-secondary">
                     {icon}
                 </div>
                 <div className="text-right">
@@ -190,7 +184,6 @@ function StatCard({ title, value, icon, color, description }: { title: string, v
             </div>
             <div className="mt-6 flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-medium">{description}</span>
-                <span className={`px-2 py-0.5 rounded-full font-bold ${variants[color].split(' ')[0]} ${variants[color].split(' ')[1]}`}>+0%</span>
             </div>
         </div>
     )
