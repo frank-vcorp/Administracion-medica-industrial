@@ -6,6 +6,7 @@ import WorkersPageClient from '@/components/workers/WorkersPageClient'
 import type { SelectableWorker } from '@/components/workers/WorkerSelectableGrid'
 
 import type { AvailableTestOption } from '@/components/public-general/PublicGeneralProfilePicker'
+import { PUBLIC_GENERAL_COMPANY_NAME } from '@/lib/public-general-company'
 
 interface Props {
   workers: SelectableWorker[]
@@ -61,10 +62,10 @@ export default function PublicGeneralPageClient({
     <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Público general</h2>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">{PUBLIC_GENERAL_COMPANY_NAME}</h2>
           <p className="text-sm text-slate-500 font-medium">
             Pacientes particulares · empresa fija{' '}
-            <span className="text-teal-700 font-bold">{publicGeneralCompany.name}</span>
+            <span className="text-teal-700 font-bold">{PUBLIC_GENERAL_COMPANY_NAME}</span>
           </p>
         </div>
         <button
@@ -72,7 +73,7 @@ export default function PublicGeneralPageClient({
           onClick={() => setModalOpen(true)}
           className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-teal-200 flex items-center gap-2"
         >
-          <span className="text-lg">+</span> Alta público general
+          <span className="text-lg">+</span> Alta {PUBLIC_GENERAL_COMPANY_NAME}
         </button>
       </div>
 

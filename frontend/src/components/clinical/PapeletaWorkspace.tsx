@@ -68,6 +68,8 @@ import type {
   AudiometriaQuestionnairePayload,
 } from "@/schemas/clinical/audiometria-questionnaire.schema"
 import { AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/audiometria-questionnaire.schema"
+import { formatStudyStatusLine } from '@/lib/clinical/study-status-display'
+import { StudyStatusBadge } from '@/components/clinical/StudyStatusBadge'
 
 // --- Tipos locales ---
 
@@ -182,29 +184,6 @@ interface PapeletaWorkspaceProps {
    * ZIP sólo con verdict emitido).
    */
   hasMedicalVerdict?: boolean
-}
-
-// --- Labels y estilos para estados V1 ---
-
-// IMPL-20260630-02: rename de labels según doc Renombramiento de catálogos (líneas 67-73)
-const STATUS_LABELS: Record<StudyStatus, string> = {
-  PENDING: 'Pendiente de resultado de prueba',
-  IN_PROGRESS: 'En proceso',
-  SAMPLE_TAKEN: 'Pendiente de resultado de prueba de laboratorio',
-  RESULT_REGISTERED: 'Pendiente de Reporte de aptitud',
-  COMPLETED: 'Pendiente de envio',
-  SKIPPED: 'Omitido',
-  CANCELLED: 'Cancelado',
-}
-
-const STATUS_BADGE: Record<StudyStatus, string> = {
-  PENDING: 'bg-amber-100 text-amber-700',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700',
-  SAMPLE_TAKEN: 'bg-purple-100 text-purple-700',
-  RESULT_REGISTERED: 'bg-teal-100 text-teal-700',
-  COMPLETED: 'bg-emerald-100 text-emerald-700',
-  SKIPPED: 'bg-slate-100 text-slate-600',
-  CANCELLED: 'bg-red-100 text-red-700',
 }
 
 // --- IMPL-20260516-04: Etapas del pipeline IA para progreso visual por hitos ---
@@ -739,9 +718,7 @@ export default function PapeletaWorkspace({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${STATUS_BADGE[test.status]}`}>
-                      {STATUS_LABELS[test.status]}
-                    </span>
+                    <StudyStatusBadge status={test.status} />
                     <span className="text-slate-400 group-hover:text-teal-600 text-sm">→</span>
                   </div>
                 </div>
@@ -775,7 +752,7 @@ export default function PapeletaWorkspace({
         >
           {visibleTests.map(t => (
             <option key={t.id} value={t.id}>
-              {t.testNameSnapshot} — {STATUS_LABELS[t.status]}
+              {t.testNameSnapshot} — {formatStudyStatusLine(t.status)}
             </option>
           ))}
         </select>
@@ -800,9 +777,7 @@ export default function PapeletaWorkspace({
               }`}
             >
               <p className="text-xs font-semibold truncate">{t.testNameSnapshot}</p>
-              <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 ${STATUS_BADGE[t.status]}`}>
-                {STATUS_LABELS[t.status]}
-              </span>
+              <StudyStatusBadge status={t.status} variant="compact" className="items-start mt-1" />
             </button>
           ))}
         </nav>
@@ -1355,9 +1330,7 @@ function StudyPanel({
             </span>
           </div>
         </div>
-        <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${STATUS_BADGE[test.status]}`}>
-          {STATUS_LABELS[test.status]}
-        </span>
+        <StudyStatusBadge status={test.status} className="shrink-0" />
       </div>
 
       <hr className="border-slate-100" />
@@ -1480,7 +1453,7 @@ function StudyPanel({
                     </p>
                   </div>
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${sampleTracked ? 'bg-purple-200 text-purple-800' : 'bg-white text-purple-700 border border-purple-200'}`}>
-                    {sampleTracked ? '✓ Pendiente de resultado de prueba de laboratorio' : 'Muestra pendiente'}
+                    {sampleTracked ? '✓ Muestra tomada · esperando laboratorio' : 'Muestra pendiente'}
                   </span>
                 </div>
 

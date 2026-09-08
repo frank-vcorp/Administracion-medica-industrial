@@ -10,32 +10,21 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import {
+  BUSINESS_STATUS_LABELS,
+  formatStudyStatusLine,
+  getBusinessStatusBadgeClass,
+  toBusinessStudyStatus,
+  type EventTestPipelineStatus,
+} from '@/lib/clinical/study-status-display'
 
 // Tipo mínimo compatible con StudyTest de PapeletaWorkspace (solo campos usados aquí)
-type StudyStatus =
-  | 'PENDING'
-  | 'IN_PROGRESS'
-  | 'SAMPLE_TAKEN'
-  | 'RESULT_REGISTERED'
-  | 'COMPLETED'
-  | 'SKIPPED'
-  | 'CANCELLED'
+type StudyStatus = EventTestPipelineStatus
 
 type TrazTest = {
   id: string
   testNameSnapshot: string
   status: StudyStatus
-}
-
-// IMPL-20260630-02: rename de labels según doc Renombramiento de catálogos (líneas 67-73)
-const STATUS_LABELS: Record<StudyStatus, string> = {
-  PENDING: 'Pendiente de resultado de prueba',
-  IN_PROGRESS: 'En proceso',
-  SAMPLE_TAKEN: 'Pendiente de resultado de prueba de laboratorio',
-  RESULT_REGISTERED: 'Pendiente de Reporte de aptitud',
-  COMPLETED: 'Pendiente de envio',
-  SKIPPED: 'Omitido',
-  CANCELLED: 'Cancelado',
 }
 
 /** Peso para determinar "más avanzado" sin timestamps */
@@ -78,13 +67,7 @@ function getTimelineIcon(status: StudyStatus): string {
 }
 
 function getTimelineBadge(status: StudyStatus): string {
-  if (status === 'COMPLETED')         return 'bg-emerald-100 text-emerald-700'
-  if (status === 'RESULT_REGISTERED') return 'bg-teal-100 text-teal-700'
-  if (status === 'SAMPLE_TAKEN')      return 'bg-purple-100 text-purple-700'
-  if (status === 'IN_PROGRESS')       return 'bg-blue-100 text-blue-700'
-  if (status === 'SKIPPED')           return 'bg-slate-100 text-slate-500'
-  if (status === 'CANCELLED')         return 'bg-red-100 text-red-500'
-  return 'bg-slate-100 text-slate-400'
+  return getBusinessStatusBadgeClass(status)
 }
 
 /** Detecta estudios de laboratorio por nombre (heurística ligera, sin importar isLabTest) */
@@ -275,7 +258,7 @@ export default function TraceabilidadLigera({
                 {ultimoMovimiento.testNameSnapshot}
               </p>
               <p className="text-[10px] text-slate-500 mt-0.5">
-                {STATUS_LABELS[ultimoMovimiento.status]}
+                {formatStudyStatusLine(ultimoMovimiento.status)}
               </p>
             </>
           ) : (
@@ -293,7 +276,7 @@ export default function TraceabilidadLigera({
                 {siguientePaso.testNameSnapshot}
               </p>
               <p className="text-[10px] text-slate-500 mt-0.5">
-                {STATUS_LABELS[siguientePaso.status]}
+                {formatStudyStatusLine(siguientePaso.status)}
               </p>
             </>
           ) : (
@@ -363,7 +346,7 @@ export default function TraceabilidadLigera({
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${getTimelineBadge(t.status)}`}
                   >
-                    {STATUS_LABELS[t.status]}
+                    {BUSINESS_STATUS_LABELS[toBusinessStudyStatus(t.status)]}
                   </span>
                 </div>
               ))}

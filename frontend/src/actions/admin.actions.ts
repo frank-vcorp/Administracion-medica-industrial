@@ -10,6 +10,8 @@ import { revalidatePath } from "next/cache"
 import {
     PUBLIC_GENERAL_COMPANY_NAME,
     PUBLIC_GENERAL_COMPANY_RFC,
+    PUBLIC_GENERAL_LEGACY_NAMES,
+    isPublicGeneralCompany,
 } from '@/lib/public-general-company'
 
 // --- COMPANIES ---
@@ -73,6 +75,16 @@ export async function createCompany(formData: FormData) {
             return { success: false, error: 'Nombre y RFC son obligatorios' }
         }
 
+        if (
+            rfc === PUBLIC_GENERAL_COMPANY_RFC ||
+            isPublicGeneralCompany({ name, rfc })
+        ) {
+            return {
+                success: false,
+                error: 'La empresa Público General ya existe. Use el módulo Público General.',
+            }
+        }
+
         let branchIds = allowedBranchIds
         if (branchIds.length === 0) {
             const tenant = await prisma.tenant.findFirst()
@@ -115,51 +127,90 @@ export async function createCompany(formData: FormData) {
 
 /**
  * Garantiza la empresa interna Público General (particulares / mostrador).
+ * Prefiere el registro con datos; elimina duplicados vacíos; normaliza nombre.
  */
 export async function ensurePublicGeneralCompany() {
-    const existing = await prisma.company.findFirst({
+    const companySelect = {
+        id: true,
+        name: true,
+        rfc: true,
+        email: true,
+        phone: true,
+        defaultBranchId: true,
+        createdAt: true,
+        _count: {
+            select: {
+                workers: true,
+                medicalProfiles: true,
+                projects: true,
+            },
+        },
+    } as const
+
+    const candidates = await prisma.company.findMany({
         where: {
             OR: [
                 { rfc: PUBLIC_GENERAL_COMPANY_RFC },
                 { name: { equals: PUBLIC_GENERAL_COMPANY_NAME, mode: 'insensitive' } },
+                ...PUBLIC_GENERAL_LEGACY_NAMES.map((legacyName) => ({
+                    name: { equals: legacyName, mode: 'insensitive' as const },
+                })),
             ],
         },
-        select: {
-            id: true,
-            name: true,
-            rfc: true,
-            email: true,
-            phone: true,
-            defaultBranchId: true,
-        },
+        select: companySelect,
+        orderBy: { createdAt: 'asc' },
     })
 
-    if (existing) {
-        if (!existing.defaultBranchId) {
-            const tenant = await prisma.tenant.findFirst()
-            const firstBranch = tenant
-                ? await prisma.branch.findFirst({
-                      where: { tenantId: tenant.id },
-                      select: { id: true },
-                      orderBy: { createdAt: 'asc' },
-                  })
-                : null
-            if (firstBranch) {
-                return await prisma.company.update({
-                    where: { id: existing.id },
-                    data: { defaultBranchId: firstBranch.id },
-                    select: {
-                        id: true,
-                        name: true,
-                        rfc: true,
-                        email: true,
-                        phone: true,
-                        defaultBranchId: true,
-                    },
-                })
-            }
+    const score = (c: (typeof candidates)[number]) =>
+        c._count.workers + c._count.medicalProfiles + c._count.projects
+
+    let canonical = candidates.sort((a, b) => score(b) - score(a) || a.createdAt.getTime() - b.createdAt.getTime())[0]
+
+    for (const dup of candidates) {
+        if (!canonical || dup.id === canonical.id) continue
+        if (score(dup) === 0) {
+            await prisma.company.delete({ where: { id: dup.id } })
         }
-        return existing
+    }
+
+    if (canonical) {
+        const needsName = canonical.name !== PUBLIC_GENERAL_COMPANY_NAME
+        const needsRfc = canonical.rfc !== PUBLIC_GENERAL_COMPANY_RFC
+        const needsBranch = !canonical.defaultBranchId
+
+        if (needsName || needsRfc || needsBranch) {
+            let defaultBranchId = canonical.defaultBranchId
+            if (!defaultBranchId) {
+                const tenant = await prisma.tenant.findFirst()
+                const firstBranch = tenant
+                    ? await prisma.branch.findFirst({
+                          where: { tenantId: tenant.id },
+                          select: { id: true },
+                          orderBy: { createdAt: 'asc' },
+                      })
+                    : null
+                defaultBranchId = firstBranch?.id ?? null
+            }
+
+            canonical = await prisma.company.update({
+                where: { id: canonical.id },
+                data: {
+                    name: PUBLIC_GENERAL_COMPANY_NAME,
+                    rfc: PUBLIC_GENERAL_COMPANY_RFC,
+                    ...(defaultBranchId ? { defaultBranchId } : {}),
+                },
+                select: companySelect,
+            })
+        }
+
+        return {
+            id: canonical.id,
+            name: canonical.name,
+            rfc: canonical.rfc,
+            email: canonical.email,
+            phone: canonical.phone,
+            defaultBranchId: canonical.defaultBranchId,
+        }
     }
 
     const tenant = await prisma.tenant.findFirst()

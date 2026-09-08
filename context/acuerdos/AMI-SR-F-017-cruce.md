@@ -74,7 +74,7 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 |---|---|---|---|
 | R-15 | **Total del día** (KPI) | No existe tarjeta | ¿Qué suma? ¿Misma pantalla que citas? |
 | R-16 | Eliminar **Agenda** y **combinar listados** | Cambio estructural nav + UX | ¿Qué pasa con `/dashboard` y `/events`? |
-| R-17 | Estatus pruebas: **Realizado / Pendiente / No realizado** | Puede cambiar enums BD | ¿Reemplaza labels actuales o estados nuevos? |
+| R-17 | Estatus pruebas: **Realizado / Pendiente / No realizado** (+ subtexto lab) | Puede cambiar enums BD | ✅ Hecho (capa visual, DEC-20260907-01) |
 | R-18 | Estatus **interpretación** vs envío | Conflicto en doc (envío vs interpretación) | ¿Cuál set de estatus queda? |
 | R-19 | **Público general** dentro de listado empresas | Cambio de ruta/nav | ¿Eliminar `/publico-general`? |
 | R-20 | **Validación diagnóstica** en listado (tabla) | Layout + columnas | ¿Qué columnas y acciones? |
@@ -89,7 +89,7 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 | Categoría | Cantidad | Estado |
 |---|---|---|
 | **A — Triviales** | 10 | 10 ✅ hechos |
-| **B — Con revisión** | 23 | 1 ⏸️ diferido (roles), 22 pendientes |
+| **B — Con revisión** | 23 | 1 ⏸️ diferido (roles), 21 pendientes, 1 ✅ (R-17 visual) |
 | **Total ítems únicos** | 33 | |
 
 ---
