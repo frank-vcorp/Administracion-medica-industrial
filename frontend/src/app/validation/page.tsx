@@ -2,6 +2,11 @@ export const dynamic = 'force-dynamic'
 
 import prisma from "@/lib/prisma"
 import Link from "next/link"
+import {
+  getEventCompletenessBadgeClass,
+  getEventCompletenessLabel,
+} from '@/lib/clinical/event-completeness'
+import type { EventTestPipelineStatus } from '@/lib/clinical/study-status-display'
 
 async function getValidationQueue() {
     return await prisma.medicalEvent.findMany({
@@ -10,8 +15,13 @@ async function getValidationQueue() {
             worker: {
                 include: { company: true }
             },
-            studies: true, // To show study count/tags
-            labs: true
+            eventTests: {
+                select: {
+                    testNameSnapshot: true,
+                    status: true,
+                },
+                orderBy: { createdAt: 'asc' },
+            },
         },
         orderBy: { createdAt: 'desc' }
     })
@@ -40,9 +50,12 @@ export default async function ValidationPage() {
                     </div>
                 )}
                 {queue.map(event => {
-                    const studyCount = event.studies.length + event.labs.length
-                    const risk = studyCount > 2 ? 'Alto' : 'Bajo'
-                    const studiesList = [...event.studies, ...event.labs].map(s => s.serviceName)
+                    const eventTests = event.eventTests.map((test) => ({
+                        status: test.status as EventTestPipelineStatus,
+                    }))
+                    const studiesList = event.eventTests.map((test) => test.testNameSnapshot)
+                    const completenessLabel = getEventCompletenessLabel(eventTests)
+                    const completenessBadgeClass = getEventCompletenessBadgeClass(eventTests)
 
                     return (
                         <ValidationCard
@@ -51,8 +64,9 @@ export default async function ValidationPage() {
                             name={`${event.worker.firstName} ${event.worker.lastName}`}
                             company={event.worker.company?.name || '---'}
                             studies={studiesList.length > 0 ? studiesList : ['Sin Estudios']}
-                            risk={risk}
-                            phone={event.worker.phone} // Passing real phone
+                            completenessLabel={completenessLabel}
+                            completenessBadgeClass={completenessBadgeClass}
+                            phone={event.worker.phone}
                         />
                     )
                 })}
@@ -61,13 +75,23 @@ export default async function ValidationPage() {
     )
 }
 
-function ValidationCard({ id, name, company, studies, risk, phone }: { id: string, name: string, company: string, studies: string[], risk: 'Alto' | 'Medio' | 'Bajo', phone: string | null }) {
-    const risks: Record<string, string> = {
-        "Alto": "bg-red-50 text-red-600 border-red-100 shadow-red-100/50",
-        "Medio": "bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/50",
-        "Bajo": "bg-emerald-50 text-emerald-600 border-emerald-100 shadow-emerald-100/50"
-    }
-
+function ValidationCard({
+    id,
+    name,
+    company,
+    studies,
+    completenessLabel,
+    completenessBadgeClass,
+    phone,
+}: {
+    id: string
+    name: string
+    company: string
+    studies: string[]
+    completenessLabel: string
+    completenessBadgeClass: string
+    phone: string | null
+}) {
     const waLink = phone
         ? `https://wa.me/${phone}?text=Hola ${name}, su dictamen de ${company} está listo. Descárguelo aquí: https://ami.com/d/${id}`
         : `https://wa.me/?text=Hola ${name}, su dictamen de ${company} está listo. Descárguelo aquí: https://ami.com/d/${id}`
@@ -77,12 +101,14 @@ function ValidationCard({ id, name, company, studies, risk, phone }: { id: strin
             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-bl-full"></div>
 
             <div className="p-8">
-                <div className="flex justify-between items-start mb-6">
-                    <div>
+                <div className="flex justify-between items-start mb-6 gap-3">
+                    <div className="min-w-0">
                         <h3 className="font-black text-slate-800 text-lg uppercase tracking-tight group-hover:text-indigo-600 transition-colors leading-tight">{name}</h3>
                         <p className="text-xs font-bold text-slate-400 mt-1">{company}</p>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black border uppercase tracking-widest ${risks[risk]}`}>{risk}</span>
+                    <span className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black border uppercase tracking-widest ${completenessBadgeClass}`}>
+                        {completenessLabel}
+                    </span>
                 </div>
 
                 <div className="space-y-3 mb-8">
