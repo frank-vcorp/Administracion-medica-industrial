@@ -14,10 +14,63 @@ import { useRouter } from 'next/navigation'
 import AppointmentFormModal from '@/components/AppointmentFormModal'
 import CorroborationModal from '@/components/CorroborationModal'
 import RescheduleAppointmentModal from '@/components/RescheduleAppointmentModal'
+import { WeeklyAppointmentsModal } from '@/components/appointments/WeeklyAppointmentsModal'
 import Link from 'next/link'
 
 /** Citas que ocupan cupo visible en la agenda del día. */
 const AGENDA_SLOT_STATUSES = new Set(['SCHEDULED', 'CONFIRMED'])
+
+function formatLocalDateString(date: Date): string {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
+function addDaysToDateString(dateStr: string, days: number): string {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+    date.setDate(date.getDate() + days)
+    return formatLocalDateString(date)
+}
+
+function appointmentLocalDateString(scheduledAt: Date): string {
+    const aptDate = new Date(scheduledAt)
+    return formatLocalDateString(aptDate)
+}
+
+function formatDayHeading(dateStr: string): string {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+    return date.toLocaleDateString('es-MX', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+    })
+}
+
+function groupAppointmentsByHour(
+    items: AppointmentWithWorker[],
+    dateStr: string,
+): Record<number, AppointmentWithWorker[]> {
+    return items
+        .filter((apt) => AGENDA_SLOT_STATUSES.has(apt.status))
+        .reduce((acc, apt) => {
+            if (appointmentLocalDateString(apt.scheduledAt) !== dateStr) return acc
+            const hour = new Date(apt.scheduledAt).getHours()
+            if (!acc[hour]) acc[hour] = []
+            acc[hour].push(apt)
+            return acc
+        }, {} as Record<number, AppointmentWithWorker[]>)
+}
+
+function countAgendaForDate(items: AppointmentWithWorker[], dateStr: string): number {
+    return items.filter(
+        (apt) =>
+            AGENDA_SLOT_STATUSES.has(apt.status) &&
+            appointmentLocalDateString(apt.scheduledAt) === dateStr,
+    ).length
+}
 
 /**
  * Vista de Gestión de citas Premium v2.2
@@ -50,6 +103,7 @@ interface Branch {
 
 export default function AppointmentsPage() {
     const [appointments, setAppointments] = useState<AppointmentWithWorker[]>([])
+    const [nextDayAppointments, setNextDayAppointments] = useState<AppointmentWithWorker[]>([])
     const [branches, setBranches] = useState<Branch[]>([])
     const [selectedBranchId, setSelectedBranchId] = useState<string>('')
     const [loading, setLoading] = useState(true)
@@ -57,14 +111,7 @@ export default function AppointmentsPage() {
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
     // IMPL-20260318-08: Estado del modal de corroboración
     const [corroborationData, setCorroborationData] = useState<Parameters<typeof CorroborationModal>[0]['appointment'] | null>(null)
-    const [selectedDate, setSelectedDate] = useState<string>(() => {
-        // Fix: Usar fecha local real para el input default, no UTC
-        const now = new Date()
-        const year = now.getFullYear()
-        const month = String(now.getMonth() + 1).padStart(2, '0')
-        const day = String(now.getDate()).padStart(2, '0')
-        return `${year}-${month}-${day}`
-    })
+    const [selectedDate, setSelectedDate] = useState<string>(() => formatLocalDateString(new Date()))
     const [error, setError] = useState<string | null>(null)
     const [checkInError, setCheckInError] = useState<string | null>(null)
     const [rescheduleApt, setRescheduleApt] = useState<AppointmentWithWorker | null>(null)
@@ -73,6 +120,7 @@ export default function AppointmentsPage() {
     const [inviteLink, setInviteLink] = useState<string | null>(null)
     const [inviteLoading, setInviteLoading] = useState(false)
     const [inviteError, setInviteError] = useState<string | null>(null)
+    const [weekModalOpen, setWeekModalOpen] = useState(false)
     const _router = useRouter()
     void _router
 
@@ -86,17 +134,30 @@ export default function AppointmentsPage() {
         })
     }, [])
 
+    const nextDate = addDaysToDateString(selectedDate, 1)
+
     const loadData = async () => {
         if (!selectedBranchId) return // Esperar a tener sucursal seleccionada
 
         setLoading(true)
         setError(null)
         try {
-            const result = await getAppointments(selectedDate, selectedBranchId)
-            if (result.success) {
-                setAppointments(result.appointments as unknown as AppointmentWithWorker[] || [])
+            const [todayResult, tomorrowResult] = await Promise.all([
+                getAppointments(selectedDate, selectedBranchId),
+                getAppointments(nextDate, selectedBranchId),
+            ])
+            if (todayResult.success) {
+                setAppointments(todayResult.appointments as unknown as AppointmentWithWorker[] || [])
             } else {
-                setError(result.error || 'No se pudieron cargar las citas.')
+                setError(todayResult.error || 'No se pudieron cargar las citas.')
+                return
+            }
+            if (tomorrowResult.success) {
+                setNextDayAppointments(
+                    tomorrowResult.appointments as unknown as AppointmentWithWorker[] || [],
+                )
+            } else {
+                setNextDayAppointments([])
             }
         } catch {
             setError('Error de conexión al cargar la agenda.')
@@ -112,22 +173,8 @@ export default function AppointmentsPage() {
         }
     }, [selectedDate, selectedBranchId])
 
-    const agendaAppointments = appointments.filter((a) => AGENDA_SLOT_STATUSES.has(a.status))
-
-    // Agrupar citas por hora (solo citas que ocupan cupo en la agenda)
-    const groupedAppointments = agendaAppointments.reduce((acc, apt) => {
-        const aptDate = new Date(apt.scheduledAt);
-        // Construir fecha local YYYY-MM-DD para comparar con selectedDate
-        const aptDateString = `${aptDate.getFullYear()}-${String(aptDate.getMonth() + 1).padStart(2, '0')}-${String(aptDate.getDate()).padStart(2, '0')}`;
-        
-        // Si la cita no corresponde al día seleccionado (por diferencias de timezone traídas del server), la ignoramos visualmente
-        if (aptDateString !== selectedDate) return acc;
-
-        const hour = aptDate.getHours();
-        if (!acc[hour]) acc[hour] = [];
-        acc[hour].push(apt);
-        return acc;
-    }, {} as Record<number, AppointmentWithWorker[]>);
+    const groupedAppointments = groupAppointmentsByHour(appointments, selectedDate)
+    const groupedNextDayAppointments = groupAppointmentsByHour(nextDayAppointments, nextDate)
 
     // Obtener configuración de la sucursal seleccionada
     const currentBranch = branches.find(b => b.id === selectedBranchId);
@@ -187,7 +234,7 @@ export default function AppointmentsPage() {
     )
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
+        <div className="max-w-[90rem] mx-auto space-y-8 animate-in fade-in duration-500">
             {/* Header Area */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -215,8 +262,15 @@ export default function AppointmentsPage() {
                             ))}
                         </select>
                     </div>
-                    <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm flex items-center gap-2">
-                        <span className="text-slate-400">📅</span>
+                    <div className="bg-white border border-slate-200 px-2 py-2 rounded-xl shadow-sm flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={() => setWeekModalOpen(true)}
+                            className="rounded-lg px-2 py-1 text-sm font-bold text-violet-700 hover:bg-violet-50 transition-colors"
+                            title="Ver calendario de la semana"
+                        >
+                            🗓️
+                        </button>
                         <input 
                             type="date" 
                             value={selectedDate}
@@ -243,122 +297,48 @@ export default function AppointmentsPage() {
                     </button>
                 </div>
             )}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Pacientes citados" value={agendaAppointments.filter(a => {
-                    const aptDate = new Date(a.scheduledAt)
-                    const aptDateString = `${aptDate.getFullYear()}-${String(aptDate.getMonth() + 1).padStart(2, '0')}-${String(aptDate.getDate()).padStart(2, '0')}`
-                    return aptDateString === selectedDate
-                }).length} color="blue" />
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <StatCard label="Pacientes citados" value={countAgendaForDate(appointments, selectedDate)} color="blue" />
+                <StatCard label="Citados día siguiente" value={countAgendaForDate(nextDayAppointments, nextDate)} color="indigo" />
                 <StatCard label="Pacientes con pruebas pendientes" value={appointments.filter(a => a.status === 'SCHEDULED').length} color="amber" />
                 <StatCard label="Pacientes con atención completa" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
                 <StatCard label="no se presentó" value={appointments.filter(a => a.status === 'NO_SHOW').length} color="slate" />
             </div>
 
-            {/* Agenda Timeline View */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
-                <div className="p-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <h2 className="font-bold text-slate-700 uppercase tracking-widest text-xs">agenda del día</h2>
-                    <div className="flex gap-2">
-                        <span className="w-3 h-3 rounded-full bg-blue-500 border border-white shadow-sm"></span>
-                        <span className="w-3 h-3 rounded-full bg-slate-300 border border-white shadow-sm"></span>
-                    </div>
-                </div>
-
-                <div className="divide-y divide-slate-100">
-                    {hours.map(hour => {
-                        const hourApts = groupedAppointments[hour] || [];
-                        const capacity = branchConfig.hourlyCapacity;
-                        const isFull = hourApts.length >= capacity;
-                        const isAlmostFull = hourApts.length >= capacity * 0.8;
-
-                        return (
-                            <div key={hour} className="flex flex-col md:flex-row border-b border-slate-100 last:border-0">
-                                {/* Time Block Header */}
-                                <div className="md:w-48 p-6 bg-slate-50/50 border-r border-slate-100 flex flex-col justify-center">
-                                    <div className="text-2xl font-black text-slate-800">
-                                        {hour.toString().padStart(2, '0')}:00
-                                    </div>
-                                    <div className="mt-2 flex items-center gap-2">
-                                        <div className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${isFull ? 'bg-red-100 text-red-700' : isAlmostFull ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                            {hourApts.length} / {capacity} Lugares
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Appointments List for this hour */}
-                                <div className="flex-grow p-4">
-                                    {hourApts.length === 0 ? (
-                                        <div className="h-full flex items-center justify-center text-slate-400 text-sm font-medium italic py-4">
-                                            Bloque disponible
-                                        </div>
-                                    ) : (
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                            {hourApts.map((apt) => (
-                                                <div key={apt.id} className="group bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-4 flex items-center gap-4 transition-all shadow-sm hover:shadow-md">
-                                                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
-                                                        👤
-                                                    </div>
-                                                    <div className="flex-grow min-w-0">
-                                                        <h3 className="font-bold text-slate-800 text-sm truncate">
-                                                            {apt.worker?.firstName} {apt.worker?.lastName}
-                                                        </h3>
-                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                            <span className="text-[10px] font-medium text-slate-500 truncate">{apt.company?.name}</span>
-                                                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">{apt.expedientId || 'PENDIENTE'}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                                                        <StatusBadge status={apt.status} />
-                                                        <div className="flex gap-1">
-                                                            <button
-                                                                onClick={() => setSelectedApt(apt)}
-                                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                                title="Ver Pase"
-                                                            >
-                                                                🎫
-                                                            </button>
-                                                            {apt.status === 'SCHEDULED' && (
-                                                                <button
-                                                                    onClick={() => setRescheduleApt(apt)}
-                                                                    className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                                                                    title="Reagendar"
-                                                                >
-                                                                    📅
-                                                                </button>
-                                                            )}
-                                                            {apt.status === 'SCHEDULED' && (
-                                                                <button
-                                                                    onClick={() => handleGenerateInvite(apt.id)}
-                                                                    className="p-1.5 text-violet-500 hover:text-violet-700 hover:bg-violet-50 rounded-lg transition-colors"
-                                                                    title="Generar enlace de prellenado"
-                                                                >
-                                                                    📩
-                                                                </button>
-                                                            )}
-                                                            {apt.status === 'SCHEDULED' && (
-                                                                <button
-                                                                    onClick={() => handleCheckIn(apt.id)}
-                                                                    disabled={checkingIn === apt.id}
-                                                                    className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-xs"
-                                                                    title="Check-in"
-                                                                >
-                                                                    {checkingIn === apt.id ? '...' : '▶'}
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )
-                    })}
-                </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+                <AgendaDayColumn
+                    title="Agenda del día"
+                    subtitle={formatDayHeading(selectedDate)}
+                    groupedAppointments={groupedAppointments}
+                    hours={hours}
+                    branchConfig={branchConfig}
+                    interactive
+                    onSelectTicket={setSelectedApt}
+                    onReschedule={setRescheduleApt}
+                    onGenerateInvite={handleGenerateInvite}
+                    onCheckIn={handleCheckIn}
+                    checkingIn={checkingIn}
+                />
+                <AgendaDayColumn
+                    title="Día siguiente"
+                    subtitle={formatDayHeading(nextDate)}
+                    groupedAppointments={groupedNextDayAppointments}
+                    hours={hours}
+                    branchConfig={branchConfig}
+                    preview
+                />
             </div>
 
             {/* IMPL-20260325-01: Modal de Invitación de Prellenado */}
+            <WeeklyAppointmentsModal
+                open={weekModalOpen}
+                onClose={() => setWeekModalOpen(false)}
+                anchorDate={selectedDate}
+                branchId={selectedBranchId}
+                branchName={currentBranch?.name}
+                onSelectDate={setSelectedDate}
+            />
+
             {inviteAptId && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
@@ -541,9 +521,156 @@ export default function AppointmentsPage() {
     )
 }
 
-function StatCard({ label, value, color }: { label: string, value: number, color: 'blue' | 'amber' | 'emerald' | 'slate' }) {
+function AgendaDayColumn({
+    title,
+    subtitle,
+    groupedAppointments,
+    hours,
+    branchConfig,
+    preview = false,
+    interactive = false,
+    onSelectTicket,
+    onReschedule,
+    onGenerateInvite,
+    onCheckIn,
+    checkingIn,
+}: {
+    title: string
+    subtitle: string
+    groupedAppointments: Record<number, AppointmentWithWorker[]>
+    hours: number[]
+    branchConfig: { hourlyCapacity: number }
+    preview?: boolean
+    interactive?: boolean
+    onSelectTicket?: (apt: AppointmentWithWorker) => void
+    onReschedule?: (apt: AppointmentWithWorker) => void
+    onGenerateInvite?: (aptId: string) => void
+    onCheckIn?: (aptId: string) => void
+    checkingIn?: string | null
+}) {
+    const total = Object.values(groupedAppointments).reduce((sum, list) => sum + list.length, 0)
+
+    return (
+        <div className={`bg-white rounded-3xl border shadow-xl shadow-slate-200/50 overflow-hidden ${preview ? 'border-indigo-200' : 'border-slate-200'}`}>
+            <div className={`p-5 border-b flex items-start justify-between gap-3 ${preview ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-200'}`}>
+                <div>
+                    <h2 className={`font-bold uppercase tracking-widest text-xs ${preview ? 'text-indigo-700' : 'text-slate-700'}`}>
+                        {title}
+                    </h2>
+                    <p className="mt-1 text-sm font-medium text-slate-600 capitalize">{subtitle}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${preview ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {total} citados
+                </span>
+            </div>
+
+            <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+                {hours.map((hour) => {
+                    const hourApts = groupedAppointments[hour] || []
+                    const capacity = branchConfig.hourlyCapacity
+                    const isFull = hourApts.length >= capacity
+                    const isAlmostFull = hourApts.length >= capacity * 0.8
+
+                    return (
+                        <div key={hour} className="flex flex-col border-b border-slate-100 last:border-0">
+                            <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/80 border-b border-slate-100">
+                                <div className="text-lg font-black text-slate-800">
+                                    {hour.toString().padStart(2, '0')}:00
+                                </div>
+                                <div className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${isFull ? 'bg-red-100 text-red-700' : isAlmostFull ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                    {hourApts.length} / {capacity}
+                                </div>
+                            </div>
+
+                            <div className="p-3">
+                                {hourApts.length === 0 ? (
+                                    <p className="py-3 text-center text-slate-400 text-sm italic">
+                                        Sin citas
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {hourApts.map((apt) => (
+                                            <div
+                                                key={apt.id}
+                                                className={`rounded-2xl border p-3 flex items-center gap-3 ${preview ? 'border-indigo-100 bg-indigo-50/40' : 'border-slate-200 bg-white hover:border-blue-300 shadow-sm'}`}
+                                            >
+                                                <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-base flex-shrink-0 border border-slate-100">
+                                                    👤
+                                                </div>
+                                                <div className="flex-grow min-w-0">
+                                                    <h3 className="font-bold text-slate-800 text-sm truncate">
+                                                        {apt.worker?.firstName} {apt.worker?.lastName}
+                                                    </h3>
+                                                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                                        <span className="text-[10px] font-medium text-slate-500 truncate">
+                                                            {apt.company?.name}
+                                                        </span>
+                                                        <span className="text-[9px] bg-white text-slate-500 px-1.5 py-0.5 rounded font-mono border border-slate-100">
+                                                            {apt.expedientId || 'PENDIENTE'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                                    <StatusBadge status={apt.status} />
+                                                    {interactive && onSelectTicket && onReschedule && onGenerateInvite && onCheckIn && (
+                                                        <div className="flex gap-1">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => onSelectTicket(apt)}
+                                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                title="Ver Pase"
+                                                            >
+                                                                🎫
+                                                            </button>
+                                                            {apt.status === 'SCHEDULED' && (
+                                                                <>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => onReschedule(apt)}
+                                                                        className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                        title="Reagendar"
+                                                                    >
+                                                                        📅
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => onGenerateInvite(apt.id)}
+                                                                        className="p-1.5 text-violet-500 hover:text-violet-700 hover:bg-violet-50 rounded-lg transition-colors"
+                                                                        title="Generar enlace de prellenado"
+                                                                    >
+                                                                        📩
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => onCheckIn(apt.id)}
+                                                                        disabled={checkingIn === apt.id}
+                                                                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-xs"
+                                                                        title="Check-in"
+                                                                    >
+                                                                        {checkingIn === apt.id ? '...' : '▶'}
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
+function StatCard({ label, value, color }: { label: string, value: number, color: 'blue' | 'indigo' | 'amber' | 'emerald' | 'slate' }) {
     const variants: Record<string, string> = {
         blue: "bg-blue-50 border-blue-100 text-blue-600",
+        indigo: "bg-indigo-50 border-indigo-100 text-indigo-600",
         amber: "bg-amber-50 border-amber-100 text-amber-600",
         emerald: "bg-emerald-50 border-emerald-100 text-emerald-600",
         slate: "bg-slate-50 border-slate-100 text-slate-600"

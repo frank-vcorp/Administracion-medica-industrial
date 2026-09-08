@@ -791,6 +791,55 @@ export async function getAppointmentForCorroboration(appointmentId: string) {
 }
 
 /**
+ * Citas de una semana (lunes–domingo) para una sucursal.
+ * @id AMI-SR-F-017 — vista semanal emergente en Gestión de citas
+ */
+export async function getAppointmentsForWeek(weekStartDate: string, branchId: string) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return { success: false, error: 'No autenticado' }
+    }
+
+    const [year, month, day] = weekStartDate.split('-').map(Number)
+    const weekStart = new Date(year, month - 1, day, 0, 0, 0, 0)
+    const weekEnd = new Date(year, month - 1, day + 6, 23, 59, 59, 999)
+
+    const startRange = new Date(weekStart)
+    startRange.setDate(startRange.getDate() - 1)
+    const endRange = new Date(weekEnd)
+    endRange.setDate(endRange.getDate() + 1)
+
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        branchId,
+        scheduledAt: { gte: startRange, lte: endRange },
+      },
+      include: {
+        worker: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            universalId: true,
+          },
+        },
+        company: { select: { name: true } },
+        branch: { select: { id: true, name: true } },
+      },
+      orderBy: { scheduledAt: 'asc' },
+    })
+
+    return { success: true, appointments }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al obtener citas de la semana',
+    }
+  }
+}
+
+/**
  * Obtiene todas las citas del día para todas las sucursales (vista de monitoreo multi-sucursal).
  * @id IMPL-20260318-08
  */

@@ -48,7 +48,7 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 
 | ID | Origen | Acción | Por qué revisar | Pregunta clave |
 |---|---|---|---|---|
-| R-01 | 🔗 Word + Minuta #5 | **Listado pacientes citados día siguiente** | Word solo renombró KPI; minuta pide listado nuevo | ¿Pantalla aparte o sección en Gestión de citas? ¿Solo lectura? |
+| R-01 | 🔗 Word + Minuta #5 | **Listado pacientes citados día siguiente** | Word solo renombró KPI; minuta pide listado nuevo | ✅ Hecho — columna «Día siguiente» en Gestión de citas |
 | R-02 | 🔗 Word + Minuta #18 | **Clic en pendientes → ir al paciente** con prueba pendiente | Implica navegación y filtro por estudio | ¿A expediente, papeleta o estudio específico? |
 | R-03 | 🔗 Word + Minuta #4 | **Barra de búsqueda general** | Word pide combinar listados; minuta pide búsqueda global | ✅ Hecho — barra en header; pacientes + expedientes + empresas (admin) |
 | R-04 | 🔗 Word + Minuta #17 | **Usuarios personalizados** / roles | Sin enum "Coordinador Médico" hoy | ⏸️ Diferido en `context/roles/` |
@@ -66,7 +66,7 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 | R-11 | 14 | **Encuesta satisfacción** pacientes | Francisco | 08/09 | Contenido + integración |
 | R-12 | 15 | Cargar pruebas: campimetría, ECG, consulta, certificado | Francisco | 08/09 | Catálogo + precios + combos |
 | R-13 | 16 | Cargar exámenes **Flowserve y Sodexo** | Francisco | 08/09 | Paquetes por empresa; datos fuente |
-| R-14 | 19 | Pre-presentación **capacitación** plataforma | Francisco | — | Proceso, no código |
+| ~~R-14~~ | ~~19~~ | ~~Pre-presentación **capacitación** plataforma~~ | — | — | ❌ Fuera de alcance — no es de este proyecto |
 
 ### B.3 Solo Word Renombramiento (no en minuta)
 
@@ -140,13 +140,17 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 
 **Ampliaciones futuras posibles:** citas del día, pruebas pendientes, historial clínico.
 
+### R-14 / Minuta #19 — Capacitación (2026-09-08, Frank)
+
+**Fuera de alcance** de este proyecto (proceso operativo / capacitación, no implementación en código).
+
 ---
 
 ## Referencias cruzadas
 
 | Tema | Word | Minuta | Roles |
 |---|---|---|---|
-| Pacientes citados | KPI rename ✅ | #5 listado día siguiente | Recepción / Coord. Médico |
+| Pacientes citados | KPI rename ✅ | #5 listado día siguiente ✅ | Recepción / Coord. Médico |
 | Pruebas pendientes | KPI rename ✅ | #18 clic → paciente | Recepción / Coord. Médico |
 | Búsqueda / listados | Combinar listados ✅ | #4 barra general ✅ | — |
 | Usuarios | Roles columna | #17 personalizados | `context/roles/` |
