@@ -5569,6 +5569,11 @@ class TestEspirometriaPrediagnosticRecommendationContextDEC20260824_02:
             espirometry_prompt.count("recommendation") > 0
         ), "El prompt debe seguir refiriéndose al campo singular `recommendation`"
 
+    def test_r06_prompt_includes_practical_recommendation_field(self, espirometry_prompt):
+        assert "CAMPO `practical_recommendation`" in espirometry_prompt
+        assert "R-06" in espirometry_prompt or "AMI-SR F-017 R-06" in espirometry_prompt
+        assert "SEGUIMIENTO ANUAL" in espirometry_prompt
+
     def test_prompt_no_minimax_for_prediagnosis(self):
         # DEC-20260824-02: "No usar Minimax para el diagnóstico: Minimax extrae;
         # prediagnóstico clínico usa proveedor clínico existente."

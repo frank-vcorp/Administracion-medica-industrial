@@ -5,13 +5,14 @@
  *
  * GUARDRAIL obligatorio (ARCH-20260326-16 §"Modo sombra clínica"):
  *   - Este panel NO sustituye el diagnóstico del médico.
- *   - El médico DEBE aceptar, editar o rechazar explícitamente antes de continuar.
+ *   - El médico valida explícitamente guardando la revisión (AMI-SR F-017 R-05).
  *   - El contenido IA NO puede propagarse a PDF oficial, dictamen ni aptitud.
  */
 "use client"
 
 import { useState, useTransition } from "react"
 import { submitDoctorStudyReview } from "@/actions/ai-prediagnosis.actions"
+import { resolvePracticalRecommendation } from "@/lib/clinical/practical-recommendations-predx"
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -48,6 +49,8 @@ interface AIPrediagnosisData {
   recommendation?: string | null
   recommendations?: string[] | null
   recommended_actions?: string[] | null
+  /** AMI-SR F-017 R-06: recomendación práctica para el reporte (textarea editable). */
+  practical_recommendation?: string | null
   non_conclusive_reason?: string | null
   calibration_source?: 'medical_calibration' | 'general_fallback' | null
   clinical_model_used?: string | null
@@ -220,6 +223,19 @@ function ConfidenceBar({ confidence }: { confidence: number }) {
   )
 }
 
+/**
+ * AMI-SR F-017 R-05: infiere el estatus de revisión sin botones de decisión.
+ * Texto idéntico al hallazgo sugerido → aceptado; cualquier cambio → editado.
+ */
+export function resolveDoctorReviewStatus(
+  suggestedSummary: string,
+  doctorDiagnosis: string,
+): 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED' {
+  return doctorDiagnosis.trim() === suggestedSummary.trim()
+    ? 'REVIEWED_ACCEPTED'
+    : 'REVIEWED_EDITED'
+}
+
 // ---------------------------------------------------------------------------
 // Formulario de revisión médica
 // ---------------------------------------------------------------------------
@@ -228,25 +244,27 @@ function DoctorReviewForm({
   prediagnosisSnapshotId,
   reviewerUserId,
   eventId,
-  suggestedRecommendations,
+  suggestedSummary,
+  suggestedPracticalRecommendations,
   onSubmitted,
 }: {
   prediagnosisSnapshotId: string
   reviewerUserId: string
   eventId: string
-  /** Texto sugerido por IA (solo placeholder / referencia visual). */
-  suggestedRecommendations?: string | null
+  /** Hallazgo sugerido por IA — pre-llena el cuadro de diagnóstico (R-05). */
+  suggestedSummary: string
+  /** Recomendación práctica — pre-llena el cuadro editable (R-06). */
+  suggestedPracticalRecommendations: string
   onSubmitted: () => void
 }) {
-  const [status, setStatus] = useState<'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED' | 'REVIEWED_REJECTED'>('REVIEWED_ACCEPTED')
-  const [doctorDiagnosis, setDoctorDiagnosis] = useState('')
-  const [doctorRecommendations, setDoctorRecommendations] = useState('')
+  const [doctorDiagnosis, setDoctorDiagnosis] = useState(() => suggestedSummary.trim())
+  const [doctorRecommendations, setDoctorRecommendations] = useState(
+    () => suggestedPracticalRecommendations.trim(),
+  )
   const [doctorNotes, setDoctorNotes] = useState('')
   const [aiAgreement, setAiAgreement] = useState<number | undefined>(undefined)
   const [aiUsefulness, setAiUsefulness] = useState<number | undefined>(undefined)
   const [differenceType, setDifferenceType] = useState('')
-  const [errorSeverity, setErrorSeverity] = useState('none')
-  const [errorCategory, setErrorCategory] = useState('')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
 
@@ -254,24 +272,27 @@ function DoctorReviewForm({
     e.preventDefault()
     setError('')
 
-    if (status === 'REVIEWED_EDITED' && !doctorDiagnosis.trim()) {
-      setError('Al editar, debes indicar el diagnóstico médico corregido.')
+    const trimmedDiagnosis = doctorDiagnosis.trim()
+    if (!trimmedDiagnosis) {
+      setError('Indica el diagnóstico o hallazgo médico antes de guardar.')
       return
     }
+
+    const doctorStatus = resolveDoctorReviewStatus(suggestedSummary, trimmedDiagnosis)
 
     startTransition(async () => {
       const result = await submitDoctorStudyReview({
         prediagnosisSnapshotId,
-        doctorStatus: status,
-        doctorDiagnosis: doctorDiagnosis || undefined,
+        doctorStatus,
+        doctorDiagnosis: trimmedDiagnosis,
         doctorRecommendations: doctorRecommendations || undefined,
         doctorNotes: doctorNotes || undefined,
         reviewedByUserId: reviewerUserId,
         aiAgreementScore: aiAgreement,
         aiUsefulnessScore: aiUsefulness,
         differenceType: differenceType || undefined,
-        errorSeverity,
-        errorCategory: errorCategory || undefined,
+        errorSeverity: 'none',
+        errorCategory: undefined,
         eventId,
       })
 
@@ -297,67 +318,36 @@ function DoctorReviewForm({
     <form onSubmit={handleSubmit} className="space-y-4 pt-4 border-t border-slate-100">
       <h4 className="text-sm font-bold text-slate-700">Revisión médica obligatoria</h4>
 
-      {/* Estado de revisión */}
       <div>
-        <label className="block text-xs font-semibold text-slate-500 mb-1.5">Decisión *</label>
-        <div className="flex gap-2 flex-wrap">
-          {(
-            [
-              ['REVIEWED_ACCEPTED', '✅ Acepto la sugerencia', 'border-emerald-300 bg-emerald-50 text-emerald-700'],
-              ['REVIEWED_EDITED', '✏️ Edito el diagnóstico', 'border-blue-300 bg-blue-50 text-blue-700'],
-              ['REVIEWED_REJECTED', '❌ Rechazo la sugerencia', 'border-red-300 bg-red-50 text-red-700'],
-            ] as const
-          ).map(([val, label, cls]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => setStatus(val)}
-              className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-all ${
-                status === val ? cls + ' shadow-sm' : 'border-slate-200 text-slate-500 bg-white hover:bg-slate-50'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <label className="block text-xs font-semibold text-slate-500 mb-1">
+          Diagnóstico / hallazgo médico *
+        </label>
+        <p className="text-[10px] text-slate-400 mb-1.5">
+          Pre-llenado con el hallazgo sugerido. Edítalo si necesitas ajustarlo antes de guardar.
+        </p>
+        <textarea
+          value={doctorDiagnosis}
+          onChange={(e) => setDoctorDiagnosis(e.target.value)}
+          rows={3}
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 outline-none resize-none"
+        />
       </div>
 
-      {/* Diagnóstico médico (requerido si edita) */}
-      {(status === 'REVIEWED_EDITED' || status === 'REVIEWED_ACCEPTED') && (
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1">
-            Diagnóstico / hallazgo médico{status === 'REVIEWED_EDITED' ? ' *' : ' (opcional)'}
-          </label>
-          <textarea
-            value={doctorDiagnosis}
-            onChange={(e) => setDoctorDiagnosis(e.target.value)}
-            rows={2}
-            placeholder="Describa el diagnóstico o hallazgo desde su perspectiva clínica..."
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 outline-none resize-none"
-          />
-        </div>
-      )}
-
-      {/* Recomendaciones validadas por el médico */}
-      {(status === 'REVIEWED_ACCEPTED' || status === 'REVIEWED_EDITED') && (
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1">
-            Recomendaciones (opcional)
-          </label>
-          {suggestedRecommendations && (
-            <p className="text-[10px] text-slate-400 mb-1">
-              Sugerencia IA: {suggestedRecommendations}
-            </p>
-          )}
-          <textarea
-            value={doctorRecommendations}
-            onChange={(e) => setDoctorRecommendations(e.target.value)}
-            rows={3}
-            placeholder="Indique recomendaciones clínicas para el paciente (seguimiento, medidas, restricciones temporales...)"
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 outline-none resize-none"
-          />
-        </div>
-      )}
+      <div>
+        <label className="block text-xs font-semibold text-slate-500 mb-1">
+          Recomendaciones (opcional)
+        </label>
+        <p className="text-[10px] text-slate-400 mb-1.5">
+          Pre-llenado con la recomendación práctica sugerida. Edítala si necesitas ajustarla antes de guardar.
+        </p>
+        <textarea
+          value={doctorRecommendations}
+          onChange={(e) => setDoctorRecommendations(e.target.value)}
+          rows={3}
+          placeholder="Indique recomendaciones clínicas para el paciente (seguimiento, medidas, restricciones temporales...)"
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 outline-none resize-none"
+        />
+      </div>
 
       {/* Notas adicionales */}
       <div>
@@ -415,39 +405,6 @@ function DoctorReviewForm({
               <option value="ai_non_conclusive">IA no fue concluyente</option>
             </select>
           </div>
-          {status === 'REVIEWED_REJECTED' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Severidad del error</label>
-                <select
-                  value={errorSeverity}
-                  onChange={(e) => setErrorSeverity(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded px-2 py-1 outline-none"
-                >
-                  <option value="none">Sin error relevante</option>
-                  <option value="low">Bajo</option>
-                  <option value="medium">Medio</option>
-                  <option value="high">Alto</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Categoría del error</label>
-                <select
-                  value={errorCategory}
-                  onChange={(e) => setErrorCategory(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded px-2 py-1 outline-none"
-                >
-                  <option value="">— Selecciona —</option>
-                  <option value="omission">Omisión de hallazgo</option>
-                  <option value="wrong_interpretation">Interpretación incorrecta</option>
-                  <option value="unsupported_claim">Afirmación sin respaldo</option>
-                  <option value="low_document_quality">Calidad documental baja</option>
-                  <option value="insufficient_context">Contexto insuficiente</option>
-                  <option value="other">Otro</option>
-                </select>
-              </div>
-            </div>
-          )}
         </div>
       </details>
 
@@ -503,6 +460,7 @@ export default function StudyAIPrediagnosisPanel({
   // que el nuevo prompt contextualizado (IMPL-20260824-06) genere
   // `recommendation` no nulo.
   const recommendationsList = resolveRecommendations(predxData)
+  const practicalRecommendationText = resolvePracticalRecommendation(predxData, studyType)
   const medgemmaFailure = isNonConclusive && (
     clinicalProvider === 'featherless' ||
     /featherless|medgemma/i.test(predxData.non_conclusive_reason ?? '')
@@ -779,11 +737,8 @@ export default function StudyAIPrediagnosisPanel({
                 prediagnosisSnapshotId={prediagnosisSnapshotId}
                 reviewerUserId={reviewerUserId}
                 eventId={eventId}
-                suggestedRecommendations={
-                  recommendationsList?.length
-                    ? recommendationsList.join(' · ')
-                    : null
-                }
+                suggestedSummary={predxData.summary ?? ''}
+                suggestedPracticalRecommendations={practicalRecommendationText}
                 onSubmitted={() => {
                   setReviewed(true)
                   setShowReviewForm(false)

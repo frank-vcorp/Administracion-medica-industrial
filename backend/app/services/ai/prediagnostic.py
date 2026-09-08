@@ -309,6 +309,17 @@ REGLAS ESPECÍFICAS PARA AUDIOMETRÍA
 6. Si la `completitud_documental` es insuficiente o las frecuencias clave faltan, usa `AI_NON_CONCLUSIVE` o un resumen prudente con limitaciones explícitas.
 7. La recommendation debe ser prudente y ocupacional: seguimiento, vigilancia, correlación clínica, comparación con estudios previos, o repetición del estudio si la calidad es insuficiente.
 
+CAMPO `practical_recommendation` — OBLIGATORIO cuando el estudio es concluyente (AMI-SR F-017 R-06):
+- Texto PRÁCTICO para el reporte entregado al contratante (vigilancia ocupacional, EPP, seguimiento).
+- Debe CORRESPONDER al mismo hallazgo/patrón que `summary` y `recommendation`.
+- Estilo AMI: frases cortas en MAYÚSCULAS, separadas por espacio (sin numeración).
+- NO repitas la redacción clínica prudente de `recommendation`.
+- NO declares aptitud laboral ni dictamen final.
+- Ejemplos orientativos:
+   * Audición normal bilateral → "AUDIOMETRÍA DE SEGUIMIENTO ANUAL"
+   * Hipoacusia conductiva/sensorineural/mixta → "USO ADECUADO DE TAPONES AUDITIVOS AUDIOMETRÍA DE SEGUIMIENTO EN 12 SEMANAS POSTERIORMENTE CADA AÑO"
+   * Estudio no concluyente o calidad insuficiente → "REPETIR AUDIOMETRÍA CON CONDICIONES ADECUADAS DE CABINA Y TÉCNICA" y `practical_recommendation` coherente; si no aplica, null.
+
 CRITERIOS DE REFERENCIA ORIENTATIVOS
 - Audición dentro de límites normales: umbrales <= 25 dB en frecuencias relevantes disponibles.
 - Hipoacusia leve: 26-40 dB.
@@ -337,6 +348,7 @@ Responde con esta estructura exacta:
   "limitations": ["Limitación 1", "Limitación 2"],
   "red_flags": [],
   "recommendation": "Recomendación prudente y no prescriptiva",
+  "practical_recommendation": "AUDIOMETRÍA DE SEGUIMIENTO ANUAL",
   "non_conclusive_reason": null,
   "resumen_por_oido": {
     "oido_derecho": {
@@ -481,6 +493,18 @@ CAMPO `recommendation` — OBLIGATORIO, NO NULO:
 - Longitud: una a tres oraciones (≤ 320 caracteres). El frontend la
   renderiza tal cual.
 
+CAMPO `practical_recommendation` — OBLIGATORIO cuando el estudio es concluyente (AMI-SR F-017 R-06):
+- Texto PRÁCTICO para el reporte entregado al contratante (vigilancia ocupacional, EPP, seguimiento).
+- Debe CORRESPONDER al mismo patrón/hallazgo que `summary` y `recommendation`.
+- Estilo AMI: frases cortas en MAYÚSCULAS, separadas por espacio (sin numeración).
+- NO repitas la redacción clínica prudente de `recommendation`.
+- NO declares aptitud laboral ni dictamen final.
+- Ejemplos orientativos según patrón:
+   * Función NORMAL → "USO ADECUADO DE EQUIPO DE PROTECCIÓN ESPIROMETRÍAS DE SEGUIMIENTO ANUAL"
+   * Patrón SUGESTIVO DE RESTRICCIÓN → "INDICAR EJERCICIOS RESPIRATORIOS SE SUGIERE COMPLEMENTAR CON RADIOGRAFÍA DE TÓRAX USO ADECUADO DE EQUIPO DE PROTECCIÓN ESPIROMETRÍAS DE SEGUIMIENTO EN 12 SEMANAS"
+   * Patrón OBSTRUCTIVO o MIXTO → "INDICAR EJERCICIOS RESPIRATORIOS USO ADECUADO DE EQUIPO DE PROTECCIÓN RESPIRATORIA ESPIROMETRÍAS DE SEGUIMIENTO EN 12 SEMANAS"
+   * Calidad dudosa o AI_NON_CONCLUSIVE → "REPETIR ESPIROMETRÍA CON TÉCNICA ADECUADA ANTES DE INTERPRETAR" (o null si no aplica)
+
 {calibration_context}
 
 Parámetros extraídos:
@@ -505,6 +529,7 @@ Responde en JSON con esta estructura exacta:
   "limitations": ["Interpretación requiere valores predichos según edad, talla y sexo; confirmar con espirometría previa si disponible"],
   "red_flags": [],
   "recommendation": "Correlacionar con espirometría previa y valoración médica complementaria. Considerar pletismografía si se confirma patrón sugestivo de restricción.",
+  "practical_recommendation": "INDICAR EJERCICIOS RESPIRATORIOS SE SUGIERE COMPLEMENTAR CON RADIOGRAFÍA DE TÓRAX USO ADECUADO DE EQUIPO DE PROTECCIÓN ESPIROMETRÍAS DE SEGUIMIENTO EN 12 SEMANAS",
   "non_conclusive_reason": null
 }""",
 
@@ -1289,6 +1314,18 @@ Responde en JSON con esta estructura exacta:
                 result.non_conclusive_reason = reason
                 result.limitations.append(reason)
                 print(f"⚠️ Confianza baja — marcado como AI_NON_CONCLUSIVE")
+            # AMI-SR F-017 R-06: asegurar recomendación práctica para espiro/audio.
+            if study_type in ("Espirometria", "Audiometria"):
+                from app.services.ai.practical_recommendations import derive_practical_recommendation
+
+                if not (result.practical_recommendation or "").strip():
+                    derived = derive_practical_recommendation(
+                        study_type,
+                        extracted_data,
+                        result.model_dump(),
+                    )
+                    if derived:
+                        result.practical_recommendation = derived
             return result
         except Exception as e:
             print(f"⚠️ Error al parsear prediagnóstico IA: {e}. Raw: {raw_result}")

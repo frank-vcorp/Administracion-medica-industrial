@@ -534,6 +534,14 @@ class AIPrediagnosisResult(BaseModel):
             "None si el estudio es no concluyente o el campo no aplica."
         )
     )
+    # AMI-SR F-017 R-06: recomendación práctica para el reporte / vigilancia ocupacional.
+    practical_recommendation: Optional[str] = Field(
+        default=None,
+        description=(
+            "Recomendación práctica para el entregable PDF (EPP, seguimiento, derivaciones). "
+            "Debe corresponder al hallazgo identificado. Distinta de `recommendation` clínica."
+        ),
+    )
     non_conclusive_reason: Optional[str] = Field(
         default=None,
         description="Si clinical_state=AI_NON_CONCLUSIVE, razón explícita"
