@@ -57,8 +57,6 @@ import { GlobalSearchLauncher } from '@/components/GlobalSearchLauncher'
 
 type Icon = ComponentType<LucideProps>
 
-const iconClass = 'h-[18px] w-[18px] shrink-0 stroke-[1.5]'
-
 function NavItem({
   href,
   icon: Icon,
@@ -78,23 +76,26 @@ function NavItem({
   const hrefPath = href.split('?')[0]
   const isActive = pathname === hrefPath
 
-  const pad = collapsed ? 'py-3' : secondary ? 'py-2 ml-3' : 'py-2.5'
-  const inactive = secondary
-    ? `${collapsed ? 'py-2' : 'py-2 text-sm ml-3'} text-ami-gray hover:bg-ami-secondary/5 hover:text-ami-secondary`
-    : 'py-2.5 text-ami-gray hover:bg-ami-secondary/5 hover:text-ami-secondary'
-
   return (
     <Link
       href={href}
       title={collapsed ? label : undefined}
       onClick={onNavigate}
-      className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3 px-3'} rounded-lg transition-colors ${
+      className={`flex items-center rounded-lg transition-colors ${
+        collapsed ? 'justify-center py-2' : `gap-3 px-3 py-1.5 ${secondary ? 'ml-2 text-sm' : ''}`
+      } ${
         isActive
-          ? `${pad} bg-ami-secondary/10 text-ami-secondary font-medium`
-          : inactive
+          ? 'bg-[#592c82]/10 font-semibold text-[#592c82]'
+          : 'text-[#636569] hover:bg-[#592c82]/5 hover:text-[#592c82]'
       }`}
     >
-      <Icon className={iconClass} aria-hidden="true" />
+      <span
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+          isActive ? 'bg-[#592c82] text-white' : 'bg-[#592c82]/15 text-[#592c82]'
+        }`}
+      >
+        <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden="true" />
+      </span>
       {!collapsed && <span>{label}</span>}
     </Link>
   )
@@ -263,7 +264,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen bg-ami-surface">
-      <aside className={`${isEventWorkspace ? 'w-20' : 'w-64'} bg-white text-ami-gray hidden md:flex md:flex-col flex-shrink-0 border-r border-ami-secondary/10 transition-all duration-200`}>
+      <aside className={`${isEventWorkspace ? 'w-20' : 'w-64'} hidden md:flex md:flex-col flex-shrink-0 bg-white text-[#636569] border-l-[3px] border-l-[#592c82] border-r border-r-[#f0f0f0] transition-all duration-200`}>
         <div className={`border-b border-ami-secondary/10 ${isEventWorkspace ? 'p-4' : 'px-5 py-5'} flex-shrink-0`}>
           {isEventWorkspace ? (
             <BrandLogo collapsed className="mx-auto" />
@@ -303,7 +304,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             className="absolute inset-0 bg-ami-secondary/40"
             onClick={closeMobileNav}
           />
-          <aside className="relative z-10 flex h-full w-[min(100%,20rem)] flex-col bg-white text-ami-gray shadow-2xl">
+          <aside className="relative z-10 flex h-full w-[min(100%,20rem)] flex-col bg-white text-[#636569] shadow-2xl border-l-[3px] border-l-[#592c82]">
             <div className="flex items-center justify-between border-b border-ami-secondary/10 p-4">
               <div>
                 <BrandLogo className="mb-2 max-h-10 w-auto" />
@@ -362,7 +363,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         {!isEventWorkspace && (
-          <header className="hidden h-16 flex-shrink-0 items-center justify-between border-b border-ami-secondary/15 bg-white px-8 md:flex">
+          <header className="hidden h-16 flex-shrink-0 items-center justify-between border-b-[3px] border-b-[#00afaa] bg-white px-8 md:flex">
             <div>
               <h2 className="text-lg font-semibold text-ami-secondary">Panel de Control</h2>
             </div>
