@@ -11,8 +11,8 @@ type BrandLogoProps = {
  * Logo SME — uso en shell, login y cualquier pantalla autenticada.
  */
 export function BrandLogo({ collapsed = false, className = '' }: BrandLogoProps) {
-  const width = collapsed ? 48 : 200
-  const height = collapsed ? 48 : 52
+  const width = collapsed ? 56 : 240
+  const height = collapsed ? 56 : 72
 
   return (
     <Image

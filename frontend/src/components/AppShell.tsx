@@ -265,17 +265,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen bg-ami-surface">
       <aside className={`${isEventWorkspace ? 'w-20' : 'w-64'} hidden md:flex md:flex-col flex-shrink-0 bg-white text-[#636569] border-l-[3px] border-l-[#592c82] border-r border-r-[#f0f0f0] transition-all duration-200`}>
-        <div className={`border-b border-ami-secondary/10 ${isEventWorkspace ? 'p-4' : 'px-5 py-5'} flex-shrink-0`}>
+        <div className={`border-b border-[#f0f0f0] ${isEventWorkspace ? 'p-3' : 'px-4 py-5'} flex-shrink-0`}>
           {isEventWorkspace ? (
             <BrandLogo collapsed className="mx-auto" />
           ) : (
-            <>
-              <BrandLogo className="mb-3 max-h-12 w-auto" />
-              <h1 className="text-base font-semibold text-ami-secondary leading-tight">
-                Residente Digital
-              </h1>
-              <p className="text-xs text-ami-gray mt-0.5">AMI Salud Responsable</p>
-            </>
+            <BrandLogo className="h-[4.5rem] w-full max-h-[4.5rem]" />
           )}
         </div>
 
@@ -305,11 +299,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
             onClick={closeMobileNav}
           />
           <aside className="relative z-10 flex h-full w-[min(100%,20rem)] flex-col bg-white text-[#636569] shadow-2xl border-l-[3px] border-l-[#592c82]">
-            <div className="flex items-center justify-between border-b border-ami-secondary/10 p-4">
-              <div>
-                <BrandLogo className="mb-2 max-h-10 w-auto" />
-                <p className="text-sm font-semibold text-ami-secondary">Residente Digital</p>
-              </div>
+            <div className="flex items-center justify-between border-b border-[#f0f0f0] p-4">
+              <BrandLogo className="h-14 w-[12rem] max-h-14" />
               <button
                 type="button"
                 aria-label="Cerrar menú de navegación"
@@ -358,7 +349,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           >
             <Menu className="h-5 w-5 stroke-[1.5]" />
           </button>
-          <BrandLogo className="max-h-8 w-auto" />
+          <BrandLogo className="max-h-10 w-auto" />
           <span className="w-10" aria-hidden="true" />
         </header>
 
