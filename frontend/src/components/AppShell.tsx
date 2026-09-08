@@ -40,15 +40,22 @@ function NavItem({
   collapsed?: boolean
   onNavigate?: () => void
 }) {
+  const pathname = usePathname()
+  const hrefPath = href.split('?')[0]
+  const isActive = pathname === hrefPath
+
+  const pad = collapsed ? 'py-3' : secondary ? 'py-2 ml-4' : 'py-3'
+  const inactive = secondary
+    ? `${collapsed ? 'py-2' : 'py-2 text-sm ml-4'} text-white/70 hover:bg-white/10 hover:text-white`
+    : 'py-3 text-white/80 hover:bg-white/10 hover:text-white'
+
   return (
     <Link
       href={href}
       title={collapsed ? label : undefined}
       onClick={onNavigate}
-      className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3 px-4'} rounded-lg transition-colors ${
-        secondary
-          ? `${collapsed ? 'py-2 text-slate-400 hover:bg-slate-800 hover:text-white' : 'py-2 text-sm text-slate-400 hover:bg-slate-800 hover:text-white ml-4'}`
-          : 'py-3 text-slate-300 hover:bg-slate-800 hover:text-white'
+      className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3 px-4'} rounded-xl transition-colors ${
+        isActive ? `${pad} bg-ami-primary text-white` : inactive
       }`}
     >
       <span>{icon}</span>
@@ -59,12 +66,12 @@ function NavItem({
 
 function NavSection({ label, collapsed }: { label: string; collapsed?: boolean }) {
   if (collapsed) {
-    return <div className="mx-3 my-2 border-t border-slate-800" />
+    return <div className="mx-3 my-2 border-t border-white/15" />
   }
 
   return (
     <div className="pt-4 pb-2">
-      <p className="text-xs uppercase text-slate-500 font-semibold px-2">{label}</p>
+      <p className="text-xs uppercase text-white/50 font-semibold px-2 tracking-wider">{label}</p>
     </div>
   )
 }
@@ -80,8 +87,8 @@ function SidebarAccount({
 }) {
   if (collapsed) {
     const account = (
-      <div className="px-2 pb-3 pt-2 border-t border-slate-800">
-        <div className="w-10 h-10 mx-auto rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
+      <div className="px-2 pb-3 pt-2 border-t border-white/15">
+        <div className="w-10 h-10 mx-auto rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-xs font-bold text-white">
           {(fullName || 'U').trim().charAt(0).toUpperCase()}
         </div>
       </div>
@@ -90,15 +97,15 @@ function SidebarAccount({
   }
 
   const account = (
-    <div className="px-4 pb-4 pt-3 border-t border-slate-800">
-      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cuenta</p>
-      <div className={`mt-2 flex items-center gap-3 rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 ${profileHref ? 'hover:bg-slate-700 transition-colors cursor-pointer' : ''}`}>
-        <div className="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-200 shrink-0">
+    <div className="px-4 pb-4 pt-3 border-t border-white/15">
+      <p className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">Cuenta</p>
+      <div className={`mt-2 flex items-center gap-3 rounded-xl bg-white/10 border border-white/15 px-3 py-2 ${profileHref ? 'hover:bg-white/15 transition-colors cursor-pointer' : ''}`}>
+        <div className="w-9 h-9 rounded-lg bg-ami-accent text-ami-secondary flex items-center justify-center text-sm font-bold shrink-0">
           {(fullName || 'U').trim().charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-200 truncate">{fullName || 'Usuario'}</p>
-          <p className="text-xs text-slate-400">Sesión activa</p>
+          <p className="text-sm font-medium text-white truncate">{fullName || 'Usuario'}</p>
+          <p className="text-xs text-white/60">Sesión activa</p>
         </div>
       </div>
     </div>
@@ -226,19 +233,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, [mobileNavOpen])
 
   return (
-    <div className="flex h-screen bg-slate-50">
-      {/* Sidebar desktop — oculto en móvil (< md) */}
-      <aside className={`${isEventWorkspace ? 'w-20' : 'w-64'} bg-slate-900 text-white hidden md:flex md:flex-col flex-shrink-0 transition-all duration-200`}>
+    <div className="flex h-screen bg-ami-surface">
+      {/* Sidebar desktop — púrpura institucional AMI */}
+      <aside className={`${isEventWorkspace ? 'w-20' : 'w-64'} bg-ami-secondary text-white hidden md:flex md:flex-col flex-shrink-0 transition-all duration-200`}>
         <div className={`${isEventWorkspace ? 'p-4' : 'p-6'} flex-shrink-0`}>
           {isEventWorkspace ? (
             <BrandLogo collapsed className="mx-auto" />
           ) : (
             <>
-              <BrandLogo className="mb-3 max-h-12 w-auto" />
-              <h1 className="text-lg font-bold text-slate-100 leading-tight">
+              <div className="mb-3 rounded-2xl bg-white p-2">
+                <BrandLogo className="max-h-12 w-auto" />
+              </div>
+              <h1 className="text-lg font-bold text-white leading-tight">
                 Residente Digital
               </h1>
-              <p className="text-xs text-slate-400 mt-1">Administración Médica v0.1</p>
+              <p className="text-xs text-white/60 mt-1">AMI Salud Responsable</p>
             </>
           )}
         </div>
@@ -266,20 +275,22 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             aria-label="Cerrar menú"
-            className="absolute inset-0 bg-slate-950/60"
+            className="absolute inset-0 bg-ami-secondary-hover/70"
             onClick={closeMobileNav}
           />
-          <aside className="relative z-10 flex h-full w-[min(100%,20rem)] flex-col bg-slate-900 text-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 p-4">
+          <aside className="relative z-10 flex h-full w-[min(100%,20rem)] flex-col bg-ami-secondary text-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/15 p-4">
               <div>
-                <BrandLogo className="mb-2 max-h-10 w-auto" />
-                <p className="text-sm font-bold text-slate-100">Residente Digital</p>
+                <div className="mb-2 rounded-xl bg-white p-2">
+                  <BrandLogo className="max-h-10 w-auto" />
+                </div>
+                <p className="text-sm font-bold text-white">Residente Digital</p>
               </div>
               <button
                 type="button"
                 aria-label="Cerrar menú de navegación"
                 onClick={closeMobileNav}
-                className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-2 text-white/80 hover:bg-white/10 hover:text-white"
               >
                 ✕
               </button>
@@ -295,7 +306,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               />
             </nav>
 
-            <div className="border-t border-slate-800 p-4 space-y-3">
+            <div className="border-t border-white/15 p-4 space-y-3">
               <SidebarAccount
                 fullName={session?.user?.fullName}
                 profileHref={canEditProfile ? '/profile' : undefined}
@@ -303,7 +314,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="w-full rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800"
+                className="w-full rounded-full border border-white/20 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/10"
               >
                 Cerrar sesión
               </button>
@@ -315,13 +326,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {/* Contenido principal */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Barra superior móvil — hamburguesa + logo */}
-        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm md:hidden">
+        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b-2 border-ami-secondary bg-white px-4 md:hidden">
           <button
             type="button"
             aria-label="Abrir menú de navegación"
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen(true)}
-            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+            className="rounded-lg bg-ami-accent p-2 text-ami-secondary hover:bg-ami-accent-hover"
           >
             <span className="text-xl leading-none">☰</span>
           </button>
@@ -330,19 +341,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         {!isEventWorkspace && (
-          <header className="hidden h-16 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-8 shadow-sm md:flex">
+          <header className="hidden h-16 flex-shrink-0 items-center justify-between border-t-2 border-t-ami-secondary border-b-[6px] border-b-ami-primary bg-white px-8 md:flex">
             <div>
-              <h2 className="text-lg font-medium text-slate-700">Panel de Control</h2>
+              <h2 className="text-lg font-semibold text-ami-secondary">Panel de Control</h2>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-500">
+              <span className="text-sm text-ami-gray">
                 {session?.user?.fullName || 'Usuario'}
               </span>
-              <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-300"></div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ami-accent text-xs font-bold text-ami-secondary">
+                {(session?.user?.fullName || 'U').trim().charAt(0).toUpperCase()}
+              </div>
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="text-sm font-medium text-slate-600 hover:text-red-600 transition-colors px-3 py-1.5 rounded-md border border-slate-200 hover:border-red-200"
+                className="text-sm font-semibold text-ami-secondary hover:text-ami-primary transition-colors px-4 py-1.5 rounded-full border border-ami-secondary/20 hover:border-ami-primary"
                 aria-label="Cerrar sesión"
               >
                 Cerrar sesión
