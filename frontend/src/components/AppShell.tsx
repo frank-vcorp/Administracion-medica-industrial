@@ -20,15 +20,30 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
-import { ReactNode } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { isAdminLike, isSuperAdmin } from '@/lib/auth/roles'
 import { BrandLogo } from '@/components/BrandLogo'
 
-function NavItem({ href, icon, label, secondary, collapsed }: { href: string; icon: string; label: string; secondary?: boolean; collapsed?: boolean }) {
+function NavItem({
+  href,
+  icon,
+  label,
+  secondary,
+  collapsed,
+  onNavigate,
+}: {
+  href: string
+  icon: string
+  label: string
+  secondary?: boolean
+  collapsed?: boolean
+  onNavigate?: () => void
+}) {
   return (
     <Link
       href={href}
       title={collapsed ? label : undefined}
+      onClick={onNavigate}
       className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3 px-4'} rounded-lg transition-colors ${
         secondary
           ? `${collapsed ? 'py-2 text-slate-400 hover:bg-slate-800 hover:text-white' : 'py-2 text-sm text-slate-400 hover:bg-slate-800 hover:text-white ml-4'}`
@@ -90,9 +105,80 @@ function SidebarAccount({
   return profileHref ? <Link href={profileHref} aria-label="Abrir mi perfil médico">{account}</Link> : account
 }
 
+function ShellNavigation({
+  collapsed,
+  showStaffItems,
+  showAdminItems,
+  showPortalItems,
+  role,
+  onNavigate,
+}: {
+  collapsed?: boolean
+  showStaffItems: boolean
+  showAdminItems: boolean
+  showPortalItems: boolean
+  role?: string
+  onNavigate?: () => void
+}) {
+  return (
+    <>
+      {showStaffItems && (
+        <>
+          <NavItem href="/appointments" icon="📅" label="Gestión de citas" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/appointments/overview" icon="🗓️" label="Vista 3 Agendas" secondary collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/workers" icon="👥" label="Listado de pacientes" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/publico-general" icon="🧍" label="Público General" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/reception" icon="🏥" label="Proceso de atención clínica" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/dashboard" icon="📊" label="Agenda" collapsed={collapsed} onNavigate={onNavigate} />
+
+          <NavSection label="Médico" collapsed={collapsed} />
+          <NavItem href="/events" icon="📁" label="Expedientes Activos" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/validation" icon="✅" label="Validación" collapsed={collapsed} onNavigate={onNavigate} />
+          {(role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR') && (
+            <NavItem href="/profile" icon="🖋️" label="Mi perfil médico" collapsed={collapsed} onNavigate={onNavigate} />
+          )}
+
+          <NavSection label="Empresas" collapsed={collapsed} />
+          <NavItem href="/companies" icon="🏢" label="Empresas Cliente" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/projects" icon="🗂️" label="Proyectos" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/operations/mobile-units" icon="🚑" label="Unidades Móviles" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/reports" icon="📊" label="Reportes Masivos" collapsed={collapsed} onNavigate={onNavigate} />
+        </>
+      )}
+
+      {showAdminItems && (
+        <>
+          <NavSection label="Administración" collapsed={collapsed} />
+          <NavItem href="/branches" icon="🏥" label="Sucursales AMI" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/users" icon="👨‍⚕️" label="Personal AMI" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/services" icon="🧪" label="Catálogo de Pruebas" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/lab/catalogs?mod=unidades" icon="🧬" label="Módulo de Laboratorios" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/lab/migration" icon="🔄" label="Migración NOVA" secondary collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/lab/cutover" icon="🚦" label="Cutover NOVA" secondary collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/lab/reception" icon="🧪" label="Recepción Lab" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/profiles" icon="🩻" label="Perfiles Médicos" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/settings" icon="⚙️" label="Configuración" collapsed={collapsed} onNavigate={onNavigate} />
+          {isSuperAdmin(role) && (
+            <NavItem href="/admin/ai-keys" icon="🔑" label="API Keys IA" collapsed={collapsed} onNavigate={onNavigate} />
+          )}
+        </>
+      )}
+
+      {showPortalItems && (
+        <>
+          <NavSection label="B2B Cliente" collapsed={collapsed} />
+          <NavItem href="/portal" icon="🌐" label="Portal de Empresas" collapsed={collapsed} onNavigate={onNavigate} />
+        </>
+      )}
+    </>
+  )
+}
+
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { data: session, status } = useSession()
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   // Sin chrome en pantalla de login y en rutas públicas (sin AMI chrome)
   // IMPL-20260623-02: bypass también para /demo/* (demo navegable público)
@@ -123,10 +209,24 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const handleSignOut = () => {
     void signOut({ callbackUrl: '/login' })
   }
+  const closeMobileNav = () => setMobileNavOpen(false)
+
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [mobileNavOpen])
 
   return (
     <div className="flex h-screen bg-slate-50">
-      {/* Sidebar — FIX REFERENCE: FIX-20260324-01 */}
+      {/* Sidebar desktop — oculto en móvil (< md) */}
       <aside className={`${isEventWorkspace ? 'w-20' : 'w-64'} bg-slate-900 text-white hidden md:flex md:flex-col flex-shrink-0 transition-all duration-200`}>
         <div className={`${isEventWorkspace ? 'p-4' : 'p-6'} flex-shrink-0`}>
           {isEventWorkspace ? (
@@ -143,74 +243,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className={`flex-1 overflow-y-auto ${isEventWorkspace ? 'px-2' : 'px-4'} pb-6 space-y-1`}>
-          {/* Ítems operativos — personal interno */}
-          {/* IMPL-20260624-02-RENOMBRES-FASE2-NAV-LANE: reorden aprobado (Citas → Listado → Proceso → Agenda, Vista 3 Agendas secondary bajo Citas) */}
-          {showStaffItems && (
-            <>
-              {/* Renombramiento catálogos 2: "Agenda de Citas" → "Gestión de citas" (solo label) */}
-              <NavItem href="/appointments" icon="📅" label="Gestión de citas" collapsed={isEventWorkspace} />
-              {/* Vista de 3 agendas simultáneas como acceso secundario */}
-              <NavItem href="/appointments/overview" icon="🗓️" label="Vista 3 Agendas" secondary collapsed={isEventWorkspace} />
-              <NavItem href="/workers" icon="👥" label="Listado de pacientes" collapsed={isEventWorkspace} />
-              <NavItem href="/publico-general" icon="🧍" label="Público General" collapsed={isEventWorkspace} />
-              <NavItem href="/reception" icon="🏥" label="Proceso de atención clínica" collapsed={isEventWorkspace} />
-              <NavItem href="/dashboard" icon="📊" label="Agenda" collapsed={isEventWorkspace} />
-
-              <NavSection label="Médico" collapsed={isEventWorkspace} />
-              <NavItem href="/events" icon="📁" label="Expedientes Activos" collapsed={isEventWorkspace} />
-              <NavItem href="/validation" icon="✅" label="Validación" collapsed={isEventWorkspace} />
-              {/* IMPL-FEATURE-20260825-01 / QA-20260825-01 P1-B: ruta fuera
-                  de /admin/* (middleware bloqueaba DOCTOR_*). El page.tsx
-                  hace redirect al dashboard si el rol no aplica. */}
-              {(role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR') && (
-                <NavItem href="/profile" icon="🖋️" label="Mi perfil médico" collapsed={isEventWorkspace} />
-              )}
-
-              <NavSection label="Empresas" collapsed={isEventWorkspace} />
-              <NavItem href="/companies" icon="🏢" label="Empresas Cliente" collapsed={isEventWorkspace} />
-              <NavItem href="/projects" icon="🗂️" label="Proyectos" collapsed={isEventWorkspace} />
-              {/* IMPL-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES: NavItem único para Unidades Móviles (antes había duplicado 🚑/🚐 entre staff y admin) */}
-              <NavItem href="/operations/mobile-units" icon="🚑" label="Unidades Móviles" collapsed={isEventWorkspace} />
-              {/* IMPL-20260706-01: Acceso directo al módulo de Reportes Masivos (sobrevuela la URL /reports index). */}
-              <NavItem href="/reports" icon="📊" label="Reportes Masivos" collapsed={isEventWorkspace} />
-            </>
-          )}
-
-          {/* Sección Administración — solo ADMIN */}
-          {showAdminItems && (
-            <>
-              <NavSection label="Administración" collapsed={isEventWorkspace} />
-              <NavItem href="/branches" icon="🏥" label="Sucursales AMI" collapsed={isEventWorkspace} />
-              <NavItem href="/admin/users" icon="👨‍⚕️" label="Personal AMI" collapsed={isEventWorkspace} />
-              <NavItem href="/admin/services" icon="🧪" label="Catálogo de Pruebas" collapsed={isEventWorkspace} />
-              {/* IMPL-20260630-06: Slice A NOVA absorción — módulo LIS (catálogos demo) */}
-              <NavItem href="/admin/lab/catalogs?mod=unidades" icon="🧬" label="Módulo de Laboratorios" collapsed={isEventWorkspace} />
-              {/* IMPL-20260708-FINAL: Fase 4 NOVA absorción — migración y cutover (admin only) */}
-              <NavItem href="/admin/lab/migration" icon="🔄" label="Migración NOVA" secondary collapsed={isEventWorkspace} />
-              <NavItem href="/admin/lab/cutover" icon="🚦" label="Cutover NOVA" secondary collapsed={isEventWorkspace} />
-              {/* IMPL-20260701-03: Slice B NOVA absorción — admisión LabOrder */}
-              <NavItem href="/lab/reception" icon="🧪" label="Recepción Lab" collapsed={isEventWorkspace} />
-              <NavItem href="/admin/profiles" icon="🩻" label="Perfiles Médicos" collapsed={isEventWorkspace} />
-              {/* IMPL-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES: el catálogo de unidades se accede desde /operations/mobile-units (NavItem único arriba). Mantenemos acceso admin directo por si hay deep-links o atajos. */}
-              <NavItem href="/admin/audit" icon="📋" label="Bitácora de Auditoría" collapsed={isEventWorkspace} />
-              <NavItem href="/admin/settings" icon="⚙️" label="Configuración" collapsed={isEventWorkspace} />
-              {/* IMPL-20260809-06 — ARCH-20260809-03: gestión runtime de API Keys IA.
-                  Visible solo para SUPERADMIN (FRANK rota keys sin redeploys).
-                  ADMIN no ve el enlace (aunque puede llegar por URL, el gate
-                  client+server de la página lo contiene). */}
-              {isSuperAdmin(role) && (
-                <NavItem href="/admin/ai-keys" icon="🔑" label="API Keys IA" collapsed={isEventWorkspace} />
-              )}
-            </>
-          )}
-
-          {/* Sección B2B — solo COMPANY_CLIENT */}
-          {showPortalItems && (
-            <>
-              <NavSection label="B2B Cliente" collapsed={isEventWorkspace} />
-              <NavItem href="/portal" icon="🌐" label="Portal de Empresas" collapsed={isEventWorkspace} />
-            </>
-          )}
+          <ShellNavigation
+            collapsed={isEventWorkspace}
+            showStaffItems={showStaffItems}
+            showAdminItems={showAdminItems}
+            showPortalItems={showPortalItems}
+            role={role}
+          />
         </nav>
 
         <SidebarAccount
@@ -220,10 +259,77 @@ export default function AppShell({ children }: { children: ReactNode }) {
         />
       </aside>
 
+      {/* Drawer móvil */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            className="absolute inset-0 bg-slate-950/60"
+            onClick={closeMobileNav}
+          />
+          <aside className="relative z-10 flex h-full w-[min(100%,20rem)] flex-col bg-slate-900 text-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 p-4">
+              <div>
+                <BrandLogo className="mb-2 max-h-10 w-auto" />
+                <p className="text-sm font-bold text-slate-100">Residente Digital</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Cerrar menú de navegación"
+                onClick={closeMobileNav}
+                className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
+              <ShellNavigation
+                showStaffItems={showStaffItems}
+                showAdminItems={showAdminItems}
+                showPortalItems={showPortalItems}
+                role={role}
+                onNavigate={closeMobileNav}
+              />
+            </nav>
+
+            <div className="border-t border-slate-800 p-4 space-y-3">
+              <SidebarAccount
+                fullName={session?.user?.fullName}
+                profileHref={canEditProfile ? '/profile' : undefined}
+              />
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="w-full rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800"
+              >
+                Cerrar sesión
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       {/* Contenido principal */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Barra superior móvil — hamburguesa + logo */}
+        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm md:hidden">
+          <button
+            type="button"
+            aria-label="Abrir menú de navegación"
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen(true)}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+          >
+            <span className="text-xl leading-none">☰</span>
+          </button>
+          <BrandLogo className="max-h-8 w-auto" />
+          <span className="w-10" aria-hidden="true" />
+        </header>
+
         {!isEventWorkspace && (
-          <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shadow-sm">
+          <header className="hidden h-16 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-8 shadow-sm md:flex">
             <div>
               <h2 className="text-lg font-medium text-slate-700">Panel de Control</h2>
             </div>
@@ -243,7 +349,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </div>
           </header>
         )}
-        <div className={isEventWorkspace ? 'p-3 md:p-4' : 'p-8'}>
+        <div className={`flex-1 overflow-y-auto ${isEventWorkspace ? 'p-3 md:p-4' : 'p-4 md:p-8'}`}>
           {children}
         </div>
       </main>
