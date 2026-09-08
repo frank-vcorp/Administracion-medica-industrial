@@ -7,7 +7,7 @@ import Image from 'next/image'
  * @id IMPL-20260325-01
  */
 import { useEffect, useState, Suspense } from 'react'
-import { getAppointments, getAppointmentForCorroboration } from '@/actions/appointment.actions'
+import { getAppointments, getAppointmentForCorroboration, getPendingStudyPatientsForDay, type PendingStudyPatientRow } from '@/actions/appointment.actions'
 import { getBranches } from '@/actions/admin.actions'
 import { generateInvitation } from '@/actions/prefilled-invitation.actions'
 import { useRouter } from 'next/navigation'
@@ -15,6 +15,7 @@ import AppointmentFormModal from '@/components/AppointmentFormModal'
 import CorroborationModal from '@/components/CorroborationModal'
 import RescheduleAppointmentModal from '@/components/RescheduleAppointmentModal'
 import { WeeklyAppointmentsModal } from '@/components/appointments/WeeklyAppointmentsModal'
+import { PendingStudiesModal } from '@/components/appointments/PendingStudiesModal'
 import Link from 'next/link'
 
 /** Citas que ocupan cupo visible en la agenda del día. */
@@ -121,6 +122,8 @@ export default function AppointmentsPage() {
     const [inviteLoading, setInviteLoading] = useState(false)
     const [inviteError, setInviteError] = useState<string | null>(null)
     const [weekModalOpen, setWeekModalOpen] = useState(false)
+    const [pendingModalOpen, setPendingModalOpen] = useState(false)
+    const [pendingStudyRows, setPendingStudyRows] = useState<PendingStudyPatientRow[]>([])
     const _router = useRouter()
     void _router
 
@@ -142,9 +145,10 @@ export default function AppointmentsPage() {
         setLoading(true)
         setError(null)
         try {
-            const [todayResult, tomorrowResult] = await Promise.all([
+            const [todayResult, tomorrowResult, pendingResult] = await Promise.all([
                 getAppointments(selectedDate, selectedBranchId),
                 getAppointments(nextDate, selectedBranchId),
+                getPendingStudyPatientsForDay(selectedDate, selectedBranchId),
             ])
             if (todayResult.success) {
                 setAppointments(todayResult.appointments as unknown as AppointmentWithWorker[] || [])
@@ -158,6 +162,11 @@ export default function AppointmentsPage() {
                 )
             } else {
                 setNextDayAppointments([])
+            }
+            if (pendingResult.success) {
+                setPendingStudyRows(pendingResult.rows)
+            } else {
+                setPendingStudyRows([])
             }
         } catch {
             setError('Error de conexión al cargar la agenda.')
@@ -300,7 +309,13 @@ export default function AppointmentsPage() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <StatCard label="Pacientes citados" value={countAgendaForDate(appointments, selectedDate)} color="blue" />
                 <StatCard label="Citados día siguiente" value={countAgendaForDate(nextDayAppointments, nextDate)} color="indigo" />
-                <StatCard label="Pacientes con pruebas pendientes" value={appointments.filter(a => a.status === 'SCHEDULED').length} color="amber" />
+                <StatCard
+                    label="Pacientes con pruebas pendientes"
+                    value={pendingStudyRows.reduce((sum, row) => sum + row.pendingTests.length, 0)}
+                    color="amber"
+                    onClick={() => setPendingModalOpen(true)}
+                    hint="Ver listado"
+                />
                 <StatCard label="Pacientes con atención completa" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
                 <StatCard label="no se presentó" value={appointments.filter(a => a.status === 'NO_SHOW').length} color="slate" />
             </div>
@@ -337,6 +352,13 @@ export default function AppointmentsPage() {
                 branchId={selectedBranchId}
                 branchName={currentBranch?.name}
                 onSelectDate={setSelectedDate}
+            />
+
+            <PendingStudiesModal
+                open={pendingModalOpen}
+                onClose={() => setPendingModalOpen(false)}
+                rows={pendingStudyRows}
+                dateLabel={formatDayHeading(selectedDate)}
             />
 
             {inviteAptId && (
@@ -667,7 +689,19 @@ function AgendaDayColumn({
     )
 }
 
-function StatCard({ label, value, color }: { label: string, value: number, color: 'blue' | 'indigo' | 'amber' | 'emerald' | 'slate' }) {
+function StatCard({
+    label,
+    value,
+    color,
+    onClick,
+    hint,
+}: {
+    label: string
+    value: number
+    color: 'blue' | 'indigo' | 'amber' | 'emerald' | 'slate'
+    onClick?: () => void
+    hint?: string
+}) {
     const variants: Record<string, string> = {
         blue: "bg-blue-50 border-blue-100 text-blue-600",
         indigo: "bg-indigo-50 border-indigo-100 text-indigo-600",
@@ -675,12 +709,30 @@ function StatCard({ label, value, color }: { label: string, value: number, color
         emerald: "bg-emerald-50 border-emerald-100 text-emerald-600",
         slate: "bg-slate-50 border-slate-100 text-slate-600"
     }
-    return (
-        <div className={`p-5 rounded-3xl border shadow-sm ${variants[color]}`}>
+
+    const className = `p-5 rounded-3xl border shadow-sm text-left w-full transition ${variants[color]} ${
+        onClick ? 'cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99]' : ''
+    }`
+
+    const content = (
+        <>
             <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">{label}</p>
             <p className="text-3xl font-black">{value}</p>
-        </div>
+            {hint && onClick && (
+                <p className="mt-2 text-[10px] font-bold uppercase tracking-wide opacity-60">{hint}</p>
+            )}
+        </>
     )
+
+    if (onClick) {
+        return (
+            <button type="button" onClick={onClick} className={className}>
+                {content}
+            </button>
+        )
+    }
+
+    return <div className={className}>{content}</div>
 }
 
 function StatusBadge({ status }: { status: string }) {

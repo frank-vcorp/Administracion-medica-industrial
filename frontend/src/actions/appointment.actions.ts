@@ -790,9 +790,87 @@ export async function getAppointmentForCorroboration(appointmentId: string) {
   }
 }
 
+const PENDING_PIPELINE_STATUSES = ['PENDING', 'IN_PROGRESS', 'SAMPLE_TAKEN'] as const
+
+export type PendingStudyPatientRow = {
+  eventId: string
+  workerId: string
+  patientName: string
+  companyName: string | null
+  pendingTests: {
+    id: string
+    name: string
+    status: string
+  }[]
+}
+
+/**
+ * Pacientes con pruebas clínicas pendientes (check-in del día + sucursal).
+ * AMI-SR F-017 minuta #18 — clic en KPI → ir al expediente / estudio.
+ */
+export async function getPendingStudyPatientsForDay(date: string, branchId: string) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return { success: false, error: 'No autenticado', rows: [] as PendingStudyPatientRow[] }
+    }
+
+    const [year, month, day] = date.split('-').map(Number)
+    const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0)
+    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
+
+    const events = await prisma.medicalEvent.findMany({
+      where: {
+        branchId,
+        status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'VALIDATING'] },
+        checkInDate: { gte: dayStart, lte: dayEnd },
+        eventTests: {
+          some: { status: { in: [...PENDING_PIPELINE_STATUSES] } },
+        },
+      },
+      include: {
+        worker: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            company: { select: { name: true } },
+          },
+        },
+        eventTests: {
+          where: { status: { in: [...PENDING_PIPELINE_STATUSES] } },
+          select: { id: true, testNameSnapshot: true, status: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { checkInDate: 'asc' },
+    })
+
+    const rows: PendingStudyPatientRow[] = events.map((ev) => ({
+      eventId: ev.id,
+      workerId: ev.worker.id,
+      patientName: `${ev.worker.firstName} ${ev.worker.lastName}`.trim(),
+      companyName: ev.worker.company?.name ?? null,
+      pendingTests: ev.eventTests.map((t) => ({
+        id: t.id,
+        name: t.testNameSnapshot,
+        status: t.status,
+      })),
+    }))
+
+    return { success: true, rows }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al obtener pendientes',
+      rows: [] as PendingStudyPatientRow[],
+    }
+  }
+}
+
 /**
  * Citas de una semana (lunes–domingo) para una sucursal.
- * @id AMI-SR-F-017 — vista semanal emergente en Gestión de citas
+ * @id AMI-SR F-017 — vista semanal emergente en Gestión de citas
  */
 export async function getAppointmentsForWeek(weekStartDate: string, branchId: string) {
   try {
