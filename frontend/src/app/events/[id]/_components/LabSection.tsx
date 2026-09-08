@@ -77,7 +77,7 @@ export async function LabSection({ medicalEventId, workerId: _workerId }: Props)
       {labEventTests.length > 0 && (
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
           <p className="text-xs font-semibold text-slate-700 mb-2">
-            🧪 Estudios de Laboratorio de esta papeleta ({labEventTests.length})
+            🧪 Estudios de Laboratorio de este módulo ({labEventTests.length})
           </p>
           <ul className="space-y-2">
             {labEventTests.map((et) => (

@@ -132,7 +132,7 @@ export default function DeleteWorkersButton({ selectedNames, onClearSelection }:
             <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg p-3 mb-4">
               <strong className="font-bold">⚠️ Atención — IRREVERSIBLE:</strong> Se
               eliminarán los pacientes y TODO su historial clínico: appointments,
-              medical events, lab orders, resultados, papeletas y registros
+              medical events, lab orders, resultados, módulos de pruebas clínicas y registros
               asociados. No se puede deshacer.
             </div>
 

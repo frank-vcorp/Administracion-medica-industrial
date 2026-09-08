@@ -63,15 +63,15 @@ export default async function LabReceptionFromEventPage({
       <div className="space-y-4">
         <InfoBanner
           icon={<span aria-hidden>⚠️</span>}
-          title="Esta papeleta no tiene EventTests SAMPLE_TAKEN de Laboratorio"
+          title="Este módulo de pruebas clínicas no tiene EventTests SAMPLE_TAKEN de Laboratorio"
         >
-          Solo se pueden crear admisiones Lab desde papeletas con muestras de laboratorio.
+          Solo se pueden crear admisiones Lab desde módulos clínicos con muestras de laboratorio.
         </InfoBanner>
         <Link
           href={`/events/${medicalEventId}`}
           className="inline-block bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
         >
-          ← Volver a la papeleta
+          ← Volver al módulo de pruebas clínicas
         </Link>
       </div>
     );
@@ -81,9 +81,9 @@ export default async function LabReceptionFromEventPage({
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Admisión Lab — Papeleta auto-llenada</h2>
+          <h2 className="text-2xl font-bold text-slate-800">Admisión Lab — Módulo clínico auto-llenado</h2>
           <p className="text-sm text-slate-500">
-            Datos importados automáticamente desde la papeleta #{ev.medicalEventId.slice(0, 8)}…
+            Datos importados automáticamente desde el módulo #{ev.medicalEventId.slice(0, 8)}…
           </p>
         </div>
         <Link
@@ -98,7 +98,7 @@ export default async function LabReceptionFromEventPage({
         icon={<span aria-hidden>✅</span>}
         title="Pre-llenado desde MedicalEvent"
       >
-        Paciente, médico y empresa vienen de la papeleta. Solo confirme precios y folio.
+        Paciente, médico y empresa vienen del módulo de pruebas clínicas. Solo confirme precios y folio.
       </InfoBanner>
 
       <LabOrderForm

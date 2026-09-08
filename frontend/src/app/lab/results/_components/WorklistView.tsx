@@ -129,7 +129,7 @@ export function WorklistView({ orderId, header }: Props) {
         {header.medicalEventId && (
           <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
             <span className="text-blue-800">
-              📎 Vinculado a papeleta AMI:{" "}
+              📎 Vinculado al módulo de pruebas clínicas:{" "}
               <a
                 href={`/events/${header.medicalEventId}`}
                 className="font-medium underline hover:text-blue-900"

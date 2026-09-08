@@ -676,7 +676,7 @@ export default function PapeletaWorkspace({
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4">
-          <h2 className="text-base font-bold text-slate-800 mb-0.5">Papeleta electrónica</h2>
+          <h2 className="text-base font-bold text-slate-800 mb-0.5">Módulo de pruebas clínicas</h2>
           <p className="text-sm text-slate-500 mb-3">
             Selecciona un estudio para abrirlo en su vista de trabajo.
           </p>
@@ -692,7 +692,7 @@ export default function PapeletaWorkspace({
 
           {localTests.length === 0 && (
             <p className="text-center text-slate-400 text-sm py-10">
-              No hay estudios registrados en esta papeleta.
+              No hay estudios registrados en este módulo.
             </p>
           )}
 

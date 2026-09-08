@@ -369,8 +369,8 @@ export default function AudiometriaQuestionnaireModal({
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Antecedentes auditivos y exploración física. Los datos
-            personales y laborales del encabezado ya se obtienen de la
-            papeleta — no se duplican aquí.
+            personales y laborales del encabezado ya se obtienen del módulo de
+            pruebas clínicas — no se duplican aquí.
           </p>
         </header>
 

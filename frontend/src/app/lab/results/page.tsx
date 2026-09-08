@@ -27,7 +27,7 @@ export default async function LabResultsPage({
         icon={<span aria-hidden>🧪</span>}
         title="Módulo LAB — Slice C — Resultados demo"
       >
-        Captura + ciclo P/R/A/V + bitácora auditoría + integración con papeleta AMI.
+        Captura + ciclo P/R/A/V + bitácora auditoría + integración con módulo de pruebas clínicas AMI.
       </InfoBanner>
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">

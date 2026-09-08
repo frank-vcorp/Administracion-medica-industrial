@@ -255,7 +255,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
           <View style={styles.sourceFallback}>
             <Text style={{ fontSize: 10, fontWeight: 'bold' }}>ESTUDIO DE ESPIROMETRIA</Text>
             <Text style={{ fontSize: 8, color: '#64748b', marginTop: 4 }}>
-              (Recorte del equipo no disponible — ver archivo fuente en la papeleta)
+              (Recorte del equipo no disponible — ver archivo fuente en el módulo de pruebas clínicas)
             </Text>
           </View>
         )}

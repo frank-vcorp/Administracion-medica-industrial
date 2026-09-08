@@ -18,6 +18,58 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 
+function getMonthBounds(offsetMonths = 0) {
+  const anchor = new Date()
+  const start = new Date(anchor.getFullYear(), anchor.getMonth() + offsetMonths, 1, 0, 0, 0, 0)
+  const end = new Date(anchor.getFullYear(), anchor.getMonth() + offsetMonths + 1, 0, 23, 59, 59, 999)
+  return { start, end }
+}
+
+function formatTrendVsPrevious(current: number, previous: number): string {
+  if (previous === 0) {
+    return current > 0 ? '+100% vs mes anterior' : 'Sin variación vs mes anterior'
+  }
+  const delta = Math.round(((current - previous) / previous) * 100)
+  const sign = delta > 0 ? '+' : ''
+  return `${sign}${delta}% vs mes anterior`
+}
+
+async function countAppointmentsBetween(start: Date, end: Date) {
+  return prisma.appointment.count({
+    where: {
+      scheduledAt: { gte: start, lte: end },
+    },
+  })
+}
+
+async function countEventsBetween(start: Date, end: Date) {
+  return prisma.medicalEvent.count({
+    where: {
+      OR: [
+        { checkInDate: { gte: start, lte: end } },
+        { checkInDate: null, createdAt: { gte: start, lte: end } },
+      ],
+    },
+  })
+}
+
+async function countCompletedEventsBetween(start: Date, end: Date) {
+  return prisma.medicalEvent.count({
+    where: {
+      status: 'COMPLETED',
+      updatedAt: { gte: start, lte: end },
+    },
+  })
+}
+
+async function countWorkersCreatedBetween(start: Date, end: Date) {
+  return prisma.worker.count({
+    where: {
+      createdAt: { gte: start, lte: end },
+    },
+  })
+}
+
 /**
  * Obtiene los KPIs principales del dashboard
  * @returns Objeto con métricas del sistema o error
@@ -65,6 +117,30 @@ export async function getDashboardKPIs() {
     // KPI 4: Total de trabajadores únicos en el sistema
     const totalWorkers = await prisma.worker.count()
 
+    const { start: monthStart, end: monthEnd } = getMonthBounds(0)
+    const { start: prevMonthStart, end: prevMonthEnd } = getMonthBounds(-1)
+
+    const [
+      appointmentsThisMonth,
+      appointmentsLastMonth,
+      eventsThisMonth,
+      completedThisMonth,
+      workersThisMonth,
+      workersLastMonth,
+    ] = await Promise.all([
+      countAppointmentsBetween(monthStart, monthEnd),
+      countAppointmentsBetween(prevMonthStart, prevMonthEnd),
+      countEventsBetween(monthStart, monthEnd),
+      countCompletedEventsBetween(monthStart, monthEnd),
+      countWorkersCreatedBetween(monthStart, monthEnd),
+      countWorkersCreatedBetween(prevMonthStart, prevMonthEnd),
+    ])
+
+    const closureRate =
+      eventsThisMonth > 0
+        ? `${Math.round((completedThisMonth / eventsThisMonth) * 100)}% cerrados`
+        : 'Sin atenciones este mes'
+
     return {
       success: true,
       kpis: {
@@ -72,6 +148,21 @@ export async function getDashboardKPIs() {
         activeEvents,
         completedEvents,
         totalWorkers,
+      },
+      monthlySummary: {
+        monthLabel: monthStart.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }),
+        appointmentsThisMonth,
+        appointmentsTrend: formatTrendVsPrevious(appointmentsThisMonth, appointmentsLastMonth),
+        eventsThisMonth,
+        completedThisMonth,
+        closureRate,
+        workersThisMonth,
+        workersTrend:
+          workersThisMonth > 0
+            ? `+${workersThisMonth} nuevos`
+            : workersLastMonth > 0
+              ? 'Sin altas este mes'
+              : 'Sin altas recientes',
       },
     }
   } catch (error) {
@@ -84,6 +175,16 @@ export async function getDashboardKPIs() {
         activeEvents: 0,
         completedEvents: 0,
         totalWorkers: 0,
+      },
+      monthlySummary: {
+        monthLabel: new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }),
+        appointmentsThisMonth: 0,
+        appointmentsTrend: 'Sin variación vs mes anterior',
+        eventsThisMonth: 0,
+        completedThisMonth: 0,
+        closureRate: 'Sin atenciones este mes',
+        workersThisMonth: 0,
+        workersTrend: 'Sin altas recientes',
       },
     }
   }

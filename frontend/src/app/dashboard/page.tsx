@@ -16,6 +16,16 @@ export default function DashboardPage() {
         completedEvents: 0,
         totalWorkers: 0,
     })
+    const [monthlySummary, setMonthlySummary] = useState({
+        monthLabel: '',
+        appointmentsThisMonth: 0,
+        appointmentsTrend: '',
+        eventsThisMonth: 0,
+        completedThisMonth: 0,
+        closureRate: '',
+        workersThisMonth: 0,
+        workersTrend: '',
+    })
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
 
@@ -25,6 +35,9 @@ export default function DashboardPage() {
                 const result = await getDashboardKPIs()
                 if (result.success) {
                     setKpis(result.kpis)
+                    if (result.monthlySummary) {
+                        setMonthlySummary(result.monthlySummary)
+                    }
                 } else {
                     setError(result.error || 'Error al cargar KPIs')
                 }
@@ -101,15 +114,32 @@ export default function DashboardPage() {
                 {/* Main Content: Performance & Status */}
                 <div className="lg:col-span-2 space-y-6">
                     <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-                        <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2">
                             <span className="w-2 h-6 bg-indigo-500 rounded-full"></span>
-                            Resumen de atenciones del día
+                            Resumen de atenciones del mes
                         </h3>
+                        <p className="text-sm text-slate-500 mb-6 capitalize">{monthlySummary.monthLabel}</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <InfoBox label="Flujo de hoy" value={`${kpis.appointmentsToday} citas programadas`} trend="+12% vs ayer" />
-                            <InfoBox label="Ocupación de Sede" value={`${kpis.activeEvents} pacientes atendiendo`} trend="Normal" />
-                            <InfoBox label="Tasa de Cierre" value={`${kpis.completedEvents} expedientes listos`} trend="85% completado" />
-                            <InfoBox label="Crecimiento Padrón" value={`${kpis.totalWorkers} registros en DB`} trend="+5 nuevos" />
+                            <InfoBox
+                                label="Flujo del mes"
+                                value={`${monthlySummary.appointmentsThisMonth} citas programadas`}
+                                trend={monthlySummary.appointmentsTrend}
+                            />
+                            <InfoBox
+                                label="Atenciones del mes"
+                                value={`${monthlySummary.eventsThisMonth} pacientes atendidos`}
+                                trend={`${kpis.activeEvents} en curso hoy`}
+                            />
+                            <InfoBox
+                                label="Tasa de cierre"
+                                value={`${monthlySummary.completedThisMonth} expedientes cerrados`}
+                                trend={monthlySummary.closureRate}
+                            />
+                            <InfoBox
+                                label="Crecimiento padrón"
+                                value={`${monthlySummary.workersThisMonth} altas del mes`}
+                                trend={monthlySummary.workersTrend}
+                            />
                         </div>
                     </div>
                 </div>

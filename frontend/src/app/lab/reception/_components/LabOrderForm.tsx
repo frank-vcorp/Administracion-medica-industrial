@@ -506,19 +506,19 @@ export function LabOrderForm({ orderId, initialWorkerId, initialMedicalEventId, 
         <div className="grid grid-cols-12 gap-3 mt-3">
           <div className="col-span-12">
             <label className={LABEL}>
-              Papeleta Asociada (opcional)
+              Módulo clínico asociado (opcional)
             </label>
             <input
               type="text"
               value={medicalEventId}
               disabled={readOnly}
               onChange={(e) => setMedicalEventId(e.target.value)}
-              placeholder="ID de MedicalEvent (papeleta AMI)"
+              placeholder="ID de MedicalEvent (módulo AMI)"
               className={BASE_INPUT}
             />
             {medicalEventId && (
               <p className="mt-1 text-xs text-blue-700">
-                📎 Esta orden quedará vinculada a la papeleta:{" "}
+                📎 Esta orden quedará vinculada al módulo clínico:{" "}
                 <a
                   href={`/events/${medicalEventId}`}
                   className="underline hover:text-blue-900"

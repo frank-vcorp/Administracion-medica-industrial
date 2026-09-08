@@ -128,7 +128,7 @@ export const PaymentReceiptPDF = ({ data }: { data: ReceiptPDFData }) => {
             </View>
           )}
           <View style={styles.row}>
-            <Text style={styles.label}>Papeleta (evento):</Text>
+            <Text style={styles.label}>Módulo clínico (evento):</Text>
             <Text style={styles.value}>{data.eventId}</Text>
           </View>
         </View>

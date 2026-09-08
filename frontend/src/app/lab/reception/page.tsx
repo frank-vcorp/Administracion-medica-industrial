@@ -40,8 +40,8 @@ export default async function LabReceptionPage({
           <h2 className="text-2xl font-bold text-slate-800">Recepción de Laboratorio</h2>
           <p className="text-sm text-slate-500">
             {isManual
-              ? "Admisión manual — pacientes sin papeleta previa."
-              : "Bandeja de papeletas con muestras de laboratorio pendientes."}
+              ? "Admisión manual — pacientes sin módulo de pruebas clínicas previo."
+              : "Bandeja de módulos clínicos con muestras de laboratorio pendientes."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -65,7 +65,7 @@ export default async function LabReceptionPage({
 
       <InfoBanner
         icon={<span aria-hidden>🧬</span>}
-        title="Módulo LAB — Fase 1 — B-v2 bandeja papeletas + E catálogo"
+        title="Módulo LAB — Fase 1 — B-v2 bandeja clínica + E catálogo"
       >
         Backend FastAPI en <code className="bg-slate-100 px-1 rounded text-xs">/api/v1/lab/pending-orders</code>
         {" "}+ <code className="bg-slate-100 px-1 rounded text-xs">/api/v1/medical_tests/lab-catalog</code>.

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { getWorkers } from "@/actions/worker.actions"
+import { getPatientExpedienteList } from '@/actions/patient-expediente.actions'
 import { getCompanies, getBranches } from "@/actions/admin.actions"
 import { getMedicalProfileOptions } from "@/actions/medical-profiles"
 import WorkerFormModal from "@/components/WorkerFormModal"
@@ -25,15 +26,24 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
     const session = await getServerSession(authOptions)
     const isSuperAdmin = (session?.user as { role?: string } | undefined)?.role === 'SUPERADMIN'
 
-    const [workers, companies, medicalProfiles, branchesResult] = await Promise.allSettled([
+    const [workers, companies, medicalProfiles, branchesResult, expedienteList] = await Promise.allSettled([
         getWorkers(),
         getCompanies(),
         getMedicalProfileOptions(),
         getBranches(),
+        getPatientExpedienteList(),
     ])
 
     if (workers.status !== 'fulfilled' || companies.status !== 'fulfilled' || medicalProfiles.status !== 'fulfilled') {
         throw new Error('No se pudo cargar el padrón de trabajadores')
+    }
+
+    if (expedienteList.status !== 'fulfilled' || !expedienteList.value.success) {
+        throw new Error(
+            expedienteList.status === 'fulfilled'
+                ? expedienteList.value.error ?? 'No se pudo cargar atenciones y expedientes'
+                : 'No se pudo cargar atenciones y expedientes'
+        )
     }
 
     const branches = branchesResult.status === 'fulfilled' ? branchesResult.value : []
@@ -50,12 +60,42 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
     // Cast al shape que consume WorkerSelectableGrid (subset de lo que devuelve getWorkers).
     const selectableWorkers: SelectableWorker[] = (workers.value as unknown as SelectableWorker[])
 
+    const expedienteRows = expedienteList.value.rows
+    const workersWithEvents = new Set(expedienteRows.map((row) => row.worker.id))
+    const padronOnlyRows: typeof expedienteRows = selectableWorkers
+        .filter((worker) => !workersWithEvents.has(worker.id))
+        .map((worker) => ({
+            eventId: null,
+            eventStatus: null,
+            sortDate: worker.createdAt
+                ? new Date(worker.createdAt).toISOString()
+                : new Date().toISOString(),
+            worker: {
+                id: worker.id,
+                universalId: worker.universalId,
+                firstName: worker.firstName,
+                lastName: worker.lastName,
+                email: worker.email,
+                phone: worker.phone,
+                dob: worker.dob,
+                companyId: worker.companyId,
+                medicalProfileId: worker.medicalProfileId,
+                createdAt: worker.createdAt ? new Date(worker.createdAt) : new Date(),
+                lastIdentityDocumentType: worker.lastIdentityDocumentType ?? null,
+                lastIdentityVerifiedAt: worker.lastIdentityVerifiedAt
+                    ? new Date(worker.lastIdentityVerifiedAt)
+                    : null,
+                company: worker.company ?? null,
+                medicalProfile: worker.medicalProfile ?? null,
+            },
+        }))
+
     return (
         <div className="space-y-8 pb-12">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight">Listado de pacientes</h2>
-                    <p className="text-sm text-slate-500 font-medium">Gestión integral de empleados y afiliaciones.</p>
+                    <p className="text-sm text-slate-500 font-medium">Pacientes, expedientes activos y estatus de atención.</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -68,6 +108,8 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
             </div>
 
             <WorkersPageClient
+                expedienteRows={expedienteRows}
+                padronOnlyRows={padronOnlyRows}
                 workers={selectableWorkers}
                 companies={companies.value}
                 medicalProfiles={medicalProfiles.value}

@@ -64,7 +64,7 @@ export function PendingOrdersTable({ initialBranchId }: Props) {
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center text-sm text-slate-500">
-        Cargando bandeja de papeletas...
+        Cargando bandeja de módulos clínicos...
       </div>
     );
   }
@@ -81,10 +81,10 @@ export function PendingOrdersTable({ initialBranchId }: Props) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
         <p className="text-sm text-slate-600">
-          🎉 No hay papeletas pendientes con muestras de laboratorio.
+          🎉 No hay módulos clínicos pendientes con muestras de laboratorio.
         </p>
         <p className="text-xs text-slate-500 mt-1">
-          Las papeletas aparecerán aquí cuando el consultorio marque
+          Los módulos aparecerán aquí cuando el consultorio marque
           <span className="font-mono mx-1">SAMPLE_TAKEN</span>
           en un EventTest de categoría Laboratorio.
         </p>
@@ -110,7 +110,7 @@ export function PendingOrdersTable({ initialBranchId }: Props) {
         <table className="min-w-full text-xs">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr className="text-left text-slate-600">
-              <th className="px-3 py-2 font-medium">Papeleta</th>
+              <th className="px-3 py-2 font-medium">Módulo clínico</th>
               <th className="px-3 py-2 font-medium">Paciente</th>
               <th className="px-3 py-2 font-medium">Empresa</th>
               <th className="px-3 py-2 font-medium">Médico</th>

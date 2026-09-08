@@ -53,6 +53,7 @@ export interface SelectableWorker {
   lastIdentityFrontFileUrl?: string | null
   lastIdentityBackFileUrl?: string | null
   lastIdentityVerifiedAt?: string | Date | null
+  createdAt?: string | Date | null
 }
 
 interface CompanyOption { id: string; name: string }

@@ -6,12 +6,16 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import type { PatientExpedienteListRow } from '@/actions/patient-expediente.actions'
+import UnifiedPatientExpedienteTable from './UnifiedPatientExpedienteTable'
 import WorkerSelectableGrid, {
   type SelectableWorker,
 } from './WorkerSelectableGrid'
 import DeleteWorkersButton from './DeleteWorkersButton'
 
 interface Props {
+  expedienteRows?: PatientExpedienteListRow[]
+  padronOnlyRows?: PatientExpedienteListRow[]
   workers: SelectableWorker[]
   companies: Array<{ id: string; name: string; defaultBranchId: string | null }>
   medicalProfiles: Array<{ id: string; name: string; companyId: string | null }>
@@ -22,6 +26,8 @@ interface Props {
 }
 
 export default function WorkersPageClient({
+  expedienteRows = [],
+  padronOnlyRows = [],
   workers,
   companies,
   medicalProfiles,
@@ -29,6 +35,9 @@ export default function WorkersPageClient({
   isSuperAdmin,
   hideCompanyColumn = false,
 }: Props) {
+  const [viewMode, setViewMode] = useState<'atenciones' | 'padron'>(
+    expedienteRows.length > 0 ? 'atenciones' : 'padron',
+  )
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedNames, setSelectedNames] = useState<
     Array<{ id: string; fullName: string; universalId: string }>
@@ -59,20 +68,60 @@ export default function WorkersPageClient({
     [companies]
   )
 
+  const unifiedRows = useMemo(
+    () => [...expedienteRows, ...padronOnlyRows],
+    [expedienteRows, padronOnlyRows]
+  )
+
   return (
     <>
-      <WorkerSelectableGrid
-        workers={workers}
-        companies={companyOptions}
-        medicalProfiles={medicalProfiles}
-        initialEditWorkerId={initialEditWorkerId}
-        selectable={selectable}
-        selectedIds={selectedIds}
-        onSelectionChange={handleSelectionChange}
-        hideCompanyColumn={hideCompanyColumn}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        {(expedienteRows.length > 0 || padronOnlyRows.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setViewMode('atenciones')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              viewMode === 'atenciones'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Atenciones y expedientes
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setViewMode('padron')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            viewMode === 'padron'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          Padrón completo
+        </button>
+      </div>
 
-      {selectable && (
+      {viewMode === 'atenciones' ? (
+        <UnifiedPatientExpedienteTable
+          rows={unifiedRows}
+          companies={companyOptions}
+          medicalProfiles={medicalProfiles}
+        />
+      ) : (
+        <WorkerSelectableGrid
+          workers={workers}
+          companies={companyOptions}
+          medicalProfiles={medicalProfiles}
+          initialEditWorkerId={initialEditWorkerId}
+          selectable={selectable}
+          selectedIds={selectedIds}
+          onSelectionChange={handleSelectionChange}
+          hideCompanyColumn={hideCompanyColumn}
+        />
+      )}
+
+      {viewMode === 'padron' && selectable && (
         <DeleteWorkersButton
           selectedNames={selectedNames}
           onClearSelection={clearSelection}

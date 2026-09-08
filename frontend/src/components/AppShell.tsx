@@ -132,7 +132,6 @@ function ShellNavigation({
           <NavItem href="/dashboard" icon="📊" label="Agenda" collapsed={collapsed} onNavigate={onNavigate} />
 
           <NavSection label="Médico" collapsed={collapsed} />
-          <NavItem href="/events" icon="📁" label="Expedientes Activos" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/validation" icon="✅" label="Validación" collapsed={collapsed} onNavigate={onNavigate} />
           {(role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR') && (
             <NavItem href="/profile" icon="🖋️" label="Mi perfil médico" collapsed={collapsed} onNavigate={onNavigate} />

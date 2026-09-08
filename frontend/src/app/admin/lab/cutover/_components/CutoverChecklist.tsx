@@ -26,7 +26,7 @@ type CutoverStatus = {
 
 const SLICE_DESCRIPTIONS: Record<string, string> = {
   A: "Catálogos base (unidades, muestras, recipientes, métodos, etc.)",
-  "B-v2": "Recepción con bandeja de papeletas + trigger SAMPLE_TAKEN",
+  "B-v2": "Recepción con bandeja de módulos clínicos + trigger SAMPLE_TAKEN",
   C: "Captura de resultados y ciclo P/R/A/V",
   D: "Trazabilidad muestra→proceso→entrega",
   E: "Catálogo avanzado de estudios + seed de 5 típicos",
@@ -178,7 +178,7 @@ const Props: FC<{ status: CutoverStatus }> = ({ status }) => {
         </h3>
         <p>
           Cuando todos los slices estén <code>closed</code>, AMI captura
-          el 100% del flujo de laboratorio: admisión (bandeja de papeletas),
+          el 100% del flujo de laboratorio: admisión (bandeja de módulos clínicos),
           catálogo LIS, captura de resultados, validación, entrega y caja.
           NOVA Connection queda archivado como fuente histórica y de
           consulta. El banner <em>“NOVA deprecado”</em> se mostrará en

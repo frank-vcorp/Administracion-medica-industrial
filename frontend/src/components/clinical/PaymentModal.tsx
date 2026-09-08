@@ -325,7 +325,7 @@ export default function PaymentModal({
             <div>
               <h2 className="text-lg font-black">Pago y Recibo</h2>
               <p className="text-amber-100 text-xs font-medium">
-                Registra el pago de la papeleta y emite un comprobante · Email o WhatsApp
+                Registra el pago del módulo de pruebas clínicas y emite un comprobante · Email o WhatsApp
               </p>
             </div>
           </div>
@@ -335,7 +335,7 @@ export default function PaymentModal({
           {/* Datos del evento */}
           <section className="bg-slate-50 rounded-2xl p-5 space-y-3 border border-slate-100">
             <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
-              Papeleta
+              Módulo de pruebas clínicas
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
