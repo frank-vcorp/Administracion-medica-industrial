@@ -27,7 +27,7 @@ export async function middleware(request: NextRequest) {
   //   son llamados desde el navegador sin token de NextAuth. La autorización fina la hace el handler
   //   (validación de token propio, scope público, etc.). NO usar `(.*)` que haría todo público: el matcher
   //   ya excluye _next/static, _next/image, favicon.ico y public.
-  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/") || pathname.startsWith("/prefill") || pathname.startsWith("/demo") || pathname.startsWith("/auto-alta") || pathname.startsWith("/solicitar-alta")
+  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/api/") || pathname.startsWith("/prefill") || pathname.startsWith("/demo") || pathname.startsWith("/auto-alta") || pathname.startsWith("/solicitar-alta") || pathname.startsWith("/feedback")
   if (isPublicRoute) {
     return NextResponse.next()
   }
