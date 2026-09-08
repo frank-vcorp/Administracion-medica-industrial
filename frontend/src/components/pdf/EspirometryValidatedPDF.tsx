@@ -8,7 +8,13 @@ import { formatAmiSectionMl } from '@/lib/espirometry-ami-section'
 import { SME_LOGO_FALLBACK_TEXT } from '@/lib/brand-constants'
 
 const styles = StyleSheet.create({
-  page: {
+  pageSource: {
+    fontFamily: 'Helvetica',
+    fontSize: 9,
+    color: '#000000',
+    paddingBottom: 72,
+  },
+  pageClinical: {
     fontFamily: 'Helvetica',
     fontSize: 9,
     color: '#000000',
@@ -52,14 +58,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#0f766e',
   },
-  sourceImage: {
+  sourceImageFullPage: {
     width: '100%',
+    maxHeight: 640,
     objectFit: 'contain',
     marginTop: 4,
   },
   sourceFallback: {
     paddingHorizontal: 28,
     paddingVertical: 8,
+    minHeight: 400,
+  },
+  pageClinicalTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#0f766e',
+    marginBottom: 10,
+    letterSpacing: 0.3,
   },
   amiBlock: {
     paddingHorizontal: 28,
@@ -99,8 +114,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    marginTop: 16,
+    marginTop: 28,
     paddingHorizontal: 28,
+    paddingBottom: 8,
   },
   signatureLeft: {
     flex: 1,
@@ -219,6 +235,43 @@ function AmiMetrics({ ami }: { ami: EspirometryAmiSectionData }) {
   )
 }
 
+function PdfHeader({ logoSrc }: { logoSrc: string }) {
+  return (
+    <View style={styles.header} fixed>
+      <View style={styles.headerLeft}>
+        <Text style={styles.brand}>Administración Médica Industrial</Text>
+        <Text style={styles.brandSub}>
+          Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía
+        </Text>
+      </View>
+      <View style={styles.headerRight}>
+        {logoSrc ? (
+          <Image style={styles.logoImage} src={logoSrc} />
+        ) : (
+          <Text style={styles.logoFallback}>{SME_LOGO_FALLBACK_TEXT}</Text>
+        )}
+      </View>
+    </View>
+  )
+}
+
+function PdfFooter() {
+  return (
+    <>
+      <View style={styles.footerRule} fixed />
+      <Text style={styles.footer} fixed>
+        Evaluaciones médicas / Outsourcing de Personal Médico / Capacitación en Salud y Seguridad /
+        Evaluaciones Ergonómicas / Fisioterapia / Nutrición{'\n'}
+        Circuito del Mesón #135 Col. Del Prado C.P 76030{'\n'}
+        (442) 225-52-67 www.medicaindustrial.com
+      </Text>
+      <Text style={styles.footerTagline} fixed>
+        Salud que produce ®
+      </Text>
+    </>
+  )
+}
+
 export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPDFData }) => {
   const recomendacionesText =
     data.recomendacionesValidadas.length > 0
@@ -232,25 +285,12 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
       author={`Dr(a). ${data.medico.fullName}`}
       subject="Estudio de Espirometría validado"
     >
-      <Page size="LETTER" style={styles.page}>
-        <View style={styles.header} fixed>
-          <View style={styles.headerLeft}>
-            <Text style={styles.brand}>Administración Médica Industrial</Text>
-            <Text style={styles.brandSub}>
-              Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía
-            </Text>
-          </View>
-          <View style={styles.headerRight}>
-            {logoSrc ? (
-              <Image style={styles.logoImage} src={logoSrc} />
-            ) : (
-              <Text style={styles.logoFallback}>{SME_LOGO_FALLBACK_TEXT}</Text>
-            )}
-          </View>
-        </View>
+      {/* Hoja 1: sólo el recorte del PDF del equipo (Sibelmed). */}
+      <Page size="LETTER" style={styles.pageSource}>
+        <PdfHeader logoSrc={logoSrc} />
 
         {data.sourceCropDataUrl ? (
-          <Image style={styles.sourceImage} src={data.sourceCropDataUrl} />
+          <Image style={styles.sourceImageFullPage} src={data.sourceCropDataUrl} />
         ) : (
           <View style={styles.sourceFallback}>
             <Text style={{ fontSize: 10, fontWeight: 'bold' }}>ESTUDIO DE ESPIROMETRIA</Text>
@@ -260,7 +300,16 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
           </View>
         )}
 
+        <PdfFooter />
+      </Page>
+
+      {/* Hoja 2: contenido generado por AMI (criterios, diagnóstico, firma). */}
+      <Page size="LETTER" style={styles.pageClinical}>
+        <PdfHeader logoSrc={logoSrc} />
+
         <View style={styles.amiBlock}>
+          <Text style={styles.pageClinicalTitle}>VALIDACIÓN CLÍNICA AMI</Text>
+
           <AmiMetrics ami={data.amiSection} />
 
           <Text style={styles.sectionHeading}>IMPRESIÓN DIAGNÓSTICA:</Text>
@@ -289,16 +338,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
           </View>
         </View>
 
-        <View style={styles.footerRule} fixed />
-        <Text style={styles.footer} fixed>
-          Evaluaciones médicas / Outsourcing de Personal Médico / Capacitación en Salud y Seguridad /
-          Evaluaciones Ergonómicas / Fisioterapia / Nutrición{'\n'}
-          Circuito del Mesón #135 Col. Del Prado C.P 76030{'\n'}
-          (442) 225-52-67 www.medicaindustrial.com
-        </Text>
-        <Text style={styles.footerTagline} fixed>
-          Salud que produce ®
-        </Text>
+        <PdfFooter />
       </Page>
     </Document>
   )
