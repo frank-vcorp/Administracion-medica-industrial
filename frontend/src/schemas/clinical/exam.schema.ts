@@ -743,4 +743,13 @@ export const ExamenMedicoCompletoSchema = ExploracionFisicaSchema
      * Opcional: exámenes existentes sin este campo siguen parseando OK.
      */
     antecedentes_captured: AntecedentesCapturaSchema.optional(),
+    /** Variante de formato: AMI | SODEXO | FLOWSERVE (snapshot al guardar). */
+    exam_variant: z.enum(['AMI', 'SODEXO', 'FLOWSERVE']).optional(),
+    /** Campos adicionales por variante corporativa. */
+    variant_extensions: z
+      .object({
+        FLOWSERVE: z.record(z.string(), z.any()).optional(),
+        SODEXO: z.record(z.string(), z.any()).optional(),
+      })
+      .optional(),
   });

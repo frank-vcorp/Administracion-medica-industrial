@@ -32,6 +32,8 @@
  *     falla (mismo patrón de Espirometría/Audiometría validadas).
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { ExamenMedicoVariantAppendixPages } from '@/components/pdf/ExamenMedicoVariantAppendix'
+import { examenMedicoVariantLabel } from '@/lib/clinical/examen-medico-variant'
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
@@ -295,6 +297,12 @@ export interface ExamenMedicoPDFData {
     studies: Array<{ serviceName: string; extractedData: unknown | null }>
     labs: Array<{ serviceName: string; extractedData: unknown | null }>
   }>
+  /** Variante corporativa del examen médico (AMI | SODEXO | FLOWSERVE). */
+  variant?: 'AMI' | 'SODEXO' | 'FLOWSERVE'
+  variantExtensions?: {
+    FLOWSERVE?: Record<string, unknown>
+    SODEXO?: Record<string, unknown>
+  }
 }
 
 // ─── Helpers de presentación ──────────────────────────────────────────────────
@@ -327,11 +335,14 @@ const statusLabel = (s: ExamenMedicoPDFData['status']) => {
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }) => (
+export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }) => {
+  const variant = data.variant ?? 'AMI'
+  const variantLabel = examenMedicoVariantLabel(variant)
+  return (
   <Document
-    title={`ExamenMedico-AMI-${data.folio.slice(0, 8)}`}
+    title={`ExamenMedico-${variant}-${data.folio.slice(0, 8)}`}
     author={`Dr(a). ${data.medico.fullName}`}
-    subject="Reporte de Examen Médico consolidado AMI"
+    subject={`Reporte de Examen Médico — ${variantLabel}`}
   >
     {/* ═════════════════════════════════════════════════════════════════════
         PÁGINA 1 — Identificación e historia
@@ -357,7 +368,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
         </View>
       </View>
 
-      <Text style={styles.docTitle}>Reporte de Examen Médico — AMI</Text>
+      <Text style={styles.docTitle}>Reporte de Examen Médico — {variantLabel}</Text>
       <Text style={styles.docSubtitle}>
         Folio: {data.folio} · Estado: {statusLabel(data.status)} · Firmado:{' '}
         {formatDate(data.signedAt)}
@@ -1122,5 +1133,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
         {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
       </Text>
     </Page>
+    <ExamenMedicoVariantAppendixPages data={data} />
   </Document>
-)
+  )
+}

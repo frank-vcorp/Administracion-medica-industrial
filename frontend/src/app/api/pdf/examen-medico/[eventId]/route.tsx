@@ -50,6 +50,10 @@ import {
 } from '@/lib/clinical/modulo1-text'
 import { readHeredoFamiliaresDisplay, readTatuajesDisplay, readTratamientoMedicoActualDisplay } from '@/lib/antecedentes-fields'
 import { formatTestAdamDisplay, formatQuisteDisplay } from '@/schemas/clinical/exam.schema'
+import {
+  isExamenMedicoTestName,
+  resolveExamenMedicoVariant,
+} from '@/lib/clinical/examen-medico-variant'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -152,6 +156,9 @@ export async function GET(
           extractedData: true,
         },
       },
+      eventTests: {
+        select: { testNameSnapshot: true },
+      },
     },
   })
 
@@ -208,6 +215,15 @@ export async function GET(
   try {
     const physicalExamData =
       (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
+    const examMedicoTest = event.eventTests.find((t) =>
+      isExamenMedicoTestName(t.testNameSnapshot),
+    )
+    const examVariant = resolveExamenMedicoVariant(
+      examMedicoTest?.testNameSnapshot,
+      str(physicalExamData.exam_variant) || null,
+    )
+    const variantExtensions =
+      (physicalExamData.variant_extensions as Record<string, unknown> | undefined) ?? {}
     const eyeAcuity =
       (event.exam?.eyeAcuityData as Record<string, unknown> | null) ?? {}
     const somatometry =
@@ -465,6 +481,11 @@ export async function GET(
           null,
       },
       logoDataUrl,
+      variant: examVariant,
+      variantExtensions: {
+        FLOWSERVE: variantExtensions.FLOWSERVE as Record<string, unknown> | undefined,
+        SODEXO: variantExtensions.SODEXO as Record<string, unknown> | undefined,
+      },
     })
 
     // Override de recomendaciones: persistidas por el médico tienen

@@ -73,6 +73,21 @@ import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
 //   "Quiero que se autopoble. Quiero que el medico solo llene lo
 //   estrictamente necesario."
 import LiveSummaryPreview from "@/components/clinical/LiveSummaryPreview"
+import { FlowserveExtension } from "@/components/clinical/examen-medico/FlowserveExtension"
+import { SodexoExtension } from "@/components/clinical/examen-medico/SodexoExtension"
+import {
+  resolveExamenMedicoVariant,
+  examenMedicoVariantLabel,
+  type ExamenMedicoVariant,
+} from "@/lib/clinical/examen-medico-variant"
+import {
+  emptyFlowserveExtension,
+  emptySodexoExtension,
+  FlowserveExtensionSchema,
+  SodexoExtensionSchema,
+  type FlowserveExtensionData,
+  type SodexoExtensionData,
+} from "@/schemas/clinical/examen-medico-variant.schema"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -87,7 +102,7 @@ type ExamData = {
 type OuterTab = 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'examen_medico'
 /** Sub-pestañas del Examen Médico clínico (pestaña 4) — IMPL-20260809-02: 'antecedentes'
  *  se añade como PRIMERA inner-tab dentro de "Examen Médico" (sub-pestaña, no outer-tab). */
-type InnerTab = 'antecedentes' | 'declarativa' | 'exploracion' | 'impresion'
+type InnerTab = 'antecedentes' | 'declarativa' | 'exploracion' | 'extension' | 'impresion'
 type M1Tab = 'gine' | 'repro' | 'inmuno'
 
 const VISUAL_FIELDS_NAMES = [
@@ -209,6 +224,8 @@ interface ExamenMedicoEstudioProps {
   somatometryEventTestId?: string
   /** ID del EventTest de Agudeza Visual para actualizar su estado al guardar — ARCH-20260506-06 */
   agudezaEventTestId?: string
+  /** Nombre snapshot del estudio (ej. Examen Médico Flowserve). */
+  testNameSnapshot?: string
 }
 
 // ─── Constantes de formularios ────────────────────────────────────────────────
@@ -478,8 +495,15 @@ export default function ExamenMedicoEstudio({
   somatometryEventTestId,
   agudezaEventTestId,
   hasMedicalVerdict = false,
+  testNameSnapshot = 'Examen Médico AMI',
 }: ExamenMedicoEstudioProps) {
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
+  const examVariant: ExamenMedicoVariant = resolveExamenMedicoVariant(
+    testNameSnapshot,
+    physicalExamData.exam_variant as string | undefined,
+  )
+  const variantExtensionsStored =
+    (physicalExamData.variant_extensions as Record<string, unknown> | undefined) ?? {}
   const initSomatometryData = (examData?.somatometryData ?? {}) as Record<string, unknown>
   const initEyeAcuityData = (examData?.eyeAcuityData ?? {}) as Record<string, unknown>
 
@@ -555,6 +579,24 @@ export default function ExamenMedicoEstudio({
     return existing && typeof existing === 'object' && !Array.isArray(existing)
       ? (existing as Record<string, unknown>)
       : {}
+  })
+
+  const [flowserveExt, setFlowserveExt] = useState<FlowserveExtensionData>(() => {
+    const raw = variantExtensionsStored.FLOWSERVE
+    if (raw && typeof raw === 'object') {
+      const parsed = FlowserveExtensionSchema.safeParse(raw)
+      if (parsed.success) return parsed.data
+    }
+    return emptyFlowserveExtension()
+  })
+
+  const [sodexoExt, setSodexoExt] = useState<SodexoExtensionData>(() => {
+    const raw = variantExtensionsStored.SODEXO
+    if (raw && typeof raw === 'object') {
+      const parsed = SodexoExtensionSchema.safeParse(raw)
+      if (parsed.success) return parsed.data
+    }
+    return emptySodexoExtension()
   })
 
   // ── Estado Somatometría (pestaña 1) ───────────────────────────────────────
@@ -672,10 +714,25 @@ export default function ExamenMedicoEstudio({
   // IMPL-20260809-02 (ARCH-20260809-01 v2): inner-tabs reordenadas — 'antecedentes' es
   // la PRIMERA sub-pestaña dentro de "Examen Médico", seguida de Módulo 1, Exploración
   // Física e Impresión/Aptitud.
+  const hasExtension =
+    examVariant === 'FLOWSERVE'
+      ? Boolean(flowserveExt.area || flowserveExt.nivel_salud || flowserveExt.contacto_emergencia)
+      : examVariant === 'SODEXO'
+        ? Boolean(sodexoExt.tipo_examen || sodexoExt.contacto_emergencia || sodexoExt.matriz_riesgos_observaciones)
+        : false
+
   const innerTabs: { id: InnerTab; label: string; icon: string; done: boolean }[] = [
     { id: 'antecedentes', label: 'Antecedentes', icon: '🩺', done: hasAntecedentes },
     { id: 'declarativa', label: 'Módulo 1', icon: '📋', done: hasM1 },
     { id: 'exploracion', label: 'Exploración Física', icon: '🩻', done: hasPhysicalExam },
+    ...(examVariant !== 'AMI'
+      ? [{
+          id: 'extension' as const,
+          label: examenMedicoVariantLabel(examVariant),
+          icon: examVariant === 'FLOWSERVE' ? '🏭' : '🍽️',
+          done: hasExtension,
+        }]
+      : []),
     { id: 'impresion', label: 'Impresión y Aptitud', icon: '✅', done: hasAptitud },
   ]
 
@@ -693,11 +750,20 @@ export default function ExamenMedicoEstudio({
     // igual que `modulo1`. El estado `form` plano sigue filtrando no-primitivos
     // (defensa contra `String({...})` = `"[object Object]"`); `antecedentesCaptured`
     // vive en estado separado y se inyecta directamente.
+    const variant_extensions: Record<string, unknown> = {}
+    if (examVariant === 'FLOWSERVE') {
+      variant_extensions.FLOWSERVE = flowserveExt
+    }
+    if (examVariant === 'SODEXO') {
+      variant_extensions.SODEXO = sodexoExt
+    }
     return {
       ...form,
       aptitud: aptitud || undefined,
       modulo1,
       antecedentes_captured: antecedentesCaptured,
+      exam_variant: examVariant,
+      ...(Object.keys(variant_extensions).length > 0 ? { variant_extensions } : {}),
     }
   }
 
@@ -1721,8 +1787,49 @@ export default function ExamenMedicoEstudio({
               ← Antecedentes
             </button>
             <button
-              onClick={() => setActiveInnerTab('impresion')}
+              onClick={() => setActiveInnerTab(examVariant !== 'AMI' ? 'extension' : 'impresion')}
               className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
+            >
+              Continuar → {examVariant !== 'AMI' ? examenMedicoVariantLabel(examVariant) : 'Impresión'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sub-tab extensión corporativa (Flowserve / Sodexo) ───────── */}
+      {activeInnerTab === 'extension' && examVariant === 'FLOWSERVE' && (
+        <div className="space-y-4">
+          <FlowserveExtension value={flowserveExt} onChange={setFlowserveExt} readonly={readonly} />
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveInnerTab('exploracion')}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-xl"
+            >
+              ← Exploración
+            </button>
+            <button
+              onClick={() => setActiveInnerTab('impresion')}
+              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl"
+            >
+              Continuar → Impresión
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeInnerTab === 'extension' && examVariant === 'SODEXO' && (
+        <div className="space-y-4">
+          <SodexoExtension value={sodexoExt} onChange={setSodexoExt} readonly={readonly} />
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveInnerTab('exploracion')}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-xl"
+            >
+              ← Exploración
+            </button>
+            <button
+              onClick={() => setActiveInnerTab('impresion')}
+              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl"
             >
               Continuar → Impresión
             </button>

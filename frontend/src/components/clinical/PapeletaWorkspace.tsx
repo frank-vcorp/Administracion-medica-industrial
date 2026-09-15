@@ -1501,7 +1501,7 @@ function StudyPanel({
           <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
             <span className="text-blue-600 text-base">📋</span>
             <div>
-              <p className="text-sm font-bold text-blue-800">Examen Médico — Formulario Clínico</p>
+              <p className="text-sm font-bold text-blue-800">{test.testNameSnapshot} — Formulario Clínico</p>
               <p className="text-xs text-blue-600">
                 Completa las secciones: Módulo 1 → Exploración Física → Impresión / Aptitud
               </p>
@@ -1510,6 +1510,7 @@ function StudyPanel({
           <ExamenMedicoEstudio
             eventId={eventId}
             eventTestId={test.id}
+            testNameSnapshot={test.testNameSnapshot}
             examData={examData}
             prefilledData={prefilledData ?? null}
             longitudinalData={longitudinalData ?? null}
