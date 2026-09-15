@@ -574,8 +574,9 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
   try {
     const normalizedExtractedData = JSON.parse(JSON.stringify(extractedData)) as Prisma.InputJsonValue
 
-    // FastAPI: `study_type` y `triggered_by_user_id` van en query; el body es
-    // el dict `extracted_data` directamente (no anidado).
+    // FastAPI (endpoint con varios Dict opcionales en body): `study_type` y
+    // `triggered_by_user_id` van en query; el JSON body debe incluir la clave
+    // `extracted_data` (no enviar el dict plano como body raíz).
     const query = new URLSearchParams({ study_type: studyType })
     if (triggeredByUserId) {
       query.set('triggered_by_user_id', triggeredByUserId)
@@ -585,7 +586,7 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(extractedData),
+        body: JSON.stringify({ extracted_data: extractedData }),
       },
     )
 
