@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   confrontacionCol: { flex: 1, alignItems: 'center' },
   confrontacionEye: { fontSize: 6, fontWeight: 'bold', textAlign: 'center', marginBottom: 1 },
   confrontacionText: { fontSize: 5.5, textAlign: 'center', marginBottom: 2, lineHeight: 1.2 },
-  confrontacionImage: { width: '94%', height: 72, objectFit: 'contain' },
+  confrontacionImage: { width: '94%', height: 110, objectFit: 'contain' },
   ishiharaHint: { fontSize: 5.5, fontStyle: 'italic', marginTop: 1, marginBottom: 1 },
   ishiharaImage: { width: '100%', height: 20, objectFit: 'contain', marginBottom: 1 },
   ishiharaTable: { borderWidth: 0.75, borderColor: '#94a3b8' },
