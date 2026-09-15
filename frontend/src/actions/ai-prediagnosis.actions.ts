@@ -48,6 +48,10 @@ import {
   buildEspirometryPdfDataAsync,
   resolveAmiLogoDataUrl,
 } from '@/lib/espirometry-pdf'
+import {
+  buildCampimetriaPdfDataAsync,
+  generateCampimetriaValidatedPdf,
+} from '@/lib/campimetria-pdf'
 import { ensureEspirometrySourceCrop } from '@/lib/espirometry-source-crop'
 // IMPL-FEATURE-20260825-02: generación del PDF validado de Audiometría.
 // Mismo patrón que Espirometría: helper puro fuera del server action.
@@ -938,6 +942,17 @@ export async function submitDoctorStudyReview(
             reviewId: review.id,
             data: pdfData,
           })
+        } else if (studyType === 'Campimetria') {
+          const pdfData = await buildCampimetriaPdfDataAsync({
+            ...baseInput,
+            doctorStatus: typedDoctorStatus,
+            eventId: eventTestData?.eventId ?? eventId,
+            clinicalContext: eventTestData?.clinicalContext,
+          })
+          pdfResult = await generateCampimetriaValidatedPdf({
+            reviewId: review.id,
+            data: pdfData,
+          })
         } else {
           // Default: Espirometría (FEATURE-20260825-01). Otros estudios sin
           // template propio: NO se genera PDF (contrato vigente).
@@ -950,18 +965,25 @@ export async function submitDoctorStudyReview(
             }
           }
 
-          const pdfData = await buildEspirometryPdfDataAsync({
-            ...baseInput,
-            doctorStatus: typedDoctorStatus,
-            eventTestId,
-            clinicalContext: eventTestData?.clinicalContext,
-          })
-          pdfResult = await generateEspirometryValidatedPdf({
-            reviewId: review.id,
-            data: pdfData,
-          })
+          if (studyType === 'Espirometria' && eventTestId) {
+            const pdfData = await buildEspirometryPdfDataAsync({
+              ...baseInput,
+              doctorStatus: typedDoctorStatus,
+              eventTestId,
+              clinicalContext: eventTestData?.clinicalContext,
+            })
+            pdfResult = await generateEspirometryValidatedPdf({
+              reviewId: review.id,
+              data: pdfData,
+            })
+          }
         }
 
+        if (!pdfResult) {
+          throw new Error(
+            `No hay plantilla PDF validada para el estudio "${studyType || 'desconocido'}".`,
+          )
+        }
         await prisma.doctorStudyReview.update({
           where: { id: review.id },
           data: {

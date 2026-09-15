@@ -678,7 +678,9 @@ export default function StudyAIPrediagnosisPanel({
                     ? 'audiometry'
                     : studyType === 'Espirometria'
                       ? 'espirometry'
-                      : null
+                      : studyType === 'Campimetria'
+                        ? 'campimetria'
+                        : null
                 if (!pdfKind) return null
                 const testIdPrefix = pdfKind
                 return (

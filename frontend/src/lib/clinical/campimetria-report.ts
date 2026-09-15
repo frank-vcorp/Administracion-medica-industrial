@@ -2,8 +2,52 @@
  * Texto de impresión / recomendaciones del reporte 005-2018 (derivado, no se teclea).
  * @id IMPL-FEATURE-20260914-01
  */
-import type { CampimetriaQuestionnairePayload } from '@/schemas/clinical/campimetria-questionnaire.schema'
+import type {
+  AptitudOftalmo,
+  CampimetriaQuestionnairePayload,
+  ExploracionOjoField,
+} from '@/schemas/clinical/campimetria-questionnaire.schema'
+import {
+  EXPLORACION_OJO_FIELDS,
+  EXPLORACION_OJO_PLANTILLA,
+} from '@/schemas/clinical/campimetria-questionnaire.schema'
 import type { InheritedAcuity } from '@/lib/clinical/campimetria-inherited'
+
+export function formatExploracionCampoPdf(
+  field: ExploracionOjoField,
+  value: CampimetriaQuestionnairePayload['exploracion']['ojo_derecho'][ExploracionOjoField],
+): string {
+  if (value.estado === 'NO_REALIZADO') return 'NO REALIZADO'
+  if (value.estado === 'ALTERADO') return (value.observacion ?? 'ALTERADO').trim()
+  return EXPLORACION_OJO_PLANTILLA[field]
+}
+
+export function exploracionAlterada(
+  payload: CampimetriaQuestionnairePayload,
+): boolean {
+  for (const ojo of ['ojo_derecho', 'ojo_izquierdo'] as const) {
+    for (const field of EXPLORACION_OJO_FIELDS) {
+      if (payload.exploracion[ojo][field].estado === 'ALTERADO') return true
+    }
+  }
+  return false
+}
+
+/** Aptitud oftalmológica derivada de la captura (005-2018). */
+export function deriveAptitudCampimetria(input: {
+  payload: CampimetriaQuestionnairePayload
+  acuity: InheritedAcuity
+}): AptitudOftalmo {
+  const { payload, acuity } = input
+  const alterado =
+    payload.confrontacion.ojo_derecho === 'ALTERADOS' ||
+    payload.confrontacion.ojo_izquierdo === 'ALTERADOS' ||
+    payload.ishihara.resultado === 'ALTERADO' ||
+    acuity.resumen === 'DISMINUIDA' ||
+    exploracionAlterada(payload)
+  if (alterado) return 'APTA CON RESTRICCIONES'
+  return 'OFTALMOLOGICAMENTE APTA PARA LABORAR'
+}
 
 export function buildCampimetriaImpresion(input: {
   payload: CampimetriaQuestionnairePayload
