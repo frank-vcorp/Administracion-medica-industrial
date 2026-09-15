@@ -49,13 +49,34 @@ function siNoLabel(v: string): string {
   return v === 'SI' ? 'SI' : 'NO'
 }
 
+function findAntecedente(
+  items: ReturnType<typeof inheritAntecedentesFromPapeleta>,
+  label: string,
+): ReturnType<typeof inheritAntecedentesFromPapeleta>[number] | undefined {
+  return items.find(a => a.label === label)
+}
+
 function antecedenteEstado(items: ReturnType<typeof inheritAntecedentesFromPapeleta>, label: string): string {
-  const row = items.find(a => a.label === label)
+  const row = findAntecedente(items, label)
   if (!row || row.estado === 'Sin dato en papeleta') return 'NO'
   const e = row.estado.toUpperCase()
   if (e.includes('SI') || e.includes('POSIT') || e.includes('PADECE')) return 'SI'
   if (e.includes('NEG')) return 'NO'
   return row.estado
+}
+
+function antecedenteTiempoEvolution(
+  items: ReturnType<typeof inheritAntecedentesFromPapeleta>,
+  label: string,
+): string {
+  const row = findAntecedente(items, label)
+  if (!row || row.estado === 'Sin dato en papeleta') return 'N/A'
+  const e = row.estado.toUpperCase()
+  if (e.includes('NEG') || e === 'NO') return 'N/A'
+  if (e.includes('SI') || e.includes('POSIT') || e.includes('PADECE')) {
+    return (row.detalle ?? '').trim() || 'N/A'
+  }
+  return (row.detalle ?? '').trim() || 'N/A'
 }
 
 export interface BuildCampimetriaPdfInput {
@@ -188,7 +209,9 @@ export async function buildCampimetriaPdfDataAsync(
           ? (payload.antecedentes.causa_cirugia ?? 'N/A')
           : 'N/A',
       diabetes: antecedenteEstado(inheritedAnt, 'Diabetes'),
+      tiempoEvolutionDiabetes: antecedenteTiempoEvolution(inheritedAnt, 'Diabetes'),
       hipertension: antecedenteEstado(inheritedAnt, 'Hipertensión arterial'),
+      tiempoEvolutionHipertension: antecedenteTiempoEvolution(inheritedAnt, 'Hipertensión arterial'),
     },
     agudeza: {
       od: {
@@ -216,7 +239,6 @@ export async function buildCampimetriaPdfDataAsync(
       od: ishiharaOd,
       oi: ishiharaOi,
     },
-    resumenClinico: buildCampimetriaImpresion({ payload, acuity }),
     impresionDiagnostica:
       (input.doctorDiagnosis ?? '').trim() ||
       buildCampimetriaImpresion({ payload, acuity }),

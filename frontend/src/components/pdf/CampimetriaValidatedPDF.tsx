@@ -1,68 +1,151 @@
 /**
- * Plantilla PDF validado de Campimetría — formato AMI 005-2018.
+ * Plantilla PDF validado de Campimetría — formato AMI 005-2018 (1 hoja carta).
  * @id IMPL-FEATURE-20260914-01
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { ISHIHARA_PLATES } from '@/schemas/clinical/campimetria-questionnaire.schema'
 
 const styles = StyleSheet.create({
-  page: { padding: 28, fontFamily: 'Helvetica', fontSize: 8, color: '#0f172a' },
+  page: {
+    paddingTop: 14,
+    paddingBottom: 22,
+    paddingHorizontal: 18,
+    fontFamily: 'Helvetica',
+    fontSize: 6.5,
+    color: '#0f172a',
+    lineHeight: 1.25,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#0f766e',
-    paddingBottom: 6,
-  },
-  brand: { fontSize: 14, fontWeight: 'bold', color: '#0f766e' },
-  brandSub: { fontSize: 7, color: '#475569' },
-  logoImage: { width: 110, height: 40, objectFit: 'contain' },
-  title: { fontSize: 12, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
-  row2: { flexDirection: 'row', marginBottom: 2 },
-  label: { width: 90, fontWeight: 'bold' },
-  value: { flex: 1 },
-  sectionTitle: {
-    fontSize: 8,
-    fontWeight: 'bold',
-    backgroundColor: '#f1f5f9',
-    padding: 3,
-    marginTop: 6,
+    alignItems: 'center',
     marginBottom: 4,
-    textTransform: 'uppercase',
+    borderBottomWidth: 0.75,
+    borderBottomColor: '#0f766e',
+    paddingBottom: 3,
   },
-  twoCol: { flexDirection: 'row', gap: 8 },
-  col: { flex: 1 },
-  colTitle: { fontSize: 8, fontWeight: 'bold', textAlign: 'center', marginBottom: 3 },
-  cell: { fontSize: 7, lineHeight: 1.35, marginBottom: 2 },
-  image: { width: '100%', height: 70, objectFit: 'contain', marginVertical: 4 },
-  table: { borderWidth: 1, borderColor: '#cbd5e1', marginTop: 4 },
-  tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  tableHead: { flex: 1, fontSize: 7, fontWeight: 'bold', padding: 2, textAlign: 'center' },
-  tableCell: { flex: 1, fontSize: 7, padding: 2, textAlign: 'center' },
-  summary: {
-    marginTop: 8,
-    fontSize: 8,
+  brand: { fontSize: 11, fontWeight: 'bold', color: '#0f766e' },
+  brandSub: { fontSize: 5.5, color: '#475569' },
+  logoImage: { width: 72, height: 26, objectFit: 'contain' },
+  title: {
+    fontSize: 9,
     fontWeight: 'bold',
     textAlign: 'center',
-    lineHeight: 1.4,
+    flex: 1,
+    paddingHorizontal: 6,
   },
-  block: { marginTop: 6, fontSize: 8, lineHeight: 1.4 },
+  sectionBar: {
+    fontSize: 6.5,
+    fontWeight: 'bold',
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 2,
+    paddingHorizontal: 3,
+    marginTop: 3,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  gridRow: { flexDirection: 'row', marginBottom: 1 },
+  gridLabel: { width: '22%', fontWeight: 'bold', paddingRight: 2 },
+  gridValue: { width: '28%', paddingRight: 4 },
+  gridLabelRight: { width: '22%', fontWeight: 'bold', paddingRight: 2 },
+  gridValueRight: { width: '28%' },
+  patientRow: { flexDirection: 'row', marginBottom: 1 },
+  patientLabel: { fontWeight: 'bold', marginRight: 2 },
+  patientValue: { marginRight: 10 },
+  acuityRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 1, alignItems: 'baseline' },
+  acuityEye: { fontWeight: 'bold', width: '18%' },
+  acuityField: { marginRight: 6 },
+  acuityFieldLabel: { fontWeight: 'bold' },
+  table: { borderWidth: 0.75, borderColor: '#94a3b8', marginTop: 1 },
+  tableRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#cbd5e1' },
+  tableRowLast: { flexDirection: 'row' },
+  tableHeadCell: {
+    flex: 1,
+    fontSize: 6,
+    fontWeight: 'bold',
+    paddingVertical: 1.5,
+    paddingHorizontal: 2,
+    textAlign: 'center',
+    backgroundColor: '#e2e8f0',
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
+  },
+  tableLabelCell: {
+    width: '20%',
+    fontSize: 6,
+    fontWeight: 'bold',
+    paddingVertical: 1,
+    paddingHorizontal: 2,
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
+  },
+  tableDataCell: {
+    flex: 1,
+    fontSize: 5.8,
+    paddingVertical: 1,
+    paddingHorizontal: 2,
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
+  },
+  confrontacionRow: { flexDirection: 'row', marginTop: 2, gap: 4 },
+  confrontacionCol: { flex: 1, alignItems: 'center' },
+  confrontacionText: { fontSize: 6, textAlign: 'center', marginBottom: 1 },
+  confrontacionImage: { width: '100%', height: 38, objectFit: 'contain' },
+  ishiharaHint: { fontSize: 5.5, fontStyle: 'italic', marginTop: 1, marginBottom: 1 },
+  ishiharaImage: { width: '100%', height: 24, objectFit: 'contain', marginBottom: 2 },
+  ishiharaTable: { borderWidth: 0.75, borderColor: '#94a3b8' },
+  ishiharaHead: {
+    flex: 1,
+    fontSize: 6,
+    fontWeight: 'bold',
+    paddingVertical: 1,
+    textAlign: 'center',
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
+  },
+  ishiharaCell: {
+    flex: 1,
+    fontSize: 6,
+    paddingVertical: 1,
+    textAlign: 'center',
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
+  },
+  ishiharaEye: {
+    width: 36,
+    fontSize: 6,
+    fontWeight: 'bold',
+    paddingVertical: 1,
+    paddingHorizontal: 2,
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
+  },
+  clinicalBlock: { marginTop: 3, marginBottom: 1 },
+  clinicalLabel: { fontWeight: 'bold', marginBottom: 0.5 },
+  clinicalText: { fontSize: 6.5, lineHeight: 1.3 },
   signatureRow: {
-    marginTop: 24,
+    marginTop: 6,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-end',
   },
-  signatureBox: { width: 200, alignItems: 'center' },
-  signatureImage: { width: 160, height: 50, objectFit: 'contain' },
-  signatureLine: { width: 160, borderBottomWidth: 1, borderBottomColor: '#0f172a', marginBottom: 3 },
+  signatureCol: { width: '30%', alignItems: 'center' },
+  signatureTitle: { fontSize: 6, fontWeight: 'bold', marginBottom: 2 },
+  signatureImage: { width: 90, height: 28, objectFit: 'contain' },
+  signatureLine: {
+    width: 90,
+    borderBottomWidth: 0.75,
+    borderBottomColor: '#0f172a',
+    marginBottom: 2,
+  },
+  signatureName: { fontSize: 6.5, fontWeight: 'bold', textAlign: 'center' },
+  signatureMeta: { fontSize: 5.5, textAlign: 'center', color: '#475569' },
+  patientSignBox: { width: '28%', alignItems: 'center' },
   footer: {
     position: 'absolute',
-    bottom: 18,
-    left: 28,
-    right: 28,
-    textAlign: 'right',
-    fontSize: 7,
+    bottom: 10,
+    right: 18,
+    fontSize: 6,
     color: '#64748b',
   },
 })
@@ -84,7 +167,9 @@ export interface CampimetriaValidatedPDFData {
     cirugiasOculares: string
     causaCirugia: string
     diabetes: string
+    tiempoEvolutionDiabetes: string
     hipertension: string
+    tiempoEvolutionHipertension: string
   }
   agudeza: {
     od: { lejanaSin: string; lejanaCon: string; cercanaSin: string; cercanaCon: string }
@@ -99,7 +184,6 @@ export interface CampimetriaValidatedPDFData {
     od: Record<string, string>
     oi: Record<string, string>
   }
-  resumenClinico: string
   impresionDiagnostica: string
   aptitud: string
   recomendaciones: string[]
@@ -128,16 +212,52 @@ function fmtDate(d: string | Date): string {
   }).format(date)
 }
 
+const EXPLORACION_ROWS: Array<{ key: string; label: string }> = [
+  { key: 'movimientos', label: 'MOVIMIENTOS OCULARES:' },
+  { key: 'reflejos', label: 'REFLEJOS PUPILARES:' },
+  { key: 'pupilas', label: 'PUPILAS' },
+  { key: 'conjuntiva', label: 'CONJUNTIVA:' },
+  { key: 'esclera', label: 'ESCLERA:' },
+  { key: 'fondo_de_ojo', label: 'FONDO DE OJO:' },
+  {
+    key: 'anexos',
+    label: 'ANEXOS Y GLANDULAS DE MEIBOMIO, CONJUNTIVALES, LAGRIMAL:',
+  },
+]
+
+function AcuityLine({
+  eyeLabel,
+  data,
+}: {
+  eyeLabel: string
+  data: { lejanaSin: string; lejanaCon: string; cercanaSin: string; cercanaCon: string }
+}) {
+  return (
+    <View style={styles.acuityRow}>
+      <Text style={styles.acuityEye}>{eyeLabel}</Text>
+      <Text style={styles.acuityField}>
+        <Text style={styles.acuityFieldLabel}>SIN LENTES: </Text>
+        {data.lejanaSin}
+      </Text>
+      <Text style={styles.acuityField}>
+        <Text style={styles.acuityFieldLabel}>CON LENTES: </Text>
+        {data.lejanaCon}
+      </Text>
+      <Text style={styles.acuityField}>
+        <Text style={styles.acuityFieldLabel}>CERCANA SIN LENTES: </Text>
+        {data.cercanaSin}
+      </Text>
+      <Text style={styles.acuityField}>
+        <Text style={styles.acuityFieldLabel}>CERCANA CON LENTES: </Text>
+        {data.cercanaCon}
+      </Text>
+    </View>
+  )
+}
+
 export function CampimetriaValidatedPDF({ data }: { data: CampimetriaValidatedPDFData }) {
-  const exploracionFields: Array<{ key: string; label: string }> = [
-    { key: 'movimientos', label: 'MOVIMIENTOS OCULARES' },
-    { key: 'reflejos', label: 'REFLEJOS PUPILARES' },
-    { key: 'pupilas', label: 'PUPILAS' },
-    { key: 'conjuntiva', label: 'CONJUNTIVA' },
-    { key: 'esclera', label: 'ESCLERA' },
-    { key: 'fondo_de_ojo', label: 'FONDO DE OJO' },
-    { key: 'anexos', label: 'ANEXOS Y GLÁNDULAS' },
-  ]
+  const recomendacionesText =
+    data.recomendaciones.length > 0 ? data.recomendaciones.join(', ') : '—'
 
   return (
     <Document>
@@ -147,6 +267,7 @@ export function CampimetriaValidatedPDF({ data }: { data: CampimetriaValidatedPD
             <Text style={styles.brand}>AMI</Text>
             <Text style={styles.brandSub}>Salud en el Trabajo</Text>
           </View>
+          <Text style={styles.title}>REPORTE DE EXAMEN VISUAL</Text>
           {data.logoUrl ? (
             <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
@@ -154,174 +275,160 @@ export function CampimetriaValidatedPDF({ data }: { data: CampimetriaValidatedPD
           )}
         </View>
 
-        <Text style={styles.title}>REPORTE DE EXAMEN VISUAL</Text>
-        <Text style={{ fontSize: 10, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 }}>
-          {data.patient.fullName.toUpperCase()}
-        </Text>
-
-        <View style={styles.row2}>
-          <Text style={styles.label}>NOMBRE:</Text>
-          <Text style={styles.value}>{data.patient.fullName}</Text>
-        </View>
-        <View style={styles.row2}>
-          <Text style={styles.label}>EMPRESA:</Text>
-          <Text style={styles.value}>{v(data.patient.companyName)}</Text>
-        </View>
-        <View style={styles.row2}>
-          <Text style={styles.label}>EDAD:</Text>
-          <Text style={styles.value}>
+        <View style={styles.patientRow}>
+          <Text style={styles.patientLabel}>NOMBRE:</Text>
+          <Text style={[styles.patientValue, { flex: 1 }]}>{data.patient.fullName.toUpperCase()}</Text>
+          <Text style={styles.patientLabel}>EDAD:</Text>
+          <Text style={styles.patientValue}>
             {data.patient.ageYears != null ? `${data.patient.ageYears} AÑOS` : '—'}
           </Text>
-          <Text style={[styles.label, { width: 50, marginLeft: 8 }]}>FECHA:</Text>
-          <Text style={styles.value}>{data.patient.eventDate}</Text>
+        </View>
+        <View style={styles.patientRow}>
+          <Text style={styles.patientLabel}>EMPRESA:</Text>
+          <Text style={[styles.patientValue, { flex: 1 }]}>{v(data.patient.companyName)}</Text>
+          <Text style={styles.patientLabel}>FECHA:</Text>
+          <Text style={styles.patientValue}>{data.patient.eventDate}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Antecedentes oftalmológicos de importancia</Text>
-        <View style={styles.row2}>
-          <Text style={styles.label}>USO DE LENTES:</Text>
-          <Text style={styles.value}>{data.antecedentes.usoLentes}</Text>
+        <Text style={styles.sectionBar}>Antecedentes oftalmológicos de importancia</Text>
+        <View style={styles.gridRow}>
+          <Text style={styles.gridLabel}>USO DE LENTES:</Text>
+          <Text style={styles.gridValue}>{data.antecedentes.usoLentes}</Text>
+          <Text style={styles.gridLabelRight}>DESDE HACE CUANTO TIEMPO USA LENTES:</Text>
+          <Text style={styles.gridValueRight}>{data.antecedentes.tiempoLentes}</Text>
         </View>
-        <View style={styles.row2}>
-          <Text style={styles.label}>DESDE CUÁNTO:</Text>
-          <Text style={styles.value}>{data.antecedentes.tiempoLentes}</Text>
+        <View style={styles.gridRow}>
+          <Text style={styles.gridLabel}>CIRUGIAS OCULARES:</Text>
+          <Text style={styles.gridValue}>{data.antecedentes.cirugiasOculares}</Text>
+          <Text style={styles.gridLabelRight}>CAUSA DE LA CIRUGIA:</Text>
+          <Text style={styles.gridValueRight}>{data.antecedentes.causaCirugia}</Text>
         </View>
-        <View style={styles.row2}>
-          <Text style={styles.label}>CIRUGÍAS OCULARES:</Text>
-          <Text style={styles.value}>{data.antecedentes.cirugiasOculares}</Text>
+        <View style={styles.gridRow}>
+          <Text style={styles.gridLabel}>PADECE DIABETES:</Text>
+          <Text style={styles.gridValue}>{data.antecedentes.diabetes}</Text>
+          <Text style={styles.gridLabelRight}>TIEMPO DE EVOLUCION:</Text>
+          <Text style={styles.gridValueRight}>{data.antecedentes.tiempoEvolutionDiabetes}</Text>
         </View>
-        <View style={styles.row2}>
-          <Text style={styles.label}>CAUSA CIRUGÍA:</Text>
-          <Text style={styles.value}>{data.antecedentes.causaCirugia}</Text>
-        </View>
-        <View style={styles.row2}>
-          <Text style={styles.label}>PADECE DIABETES:</Text>
-          <Text style={styles.value}>{data.antecedentes.diabetes}</Text>
-        </View>
-        <View style={styles.row2}>
-          <Text style={styles.label}>PADECE HTA:</Text>
-          <Text style={styles.value}>{data.antecedentes.hipertension}</Text>
+        <View style={styles.gridRow}>
+          <Text style={styles.gridLabel}>PADECE HIPERTENSION ARTERIAL:</Text>
+          <Text style={styles.gridValue}>{data.antecedentes.hipertension}</Text>
+          <Text style={styles.gridLabelRight}>TIEMPO DE EVOLUCION:</Text>
+          <Text style={styles.gridValueRight}>{data.antecedentes.tiempoEvolutionHipertension}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Agudeza visual</Text>
+        <Text style={styles.sectionBar}>Agudeza visual</Text>
         {data.agudeza.pending ? (
-          <Text style={styles.cell}>PENDIENTE EN PAPELETA</Text>
+          <Text style={styles.clinicalText}>PENDIENTE EN PAPELETA</Text>
         ) : (
-          <View style={styles.twoCol}>
-            <View style={styles.col}>
-              <Text style={styles.colTitle}>OJO DERECHO</Text>
-              <Text style={styles.cell}>LEJANA SIN LENTES: {data.agudeza.od.lejanaSin}</Text>
-              <Text style={styles.cell}>LEJANA CON LENTES: {data.agudeza.od.lejanaCon}</Text>
-              <Text style={styles.cell}>CERCANA SIN LENTES: {data.agudeza.od.cercanaSin}</Text>
-              <Text style={styles.cell}>CERCANA CON LENTES: {data.agudeza.od.cercanaCon}</Text>
-            </View>
-            <View style={styles.col}>
-              <Text style={styles.colTitle}>OJO IZQUIERDO</Text>
-              <Text style={styles.cell}>LEJANA SIN LENTES: {data.agudeza.oi.lejanaSin}</Text>
-              <Text style={styles.cell}>LEJANA CON LENTES: {data.agudeza.oi.lejanaCon}</Text>
-              <Text style={styles.cell}>CERCANA SIN LENTES: {data.agudeza.oi.cercanaSin}</Text>
-              <Text style={styles.cell}>CERCANA CON LENTES: {data.agudeza.oi.cercanaCon}</Text>
-            </View>
-          </View>
+          <>
+            <AcuityLine eyeLabel="AGUDEZA VISUAL OJO DERECHO:" data={data.agudeza.od} />
+            <AcuityLine eyeLabel="AGUDEZA VISUAL OJO IZQUIERDO:" data={data.agudeza.oi} />
+          </>
         )}
 
-        <Text style={styles.sectionTitle}>Exploración oftalmológica</Text>
-        <View style={styles.twoCol}>
-          <View style={styles.col}>
-            <Text style={styles.colTitle}>OJO DERECHO</Text>
-            {exploracionFields.map(f => (
-              <Text key={f.key} style={styles.cell}>
-                {f.label}: {data.exploracionOd[f.key] ?? '—'}
-              </Text>
-            ))}
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.colTitle}>OJO IZQUIERDO</Text>
-            {exploracionFields.map(f => (
-              <Text key={f.key} style={styles.cell}>
-                {f.label}: {data.exploracionOi[f.key] ?? '—'}
-              </Text>
-            ))}
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Campimetría de confrontación</Text>
-        <View style={styles.twoCol}>
-          <View style={styles.col}>
-            <Text style={styles.cell}>OD: {data.confrontacion.od}</Text>
-            {data.confrontacionOdImage ? (
-              <Image style={styles.image} src={data.confrontacionOdImage} />
-            ) : null}
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.cell}>OI: {data.confrontacion.oi}</Text>
-            {data.confrontacionOiImage ? (
-              <Image style={styles.image} src={data.confrontacionOiImage} />
-            ) : null}
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Prueba de Ishihara — {data.ishihara.resultado}</Text>
-        {data.ishiharaImage ? <Image style={styles.image} src={data.ishiharaImage} /> : null}
-        <View style={styles.table}>
+        <View style={[styles.table, { marginTop: 3 }]}>
           <View style={styles.tableRow}>
-            <Text style={styles.tableHead}>OJO</Text>
+            <Text style={[styles.tableLabelCell, { backgroundColor: '#e2e8f0' }]} />
+            <Text style={[styles.tableHeadCell, { flex: 1 }]}>OJO IZQUIERDO</Text>
+            <Text style={[styles.tableHeadCell, { flex: 1, borderRightWidth: 0 }]}>OJO DERECHO</Text>
+          </View>
+          {EXPLORACION_ROWS.map((row, idx) => (
+            <View
+              key={row.key}
+              style={idx === EXPLORACION_ROWS.length - 1 ? styles.tableRowLast : styles.tableRow}
+            >
+              <Text style={styles.tableLabelCell}>{row.label}</Text>
+              <Text style={styles.tableDataCell}>{data.exploracionOi[row.key] ?? '—'}</Text>
+              <Text style={[styles.tableDataCell, { borderRightWidth: 0 }]}>
+                {data.exploracionOd[row.key] ?? '—'}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={styles.sectionBar}>Campimetria de confrontacion</Text>
+        <View style={styles.confrontacionRow}>
+          <View style={styles.confrontacionCol}>
+            <Text style={styles.confrontacionText}>{data.confrontacion.oi}</Text>
+            {data.confrontacionOiImage ? (
+              <Image style={styles.confrontacionImage} src={data.confrontacionOiImage} />
+            ) : null}
+          </View>
+          <View style={styles.confrontacionCol}>
+            <Text style={styles.confrontacionText}>{data.confrontacion.od}</Text>
+            {data.confrontacionOdImage ? (
+              <Image style={styles.confrontacionImage} src={data.confrontacionOdImage} />
+            ) : null}
+          </View>
+        </View>
+
+        <Text style={styles.sectionBar}>Prueba de Ishihara: {data.ishihara.resultado}</Text>
+        <Text style={styles.ishiharaHint}>
+          Favor de especificar en el recuadro el número referido por el paciente
+        </Text>
+        {data.ishiharaImage ? <Image style={styles.ishiharaImage} src={data.ishiharaImage} /> : null}
+        <View style={styles.ishiharaTable}>
+          <View style={styles.tableRow}>
+            <Text style={styles.ishiharaEye}>OJO</Text>
             {ISHIHARA_PLATES.map(p => (
-              <Text key={p.id} style={styles.tableHead}>
+              <Text key={p.id} style={styles.ishiharaHead}>
                 {p.displayExpected ?? p.expected}
               </Text>
             ))}
           </View>
           <View style={styles.tableRow}>
-            <Text style={styles.tableCell}>OD</Text>
+            <Text style={styles.ishiharaEye}>OD</Text>
             {ISHIHARA_PLATES.map(p => (
-              <Text key={p.id} style={styles.tableCell}>
+              <Text key={p.id} style={styles.ishiharaCell}>
                 {data.ishihara.od[p.id] || '—'}
               </Text>
             ))}
           </View>
-          <View style={styles.tableRow}>
-            <Text style={styles.tableCell}>OI</Text>
+          <View style={styles.tableRowLast}>
+            <Text style={styles.ishiharaEye}>OI</Text>
             {ISHIHARA_PLATES.map(p => (
-              <Text key={p.id} style={styles.tableCell}>
+              <Text key={p.id} style={styles.ishiharaCell}>
                 {data.ishihara.oi[p.id] || '—'}
               </Text>
             ))}
           </View>
         </View>
 
-        <Text style={styles.summary}>{data.resumenClinico}</Text>
-
-        <View style={styles.block}>
-          <Text style={{ fontWeight: 'bold' }}>IMPRESIÓN DIAGNÓSTICA:</Text>
-          <Text>{data.impresionDiagnostica}</Text>
+        <View style={styles.clinicalBlock}>
+          <Text style={styles.clinicalLabel}>IMPRESION DIAGNOSTICA:</Text>
+          <Text style={styles.clinicalText}>{data.impresionDiagnostica}</Text>
         </View>
-        <View style={styles.block}>
-          <Text style={{ fontWeight: 'bold' }}>APTITUD SEGÚN HALLAZGOS FÍSICOS</Text>
-          <Text>{data.aptitud}</Text>
+        <View style={styles.clinicalBlock}>
+          <Text style={styles.clinicalLabel}>APTITUD SEGÚN HALLAZGOS FÍSICOS</Text>
+          <Text style={styles.clinicalText}>{data.aptitud}</Text>
         </View>
-        {data.recomendaciones.length > 0 && (
-          <View style={styles.block}>
-            <Text style={{ fontWeight: 'bold' }}>RECOMENDACIONES:</Text>
-            {data.recomendaciones.map((r, i) => (
-              <Text key={i}>• {r}</Text>
-            ))}
-          </View>
-        )}
+        <View style={styles.clinicalBlock}>
+          <Text style={styles.clinicalLabel}>RECOMENDACIONES:</Text>
+          <Text style={styles.clinicalText}>{recomendacionesText}</Text>
+        </View>
 
         <View style={styles.signatureRow}>
-          <View style={styles.signatureBox}>
-            <Text style={{ fontSize: 7, marginBottom: 4 }}>REALIZÓ EXAMEN</Text>
+          <View style={styles.signatureCol}>
+            <Text style={styles.signatureTitle}>REALIZÓ EXAMEN</Text>
+            <View style={styles.signatureLine} />
           </View>
-          <View style={styles.signatureBox}>
-            <Text style={{ fontSize: 7, marginBottom: 4 }}>REVISÓ EXAMEN</Text>
+          <View style={styles.signatureCol}>
+            <Text style={styles.signatureTitle}>REVISÓ EXAMEN</Text>
             {data.medico.signatureImageUrl ? (
               <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
             ) : (
               <View style={styles.signatureLine} />
             )}
-            <Text style={{ fontSize: 8, fontWeight: 'bold' }}>{data.medico.fullName}</Text>
-            <Text style={{ fontSize: 7 }}>CED. PROF. {data.medico.professionalLicense}</Text>
-            <Text style={{ fontSize: 7, color: '#64748b' }}>{fmtDate(data.signedAt)}</Text>
+            <Text style={styles.signatureName}>{data.medico.fullName}</Text>
+            <Text style={styles.signatureMeta}>CED.PROF {data.medico.professionalLicense}</Text>
+            <Text style={styles.signatureMeta}>{fmtDate(data.signedAt)}</Text>
+          </View>
+          <View style={styles.patientSignBox}>
+            <Text style={styles.signatureTitle}>NOMBRE DEL PACIENTE</Text>
+            <View style={styles.signatureLine} />
+            <Text style={[styles.signatureName, { marginTop: 2 }]}>
+              {data.patient.fullName.toUpperCase()}
+            </Text>
           </View>
         </View>
 
