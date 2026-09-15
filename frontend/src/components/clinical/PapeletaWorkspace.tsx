@@ -71,6 +71,7 @@ import type {
 import { AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/audiometria-questionnaire.schema"
 import type { CampimetriaQuestionnairePayload } from "@/schemas/clinical/campimetria-questionnaire.schema"
 import { CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/campimetria-questionnaire.schema"
+import { retryCampimetriaPrediagnosis } from "@/actions/campimetria-questionnaire.actions"
 import { buildStudyInterpretationFromSnapshot, formatStudyStatusLine } from '@/lib/clinical/study-status-display'
 import { StudyStatusBadge } from '@/components/clinical/StudyStatusBadge'
 
@@ -1296,12 +1297,33 @@ function StudyPanel({
 }) {
   // ARCH-20260518-04: confirmación local antes de ejecutar la limpieza destructiva
   const [isClearConfirming, setIsClearConfirming] = useState(false)
+  const [campiRetryError, setCampiRetryError] = useState('')
+  const [isCampiRetrying, startCampiRetry] = useTransition()
+  const router = useRouter()
 
   const isMedico = isExamenMedico(test.testNameSnapshot)
   const isSomato = isSomatometria(test.testNameSnapshot)
   const isAgudeza = isAgudezaVisual(test.testNameSnapshot)
   const isCampi = getCanonicalAIStudyType(test) === 'Campimetria'
+  const hasCampiCapture =
+    isCampi &&
+    test.clinicalContext &&
+    typeof test.clinicalContext === 'object' &&
+    (test.clinicalContext as { schemaVersion?: string }).schemaVersion ===
+      CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
   const isLab = isLabTest(test)
+
+  const onRetryCampimetriaAI = () => {
+    startCampiRetry(async () => {
+      setCampiRetryError('')
+      const res = await retryCampimetriaPrediagnosis(test.id, eventId)
+      if (!res.success) {
+        setCampiRetryError(res.error)
+        return
+      }
+      router.refresh()
+    })
+  }
   // IMPL-20260326-18: Elegibilidad y type canónico desde helper central
   const aiLabel = getAIWorkflowLabel(test)
   const isAIEligible = isAIEligibleEventTest(test) && !isCampi
@@ -1352,9 +1374,24 @@ function StudyPanel({
 
       {/* IMPL-20260326-04: Ocultar Trazabilidad IA cuando ya existe aiSnapshot (el panel reemplaza este aviso) */}
       {test.resultNotes && !test.aiSnapshot && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
           <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Trazabilidad IA</p>
           <p className="text-sm text-amber-900 mt-1">{test.resultNotes}</p>
+          {hasCampiCapture && !readonly && (
+            <div className="pt-1">
+              <button
+                type="button"
+                disabled={isCampiRetrying}
+                onClick={onRetryCampimetriaAI}
+                className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+              >
+                {isCampiRetrying ? 'Generando prediagnóstico…' : 'Reintentar prediagnóstico IA'}
+              </button>
+              {campiRetryError && (
+                <p className="text-xs text-red-700 mt-1">{campiRetryError}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1431,13 +1468,27 @@ function StudyPanel({
                 studyType="Campimetria"
               />
             ) : (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center space-y-3">
                 <span className="text-2xl block mb-1">🤖</span>
                 <p className="text-sm text-slate-600 font-medium">Prediagnóstico IA</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Guarda o completa la captura para que la IA sugiera un hallazgo.
-                  El médico lo valida o escribe el suyo, igual que en el resto de estudios.
+                  {hasCampiCapture
+                    ? 'Completa la captura o reintenta para que la IA sugiera un hallazgo. El médico lo valida o edita.'
+                    : 'Guarda o completa la captura para que la IA sugiera un hallazgo. El médico lo valida o escribe el suyo, igual que en el resto de estudios.'}
                 </p>
+                {hasCampiCapture && !readonly && (
+                  <button
+                    type="button"
+                    disabled={isCampiRetrying}
+                    onClick={onRetryCampimetriaAI}
+                    className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    {isCampiRetrying ? 'Generando…' : 'Generar prediagnóstico IA'}
+                  </button>
+                )}
+                {campiRetryError && (
+                  <p className="text-xs text-red-600">{campiRetryError}</p>
+                )}
               </div>
             )}
           </div>
