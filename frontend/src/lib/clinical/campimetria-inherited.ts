@@ -90,7 +90,9 @@ export function inheritAntecedentesFromPapeleta(input: {
   physicalExamData?: Record<string, unknown> | null
   longitudinalData?: Record<string, unknown> | null
 }): InheritedAntecedente[] {
-  const fromExam = asRecord(input.physicalExamData?.patologicos)
+  const captured = asRecord(input.physicalExamData?.antecedentes_captured)
+  const fromExam =
+    asRecord(captured?.patologicos) ?? asRecord(input.physicalExamData?.patologicos)
   const fromHist = asRecord(input.longitudinalData?.patologicos)
   const src = fromExam ?? fromHist ?? {}
   const keys: Array<{ key: string; label: string }> = [

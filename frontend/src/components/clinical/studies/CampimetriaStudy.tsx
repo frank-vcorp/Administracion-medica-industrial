@@ -20,8 +20,11 @@ import {
   ISHIHARA_PLATES,
   ISHIHARA_RESULTADO_VALUES,
   TIEMPO_LENTES_VALUES,
-  defaultCampimetriaQuestionnairePayload,
+  applyIshiharaDerivation,
+  defaultCampimetriaDraftPayload,
   defaultExploracionCampo,
+  deriveIshiharaResultado,
+  emptyIshiharaPlates,
   expectedIshiharaAnswers,
   type CampimetriaQuestionnairePayload,
   type ExploracionEstadoCampimetria,
@@ -71,7 +74,7 @@ export default function CampimetriaStudy({
   onStatusChange?: (status: string) => void
 }) {
   const [form, setForm] = useState<CampimetriaQuestionnairePayload>(
-    () => initialContext ?? defaultCampimetriaQuestionnairePayload(),
+    () => initialContext ?? defaultCampimetriaDraftPayload(),
   )
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -153,15 +156,33 @@ export default function CampimetriaStudy({
     }))
   }
 
-  const setIshiharaNormal = () => {
+  const fillIshiharaNormalAnswers = () => {
     const plates = expectedIshiharaAnswers()
     setForm(prev => ({
       ...prev,
-      ishihara: {
-        resultado: 'NORMAL',
+      ishihara: applyIshiharaDerivation({
+        ...prev.ishihara,
+        resultado: 'ALTERADO',
         ojo_derecho: { ...plates },
         ojo_izquierdo: { ...plates },
-      },
+      }),
+    }))
+  }
+
+  const setIshiharaNoAplica = (noAplica: boolean) => {
+    setForm(prev => ({
+      ...prev,
+      ishihara: noAplica
+        ? {
+            resultado: 'NO APLICA',
+            ojo_derecho: emptyIshiharaPlates(),
+            ojo_izquierdo: emptyIshiharaPlates(),
+          }
+        : {
+            resultado: 'ALTERADO',
+            ojo_derecho: emptyIshiharaPlates(),
+            ojo_izquierdo: emptyIshiharaPlates(),
+          },
     }))
   }
 
@@ -170,15 +191,21 @@ export default function CampimetriaStudy({
     plate: IshiharaPlateId,
     value: string,
   ) => {
-    setForm(prev => ({
-      ...prev,
-      ishihara: {
+    setForm(prev => {
+      const nextIshihara = {
         ...prev.ishihara,
-        resultado: 'ALTERADO',
+        resultado:
+          prev.ishihara.resultado === 'NO APLICA' ? 'ALTERADO' : prev.ishihara.resultado,
         [ojo]: { ...prev.ishihara[ojo], [plate]: value },
-      },
-    }))
+      }
+      return {
+        ...prev,
+        ishihara: applyIshiharaDerivation(nextIshihara),
+      }
+    })
   }
+
+  const ishiharaDerived = deriveIshiharaResultado(form.ishihara)
 
   const save = async (complete: boolean) => {
     setSaving(true)
@@ -187,6 +214,7 @@ export default function CampimetriaStudy({
     setFieldErrors({})
     const payload: CampimetriaQuestionnairePayload = {
       ...form,
+      ishihara: applyIshiharaDerivation(form.ishihara),
       capturedAt: new Date().toISOString(),
     }
     const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId)
@@ -426,40 +454,49 @@ export default function CampimetriaStudy({
         </section>
 
         <section className="rounded-xl border border-slate-200 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Prueba de Ishihara
             </h4>
-            {!readonly && (
-              <button
-                type="button"
-                onClick={setIshiharaNormal}
-                className="text-xs font-bold text-teal-700 hover:underline"
-              >
-                Normal ambos ojos
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {ISHIHARA_RESULTADO_VALUES.map(v => (
-              <button
-                key={v}
-                type="button"
-                disabled={readonly}
-                onClick={() => {
-                  if (v === 'NORMAL') setIshiharaNormal()
-                  else setForm(prev => ({ ...prev, ishihara: { ...prev.ishihara, resultado: v } }))
-                }}
-                className={`rounded-full px-3 py-1.5 text-xs font-bold ${
-                  form.ishihara.resultado === v
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-slate-100 text-slate-600'
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-bold ${
+                  ishiharaDerived === 'NORMAL'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : ishiharaDerived === 'ALTERADO'
+                      ? 'bg-amber-100 text-amber-800'
+                      : ishiharaDerived === 'NO APLICA'
+                        ? 'bg-slate-200 text-slate-600'
+                        : 'bg-slate-100 text-slate-500'
                 }`}
               >
-                {v}
-              </button>
-            ))}
+                Resultado:{' '}
+                {ishiharaDerived === 'INCOMPLETO' ? 'Pendiente' : ishiharaDerived}
+              </span>
+              {!readonly && form.ishihara.resultado !== 'NO APLICA' && (
+                <button
+                  type="button"
+                  onClick={fillIshiharaNormalAnswers}
+                  className="text-xs font-bold text-teal-700 hover:underline"
+                >
+                  Rellenar respuestas normales
+                </button>
+              )}
+            </div>
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              disabled={readonly}
+              checked={form.ishihara.resultado === 'NO APLICA'}
+              onChange={e => setIshiharaNoAplica(e.target.checked)}
+              className="rounded border-slate-300"
+            />
+            Prueba no aplica
+          </label>
+          <p className="text-xs text-slate-500">
+            Captura el número que ve el paciente en cada placa. El resultado se calcula solo.
+          </p>
           <img
             src="/clinical/campimetria/ishihara.png"
             alt="Placas de Ishihara de referencia (12, 45, 3, 5, 2, 26, 74)"
@@ -487,10 +524,11 @@ export default function CampimetriaStudy({
                       {ISHIHARA_PLATES.map(plate => (
                         <td key={plate.id} className="p-1">
                           <input
-                            disabled={readonly || form.ishihara.resultado === 'NORMAL'}
+                            disabled={readonly}
                             value={form.ishihara[ojo][plate.id]}
                             onChange={e => setPlate(ojo, plate.id, e.target.value)}
                             className="w-full rounded-lg border border-slate-200 p-1 text-center"
+                            placeholder="—"
                           />
                         </td>
                       ))}

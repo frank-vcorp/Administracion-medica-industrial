@@ -197,33 +197,22 @@ const IshiharaSchema = z
   })
   .superRefine((val, ctx) => {
     if (val.resultado === 'NO APLICA') return
-    const expected: Record<IshiharaPlateId, string> = {
-      p12: '12',
-      p45: '45',
-      p03: '3',
-      p05: '5',
-      p02: '2',
-      p26: '26',
-      p74: '74',
-    }
     for (const plate of ISHIHARA_PLATES) {
-      const exp = expected[plate.id]
-      if (!val.ojo_derecho[plate.id] || !val.ojo_izquierdo[plate.id]) {
+      if (!val.ojo_derecho[plate.id]?.trim() || !val.ojo_izquierdo[plate.id]?.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Completa el número referido en cada placa.',
+          message: 'Completa el número referido en cada placa o marca No aplica.',
           path: ['ojo_derecho', plate.id],
         })
       }
-      if (val.resultado === 'NORMAL') {
-        if (val.ojo_derecho[plate.id] !== exp || val.ojo_izquierdo[plate.id] !== exp) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Normal requiere ${exp} en ambos ojos.`,
-            path: ['ojo_derecho', plate.id],
-          })
-        }
-      }
+    }
+    const derived = deriveIshiharaResultado(val)
+    if (derived !== 'INCOMPLETO' && derived !== val.resultado) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `El resultado (${val.resultado}) no coincide con los números capturados (${derived}).`,
+        path: ['resultado'],
+      })
     }
   })
 
@@ -265,6 +254,50 @@ export function expectedIshiharaAnswers(): Record<IshiharaPlateId, string> {
   }
 }
 
+export function emptyIshiharaPlates(): Record<IshiharaPlateId, string> {
+  return Object.fromEntries(
+    ISHIHARA_PLATES.map(plate => [plate.id, '']),
+  ) as Record<IshiharaPlateId, string>
+}
+
+/** Normaliza respuesta de placa (ej. "03" → "3") para comparar con lo esperado. */
+export function normalizeIshiharaAnswer(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  return trimmed.replace(/^0+(?=\d)/, '')
+}
+
+export function deriveIshiharaResultado(input: {
+  resultado: IshiharaResultado
+  ojo_derecho: Record<IshiharaPlateId, string>
+  ojo_izquierdo: Record<IshiharaPlateId, string>
+}): IshiharaResultado | 'INCOMPLETO' {
+  if (input.resultado === 'NO APLICA') return 'NO APLICA'
+
+  const expected = expectedIshiharaAnswers()
+  for (const plate of ISHIHARA_PLATES) {
+    const od = normalizeIshiharaAnswer(input.ojo_derecho[plate.id] ?? '')
+    const oi = normalizeIshiharaAnswer(input.ojo_izquierdo[plate.id] ?? '')
+    if (!od || !oi) return 'INCOMPLETO'
+    const exp = expected[plate.id]
+    if (od !== exp || oi !== exp) return 'ALTERADO'
+  }
+  return 'NORMAL'
+}
+
+export function applyIshiharaDerivation<
+  T extends {
+    resultado: IshiharaResultado
+    ojo_derecho: Record<IshiharaPlateId, string>
+    ojo_izquierdo: Record<IshiharaPlateId, string>
+  },
+>(ishihara: T): T {
+  if (ishihara.resultado === 'NO APLICA') return ishihara
+  const derived = deriveIshiharaResultado(ishihara)
+  if (derived === 'INCOMPLETO') return ishihara
+  return { ...ishihara, resultado: derived }
+}
+
 export function defaultExploracionCampo(): {
   estado: 'NORMAL'
   observacion?: undefined
@@ -284,8 +317,9 @@ export function defaultExploracionOjo(): ExploracionOjoCampimetria {
   }
 }
 
-export function defaultCampimetriaQuestionnairePayload(): CampimetriaQuestionnairePayload {
-  const plates = expectedIshiharaAnswers()
+/** Borrador vacío para abrir captura nueva (Ishihara pendiente hasta llenar placas). */
+export function defaultCampimetriaDraftPayload(): CampimetriaQuestionnairePayload {
+  const emptyPlates = emptyIshiharaPlates()
   return {
     schemaVersion: CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
     capturedAt: new Date().toISOString(),
@@ -302,10 +336,23 @@ export function defaultCampimetriaQuestionnairePayload(): CampimetriaQuestionnai
       ojo_derecho: 'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES',
     },
     ishihara: {
+      resultado: 'ALTERADO',
+      ojo_derecho: { ...emptyPlates },
+      ojo_izquierdo: { ...emptyPlates },
+    },
+    aptitud: 'OFTALMOLOGICAMENTE APTA PARA LABORAR',
+  }
+}
+
+/** Payload completo “todo normal” (tests y atajo de relleno). */
+export function defaultCampimetriaQuestionnairePayload(): CampimetriaQuestionnairePayload {
+  const plates = expectedIshiharaAnswers()
+  return {
+    ...defaultCampimetriaDraftPayload(),
+    ishihara: applyIshiharaDerivation({
       resultado: 'NORMAL',
       ojo_derecho: { ...plates },
       ojo_izquierdo: { ...plates },
-    },
-    aptitud: 'OFTALMOLOGICAMENTE APTA PARA LABORAR',
+    }),
   }
 }
