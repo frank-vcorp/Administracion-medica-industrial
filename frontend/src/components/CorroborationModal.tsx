@@ -542,7 +542,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                   dateLabel={consentDateLabel}
                 />
                 <p className="text-[10px] text-slate-400 mt-2">
-                  Al firmar abajo, se generará el PDF oficial con su nombre, fecha y firma autógrafa.
+                  Al firmar abajo, se generará el PDF oficial (nombre, fecha y firma) y quedará guardado
+                  en el historial del trabajador.
                 </p>
               </div>
 
