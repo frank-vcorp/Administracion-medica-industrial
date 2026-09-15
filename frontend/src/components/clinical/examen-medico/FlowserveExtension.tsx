@@ -4,6 +4,7 @@ import {
   INTERROGATORIO_SISTEMAS,
   NORDICO_REGIONES,
   NORDICO_REGION_LABELS,
+  emptyNordicoCuestionario,
   type FlowserveExtensionData,
   type NordicoRegionData,
 } from '@/schemas/clinical/examen-medico-variant.schema'
@@ -44,15 +45,12 @@ export function FlowserveExtension({ value, onChange, readonly = false }: Props)
     field: keyof NordicoRegionData,
     v: NordicoRegionData[keyof NordicoRegionData],
   ) => {
-    const row = value.cuestionario_nordico?.[region] ?? {
-      sintomas_12m: null,
-      impidio_trabajo_12m: null,
-      sintomas_7d: null,
-    }
+    const base = value.cuestionario_nordico ?? emptyNordicoCuestionario()
+    const row = base[region]
     onChange({
       ...value,
       cuestionario_nordico: {
-        ...(value.cuestionario_nordico ?? {}),
+        ...base,
         [region]: { ...row, [field]: v },
       },
     })
