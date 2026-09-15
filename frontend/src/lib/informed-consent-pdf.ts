@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { formatInformedConsentDate } from '@/lib/informed-consent-content'
 
 export interface InformedConsentPdfInput {
   patientFullName: string
@@ -17,14 +18,6 @@ const LAYOUT = {
   name: { x: 108, y: 570, size: 11, maxWidth: 420 },
   signature: { x: 130, y: 72, width: 220, height: 50 },
 } as const
-
-function formatConsentDate(date: Date): string {
-  return date.toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-}
 
 function parsePngDataUrl(dataUrl: string): Uint8Array {
   const match = /^data:image\/png;base64,(.+)$/i.exec(dataUrl.trim())
@@ -49,7 +42,7 @@ export async function buildInformedConsentPdf(input: InformedConsentPdfInput): P
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
-  const dateLabel = formatConsentDate(input.signedAt)
+  const dateLabel = formatInformedConsentDate(input.signedAt)
   const name = input.patientFullName.trim()
 
   page.drawText(dateLabel, {

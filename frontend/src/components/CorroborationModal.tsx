@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'next/navigation'
 import IdentityLightbox from '@/components/IdentityLightbox'
 import SignaturePad, { type SignaturePadHandle } from '@/components/reception/SignaturePad'
+import { InformedConsentDocument } from '@/components/reception/InformedConsentDocument'
 
 // ── Etiquetas de catálogos ──────────────────────────────────────────────────
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -532,55 +533,16 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
 
           {step === 2 && (
             <section className="space-y-5">
-              <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 space-y-2">
-                <p className="text-xs font-bold text-violet-800">Datos que se incluirán en el PDF</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-[10px] font-bold text-violet-600 uppercase">Paciente</p>
-                    <p className="font-semibold text-slate-900">{patientDisplayName}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-violet-600 uppercase">Fecha</p>
-                    <p className="font-semibold text-slate-900">{consentDateLabel}</p>
-                  </div>
-                </div>
-              </div>
-
               <div>
                 <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-2">
-                  Documento oficial
+                  Lea y confirme el documento
                 </p>
-                <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
-                  <object
-                    data="/templates/consentimiento-informado.pdf#toolbar=0&navpanes=0&view=FitH"
-                    type="application/pdf"
-                    className="w-full h-[420px]"
-                    aria-label="Vista previa del consentimiento informado"
-                  >
-                    <p className="p-4 text-sm text-slate-600">
-                      No se pudo mostrar la vista previa en este navegador.{' '}
-                      <a
-                        href="/templates/consentimiento-informado.pdf"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold text-violet-700 underline"
-                      >
-                        Abrir documento PDF
-                      </a>
-                    </p>
-                  </object>
-                </div>
+                <InformedConsentDocument
+                  patientFullName={patientDisplayName}
+                  dateLabel={consentDateLabel}
+                />
                 <p className="text-[10px] text-slate-400 mt-2">
-                  Si ves un recuadro gris vacío,{' '}
-                  <a
-                    href="/templates/consentimiento-informado.pdf"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold text-violet-600 underline"
-                  >
-                    abre el PDF en una pestaña nueva
-                  </a>
-                  .
+                  Al firmar abajo, se generará el PDF oficial con su nombre, fecha y firma autógrafa.
                 </p>
               </div>
 
