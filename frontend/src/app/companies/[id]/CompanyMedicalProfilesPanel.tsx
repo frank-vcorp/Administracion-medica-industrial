@@ -129,8 +129,7 @@ export default function CompanyMedicalProfilesPanel({
         <div>
           <h2 className="text-xl font-bold text-slate-800">🧪 Perfiles Médicos</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Crea y ajusta los perfiles propios de {companyName} para que luego aparezcan como
-            opción natural al configurar los puestos de trabajo.
+            Crea y ajusta los perfiles propios de {companyName} para asignarlos a trabajadores y citas.
           </p>
         </div>
         <button
@@ -161,7 +160,7 @@ export default function CompanyMedicalProfilesPanel({
           <p className="text-4xl">🩺</p>
           <p className="mt-3 font-medium text-slate-700">Aún no hay perfiles médicos propios.</p>
           <p className="mt-1 text-sm">
-            Crea el primer perfil aquí y luego asígnalo desde el bloque de puestos de trabajo.
+            Crea el primer perfil aquí y asígnalo al registrar trabajadores o agendar citas.
           </p>
         </div>
       ) : (

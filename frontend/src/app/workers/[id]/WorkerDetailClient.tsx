@@ -12,7 +12,7 @@
  *
  * El server-component padre (/workers/[id]/page.tsx) hace:
  *   - await params + getWorkerById + getWorkerClinicalHistory
- *   - loadCompanies + loadJobPositions (necesarios por WorkerFormModal)
+ *   - loadCompanies + medicalProfiles (necesarios por WorkerFormModal)
  *   - serializa el worker (Date → ISO string) y lo pasa a este wrapper.
  *
  * Mecanismo del modal "Agendar Cita" (decisión §6.3 SPEC):

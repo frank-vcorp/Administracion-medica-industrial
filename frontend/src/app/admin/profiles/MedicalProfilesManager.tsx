@@ -160,7 +160,7 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Perfiles Médicos</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Combinaciones de pruebas clínicas para puestos de trabajo y citas empresariales.
+            Combinaciones de pruebas clínicas para trabajadores y citas empresariales.
           </p>
         </div>
         <button

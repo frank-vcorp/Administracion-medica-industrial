@@ -29,8 +29,7 @@ export const getEventById = async (id: string) => {
             worker: {
                 include: {
                     company: true,
-                    // IMPL-20260324-06: Incluir puesto para cabecera persistente del workspace
-                    jobPosition: true
+                    medicalProfile: { select: { id: true, name: true } },
                 }
             },
             branch: true,

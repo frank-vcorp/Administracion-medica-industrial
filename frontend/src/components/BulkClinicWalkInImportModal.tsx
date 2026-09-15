@@ -106,7 +106,7 @@ export default function BulkClinicWalkInImportModal({
 
   function updateRow(
     index: number,
-    field: 'firstName' | 'lastName' | 'dob' | 'nationalId' | 'phone' | 'email' | 'jobPositionName',
+    field: 'firstName' | 'lastName' | 'dob' | 'nationalId' | 'phone' | 'email' | 'medicalProfileName',
     value: string
   ) {
     setRows((current) =>
@@ -176,7 +176,7 @@ export default function BulkClinicWalkInImportModal({
       dob: r.dob,
       phone: r.phone,
       email: r.email,
-      jobPositionName: r.jobPositionName,
+      medicalProfileName: r.medicalProfileName,
       _rowIndex: r._rowIndex,
     }))
 
@@ -279,7 +279,7 @@ export default function BulkClinicWalkInImportModal({
                             <th className="px-2 py-2">CURP/ID</th>
                             <th className="px-2 py-2">Teléfono</th>
                             <th className="px-2 py-2">Correo</th>
-                            <th className="px-2 py-2">Puesto</th>
+                            <th className="px-2 py-2">Perfil médico</th>
                             <th className="px-2 py-2">Acción</th>
                           </tr>
                         </thead>
@@ -293,7 +293,7 @@ export default function BulkClinicWalkInImportModal({
                               <td className="px-2 py-2"><input value={row.nationalId ?? ''} onChange={(e) => updateRow(row._rowIndex, 'nationalId', e.target.value)} className="w-28 rounded border border-slate-200 px-2 py-1" /></td>
                               <td className="px-2 py-2"><input value={row.phone ?? ''} onChange={(e) => updateRow(row._rowIndex, 'phone', e.target.value)} className="w-24 rounded border border-slate-200 px-2 py-1" /></td>
                               <td className="px-2 py-2"><input value={row.email ?? ''} onChange={(e) => updateRow(row._rowIndex, 'email', e.target.value)} className="w-32 rounded border border-slate-200 px-2 py-1" /></td>
-                              <td className="px-2 py-2"><input value={row.jobPositionName ?? ''} onChange={(e) => updateRow(row._rowIndex, 'jobPositionName', e.target.value)} className="w-24 rounded border border-slate-200 px-2 py-1" /></td>
+                              <td className="px-2 py-2"><input value={row.medicalProfileName ?? ''} onChange={(e) => updateRow(row._rowIndex, 'medicalProfileName', e.target.value)} className="w-28 rounded border border-slate-200 px-2 py-1" /></td>
                               <td className="px-2 py-2">
                                 <button type="button" onClick={() => removeRow(row._rowIndex)} className="text-red-600 hover:text-red-700">Quitar</button>
                               </td>

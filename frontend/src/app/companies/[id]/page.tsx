@@ -1,6 +1,6 @@
 /**
  * @file Detalle de Empresa — Puestos de Trabajo + Ficha Cliente v2.
- * @description Página de detalle de empresa con gestión de puestos, perfiles médicos,
+ * @description Página de detalle de empresa con perfiles médicos,
  *              sucursales B2B, historial de vendedor, formulario fiscal completo
  *              y acciones operativas (cambiar vendedor / toggle / revisar).
  * @id IMPL-20260527-01 (núcleo) + IMPL-20260623-03 (integración Ficha v2)
@@ -12,11 +12,9 @@ import Link from 'next/link'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { getCompanyById, listActiveSellersAction } from '@/actions/company.actions'
-import { getJobPositionsByCompany } from '@/actions/job-positions.actions'
 import { getMedicalProfilesForCompany, getMedicalTests } from '@/actions/medical-profiles'
 import { getBranches } from '@/actions/admin.actions'
 import { isAdminLike } from '@/lib/auth/roles'
-import JobPositionsPanel from './JobPositionsPanel'
 import AllowedBranchesPanel from './AllowedBranchesPanel'
 import CompanyMedicalProfilesPanel from './CompanyMedicalProfilesPanel'
 import { CompanyStatusBadge } from '@/components/companies/CompanyStatusBadge'
@@ -39,10 +37,9 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   const session = await getServerSession(authOptions)
   const role = (session?.user?.role as string | undefined) ?? 'COMPANY_CLIENT'
 
-  const [company, jobPositions, profiles, branches, availableTests, sellersRaw, originChannel] =
+  const [company, profiles, branches, availableTests, sellersRaw, originChannel] =
     await Promise.all([
       getCompanyById(id),
-      getJobPositionsByCompany(id),
       getMedicalProfilesForCompany(id),
       getBranches(),
       getMedicalTests(),
@@ -178,13 +175,6 @@ export default async function CompanyDetailPage({ params }: PageProps) {
         companyName={company.name}
         companyProfiles={companyProfiles}
         availableTests={availableTests}
-      />
-
-      {/* Panel Puestos de Trabajo */}
-      <JobPositionsPanel
-        companyId={id}
-        jobPositions={jobPositions}
-        profiles={profiles}
       />
     </div>
   )

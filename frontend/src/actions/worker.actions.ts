@@ -114,7 +114,7 @@ export async function getWorkerIdentityImage(workerId: string) {
 }
 
 /**
- * Retorna los trabajadores de una empresa específica, con incluidos de puesto y empresa.
+ * Retorna los trabajadores de una empresa específica, con perfil médico y empresa.
  * @id IMPL-20260318-07
  */
 export async function getWorkersByCompany(companyId: string) {
@@ -123,9 +123,6 @@ export async function getWorkersByCompany(companyId: string) {
         include: {
             company: {
                 select: { name: true, defaultBranchId: true }
-            },
-            jobPosition: {
-                select: { id: true, name: true, defaultProfileId: true }
             },
             medicalProfile: {
                 select: { id: true, name: true }

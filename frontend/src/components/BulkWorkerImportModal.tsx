@@ -60,7 +60,7 @@ function createEmptyQuickRow(index: number): QuickCaptureRow {
     nationalId: undefined,
     dob: undefined,
     phone: undefined,
-    jobPositionName: undefined,
+    medicalProfileName: undefined,
     _rowIndex: index,
     _status: 'valid',
   }
@@ -87,7 +87,8 @@ function parseRow(raw: Record<string, unknown>, rowIndex: number): PreviewRow {
   const gender = genderRaw === 'M' || genderRaw === 'F' ? (genderRaw as 'M' | 'F') : undefined
   const email = cellVal(raw, 'Correo Electrónico')
   const phone = cellVal(raw, 'Teléfono')
-  const jobPositionName = cellVal(raw, 'Puesto')
+  const medicalProfileName =
+    cellVal(raw, 'Perfil Médico') || cellVal(raw, 'Perfil medico') || cellVal(raw, 'Puesto')
 
   const errors: string[] = []
 
@@ -109,7 +110,7 @@ function parseRow(raw: Record<string, unknown>, rowIndex: number): PreviewRow {
     gender,
     email: email || undefined,
     phone: phone || undefined,
-    jobPositionName: jobPositionName || undefined,
+    medicalProfileName: medicalProfileName || undefined,
     _rowIndex: rowIndex,
     _status: status,
     _statusReason: errors.join(' · '),
@@ -341,7 +342,7 @@ export default function BulkWorkerImportModal({
         nationalId: row.nationalId,
         dob: row.dob,
         phone: row.phone,
-        jobPositionName: row.jobPositionName,
+        medicalProfileName: row.medicalProfileName,
         _rowIndex: row._rowIndex,
       }))
 
@@ -364,7 +365,7 @@ export default function BulkWorkerImportModal({
 
   function updateQuickRow(
     index: number,
-    field: 'firstName' | 'lastName' | 'dob' | 'nationalId' | 'phone' | 'jobPositionName',
+    field: 'firstName' | 'lastName' | 'dob' | 'nationalId' | 'phone' | 'medicalProfileName',
     value: string
   ) {
     setQuickRows((current) => current.map((row) => {
@@ -598,7 +599,7 @@ export default function BulkWorkerImportModal({
                               <th className="px-2 py-2">DOB</th>
                               <th className="px-2 py-2">CURP/ID</th>
                               <th className="px-2 py-2">Teléfono</th>
-                              <th className="px-2 py-2">Puesto</th>
+                              <th className="px-2 py-2">Perfil médico</th>
                               <th className="px-2 py-2">Acción</th>
                             </tr>
                           </thead>
@@ -611,7 +612,7 @@ export default function BulkWorkerImportModal({
                                 <td className="px-2 py-2"><input type="date" value={row.dob ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'dob', event.target.value)} className="w-32 rounded border border-slate-200 px-2 py-1" /></td>
                                 <td className="px-2 py-2"><input value={row.nationalId ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'nationalId', event.target.value)} className="w-28 rounded border border-slate-200 px-2 py-1" /></td>
                                 <td className="px-2 py-2"><input value={row.phone ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'phone', event.target.value)} className="w-24 rounded border border-slate-200 px-2 py-1" /></td>
-                                <td className="px-2 py-2"><input value={row.jobPositionName ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'jobPositionName', event.target.value)} className="w-24 rounded border border-slate-200 px-2 py-1" /></td>
+                                <td className="px-2 py-2"><input value={row.medicalProfileName ?? ''} onChange={(event) => updateQuickRow(row._rowIndex, 'medicalProfileName', event.target.value)} className="w-28 rounded border border-slate-200 px-2 py-1" /></td>
                                 <td className="px-2 py-2">
                                   <button type="button" onClick={() => removeQuickRow(row._rowIndex)} className="text-red-600 hover:text-red-700">Quitar</button>
                                 </td>

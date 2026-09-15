@@ -48,7 +48,6 @@ const APPOINTMENT_DATE = (() => {
   const day = String(tomorrow.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 })();
-const PUESTO_NOMBRE = `Soldador - ${RUN_TAG}`;
 const PERFIL_NOMBRE = `Examen Médico General - Soldador - ${RUN_TAG}`;
 
 // Helper: Login
@@ -235,41 +234,8 @@ test.describe('Flujo End-to-End Completo', () => {
     await expect(authenticatedPage.getByText('Perfil médico creado exitosamente')).toBeVisible({ timeout: 15000 });
   });
 
-  // Fase 1.3: Crear puesto con perfil default
-  test('TC-03: Crear puesto de trabajo con perfil default', async () => {
-    test.setTimeout(60000);
-    test.skip(!companyId, 'Sin empresa creada');
-
-    await authenticatedPage.goto(`${BASE_URL}/companies/${companyId}`);
-    await authenticatedPage.waitForLoadState('networkidle');
-
-    // Selector real de JobPositionsPanel: "+ Crear Puesto".
-    await authenticatedPage.getByRole('button', { name: /crear puesto/i }).click();
-
-    const jobForm = authenticatedPage
-      .locator('form')
-      .filter({ has: authenticatedPage.getByPlaceholder('Ej: Soldador, Operador de Montacargas') })
-      .first();
-    await expect(jobForm).toBeVisible();
-    await jobForm
-      .getByPlaceholder('Ej: Soldador, Operador de Montacargas')
-      .fill(PUESTO_NOMBRE);
-
-    const profileSelect = jobForm.locator('select[name="defaultProfileId"]');
-    await expect(profileSelect).toBeVisible();
-    await profileSelect.selectOption({ label: PERFIL_NOMBRE });
-
-    await jobForm.getByRole('button', { name: /crear puesto|guardar cambios/i }).click();
-    await expect(authenticatedPage.getByText('Puesto de trabajo creado exitosamente')).toBeVisible({ timeout: 15000 });
-
-    // La mutación revalida la ruta pero no refresca el componente cliente.
-    await authenticatedPage.reload();
-    await authenticatedPage.waitForLoadState('networkidle');
-    await expect(authenticatedPage.locator('tr').filter({ hasText: PUESTO_NOMBRE })).toBeVisible({ timeout: 15000 });
-  });
-
   // Fase 2: Crear trabajador
-  test('TC-04: Crear trabajador asociado a empresa y puesto', async () => {
+  test('TC-04: Crear trabajador asociado a empresa y perfil médico', async () => {
     test.setTimeout(60000);
     test.skip(!companyId, 'Sin empresa creada');
 
@@ -279,7 +245,7 @@ test.describe('Flujo End-to-End Completo', () => {
     // Click "+ Registrar Trabajador" (selector real verificado en producción).
     await authenticatedPage.getByRole('button', { name: '+ Registrar Trabajador' }).click();
 
-    // El formulario exige nombre, apellido, fecha y género además de empresa y puesto.
+    // El formulario exige nombre, apellido, fecha y género además de empresa y perfil médico.
     const workerForm = authenticatedPage
       .locator('form')
       .filter({ has: authenticatedPage.getByPlaceholder('Nombre') })
@@ -293,10 +259,10 @@ test.describe('Flujo End-to-End Completo', () => {
     await workerForm.getByPlaceholder('10 dígitos').fill(TRABAJADOR.phone);
 
     const empresaSelect = workerForm.locator('select[name="companyId"]');
-    const puestoSelect = workerForm.locator('select[name="jobPositionId"]');
+    const perfilSelect = workerForm.locator('select[name="medicalProfileId"]');
     await empresaSelect.selectOption(companyId);
-    await expect(puestoSelect).toBeEnabled({ timeout: 10000 });
-    await puestoSelect.selectOption({ label: PUESTO_NOMBRE });
+    await expect(perfilSelect).toBeEnabled({ timeout: 10000 });
+    await perfilSelect.selectOption({ label: PERFIL_NOMBRE });
 
     const submitButton = workerForm.getByRole('button', { name: 'Guardar Trabajador' });
     await expect(submitButton).toBeEnabled();

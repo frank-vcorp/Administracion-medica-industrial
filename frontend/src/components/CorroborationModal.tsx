@@ -51,7 +51,7 @@ interface WorkerData {
   email: string | null
   dob: Date | null
   company: { id: string; name: string } | null
-  jobPosition: { id: string; name: string } | null
+  medicalProfile: { id: string; name: string } | null
   lastIdentityDocumentType: string | null
   lastIdentityFrontFileUrl: string | null
   lastIdentityBackFileUrl: string | null
@@ -279,8 +279,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 <p className="text-sm font-medium text-slate-700">{worker.company?.name || '—'}</p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Puesto</p>
-                <p className="text-sm font-medium text-slate-700">{worker.jobPosition?.name || '—'}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Perfil médico</p>
+                <p className="text-sm font-medium text-slate-700">{worker.medicalProfile?.name || '—'}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">Expediente</p>

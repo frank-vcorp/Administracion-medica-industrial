@@ -94,20 +94,14 @@ export async function createAppointment(data: {
       }
     });
 
-    // Perfil clínico: explícito en la cita, o heredado del paciente / puesto legacy
+    // Perfil clínico: explícito en la cita, o heredado del paciente
     let resolvedServiceProfileId = data.serviceProfileId || null
     if (!resolvedServiceProfileId) {
       const workerProfile = await prisma.worker.findUnique({
         where: { id: data.workerId },
-        select: {
-          medicalProfileId: true,
-          jobPosition: { select: { defaultProfileId: true } },
-        },
+        select: { medicalProfileId: true },
       })
-      resolvedServiceProfileId =
-        workerProfile?.medicalProfileId ??
-        workerProfile?.jobPosition?.defaultProfileId ??
-        null
+      resolvedServiceProfileId = workerProfile?.medicalProfileId ?? null
     }
 
     // IMPL-20260519-10: QR operativo mínimo — payload AMI|NOMBRE=...|FN=YYYY-MM-DD
@@ -763,9 +757,9 @@ export async function getAppointmentForCorroboration(appointmentId: string) {
             email: true,
             dob: true,
             companyId: true,
-            jobPositionId: true,
+            medicalProfileId: true,
             company: { select: { id: true, name: true } },
-            jobPosition: { select: { id: true, name: true } },
+            medicalProfile: { select: { id: true, name: true } },
             // IMPL-20260519-10: Última identificación válida para reutilización
             lastIdentityDocumentType: true,
             lastIdentityFrontFileUrl: true,

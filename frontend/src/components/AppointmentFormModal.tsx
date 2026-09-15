@@ -17,8 +17,6 @@ interface Worker {
     medicalProfileId?: string | null
     company?: { name: string, defaultBranchId: string | null } | null
     medicalProfile?: { id: string; name: string } | null
-    /** @deprecated legacy — fallback si medicalProfileId no está poblado */
-    jobPosition?: { id: string; name: string; defaultProfileId: string | null } | null
 }
 
 interface Company {
@@ -136,8 +134,6 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                             setProfiles(pData)
                             if (worker.medicalProfileId) {
                                 setSelectedProfileId(worker.medicalProfileId)
-                            } else if (worker.jobPosition?.defaultProfileId) {
-                                setSelectedProfileId(worker.jobPosition.defaultProfileId)
                             }
                         }
                     } else {
@@ -226,8 +222,6 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         // Auto-seleccionar perfil del paciente
         if (worker?.medicalProfileId) {
             setSelectedProfileId(worker.medicalProfileId)
-        } else if (worker?.jobPosition?.defaultProfileId) {
-            setSelectedProfileId(worker.jobPosition.defaultProfileId)
         }
     }
 

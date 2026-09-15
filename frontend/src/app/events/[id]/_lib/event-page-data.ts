@@ -173,13 +173,16 @@ export async function fetchEventPageData(input: {
       )
     : undefined
 
-  type WorkerExtras = { jobPosition?: { name: string } | null }
   type AppointmentExtras = { serviceProfile?: { name: string } | null }
 
-  const workerWithPos = event.worker as typeof event.worker & WorkerExtras
   const appointmentWithProfile = (
     event as typeof event & { appointment?: AppointmentExtras }
   ).appointment
+
+  const antecedentesCaptured = physicalExamData?.antecedentes_captured as
+    | { datos_personales?: { puesto_actual?: string } }
+    | undefined
+  const puestoActual = antecedentesCaptured?.datos_personales?.puesto_actual?.trim() ?? ''
 
   const eventDateRaw = event.checkInDate ?? event.createdAt
   const eventDateLabel = new Intl.DateTimeFormat('es-MX', {
@@ -200,7 +203,7 @@ export async function fetchEventPageData(input: {
 
   const workerInfo = {
     name: `${event.worker.firstName} ${event.worker.lastName}`,
-    position: workerWithPos.jobPosition?.name || '',
+    position: puestoActual,
     company:
       event.worker.company?.name ||
       (eventWithIntake.intakeSource === 'EXTERNAL_WALK_IN'
