@@ -54,7 +54,14 @@ export const APTITUD_OFTALMO_VALUES = [
 export type AptitudOftalmo = (typeof APTITUD_OFTALMO_VALUES)[number]
 
 /** Placas del Excel CAMPI (fila de números por ojo). */
-export const ISHIHARA_PLATES = [
+export type IshiharaPlateId = 'p12' | 'p45' | 'p03' | 'p05' | 'p02' | 'p26' | 'p74'
+
+export const ISHIHARA_PLATES: ReadonlyArray<{
+  id: IshiharaPlateId
+  expected: string
+  src: string
+  displayExpected?: string
+}> = [
   { id: 'p12', expected: '12', src: '/clinical/campimetria/ishihara-12.png' },
   { id: 'p45', expected: '45', src: '/clinical/campimetria/ishihara-45.png' },
   { id: 'p03', expected: '03', src: '/clinical/campimetria/ishihara-03.png', displayExpected: '3' },
@@ -62,9 +69,7 @@ export const ISHIHARA_PLATES = [
   { id: 'p02', expected: '02', src: '/clinical/campimetria/ishihara-02.png', displayExpected: '2' },
   { id: 'p26', expected: '26', src: '/clinical/campimetria/ishihara-26.png' },
   { id: 'p74', expected: '74', src: '/clinical/campimetria/ishihara-74.png' },
-] as const
-
-export type IshiharaPlateId = (typeof ISHIHARA_PLATES)[number]['id']
+]
 
 export const EXPLORACION_OJO_FIELDS = [
   'movimientos',
