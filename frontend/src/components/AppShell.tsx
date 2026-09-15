@@ -21,13 +21,15 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
-import { ReactNode, useEffect, useState, type ComponentType } from 'react'
+import { ReactNode, useCallback, useEffect, useState, type ComponentType } from 'react'
 import {
   Ambulance,
   BadgeCheck,
   Building2,
   Calendar,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   FileBarChart,
   FlaskConical,
@@ -56,6 +58,8 @@ import { BrandLogo } from '@/components/BrandLogo'
 import { GlobalSearchLauncher } from '@/components/GlobalSearchLauncher'
 
 type Icon = ComponentType<LucideProps>
+
+const SIDEBAR_COLLAPSED_KEY = 'ami-sidebar-collapsed'
 
 function NavItem({
   href,
@@ -223,6 +227,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { data: session, status } = useSession()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const isChromeFreePage =
     pathname?.startsWith('/login') ||
@@ -249,9 +254,32 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
   const closeMobileNav = () => setMobileNavOpen(false)
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next))
+      } catch {
+        /* ignore quota / private mode */
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     setMobileNavOpen(false)
   }, [pathname])
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+      if (saved === 'true') setSidebarCollapsed(true)
+      else if (saved === 'false') setSidebarCollapsed(false)
+      else if (isEventWorkspace) setSidebarCollapsed(true)
+    } catch {
+      if (isEventWorkspace) setSidebarCollapsed(true)
+    }
+  }, [isEventWorkspace])
 
   useEffect(() => {
     if (!mobileNavOpen) return
@@ -264,18 +292,45 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen bg-ami-surface">
-      <aside className={`${isEventWorkspace ? 'w-20' : 'w-64'} hidden md:flex md:flex-col flex-shrink-0 bg-white text-[#636569] border-l-[3px] border-l-[#592c82] border-r border-r-[#f0f0f0] transition-all duration-200`}>
-        <div className={`border-b border-[#f0f0f0] ${isEventWorkspace ? 'p-3' : 'px-4 py-5'} flex-shrink-0`}>
-          {isEventWorkspace ? (
-            <BrandLogo collapsed className="mx-auto" />
-          ) : (
-            <BrandLogo className="h-[4.5rem] w-full max-h-[4.5rem]" />
-          )}
+      <aside
+        className={`${
+          sidebarCollapsed ? 'w-[4.5rem]' : 'w-64'
+        } hidden md:flex md:flex-col flex-shrink-0 bg-white text-[#636569] border-l-[3px] border-l-[#592c82] border-r border-r-[#f0f0f0] transition-[width] duration-200`}
+      >
+        <div
+          className={`border-b border-[#f0f0f0] flex-shrink-0 ${
+            sidebarCollapsed ? 'flex flex-col items-center gap-2 p-2' : 'flex items-start justify-between gap-2 px-3 py-4'
+          }`}
+        >
+          <BrandLogo
+            collapsed={sidebarCollapsed}
+            className={sidebarCollapsed ? 'mx-auto' : 'h-[4.5rem] w-full max-h-[4.5rem] flex-1 min-w-0'}
+          />
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={sidebarCollapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'}
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'}
+            className={`flex shrink-0 items-center justify-center rounded-lg border border-[#592c82]/15 text-[#592c82] hover:bg-[#592c82]/5 transition-colors ${
+              sidebarCollapsed ? 'h-8 w-8' : 'h-8 w-8 mt-1'
+            }`}
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
+            )}
+          </button>
         </div>
 
-        <nav className={`flex-1 overflow-y-auto ${isEventWorkspace ? 'px-2' : 'px-3'} py-3 space-y-0.5`}>
+        <nav
+          className={`flex-1 overflow-y-auto py-3 space-y-0.5 ${
+            sidebarCollapsed ? 'px-1.5' : 'px-3'
+          }`}
+        >
           <ShellNavigation
-            collapsed={isEventWorkspace}
+            collapsed={sidebarCollapsed}
             showStaffItems={showStaffItems}
             showAdminItems={showAdminItems}
             showPortalItems={showPortalItems}
@@ -285,7 +340,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <SidebarAccount
           fullName={session?.user?.fullName}
-          collapsed={isEventWorkspace}
+          collapsed={sidebarCollapsed}
           profileHref={canEditProfile ? '/profile' : undefined}
         />
       </aside>
