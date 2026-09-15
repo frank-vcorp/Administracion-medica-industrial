@@ -25,6 +25,7 @@ import {
   expectedIshiharaAnswers,
   type CampimetriaQuestionnairePayload,
   type ExploracionEstadoCampimetria,
+  type ExploracionOjoCampimetria,
   type ExploracionOjoField,
   type IshiharaPlateId,
 } from '@/schemas/clinical/campimetria-questionnaire.schema'
