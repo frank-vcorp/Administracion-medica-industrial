@@ -186,7 +186,7 @@ function EventView({ data }: EventViewProps) {
           workerInfo={workerInfo}
           workerId={event.worker.id}
           reviewerUserId={reviewerUserId}
-          reviewerRole={userRole}
+          reviewerRole={userRole ?? undefined}
           readonly={currentStep > 3}
           apiUrl={apiUrl}
           examData={serializedExam as Parameters<typeof PapeletaWorkspace>[0]['examData']}
