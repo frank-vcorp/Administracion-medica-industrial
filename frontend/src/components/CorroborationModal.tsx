@@ -550,11 +550,38 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-2">
                   Documento oficial
                 </p>
-                <iframe
-                  title="Consentimiento informado"
-                  src="/templates/consentimiento-informado.pdf"
-                  className="w-full h-56 rounded-xl border border-slate-200 bg-slate-50"
-                />
+                <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+                  <object
+                    data="/templates/consentimiento-informado.pdf#toolbar=0&navpanes=0&view=FitH"
+                    type="application/pdf"
+                    className="w-full h-[420px]"
+                    aria-label="Vista previa del consentimiento informado"
+                  >
+                    <p className="p-4 text-sm text-slate-600">
+                      No se pudo mostrar la vista previa en este navegador.{' '}
+                      <a
+                        href="/templates/consentimiento-informado.pdf"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-violet-700 underline"
+                      >
+                        Abrir documento PDF
+                      </a>
+                    </p>
+                  </object>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">
+                  Si ves un recuadro gris vacío,{' '}
+                  <a
+                    href="/templates/consentimiento-informado.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-violet-600 underline"
+                  >
+                    abre el PDF en una pestaña nueva
+                  </a>
+                  .
+                </p>
               </div>
 
               <div className="space-y-2">
