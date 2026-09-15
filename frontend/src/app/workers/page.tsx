@@ -6,10 +6,9 @@ import { getWorkers } from "@/actions/worker.actions"
 import { getPatientExpedienteList } from '@/actions/patient-expediente.actions'
 import { getCompanies, getBranches } from "@/actions/admin.actions"
 import { getMedicalProfileOptions } from "@/actions/medical-profiles"
-import WorkerFormModal from "@/components/WorkerFormModal"
-import BulkWorkerImportModal from "@/components/BulkWorkerImportModal"
-import BulkClinicWalkInImportModal from "@/components/BulkClinicWalkInImportModal"
+import { Suspense } from 'react'
 import WorkersPageClient from "@/components/workers/WorkersPageClient"
+import WorkersPageToolbar from "@/components/workers/WorkersPageToolbar"
 import type { SelectableWorker } from "@/components/workers/WorkerSelectableGrid"
 
 /**
@@ -98,13 +97,17 @@ export default async function WorkersPage(props: { searchParams: Promise<{ edit?
                     <p className="text-sm text-slate-500 font-medium">Pacientes, expedientes activos y estatus de atención.</p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    {/* Verde: BulkWorkerImportModal renderiza su propio botón "Carga Masiva" (Unidad Móvil, con proyecto, intakeSource=UNIT_MOBILE_MASS) */}
-                    <BulkWorkerImportModal companies={companyOptions} branches={branchOptions} />
-                    {/* Azul: Clínica Física (sin proyecto, intakeSource=CLINIC_WALK_IN_MASS) */}
-                    <BulkClinicWalkInImportModal branches={branchOptions} />
-                    <WorkerFormModal companies={companyOptions} medicalProfiles={medicalProfiles.value} />
-                </div>
+                <Suspense
+                    fallback={
+                        <div className="h-12 w-48 animate-pulse rounded-xl bg-slate-100" aria-hidden />
+                    }
+                >
+                    <WorkersPageToolbar
+                        companies={companyOptions}
+                        branches={branchOptions}
+                        medicalProfiles={medicalProfiles.value}
+                    />
+                </Suspense>
             </div>
 
             <WorkersPageClient

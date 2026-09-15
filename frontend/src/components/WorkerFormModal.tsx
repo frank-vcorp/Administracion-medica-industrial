@@ -64,8 +64,10 @@ interface WorkerFormModalProps {
     onClose?: () => void
     /** Alta fija en empresa Público General (oculta selector de empresa). */
     publicGeneralMode?: boolean
-    /** Empresa preseleccionada al abrir (p. ej. Público General). */
+    /** Empresa preseleccionada al abrir (p. ej. Público General o alta post-empresa). */
     defaultCompanyId?: string
+    /** Si true, la empresa queda fija (no editable) cuando hay defaultCompanyId. */
+    lockCompany?: boolean
     /** Oculta el botón trigger por defecto (el padre abre con isOpen). */
     hideDefaultTrigger?: boolean
     /** Catálogo de pruebas para perfil rápido (solo publicGeneralMode). */
@@ -93,6 +95,7 @@ export default function WorkerFormModal({
     onClose,
     publicGeneralMode = false,
     defaultCompanyId,
+    lockCompany = false,
     hideDefaultTrigger = false,
     availableTests = [],
     branches = [],
@@ -134,9 +137,12 @@ export default function WorkerFormModal({
 
     useEffect(() => {
         if (!modalOpen || workerToEdit) return
-        if (publicGeneralMode && defaultCompanyId) {
-            setSelectedCompanyId(defaultCompanyId)
-            setSelectedMedicalProfileId('')
+        if (!defaultCompanyId) return
+
+        setSelectedCompanyId(defaultCompanyId)
+        setSelectedMedicalProfileId('')
+
+        if (publicGeneralMode) {
             setContactEmail('')
             setContactPhone('')
             setPgProfileMode('existing')
@@ -148,7 +154,12 @@ export default function WorkerFormModal({
                 branches[0]?.id ||
                 ''
             setSelectedBranchId(initialBranch)
+            return
         }
+
+        const company = companies.find((c) => c.id === defaultCompanyId)
+        setContactEmail(company?.email || '')
+        setContactPhone(company?.phone || '')
     }, [modalOpen, publicGeneralMode, defaultCompanyId, workerToEdit, defaultBranchId, companies, branches])
 
     useEffect(() => {
@@ -171,7 +182,12 @@ export default function WorkerFormModal({
         setInternalOpen(true)
         setError(null)
         setDuplicateWorker(null)
-        setSelectedCompanyId(publicGeneralMode && defaultCompanyId ? defaultCompanyId : '')
+        setSelectedCompanyId(defaultCompanyId ?? '')
+        if (defaultCompanyId && !publicGeneralMode) {
+            const company = companies.find((c) => c.id === defaultCompanyId)
+            setContactEmail(company?.email || '')
+            setContactPhone(company?.phone || '')
+        }
         setSelectedMedicalProfileId('')
         setContactEmail('')
         setContactPhone('')
@@ -548,6 +564,17 @@ export default function WorkerFormModal({
                                     {!publicGeneralMode || workerToEdit ? (
                                         publicGeneralMode && workerToEdit ? (
                                             <input type="hidden" name="companyId" value={selectedCompanyId} />
+                                        ) : lockCompany && defaultCompanyId && !workerToEdit ? (
+                                            <>
+                                                <input type="hidden" name="companyId" value={selectedCompanyId} />
+                                                <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+                                                    Empresa:{' '}
+                                                    <strong>
+                                                        {companies.find((c) => c.id === defaultCompanyId)?.name ??
+                                                            'Convenio recién creado'}
+                                                    </strong>
+                                                </div>
+                                            </>
                                         ) : (
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
