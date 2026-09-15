@@ -61,17 +61,7 @@ import {
 } from '@/lib/audiometry-pdf'
 import { validateDoctorProfileForPdf } from '@/schemas/clinical/doctor-profile.schema'
 import { authOptions } from '@/auth'
-
-/**
- * QA-20260825-01 P1-A: roles autorizados para emitir revisión médica
- * (y por tanto congelar firma/cédula en el PDF). Coincide con los roles
- * que pueden editar el perfil médico (`doctor-profile.actions.ts`).
- */
-const AUTHORIZED_REVIEWER_ROLES = new Set<string>([
-  'SUPERADMIN',
-  'DOCTOR_GENERAL',
-  'DOCTOR_VALIDATOR',
-])
+import { canEmitMedicalReview } from '@/lib/auth/roles'
 
 const PYTHON_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -776,8 +766,12 @@ export async function submitDoctorStudyReview(
   if (!session?.user?.id) {
     return { success: false, error: 'No autenticado' }
   }
-  if (!AUTHORIZED_REVIEWER_ROLES.has(session.user.role)) {
-    return { success: false, error: 'Sin permisos para emitir revisión médica' }
+  if (!canEmitMedicalReview(session.user.role)) {
+    return {
+      success: false,
+      error:
+        'Sin permisos para emitir revisión médica. Inicia sesión con una cuenta de médico (Doctor General o Validador).',
+    }
   }
   const reviewedByUserId = session.user.id
 

@@ -184,6 +184,8 @@ interface PapeletaWorkspaceProps {
   workerId?: string
   /** IMPL-20260326-18: ID del usuario que revisa el prediagnóstico IA (médico en sesión) */
   reviewerUserId?: string
+  /** Rol en sesión — gate de revisión médica IA */
+  reviewerRole?: string
   /**
    * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
    * `true` si ya existe `MedicalVerdict` emitido para el Event. Se reenvía
@@ -353,6 +355,7 @@ export default function PapeletaWorkspace({
   longitudinalData = null,
   workerId,
   reviewerUserId = 'system',
+  reviewerRole,
   hasMedicalVerdict = false,
 }: PapeletaWorkspaceProps) {
   const router = useRouter()
@@ -804,6 +807,7 @@ export default function PapeletaWorkspace({
               longitudinalData={longitudinalData}
               workerId={workerId}
               reviewerUserId={reviewerUserId}
+              reviewerRole={reviewerRole}
               readonly={readonly}
               isPending={isPending}
               isUploading={isUploading}
@@ -1228,6 +1232,7 @@ function StudyPanel({
   workerId,
   workerInfo,
   reviewerUserId,
+  reviewerRole,
   readonly,
   isPending,
   isUploading,
@@ -1265,6 +1270,7 @@ function StudyPanel({
   longitudinalData: Record<string, unknown> | null | undefined
   workerId: string | undefined
   reviewerUserId: string
+  reviewerRole?: string
   readonly: boolean
   isPending: boolean
   isUploading: boolean
@@ -1462,6 +1468,7 @@ function StudyPanel({
                 prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
                 snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
                 reviewerUserId={reviewerUserId}
+                reviewerRole={reviewerRole}
                 eventId={eventId}
                 existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
                 readonly={readonly}
@@ -1861,6 +1868,7 @@ function StudyPanel({
                 prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
                 snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
                 reviewerUserId={reviewerUserId}
+                reviewerRole={reviewerRole}
                 eventId={eventId}
                 existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
                 readonly={readonly}

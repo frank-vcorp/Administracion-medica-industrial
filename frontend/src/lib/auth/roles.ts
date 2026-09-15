@@ -40,3 +40,15 @@ export function isSellerLike(role: UserRole | string | null | undefined): boolea
 export function isSuperAdmin(role: UserRole | string | null | undefined): boolean {
   return role === 'SUPERADMIN'
 }
+
+/** Roles que pueden emitir revisión médica sobre prediagnóstico IA (firma en PDF). */
+export const MEDICAL_REVIEWER_ROLES: readonly UserRole[] = [
+  'SUPERADMIN',
+  'DOCTOR_GENERAL',
+  'DOCTOR_VALIDATOR',
+]
+
+export function canEmitMedicalReview(role: UserRole | string | null | undefined): boolean {
+  if (!role) return false
+  return (MEDICAL_REVIEWER_ROLES as readonly string[]).includes(role)
+}

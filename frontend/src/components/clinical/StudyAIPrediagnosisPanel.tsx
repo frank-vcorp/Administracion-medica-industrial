@@ -12,6 +12,7 @@
 
 import { useState, useTransition } from "react"
 import { submitDoctorStudyReview } from "@/actions/ai-prediagnosis.actions"
+import { canEmitMedicalReview } from "@/lib/auth/roles"
 import { resolvePracticalRecommendation } from "@/lib/clinical/practical-recommendations-predx"
 
 // ---------------------------------------------------------------------------
@@ -135,6 +136,8 @@ interface StudyAIPrediagnosisPanelProps {
   snapshot: AIPrediagnosisSnapshot
   /** ID del médico que revisa */
   reviewerUserId: string
+  /** Rol en sesión — determina si puede emitir revisión médica */
+  reviewerRole?: string
   /** ID del evento para revalidar */
   eventId: string
   /** Estado de revisión ya existente (si hay) */
@@ -431,6 +434,7 @@ export default function StudyAIPrediagnosisPanel({
   prediagnosisSnapshotId,
   snapshot,
   reviewerUserId,
+  reviewerRole,
   eventId,
   existingReview,
   readonly = false,
@@ -438,6 +442,7 @@ export default function StudyAIPrediagnosisPanel({
 }: StudyAIPrediagnosisPanelProps) {
   const [reviewed, setReviewed] = useState(!!existingReview)
   const [showReviewForm, setShowReviewForm] = useState(false)
+  const canReview = canEmitMedicalReview(reviewerRole)
 
   const predxData = snapshot.prediagnosisData as AIPrediagnosisData | null
   if (!predxData) return null
@@ -727,7 +732,16 @@ export default function StudyAIPrediagnosisPanel({
         {/* Formulario de revisión */}
         {!readonly && !isReviewed && (
           <>
-            {!showReviewForm ? (
+            {!canReview ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                <p className="font-semibold">Revisión médica restringida</p>
+                <p className="mt-1">
+                  Tu rol actual ({reviewerRole ?? 'desconocido'}) no puede firmar revisiones clínicas.
+                  Usa una cuenta de <strong>Doctor General</strong> o <strong>Validador</strong>
+                  {' '}(p. ej. <span className="font-mono">doctor@ami.com</span>).
+                </p>
+              </div>
+            ) : !showReviewForm ? (
               <button
                 onClick={() => setShowReviewForm(true)}
                 className="w-full py-2 px-4 border-2 border-teal-500 text-teal-700 text-sm font-semibold rounded-lg hover:bg-teal-50 transition-colors"
