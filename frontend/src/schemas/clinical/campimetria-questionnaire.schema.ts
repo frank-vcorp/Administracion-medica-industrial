@@ -231,7 +231,8 @@ export const CampimetriaQuestionnairePayloadSchema = z.object({
     ojo_derecho: z.enum(CONFRONTACION_VALUES),
   }),
   ishihara: IshiharaSchema,
-  aptitud: z.enum(APTITUD_OFTALMO_VALUES),
+  /** Legacy: la aptitud la define el médico en la revisión IA, no en captura. */
+  aptitud: z.enum(APTITUD_OFTALMO_VALUES).optional(),
   observaciones: optString,
 })
 
@@ -340,7 +341,6 @@ export function defaultCampimetriaDraftPayload(): CampimetriaQuestionnairePayloa
       ojo_derecho: { ...emptyPlates },
       ojo_izquierdo: { ...emptyPlates },
     },
-    aptitud: 'OFTALMOLOGICAMENTE APTA PARA LABORAR',
   }
 }
 

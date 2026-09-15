@@ -70,6 +70,5 @@ export function buildCampimetriaExtractedData(input: {
     vision_lejana_od: input.acuity.vision_lejana_od ?? null,
     vision_lejana_oi: input.acuity.vision_lejana_oi ?? null,
     agudeza_resumen: input.acuity.pending ? 'PENDIENTE' : (input.acuity.resumen ?? null),
-    aptitud: input.payload.aptitud,
   }
 }

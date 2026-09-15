@@ -31,6 +31,7 @@ export async function saveCampimetriaQuestionnaire(
   eventTestId: string,
   rawPayload: unknown,
   eventId: string,
+  options?: { triggerPrediagnosis?: boolean },
 ): Promise<SaveCampimetriaQuestionnaireResult> {
   if (!eventTestId || !eventId) {
     return { success: false, error: 'Faltan parámetros obligatorios' }
@@ -48,7 +49,7 @@ export async function saveCampimetriaQuestionnaire(
       fieldErrors: validation.fieldErrors,
     }
   }
-  const payload = validation.payload
+  const { aptitud: _legacyAptitud, ...payload } = validation.payload
 
   const eventTest = await prisma.eventTest.findUnique({
     where: { id: eventTestId },
@@ -85,28 +86,30 @@ export async function saveCampimetriaQuestionnaire(
       where: { eventId },
       select: { eyeAcuityData: true },
     })
-    const extractedData = buildCampimetriaExtractedData({
-      payload,
-      acuity: inheritAcuityFromExam(
-        (exam?.eyeAcuityData as Record<string, unknown> | null) ?? null,
-      ),
-    })
-    const aiResult = await triggerStructuredStudyAIPrediagnosis({
-      eventTestId,
-      eventId,
-      studyType: 'Campimetria',
-      extractedData,
-    })
     let aiWarning: string | undefined
-    if (!aiResult.success) aiWarning = aiResult.error
-    await prisma.eventTest.update({
-      where: { id: eventTestId },
-      data: {
-        resultNotes: aiResult.success
-          ? `Campimetría: IA generada (${aiResult.clinicalState ?? 'AI_PENDING_REVIEW'}): ${aiResult.summary ?? ''}`.trim()
-          : `Campimetría: captura guardada, pero la IA no generó prediagnóstico: ${aiResult.error ?? 'sin detalle'}`,
-      },
-    })
+    if (options?.triggerPrediagnosis) {
+      const extractedData = buildCampimetriaExtractedData({
+        payload,
+        acuity: inheritAcuityFromExam(
+          (exam?.eyeAcuityData as Record<string, unknown> | null) ?? null,
+        ),
+      })
+      const aiResult = await triggerStructuredStudyAIPrediagnosis({
+        eventTestId,
+        eventId,
+        studyType: 'Campimetria',
+        extractedData,
+      })
+      if (!aiResult.success) aiWarning = aiResult.error
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: {
+          resultNotes: aiResult.success
+            ? `Campimetría: IA generada (${aiResult.clinicalState ?? 'AI_PENDING_REVIEW'}): ${aiResult.summary ?? ''}`.trim()
+            : `Campimetría: captura guardada, pero la IA no generó prediagnóstico: ${aiResult.error ?? 'sin detalle'}`,
+        },
+      })
+    }
 
     revalidatePath(`/events/${eventId}`)
     return {

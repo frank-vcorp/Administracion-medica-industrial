@@ -9,10 +9,10 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { saveCampimetriaQuestionnaire } from '@/actions/campimetria-questionnaire.actions'
 import { updateEventTestStatus } from '@/actions/event-test.actions'
 import {
-  APTITUD_OFTALMO_VALUES,
   CONFRONTACION_VALUES,
   EXPLORACION_OJO_FIELDS,
   EXPLORACION_OJO_LABEL,
@@ -73,6 +73,7 @@ export default function CampimetriaStudy({
   readonly?: boolean
   onStatusChange?: (status: string) => void
 }) {
+  const router = useRouter()
   const [form, setForm] = useState<CampimetriaQuestionnairePayload>(
     () => initialContext ?? defaultCampimetriaDraftPayload(),
   )
@@ -217,7 +218,9 @@ export default function CampimetriaStudy({
       ishihara: applyIshiharaDerivation(form.ishihara),
       capturedAt: new Date().toISOString(),
     }
-    const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId)
+    const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId, {
+      triggerPrediagnosis: complete,
+    })
     if (!res.success) {
       setFieldErrors(res.fieldErrors ?? {})
       setMessage(res.error)
@@ -232,12 +235,19 @@ export default function CampimetriaStudy({
       eventId,
     )
     onStatusChange?.(status)
-    setMessage(complete ? 'Campimetría completada.' : 'Borrador guardado.')
+    setMessage(
+      complete
+        ? res.aiWarning
+          ? 'Campimetría completada (revisa el prediagnóstico IA a la derecha).'
+          : 'Campimetría completada. Revisa y valida el prediagnóstico IA a la derecha.'
+        : 'Borrador guardado.',
+    )
     if (res.aiWarning) {
       setAiWarning(
         `La captura se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`,
       )
     }
+    if (complete) router.refresh()
     setSaving(false)
   }
 
@@ -540,26 +550,13 @@ export default function CampimetriaStudy({
           )}
         </section>
 
-        <section className="rounded-xl border border-slate-200 p-4 space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Aptitud</h4>
-          <select
-            disabled={readonly}
-            value={form.aptitud}
-            onChange={e =>
-              setForm(prev => ({
-                ...prev,
-                aptitud: e.target.value as (typeof APTITUD_OFTALMO_VALUES)[number],
-              }))
-            }
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-sm"
-          >
-            {APTITUD_OFTALMO_VALUES.map(v => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </section>
+        {!readonly && (
+          <p className="text-xs text-slate-500 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            La aptitud y el hallazgo final los valida el médico en el panel de{' '}
+            <strong>Prediagnóstico IA</strong> (columna derecha), igual que en
+            espirometría y audiometría.
+          </p>
+        )}
 
         {message && (
           <p className={`text-sm font-medium ${message.includes('inválid') || message.includes('Error') || fieldErrors && Object.keys(fieldErrors).length ? 'text-red-600' : 'text-teal-700'}`}>

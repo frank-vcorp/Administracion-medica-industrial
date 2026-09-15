@@ -574,15 +574,20 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
   try {
     const normalizedExtractedData = JSON.parse(JSON.stringify(extractedData)) as Prisma.InputJsonValue
 
-    const response = await fetch(`${PYTHON_API}/api/v2/studies/prediagnosis-from-params`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        study_type: studyType,
-        extracted_data: extractedData,
-        triggered_by_user_id: triggeredByUserId,
-      }),
-    })
+    // FastAPI: `study_type` y `triggered_by_user_id` van en query; el body es
+    // el dict `extracted_data` directamente (no anidado).
+    const query = new URLSearchParams({ study_type: studyType })
+    if (triggeredByUserId) {
+      query.set('triggered_by_user_id', triggeredByUserId)
+    }
+    const response = await fetch(
+      `${PYTHON_API}/api/v2/studies/prediagnosis-from-params?${query.toString()}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(extractedData),
+      },
+    )
 
     if (!response.ok) {
       const errText = await response.text().catch(() => 'Sin detalle')
