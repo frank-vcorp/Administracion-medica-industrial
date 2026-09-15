@@ -17,6 +17,7 @@ import { useSession } from 'next-auth/react'
 import { buildVerdictFromExam } from '@/lib/clinical/verdict.builder'
 import { buildRecommendationsFromExam } from '@/lib/clinical/recommendations'
 import { ServiceRatingPrompt } from '@/components/clinical/ServiceRatingPrompt'
+import { isAdminLike } from '@/lib/auth/roles'
 
 interface EventFlowControllerProps {
     eventId: string
@@ -420,5 +421,5 @@ export default function EventFlowController({
  * corporativo — FND-20260825-18 / P1-2).
  */
 function isClinicalRole(role: string | null | undefined): boolean {
-    return role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR'
+    return isAdminLike(role) || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR'
 }

@@ -41,14 +41,15 @@ export function isSuperAdmin(role: UserRole | string | null | undefined): boolea
   return role === 'SUPERADMIN'
 }
 
-/** Roles que pueden emitir revisión médica sobre prediagnóstico IA (firma en PDF). */
+/** Roles clínicos que emiten revisión médica (además de admin-like). */
 export const MEDICAL_REVIEWER_ROLES: readonly UserRole[] = [
-  'SUPERADMIN',
   'DOCTOR_GENERAL',
   'DOCTOR_VALIDATOR',
 ]
 
+/** ADMIN/SUPERADMIN heredan revisión médica; médicos conservan su flujo propio. */
 export function canEmitMedicalReview(role: UserRole | string | null | undefined): boolean {
   if (!role) return false
+  if (isAdminLike(role)) return true
   return (MEDICAL_REVIEWER_ROLES as readonly string[]).includes(role)
 }

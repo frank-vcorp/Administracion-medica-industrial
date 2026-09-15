@@ -769,8 +769,7 @@ export async function submitDoctorStudyReview(
   if (!canEmitMedicalReview(session.user.role)) {
     return {
       success: false,
-      error:
-        'Sin permisos para emitir revisión médica. Inicia sesión con una cuenta de médico (Doctor General o Validador).',
+      error: 'Sin permisos para emitir revisión médica',
     }
   }
   const reviewedByUserId = session.user.id

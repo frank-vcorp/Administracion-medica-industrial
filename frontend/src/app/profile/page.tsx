@@ -16,6 +16,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import { redirect } from 'next/navigation'
 import DoctorProfileForm from '@/components/admin/DoctorProfileForm'
+import { isAdminLike } from '@/lib/auth/roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,7 @@ export default async function DoctorProfilePage() {
   }
   const role = session.user.role
   if (
-    role !== 'SUPERADMIN' &&
+    !isAdminLike(role) &&
     role !== 'DOCTOR_GENERAL' &&
     role !== 'DOCTOR_VALIDATOR'
   ) {

@@ -247,7 +247,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showAdminItems = isAdmin
   const showPortalItems = isCompanyClient
   const showGlobalSearch = showStaffItems && !isCompanyClient
-  const canEditProfile = role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR'
+  const canEditProfile = isAdminLike(role) || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR'
   const isEventWorkspace = /^\/events\/[^/]+$/.test(pathname || '')
   const handleSignOut = () => {
     void signOut({ callbackUrl: '/login' })
