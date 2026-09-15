@@ -7,7 +7,7 @@ import {
   CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
   defaultCampimetriaQuestionnairePayload,
 } from '../campimetria-questionnaire.schema'
-import { buildCampimetriaImpresion } from '@/lib/clinical/campimetria-report'
+import { buildCampimetriaImpresion, buildCampimetriaExtractedData } from '@/lib/clinical/campimetria-report'
 import { inheritAcuityFromExam } from '@/lib/clinical/campimetria-inherited'
 
 describe('CampimetriaQuestionnairePayloadSchema', () => {
@@ -63,5 +63,18 @@ describe('buildCampimetriaImpresion', () => {
       acuity: inheritAcuityFromExam(null),
     })
     expect(text).toContain('PENDIENTE EN PAPELETA')
+  })
+})
+
+describe('buildCampimetriaExtractedData', () => {
+  it('expone confrontación OD/OI para el prediagnóstico IA', () => {
+    const payload = defaultCampimetriaQuestionnairePayload()
+    const data = buildCampimetriaExtractedData({
+      payload,
+      acuity: inheritAcuityFromExam(null),
+    })
+    expect(data.confrontacion_od).toBe('CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES')
+    expect(data.confrontacion_oi).toBe('CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES')
+    expect(data.ishihara_resultado).toBe('NORMAL')
   })
 })

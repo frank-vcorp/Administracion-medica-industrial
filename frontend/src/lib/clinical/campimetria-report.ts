@@ -51,3 +51,25 @@ export function buildCampimetriaRecomendaciones(input: {
   }
   return parts.join('. ')
 }
+
+/** Parámetros estructurados para prediagnóstico IA (sin PII). */
+export function buildCampimetriaExtractedData(input: {
+  payload: CampimetriaQuestionnairePayload
+  acuity: InheritedAcuity
+}): Record<string, unknown> {
+  return {
+    confrontacion_od: input.payload.confrontacion.ojo_derecho,
+    confrontacion_oi: input.payload.confrontacion.ojo_izquierdo,
+    ishihara_resultado: input.payload.ishihara.resultado,
+    ishihara_od: input.payload.ishihara.ojo_derecho,
+    ishihara_oi: input.payload.ishihara.ojo_izquierdo,
+    exploracion_od: input.payload.exploracion.ojo_derecho,
+    exploracion_oi: input.payload.exploracion.ojo_izquierdo,
+    uso_lentes: input.payload.antecedentes.uso_lentes,
+    cirugias_oculares: input.payload.antecedentes.cirugias_oculares,
+    vision_lejana_od: input.acuity.vision_lejana_od ?? null,
+    vision_lejana_oi: input.acuity.vision_lejana_oi ?? null,
+    agudeza_resumen: input.acuity.pending ? 'PENDIENTE' : (input.acuity.resumen ?? null),
+    aptitud: input.payload.aptitud,
+  }
+}

@@ -330,15 +330,41 @@ class TestPrediagnosticoNuevosTipos:
         from app.services.ai.prediagnostic import PrediagnosticService
         return PrediagnosticService(api_key="test-api-key", model="gemini-2.5-flash")
 
-    def test_campimetria_retorna_non_conclusive(self, prediagnostic_svc):
-        """Campimetría debe retornar AI_NON_CONCLUSIVE en V1 (sin soporte de prediagnóstico IA)."""
+    def test_campimetria_sin_params_minimos_retorna_non_conclusive(self, prediagnostic_svc):
+        """Sin confrontación OD/OI la campimetría sigue siendo no concluyente."""
         result = prediagnostic_svc.generate_prediagnosis(
             "Campimetria",
             {"paciente": "Test", "fecha_estudio": "26/03/2026"}
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
         assert result.confidence == 0.0
-        assert "Campimetria" in (result.non_conclusive_reason or "")
+        assert "confrontacion" in (result.non_conclusive_reason or "")
+
+    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
+    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    def test_campimetria_con_confrontacion_genera_prediagnostico(self, mock_dr7, prediagnostic_svc):
+        """Formulario interno de campimetría con confrontación genera prediagnóstico."""
+        mock_dr7.return_value = {
+            "summary": "Campos visuales de confrontación compatibles con parámetros normales.",
+            "confidence": 0.7,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": [],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+        }
+        result = prediagnostic_svc.generate_prediagnosis(
+            "Campimetria",
+            {
+                "confrontacion_od": "CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES",
+                "confrontacion_oi": "CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES",
+                "ishihara_resultado": "NORMAL",
+            },
+        )
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        mock_dr7.assert_called_once()
 
     def test_riesgo_cardiovascular_retorna_non_conclusive(self, prediagnostic_svc):
         """RiesgoCardiovascular debe retornar AI_NON_CONCLUSIVE en V1."""

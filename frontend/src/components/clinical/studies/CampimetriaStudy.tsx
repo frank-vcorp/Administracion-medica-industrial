@@ -1,6 +1,7 @@
 /**
- * @fileoverview Captura + preview de reporte de Campimetría (formato 005-2018).
- * Sin dropzone de PDF. Hereda PII/agudeza/antecedentes de la papeleta.
+ * @fileoverview Captura de Campimetría (confrontación + Ishihara + exploración).
+ * Sin dropzone de PDF. El prediagnóstico IA vive en el mismo recuadro que
+ * audio/espiro (StudyAIPrediagnosisPanel).
  *
  * @id IMPL-FEATURE-20260914-01
  * @spec SPEC-FEATURE-20260914-01-CAMPIMETRIA-CUESTIONARIO.md
@@ -24,7 +25,6 @@ import {
   expectedIshiharaAnswers,
   type CampimetriaQuestionnairePayload,
   type ExploracionEstadoCampimetria,
-  type ExploracionOjoCampimetria,
   type ExploracionOjoField,
   type IshiharaPlateId,
 } from '@/schemas/clinical/campimetria-questionnaire.schema'
@@ -32,10 +32,6 @@ import {
   inheritAcuityFromExam,
   inheritAntecedentesFromPapeleta,
 } from '@/lib/clinical/campimetria-inherited'
-import {
-  buildCampimetriaImpresion,
-  buildCampimetriaRecomendaciones,
-} from '@/lib/clinical/campimetria-report'
 
 const TIEMPO_LENTES_LABEL: Record<(typeof TIEMPO_LENTES_VALUES)[number], string> = {
   MENOS_1_ANIO: 'Menos de 1 año',
@@ -78,6 +74,7 @@ export default function CampimetriaStudy({
   )
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [aiWarning, setAiWarning] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
 
   const acuity = useMemo(
@@ -92,9 +89,6 @@ export default function CampimetriaStudy({
       }),
     [examData?.physicalExamData, longitudinalData],
   )
-  const impresion = buildCampimetriaImpresion({ payload: form, acuity })
-  const recomendaciones = buildCampimetriaRecomendaciones({ payload: form, acuity })
-
   const setAntecedente = <K extends keyof CampimetriaQuestionnairePayload['antecedentes']>(
     key: K,
     value: CampimetriaQuestionnairePayload['antecedentes'][K],
@@ -188,6 +182,7 @@ export default function CampimetriaStudy({
   const save = async (complete: boolean) => {
     setSaving(true)
     setMessage('')
+    setAiWarning('')
     setFieldErrors({})
     const payload: CampimetriaQuestionnairePayload = {
       ...form,
@@ -209,14 +204,18 @@ export default function CampimetriaStudy({
     )
     onStatusChange?.(status)
     setMessage(complete ? 'Campimetría completada.' : 'Borrador guardado.')
+    if (res.aiWarning) {
+      setAiWarning(
+        `La captura se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`,
+      )
+    }
     setSaving(false)
   }
 
   const err = (path: string) => fieldErrors[path]?.[0]
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-      <div className="space-y-4">
+    <div className="space-y-4">
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
           <p className="text-sm font-bold text-violet-900">Campimetría — captura manual</p>
           <p className="text-xs text-violet-700 mt-0.5">
@@ -528,6 +527,9 @@ export default function CampimetriaStudy({
             {message}
           </p>
         )}
+        {aiWarning && (
+          <p className="text-sm font-medium text-amber-700">{aiWarning}</p>
+        )}
 
         {!readonly && (
           <div className="flex flex-wrap gap-2">
@@ -549,16 +551,6 @@ export default function CampimetriaStudy({
             </button>
           </div>
         )}
-      </div>
-
-      <CampimetriaReportPreview
-        workerInfo={workerInfo}
-        acuity={acuity}
-        inheritedAnt={inheritedAnt}
-        payload={form}
-        impresion={impresion}
-        recomendaciones={recomendaciones}
-      />
     </div>
   )
 }
@@ -624,104 +616,6 @@ function EstadoChips({
           {v === 'NO_REALIZADO' ? 'N/R' : v}
         </button>
       ))}
-    </div>
-  )
-}
-
-function CampimetriaReportPreview({
-  workerInfo,
-  acuity,
-  inheritedAnt,
-  payload,
-  impresion,
-  recomendaciones,
-}: {
-  workerInfo: WorkerBanner
-  acuity: ReturnType<typeof inheritAcuityFromExam>
-  inheritedAnt: ReturnType<typeof inheritAntecedentesFromPapeleta>
-  payload: CampimetriaQuestionnairePayload
-  impresion: string
-  recomendaciones: string
-}) {
-  const textoOjo = (ojo: ExploracionOjoCampimetria, field: ExploracionOjoField) => {
-    if (ojo[field].estado === 'NORMAL') return EXPLORACION_OJO_PLANTILLA[field]
-    if (ojo[field].estado === 'NO_REALIZADO') return 'NO REALIZADO'
-    return ojo[field].observacion || 'ALTERADO'
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-300 bg-white p-5 shadow-sm xl:sticky xl:top-4 space-y-4 text-[11px] text-slate-800">
-      <p className="text-center text-sm font-black tracking-wide">REPORTE DE EXAMEN VISUAL</p>
-      <p className="text-center text-[10px] text-slate-400">Formato 005-2018 · preview</p>
-      <div className="grid grid-cols-2 gap-2">
-        <p><span className="font-bold">NOMBRE:</span> {workerInfo.name}</p>
-        <p><span className="font-bold">EDAD:</span> {workerInfo.ageYears != null ? `${workerInfo.ageYears} años` : '—'}</p>
-        <p><span className="font-bold">EMPRESA:</span> {workerInfo.company || '—'}</p>
-        <p><span className="font-bold">FECHA:</span> {workerInfo.eventDate || '—'}</p>
-      </div>
-      <div>
-        <p className="font-bold uppercase text-slate-500 mb-1">Antecedentes oftalmológicos</p>
-        <p>Uso de lentes: {payload.antecedentes.uso_lentes}{payload.antecedentes.tiempo_lentes ? ` (${TIEMPO_LENTES_LABEL[payload.antecedentes.tiempo_lentes]})` : ''}</p>
-        <p>Cirugías oculares: {payload.antecedentes.cirugias_oculares}{payload.antecedentes.causa_cirugia ? ` — ${payload.antecedentes.causa_cirugia}` : ''}</p>
-        {inheritedAnt.map(a => (
-          <p key={a.label}>{a.label}: {a.estado}{a.detalle ? ` — ${a.detalle}` : ''}</p>
-        ))}
-      </div>
-      <div>
-        <p className="font-bold uppercase text-slate-500 mb-1">Agudeza visual (heredada)</p>
-        {acuity.pending ? (
-          <p className="text-amber-700">Pendiente en papeleta</p>
-        ) : (
-          <>
-            <p>OD sin lentes {acuity.vision_lejana_od ?? '—'} · con lentes {acuity.lejana_corregida_od ?? '—'} · cercana {acuity.vision_cercana_od ?? '—'}</p>
-            <p>OI sin lentes {acuity.vision_lejana_oi ?? '—'} · con lentes {acuity.lejana_corregida_oi ?? '—'} · cercana {acuity.vision_cercana_oi ?? '—'}</p>
-          </>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <figure>
-          <img
-            src="/clinical/campimetria/confrontacion-oi.png"
-            alt=""
-            className="w-full border border-slate-200"
-          />
-          <figcaption className="text-center font-bold">OI: {payload.confrontacion.ojo_izquierdo}</figcaption>
-        </figure>
-        <figure>
-          <img
-            src="/clinical/campimetria/confrontacion-od.png"
-            alt=""
-            className="w-full border border-slate-200"
-          />
-          <figcaption className="text-center font-bold">OD: {payload.confrontacion.ojo_derecho}</figcaption>
-        </figure>
-      </div>
-      <div>
-        <p className="font-bold uppercase text-slate-500 mb-1">Exploración</p>
-        {EXPLORACION_OJO_FIELDS.map(f => (
-          <p key={f}>
-            {EXPLORACION_OJO_LABEL[f]} — OI: {textoOjo(payload.exploracion.ojo_izquierdo, f)} · OD:{' '}
-            {textoOjo(payload.exploracion.ojo_derecho, f)}
-          </p>
-        ))}
-      </div>
-      <div>
-        <p className="font-bold uppercase text-slate-500 mb-1">Ishihara: {payload.ishihara.resultado}</p>
-        <img
-          src="/clinical/campimetria/ishihara.png"
-          alt=""
-          className="w-full border border-slate-200 mb-1"
-        />
-        {payload.ishihara.resultado !== 'NO APLICA' && (
-          <p>
-            OD {ISHIHARA_PLATES.map(p => payload.ishihara.ojo_derecho[p.id]).join(', ')} · OI{' '}
-            {ISHIHARA_PLATES.map(p => payload.ishihara.ojo_izquierdo[p.id]).join(', ')}
-          </p>
-        )}
-      </div>
-      <p><span className="font-bold">IMPRESIÓN DIAGNÓSTICA:</span> {impresion}</p>
-      <p><span className="font-bold">APTITUD:</span> {payload.aptitud}</p>
-      <p><span className="font-bold">RECOMENDACIONES:</span> {recomendaciones}</p>
     </div>
   )
 }

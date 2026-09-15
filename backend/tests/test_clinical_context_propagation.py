@@ -116,17 +116,17 @@ class TestGeneratePrediagnosisSignatureCompat:
         deben seguir funcionando idénticamente al pre-FEATURE-20260824-02.
         """
         result = prediagnostic_svc.generate_prediagnosis(
-            "Campimetria",
+            "RiesgoCardiovascular",
             {"paciente": "Test", "fecha_estudio": "26/03/2026"},
         )
-        # Campimetria retorna AI_NON_CONCLUSIVE en V1 — sólo validamos que
+        # RiesgoCardiovascular retorna AI_NON_CONCLUSIVE en V1 — sólo validamos que
         # el kwarg opcional no rompa el flujo.
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
 
     def test_acepta_clinical_context_explicito_none(self, prediagnostic_svc):
         """clinical_context=None explícito es equivalente a no pasarlo."""
         result = prediagnostic_svc.generate_prediagnosis(
-            "Campimetria",
+            "RiesgoCardiovascular",
             {"paciente": "Test", "fecha_estudio": "26/03/2026"},
             clinical_context=None,
         )

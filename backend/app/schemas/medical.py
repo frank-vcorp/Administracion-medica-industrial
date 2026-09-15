@@ -278,7 +278,8 @@ class CampimetriaData(BaseModel):
     """
     Datos EXTRAÍDOS de estudio de campo visual (campimetría).
     Parámetros canónicos: puntos de déficit por ojo, índices de pérdida.
-    NOTA: prediagnóstico IA no soportado en V1 — requiere revisión médica manual.
+    NOTA: el flujo operativo de AMI es captura de confrontación (formulario),
+    no Humphrey. El prediagnóstico IA usa parámetros del formulario.
     """
     paciente: str
     fecha_estudio: str

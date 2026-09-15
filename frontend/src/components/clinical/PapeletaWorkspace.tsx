@@ -1398,25 +1398,50 @@ function StudyPanel({
         </div>
       )}
 
-      {/* SPEC-FEATURE-20260914-01: Campimetría es captura manual, sin PDF. */}
+      {/* SPEC-FEATURE-20260914-01: Campimetría es captura manual, sin PDF.
+          Derecha: el mismo recuadro de prediagnóstico IA que audio/espiro. */}
       {isCampi && (
-        <CampimetriaStudy
-          eventId={eventId}
-          eventTestId={test.id}
-          initialContext={
-            test.clinicalContext &&
-            typeof test.clinicalContext === 'object' &&
-            (test.clinicalContext as { schemaVersion?: string }).schemaVersion ===
-              CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
-              ? (test.clinicalContext as CampimetriaQuestionnairePayload)
-              : null
-          }
-          examData={examData}
-          longitudinalData={longitudinalData}
-          workerInfo={workerInfo}
-          readonly={readonly}
-          onStatusChange={(status) => onExamenMedicoStatusChange(status)}
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CampimetriaStudy
+            eventId={eventId}
+            eventTestId={test.id}
+            initialContext={
+              test.clinicalContext &&
+              typeof test.clinicalContext === 'object' &&
+              (test.clinicalContext as { schemaVersion?: string }).schemaVersion ===
+                CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
+                ? (test.clinicalContext as CampimetriaQuestionnairePayload)
+                : null
+            }
+            examData={examData}
+            longitudinalData={longitudinalData}
+            workerInfo={workerInfo}
+            readonly={readonly}
+            onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+          />
+          <div className="space-y-3 lg:sticky lg:top-4 self-start">
+            {test.aiSnapshot ? (
+              <StudyAIPrediagnosisPanel
+                prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
+                snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
+                reviewerUserId={reviewerUserId}
+                eventId={eventId}
+                existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
+                readonly={readonly}
+                studyType="Campimetria"
+              />
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
+                <span className="text-2xl block mb-1">🤖</span>
+                <p className="text-sm text-slate-600 font-medium">Prediagnóstico IA</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Guarda o completa la captura para que la IA sugiera un hallazgo.
+                  El médico lo valida o escribe el suyo, igual que en el resto de estudios.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Sección: Examen Médico (tipo formulario — IMPL-20260325-01) */}

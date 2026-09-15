@@ -164,6 +164,7 @@ CONFIDENCE_THRESHOLDS: Dict[str, float] = {
     # IMPL-20260326-02: Formularios internos — umbral modesto; datos son estructurados
     "Somatometria": 0.55,
     "AgudezaVisual": 0.55,
+    "Campimetria": 0.55,
     "ExamenMedico": 0.50,
     "Otro": 0.40,
 }
@@ -179,6 +180,7 @@ REQUIRED_PARAMS: Dict[str, list] = {
     # IMPL-20260326-02: Formularios internos — mínimos para que el LLM tenga base
     "Somatometria": ["peso_kg", "talla_m"],
     "AgudezaVisual": ["vision_lejana_od", "vision_lejana_oi"],
+    "Campimetria": ["confrontacion_od", "confrontacion_oi"],
     # ExamenMedico no tiene mínimos estrictos; el prompt maneja datos parciales
 }
 
@@ -207,16 +209,17 @@ def _espirometry_param_present_in_tabla(extracted_data: Dict[str, Any], param: s
     value = _backfill_espirometry_scalar(parametros, param)
     return isinstance(value, (int, float)) and value > 0
 
-# IMPL-20260326-17: Tipos con prediagnóstico IA explícito. Campimetria y RiesgoCardiovascular
-# quedan fuera en V1 — sus documentos ya contienen el resultado calculado o requieren
-# tablas normativas altamente especializadas que el modelo general no debe asumir.
+# IMPL-20260326-17: Tipos con prediagnóstico IA explícito. RiesgoCardiovascular
+# queda fuera en V1 — el documento ya contiene el resultado calculado.
 # IMPL-20260326-02: Añadidos formularios internos: Somatometria, AgudezaVisual, ExamenMedico.
+# IMPL-FEATURE-20260914-01: Campimetria pasa a formulario interno (confrontación + Ishihara).
 PREDIAGNOSIS_SUPPORTED_TYPES = {
     "Audiometria",
     "Laboratorio",
     "Espirometria",
     "Rayos_X",
     "Electrocardiograma",
+    "Campimetria",
     # Formularios internos (sin OCR — parámetros ya estructurados)
     "Somatometria",
     "AgudezaVisual",
@@ -675,6 +678,42 @@ Responde en JSON con esta estructura exacta:
   "non_conclusive_reason": null
 }""",
 
+        "Campimetria": """Eres un sistema de apoyo a la decisión clínica para salud visual ocupacional.
+Recibirás hallazgos de campimetría de confrontación e Ishihara capturados por el operador
+(campos visuales por ojo, exploración oftalmológica, discriminación de color, agudeza heredada).
+Tu tarea es generar un análisis de apoyo, NO un diagnóstico oftalmológico definitivo ni aptitud laboral.
+
+REGLAS ESTRICTAS:
+1. Usa lenguaje prudente: "hallazgos compatibles con", "sugiere evaluación oftalmológica", "requiere correlación clínica".
+2. NO emitas diagnóstico de glaucoma, retinopatía u otra enfermedad, ni aptitud laboral.
+3. Campos visuales: comenta confrontacion_od y confrontacion_oi. "ALTERADOS" es hallazgo relevante.
+4. Ishihara: comenta ishihara_resultado. No asumas daltonismo si el resultado es NORMAL o NO APLICA.
+5. Agudeza visual heredada puede estar PENDIENTE: no la inventes.
+6. Si faltan confrontacion_od y confrontacion_oi, declara AI_NON_CONCLUSIVE.
+7. Responde SOLO en JSON, sin markdown.
+
+Parámetros capturados:
+{extracted_json}
+
+Responde en JSON con esta estructura exacta:
+{
+  "summary": "Texto prudente de máx. 2 oraciones sobre campos visuales e Ishihara",
+  "confidence": 0.68,
+  "clinical_state": "AI_PENDING_REVIEW",
+  "justification": ["Campos visuales de confrontación dentro de parámetros normales en ambos ojos", "Ishihara sin alteración documentada"],
+  "clinical_basis": [
+    {"principle": "Campimetría de confrontación como tamiz de campo visual", "applied_parameters": ["confrontacion_od", "confrontacion_oi"]},
+    {"principle": "Evaluación de visión cromática (Ishihara)", "applied_parameters": ["ishihara_resultado"]}
+  ],
+  "citations": [
+    {"source_id": "AAO-VF-2022", "title": "Primary Open-Angle Glaucoma Preferred Practice Pattern", "section": "Visual field testing", "excerpt": "Confrontation fields are a screening adjunct, not a substitute for automated perimetry when indicated", "version_or_date": "2022"}
+  ],
+  "limitations": ["La confrontación no sustituye perimetría automatizada; se requiere correlación oftalmológica para diagnóstico"],
+  "red_flags": [],
+  "recommendation": null,
+  "non_conclusive_reason": null
+}""",
+
         "ExamenMedico": """Eres un sistema de apoyo a la decisión clínica para medicina del trabajo.
 Recibirás hallazgos de una exploración física general capturados directamente por el médico
 (hallazgos por sistema: neurológico, corazón, pulmones, abdomen, columna, extremidades, etc.).
@@ -1048,7 +1087,7 @@ Responde en JSON con esta estructura exacta:
         # AI_NON_CONCLUSIVE explícito sin llamar DR7.
 
         # IMPL-20260326-17: Tipos sin soporte de prediagnóstico IA en V1
-        # Campimetria y RiesgoCardiovascular retornan AI_NON_CONCLUSIVE explícito.
+        # RiesgoCardiovascular retorna AI_NON_CONCLUSIVE explícito.
         if study_type not in PREDIAGNOSIS_SUPPORTED_TYPES or not effective["prediagnosisEnabled"]:
             print(f"ℹ️ Tipo '{study_type}' sin prediagnóstico IA habilitado — revisión médica manual requerida")
             return _result_with_provider(

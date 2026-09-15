@@ -9,6 +9,9 @@ import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import type { CampimetriaQuestionnairePayload } from '@/schemas/clinical/campimetria-questionnaire.schema'
+import { inheritAcuityFromExam } from '@/lib/clinical/campimetria-inherited'
+import { buildCampimetriaExtractedData } from '@/lib/clinical/campimetria-report'
+import { triggerStructuredStudyAIPrediagnosis } from '@/actions/ai-prediagnosis.actions'
 
 export type SaveCampimetriaQuestionnaireResult =
   | {
@@ -16,6 +19,7 @@ export type SaveCampimetriaQuestionnaireResult =
       eventTestId: string
       payload: CampimetriaQuestionnairePayload
       updatedAt: string
+      aiWarning?: string
     }
   | {
       success: false
@@ -76,12 +80,41 @@ export async function saveCampimetriaQuestionnaire(
       },
       select: { id: true, updatedAt: true },
     })
+
+    const exam = await prisma.medicalExam.findUnique({
+      where: { eventId },
+      select: { eyeAcuityData: true },
+    })
+    const extractedData = buildCampimetriaExtractedData({
+      payload,
+      acuity: inheritAcuityFromExam(
+        (exam?.eyeAcuityData as Record<string, unknown> | null) ?? null,
+      ),
+    })
+    const aiResult = await triggerStructuredStudyAIPrediagnosis({
+      eventTestId,
+      eventId,
+      studyType: 'Campimetria',
+      extractedData,
+    })
+    let aiWarning: string | undefined
+    if (!aiResult.success) aiWarning = aiResult.error
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        resultNotes: aiResult.success
+          ? `Campimetría: IA generada (${aiResult.clinicalState ?? 'AI_PENDING_REVIEW'}): ${aiResult.summary ?? ''}`.trim()
+          : `Campimetría: captura guardada, pero la IA no generó prediagnóstico: ${aiResult.error ?? 'sin detalle'}`,
+      },
+    })
+
     revalidatePath(`/events/${eventId}`)
     return {
       success: true,
       eventTestId: updated.id,
       payload,
       updatedAt: updated.updatedAt.toISOString(),
+      aiWarning,
     }
   } catch (err) {
     console.error('[IMPL-FEATURE-20260914-01] saveCampimetriaQuestionnaire failed:', err)
