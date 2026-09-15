@@ -40,8 +40,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9',
     paddingVertical: 2,
     paddingHorizontal: 3,
-    marginTop: 3,
-    marginBottom: 2,
+    marginTop: 2,
+    marginBottom: 1,
     textTransform: 'uppercase',
   },
   gridRow: { flexDirection: 'row', marginBottom: 1 },
@@ -87,12 +87,13 @@ const styles = StyleSheet.create({
     borderRightWidth: 0.5,
     borderRightColor: '#cbd5e1',
   },
-  confrontacionRow: { flexDirection: 'row', marginTop: 2, gap: 4 },
+  confrontacionRow: { flexDirection: 'row', marginTop: 1, gap: 6 },
   confrontacionCol: { flex: 1, alignItems: 'center' },
-  confrontacionText: { fontSize: 6, textAlign: 'center', marginBottom: 1 },
-  confrontacionImage: { width: '100%', height: 38, objectFit: 'contain' },
+  confrontacionEye: { fontSize: 6, fontWeight: 'bold', textAlign: 'center', marginBottom: 1 },
+  confrontacionText: { fontSize: 5.5, textAlign: 'center', marginBottom: 2, lineHeight: 1.2 },
+  confrontacionImage: { width: '94%', height: 68, objectFit: 'contain' },
   ishiharaHint: { fontSize: 5.5, fontStyle: 'italic', marginTop: 1, marginBottom: 1 },
-  ishiharaImage: { width: '100%', height: 24, objectFit: 'contain', marginBottom: 2 },
+  ishiharaImage: { width: '100%', height: 20, objectFit: 'contain', marginBottom: 1 },
   ishiharaTable: { borderWidth: 0.75, borderColor: '#94a3b8' },
   ishiharaHead: {
     flex: 1,
@@ -120,7 +121,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 0.5,
     borderRightColor: '#cbd5e1',
   },
-  clinicalBlock: { marginTop: 3, marginBottom: 1 },
+  clinicalBlock: { marginTop: 2, marginBottom: 1 },
   clinicalLabel: { fontWeight: 'bold', marginBottom: 0.5 },
   clinicalText: { fontSize: 6.5, lineHeight: 1.3 },
   signatureRow: {
@@ -349,16 +350,18 @@ export function CampimetriaValidatedPDF({ data }: { data: CampimetriaValidatedPD
         <Text style={styles.sectionBar}>Campimetria de confrontacion</Text>
         <View style={styles.confrontacionRow}>
           <View style={styles.confrontacionCol}>
-            <Text style={styles.confrontacionText}>{data.confrontacion.oi}</Text>
+            <Text style={styles.confrontacionEye}>OJO IZQUIERDO</Text>
             {data.confrontacionOiImage ? (
               <Image style={styles.confrontacionImage} src={data.confrontacionOiImage} />
             ) : null}
+            <Text style={styles.confrontacionText}>{data.confrontacion.oi}</Text>
           </View>
           <View style={styles.confrontacionCol}>
-            <Text style={styles.confrontacionText}>{data.confrontacion.od}</Text>
+            <Text style={styles.confrontacionEye}>OJO DERECHO</Text>
             {data.confrontacionOdImage ? (
               <Image style={styles.confrontacionImage} src={data.confrontacionOdImage} />
             ) : null}
+            <Text style={styles.confrontacionText}>{data.confrontacion.od}</Text>
           </View>
         </View>
 
