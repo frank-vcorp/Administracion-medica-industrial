@@ -291,11 +291,7 @@ export default function WorkerFormModal({
                     }
                     if (result.success) {
                         router.refresh()
-                        if (isControlled) {
-                            onClose?.()
-                        } else {
-                            setSuccessData(result)
-                        }
+                        setSuccessData(result)
                     } else {
                         setError(result.error || 'Error al guardar')
                     }
@@ -306,7 +302,7 @@ export default function WorkerFormModal({
         })
     }
 
-    if (!isControlled && duplicateWorker) {
+    if (duplicateWorker && modalOpen) {
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
                 <div className="bg-white p-8 rounded-[2rem] shadow-2xl max-w-sm w-full space-y-6">
@@ -352,7 +348,11 @@ export default function WorkerFormModal({
                         <button
                             onClick={() => {
                                 setDuplicateWorker(null)
-                                setInternalOpen(false)
+                                if (isControlled) {
+                                    onClose?.()
+                                } else {
+                                    setInternalOpen(false)
+                                }
                                 router.push(`/workers?edit=${duplicateWorker.id}`)
                             }}
                             className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
@@ -371,7 +371,7 @@ export default function WorkerFormModal({
         )
     }
 
-    if (!isControlled && successData) {
+    if (successData && modalOpen) {
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
                 <div className="bg-white p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center space-y-6">
@@ -387,7 +387,11 @@ export default function WorkerFormModal({
                             onClick={() => {
                                 const w = successData.worker
                                 setSuccessData(null)
-                                setInternalOpen(false)
+                                if (isControlled) {
+                                    onClose?.()
+                                } else {
+                                    setInternalOpen(false)
+                                }
                                 const branchForAppt = w?.branchId || w?.company?.defaultBranchId
                                 const params = new URLSearchParams()
                                 params.set('action', 'new-appointment')
@@ -407,7 +411,11 @@ export default function WorkerFormModal({
                         <button
                             onClick={() => {
                                 setSuccessData(null)
-                                setInternalOpen(false)
+                                if (isControlled) {
+                                    onClose?.()
+                                } else {
+                                    setInternalOpen(false)
+                                }
                                 if (publicGeneralMode) {
                                     router.push('/publico-general')
                                 }

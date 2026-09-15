@@ -73,12 +73,10 @@ export default function UnifiedPatientExpedienteTable({
     return rows
       .filter((row) => {
         if (statusFilter === 'NO_EVENT') {
-          return row.eventId === null
-        }
-        if (row.eventId === null) {
-          return false
-        }
-        if (statusFilter !== 'ALL' && row.eventStatus !== statusFilter) {
+          if (row.eventId !== null) return false
+        } else if (statusFilter === 'ALL') {
+          // Incluir atenciones activas y altas recientes sin expediente (padrón)
+        } else if (row.eventId === null || row.eventStatus !== statusFilter) {
           return false
         }
         if (companyId && row.worker.companyId !== companyId) {
