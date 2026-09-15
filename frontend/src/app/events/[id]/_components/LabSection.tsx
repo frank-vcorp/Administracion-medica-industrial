@@ -54,6 +54,11 @@ export async function LabSection({ medicalEventId, workerId: _workerId }: Props)
     }),
   ]);
 
+  // Solo mostrar cuando el perfil incluye estudios de lab o ya hay órdenes ligadas al evento.
+  if (labEventTests.length === 0 && labOrders.length === 0) {
+    return null
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -109,12 +114,12 @@ export async function LabSection({ medicalEventId, workerId: _workerId }: Props)
         </div>
       )}
 
-      {labOrders.length === 0 ? (
+      {labOrders.length === 0 && labEventTests.length > 0 ? (
         <p className="text-sm text-slate-500 italic">
           Aún no hay órdenes de laboratorio creadas. Las admisiones se generan automáticamente
           al marcar los EventTests como <span className="font-mono">SAMPLE_TAKEN</span>.
         </p>
-      ) : (
+      ) : labOrders.length > 0 ? (
         <ul className="space-y-3">
           {labOrders.map((o) => {
             const totalResults = o.items.reduce(
@@ -206,7 +211,7 @@ export async function LabSection({ medicalEventId, workerId: _workerId }: Props)
             );
           })}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }
