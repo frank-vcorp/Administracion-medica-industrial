@@ -36,6 +36,7 @@ import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEve
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
+import CampimetriaStudy from "@/components/clinical/studies/CampimetriaStudy"
 import StudyAIPrediagnosisPanel from "@/components/clinical/StudyAIPrediagnosisPanel"
 import StudyDocumentViewer from "@/components/clinical/StudyDocumentViewer"
 // IMPL-20260518-13: Renderer clínico general configurable por studyType
@@ -68,6 +69,8 @@ import type {
   AudiometriaQuestionnairePayload,
 } from "@/schemas/clinical/audiometria-questionnaire.schema"
 import { AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/audiometria-questionnaire.schema"
+import type { CampimetriaQuestionnairePayload } from "@/schemas/clinical/campimetria-questionnaire.schema"
+import { CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/campimetria-questionnaire.schema"
 import { buildStudyInterpretationFromSnapshot, formatStudyStatusLine } from '@/lib/clinical/study-status-display'
 import { StudyStatusBadge } from '@/components/clinical/StudyStatusBadge'
 
@@ -145,6 +148,7 @@ type StudyTest = {
   clinicalContext?:
     | EspirometriaQuestionnairePayload
     | AudiometriaQuestionnairePayload
+    | CampimetriaQuestionnairePayload
     | null
 }
 
@@ -153,6 +157,8 @@ type WorkerInfo = {
   position: string
   company: string
   profile: string
+  ageYears?: number | null
+  eventDate?: string
 }
 
 type MedicalExamData = {
@@ -338,7 +344,7 @@ function getStudyIcon(test: StudyTest): string {  if (isExamenMedico(test.testNa
 export default function PapeletaWorkspace({
   eventId,
   eventTests,
-  workerInfo: _workerInfo,
+  workerInfo,
   readonly = false,
   apiUrl,
   examData = null,
@@ -792,6 +798,7 @@ export default function PapeletaWorkspace({
               test={activeTest}
               eventId={eventId}
               examData={examData}
+              workerInfo={workerInfo}
               prefilledData={prefilledData}
               longitudinalData={longitudinalData}
               workerId={workerId}
@@ -1218,6 +1225,7 @@ function StudyPanel({
   prefilledData,
   longitudinalData,
   workerId,
+  workerInfo,
   reviewerUserId,
   readonly,
   isPending,
@@ -1251,6 +1259,7 @@ function StudyPanel({
   test: StudyTest
   eventId: string
   examData: MedicalExamData
+  workerInfo: WorkerInfo
   prefilledData: Record<string, unknown> | null | undefined
   longitudinalData: Record<string, unknown> | null | undefined
   workerId: string | undefined
@@ -1291,10 +1300,11 @@ function StudyPanel({
   const isMedico = isExamenMedico(test.testNameSnapshot)
   const isSomato = isSomatometria(test.testNameSnapshot)
   const isAgudeza = isAgudezaVisual(test.testNameSnapshot)
+  const isCampi = getCanonicalAIStudyType(test) === 'Campimetria'
   const isLab = isLabTest(test)
   // IMPL-20260326-18: Elegibilidad y type canónico desde helper central
   const aiLabel = getAIWorkflowLabel(test)
-  const isAIEligible = isAIEligibleEventTest(test)
+  const isAIEligible = isAIEligibleEventTest(test) && !isCampi
   // ARCH-20260507-06: sampleTracked incluye muestra tomada por grupo compartido (hermano)
   const sampleTracked = isLab && (
     ['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'].includes(test.status) || groupSampleTaken
@@ -1321,6 +1331,7 @@ function StudyPanel({
               isMedico ? 'bg-blue-50 text-blue-600' :
               isSomato ? 'bg-teal-50 text-teal-700' :
               isAgudeza ? 'bg-indigo-50 text-indigo-700' :
+              isCampi ? 'bg-violet-50 text-violet-700' :
               isLab ? 'bg-purple-50 text-purple-700' :
               isAIEligible ? 'bg-teal-50 text-teal-700' :
               'bg-slate-50 text-slate-600'
@@ -1328,6 +1339,7 @@ function StudyPanel({
               {isMedico ? '📋 Formulario' :
                isSomato ? '⚖️ Somatometría' :
                isAgudeza ? '👁️ Agudeza Visual' :
+               isCampi ? '🗺️ Captura manual' :
                isLab ? '🧪 Con muestra y resultado' :
                (aiLabel ?? '📄 Documental')}
             </span>
@@ -1386,6 +1398,27 @@ function StudyPanel({
         </div>
       )}
 
+      {/* SPEC-FEATURE-20260914-01: Campimetría es captura manual, sin PDF. */}
+      {isCampi && (
+        <CampimetriaStudy
+          eventId={eventId}
+          eventTestId={test.id}
+          initialContext={
+            test.clinicalContext &&
+            typeof test.clinicalContext === 'object' &&
+            (test.clinicalContext as { schemaVersion?: string }).schemaVersion ===
+              CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
+              ? (test.clinicalContext as CampimetriaQuestionnairePayload)
+              : null
+          }
+          examData={examData}
+          longitudinalData={longitudinalData}
+          workerInfo={workerInfo}
+          readonly={readonly}
+          onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+        />
+      )}
+
       {/* Sección: Examen Médico (tipo formulario — IMPL-20260325-01) */}
       {isMedico && (
         <div className="space-y-3">
@@ -1417,7 +1450,7 @@ function StudyPanel({
       {/* ARCH-20260327-01: Estudios documentales — layout bifurcado de 2 columnas en desktop.
           Izquierda: dropzone, trazabilidad, extracción legible, prediagnóstico IA, acciones.
           Derecha: archivo vinculado, visor embebido, raw de extracción. */}
-      {!isMedico && !isSomato && !isAgudeza && (
+      {!isMedico && !isSomato && !isAgudeza && !isCampi && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
           {/* ===== COLUMNA IZQUIERDA: OPERACIÓN CLÍNICA ===== */}
@@ -1806,7 +1839,7 @@ function StudyPanel({
         </div>
       )}
 
-      {(isMedico || isSomato || isAgudeza) && readonly && (
+      {(isMedico || isSomato || isAgudeza || isCampi) && readonly && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
           <p className="text-xs text-slate-400">Vista de solo lectura — el expediente ya fue cerrado.</p>
         </div>

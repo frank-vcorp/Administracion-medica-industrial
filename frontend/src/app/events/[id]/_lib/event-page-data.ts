@@ -72,6 +72,8 @@ export type EventPageData = {
     position: string
     company: string
     profile: string
+    ageYears: number | null
+    eventDate: string
   }
   review: string
   userRole: string | null
@@ -179,6 +181,23 @@ export async function fetchEventPageData(input: {
     event as typeof event & { appointment?: AppointmentExtras }
   ).appointment
 
+  const eventDateRaw = event.checkInDate ?? event.createdAt
+  const eventDateLabel = new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(eventDateRaw)
+
+  const ageYears = (() => {
+    const dob = event.worker.dob
+    if (!dob) return null
+    const asOf = eventDateRaw
+    let age = asOf.getFullYear() - dob.getFullYear()
+    const m = asOf.getMonth() - dob.getMonth()
+    if (m < 0 || (m === 0 && asOf.getDate() < dob.getDate())) age -= 1
+    return age >= 0 && age < 130 ? age : null
+  })()
+
   const workerInfo = {
     name: `${event.worker.firstName} ${event.worker.lastName}`,
     position: workerWithPos.jobPosition?.name || '',
@@ -188,6 +207,8 @@ export async function fetchEventPageData(input: {
         ? 'Externo sin empresa'
         : '—'),
     profile: appointmentWithProfile?.serviceProfile?.name || '',
+    ageYears,
+    eventDate: eventDateLabel,
   }
 
   const paymentRoles = [

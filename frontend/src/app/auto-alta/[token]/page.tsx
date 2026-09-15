@@ -15,6 +15,7 @@
  */
 import { notFound } from 'next/navigation'
 import SelfRegistrationForm from '@/components/companies/SelfRegistrationForm'
+import { PublicPortalChrome } from '@/components/PublicPortalChrome'
 import { validateCompanySelfRegToken, listEstadosMexico } from '@/services/company.service'
 import { CFDI_USO_VALUES } from '@/lib/schemas/company-full-form'
 
@@ -104,37 +105,18 @@ export default async function AutoAltaPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black">
-              AMI
-            </div>
-            <div>
-              <h1 className="text-lg font-black text-slate-800 leading-none">
-                Alta de Cliente — Auto-registro
-              </h1>
-              <p className="text-xs text-slate-500 mt-1">
-                Tu solicitud será revisada por un vendedor antes de activarse.
-              </p>
-            </div>
-          </div>
-          <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-            Portal público
-          </span>
-        </div>
-      </header>
-
-      <main className="py-8">
-        <SelfRegistrationForm
-          token={token}
-          source="TOKEN"
-          initial={initial}
-          estados={estados}
-          cfdiOptions={CFDI_USO_VALUES}
-        />
-      </main>
-    </div>
+    <PublicPortalChrome
+      title="Alta de Cliente —"
+      titleAccent="Auto-registro"
+      subtitle="Tu solicitud será revisada por un vendedor antes de activarse."
+    >
+      <SelfRegistrationForm
+        token={token}
+        source="TOKEN"
+        initial={initial}
+        estados={estados}
+        cfdiOptions={CFDI_USO_VALUES}
+      />
+    </PublicPortalChrome>
   )
 }

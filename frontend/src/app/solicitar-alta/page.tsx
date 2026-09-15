@@ -15,6 +15,7 @@
  * habilita hasta que un vendedor/admin lo revise.
  */
 import SelfRegistrationForm from '@/components/companies/SelfRegistrationForm'
+import { PublicPortalChrome } from '@/components/PublicPortalChrome'
 import { listEstadosMexico } from '@/services/company.service'
 import { CFDI_USO_VALUES } from '@/lib/schemas/company-full-form'
 
@@ -44,36 +45,17 @@ export default async function SolicitarAltaPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black">
-              AMI
-            </div>
-            <div>
-              <h1 className="text-lg font-black text-slate-800 leading-none">
-                Solicita tu Alta como Cliente
-              </h1>
-              <p className="text-xs text-slate-500 mt-1">
-                Tu información será revisada por un ejecutivo antes de activar tu cuenta.
-              </p>
-            </div>
-          </div>
-          <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-100">
-            Portal público
-          </span>
-        </div>
-      </header>
-
-      <main className="py-8">
-        <SelfRegistrationForm
-          source="PUBLIC"
-          initial={initial}
-          estados={estados}
-          cfdiOptions={CFDI_USO_VALUES}
-        />
-      </main>
-    </div>
+    <PublicPortalChrome
+      title="Solicita tu alta como"
+      titleAccent="Cliente"
+      subtitle="Tu información será revisada por un ejecutivo antes de activar tu cuenta."
+    >
+      <SelfRegistrationForm
+        source="PUBLIC"
+        initial={initial}
+        estados={estados}
+        cfdiOptions={CFDI_USO_VALUES}
+      />
+    </PublicPortalChrome>
   )
 }
