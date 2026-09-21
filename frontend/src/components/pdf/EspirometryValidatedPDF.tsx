@@ -1,158 +1,131 @@
 /**
- * Plantilla PDF validado de Espirometría — layout AMI híbrido.
- * Membrete AMI + recorte Sibelmed (tabla/gráficas) + bloque clínico inferior.
+ * Plantilla PDF validado de Espirometría — 1 hoja carta.
+ * Tabla y metadatos desde extracción; gráficas pegadas del PDF fuente.
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import type { EspirometryAmiSectionData } from '@/lib/espirometry-ami-section'
 import { formatAmiSectionMl } from '@/lib/espirometry-ami-section'
+import type { EspirometryPdfExtractionView } from '@/lib/espirometry-pdf-extraction'
 import { SME_LOGO_FALLBACK_TEXT } from '@/lib/brand-constants'
 
 const styles = StyleSheet.create({
-  pageSource: {
+  page: {
+    paddingTop: 12,
+    paddingBottom: 48,
+    paddingHorizontal: 16,
     fontFamily: 'Helvetica',
-    fontSize: 9,
+    fontSize: 6.5,
     color: '#000000',
-    paddingBottom: 72,
-  },
-  pageClinical: {
-    fontFamily: 'Helvetica',
-    fontSize: 9,
-    color: '#000000',
-    paddingBottom: 72,
+    lineHeight: 1.25,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 28,
-    paddingTop: 16,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
+    marginBottom: 4,
+    borderBottomWidth: 0.75,
     borderBottomColor: '#0f766e',
+    paddingBottom: 3,
   },
-  headerLeft: {
-    flexDirection: 'column',
+  brand: { fontSize: 10, fontWeight: 'bold', color: '#0f766e' },
+  brandSub: { fontSize: 5.5, color: '#475569' },
+  logoImage: { width: 72, height: 26, objectFit: 'contain' },
+  title: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    textAlign: 'center',
     flex: 1,
+    paddingHorizontal: 4,
   },
-  brand: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#0f766e',
-  },
-  brandSub: {
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 1 },
+  metaItem: { marginRight: 8, marginBottom: 1 },
+  metaLabel: { fontWeight: 'bold' },
+  sectionTitle: {
     fontSize: 7,
-    color: '#475569',
-    marginTop: 2,
-  },
-  headerRight: {
-    width: 120,
-    alignItems: 'flex-end',
-  },
-  logoImage: {
-    width: 110,
-    height: 42,
-    objectFit: 'contain',
-  },
-  logoFallback: {
-    fontSize: 18,
     fontWeight: 'bold',
-    color: '#0f766e',
-  },
-  sourceImageFullPage: {
-    width: '100%',
-    maxHeight: 640,
-    objectFit: 'contain',
-    marginTop: 4,
-  },
-  sourceFallback: {
-    paddingHorizontal: 28,
-    paddingVertical: 8,
-    minHeight: 400,
-  },
-  pageClinicalTitle: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#0f766e',
-    marginBottom: 10,
-    letterSpacing: 0.3,
-  },
-  amiBlock: {
-    paddingHorizontal: 28,
-    paddingTop: 8,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 4,
-  },
-  metricItem: {
-    flexDirection: 'row',
-    marginRight: 12,
+    marginTop: 3,
     marginBottom: 2,
+    textTransform: 'uppercase',
   },
-  metricLabel: {
+  table: { borderWidth: 0.75, borderColor: '#94a3b8', marginBottom: 2 },
+  tableRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#cbd5e1' },
+  tableRowLast: { flexDirection: 'row' },
+  tableHead: {
+    flex: 1,
+    fontSize: 5.5,
     fontWeight: 'bold',
-    marginRight: 4,
+    paddingVertical: 1,
+    paddingHorizontal: 1,
+    textAlign: 'center',
+    backgroundColor: '#e2e8f0',
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
   },
-  metricValue: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#000000',
-    minWidth: 36,
-    paddingBottom: 1,
-  },
-  sectionHeading: {
+  tableParamHead: {
+    width: '16%',
+    fontSize: 5.5,
     fontWeight: 'bold',
-    marginTop: 8,
-    marginBottom: 4,
-    fontSize: 10,
+    paddingVertical: 1,
+    paddingHorizontal: 1,
+    backgroundColor: '#e2e8f0',
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
   },
-  paragraph: {
-    lineHeight: 1.45,
-    marginBottom: 6,
+  tableCell: {
+    flex: 1,
+    fontSize: 5.5,
+    paddingVertical: 1,
+    paddingHorizontal: 1,
+    textAlign: 'center',
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
   },
+  tableParamCell: {
+    width: '16%',
+    fontSize: 5.5,
+    paddingVertical: 1,
+    paddingHorizontal: 1,
+    borderRightWidth: 0.5,
+    borderRightColor: '#cbd5e1',
+  },
+  graphsImage: { width: '100%', height: 118, objectFit: 'contain', marginVertical: 2 },
+  metricsLine: { fontSize: 6.5, marginBottom: 1, lineHeight: 1.3 },
+  metricsLabel: { fontWeight: 'bold' },
+  block: { marginTop: 2, marginBottom: 1 },
+  blockLabel: { fontWeight: 'bold', marginBottom: 0.5 },
+  blockText: { fontSize: 6.5, lineHeight: 1.35 },
   signatureRow: {
+    marginTop: 4,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    marginTop: 28,
-    paddingHorizontal: 28,
-    paddingBottom: 8,
   },
-  signatureLeft: {
-    flex: 1,
-  },
-  signatureRight: {
-    width: 180,
-    alignItems: 'center',
-  },
-  signatureImage: {
-    width: 160,
-    height: 60,
-    objectFit: 'contain',
-  },
+  signatureLeft: { flex: 1 },
+  signatureRight: { width: 120, alignItems: 'center' },
+  signatureImage: { width: 90, height: 32, objectFit: 'contain' },
   footerRule: {
     position: 'absolute',
-    bottom: 48,
-    left: 28,
-    right: 28,
-    borderTopWidth: 1,
+    bottom: 36,
+    left: 16,
+    right: 16,
+    borderTopWidth: 0.75,
     borderTopColor: '#0f766e',
-    paddingTop: 6,
+    paddingTop: 3,
   },
   footer: {
     position: 'absolute',
-    bottom: 12,
-    left: 28,
-    right: 28,
-    fontSize: 7,
+    bottom: 8,
+    left: 16,
+    right: 16,
+    fontSize: 5.5,
     color: '#0f766e',
-    lineHeight: 1.35,
+    lineHeight: 1.25,
   },
   footerTagline: {
     position: 'absolute',
-    bottom: 18,
-    right: 28,
-    fontSize: 11,
+    bottom: 10,
+    right: 16,
+    fontSize: 8,
     fontWeight: 'bold',
     color: '#0f766e',
   },
@@ -173,8 +146,9 @@ export interface EspirometryValidatedPDFData {
   doctorNotes?: string | null
   recomendacionesValidadas: string[]
   amiSection: EspirometryAmiSectionData
-  /** Recorte PNG (data URL) de la zona superior del PDF Sibelmed */
-  sourceCropDataUrl?: string | null
+  extractionView: EspirometryPdfExtractionView
+  /** Gráficas recortadas del PDF fuente (flujo-volumen + volumen-tiempo). */
+  graphsCropDataUrl?: string | null
   medico: {
     fullName: string
     professionalLicense: string
@@ -183,92 +157,103 @@ export interface EspirometryValidatedPDFData {
   logoUrl: string
 }
 
-function MetricItem({ label, value }: { label: string; value: string }) {
+function MetaGrid({ items }: { items: Array<{ label: string; value: string }> }) {
+  if (items.length === 0) return null
   return (
-    <View style={styles.metricItem}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
+    <View style={styles.metaRow}>
+      {items.map((item, idx) => (
+        <Text key={`${item.label}-${idx}`} style={styles.metaItem}>
+          <Text style={styles.metaLabel}>{item.label}: </Text>
+          {item.value}
+        </Text>
+      ))}
     </View>
   )
 }
 
-function AmiMetrics({ ami }: { ami: EspirometryAmiSectionData }) {
+function ParametersTable({ rows }: { rows: EspirometryPdfExtractionView['parametros'] }) {
+  if (rows.length === 0) {
+    return (
+      <Text style={styles.blockText}>
+        Tabla de parámetros no disponible en la extracción.
+      </Text>
+    )
+  }
+
+  return (
+    <View style={styles.table}>
+      <View style={styles.tableRow}>
+        <Text style={styles.tableParamHead}>PARÁMETRO</Text>
+        <Text style={styles.tableHead}>M1</Text>
+        <Text style={styles.tableHead}>%REF</Text>
+        <Text style={styles.tableHead}>M2</Text>
+        <Text style={styles.tableHead}>%REF</Text>
+        <Text style={styles.tableHead}>M3</Text>
+        <Text style={styles.tableHead}>%REF</Text>
+        <Text style={styles.tableHead}>REF</Text>
+        <Text style={[styles.tableHead, { borderRightWidth: 0 }]}>LLN</Text>
+      </View>
+      {rows.map((row, idx) => (
+        <View
+          key={`${row.label}-${idx}`}
+          style={idx === rows.length - 1 ? styles.tableRowLast : styles.tableRow}
+        >
+          <Text style={styles.tableParamCell}>{row.label}</Text>
+          <Text style={styles.tableCell}>{row.m1}</Text>
+          <Text style={styles.tableCell}>{row.m1Pct}</Text>
+          <Text style={styles.tableCell}>{row.m2}</Text>
+          <Text style={styles.tableCell}>{row.m2Pct}</Text>
+          <Text style={styles.tableCell}>{row.m3}</Text>
+          <Text style={styles.tableCell}>{row.m3Pct}</Text>
+          <Text style={styles.tableCell}>{row.ref}</Text>
+          <Text style={[styles.tableCell, { borderRightWidth: 0 }]}>{row.lln}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+function AmiMetricsLines({ ami }: { ami: EspirometryAmiSectionData }) {
+  const pruebas =
+    ami.pruebasAceptables !== null && ami.pruebasAceptables !== undefined
+      ? String(ami.pruebasAceptables)
+      : '—'
+
   return (
     <View>
-      <View style={styles.metricsRow}>
-        <MetricItem
-          label="Repetibilidad FVC:"
-          value={formatAmiSectionMl(ami.repetibilidadFvcMl)}
-        />
-        <MetricItem label="FEV1:" value={formatAmiSectionMl(ami.repetibilidadFev1Ml)} />
-      </View>
-      <View style={styles.metricsRow}>
-        <MetricItem label="Pico Maximo:" value={ami.picoMaximo ?? '—'} />
-        <MetricItem label="Forma Triangular:" value={ami.formaTriangular ?? '—'} />
-        <MetricItem label="Libre de artefactos:" value={ami.libreArtefactos ?? '—'} />
-        <MetricItem label="Meseta:" value={ami.meseta ?? '—'} />
-        <MetricItem label="Tiempo:" value={ami.tiempo ?? '—'} />
-      </View>
-      <View style={styles.metricsRow}>
-        <MetricItem
-          label="Repetibilidad FVC < 200:"
-          value={ami.repetibilidadFvcMenor200 ?? '—'}
-        />
-        <MetricItem
-          label="Repetibilidad FEV1 < 200:"
-          value={ami.repetibilidadFev1Menor200 ?? '—'}
-        />
-      </View>
-      <View style={styles.metricsRow}>
-        <MetricItem
-          label="#Pruebas aceptables:"
-          value={
-            ami.pruebasAceptables !== null && ami.pruebasAceptables !== undefined
-              ? String(ami.pruebasAceptables)
-              : '—'
-          }
-        />
-        <MetricItem label="Criterios para Dx:" value={ami.criteriosParaDx ?? '—'} />
-        <MetricItem label="Calidad:" value={ami.calidad ?? '—'} />
-      </View>
-    </View>
-  )
-}
-
-function PdfHeader({ logoSrc }: { logoSrc: string }) {
-  return (
-    <View style={styles.header} fixed>
-      <View style={styles.headerLeft}>
-        <Text style={styles.brand}>Administración Médica Industrial</Text>
-        <Text style={styles.brandSub}>
-          Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía
-        </Text>
-      </View>
-      <View style={styles.headerRight}>
-        {logoSrc ? (
-          <Image style={styles.logoImage} src={logoSrc} />
-        ) : (
-          <Text style={styles.logoFallback}>{SME_LOGO_FALLBACK_TEXT}</Text>
-        )}
-      </View>
-    </View>
-  )
-}
-
-function PdfFooter() {
-  return (
-    <>
-      <View style={styles.footerRule} fixed />
-      <Text style={styles.footer} fixed>
-        Evaluaciones médicas / Outsourcing de Personal Médico / Capacitación en Salud y Seguridad /
-        Evaluaciones Ergonómicas / Fisioterapia / Nutrición{'\n'}
-        Circuito del Mesón #135 Col. Del Prado C.P 76030{'\n'}
-        (442) 225-52-67 www.medicaindustrial.com
+      <Text style={styles.metricsLine}>
+        <Text style={styles.metricsLabel}>Repetibilidad FVC: </Text>
+        {formatAmiSectionMl(ami.repetibilidadFvcMl)}
+        <Text style={styles.metricsLabel}> FEV1: </Text>
+        {formatAmiSectionMl(ami.repetibilidadFev1Ml)}
       </Text>
-      <Text style={styles.footerTagline} fixed>
-        Salud que produce ®
+      <Text style={styles.metricsLine}>
+        <Text style={styles.metricsLabel}>Pico Maximo: </Text>
+        {ami.picoMaximo ?? '—'}
+        <Text style={styles.metricsLabel}> Forma Triangular: </Text>
+        {ami.formaTriangular ?? '—'}
+        <Text style={styles.metricsLabel}> Libre de artefactos: </Text>
+        {ami.libreArtefactos ?? '—'}
+        <Text style={styles.metricsLabel}> Meseta: </Text>
+        {ami.meseta ?? '—'}
+        <Text style={styles.metricsLabel}> Tiempo: </Text>
+        {ami.tiempo ?? '—'}
       </Text>
-    </>
+      <Text style={styles.metricsLine}>
+        <Text style={styles.metricsLabel}>Repetibilidad FVC {'<'} 200: </Text>
+        {ami.repetibilidadFvcMenor200 ?? '—'}
+        <Text style={styles.metricsLabel}> Repetibilidad FEV1 {'<'} 200: </Text>
+        {ami.repetibilidadFev1Menor200 ?? '—'}
+      </Text>
+      <Text style={styles.metricsLine}>
+        <Text style={styles.metricsLabel}>#Pruebas aceptables: </Text>
+        {pruebas}
+        <Text style={styles.metricsLabel}> Criterios para Dx: </Text>
+        {ami.criteriosParaDx ?? '—'}
+        <Text style={styles.metricsLabel}> Calidad: </Text>
+        {ami.calidad ?? '—'}
+      </Text>
+    </View>
   )
 }
 
@@ -278,6 +263,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
       ? data.recomendacionesValidadas.join(' ')
       : '—'
   const logoSrc = data.logoUrl
+  const extraction = data.extractionView
 
   return (
     <Document
@@ -285,46 +271,70 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
       author={`Dr(a). ${data.medico.fullName}`}
       subject="Estudio de Espirometría validado"
     >
-      {/* Hoja 1: sólo el recorte del PDF del equipo (Sibelmed). */}
-      <Page size="LETTER" style={styles.pageSource}>
-        <PdfHeader logoSrc={logoSrc} />
-
-        {data.sourceCropDataUrl ? (
-          <Image style={styles.sourceImageFullPage} src={data.sourceCropDataUrl} />
-        ) : (
-          <View style={styles.sourceFallback}>
-            <Text style={{ fontSize: 10, fontWeight: 'bold' }}>ESTUDIO DE ESPIROMETRIA</Text>
-            <Text style={{ fontSize: 8, color: '#64748b', marginTop: 4 }}>
-              (Recorte del equipo no disponible — ver archivo fuente en el módulo de pruebas clínicas)
-            </Text>
+      <Page size="LETTER" style={styles.page}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.brand}>AMI</Text>
+            <Text style={styles.brandSub}>Salud en el Trabajo</Text>
           </View>
+          <Text style={styles.title}>ESTUDIO DE ESPIROMETRIA</Text>
+          {logoSrc ? (
+            <Image style={styles.logoImage} src={logoSrc} />
+          ) : (
+            <Text style={styles.brand}>{SME_LOGO_FALLBACK_TEXT}</Text>
+          )}
+        </View>
+
+        <Text style={styles.sectionTitle}>Paciente</Text>
+        <MetaGrid
+          items={[
+            { label: 'Nombre', value: data.patient.fullName },
+            ...extraction.paciente.filter(row => row.label !== 'Nombre'),
+          ]}
+        />
+
+        {(extraction.estudio.length > 0 || extraction.condiciones.length > 0) && (
+          <>
+            <Text style={styles.sectionTitle}>Estudio y condiciones</Text>
+            <MetaGrid items={[...extraction.estudio, ...extraction.condiciones]} />
+          </>
         )}
 
-        <PdfFooter />
-      </Page>
+        <Text style={styles.sectionTitle}>Informe de FVC</Text>
+        <ParametersTable rows={extraction.parametros} />
+        {extraction.repetibilidadAtsErs ? (
+          <Text style={styles.metricsLine}>
+            <Text style={styles.metricsLabel}>Repetibilidad ATS/ERS: </Text>
+            {extraction.repetibilidadAtsErs}
+          </Text>
+        ) : null}
 
-      {/* Hoja 2: contenido generado por AMI (criterios, diagnóstico, firma). */}
-      <Page size="LETTER" style={styles.pageClinical}>
-        <PdfHeader logoSrc={logoSrc} />
+        {data.graphsCropDataUrl ? (
+          <Image style={styles.graphsImage} src={data.graphsCropDataUrl} />
+        ) : (
+          <Text style={[styles.blockText, { color: '#64748b', marginVertical: 2 }]}>
+            Gráficas no disponibles — ver PDF fuente en el módulo de pruebas clínicas.
+          </Text>
+        )}
 
-        <View style={styles.amiBlock}>
-          <Text style={styles.pageClinicalTitle}>VALIDACIÓN CLÍNICA AMI</Text>
+        <AmiMetricsLines ami={data.amiSection} />
 
-          <AmiMetrics ami={data.amiSection} />
-
-          <Text style={styles.sectionHeading}>IMPRESIÓN DIAGNÓSTICA:</Text>
-          <Text style={styles.paragraph}>{data.doctorDiagnosis}</Text>
-
-          <Text style={styles.sectionHeading}>RECOMENDACIONES:</Text>
-          <Text style={styles.paragraph}>{recomendacionesText}</Text>
-
-          {data.doctorNotes ? (
-            <>
-              <Text style={styles.sectionHeading}>NOTAS:</Text>
-              <Text style={styles.paragraph}>{data.doctorNotes}</Text>
-            </>
-          ) : null}
+        <View style={styles.block}>
+          <Text style={styles.blockLabel}>IMPRESIÓN DIAGNÓSTICA:</Text>
+          <Text style={styles.blockText}>{data.doctorDiagnosis}</Text>
         </View>
+
+        <View style={styles.block}>
+          <Text style={styles.blockLabel}>RECOMENDACIONES:</Text>
+          <Text style={styles.blockText}>{recomendacionesText}</Text>
+        </View>
+
+        {data.doctorNotes ? (
+          <View style={styles.block}>
+            <Text style={styles.blockLabel}>NOTAS:</Text>
+            <Text style={styles.blockText}>{data.doctorNotes}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.signatureRow}>
           <View style={styles.signatureLeft}>
@@ -338,7 +348,16 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
           </View>
         </View>
 
-        <PdfFooter />
+        <View style={styles.footerRule} fixed />
+        <Text style={styles.footer} fixed>
+          Evaluaciones médicas / Outsourcing de Personal Médico / Capacitación en Salud y Seguridad /
+          Evaluaciones Ergonómicas / Fisioterapia / Nutrición{'\n'}
+          Circuito del Mesón #135 Col. Del Prado C.P 76030{'\n'}
+          (442) 225-52-67 www.medicaindustrial.com
+        </Text>
+        <Text style={styles.footerTagline} fixed>
+          Salud que produce ®
+        </Text>
       </Page>
     </Document>
   )

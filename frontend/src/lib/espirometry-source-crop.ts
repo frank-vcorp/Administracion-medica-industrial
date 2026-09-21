@@ -11,19 +11,61 @@ import { promisify } from 'node:util'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { cropPngTop } from '@/lib/png-crop-top'
+import { cropPngBand } from '@/lib/png-crop-band'
+import { maskPngRect, SIBELMED_BRAND_MASK } from '@/lib/png-mask-rect'
 import { resolveBackendFileUrl } from '@/lib/zip-cierre-clinico'
 
 const execFileAsync = promisify(execFile)
 
 export const SIBELMED_W20S_TOP_CROP_RATIO = 0.67
+/** Banda inferior del recorte Sibelmed donde están flujo-volumen y volumen-tiempo. */
+export const SIBELMED_GRAPHS_BAND_START = 0.48
+export const SIBELMED_GRAPHS_BAND_END = 0.98
 export const ESPIROMETRY_CROP_SUBDIR = 'espirometry-crops'
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
 export type EspirometrySourceCropMeta = {
   relativePath: string
   fileUrl?: string
-  templateId: 'sibelmed-w20s'
+  templateId: 'sibelmed-w20s' | 'sibelmed-w20s-v2'
   generatedAt: string
+}
+
+export function stripSibelmedBrandFromPng(pngBuffer: Buffer): Buffer {
+  return maskPngRect(pngBuffer, SIBELMED_BRAND_MASK)
+}
+
+export function extractGraphsFromSourceCropPng(pngBuffer: Buffer): Buffer {
+  return cropPngBand(
+    pngBuffer,
+    SIBELMED_GRAPHS_BAND_START,
+    SIBELMED_GRAPHS_BAND_END,
+  )
+}
+
+async function readSourceCropPngBuffer(
+  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
+): Promise<Buffer | null> {
+  try {
+    const abs = path.join(REPO_UPLOAD_DIR, meta.relativePath)
+    return await readFile(abs)
+  } catch {
+    // Producción: PNG remoto
+  }
+
+  const fileRef = meta.fileUrl ?? `/api/files/${meta.relativePath}`
+  const remoteUrl = resolveBackendFileUrl(fileRef)
+  if (!remoteUrl) return null
+
+  try {
+    const resp = await fetch(remoteUrl, {
+      headers: { 'User-Agent': 'AMI-Espirometry-Crop/1.0' },
+    })
+    if (!resp.ok) return null
+    return Buffer.from(await resp.arrayBuffer())
+  } catch {
+    return null
+  }
 }
 
 function resolveLocalUploadPath(fileUrl: string): string | null {
@@ -96,7 +138,8 @@ export async function cropEspirometrySourceTopFromPdfLocal(
 
     const pngPath = `${prefix}-1.png`
     const fullPage = await readFile(pngPath)
-    return cropPngTop(fullPage, cropRatio)
+    const cropped = cropPngTop(fullPage, cropRatio)
+    return stripSibelmedBrandFromPng(cropped)
   } finally {
     await rm(tempDir, { recursive: true, force: true })
   }
@@ -153,7 +196,7 @@ async function cropViaBackend(
     return {
       relativePath: payload.relative_path,
       fileUrl: payload.file_url ?? `/api/files/${payload.relative_path}`,
-      templateId: 'sibelmed-w20s',
+      templateId: 'sibelmed-w20s-v2',
       generatedAt: payload.generated_at ?? new Date().toISOString(),
     }
   } catch (err) {
@@ -174,7 +217,7 @@ export async function persistEspirometrySourceCropPng(
   return {
     relativePath,
     fileUrl: `/api/files/${relativePath}`,
-    templateId: 'sibelmed-w20s',
+    templateId: 'sibelmed-w20s-v2',
     generatedAt: new Date().toISOString(),
   }
 }
@@ -182,28 +225,21 @@ export async function persistEspirometrySourceCropPng(
 export async function loadEspirometrySourceCropDataUrl(
   meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
 ): Promise<string | null> {
-  try {
-    const abs = path.join(REPO_UPLOAD_DIR, meta.relativePath)
-    const buf = await readFile(abs)
-    return `data:image/png;base64,${buf.toString('base64')}`
-  } catch {
-    // Producción: PNG en Railway/S3
-  }
+  const buf = await readSourceCropPngBuffer(meta)
+  if (!buf) return null
+  const masked = stripSibelmedBrandFromPng(buf)
+  return `data:image/png;base64,${masked.toString('base64')}`
+}
 
-  const fileRef = meta.fileUrl ?? `/api/files/${meta.relativePath}`
-  const remoteUrl = resolveBackendFileUrl(fileRef)
-  if (!remoteUrl) return null
-
-  try {
-    const resp = await fetch(remoteUrl, {
-      headers: { 'User-Agent': 'AMI-Espirometry-Crop/1.0' },
-    })
-    if (!resp.ok) return null
-    const buf = Buffer.from(await resp.arrayBuffer())
-    return `data:image/png;base64,${buf.toString('base64')}`
-  } catch {
-    return null
-  }
+/** Gráficas flujo-volumen / volumen-tiempo recortadas del PDF fuente (sin marca Sibelmed). */
+export async function loadEspirometryGraphsCropDataUrl(
+  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
+): Promise<string | null> {
+  const buf = await readSourceCropPngBuffer(meta)
+  if (!buf) return null
+  const masked = stripSibelmedBrandFromPng(buf)
+  const graphs = extractGraphsFromSourceCropPng(masked)
+  return `data:image/png;base64,${graphs.toString('base64')}`
 }
 
 function mergeClinicalContext(
@@ -235,7 +271,9 @@ export async function ensureEspirometrySourceCrop(
 
   const ctx = eventTest.clinicalContext as Record<string, unknown> | null
   const existing = ctx?.espirometrySourceCrop as EspirometrySourceCropMeta | undefined
-  if (existing?.relativePath && !options?.force) {
+  const needsRegenerate =
+    existing?.templateId !== 'sibelmed-w20s-v2' || options?.force === true
+  if (existing?.relativePath && !needsRegenerate) {
     const preview = await loadEspirometrySourceCropDataUrl(existing)
     if (preview) return existing
   }
