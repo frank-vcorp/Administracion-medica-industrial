@@ -34,6 +34,7 @@ import {
   assertUserIsActive,
 } from '@/lib/schemas/company-full-form'
 import { getPublicBaseUrl } from '@/lib/env/public-base-url'
+import { isPublicGeneralCompany } from '@/lib/public-general-company'
 import type { UpdateCompanyInput } from '@/lib/schemas/company-update'
 
 // --------------------------------------------------------------------------
@@ -890,10 +891,18 @@ export async function deleteCompanies(args: {
   // Captura de nombres previos para audit (snapshot estable pre-delete).
   const companies = await prisma.company.findMany({
     where: { id: { in: companyIds } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, rfc: true },
   })
   if (companies.length === 0) {
     return { ok: false, code: 'NOT_FOUND', error: 'No se encontraron empresas con esos IDs' }
+  }
+
+  if (companies.some((c) => isPublicGeneralCompany(c))) {
+    return {
+      ok: false,
+      code: 'INVALID_INPUT',
+      error: 'No se puede eliminar la empresa Público General.',
+    }
   }
 
   const nameById = new Map(companies.map((c) => [c.id, c.name] as const))

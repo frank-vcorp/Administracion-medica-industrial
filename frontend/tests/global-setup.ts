@@ -40,9 +40,12 @@ function loadEnvFile(filePath: string): void {
 }
 
 export default async function globalSetup(): Promise<void> {
-  // Prioridad: .env.local > .env
+  // Prioridad: .env.local > .env > .env.production.local (solo si falta DATABASE_URL)
   loadEnvFile(path.join(FRONTEND_DIR, '.env.local'))
   loadEnvFile(path.join(FRONTEND_DIR, '.env'))
+  if (!process.env.DATABASE_URL) {
+    loadEnvFile(path.join(FRONTEND_DIR, '.env.production.local'))
+  }
 
   if (!process.env.DATABASE_URL) {
     throw new Error(

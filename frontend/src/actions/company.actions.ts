@@ -276,6 +276,9 @@ export async function deleteCompaniesAction(args: {
 
   if (result.ok) {
     revalidatePath('/companies')
+    for (const id of result.deletedCompanyIds) {
+      revalidatePath(`/companies/${id}`)
+    }
   }
   return result
 }

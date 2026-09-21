@@ -35,6 +35,9 @@ npx playwright test --list
 # Correr un test específico
 npx playwright test mobile-units.spec.ts -g "7\\. Bloqueo"
 
+# Flujo E2E 4 pruebas (audio, espiro, campimetría, examen médico)
+npx playwright test flujo-cuatro-pruebas.spec.ts --project=chromium
+
 # Correr todo el suite (requiere BD real)
 npx playwright test
 ```

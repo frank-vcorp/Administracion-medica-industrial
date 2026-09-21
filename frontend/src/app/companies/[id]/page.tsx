@@ -14,7 +14,8 @@ import { authOptions } from '@/auth'
 import { getCompanyById, listActiveSellersAction } from '@/actions/company.actions'
 import { getMedicalProfilesForCompany, getMedicalTests } from '@/actions/medical-profiles'
 import { getBranches } from '@/actions/admin.actions'
-import { isAdminLike } from '@/lib/auth/roles'
+import { isAdminLike, isSuperAdmin } from '@/lib/auth/roles'
+import { isPublicGeneralCompany } from '@/lib/public-general-company'
 import AllowedBranchesPanel from './AllowedBranchesPanel'
 import CompanyMedicalProfilesPanel from './CompanyMedicalProfilesPanel'
 import { CompanyStatusBadge } from '@/components/companies/CompanyStatusBadge'
@@ -71,6 +72,9 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   const canEdit = role !== 'COMPANY_CLIENT' && estado === 'HABILITADO'
   // IMPL-20260624-03 (ARCH-20260624-03): Solo ADMIN puede editar datos completos internos.
   const canEditFullData = isAdminLike(role) && estado === 'HABILITADO'
+  const canDeleteCompany =
+    isSuperAdmin(role) &&
+    !isPublicGeneralCompany({ name: company.name, rfc: company.rfc ?? null })
 
   return (
     <div className="space-y-6">
@@ -132,6 +136,9 @@ export default async function CompanyDetailPage({ params }: PageProps) {
       {/* IMPL-20260623-03: Acciones operativas (cambiar vendedor, toggle, revisar) */}
       <CompanyActionsPanel
         companyId={id}
+        companyName={company.name}
+        companyRfc={company.rfc ?? null}
+        canDeleteCompany={canDeleteCompany}
         estado={estado}
         currentSellerId={sellerId}
         sellers={sellers}

@@ -19,6 +19,7 @@ import {
   reviewAndEnableCompanyAction,
 } from '@/actions/company.actions'
 import { isAdminLike, isSellerLike } from '@/lib/auth/roles'
+import DeleteSingleCompanyButton from '@/components/companies/DeleteSingleCompanyButton'
 
 export interface SellerOption {
   id: string
@@ -28,6 +29,10 @@ export interface SellerOption {
 
 interface Props {
   companyId: string
+  companyName: string
+  companyRfc: string | null
+  /** false para Público General y roles sin permiso. */
+  canDeleteCompany: boolean
   estado: CompanyStatus
   currentSellerId: string | null
   sellers: SellerOption[]
@@ -36,6 +41,9 @@ interface Props {
 
 export default function CompanyActionsPanel({
   companyId,
+  companyName,
+  companyRfc,
+  canDeleteCompany,
   estado,
   currentSellerId,
   sellers,
@@ -181,6 +189,14 @@ export default function CompanyActionsPanel({
           >
             Revisar y Habilitar
           </button>
+        )}
+
+        {canDeleteCompany && (
+          <DeleteSingleCompanyButton
+            companyId={companyId}
+            companyName={companyName}
+            companyRfc={companyRfc}
+          />
         )}
       </div>
 
