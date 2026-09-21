@@ -1,5 +1,6 @@
 "use server"
 
+import { Prisma } from '@prisma/client'
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { triggerStructuredStudyAIPrediagnosis } from "./ai-prediagnosis.actions"
@@ -119,13 +120,13 @@ export async function updateAgudezaVisual(eventId: string, rawData: unknown) {
       where: { eventId },
       update: {
         eyeAcuityData: data,
-        physicalExamData: physicalExamPatch,
+        physicalExamData: physicalExamPatch as Prisma.InputJsonValue,
       },
       create: {
         eventId,
         eyeAcuityData: data,
         physicalExamData: agudezaResumen.length > 0
-          ? { agudeza_visual_resumen: agudezaResumen }
+          ? ({ agudeza_visual_resumen: agudezaResumen } as Prisma.InputJsonValue)
           : undefined,
       },
     })

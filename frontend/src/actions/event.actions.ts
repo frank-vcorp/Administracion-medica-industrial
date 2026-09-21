@@ -5,6 +5,7 @@
  * @see context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
  * @backup context/interconsultas/HANDOFF_ARCH-20260527-14_SOFIA_SLICE-D-ADMISION-EXTERNA.md
  */
+import { Prisma } from '@prisma/client'
 import prisma from "@/lib/prisma"
 import { authOptions } from "@/auth"
 import { getServerSession } from "next-auth"
@@ -41,13 +42,13 @@ function todayLocalDateString(): string {
 
 const RECEPTION_DISCHARGE_ROLES = ['ADMIN', 'SUPERADMIN', 'RECEPTIONIST', 'CAPTURIST'] as const
 
-function eventDayFilter(start: Date, end: Date) {
+function eventDayFilter(start: Date, end: Date): Prisma.MedicalEventWhereInput {
     return {
         OR: [
             { checkInDate: { gte: start, lte: end } },
             { checkInDate: null, createdAt: { gte: start, lte: end } },
         ],
-    } as const
+    }
 }
 
 const kanbanEventSelect = {
