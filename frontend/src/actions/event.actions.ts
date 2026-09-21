@@ -9,6 +9,11 @@ import prisma from "@/lib/prisma"
 import { authOptions } from "@/auth"
 import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
+import {
+    buildNotPerformedTestIdSet,
+    isCheckoutEnabled,
+    getCheckoutEligibility,
+} from "@/lib/clinical/reception-checkout"
 
 /** Límites del día local (YYYY-MM-DD) para filtrar eventos del kanban. */
 function localDayBounds(dateStr: string): { start: Date; end: Date } {
@@ -34,45 +39,204 @@ function todayLocalDateString(): string {
     return `${y}-${m}-${d}`
 }
 
+const RECEPTION_DISCHARGE_ROLES = ['ADMIN', 'SUPERADMIN', 'RECEPTIONIST', 'CAPTURIST'] as const
+
+function eventDayFilter(start: Date, end: Date) {
+    return {
+        OR: [
+            { checkInDate: { gte: start, lte: end } },
+            { checkInDate: null, createdAt: { gte: start, lte: end } },
+        ],
+    } as const
+}
+
+const kanbanEventSelect = {
+    id: true,
+    status: true,
+    intakeSource: true,
+    appointmentId: true,
+    checkInDate: true,
+    createdAt: true,
+    worker: {
+        include: { company: true },
+    },
+    branch: true,
+} as const
+
+const kanbanCheckoutSelect = {
+    ...kanbanEventSelect,
+    dischargedAt: true,
+    worker: {
+        select: {
+            firstName: true,
+            lastName: true,
+            phone: true,
+            company: true,
+        },
+    },
+    eventTests: {
+        select: { id: true, status: true },
+    },
+} as const
+
 export async function getEventsKanban(date?: string) {
     try {
         const dateStr = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayLocalDateString()
         const { start, end } = localDayBounds(dateStr)
+        const dayFilter = eventDayFilter(start, end)
 
-        const events = await prisma.medicalEvent.findMany({
+        const clinicEvents = await prisma.medicalEvent.findMany({
             where: {
-                status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'VALIDATING'] },
-                OR: [
-                    { checkInDate: { gte: start, lte: end } },
-                    { checkInDate: null, createdAt: { gte: start, lte: end } },
-                ],
+                dischargedAt: null,
+                status: { notIn: ['CANCELED'] },
+                ...dayFilter,
             },
-            select: {
-                id: true,
-                status: true,
-                intakeSource: true,
-                appointmentId: true,
-                checkInDate: true,
-                createdAt: true,
-                worker: {
-                    include: { company: true }
-                },
-                branch: true
-            },
-            orderBy: { createdAt: 'desc' }
+            select: kanbanCheckoutSelect,
+            orderBy: { createdAt: 'desc' },
         })
 
-        // Group by status for Kanban in a single pass O(N)
-        return events.reduce((acc, e) => {
-            if (e.status === 'CHECKED_IN') acc.scheduled.push(e) // Sala de espera
-            else if (e.status === 'IN_PROGRESS') acc.inProgress.push(e) // En consultorio
-            else if (e.status === 'VALIDATING') acc.completed.push(e) // Por validar
-            return acc
-        }, { scheduled: [] as typeof events, inProgress: [] as typeof events, completed: [] as typeof events })
+        const eventIds = clinicEvents.map((e) => e.id)
+        const timelineEntries =
+            eventIds.length === 0
+                ? []
+                : await prisma.papeletaTimelineEntry.findMany({
+                      where: {
+                          eventId: { in: eventIds },
+                          eventTestId: { not: null },
+                          entryType: { in: ['ADMIN_INCIDENCE', 'STUDY_NOT_PERFORMED'] },
+                      },
+                      select: { eventId: true, eventTestId: true, entryType: true },
+                  })
 
+        const incidencesByEvent = new Map<string, Set<string>>()
+        for (const entry of timelineEntries) {
+            if (!entry.eventTestId) continue
+            const set = incidencesByEvent.get(entry.eventId) ?? new Set<string>()
+            for (const id of buildNotPerformedTestIdSet([entry])) {
+                set.add(id)
+            }
+            incidencesByEvent.set(entry.eventId, set)
+        }
+
+        type KanbanEvent = (typeof clinicEvents)[number]
+        const scheduled: KanbanEvent[] = []
+        const inProgress: KanbanEvent[] = []
+        const readyForCheckout: KanbanEvent[] = []
+
+        for (const event of clinicEvents) {
+            const notPerformedIds = incidencesByEvent.get(event.id) ?? new Set<string>()
+            const checkoutInput = {
+                dischargedAt: event.dischargedAt,
+                eventTests: event.eventTests,
+            }
+
+            if (isCheckoutEnabled(checkoutInput, notPerformedIds)) {
+                readyForCheckout.push(event)
+                continue
+            }
+
+            if (event.status === 'CHECKED_IN') {
+                scheduled.push(event)
+                continue
+            }
+
+            inProgress.push(event)
+        }
+
+        return { scheduled, inProgress, readyForCheckout }
     } catch (error) {
         console.error("Error fetching events kanban:", error)
-        return { scheduled: [], inProgress: [], completed: [] }
+        return { scheduled: [], inProgress: [], readyForCheckout: [] }
+    }
+}
+
+/**
+ * Checkout en recepción: marca salida física del paciente (#13 F-017).
+ * Requiere paso 1 completado en todos los estudios (SPEC §4.4), no dictamen firmado.
+ */
+export async function dischargePatientFromReception(eventId: string) {
+    try {
+        const session = await getServerSession(authOptions)
+        if (!session?.user?.id) {
+            return { success: false, error: 'Sesión no válida.' }
+        }
+
+        const role = session.user.role
+        if (!RECEPTION_DISCHARGE_ROLES.includes(role as (typeof RECEPTION_DISCHARGE_ROLES)[number])) {
+            return { success: false, error: 'No tienes permiso para registrar salidas.' }
+        }
+
+        const event = await prisma.medicalEvent.findUnique({
+            where: { id: eventId },
+            select: {
+                id: true,
+                dischargedAt: true,
+                workerId: true,
+                eventTests: { select: { id: true, status: true } },
+            },
+        })
+
+        if (!event) {
+            return { success: false, error: 'Expediente no encontrado.' }
+        }
+
+        const timelineEntries = await prisma.papeletaTimelineEntry.findMany({
+            where: {
+                eventId,
+                eventTestId: { not: null },
+                entryType: { in: ['ADMIN_INCIDENCE', 'STUDY_NOT_PERFORMED'] },
+            },
+            select: { eventTestId: true, entryType: true },
+        })
+        const notPerformedIds = buildNotPerformedTestIdSet(timelineEntries)
+
+        const eligibility = getCheckoutEligibility(
+            { dischargedAt: event.dischargedAt, eventTests: event.eventTests },
+            notPerformedIds,
+        )
+
+        if (!eligibility.eligible) {
+            const messages: Record<typeof eligibility.reason, string> = {
+                already_discharged: 'Este paciente ya tiene salida registrada.',
+                no_tests: 'El expediente no tiene estudios asignados.',
+                pending_studies: 'Aún hay estudios sin realizar (paso 1 pendiente).',
+                invalid_skipped: 'Hay estudios omitidos sin incidencia documentada.',
+            }
+            return { success: false, error: messages[eligibility.reason] }
+        }
+
+        const now = new Date()
+        await prisma.$transaction([
+            prisma.medicalEvent.update({
+                where: { id: eventId },
+                data: {
+                    dischargedAt: now,
+                    dischargedByUserId: session.user.id,
+                },
+            }),
+            prisma.auditLog.create({
+                data: {
+                    action: 'RECEPTION_PATIENT_DISCHARGED',
+                    entity: 'MedicalEvent',
+                    entityId: eventId,
+                    userId: session.user.id,
+                    details: {
+                        workerId: event.workerId,
+                        dischargedAt: now.toISOString(),
+                    },
+                },
+            }),
+        ])
+
+        revalidatePath('/reception')
+        revalidatePath(`/events/${eventId}`)
+        return { success: true, dischargedAt: now.toISOString() }
+    } catch (error) {
+        console.error('[dischargePatientFromReception]', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Error al registrar la salida.',
+        }
     }
 }
 

@@ -16,7 +16,6 @@ import { useSession } from 'next-auth/react'
 // en la pestana Impresion y Aptitud del ExamenMedicoEstudio.
 import { buildVerdictFromExam } from '@/lib/clinical/verdict.builder'
 import { buildRecommendationsFromExam } from '@/lib/clinical/recommendations'
-import { ServiceRatingPrompt } from '@/components/clinical/ServiceRatingPrompt'
 import { isAdminLike } from '@/lib/auth/roles'
 
 interface EventFlowControllerProps {
@@ -42,8 +41,6 @@ interface EventFlowControllerProps {
      * emitido. Por defecto `false` (defensa en profundidad).
      */
     hasMedicalVerdict?: boolean
-    patientFirstName?: string
-    patientPhone?: string | null
 }
 
 export default function EventFlowController({
@@ -52,8 +49,6 @@ export default function EventFlowController({
     verdictData,
     examSummary,
     hasMedicalVerdict = false,
-    patientFirstName = 'paciente',
-    patientPhone,
 }: EventFlowControllerProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
@@ -324,11 +319,11 @@ export default function EventFlowController({
                             </button>
                         </div>
 
-                        <ServiceRatingPrompt
-                            patientFirstName={patientFirstName}
-                            patientPhone={patientPhone}
-                            eventId={eventId}
-                        />
+                        <p className="mx-auto mt-6 max-w-md rounded-xl border border-amber-100 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                            La calificación del servicio y la encuesta se ofrecen en{' '}
+                            <strong>recepción</strong> al dar salida al paciente (columna{' '}
+                            <em>Listos para salida</em>).
+                        </p>
 
                         {/* IMPL-20260826-08 (FND-20260826-03): botón explícito
                             de re-emisión del dictamen general con el renderer

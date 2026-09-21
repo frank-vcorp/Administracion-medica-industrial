@@ -228,8 +228,6 @@ function EventView({ data }: EventViewProps) {
           verdictData={serializedVerdict as Parameters<typeof EventFlowController>[0]['verdictData']}
           examSummary={examSummary ?? undefined}
           hasMedicalVerdict={hasMedicalVerdict}
-          patientFirstName={event.worker.firstName}
-          patientPhone={event.worker.phone}
         />
       )}
     </div>

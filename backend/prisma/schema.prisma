@@ -41,6 +41,7 @@ model User {
   verifiedAppointments      Appointment[]             @relation("AppointmentIdentityVerifier")
   /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
   intakeCreatedEvents       MedicalEvent[]            @relation("MedicalEventIntakeCreator")
+  dischargedMedicalEvents   MedicalEvent[]            @relation("MedicalEventDischargedBy")
   // IMPL-20260623-02: Ficha Cliente v2 - vendedor asignado, habilitado, historial de vendedores (ARCH-20260623-03)
   sellerCompanies           Company[]                 @relation("CompanySeller")
   enabledCompanies          Company[]                 @relation("CompanyEnabledBy")
@@ -366,6 +367,9 @@ model MedicalEvent {
   intakeSource          IntakeSource?
   projectId             String?
   intakeCreatedByUserId String?
+  dischargedAt          DateTime?
+  dischargedByUserId    String?
+  dischargedByUser      User?                   @relation("MedicalEventDischargedBy", fields: [dischargedByUserId], references: [id], onDelete: SetNull)
   eventTests            EventTest[]
   labs                  LabRecord[]
   billingCompany        Company?                @relation("BillingCompany", fields: [billingCompanyId], references: [id])

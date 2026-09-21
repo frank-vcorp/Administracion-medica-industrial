@@ -21,6 +21,8 @@
  */
 import { PrismaClient, UserRole, MobileUnitStatus } from "@prisma/client"
 import bcryptjs from "bcryptjs"
+import fs from "node:fs"
+import path from "node:path"
 
 const prisma = new PrismaClient()
 
@@ -168,6 +170,65 @@ async function seedMobileUnits(): Promise<void> {
   )
 }
 
+const E2E_WORKER_UID = "E2E-CHECKOUT-WORKER"
+
+async function seedCheckoutScenario(branchId: string, companyId: string) {
+  const worker = await prisma.worker.upsert({
+    where: { universalId: E2E_WORKER_UID },
+    update: {
+      firstName: "E2E",
+      lastName: "Checkout",
+      companyId,
+      branchId,
+      phone: "5551234567",
+    },
+    create: {
+      universalId: E2E_WORKER_UID,
+      firstName: "E2E",
+      lastName: "Checkout",
+      companyId,
+      branchId,
+      phone: "5551234567",
+    },
+    select: { id: true },
+  })
+
+  await prisma.medicalEvent.deleteMany({
+    where: {
+      workerId: worker.id,
+      intakeSource: "DIRECT_RECEPTION",
+      checkInDate: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+    },
+  })
+
+  const event = await prisma.medicalEvent.create({
+    data: {
+      workerId: worker.id,
+      branchId,
+      status: "IN_PROGRESS",
+      checkInDate: new Date(),
+      intakeSource: "DIRECT_RECEPTION",
+      eventTests: {
+        create: [
+          { testNameSnapshot: "E2E Audiometría", status: "IN_PROGRESS" },
+          { testNameSnapshot: "E2E Laboratorio", status: "SAMPLE_TAKEN" },
+        ],
+      },
+    },
+    select: { id: true },
+  })
+
+  const fixtures = {
+    checkoutEventId: event.id,
+    checkoutWorkerId: worker.id,
+  }
+
+  const fixturesPath = path.join(__dirname, "../tests/.auth/e2e-fixtures.json")
+  fs.mkdirSync(path.dirname(fixturesPath), { recursive: true })
+  fs.writeFileSync(fixturesPath, JSON.stringify(fixtures, null, 2))
+  console.log(`[seed-e2e] Checkout scenario: event=${event.id}`)
+}
+
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     throw new Error(
@@ -177,8 +238,9 @@ async function main(): Promise<void> {
   await seedTenant()
   await seedAdminUser()
   const branchId = await seedBranch()
-  await seedCompany(branchId)
+  const companyId = await seedCompany(branchId)
   await seedMobileUnits()
+  await seedCheckoutScenario(branchId, companyId)
   console.log("[seed-e2e] ✅ Seed E2E completo")
 }
 

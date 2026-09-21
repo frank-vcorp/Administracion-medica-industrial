@@ -9,6 +9,7 @@
  * @see context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  */
 import { getWorkerById, getWorkerInformedConsentHistory } from '@/services/worker.service'
+import { getSatisfactionSurveysByWorker } from '@/actions/satisfaction.actions'
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { getCompanies } from '@/actions/admin.actions'
 import { getMedicalProfileOptions } from '@/actions/medical-profiles'
@@ -27,11 +28,12 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
         notFound()
     }
 
-    const [historyResult, companies, medicalProfiles, informedConsents] = await Promise.all([
+    const [historyResult, companies, medicalProfiles, informedConsents, satisfactionData] = await Promise.all([
         getWorkerClinicalHistory(id),
         getCompanies(),
         getMedicalProfileOptions(),
         getWorkerInformedConsentHistory(id),
+        getSatisfactionSurveysByWorker(id),
     ])
 
     // Serialización Date → ISO string para cruzar el server/client boundary.
@@ -100,6 +102,8 @@ export default async function WorkerDetailPage({ params }: { params: Promise<{ i
             worker={serialized}
             historyResult={historyPayload}
             informedConsentHistory={informedConsentHistory}
+            satisfactionSurveys={satisfactionData.surveys}
+            pendingSurveyEvents={satisfactionData.pendingSurveyEventIds}
             companies={companyOptions}
             medicalProfiles={medicalProfileOptions}
         />

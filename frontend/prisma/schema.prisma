@@ -31,6 +31,7 @@ model User {
   verifiedAppointments      Appointment[]             @relation("AppointmentIdentityVerifier")
   /// IMPL-20260527-01 - Ref: context/interconsultas/HANDOFF_ARCH-20260527-11_SOFIA_SLICE-A-TRAZABILIDAD-EVENT.md
   intakeCreatedEvents       MedicalEvent[]            @relation("MedicalEventIntakeCreator")
+  dischargedMedicalEvents   MedicalEvent[]            @relation("MedicalEventDischargedBy")
   // IMPL-20260623-02: Ficha Cliente v2 - vendedor asignado, habilitado, historial de vendedores (ARCH-20260623-03)
   sellerCompanies           Company[]                 @relation("CompanySeller")
   enabledCompanies          Company[]                 @relation("CompanyEnabledBy")
@@ -222,6 +223,7 @@ model Worker {
   reportEmails             WorkerReportEmail[]
   // ARCH-20260708-01: Huella de origen del alta para distinguir clínica vs unidad móvil
   intakeSource             IntakeSource        @default(PROJECT_SAME_DAY)
+  satisfactionSurveys      SatisfactionSurvey[]
 
   @@map("workers")
 }
@@ -416,6 +418,10 @@ model MedicalEvent {
   intakeSource          IntakeSource?
   projectId             String?
   intakeCreatedByUserId String?
+  /// Salida en recepción (checkout): cuándo el paciente se retira y se ofrece encuesta (#13 F-017).
+  dischargedAt          DateTime?
+  dischargedByUserId    String?
+  dischargedByUser      User?                   @relation("MedicalEventDischargedBy", fields: [dischargedByUserId], references: [id], onDelete: SetNull)
   // IMPL-20260711-01: Unidad móvil donde se realizó el evento (opcional). ARCH-20260711-01.
   mobileUnitId          String?
   mobileUnit            MobileUnit?             @relation(fields: [mobileUnitId], references: [id], onDelete: SetNull)
@@ -440,6 +446,7 @@ model MedicalEvent {
   // IMPL-20260707-16: Slice C — labResults transitivos vía LabOrder
   // (accesibles por la consulta Prisma anidada; no requiere relation directa
   //  porque el modelo MedicalEvent no tiene FK explícita a LabResult)
+  satisfactionSurveys   SatisfactionSurvey[]
 
   @@map("medical_events")
 }
@@ -867,6 +874,40 @@ enum TimelineEntryType {
   STUDY_COMPLETED // Estudio completado (status → COMPLETED)
   MEDICAL_EXAM_SAVED // Examen médico guardado
   ADMIN_INCIDENCE // Incidencia manual registrada por administrador
+  STUDY_NOT_PERFORMED // Estudio no realizado — ligado a eventTestId (SPEC ARCH-20260921-01)
+}
+
+enum SatisfactionChannel {
+  TABLET
+  WHATSAPP_LINK
+  DIRECT
+}
+
+/// Encuesta de satisfacción AMI oficial (SPEC ARCH-20260921-01 §7).
+model SatisfactionSurvey {
+  id          String              @id @default(uuid())
+  eventId     String              @unique
+  workerId    String
+  companyId   String?
+  branchId    String?
+  turno       String
+  overall     Int
+  qTrato      Int
+  qEscucha    Int
+  qResolucion Int
+  qEspera     Int
+  qLimpieza   Int
+  qPrivacidad Int
+  recomienda  Int
+  comentario  String?
+  channel     SatisfactionChannel
+  submittedAt DateTime            @default(now())
+  event       MedicalEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  worker      Worker              @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@index([submittedAt])
+  @@map("satisfaction_surveys")
 }
 
 /// Bitácora operativa persistente de papeleta. Cada entrada es inmutable.

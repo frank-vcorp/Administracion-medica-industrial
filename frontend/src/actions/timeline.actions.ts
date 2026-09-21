@@ -13,6 +13,9 @@ import { authOptions } from '@/auth'
 import { getTimelineForEvent, writeTimelineEntry } from '@/lib/timeline.service'
 import { isAdminLike } from '@/lib/auth/roles'
 import { revalidatePath } from 'next/cache'
+import prisma from '@/lib/prisma'
+
+const STUDY_NOT_PERFORMED_ROLES = ['ADMIN', 'SUPERADMIN', 'RECEPTIONIST', 'DOCTOR', 'CAPTURIST'] as const
 
 export async function getEventTimeline(eventId: string) {
   const session = await getServerSession(authOptions)
@@ -59,5 +62,70 @@ export async function addAdminIncidence(
   })
 
   revalidatePath(`/events/${eventId}`)
+  return { success: true }
+}
+
+/** Registra estudio no realizado: incidencia + SKIPPED (SPEC ARCH-20260921-01 §6). */
+export async function registerStudyNotPerformed(
+  eventId: string,
+  payload: {
+    eventTestId: string
+    title: string
+    description?: string
+  },
+) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return { success: false, error: 'No autenticado' }
+
+  const role = session.user.role
+  if (!STUDY_NOT_PERFORMED_ROLES.includes(role as (typeof STUDY_NOT_PERFORMED_ROLES)[number])) {
+    return { success: false, error: 'No tienes permiso para registrar esta incidencia' }
+  }
+
+  if (!eventId || !payload.eventTestId || !payload.title?.trim()) {
+    return { success: false, error: 'eventId, eventTestId y title son obligatorios' }
+  }
+
+  const eventTest = await prisma.eventTest.findFirst({
+    where: { id: payload.eventTestId, eventId },
+    select: { id: true, testNameSnapshot: true },
+  })
+  if (!eventTest) {
+    return { success: false, error: 'Estudio no encontrado en este expediente' }
+  }
+
+  await prisma.$transaction([
+    prisma.eventTest.update({
+      where: { id: payload.eventTestId },
+      data: { status: 'SKIPPED' },
+    }),
+    prisma.papeletaTimelineEntry.create({
+      data: {
+        eventId,
+        eventTestId: payload.eventTestId,
+        entryType: 'STUDY_NOT_PERFORMED',
+        title: payload.title.trim(),
+        description: payload.description?.trim() || null,
+        createdById: session.user.id,
+        visibility: 'ADMIN_ONLY',
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: 'STUDY_NOT_PERFORMED',
+        entity: 'EventTest',
+        entityId: payload.eventTestId,
+        details: {
+          eventId,
+          title: payload.title.trim(),
+          testName: eventTest.testNameSnapshot,
+        },
+      },
+    }),
+  ])
+
+  revalidatePath(`/events/${eventId}`)
+  revalidatePath('/reception')
   return { success: true }
 }

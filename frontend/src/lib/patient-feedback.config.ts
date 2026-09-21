@@ -1,11 +1,16 @@
 const DEFAULT_SURVEY_PATH = '/feedback/satisfaction'
 
-export function buildServiceRatingMessage(patientFirstName: string): string {
+export function buildServiceRatingMessage(
+  patientFirstName: string,
+  surveyUrl?: string,
+): string {
   const name = patientFirstName.trim() || 'paciente'
+  const link = surveyUrl?.trim()
   return [
     `Hola ${name}, gracias por visitarnos en Soluciones Médico Empresariales.`,
-    '¿Cómo calificarías tu atención hoy? Responde del 1 al 10.',
-    'Tu opinión nos ayuda a mejorar.',
+    'Nos importa tu opinión — completa nuestra encuesta de satisfacción (1–5).',
+    link ? `Encuesta: ${link}` : 'Pregunta en recepción por la encuesta en tableta.',
+    'Tu retroalimentación nos ayuda a mejorar.',
   ].join(' ')
 }
 
@@ -17,10 +22,14 @@ export function normalizeMexicoPhone(raw: string): string | null {
   return digits
 }
 
-export function buildWhatsAppRatingLink(phone: string, patientFirstName: string): string | null {
+export function buildWhatsAppRatingLink(
+  phone: string,
+  patientFirstName: string,
+  surveyUrl?: string,
+): string | null {
   const normalized = normalizeMexicoPhone(phone)
   if (!normalized) return null
-  const text = encodeURIComponent(buildServiceRatingMessage(patientFirstName))
+  const text = encodeURIComponent(buildServiceRatingMessage(patientFirstName, surveyUrl))
   return `https://wa.me/${normalized}?text=${text}`
 }
 

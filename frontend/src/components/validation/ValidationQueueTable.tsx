@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 
+import type { ValidationStage } from '@/lib/clinical/validation-stage'
+
 export type ValidationQueueRow = {
   eventId: string
   sortDate: string
@@ -11,6 +13,9 @@ export type ValidationQueueRow = {
   companyId: string | null
   companyName: string
   studies: string[]
+  stage: ValidationStage
+  stageLabel: string
+  stageBadgeClass: string
   completeness: 'complete' | 'incomplete'
   completenessLabel: string
   completenessBadgeClass: string
@@ -19,6 +24,7 @@ export type ValidationQueueRow = {
 
 type CompanyOption = { id: string; name: string }
 type CompletenessFilter = 'ALL' | 'complete' | 'incomplete'
+type StageFilter = 'ALL' | ValidationStage
 
 function formatListDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-MX', {
@@ -39,6 +45,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
   const [search, setSearch] = useState('')
   const [companyId, setCompanyId] = useState('')
   const [completenessFilter, setCompletenessFilter] = useState<CompletenessFilter>('ALL')
+  const [stageFilter, setStageFilter] = useState<StageFilter>('ALL')
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -46,6 +53,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
     return rows
       .filter((row) => {
         if (companyId && row.companyId !== companyId) return false
+        if (stageFilter !== 'ALL' && row.stage !== stageFilter) return false
         if (completenessFilter !== 'ALL' && row.completeness !== completenessFilter) {
           return false
         }
@@ -63,7 +71,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
       .sort(
         (a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime(),
       )
-  }, [rows, search, companyId, completenessFilter])
+  }, [rows, search, companyId, completenessFilter, stageFilter])
 
   return (
     <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-100 border border-slate-100 overflow-hidden">
@@ -99,7 +107,22 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
         </div>
         <div className="space-y-1 min-w-[200px]">
           <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
-            Expediente
+            Etapa
+          </label>
+          <select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value as StageFilter)}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="ALL">Todas</option>
+            <option value="V1">V1 — Resultados</option>
+            <option value="V2">V2 — Diagnóstico</option>
+            <option value="V3">V3 — Dictamen</option>
+          </select>
+        </div>
+        <div className="space-y-1 min-w-[200px]">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+            Semáforo
           </label>
           <select
             value={completenessFilter}
@@ -125,6 +148,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
             <th className="px-6 py-4">ID</th>
             <th className="px-6 py-4">Empresa</th>
             <th className="px-6 py-4">Pruebas</th>
+            <th className="px-6 py-4">Etapa</th>
             <th className="px-6 py-4">Semáforo</th>
             <th className="px-6 py-4 text-right">Acciones</th>
           </tr>
@@ -132,7 +156,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
         <tbody className="divide-y divide-slate-100">
           {filteredRows.length === 0 && (
             <tr>
-              <td colSpan={7} className="p-8 text-center text-slate-400">
+              <td colSpan={8} className="p-8 text-center text-slate-400">
                 No hay expedientes pendientes de validación con los filtros actuales
               </td>
             </tr>
@@ -171,6 +195,13 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                       </span>
                     ))}
                   </div>
+                </td>
+                <td className="px-6 py-4">
+                  <span
+                    className={`px-2 py-1 rounded-full text-[10px] font-black border uppercase tracking-widest ${row.stageBadgeClass}`}
+                  >
+                    {row.stageLabel}
+                  </span>
                 </td>
                 <td className="px-6 py-4">
                   <span

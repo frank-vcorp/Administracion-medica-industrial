@@ -312,6 +312,7 @@ export async function updateEventTestStatus(
         STUDY_COMPLETED:    `Estudio completado: ${testName}`,
         MEDICAL_EXAM_SAVED: `Examen médico guardado`,
         ADMIN_INCIDENCE:    testName,
+        STUDY_NOT_PERFORMED: `Estudio no realizado: ${testName}`,
       }
       await writeTimelineEntry({
         eventId,

@@ -7,6 +7,7 @@ import { getWorkers } from "@/actions/worker.actions"
 import CheckInModal from "@/components/CheckInModal"
 import QRScannerModal from "@/components/QRScannerModal"
 import StatusUpdateButton from "@/components/StatusUpdateButton"
+import ReceptionCheckoutCard from "@/components/reception/ReceptionCheckoutCard"
 import ReceptionDayFilter from "@/components/reception/ReceptionDayFilter"
 import prisma from "@/lib/prisma"
 import Link from "next/link"
@@ -63,8 +64,8 @@ export default async function ReceptionPage(props: { searchParams: Promise<{ dat
             ? searchParams.date
             : todayLocalDateString()
 
-    const { scheduled, inProgress, completed } = await getEventsKanban(selectedDate)
-    const totalCount = scheduled.length + inProgress.length + completed.length
+    const { scheduled, inProgress, readyForCheckout } = await getEventsKanban(selectedDate)
+    const totalCount = scheduled.length + inProgress.length + readyForCheckout.length
 
     const [allWorkers, branches] = await Promise.all([
         getWorkers(),
@@ -94,7 +95,7 @@ export default async function ReceptionPage(props: { searchParams: Promise<{ dat
                 </div>
             </div>
 
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-hidden min-h-0">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 overflow-hidden min-h-0">
                 <Lane title="Registro de pruebas" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
                     {scheduled.length === 0 ? (
                         <EmptyLane message="Sin pacientes en registro para este día" />
@@ -102,18 +103,24 @@ export default async function ReceptionPage(props: { searchParams: Promise<{ dat
                         scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" nextStatus="IN_PROGRESS" />)
                     )}
                 </Lane>
-                <Lane title="en proceso de prueba" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
+                <Lane title="En proceso" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
                     {inProgress.length === 0 ? (
                         <EmptyLane message="Nadie en proceso para este día" />
                     ) : (
                         inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" />)
                     )}
                 </Lane>
-                <Lane title="Por dictaminar" count={completed.length} color="bg-emerald-50/30" borderColor="border-emerald-100" icon="🛡️">
-                    {completed.length === 0 ? (
-                        <EmptyLane message="Sin expedientes por dictaminar hoy" />
+                <Lane title="Listo para checkout" count={readyForCheckout.length} color="bg-amber-50/40" borderColor="border-amber-200" icon="🚪">
+                    {readyForCheckout.length === 0 ? (
+                        <EmptyLane message="Sin pacientes pendientes de checkout" />
                     ) : (
-                        completed.map(e => <PatientCard key={e.id} event={e} status="done" />)
+                        readyForCheckout.map(e => (
+                            <ReceptionCheckoutCard
+                                key={e.id}
+                                event={e}
+                                intakeBadge={getIntakeSourceBadge(e)}
+                            />
+                        ))
                     )}
                 </Lane>
             </div>

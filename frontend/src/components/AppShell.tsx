@@ -32,6 +32,7 @@ import {
   ChevronRight,
   ClipboardList,
   FileBarChart,
+  Smile,
   FlaskConical,
   FolderKanban,
   Globe,
@@ -191,6 +192,7 @@ function ShellNavigation({
           <NavItem href="/projects" icon={FolderKanban} label="Proyectos" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/operations/mobile-units" icon={Ambulance} label="Unidades Móviles" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/reports" icon={FileBarChart} label="Reportes Masivos" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/reports/satisfaction" icon={Smile} label="Satisfacción" secondary collapsed={collapsed} onNavigate={onNavigate} />
         </>
       )}
 

@@ -29,6 +29,10 @@ import WorkerIdentityCard from '@/components/workers/WorkerIdentityCard'
 import WorkerInformedConsentCard, {
     type InformedConsentHistoryItem,
 } from '@/components/workers/WorkerInformedConsentCard'
+import WorkerSatisfactionCard, {
+    type PendingSurveyItem,
+    type SatisfactionSurveyItem,
+} from '@/components/workers/WorkerSatisfactionCard'
 
 // ────────────────────────────────────────────────────────────
 // Tipos — explícitos para evitar `any` en server→client boundary
@@ -78,6 +82,8 @@ interface Props {
     worker: SerializedWorker
     historyResult: HistoryPayload
     informedConsentHistory: InformedConsentHistoryPayload
+    satisfactionSurveys: SatisfactionSurveyItem[]
+    pendingSurveyEvents: PendingSurveyItem[]
     companies: CompanyOption[]
     medicalProfiles: MedicalProfileOption[]
 }
@@ -97,6 +103,8 @@ export default function WorkerDetailClient({
     worker,
     historyResult,
     informedConsentHistory,
+    satisfactionSurveys,
+    pendingSurveyEvents,
     companies,
     medicalProfiles,
 }: Props) {
@@ -240,6 +248,13 @@ export default function WorkerDetailClient({
                         firstName={worker.firstName}
                         lastName={worker.lastName}
                         consents={informedConsentHistory}
+                    />
+
+                    <WorkerSatisfactionCard
+                        firstName={worker.firstName}
+                        lastName={worker.lastName}
+                        surveys={satisfactionSurveys}
+                        pendingSurveys={pendingSurveyEvents}
                     />
 
                     {/* Card Historial Clínico Longitudinal — slate contenedor, accent azul */}

@@ -1,7 +1,9 @@
 import {
   type EventTestPipelineStatus,
+  type StudyInterpretationInput,
   toBusinessStudyStatus,
 } from '@/lib/clinical/study-status-display'
+import { getStudyVisibleStep } from '@/lib/clinical/study-step'
 
 export type EventCompleteness = 'complete' | 'incomplete'
 
@@ -39,4 +41,28 @@ export function getEventCompletenessBadgeClass(
   tests: ReadonlyArray<{ status: EventTestPipelineStatus }>,
 ): string {
   return EVENT_COMPLETENESS_BADGE[getEventCompleteness(tests)]
+}
+
+/** Semáforo por pasos 3/E (SPEC ARCH-20260921-01 §5.3). */
+export function getEventCompletenessFromSteps(
+  tests: ReadonlyArray<{
+    id: string
+    status: EventTestPipelineStatus
+    interpretation?: StudyInterpretationInput | null
+  }>,
+  notPerformedTestIds: ReadonlySet<string> = new Set(),
+): EventCompleteness {
+  const active = tests.filter((t) => t.status !== 'CANCELLED')
+  if (active.length === 0) return 'incomplete'
+
+  const allComplete = active.every((test) => {
+    const step = getStudyVisibleStep({
+      status: test.status,
+      hasNotPerformedIncidence: notPerformedTestIds.has(test.id),
+      interpretation: test.interpretation ?? null,
+    })
+    return step === '3' || step === 'E'
+  })
+
+  return allComplete ? 'complete' : 'incomplete'
 }

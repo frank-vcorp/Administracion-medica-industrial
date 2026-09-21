@@ -74,6 +74,8 @@ import { CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/cam
 import { retryCampimetriaPrediagnosis } from "@/actions/campimetria-questionnaire.actions"
 import { buildStudyInterpretationFromSnapshot, formatStudyStatusLine } from '@/lib/clinical/study-status-display'
 import { StudyStatusBadge } from '@/components/clinical/StudyStatusBadge'
+import { StudyStepChips } from '@/components/clinical/StudyStepChips'
+import { isAdminLike } from '@/lib/auth/roles'
 
 // --- Tipos locales ---
 
@@ -731,6 +733,7 @@ export default function PapeletaWorkspace({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <StudyStepChips status={test.status} aiSnapshot={test.aiSnapshot} compact />
                     <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} />
                     <span className="text-slate-400 group-hover:text-teal-600 text-sm">→</span>
                   </div>
@@ -1348,6 +1351,7 @@ function StudyPanel({
     ['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'].includes(test.status) || groupSampleTaken
   )
   const resultTracked = ['RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
+  const allowAdminStatusCorrection = isAdminLike(reviewerRole)
 
   return (
     <div className="space-y-4">
@@ -1383,7 +1387,10 @@ function StudyPanel({
             </span>
           </div>
         </div>
-        <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} className="shrink-0" />
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <StudyStepChips status={test.status} aiSnapshot={test.aiSnapshot} />
+          <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} />
+        </div>
       </div>
 
       <hr className="border-slate-100" />
@@ -1790,7 +1797,7 @@ function StudyPanel({
                       🧪 Muestra tomada
                     </button>
                   )}
-                  {(test.status !== 'COMPLETED' && test.status !== 'RESULT_REGISTERED') && (
+                  {allowAdminStatusCorrection && (test.status !== 'COMPLETED' && test.status !== 'RESULT_REGISTERED') && (
                     <button
                       onClick={() => onStatusChange(test.id, 'RESULT_REGISTERED')}
                       disabled={isPending}
@@ -1799,7 +1806,7 @@ function StudyPanel({
                       ✅ Resultado registrado
                     </button>
                   )}
-                  {test.status !== 'COMPLETED' && (
+                  {allowAdminStatusCorrection && test.status !== 'COMPLETED' && (
                     <button
                       onClick={() => onStatusChange(test.id, 'COMPLETED')}
                       disabled={isPending}
@@ -1909,7 +1916,7 @@ function StudyPanel({
                 ▶ Iniciar proceso
               </button>
             )}
-            {(test.status !== 'COMPLETED' && test.status !== 'RESULT_REGISTERED') && !isMedico && (
+            {allowAdminStatusCorrection && (test.status !== 'COMPLETED' && test.status !== 'RESULT_REGISTERED') && !isMedico && (
               <button
                 onClick={() => onStatusChange(test.id, 'RESULT_REGISTERED')}
                 disabled={isPending}
@@ -1918,7 +1925,7 @@ function StudyPanel({
                 ✅ Resultado registrado
               </button>
             )}
-            {test.status !== 'COMPLETED' && (
+            {allowAdminStatusCorrection && test.status !== 'COMPLETED' && (
               <button
                 onClick={() => onStatusChange(test.id, 'COMPLETED')}
                 disabled={isPending}

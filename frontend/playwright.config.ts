@@ -42,6 +42,11 @@ export default defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+
+    /* Fallback a Chrome del sistema cuando `npx playwright install` no soporta la distro. */
+    ...(process.env.PLAYWRIGHT_CHANNEL
+      ? { channel: process.env.PLAYWRIGHT_CHANNEL as 'chrome' }
+      : {}),
   },
 
   /**
