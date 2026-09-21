@@ -43,5 +43,5 @@ def test_crop_espirometry_letter_bottom_half_from_pdf():
     img = Image.open(BytesIO(out))
     # Mitad inferior de página carta @150dpi ≈ 1275×825; tolerancia para PDF mínimo
     assert img.width > 50
-    assert ESPIROMETRY_LETTER_BOTTOM_Y0_PT == 396
+    assert ESPIROMETRY_LETTER_BOTTOM_Y0_PT == 385
     assert ESPIROMETRY_LETTER_HEIGHT_PT == 792

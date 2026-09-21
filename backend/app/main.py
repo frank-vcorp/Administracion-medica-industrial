@@ -1910,7 +1910,7 @@ class EspirometrySourceCropRequest(BaseModel):
 @app.post("/api/v2/event-tests/espirometry-source-crop")
 async def v2_event_test_espirometry_source_crop(body: EspirometrySourceCropRequest):
     """
-    Genera el recorte PNG de la mitad inferior (0,396)→(612,792 pt) de la
+    Genera el recorte PNG de la mitad inferior (0,385)→(612,792 pt) de la
     primera página del PDF Sibelmed. Corre en Railway (poppler + Pillow).
     """
     from app.services.pdf.espirometry_source_crop import (

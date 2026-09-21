@@ -1,6 +1,6 @@
 /**
  * Recorte fijo mitad inferior del PDF fuente Sibelmed — carta 612×792 pt.
- * Clip: (0, 396) → (612, 792), ancho completo.
+ * Clip: (0, 385) → (612, 792), ancho completo.
  * Producción: Railway /api/v2/event-tests/espirometry-source-crop (poppler).
  * Desarrollo local: pdftoppm + pngjs.
  */
@@ -41,6 +41,7 @@ export type EspirometrySourceCropMeta = {
     | 'sibelmed-w20s'
     | 'sibelmed-w20s-v2'
     | 'sibelmed-letter-bottom-v1'
+    | 'sibelmed-letter-bottom-v2'
   generatedAt: string
 }
 
@@ -133,7 +134,7 @@ export async function readEventTestSourcePdfBytes(
   }
 }
 
-/** Rasteriza página 1 completa y recorta (0,396)→(612,792) pt. */
+/** Rasteriza página 1 completa y recorta (0,385)→(612,792) pt. */
 export async function cropEspirometryLetterBottomHalfFromPdfLocal(
   pdfBuffer: Buffer,
 ): Promise<Buffer> {

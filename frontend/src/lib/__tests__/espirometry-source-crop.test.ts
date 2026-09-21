@@ -33,14 +33,14 @@ function hasPdftoppm(): boolean {
 }
 
 describe('espirometry letter bottom clip', () => {
-  it('constantes carta mitad inferior 396→792 pt', () => {
+  it('constantes carta recorte inferior 385→792 pt', () => {
     expect(ESPIROMETRY_LETTER_BOTTOM_CLIP_PT).toEqual({
       x0: 0,
-      y0: 396,
+      y0: 385,
       x1: 612,
       y1: 792,
     })
-    expect(ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO).toBe(396 / ESPIROMETRY_LETTER_HEIGHT_PT)
+    expect(ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO).toBe(385 / ESPIROMETRY_LETTER_HEIGHT_PT)
   })
 
   it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
@@ -58,8 +58,10 @@ describe('espirometry letter bottom clip', () => {
       const full = PNG.sync.read(readFileSync(`${prefix}-1.png`))
 
       expect(parsed.width).toBe(full.width)
-      expect(parsed.height).toBe(Math.floor(full.height / 2))
-      expect(parsed.width / parsed.height).toBeCloseTo(612 / 396, 1)
+      const expectedHeight =
+        full.height - Math.floor(full.height * ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO)
+      expect(parsed.height).toBe(expectedHeight)
+      expect(parsed.width / parsed.height).toBeCloseTo(612 / 407, 1)
     },
   )
 
@@ -75,7 +77,7 @@ describe('espirometry letter bottom clip', () => {
     const out = extractLetterBottomHalfFromFullPagePng(input)
     const parsed = PNG.sync.read(out)
     expect(parsed.width).toBe(612)
-    expect(parsed.height).toBe(396)
+    expect(parsed.height).toBe(407)
   })
 
   it('bottomHalfCropFromSourcePng devuelve data URL', () => {
@@ -83,6 +85,7 @@ describe('espirometry letter bottom clip', () => {
     const input = PNG.sync.write(src)
     const crop = bottomHalfCropFromSourcePng(input)
     expect(crop.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
-    expect(crop.aspectRatio).toBeCloseTo(100 / 100, 5)
+    const cropHeight = 200 - Math.floor(200 * ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO)
+    expect(crop.aspectRatio).toBeCloseTo(100 / cropHeight, 5)
   })
 })

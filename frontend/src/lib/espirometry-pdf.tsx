@@ -297,7 +297,7 @@ async function resolveEspirometryCropMeta(input: {
     try {
       meta =
         (await ensureEspirometrySourceCrop(input.eventTestId, {
-          force: meta?.templateId !== 'sibelmed-letter-bottom-v1',
+          force: meta?.templateId !== 'sibelmed-letter-bottom-v2',
         })) ?? undefined
     } catch (err) {
       console.warn('[espirometry-pdf] No se pudo generar recorte fuente:', err)

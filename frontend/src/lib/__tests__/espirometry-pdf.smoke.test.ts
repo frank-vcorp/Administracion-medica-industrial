@@ -37,7 +37,7 @@ describe('espirometry PDF smoke — layout híbrido', () => {
       const pngBuf = await cropEspirometryLetterBottomHalfFromPdfLocal(pdfBuf)
       bottomHalfCrop = {
         dataUrl: `data:image/png;base64,${pngBuf.toString('base64')}`,
-        aspectRatio: 612 / 396,
+        aspectRatio: 612 / 407,
       }
     } catch {
       bottomHalfCrop = {

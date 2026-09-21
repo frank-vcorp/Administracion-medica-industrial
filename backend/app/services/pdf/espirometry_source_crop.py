@@ -1,6 +1,6 @@
 """
 Recorte fijo mitad inferior del PDF fuente Sibelmed — hoja carta 612×792 pt.
-Clip exacto: (0, 396) → (612, 792), ancho completo.
+Clip exacto: (0, 385) → (612, 792), ancho completo.
 Ejecutado en Railway donde poppler-utils está disponible.
 """
 from __future__ import annotations
@@ -14,8 +14,8 @@ ESPIROMETRY_CROP_SUBDIR = "espirometry-crops"
 ESPIROMETRY_RENDER_DPI = 150
 ESPIROMETRY_LETTER_WIDTH_PT = 612
 ESPIROMETRY_LETTER_HEIGHT_PT = 792
-ESPIROMETRY_LETTER_BOTTOM_Y0_PT = 396
-ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID = "sibelmed-letter-bottom-v1"
+ESPIROMETRY_LETTER_BOTTOM_Y0_PT = 385
+ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID = "sibelmed-letter-bottom-v2"
 
 # Compat tests / imports legacy
 SIBELMED_W20S_TOP_CROP_RATIO = 0.67
@@ -40,7 +40,7 @@ def espirometry_crop_output_key(event_test_id: str) -> str:
 
 
 def crop_espirometry_letter_bottom_half_from_pdf(pdf_bytes: bytes) -> bytes:
-    """Rasteriza página 1 completa y recorta (0,396)→(612,792) en puntos carta."""
+    """Rasteriza página 1 completa y recorta (0,385)→(612,792) en puntos carta."""
     pages = convert_from_bytes(
         pdf_bytes,
         dpi=ESPIROMETRY_RENDER_DPI,
