@@ -7,6 +7,7 @@
  * @see context/SPECs/SPEC_ARCH-20260527-04-PERFILES-MEDICOS-EN-EMPRESA-Y-ASIGNACION-A-PUESTOS.md
  * @see context/SPECs/SPEC_ARCH-20260623-03-CLIENTE-V2-VENDEDOR-HISTORIAL-LINK-PUBLICO.md
  */
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getServerSession } from 'next-auth/next'
@@ -177,12 +178,20 @@ export default async function CompanyDetailPage({ params }: PageProps) {
         )}
       />
 
-      <CompanyMedicalProfilesPanel
-        companyId={id}
-        companyName={company.name}
-        companyProfiles={companyProfiles}
-        availableTests={availableTests}
-      />
+      <Suspense
+        fallback={
+          <section className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+            Cargando perfiles médicos…
+          </section>
+        }
+      >
+        <CompanyMedicalProfilesPanel
+          companyId={id}
+          companyName={company.name}
+          companyProfiles={companyProfiles}
+          availableTests={availableTests}
+        />
+      </Suspense>
     </div>
   )
 }

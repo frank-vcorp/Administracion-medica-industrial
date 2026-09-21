@@ -12,7 +12,8 @@
  */
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   createMedicalProfile,
   deleteMedicalProfile,
@@ -66,6 +67,24 @@ export default function CompanyMedicalProfilesPanel({
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editTarget, setEditTarget] = useState<CompanyMedicalProfile | null>(null)
   const [cloneSource, setCloneSource] = useState<CompanyMedicalProfile | null>(null)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (searchParams.get('action') !== 'new-profile') return
+
+    setShowCreateModal(true)
+    requestAnimationFrame(() => {
+      document.getElementById('perfiles-medicos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+
+    const next = new URLSearchParams(searchParams.toString())
+    next.delete('action')
+    const qs = next.toString()
+    router.replace(
+      qs ? `/companies/${companyId}?${qs}#perfiles-medicos` : `/companies/${companyId}#perfiles-medicos`
+    )
+  }, [searchParams, router, companyId])
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message })
@@ -124,7 +143,7 @@ export default function CompanyMedicalProfilesPanel({
   }
 
   return (
-    <section className="space-y-4">
+    <section id="perfiles-medicos" className="space-y-4 scroll-mt-6">
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-xl font-bold text-slate-800">🧪 Perfiles Médicos</h2>

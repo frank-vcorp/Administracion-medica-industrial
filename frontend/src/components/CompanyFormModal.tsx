@@ -156,7 +156,7 @@ export default function CompanyFormModal(props?: {
     if (successData) {
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
-                <div className="bg-white p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center space-y-6">
+                <div className="bg-white p-8 rounded-[2rem] shadow-2xl max-w-md w-full text-center space-y-6">
                     <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-4xl animate-bounce">
                         🏢
                     </div>
@@ -174,6 +174,16 @@ export default function CompanyFormModal(props?: {
                             className="block w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
                         >
                             ➕ Registrar Trabajadores
+                        </Link>
+                        <Link
+                            href={
+                                successData.company?.id
+                                    ? `/companies/${successData.company.id}?action=new-profile#perfiles-medicos`
+                                    : '/admin/profiles'
+                            }
+                            className="block w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
+                        >
+                            🧪 Registrar Perfiles
                         </Link>
                         <button
                             onClick={() => { setSuccessData(null); setIsOpen(false); }}
