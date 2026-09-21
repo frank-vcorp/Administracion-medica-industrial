@@ -50,7 +50,20 @@ export interface WorkerForEdit {
 interface WorkerRef {
     id: string
     branchId?: string | null
+    companyId?: string | null
+    medicalProfileId?: string | null
+    firstName?: string
+    lastName?: string
     company?: { id: string; defaultBranchId: string | null } | null
+}
+
+export type WorkerCreatedPayload = {
+    id: string
+    firstName: string
+    lastName: string
+    companyId: string | null
+    medicalProfileId: string | null
+    branchId?: string | null
 }
 
 interface WorkerFormModalProps {
@@ -76,6 +89,10 @@ interface WorkerFormModalProps {
     branches?: BranchOption[]
     /** Sucursal default de la empresa (p. ej. Público General). */
     defaultBranchId?: string | null
+    /** Tras alta exitosa: vuelve al flujo padre sin pantalla de éxito (p. ej. modal de cita). */
+    onWorkerCreated?: (worker: WorkerCreatedPayload) => void
+    /** Modal apilado sobre otro (mayor z-index). */
+    stacked?: boolean
 }
 
 function profilesForCompany(
@@ -100,7 +117,11 @@ export default function WorkerFormModal({
     availableTests = [],
     branches = [],
     defaultBranchId,
+    onWorkerCreated,
+    stacked = false,
 }: WorkerFormModalProps) {
+    const overlayZ = stacked ? 'z-[70]' : 'z-[60]'
+    const formOverlayZ = stacked ? 'z-[70]' : 'z-50'
     const isControlled = isOpenProp !== undefined
     const [internalOpen, setInternalOpen] = useState(false)
     const modalOpen = isControlled ? isOpenProp! : internalOpen
@@ -291,6 +312,24 @@ export default function WorkerFormModal({
                     }
                     if (result.success) {
                         router.refresh()
+                        const w = result.worker
+                        if (onWorkerCreated && w?.id) {
+                            onWorkerCreated({
+                                id: w.id,
+                                firstName: w.firstName ?? '',
+                                lastName: w.lastName ?? '',
+                                companyId: w.companyId ?? w.company?.id ?? null,
+                                medicalProfileId: w.medicalProfileId ?? null,
+                                branchId: w.branchId ?? null,
+                            })
+                            setSuccessData(null)
+                            if (isControlled) {
+                                onClose?.()
+                            } else {
+                                setInternalOpen(false)
+                            }
+                            return
+                        }
                         setSuccessData(result)
                     } else {
                         setError(result.error || 'Error al guardar')
@@ -304,7 +343,7 @@ export default function WorkerFormModal({
 
     if (duplicateWorker && modalOpen) {
         return (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
+            <div className={`fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center ${overlayZ} p-4 animate-in fade-in duration-300`}>
                 <div className="bg-white p-8 rounded-[2rem] shadow-2xl max-w-sm w-full space-y-6">
                     <div className="text-center space-y-2">
                         <div className="w-20 h-20 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mx-auto text-4xl">
@@ -373,7 +412,7 @@ export default function WorkerFormModal({
 
     if (successData && modalOpen) {
         return (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
+            <div className={`fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center ${overlayZ} p-4 animate-in fade-in duration-300`}>
                 <div className="bg-white p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center space-y-6">
                     <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto text-4xl animate-bounce">
                         👤
@@ -446,7 +485,7 @@ export default function WorkerFormModal({
             )}
 
             {modalOpen && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center ${formOverlayZ} p-4 animate-in fade-in duration-200`}>
                     <div className={`bg-white p-8 rounded-3xl shadow-2xl w-full border border-slate-100 relative overflow-hidden ${publicGeneralMode && isCreateMode ? 'max-w-lg max-h-[90vh] overflow-y-auto' : 'max-w-md'}`}>
                         <div className={`absolute top-0 left-0 w-full h-2 ${accentBarClass}`} />
 

@@ -4,8 +4,9 @@ import { useState, useTransition, useEffect } from 'react'
 import { createAppointment } from '@/actions/appointment.actions'
 import { getWorkersByCompany } from '@/actions/worker.actions'
 import { getBranches, getCompanies } from '@/actions/admin.actions'
-import { getMedicalProfilesForCompany } from '@/actions/medical-profiles'
+import { getMedicalProfilesForCompany, getMedicalProfileOptions } from '@/actions/medical-profiles'
 import { useRouter, useSearchParams } from 'next/navigation'
+import WorkerFormModal, { type WorkerCreatedPayload } from '@/components/WorkerFormModal'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
@@ -72,6 +73,8 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
     const [selectedProfileId, setSelectedProfileId] = useState<string>('')
     const [preselectedWorkerId, setPreselectedWorkerId] = useState<string | null>(null)
     const [preselectedCompanyId, setPreselectedCompanyId] = useState<string | null>(null)
+    const [workerQuickOpen, setWorkerQuickOpen] = useState(false)
+    const [allMedicalProfiles, setAllMedicalProfiles] = useState<MedicalProfileOption[]>([])
     const router = useRouter()
     const searchParams = useSearchParams()
 
@@ -109,9 +112,14 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         async function fetchAndSelect() {
             try {
                 // Cargar empresas y sucursales (no todos los trabajadores)
-                const [cData, bData] = await Promise.all([getCompanies(), getBranches()])
+                const [cData, bData, profileOptions] = await Promise.all([
+                    getCompanies(),
+                    getBranches(),
+                    getMedicalProfileOptions(),
+                ])
                 setCompanies(cData as Company[])
                 setBranches(bData)
+                setAllMedicalProfiles(profileOptions)
                 
                 // Si hay una empresa preseleccionada (desde redirección de creación de trabajador)
                 const companyIdToUse = preselectedCompanyId
@@ -211,6 +219,28 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         } catch (err) {
             console.error('Error cargando trabajadores de la empresa:', err)
         }
+    }
+
+    async function refreshWorkersAndSelect(companyId: string, workerId: string) {
+        const [wData, pData] = await Promise.all([
+            getWorkersByCompany(companyId),
+            getMedicalProfilesForCompany(companyId),
+        ])
+        setWorkers(wData)
+        setProfiles(pData)
+        const worker = wData.find((w) => w.id === workerId) ?? null
+        setSelectedWorker(worker)
+        if (worker?.medicalProfileId) {
+            setSelectedProfileId(worker.medicalProfileId)
+        }
+    }
+
+    function handleWorkerQuickCreated(created: WorkerCreatedPayload) {
+        setWorkerQuickOpen(false)
+        if (!selectedCompanyId) return
+        void refreshWorkersAndSelect(selectedCompanyId, created.id).catch((err) => {
+            console.error('Error actualizando trabajadores tras alta rápida:', err)
+        })
     }
 
     const handleWorkerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -397,7 +427,18 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Trabajador</label>
+                                <div className="flex items-center justify-between ml-1 mr-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Trabajador</label>
+                                    {selectedCompanyId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setWorkerQuickOpen(true)}
+                                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wide"
+                                        >
+                                            + Alta rápida
+                                        </button>
+                                    )}
+                                </div>
                                 <select 
                                     name="workerId" 
                                     required
@@ -414,7 +455,17 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                     ))}
                                 </select>
                                 {selectedCompanyId && workers.length === 0 && (
-                                    <p className="text-[10px] text-amber-500 ml-1">⚠️ Esta empresa no tiene trabajadores registrados.</p>
+                                    <p className="text-[10px] text-amber-600 ml-1">
+                                        ⚠️ Esta empresa no tiene trabajadores. Usa{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => setWorkerQuickOpen(true)}
+                                            className="font-bold underline hover:text-amber-800"
+                                        >
+                                            Alta rápida
+                                        </button>
+                                        .
+                                    </p>
                                 )}
                             </div>
 
@@ -536,6 +587,22 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                     </div>
                 </div>
             )}
+
+            <WorkerFormModal
+                companies={companies.map((c) => ({
+                    id: c.id,
+                    name: c.name,
+                    defaultBranchId: c.defaultBranchId,
+                }))}
+                medicalProfiles={allMedicalProfiles}
+                defaultCompanyId={selectedCompanyId || undefined}
+                lockCompany={Boolean(selectedCompanyId)}
+                isOpen={workerQuickOpen}
+                onClose={() => setWorkerQuickOpen(false)}
+                hideDefaultTrigger
+                stacked
+                onWorkerCreated={handleWorkerQuickCreated}
+            />
         </>
     )
 }
