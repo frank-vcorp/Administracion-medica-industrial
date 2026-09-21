@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
-import { isAdminLike } from '@/lib/auth/roles'
+import { isAdminLike, isSuperAdmin } from '@/lib/auth/roles'
 import BrandingLogoManager from '@/components/admin/BrandingLogoManager'
+import OperationalCleanupPanel from '@/components/admin/OperationalCleanupPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,8 @@ export default async function AdminSettingsPage() {
   const session = await getServerSession(authOptions)
   if (!session?.user) redirect('/login')
   if (!isAdminLike(session.user.role)) redirect('/')
+
+  const showOperationalCleanup = isSuperAdmin(session.user.role)
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-3xl space-y-6">
@@ -21,6 +24,8 @@ export default async function AdminSettingsPage() {
       </header>
 
       <BrandingLogoManager />
+
+      {showOperationalCleanup ? <OperationalCleanupPanel /> : null}
     </div>
   )
 }
