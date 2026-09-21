@@ -1,6 +1,6 @@
 /**
  * Plantilla PDF validado de Espirometría — 1 hoja carta.
- * Recorte completo del informe fuente (tabla + gráficas) + bloque clínico AMI.
+ * Gráficas del informe fuente (flujo-volumen + volumen-tiempo) + bloque clínico AMI.
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import type { EspirometryAmiSectionData } from '@/lib/espirometry-ami-section'
@@ -141,9 +141,9 @@ export interface EspirometryValidatedPDFData {
   doctorNotes?: string | null
   recomendacionesValidadas: string[]
   amiSection: EspirometryAmiSectionData
-  /** Recorte tabla + gráficas del informe fuente (sin cabecera ni marca Sibelmed). */
+  /** Recorte de gráficas del informe fuente (sin tabla, cabecera ni marca Sibelmed). */
   sourceCropDataUrl?: string | null
-  /** Ancho/alto del recorte — para calcular altura a todo el ancho de carta. */
+  /** Ancho/alto de las gráficas — para calcular altura a todo el ancho de carta. */
   sourceCropAspectRatio?: number | null
   medico: {
     fullName: string
@@ -191,7 +191,7 @@ function AmiMetricsGrid({ ami }: { ami: EspirometryAmiSectionData }) {
 }
 
 const LETTER_WIDTH_PT = 612
-const SOURCE_IMAGE_MAX_HEIGHT_PT = 370
+const SOURCE_IMAGE_MAX_HEIGHT_PT = 280
 
 export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPDFData }) => {
   const recomendacionesText =

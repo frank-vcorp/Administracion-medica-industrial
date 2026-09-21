@@ -28,10 +28,13 @@ export const SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT = 0.32
 export const SIBELMED_TABLE_GRAPHS_BAND_START_LOGO = 0.48
 export const SIBELMED_TABLE_GRAPHS_BAND_END = 0.99
 
-export type EspirometryTableGraphsCrop = {
+export type EspirometrySourceImageCrop = {
   dataUrl: string
   aspectRatio: number
 }
+
+/** @deprecated Usar `EspirometrySourceImageCrop`. */
+export type EspirometryTableGraphsCrop = EspirometrySourceImageCrop
 export const ESPIROMETRY_CROP_SUBDIR = 'espirometry-crops'
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -87,15 +90,22 @@ export function extractTableAndGraphsFromSourceCropPng(pngBuffer: Buffer): Buffe
   return cropPngBand(pngBuffer, start, SIBELMED_TABLE_GRAPHS_BAND_END)
 }
 
-function toTableGraphsCrop(masked: Buffer): EspirometryTableGraphsCrop {
-  const band = extractTableAndGraphsFromSourceCropPng(masked)
+function toSourceImageCrop(band: Buffer, fallbackAspect = 2.3): EspirometrySourceImageCrop {
   const parsed = PNG.sync.read(band)
   const aspectRatio =
-    parsed.height > 0 ? parsed.width / parsed.height : 1.72
+    parsed.height > 0 ? parsed.width / parsed.height : fallbackAspect
   return {
     dataUrl: `data:image/png;base64,${band.toString('base64')}`,
     aspectRatio,
   }
+}
+
+function toTableGraphsCrop(masked: Buffer): EspirometrySourceImageCrop {
+  return toSourceImageCrop(extractTableAndGraphsFromSourceCropPng(masked), 1.72)
+}
+
+function toGraphsCrop(masked: Buffer): EspirometrySourceImageCrop {
+  return toSourceImageCrop(extractGraphsFromSourceCropPng(masked), 2.3)
 }
 
 async function readSourceCropPngBuffer(
@@ -300,15 +310,29 @@ export async function loadEspirometryGraphsCropDataUrl(
 /** Tabla + gráficas del informe fuente, sin cabecera de paciente ni marca Sibelmed. */
 export async function loadEspirometryTableGraphsCrop(
   meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
-): Promise<EspirometryTableGraphsCrop | null> {
+): Promise<EspirometrySourceImageCrop | null> {
   const buf = await readSourceCropPngBuffer(meta)
   if (!buf) return null
   const masked = stripSibelmedBrandFromPng(buf)
   return toTableGraphsCrop(masked)
 }
 
-export function tableGraphsCropFromSourcePng(pngBuffer: Buffer): EspirometryTableGraphsCrop {
+export function tableGraphsCropFromSourcePng(pngBuffer: Buffer): EspirometrySourceImageCrop {
   return toTableGraphsCrop(stripSibelmedBrandFromPng(pngBuffer))
+}
+
+/** Solo gráficas flujo-volumen y volumen-tiempo (sin tabla ni cabecera). */
+export async function loadEspirometryGraphsCrop(
+  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
+): Promise<EspirometrySourceImageCrop | null> {
+  const buf = await readSourceCropPngBuffer(meta)
+  if (!buf) return null
+  const masked = stripSibelmedBrandFromPng(buf)
+  return toGraphsCrop(masked)
+}
+
+export function graphsCropFromSourcePng(pngBuffer: Buffer): EspirometrySourceImageCrop {
+  return toGraphsCrop(stripSibelmedBrandFromPng(pngBuffer))
 }
 
 function mergeClinicalContext(

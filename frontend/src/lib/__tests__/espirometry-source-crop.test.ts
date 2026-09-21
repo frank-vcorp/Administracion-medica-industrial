@@ -6,6 +6,8 @@ import {
   cropEspirometrySourceTopFromPdfLocal,
   detectTableGraphsBandStart,
   extractTableAndGraphsFromSourceCropPng,
+  extractGraphsFromSourceCropPng,
+  graphsCropFromSourcePng,
   stripSibelmedBrandFromPng,
   SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT,
   SIBELMED_TABLE_GRAPHS_BAND_START_LOGO,
@@ -99,6 +101,21 @@ describe('stripSibelmedBrandFromPng', () => {
       const parsed = PNG.sync.read(band)
       expect(parsed.width / parsed.height).toBeGreaterThan(1.5)
       expect(parsed.height).toBeLessThan(full.height)
+    },
+  )
+
+  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
+    'extractGraphsFromSourceCropPng deja banda ancha con ambas curvas',
+    async () => {
+      const pdfBytes = readFileSync(SAMPLE_PDF)
+      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
+      const band = extractGraphsFromSourceCropPng(cropped)
+      const { PNG } = await import('pngjs')
+      const parsed = PNG.sync.read(band)
+      expect(parsed.width / parsed.height).toBeGreaterThan(2)
+      const crop = graphsCropFromSourcePng(cropped)
+      expect(crop.aspectRatio).toBeGreaterThan(2)
+      expect(crop.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
     },
   )
 
