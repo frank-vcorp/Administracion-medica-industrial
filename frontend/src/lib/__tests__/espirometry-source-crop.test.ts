@@ -1,18 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
+import { PNG } from 'pngjs'
 import {
-  cropEspirometrySourceTopFromPdfLocal,
-  detectTableGraphsBandStart,
-  extractTableAndGraphsFromSourceCropPng,
-  extractGraphsFromSourceCropPng,
-  extractBottomHalfFromSourceCropPng,
+  ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO,
+  ESPIROMETRY_LETTER_HEIGHT_PT,
+  ESPIROMETRY_LETTER_BOTTOM_CLIP_PT,
+} from '@/lib/espirometry-letter-clip'
+import {
+  cropEspirometryLetterBottomHalfFromPdfLocal,
+  extractLetterBottomHalfFromFullPagePng,
   bottomHalfCropFromSourcePng,
-  graphsCropFromSourcePng,
-  stripSibelmedBrandFromPng,
-  SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT,
-  SIBELMED_TABLE_GRAPHS_BAND_START_LOGO,
 } from '@/lib/espirometry-source-crop'
 
 const SAMPLE_PDF = path.join(
@@ -22,13 +21,6 @@ const SAMPLE_PDF = path.join(
   'PACIENTES',
   '167555 - CARRAZCO SUAREZ ALVARO RX0001',
   'espiro.pdf',
-)
-const SAMPLE_PDF_LOGO = path.join(
-  process.cwd(),
-  '..',
-  'context',
-  'datos AMI',
-  'Espirometria-OEXJ-19860808-M-AMI-CLI.pdf',
 )
 
 function hasPdftoppm(): boolean {
@@ -40,110 +32,57 @@ function hasPdftoppm(): boolean {
   }
 }
 
-function ocrContainsSibelmed(pngBuffer: Buffer): boolean {
-  const tmp = `/tmp/ami-espiro-mask-${process.pid}.png`
-  const out = `/tmp/ami-espiro-mask-${process.pid}`
-  try {
-    writeFileSync(tmp, pngBuffer)
-    execFileSync('tesseract', [tmp, out, '-l', 'spa+eng'], { stdio: 'ignore' })
-    const text = readFileSync(`${out}.txt`, 'utf8').toUpperCase()
-    return text.includes('SIBELMED')
-  } catch {
-    return false
-  } finally {
-    try {
-      unlinkSync(tmp)
-      unlinkSync(`${out}.txt`)
-    } catch {
-      // ignore
-    }
-  }
-}
-
-describe('stripSibelmedBrandFromPng', () => {
-  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
-    'elimina texto SIBELMED de un PDF real',
-    async () => {
-      const pdfBytes = readFileSync(SAMPLE_PDF)
-      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
-      expect(ocrContainsSibelmed(cropped)).toBe(false)
-    },
-  )
+describe('espirometry letter bottom clip', () => {
+  it('constantes carta mitad inferior 396→792 pt', () => {
+    expect(ESPIROMETRY_LETTER_BOTTOM_CLIP_PT).toEqual({
+      x0: 0,
+      y0: 396,
+      x1: 612,
+      y1: 792,
+    })
+    expect(ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO).toBe(396 / ESPIROMETRY_LETTER_HEIGHT_PT)
+  })
 
   it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
-    'detectTableGraphsBandStart elige layout compacto',
+    'cropEspirometryLetterBottomHalfFromPdfLocal recorta mitad inferior ancho completo',
     async () => {
       const pdfBytes = readFileSync(SAMPLE_PDF)
-      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
-      expect(detectTableGraphsBandStart(cropped)).toBe(
-        SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT,
-      )
-    },
-  )
-
-  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF_LOGO))(
-    'detectTableGraphsBandStart elige layout con logo grande',
-    async () => {
-      const pdfBytes = readFileSync(SAMPLE_PDF_LOGO)
-      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
-      expect(detectTableGraphsBandStart(cropped)).toBe(
-        SIBELMED_TABLE_GRAPHS_BAND_START_LOGO,
-      )
-    },
-  )
-
-  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
-    'extractTableAndGraphsFromSourceCropPng recorta banda más ancha que alta',
-    async () => {
-      const pdfBytes = readFileSync(SAMPLE_PDF)
-      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
-      const band = extractTableAndGraphsFromSourceCropPng(cropped)
-      const { PNG } = await import('pngjs')
-      const full = PNG.sync.read(cropped)
-      const parsed = PNG.sync.read(band)
-      expect(parsed.width / parsed.height).toBeGreaterThan(1.5)
-      expect(parsed.height).toBeLessThan(full.height)
-    },
-  )
-
-  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
-    'extractBottomHalfFromSourceCropPng toma la mitad inferior del recorte',
-    async () => {
-      const pdfBytes = readFileSync(SAMPLE_PDF)
-      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
-      const bottom = extractBottomHalfFromSourceCropPng(cropped)
-      const { PNG } = await import('pngjs')
-      const full = PNG.sync.read(cropped)
+      const bottom = await cropEspirometryLetterBottomHalfFromPdfLocal(pdfBytes)
       const parsed = PNG.sync.read(bottom)
+
+      const tempDir = require('node:fs').mkdtempSync('/tmp/ami-espiro-full-')
+      const pdfPath = `${tempDir}/s.pdf`
+      const prefix = `${tempDir}/p`
+      require('node:fs').writeFileSync(pdfPath, pdfBytes)
+      execFileSync('pdftoppm', ['-png', '-r', '150', '-f', '1', '-l', '1', pdfPath, prefix])
+      const full = PNG.sync.read(readFileSync(`${prefix}-1.png`))
+
       expect(parsed.width).toBe(full.width)
       expect(parsed.height).toBe(Math.floor(full.height / 2))
-      const crop = bottomHalfCropFromSourcePng(cropped)
-      expect(crop.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+      expect(parsed.width / parsed.height).toBeCloseTo(612 / 396, 1)
     },
   )
 
-  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
-    'extractGraphsFromSourceCropPng deja banda ancha con ambas curvas',
-    async () => {
-      const pdfBytes = readFileSync(SAMPLE_PDF)
-      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
-      const band = extractGraphsFromSourceCropPng(cropped)
-      const { PNG } = await import('pngjs')
-      const parsed = PNG.sync.read(band)
-      expect(parsed.width / parsed.height).toBeGreaterThan(2)
-      const crop = graphsCropFromSourcePng(cropped)
-      expect(crop.aspectRatio).toBeGreaterThan(2)
-      expect(crop.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
-    },
-  )
+  it('extractLetterBottomHalfFromFullPagePng conserva ancho', () => {
+    const src = new PNG({ width: 612, height: 792 })
+    for (let i = 0; i < src.data.length; i += 4) {
+      src.data[i] = 10
+      src.data[i + 1] = 20
+      src.data[i + 2] = 30
+      src.data[i + 3] = 255
+    }
+    const input = PNG.sync.write(src)
+    const out = extractLetterBottomHalfFromFullPagePng(input)
+    const parsed = PNG.sync.read(out)
+    expect(parsed.width).toBe(612)
+    expect(parsed.height).toBe(396)
+  })
 
-  it('stripSibelmedBrandFromPng es idempotente', () => {
-    const input = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-      'base64',
-    )
-    const once = stripSibelmedBrandFromPng(input)
-    const twice = stripSibelmedBrandFromPng(once)
-    expect(twice.equals(once)).toBe(true)
+  it('bottomHalfCropFromSourcePng devuelve data URL', () => {
+    const src = new PNG({ width: 100, height: 200 })
+    const input = PNG.sync.write(src)
+    const crop = bottomHalfCropFromSourcePng(input)
+    expect(crop.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+    expect(crop.aspectRatio).toBeCloseTo(100 / 100, 5)
   })
 })

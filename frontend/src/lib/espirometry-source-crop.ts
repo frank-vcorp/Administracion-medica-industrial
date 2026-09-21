@@ -1,7 +1,8 @@
 /**
- * Recorte fijo de la zona superior del PDF Sibelmed W20s (tabla + gráficas).
- * Producción: Railway vía /api/v2/event-tests/espirometry-source-crop (poppler).
- * Desarrollo local: fallback con pdftoppm + pngjs.
+ * Recorte fijo mitad inferior del PDF fuente Sibelmed — carta 612×792 pt.
+ * Clip: (0, 396) → (612, 792), ancho completo.
+ * Producción: Railway /api/v2/event-tests/espirometry-source-crop (poppler).
+ * Desarrollo local: pdftoppm + pngjs.
  */
 import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises'
@@ -11,97 +12,48 @@ import { promisify } from 'node:util'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { PNG } from 'pngjs'
-import { cropPngTop } from '@/lib/png-crop-top'
 import { cropPngBand } from '@/lib/png-crop-band'
-import { maskPngRects, SIBELMED_BRAND_MASKS } from '@/lib/png-mask-rect'
 import { resolveBackendFileUrl } from '@/lib/zip-cierre-clinico'
+import {
+  ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO,
+  ESPIROMETRY_LETTER_BOTTOM_Y1_RATIO,
+  ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID,
+} from '@/lib/espirometry-letter-clip'
 
 const execFileAsync = promisify(execFile)
 
+/** @deprecated Recorte legacy 67% superior — ya no se usa en PDF validado. */
 export const SIBELMED_W20S_TOP_CROP_RATIO = 0.67
-/** Mitad inferior del recorte fuente (50% → 100%). */
-export const ESPIROMETRY_SOURCE_BOTTOM_HALF_START = 0.5
-export const ESPIROMETRY_SOURCE_BOTTOM_HALF_END = 1
-/** Banda inferior del recorte Sibelmed donde están flujo-volumen y volumen-tiempo. */
-export const SIBELMED_GRAPHS_BAND_START = 0.48
-export const SIBELMED_GRAPHS_BAND_END = 0.98
-/** Banda tabla + gráficas (sin cabecera de paciente) — layout compacto Sibelmed. */
-export const SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT = 0.32
-/** Banda tabla + gráficas — layout con logo grande arriba. */
-export const SIBELMED_TABLE_GRAPHS_BAND_START_LOGO = 0.48
-export const SIBELMED_TABLE_GRAPHS_BAND_END = 0.99
 
 export type EspirometrySourceImageCrop = {
   dataUrl: string
   aspectRatio: number
 }
 
-/** @deprecated Usar `EspirometrySourceImageCrop`. */
-export type EspirometryTableGraphsCrop = EspirometrySourceImageCrop
 export const ESPIROMETRY_CROP_SUBDIR = 'espirometry-crops'
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
+const ESPIROMETRY_RENDER_DPI = 150
 
 export type EspirometrySourceCropMeta = {
   relativePath: string
   fileUrl?: string
-  templateId: 'sibelmed-w20s' | 'sibelmed-w20s-v2'
+  templateId:
+    | 'sibelmed-w20s'
+    | 'sibelmed-w20s-v2'
+    | 'sibelmed-letter-bottom-v1'
   generatedAt: string
 }
 
-export function stripSibelmedBrandFromPng(pngBuffer: Buffer): Buffer {
-  return maskPngRects(pngBuffer, SIBELMED_BRAND_MASKS)
-}
-
-export function extractBottomHalfFromSourceCropPng(pngBuffer: Buffer): Buffer {
+/** Mitad inferior de una página carta ya rasterizada (ancho intacto). */
+export function extractLetterBottomHalfFromFullPagePng(pngBuffer: Buffer): Buffer {
   return cropPngBand(
     pngBuffer,
-    ESPIROMETRY_SOURCE_BOTTOM_HALF_START,
-    ESPIROMETRY_SOURCE_BOTTOM_HALF_END,
+    ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO,
+    ESPIROMETRY_LETTER_BOTTOM_Y1_RATIO,
   )
 }
 
-export function extractGraphsFromSourceCropPng(pngBuffer: Buffer): Buffer {
-  return cropPngBand(
-    pngBuffer,
-    SIBELMED_GRAPHS_BAND_START,
-    SIBELMED_GRAPHS_BAND_END,
-  )
-}
-
-function rowInkDensity(png: PNG, yRatio: number, heightRatio = 0.03): number {
-  const { width, height, data } = png
-  const y0 = Math.max(0, Math.floor(height * yRatio))
-  const y1 = Math.min(height, Math.ceil(height * (yRatio + heightRatio)))
-  let dark = 0
-  let total = 0
-  for (let y = y0; y < y1; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (width * y + x) << 2
-      if (data[idx] < 240 || data[idx + 1] < 240 || data[idx + 2] < 240) dark++
-      total++
-    }
-  }
-  return total > 0 ? dark / total : 0
-}
-
-/** Detecta inicio de tabla según layout compacto vs. logo grande arriba. */
-export function detectTableGraphsBandStart(pngBuffer: Buffer): number {
-  const png = PNG.sync.read(pngBuffer)
-  const upperBlock = rowInkDensity(png, 0.3)
-  const gapBeforeTable = rowInkDensity(png, 0.48)
-  if (upperBlock > 0.08 && gapBeforeTable < 0.05) {
-    return SIBELMED_TABLE_GRAPHS_BAND_START_LOGO
-  }
-  return SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT
-}
-
-/** Tabla de parámetros + repetibilidad ATS/ERS + ambas gráficas (como foto 2). */
-export function extractTableAndGraphsFromSourceCropPng(pngBuffer: Buffer): Buffer {
-  const start = detectTableGraphsBandStart(pngBuffer)
-  return cropPngBand(pngBuffer, start, SIBELMED_TABLE_GRAPHS_BAND_END)
-}
-
-function toSourceImageCrop(band: Buffer, fallbackAspect = 2.3): EspirometrySourceImageCrop {
+function toSourceImageCrop(band: Buffer, fallbackAspect = 1.55): EspirometrySourceImageCrop {
   const parsed = PNG.sync.read(band)
   const aspectRatio =
     parsed.height > 0 ? parsed.width / parsed.height : fallbackAspect
@@ -109,18 +61,6 @@ function toSourceImageCrop(band: Buffer, fallbackAspect = 2.3): EspirometrySourc
     dataUrl: `data:image/png;base64,${band.toString('base64')}`,
     aspectRatio,
   }
-}
-
-function toTableGraphsCrop(masked: Buffer): EspirometrySourceImageCrop {
-  return toSourceImageCrop(extractTableAndGraphsFromSourceCropPng(masked), 1.72)
-}
-
-function toGraphsCrop(masked: Buffer): EspirometrySourceImageCrop {
-  return toSourceImageCrop(extractGraphsFromSourceCropPng(masked), 2.3)
-}
-
-function toBottomHalfCrop(masked: Buffer): EspirometrySourceImageCrop {
-  return toSourceImageCrop(extractBottomHalfFromSourceCropPng(masked), 2.1)
 }
 
 async function readSourceCropPngBuffer(
@@ -193,10 +133,9 @@ export async function readEventTestSourcePdfBytes(
   }
 }
 
-/** Recorte local (solo dev / entornos con pdftoppm). */
-export async function cropEspirometrySourceTopFromPdfLocal(
+/** Rasteriza página 1 completa y recorta (0,396)→(612,792) pt. */
+export async function cropEspirometryLetterBottomHalfFromPdfLocal(
   pdfBuffer: Buffer,
-  cropRatio = SIBELMED_W20S_TOP_CROP_RATIO,
 ): Promise<Buffer> {
   const tempDir = await mkdtemp(path.join(tmpdir(), 'ami-espiro-crop-'))
   const pdfPath = path.join(tempDir, 'source.pdf')
@@ -207,7 +146,7 @@ export async function cropEspirometrySourceTopFromPdfLocal(
     await execFileAsync('pdftoppm', [
       '-png',
       '-r',
-      '150',
+      String(ESPIROMETRY_RENDER_DPI),
       '-f',
       '1',
       '-l',
@@ -218,12 +157,15 @@ export async function cropEspirometrySourceTopFromPdfLocal(
 
     const pngPath = `${prefix}-1.png`
     const fullPage = await readFile(pngPath)
-    const cropped = cropPngTop(fullPage, cropRatio)
-    return stripSibelmedBrandFromPng(cropped)
+    return extractLetterBottomHalfFromFullPagePng(fullPage)
   } finally {
     await rm(tempDir, { recursive: true, force: true })
   }
 }
+
+/** @deprecated Usar cropEspirometryLetterBottomHalfFromPdfLocal. */
+export const cropEspirometrySourceTopFromPdfLocal =
+  cropEspirometryLetterBottomHalfFromPdfLocal
 
 async function cropViaBackend(
   eventTestId: string,
@@ -276,7 +218,7 @@ async function cropViaBackend(
     return {
       relativePath: payload.relative_path,
       fileUrl: payload.file_url ?? `/api/files/${payload.relative_path}`,
-      templateId: 'sibelmed-w20s-v2',
+      templateId: ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID,
       generatedAt: payload.generated_at ?? new Date().toISOString(),
     }
   } catch (err) {
@@ -297,71 +239,22 @@ export async function persistEspirometrySourceCropPng(
   return {
     relativePath,
     fileUrl: `/api/files/${relativePath}`,
-    templateId: 'sibelmed-w20s-v2',
+    templateId: ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID,
     generatedAt: new Date().toISOString(),
   }
 }
 
-export async function loadEspirometrySourceCropDataUrl(
-  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
-): Promise<string | null> {
-  const buf = await readSourceCropPngBuffer(meta)
-  if (!buf) return null
-  const masked = stripSibelmedBrandFromPng(buf)
-  return `data:image/png;base64,${masked.toString('base64')}`
-}
-
-/** Gráficas flujo-volumen / volumen-tiempo recortadas del PDF fuente (sin marca Sibelmed). */
-export async function loadEspirometryGraphsCropDataUrl(
-  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
-): Promise<string | null> {
-  const buf = await readSourceCropPngBuffer(meta)
-  if (!buf) return null
-  const masked = stripSibelmedBrandFromPng(buf)
-  const graphs = extractGraphsFromSourceCropPng(masked)
-  return `data:image/png;base64,${graphs.toString('base64')}`
-}
-
-/** Tabla + gráficas del informe fuente, sin cabecera de paciente ni marca Sibelmed. */
-export async function loadEspirometryTableGraphsCrop(
-  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
-): Promise<EspirometrySourceImageCrop | null> {
-  const buf = await readSourceCropPngBuffer(meta)
-  if (!buf) return null
-  const masked = stripSibelmedBrandFromPng(buf)
-  return toTableGraphsCrop(masked)
-}
-
-export function tableGraphsCropFromSourcePng(pngBuffer: Buffer): EspirometrySourceImageCrop {
-  return toTableGraphsCrop(stripSibelmedBrandFromPng(pngBuffer))
-}
-
-/** Solo gráficas flujo-volumen y volumen-tiempo (sin tabla ni cabecera). */
-export async function loadEspirometryGraphsCrop(
-  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
-): Promise<EspirometrySourceImageCrop | null> {
-  const buf = await readSourceCropPngBuffer(meta)
-  if (!buf) return null
-  const masked = stripSibelmedBrandFromPng(buf)
-  return toGraphsCrop(masked)
-}
-
-export function graphsCropFromSourcePng(pngBuffer: Buffer): EspirometrySourceImageCrop {
-  return toGraphsCrop(stripSibelmedBrandFromPng(pngBuffer))
-}
-
-/** Mitad inferior del informe fuente rasterizado (sin marca Sibelmed). */
+/** PNG persistido = mitad inferior lista para el PDF validado. */
 export async function loadEspirometryBottomHalfCrop(
   meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
 ): Promise<EspirometrySourceImageCrop | null> {
   const buf = await readSourceCropPngBuffer(meta)
   if (!buf) return null
-  const masked = stripSibelmedBrandFromPng(buf)
-  return toBottomHalfCrop(masked)
+  return toSourceImageCrop(buf)
 }
 
-export function bottomHalfCropFromSourcePng(pngBuffer: Buffer): EspirometrySourceImageCrop {
-  return toBottomHalfCrop(stripSibelmedBrandFromPng(pngBuffer))
+export function bottomHalfCropFromSourcePng(fullPagePng: Buffer): EspirometrySourceImageCrop {
+  return toSourceImageCrop(extractLetterBottomHalfFromFullPagePng(fullPagePng))
 }
 
 function mergeClinicalContext(
@@ -375,7 +268,7 @@ function mergeClinicalContext(
   return { ...base, ...patch }
 }
 
-/** Genera y persiste el recorte superior si hay PDF fuente de espirometría. */
+/** Genera y persiste el recorte inferior si hay PDF fuente de espirometría. */
 export async function ensureEspirometrySourceCrop(
   eventTestId: string,
   options?: { force?: boolean },
@@ -394,9 +287,10 @@ export async function ensureEspirometrySourceCrop(
   const ctx = eventTest.clinicalContext as Record<string, unknown> | null
   const existing = ctx?.espirometrySourceCrop as EspirometrySourceCropMeta | undefined
   const needsRegenerate =
-    existing?.templateId !== 'sibelmed-w20s-v2' || options?.force === true
+    existing?.templateId !== ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID ||
+    options?.force === true
   if (existing?.relativePath && !needsRegenerate) {
-    const preview = await loadEspirometrySourceCropDataUrl(existing)
+    const preview = await loadEspirometryBottomHalfCrop(existing)
     if (preview) return existing
   }
 
@@ -411,7 +305,7 @@ export async function ensureEspirometrySourceCrop(
       const pdfBytes = await readEventTestSourcePdfBytes(fileUrl)
       if (!pdfBytes) return null
       try {
-        const pngBuffer = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
+        const pngBuffer = await cropEspirometryLetterBottomHalfFromPdfLocal(pdfBytes)
         return await persistEspirometrySourceCropPng(eventTestId, pngBuffer)
       } catch (err) {
         console.warn('[espirometry-crop] Recorte local falló:', err)

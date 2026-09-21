@@ -1910,11 +1910,12 @@ class EspirometrySourceCropRequest(BaseModel):
 @app.post("/api/v2/event-tests/espirometry-source-crop")
 async def v2_event_test_espirometry_source_crop(body: EspirometrySourceCropRequest):
     """
-    Genera el recorte PNG (tabla + gráficas) de la primera página del PDF
-    Sibelmed W20s. Corre en Railway (poppler + Pillow) para Vercel serverless.
+    Genera el recorte PNG de la mitad inferior (0,396)→(612,792 pt) de la
+    primera página del PDF Sibelmed. Corre en Railway (poppler + Pillow).
     """
     from app.services.pdf.espirometry_source_crop import (
-        crop_espirometry_source_top_from_pdf,
+        ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID,
+        crop_espirometry_letter_bottom_half_from_pdf,
         espirometry_crop_output_key,
         file_url_to_storage_key,
     )
@@ -1938,7 +1939,7 @@ async def v2_event_test_espirometry_source_crop(body: EspirometrySourceCropReque
         raise HTTPException(status_code=404, detail="PDF fuente no encontrado")
 
     try:
-        png_bytes = crop_espirometry_source_top_from_pdf(pdf_bytes)
+        png_bytes = crop_espirometry_letter_bottom_half_from_pdf(pdf_bytes)
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -1959,7 +1960,7 @@ async def v2_event_test_espirometry_source_crop(body: EspirometrySourceCropReque
         "status": "success",
         "relative_path": out_key,
         "file_url": file_url,
-        "template_id": "sibelmed-w20s",
+        "template_id": ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 

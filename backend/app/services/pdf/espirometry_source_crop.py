@@ -1,5 +1,6 @@
 """
-Recorte fijo de la zona superior del PDF Sibelmed W20s (tabla + gráficas).
+Recorte fijo mitad inferior del PDF fuente Sibelmed — hoja carta 612×792 pt.
+Clip exacto: (0, 396) → (612, 792), ancho completo.
 Ejecutado en Railway donde poppler-utils está disponible.
 """
 from __future__ import annotations
@@ -9,15 +10,15 @@ from typing import Optional
 
 from pdf2image import convert_from_bytes
 
-SIBELMED_W20S_TOP_CROP_RATIO = 0.67
 ESPIROMETRY_CROP_SUBDIR = "espirometry-crops"
+ESPIROMETRY_RENDER_DPI = 150
+ESPIROMETRY_LETTER_WIDTH_PT = 612
+ESPIROMETRY_LETTER_HEIGHT_PT = 792
+ESPIROMETRY_LETTER_BOTTOM_Y0_PT = 396
+ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID = "sibelmed-letter-bottom-v1"
 
-# Regiones enmascaradas (ratios sobre PNG recortado @150 DPI) — espejo de frontend png-mask-rect.ts
-SIBELMED_BRAND_MASKS: list[tuple[float, float, float, float]] = [
-    (0.60, 0.0, 0.40, 0.22),
-    (0.50, 0.325, 0.50, 0.035),
-    (0.55, 0.495, 0.45, 0.035),
-]
+# Compat tests / imports legacy
+SIBELMED_W20S_TOP_CROP_RATIO = 0.67
 
 
 def file_url_to_storage_key(file_url: str) -> Optional[str]:
@@ -38,29 +39,11 @@ def espirometry_crop_output_key(event_test_id: str) -> str:
     return f"{ESPIROMETRY_CROP_SUBDIR}/{safe_id}.png"
 
 
-def _mask_png_rect(img, left_ratio: float, top_ratio: float, width_ratio: float, height_ratio: float):
-    width, height = img.size
-    x0 = max(0, int(width * left_ratio))
-    y0 = max(0, int(height * top_ratio))
-    x1 = min(width, int(x0 + width * width_ratio))
-    y1 = min(height, int(y0 + height * height_ratio))
-    for y in range(y0, y1):
-        for x in range(x0, x1):
-            img.putpixel((x, y), (255, 255, 255))
-
-
-def strip_sibelmed_brand_from_png(img) -> None:
-    for left, top, w_ratio, h_ratio in SIBELMED_BRAND_MASKS:
-        _mask_png_rect(img, left, top, w_ratio, h_ratio)
-
-
-def crop_espirometry_source_top_from_pdf(
-    pdf_bytes: bytes,
-    crop_ratio: float = SIBELMED_W20S_TOP_CROP_RATIO,
-) -> bytes:
+def crop_espirometry_letter_bottom_half_from_pdf(pdf_bytes: bytes) -> bytes:
+    """Rasteriza página 1 completa y recorta (0,396)→(612,792) en puntos carta."""
     pages = convert_from_bytes(
         pdf_bytes,
-        dpi=150,
+        dpi=ESPIROMETRY_RENDER_DPI,
         first_page=1,
         last_page=1,
     )
@@ -72,9 +55,17 @@ def crop_espirometry_source_top_from_pdf(
     if width <= 0 or height <= 0:
         raise ValueError("Dimensiones inválidas en la página rasterizada")
 
-    crop_height = max(1, round(height * crop_ratio))
-    cropped = img.crop((0, 0, width, crop_height))
-    strip_sibelmed_brand_from_png(cropped)
+    y0 = round(height * ESPIROMETRY_LETTER_BOTTOM_Y0_PT / ESPIROMETRY_LETTER_HEIGHT_PT)
+    y0 = max(0, min(height - 1, y0))
+    cropped = img.crop((0, y0, width, height))
     out = io.BytesIO()
     cropped.save(out, format="PNG")
     return out.getvalue()
+
+
+def crop_espirometry_source_top_from_pdf(
+    pdf_bytes: bytes,
+    crop_ratio: float = SIBELMED_W20S_TOP_CROP_RATIO,
+) -> bytes:
+    """@deprecated Usar crop_espirometry_letter_bottom_half_from_pdf."""
+    return crop_espirometry_letter_bottom_half_from_pdf(pdf_bytes)

@@ -8,7 +8,9 @@ from pdf2image.exceptions import PDFInfoNotInstalledError
 import pytest
 
 from app.services.pdf.espirometry_source_crop import (
-    crop_espirometry_source_top_from_pdf,
+    ESPIROMETRY_LETTER_BOTTOM_Y0_PT,
+    ESPIROMETRY_LETTER_HEIGHT_PT,
+    crop_espirometry_letter_bottom_half_from_pdf,
     espirometry_crop_output_key,
     file_url_to_storage_key,
 )
@@ -31,10 +33,15 @@ def _minimal_pdf_bytes() -> bytes:
     return buf.getvalue()
 
 
-def test_crop_espirometry_source_top_from_pdf():
+def test_crop_espirometry_letter_bottom_half_from_pdf():
     try:
-        out = crop_espirometry_source_top_from_pdf(_minimal_pdf_bytes(), crop_ratio=0.5)
+        out = crop_espirometry_letter_bottom_half_from_pdf(_minimal_pdf_bytes())
     except PDFInfoNotInstalledError:
         pytest.skip("poppler no instalado en este entorno")
     assert out[:8] == b"\x89PNG\r\n\x1a\n"
     assert len(out) > 100
+    img = Image.open(BytesIO(out))
+    # Mitad inferior de página carta @150dpi ≈ 1275×825; tolerancia para PDF mínimo
+    assert img.width > 50
+    assert ESPIROMETRY_LETTER_BOTTOM_Y0_PT == 396
+    assert ESPIROMETRY_LETTER_HEIGHT_PT == 792

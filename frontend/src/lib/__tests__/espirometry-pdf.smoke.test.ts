@@ -10,14 +10,15 @@ import {
   buildEspirometryPdfData,
   generateEspirometryValidatedPdf,
 } from '@/lib/espirometry-pdf'
-import { bottomHalfCropFromSourcePng } from '@/lib/espirometry-source-crop'
+import { cropEspirometryLetterBottomHalfFromPdfLocal } from '@/lib/espirometry-source-crop'
 
-const CROP_PATH = path.join(
+const SAMPLE_PDF = path.join(
   process.cwd(),
   '..',
-  'uploads',
-  '_test-crop',
-  'espirometry-top.png',
+  'context',
+  'PACIENTES',
+  '167555 - CARRAZCO SUAREZ ALVARO RX0001',
+  'espiro.pdf',
 )
 const OUT_PATH = path.join(
   process.cwd(),
@@ -29,19 +30,22 @@ const OUT_PATH = path.join(
 
 describe('espirometry PDF smoke — layout híbrido', () => {
   it('genera PDF con recorte Sibelmed + bloque AMI', async () => {
-    let cropBuf: Buffer
+    let bottomHalfCrop: { dataUrl: string; aspectRatio: number }
     try {
-      await access(CROP_PATH)
-      cropBuf = await readFile(CROP_PATH)
+      await access(SAMPLE_PDF)
+      const pdfBuf = await readFile(SAMPLE_PDF)
+      const pngBuf = await cropEspirometryLetterBottomHalfFromPdfLocal(pdfBuf)
+      bottomHalfCrop = {
+        dataUrl: `data:image/png;base64,${pngBuf.toString('base64')}`,
+        aspectRatio: 612 / 396,
+      }
     } catch {
-      // Generar recorte mínimo si no existe (CI sin pdftoppm)
-      cropBuf = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-        'base64',
-      )
+      bottomHalfCrop = {
+        dataUrl:
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        aspectRatio: 1,
+      }
     }
-
-    const bottomHalfCrop = bottomHalfCropFromSourcePng(cropBuf)
     const data = buildEspirometryPdfData({
       reviewId: 'smoke-hybrid',
       doctorStatus: 'REVIEWED_ACCEPTED',
