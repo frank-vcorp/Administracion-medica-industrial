@@ -55,6 +55,7 @@ import {
   type LucideProps,
 } from 'lucide-react'
 import { isAdminLike, isSuperAdmin } from '@/lib/auth/roles'
+import { AmiCornerWaveAccent } from '@/components/AmiCornerWaveAccent'
 import { BrandLogo } from '@/components/BrandLogo'
 import { GlobalSearchLauncher } from '@/components/GlobalSearchLauncher'
 
@@ -293,7 +294,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, [mobileNavOpen])
 
   return (
-    <div className="flex h-screen bg-ami-surface">
+    <div className="relative flex h-screen bg-ami-surface">
+      <AmiCornerWaveAccent />
       <aside
         className={`${
           sidebarCollapsed ? 'w-[4.5rem]' : 'w-64'
@@ -395,7 +397,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-ami-secondary/15 bg-white px-4 md:hidden">
           <button
             type="button"
