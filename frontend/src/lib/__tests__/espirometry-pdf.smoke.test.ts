@@ -10,7 +10,7 @@ import {
   buildEspirometryPdfData,
   generateEspirometryValidatedPdf,
 } from '@/lib/espirometry-pdf'
-import { stripSibelmedBrandFromPng } from '@/lib/espirometry-source-crop'
+import { tableGraphsCropFromSourcePng } from '@/lib/espirometry-source-crop'
 
 const CROP_PATH = path.join(
   process.cwd(),
@@ -41,7 +41,7 @@ describe('espirometry PDF smoke — layout híbrido', () => {
       )
     }
 
-    const sourceCropDataUrl = `data:image/png;base64,${stripSibelmedBrandFromPng(cropBuf).toString('base64')}`
+    const tableGraphsCrop = tableGraphsCropFromSourcePng(cropBuf)
     const data = buildEspirometryPdfData({
       reviewId: 'smoke-hybrid',
       doctorStatus: 'REVIEWED_ACCEPTED',
@@ -75,7 +75,8 @@ describe('espirometry PDF smoke — layout híbrido', () => {
           'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
       },
       logoDataUrl: null,
-      sourceCropDataUrl,
+      sourceCropDataUrl: tableGraphsCrop.dataUrl,
+      sourceCropAspectRatio: tableGraphsCrop.aspectRatio,
     })
 
     const result = await generateEspirometryValidatedPdf({

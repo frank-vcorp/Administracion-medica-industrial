@@ -48,7 +48,6 @@ const styles = StyleSheet.create({
   },
   sourceImage: {
     width: '100%',
-    height: 310,
     objectFit: 'contain',
   },
   clinicalPanel: {
@@ -142,8 +141,10 @@ export interface EspirometryValidatedPDFData {
   doctorNotes?: string | null
   recomendacionesValidadas: string[]
   amiSection: EspirometryAmiSectionData
-  /** Recorte del informe fuente (tabla + gráficas, sin marca Sibelmed). */
+  /** Recorte tabla + gráficas del informe fuente (sin cabecera ni marca Sibelmed). */
   sourceCropDataUrl?: string | null
+  /** Ancho/alto del recorte — para calcular altura a todo el ancho de carta. */
+  sourceCropAspectRatio?: number | null
   medico: {
     fullName: string
     professionalLicense: string
@@ -189,12 +190,19 @@ function AmiMetricsGrid({ ami }: { ami: EspirometryAmiSectionData }) {
   )
 }
 
+const LETTER_WIDTH_PT = 612
+const SOURCE_IMAGE_MAX_HEIGHT_PT = 370
+
 export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPDFData }) => {
   const recomendacionesText =
     data.recomendacionesValidadas.length > 0
       ? data.recomendacionesValidadas.join(' ')
       : '—'
   const logoSrc = data.logoUrl
+  const sourceImageHeight =
+    data.sourceCropAspectRatio && data.sourceCropAspectRatio > 0
+      ? Math.min(SOURCE_IMAGE_MAX_HEIGHT_PT, LETTER_WIDTH_PT / data.sourceCropAspectRatio)
+      : 340
 
   return (
     <Document
@@ -231,7 +239,10 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
 
         <View style={styles.sourceWrap}>
           {data.sourceCropDataUrl ? (
-            <Image style={styles.sourceImage} src={data.sourceCropDataUrl} />
+            <Image
+              style={[styles.sourceImage, { height: sourceImageHeight }]}
+              src={data.sourceCropDataUrl}
+            />
           ) : (
             <Text style={[styles.blockText, { color: '#64748b', paddingHorizontal: 14 }]}>
               Informe del equipo no disponible — ver PDF fuente en el módulo de pruebas clínicas.

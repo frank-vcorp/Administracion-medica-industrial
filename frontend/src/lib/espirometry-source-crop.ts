@@ -10,6 +10,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
+import { PNG } from 'pngjs'
 import { cropPngTop } from '@/lib/png-crop-top'
 import { cropPngBand } from '@/lib/png-crop-band'
 import { maskPngRects, SIBELMED_BRAND_MASKS } from '@/lib/png-mask-rect'
@@ -21,6 +22,16 @@ export const SIBELMED_W20S_TOP_CROP_RATIO = 0.67
 /** Banda inferior del recorte Sibelmed donde están flujo-volumen y volumen-tiempo. */
 export const SIBELMED_GRAPHS_BAND_START = 0.48
 export const SIBELMED_GRAPHS_BAND_END = 0.98
+/** Banda tabla + gráficas (sin cabecera de paciente) — layout compacto Sibelmed. */
+export const SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT = 0.32
+/** Banda tabla + gráficas — layout con logo grande arriba. */
+export const SIBELMED_TABLE_GRAPHS_BAND_START_LOGO = 0.48
+export const SIBELMED_TABLE_GRAPHS_BAND_END = 0.99
+
+export type EspirometryTableGraphsCrop = {
+  dataUrl: string
+  aspectRatio: number
+}
 export const ESPIROMETRY_CROP_SUBDIR = 'espirometry-crops'
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -41,6 +52,50 @@ export function extractGraphsFromSourceCropPng(pngBuffer: Buffer): Buffer {
     SIBELMED_GRAPHS_BAND_START,
     SIBELMED_GRAPHS_BAND_END,
   )
+}
+
+function rowInkDensity(png: PNG, yRatio: number, heightRatio = 0.03): number {
+  const { width, height, data } = png
+  const y0 = Math.max(0, Math.floor(height * yRatio))
+  const y1 = Math.min(height, Math.ceil(height * (yRatio + heightRatio)))
+  let dark = 0
+  let total = 0
+  for (let y = y0; y < y1; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (width * y + x) << 2
+      if (data[idx] < 240 || data[idx + 1] < 240 || data[idx + 2] < 240) dark++
+      total++
+    }
+  }
+  return total > 0 ? dark / total : 0
+}
+
+/** Detecta inicio de tabla según layout compacto vs. logo grande arriba. */
+export function detectTableGraphsBandStart(pngBuffer: Buffer): number {
+  const png = PNG.sync.read(pngBuffer)
+  const upperBlock = rowInkDensity(png, 0.3)
+  const gapBeforeTable = rowInkDensity(png, 0.48)
+  if (upperBlock > 0.08 && gapBeforeTable < 0.05) {
+    return SIBELMED_TABLE_GRAPHS_BAND_START_LOGO
+  }
+  return SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT
+}
+
+/** Tabla de parámetros + repetibilidad ATS/ERS + ambas gráficas (como foto 2). */
+export function extractTableAndGraphsFromSourceCropPng(pngBuffer: Buffer): Buffer {
+  const start = detectTableGraphsBandStart(pngBuffer)
+  return cropPngBand(pngBuffer, start, SIBELMED_TABLE_GRAPHS_BAND_END)
+}
+
+function toTableGraphsCrop(masked: Buffer): EspirometryTableGraphsCrop {
+  const band = extractTableAndGraphsFromSourceCropPng(masked)
+  const parsed = PNG.sync.read(band)
+  const aspectRatio =
+    parsed.height > 0 ? parsed.width / parsed.height : 1.72
+  return {
+    dataUrl: `data:image/png;base64,${band.toString('base64')}`,
+    aspectRatio,
+  }
 }
 
 async function readSourceCropPngBuffer(
@@ -240,6 +295,20 @@ export async function loadEspirometryGraphsCropDataUrl(
   const masked = stripSibelmedBrandFromPng(buf)
   const graphs = extractGraphsFromSourceCropPng(masked)
   return `data:image/png;base64,${graphs.toString('base64')}`
+}
+
+/** Tabla + gráficas del informe fuente, sin cabecera de paciente ni marca Sibelmed. */
+export async function loadEspirometryTableGraphsCrop(
+  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
+): Promise<EspirometryTableGraphsCrop | null> {
+  const buf = await readSourceCropPngBuffer(meta)
+  if (!buf) return null
+  const masked = stripSibelmedBrandFromPng(buf)
+  return toTableGraphsCrop(masked)
+}
+
+export function tableGraphsCropFromSourcePng(pngBuffer: Buffer): EspirometryTableGraphsCrop {
+  return toTableGraphsCrop(stripSibelmedBrandFromPng(pngBuffer))
 }
 
 function mergeClinicalContext(

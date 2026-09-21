@@ -4,7 +4,11 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import {
   cropEspirometrySourceTopFromPdfLocal,
+  detectTableGraphsBandStart,
+  extractTableAndGraphsFromSourceCropPng,
   stripSibelmedBrandFromPng,
+  SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT,
+  SIBELMED_TABLE_GRAPHS_BAND_START_LOGO,
 } from '@/lib/espirometry-source-crop'
 
 const SAMPLE_PDF = path.join(
@@ -14,6 +18,13 @@ const SAMPLE_PDF = path.join(
   'PACIENTES',
   '167555 - CARRAZCO SUAREZ ALVARO RX0001',
   'espiro.pdf',
+)
+const SAMPLE_PDF_LOGO = path.join(
+  process.cwd(),
+  '..',
+  'context',
+  'datos AMI',
+  'Espirometria-OEXJ-19860808-M-AMI-CLI.pdf',
 )
 
 function hasPdftoppm(): boolean {
@@ -52,6 +63,42 @@ describe('stripSibelmedBrandFromPng', () => {
       const pdfBytes = readFileSync(SAMPLE_PDF)
       const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
       expect(ocrContainsSibelmed(cropped)).toBe(false)
+    },
+  )
+
+  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
+    'detectTableGraphsBandStart elige layout compacto',
+    async () => {
+      const pdfBytes = readFileSync(SAMPLE_PDF)
+      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
+      expect(detectTableGraphsBandStart(cropped)).toBe(
+        SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT,
+      )
+    },
+  )
+
+  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF_LOGO))(
+    'detectTableGraphsBandStart elige layout con logo grande',
+    async () => {
+      const pdfBytes = readFileSync(SAMPLE_PDF_LOGO)
+      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
+      expect(detectTableGraphsBandStart(cropped)).toBe(
+        SIBELMED_TABLE_GRAPHS_BAND_START_LOGO,
+      )
+    },
+  )
+
+  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
+    'extractTableAndGraphsFromSourceCropPng recorta banda más ancha que alta',
+    async () => {
+      const pdfBytes = readFileSync(SAMPLE_PDF)
+      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
+      const band = extractTableAndGraphsFromSourceCropPng(cropped)
+      const { PNG } = await import('pngjs')
+      const full = PNG.sync.read(cropped)
+      const parsed = PNG.sync.read(band)
+      expect(parsed.width / parsed.height).toBeGreaterThan(1.5)
+      expect(parsed.height).toBeLessThan(full.height)
     },
   )
 
