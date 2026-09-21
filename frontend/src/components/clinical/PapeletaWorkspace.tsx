@@ -656,13 +656,14 @@ export default function PapeletaWorkspace({
   }
 
   // ARCH-20260518-04: Limpiar archivo activo y análisis vigentes (acción destructiva controlada)
-  const handleClearStudy = async (testId: string) => {
+  const handleClearStudy = async (testId: string): Promise<boolean> => {
     setIsClearingStudy(true)
     setClearStudyError('')
     try {
       const res = await clearEventTestFile(testId, eventId)
       if (res.success) {
-        // Actualización optimista: quitar fileUrl, snapshots vigentes, status PENDING
+        // Actualización optimista: quitar fileUrl, snapshots vigentes, status PENDING.
+        // No router.refresh(): remonta PapeletaWorkspace y pierde activeTestId.
         setLocalTests(prev => prev.map(t => t.id === testId ? {
           ...t,
           fileUrl: null,
@@ -670,12 +671,14 @@ export default function PapeletaWorkspace({
           extractionSnapshot: null,
           aiSnapshot: null,
         } : t))
-        router.refresh()
-      } else {
-        setClearStudyError(res.error || 'Error al limpiar el estudio')
+        setActiveTestId(testId)
+        return true
       }
+      setClearStudyError(res.error || 'Error al limpiar el estudio')
+      return false
     } catch (err) {
       setClearStudyError(err instanceof Error ? err.message : 'Error al limpiar el estudio')
+      return false
     } finally {
       setIsClearingStudy(false)
     }
@@ -1293,7 +1296,7 @@ function StudyPanel({
   /** ARCH-20260518-04: limpieza de archivo y análisis vigentes */
   isClearingStudy: boolean
   clearStudyError: string
-  onClearStudy: (id: string) => void
+  onClearStudy: (id: string) => Promise<boolean>
   onExamenMedicoStatusChange: (status: string) => void
   // IMPL-FEATURE-20260824-02: callback para abrir el modal del
   // cuestionario de Espirometría (gestionado en el padre).
@@ -1303,6 +1306,13 @@ function StudyPanel({
 }) {
   // ARCH-20260518-04: confirmación local antes de ejecutar la limpieza destructiva
   const [isClearConfirming, setIsClearConfirming] = useState(false)
+
+  const handleConfirmClearStudy = async () => {
+    const cleared = await onClearStudy(test.id)
+    if (cleared) {
+      setIsClearConfirming(false)
+    }
+  }
   const [campiRetryError, setCampiRetryError] = useState('')
   const [isCampiRetrying, startCampiRetry] = useTransition()
   const router = useRouter()
@@ -1654,7 +1664,7 @@ function StudyPanel({
                           <div className="flex items-center justify-center gap-2">
                             <button
                               type="button"
-                              onClick={() => onClearStudy(test.id)}
+                              onClick={() => void handleConfirmClearStudy()}
                               disabled={isClearingStudy}
                               className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold disabled:opacity-50"
                             >
