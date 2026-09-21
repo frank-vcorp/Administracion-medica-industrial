@@ -8,18 +8,22 @@
  */
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): se adopta el catálogo ZIN
 // para los 8 campos de visión (Snellen) + 3 pruebas complementarias.
 // Ver SPEC §4.1.
 import {
-  VISION_SNELLEN_VALUES,
   REFLEJOS_VALUES,
   CAMPIMETRIA_VALUES,
   TEST_ISHIHARA_VALUES,
 } from "@/schemas/clinical/exam.schema"
+import {
+  deriveAgudezaVisualResumen,
+  VISION_SNELLEN_NO_APLICA,
+  VISION_SNELLEN_SELECT_OPTIONS,
+} from "@/lib/clinical/agudeza-visual"
 
 const VISUAL_FIELDS = [
   { name: 'vision_lejana_od', label: 'Visión Lejana OD' },
@@ -32,7 +36,7 @@ const VISUAL_FIELDS = [
   { name: 'cercana_corregida_oi', label: 'Cercana Corregida OI' },
 ]
 
-const NO_APLICA = 'NO APLICA'
+const NO_APLICA = VISION_SNELLEN_NO_APLICA
 
 interface AgudezaVisualStudyProps {
   eventId: string
@@ -67,6 +71,15 @@ export default function AgudezaVisualStudy({
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [aiWarning, setAiWarning] = useState("")
+
+  const derivedResumen = useMemo(
+    () =>
+      deriveAgudezaVisualResumen(
+        formData.vision_lejana_od,
+        formData.vision_lejana_oi,
+      ),
+    [formData.vision_lejana_od, formData.vision_lejana_oi],
+  )
 
   const handleChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }))
@@ -110,12 +123,20 @@ export default function AgudezaVisualStudy({
                 disabled={readonly}
                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:opacity-60"
               >
-                {VISION_SNELLEN_VALUES.map(v => (
+                {VISION_SNELLEN_SELECT_OPTIONS.map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
             </div>
           ))}
+        </div>
+        <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500">
+            Clasificación agudeza visual (automática)
+          </p>
+          <p className="mt-1 text-sm font-semibold text-blue-900">
+            {derivedResumen || 'Complete visión lejana OD/OI para clasificar'}
+          </p>
         </div>
       </div>
 

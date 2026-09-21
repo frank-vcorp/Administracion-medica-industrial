@@ -3,20 +3,7 @@
  * @id IMPL-FEATURE-20260914-01
  */
 
-function deriveAgudezaVisualResumen(od: string, oi: string): string {
-  const sv = (v: string): number | null => {
-    const m = v.match(/^20\/(\d+)$/)
-    if (!m) return null
-    return parseInt(m[1], 10)
-  }
-  const a = sv(od)
-  const b = sv(oi)
-  if (a === null && b === null) return ''
-  const worst = Math.max(a ?? 30, b ?? 30)
-  if (worst > 30) return 'DISMINUIDA'
-  if (worst <= 25) return 'NORMAL'
-  return 'BAJA AL MOMENTO DE LA TOMA'
-}
+import { deriveAgudezaVisualResumen } from '@/lib/clinical/agudeza-visual'
 
 export type InheritedAcuity = {
   vision_lejana_od?: string

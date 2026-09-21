@@ -11,6 +11,7 @@ import {
   ExploracionFisicaSchema,
   ExamenMedicoCompletoSchema,
 } from "@/schemas/clinical/exam.schema"
+import { deriveAgudezaVisualResumen } from "@/lib/clinical/agudeza-visual"
 
 /**
  * @id ARCH-20260326-01
@@ -99,11 +100,34 @@ export async function updateSomatometria(eventId: string, rawData: unknown) {
 export async function updateAgudezaVisual(eventId: string, rawData: unknown) {
   try {
     const data = AgudezaVisualSchema.parse(rawData)
-    
+    const agudezaResumen = deriveAgudezaVisualResumen(
+      data.vision_lejana_od,
+      data.vision_lejana_oi,
+    )
+    const existing = await prisma.medicalExam.findUnique({
+      where: { eventId },
+      select: { physicalExamData: true },
+    })
+    const prevPhysical =
+      (existing?.physicalExamData as Record<string, unknown> | null) ?? {}
+    const physicalExamPatch =
+      agudezaResumen.length > 0
+        ? { ...prevPhysical, agudeza_visual_resumen: agudezaResumen }
+        : prevPhysical
+
     await prisma.medicalExam.upsert({
       where: { eventId },
-      update: { eyeAcuityData: data },
-      create: { eventId, eyeAcuityData: data }
+      update: {
+        eyeAcuityData: data,
+        physicalExamData: physicalExamPatch,
+      },
+      create: {
+        eventId,
+        eyeAcuityData: data,
+        physicalExamData: agudezaResumen.length > 0
+          ? { agudeza_visual_resumen: agudezaResumen }
+          : undefined,
+      },
     })
 
     const eventTest = await prisma.eventTest.findFirst({

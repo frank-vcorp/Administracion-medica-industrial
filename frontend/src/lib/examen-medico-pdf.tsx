@@ -62,6 +62,7 @@ import {
   type IaResultsForHallazgos,
 } from '@/lib/clinical/recommendations'
 import { formatQuisteDisplay } from '@/schemas/clinical/exam.schema'
+import { deriveAgudezaVisualResumen } from '@/lib/clinical/agudeza-visual'
 
 export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl } from '@/lib/ami-brand'
 import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
@@ -561,32 +562,6 @@ function deriveEstadoNutricionalFromImc(imc: string | null | undefined): string 
   if (n < 25) return 'NORMAL'
   if (n < 30) return 'SOBREPESO'
   return 'OBESIDAD'
-}
-
-/**
- * Visión lejana OD/OI → resumen canónico del PDF. Si ambas son `20/20` o
- * `20/25`, marca como `NORMAL`; si alguna es `20/40` o peor, marca como
- * `DISMINUIDA`; si no se puede determinar, devuelve '' (visible).
- */
-function deriveAgudezaVisualResumen(
-  od: string | null | undefined,
-  oi: string | null | undefined
-): string {
-  const sv = (v: string | null | undefined): number | null => {
-    const t = s(v)
-    if (!t) return null
-    const m = t.match(/^20\/(\d+)$/)
-    if (!m) return null
-    return parseInt(m[1], 10)
-  }
-  const a = sv(od)
-  const b = sv(oi)
-  if (a === null && b === null) return ''
-  // Conservador: si alguno está peor que 20/30 → DISMINUIDA.
-  const worst = Math.max(a ?? 30, b ?? 30)
-  if (worst > 30) return 'DISMINUIDA'
-  if (worst <= 25) return 'NORMAL'
-  return 'BAJA AL MOMENTO DE LA TOMA'
 }
 
 /**

@@ -12,7 +12,7 @@
  */
 "use client"
 
-import { useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
@@ -27,7 +27,6 @@ import { VitalSignsPrediagnosisPanel } from "@/components/clinical/VitalSignsPre
 // combos de Exploración Física + 17 plantillas prellenadas + estado
 // nutricional/salud bucal en Resumen Clínico. Ver SPEC §4.2, §4.3.
 import {
-  VISION_SNELLEN_VALUES,
   REFLEJOS_VALUES,
   CAMPIMETRIA_VALUES,
   TEST_ISHIHARA_VALUES,
@@ -66,6 +65,11 @@ import {
 // auto-poblamiento para las recomendaciones del dictamen (catalogo
 // hallazgo → recomendacion + edicion manual).
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
+import {
+  deriveAgudezaVisualResumen,
+  VISION_SNELLEN_NO_APLICA,
+  VISION_SNELLEN_SELECT_OPTIONS,
+} from "@/lib/clinical/agudeza-visual"
 // IMPL-20260817-11-C1 (ARCH-20260817-02 corte 4 DA-5): preview en vivo de los
 // 9 campos auto-poblados, renderizado ARRIBA del selector de aptitud. El medico
 // ve primero lo que se va a poblar y despues decide la aptitud.
@@ -241,7 +245,7 @@ const VISUAL_FIELDS: { name: string; label: string }[] = [
   { name: 'cercana_corregida_oi', label: 'Cercana Corregida OI' },
 ]
 
-const NO_APLICA = 'NO APLICA'
+const NO_APLICA = VISION_SNELLEN_NO_APLICA
 const SEX_OPTIONS = ['Femenino', 'Masculino'] as const
 const LONGITUDINAL_SECTIONS: [string, string][] = [
   ['datos_personales', 'Datos Personales'],
@@ -647,6 +651,31 @@ export default function ExamenMedicoEstudio({
     Object.keys(initEyeAcuityData).length > 0
   )
 
+  const derivedAgudezaResumen = useMemo(
+    () =>
+      deriveAgudezaVisualResumen(
+        agudezaForm.vision_lejana_od,
+        agudezaForm.vision_lejana_oi,
+      ),
+    [agudezaForm.vision_lejana_od, agudezaForm.vision_lejana_oi],
+  )
+
+  function handleAgudezaField(name: string, value: string) {
+    setAgudezaForm(prev => {
+      const next = { ...prev, [name]: value }
+      if (VISUAL_FIELDS_NAMES.includes(name)) {
+        const resumen = deriveAgudezaVisualResumen(
+          next.vision_lejana_od,
+          next.vision_lejana_oi,
+        )
+        if (resumen) {
+          setForm(f => ({ ...f, agudeza_visual_resumen: resumen }))
+        }
+      }
+      return next
+    })
+  }
+
   // ── Pestaña activa externa (1-4) ──────────────────────────────────────────
   const [outerTab, setOuterTab] = useState<OuterTab>('somatometria')
 
@@ -818,6 +847,9 @@ export default function ExamenMedicoEstudio({
     setAgudezaSaveMsg('')
     const res = await updateAgudezaVisual(eventId, agudezaForm)
     if (res.success) {
+      if (derivedAgudezaResumen) {
+        setForm(prev => ({ ...prev, agudeza_visual_resumen: derivedAgudezaResumen }))
+      }
       setAgudezaSaveMsg(markComplete ? '🏁 Agudeza Visual completada.' : '✅ Datos guardados.')
       setAgudezaCompleted(true)
       if (agudezaEventTestId) {
@@ -1130,7 +1162,7 @@ export default function ExamenMedicoEstudio({
             <p className="text-xs font-bold text-indigo-800">Agudeza Visual — Campo Visual y Pruebas Complementarias</p>
           </div>
 
-          {/* Campo Visual */}
+          {/* Campo Visual — escala Snellen ZIN (R-08 / CAMPIMETRÍA.xlsx) */}
           <div>
             <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Campo Visual</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1139,16 +1171,27 @@ export default function ExamenMedicoEstudio({
                   <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{f.label}</label>
                   <select
                     value={agudezaForm[f.name] || NO_APLICA}
-                    onChange={e => setAgudezaForm(prev => ({ ...prev, [f.name]: e.target.value }))}
+                    onChange={e => handleAgudezaField(f.name, e.target.value)}
                     disabled={readonly}
                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-sm disabled:opacity-60"
                   >
-                    {VISION_SNELLEN_VALUES.map(v => (
+                    {VISION_SNELLEN_SELECT_OPTIONS.map(v => (
                       <option key={v} value={v}>{v}</option>
                     ))}
                   </select>
                 </div>
               ))}
+            </div>
+            <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+                Clasificación agudeza visual (automática)
+              </p>
+              <p className="mt-1 text-sm font-semibold text-indigo-900">
+                {derivedAgudezaResumen || 'Complete visión lejana OD/OI para clasificar'}
+              </p>
+              <p className="mt-1 text-xs text-indigo-700/80">
+                Se sincroniza al resumen clínico y al PDF del examen médico.
+              </p>
             </div>
           </div>
 
@@ -1165,7 +1208,7 @@ export default function ExamenMedicoEstudio({
                   <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{label}</label>
                   <select
                     value={agudezaForm[name] || options[0]}
-                    onChange={e => setAgudezaForm(prev => ({ ...prev, [name]: e.target.value }))}
+                    onChange={e => handleAgudezaField(name, e.target.value)}
                     disabled={readonly}
                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm disabled:opacity-60"
                   >
@@ -1176,6 +1219,9 @@ export default function ExamenMedicoEstudio({
                 </div>
               ))}
             </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Campimetría resumida para papeletas sin estudio CAMPIMETRIA completo.
+            </p>
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3 flex-wrap">
