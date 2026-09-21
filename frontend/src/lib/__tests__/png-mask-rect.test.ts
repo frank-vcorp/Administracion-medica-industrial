@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { PNG } from 'pngjs'
-import { maskPngRect, SIBELMED_BRAND_MASK } from '@/lib/png-mask-rect'
+import { maskPngRect, SIBELMED_BRAND_MASKS } from '@/lib/png-mask-rect'
 
 describe('maskPngRect', () => {
   it('pinta blanco la región indicada', () => {
@@ -26,10 +26,13 @@ describe('maskPngRect', () => {
     expect(masked.data[0]).toBe(10)
   })
 
-  it('exporta máscara Sibelmed con ratios válidos', () => {
-    expect(SIBELMED_BRAND_MASK.leftRatio).toBeGreaterThan(0)
-    expect(SIBELMED_BRAND_MASK.topRatio).toBeGreaterThan(0)
-    expect(SIBELMED_BRAND_MASK.widthRatio).toBeGreaterThan(0)
-    expect(SIBELMED_BRAND_MASK.heightRatio).toBeGreaterThan(0)
+  it('exporta máscaras Sibelmed con ratios válidos', () => {
+    expect(SIBELMED_BRAND_MASKS.length).toBeGreaterThanOrEqual(2)
+    for (const mask of SIBELMED_BRAND_MASKS) {
+      expect(mask.leftRatio).toBeGreaterThanOrEqual(0)
+      expect(mask.topRatio).toBeGreaterThanOrEqual(0)
+      expect(mask.widthRatio).toBeGreaterThan(0)
+      expect(mask.heightRatio).toBeGreaterThan(0)
+    }
   })
 })

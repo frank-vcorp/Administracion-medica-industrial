@@ -12,7 +12,7 @@ import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { cropPngTop } from '@/lib/png-crop-top'
 import { cropPngBand } from '@/lib/png-crop-band'
-import { maskPngRect, SIBELMED_BRAND_MASK } from '@/lib/png-mask-rect'
+import { maskPngRects, SIBELMED_BRAND_MASKS } from '@/lib/png-mask-rect'
 import { resolveBackendFileUrl } from '@/lib/zip-cierre-clinico'
 
 const execFileAsync = promisify(execFile)
@@ -32,7 +32,7 @@ export type EspirometrySourceCropMeta = {
 }
 
 export function stripSibelmedBrandFromPng(pngBuffer: Buffer): Buffer {
-  return maskPngRect(pngBuffer, SIBELMED_BRAND_MASK)
+  return maskPngRects(pngBuffer, SIBELMED_BRAND_MASKS)
 }
 
 export function extractGraphsFromSourceCropPng(pngBuffer: Buffer): Buffer {
