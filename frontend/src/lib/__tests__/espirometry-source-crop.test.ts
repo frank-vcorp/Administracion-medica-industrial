@@ -7,6 +7,8 @@ import {
   detectTableGraphsBandStart,
   extractTableAndGraphsFromSourceCropPng,
   extractGraphsFromSourceCropPng,
+  extractBottomHalfFromSourceCropPng,
+  bottomHalfCropFromSourcePng,
   graphsCropFromSourcePng,
   stripSibelmedBrandFromPng,
   SIBELMED_TABLE_GRAPHS_BAND_START_COMPACT,
@@ -101,6 +103,22 @@ describe('stripSibelmedBrandFromPng', () => {
       const parsed = PNG.sync.read(band)
       expect(parsed.width / parsed.height).toBeGreaterThan(1.5)
       expect(parsed.height).toBeLessThan(full.height)
+    },
+  )
+
+  it.skipIf(!hasPdftoppm() || !existsSync(SAMPLE_PDF))(
+    'extractBottomHalfFromSourceCropPng toma la mitad inferior del recorte',
+    async () => {
+      const pdfBytes = readFileSync(SAMPLE_PDF)
+      const cropped = await cropEspirometrySourceTopFromPdfLocal(pdfBytes)
+      const bottom = extractBottomHalfFromSourceCropPng(cropped)
+      const { PNG } = await import('pngjs')
+      const full = PNG.sync.read(cropped)
+      const parsed = PNG.sync.read(bottom)
+      expect(parsed.width).toBe(full.width)
+      expect(parsed.height).toBe(Math.floor(full.height / 2))
+      const crop = bottomHalfCropFromSourcePng(cropped)
+      expect(crop.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
     },
   )
 

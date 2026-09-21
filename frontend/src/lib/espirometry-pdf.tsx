@@ -49,8 +49,8 @@ import {
 } from '@/lib/espirometry-ami-section'
 import {
   ensureEspirometrySourceCrop,
-  loadEspirometryGraphsCrop,
-  graphsCropFromSourcePng,
+  loadEspirometryBottomHalfCrop,
+  bottomHalfCropFromSourcePng,
   type EspirometrySourceCropMeta,
 } from '@/lib/espirometry-source-crop'
 import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
@@ -289,7 +289,7 @@ async function resolveEspirometryCropMeta(input: {
   let meta = ctx?.espirometrySourceCrop as EspirometrySourceCropMeta | undefined
 
   if (meta?.relativePath) {
-    const preview = await loadEspirometryGraphsCrop(meta)
+    const preview = await loadEspirometryBottomHalfCrop(meta)
     if (preview) return meta
   }
 
@@ -307,7 +307,7 @@ async function resolveEspirometryCropMeta(input: {
   return meta?.relativePath ? meta : null
 }
 
-export async function resolveEspirometryGraphsCropForPdf(input: {
+export async function resolveEspirometryBottomHalfCropForPdf(input: {
   eventTestId?: string | null
   sourceCropDataUrl?: string | null
   sourceCropAspectRatio?: number | null
@@ -325,31 +325,38 @@ export async function resolveEspirometryGraphsCropForPdf(input: {
     clinicalContext: input.clinicalContext,
   })
   if (!meta) return { dataUrl: null, aspectRatio: null }
-  const crop = await loadEspirometryGraphsCrop(meta)
+  const crop = await loadEspirometryBottomHalfCrop(meta)
   return {
     dataUrl: crop?.dataUrl ?? null,
     aspectRatio: crop?.aspectRatio ?? null,
   }
 }
 
-/** @deprecated Usar `resolveEspirometryGraphsCropForPdf`. */
-export async function resolveEspirometryTableGraphsCropForPdf(
-  input: Parameters<typeof resolveEspirometryGraphsCropForPdf>[0],
+/** @deprecated Usar `resolveEspirometryBottomHalfCropForPdf`. */
+export async function resolveEspirometryGraphsCropForPdf(
+  input: Parameters<typeof resolveEspirometryBottomHalfCropForPdf>[0],
 ) {
-  return resolveEspirometryGraphsCropForPdf(input)
+  return resolveEspirometryBottomHalfCropForPdf(input)
 }
 
-/** @deprecated Usar `resolveEspirometryGraphsCropForPdf`. */
+/** @deprecated Usar `resolveEspirometryBottomHalfCropForPdf`. */
+export async function resolveEspirometryTableGraphsCropForPdf(
+  input: Parameters<typeof resolveEspirometryBottomHalfCropForPdf>[0],
+) {
+  return resolveEspirometryBottomHalfCropForPdf(input)
+}
+
+/** @deprecated Usar `resolveEspirometryBottomHalfCropForPdf`. */
 export async function resolveEspirometrySourceCropDataUrlForPdf(input: {
   eventTestId?: string | null
   sourceCropDataUrl?: string | null
   clinicalContext?: unknown
 }): Promise<string | null> {
-  const resolved = await resolveEspirometryGraphsCropForPdf(input)
+  const resolved = await resolveEspirometryBottomHalfCropForPdf(input)
   return resolved.dataUrl
 }
 
-export { graphsCropFromSourcePng }
+export { bottomHalfCropFromSourcePng }
 
 export function buildEspirometryPdfData(
   input: BuildEspirometryPdfInput,
@@ -390,7 +397,7 @@ export function buildEspirometryPdfData(
 export async function buildEspirometryPdfDataAsync(
   input: BuildEspirometryPdfInput,
 ): Promise<EspirometryValidatedPDFData> {
-  const graphsCrop = await resolveEspirometryGraphsCropForPdf({
+  const bottomHalfCrop = await resolveEspirometryBottomHalfCropForPdf({
     eventTestId: input.eventTestId,
     sourceCropDataUrl: input.sourceCropDataUrl,
     sourceCropAspectRatio: input.sourceCropAspectRatio,
@@ -398,8 +405,8 @@ export async function buildEspirometryPdfDataAsync(
   })
   return buildEspirometryPdfData({
     ...input,
-    sourceCropDataUrl: graphsCrop.dataUrl,
-    sourceCropAspectRatio: graphsCrop.aspectRatio,
+    sourceCropDataUrl: bottomHalfCrop.dataUrl,
+    sourceCropAspectRatio: bottomHalfCrop.aspectRatio,
   })
 }
 

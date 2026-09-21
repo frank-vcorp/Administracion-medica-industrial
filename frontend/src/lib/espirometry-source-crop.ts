@@ -19,6 +19,9 @@ import { resolveBackendFileUrl } from '@/lib/zip-cierre-clinico'
 const execFileAsync = promisify(execFile)
 
 export const SIBELMED_W20S_TOP_CROP_RATIO = 0.67
+/** Mitad inferior del recorte fuente (50% → 100%). */
+export const ESPIROMETRY_SOURCE_BOTTOM_HALF_START = 0.5
+export const ESPIROMETRY_SOURCE_BOTTOM_HALF_END = 1
 /** Banda inferior del recorte Sibelmed donde están flujo-volumen y volumen-tiempo. */
 export const SIBELMED_GRAPHS_BAND_START = 0.48
 export const SIBELMED_GRAPHS_BAND_END = 0.98
@@ -47,6 +50,14 @@ export type EspirometrySourceCropMeta = {
 
 export function stripSibelmedBrandFromPng(pngBuffer: Buffer): Buffer {
   return maskPngRects(pngBuffer, SIBELMED_BRAND_MASKS)
+}
+
+export function extractBottomHalfFromSourceCropPng(pngBuffer: Buffer): Buffer {
+  return cropPngBand(
+    pngBuffer,
+    ESPIROMETRY_SOURCE_BOTTOM_HALF_START,
+    ESPIROMETRY_SOURCE_BOTTOM_HALF_END,
+  )
 }
 
 export function extractGraphsFromSourceCropPng(pngBuffer: Buffer): Buffer {
@@ -106,6 +117,10 @@ function toTableGraphsCrop(masked: Buffer): EspirometrySourceImageCrop {
 
 function toGraphsCrop(masked: Buffer): EspirometrySourceImageCrop {
   return toSourceImageCrop(extractGraphsFromSourceCropPng(masked), 2.3)
+}
+
+function toBottomHalfCrop(masked: Buffer): EspirometrySourceImageCrop {
+  return toSourceImageCrop(extractBottomHalfFromSourceCropPng(masked), 2.1)
 }
 
 async function readSourceCropPngBuffer(
@@ -333,6 +348,20 @@ export async function loadEspirometryGraphsCrop(
 
 export function graphsCropFromSourcePng(pngBuffer: Buffer): EspirometrySourceImageCrop {
   return toGraphsCrop(stripSibelmedBrandFromPng(pngBuffer))
+}
+
+/** Mitad inferior del informe fuente rasterizado (sin marca Sibelmed). */
+export async function loadEspirometryBottomHalfCrop(
+  meta: Pick<EspirometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
+): Promise<EspirometrySourceImageCrop | null> {
+  const buf = await readSourceCropPngBuffer(meta)
+  if (!buf) return null
+  const masked = stripSibelmedBrandFromPng(buf)
+  return toBottomHalfCrop(masked)
+}
+
+export function bottomHalfCropFromSourcePng(pngBuffer: Buffer): EspirometrySourceImageCrop {
+  return toBottomHalfCrop(stripSibelmedBrandFromPng(pngBuffer))
 }
 
 function mergeClinicalContext(
