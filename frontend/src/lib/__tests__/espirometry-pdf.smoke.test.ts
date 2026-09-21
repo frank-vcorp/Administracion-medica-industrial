@@ -10,7 +10,7 @@ import {
   buildEspirometryPdfData,
   generateEspirometryValidatedPdf,
 } from '@/lib/espirometry-pdf'
-import { extractGraphsFromSourceCropPng } from '@/lib/espirometry-source-crop'
+import { stripSibelmedBrandFromPng } from '@/lib/espirometry-source-crop'
 
 const CROP_PATH = path.join(
   process.cwd(),
@@ -41,8 +41,7 @@ describe('espirometry PDF smoke — layout híbrido', () => {
       )
     }
 
-    const graphsBuf = extractGraphsFromSourceCropPng(cropBuf)
-    const graphsCropDataUrl = `data:image/png;base64,${graphsBuf.toString('base64')}`
+    const sourceCropDataUrl = `data:image/png;base64,${stripSibelmedBrandFromPng(cropBuf).toString('base64')}`
     const data = buildEspirometryPdfData({
       reviewId: 'smoke-hybrid',
       doctorStatus: 'REVIEWED_ACCEPTED',
@@ -53,24 +52,12 @@ describe('espirometry PDF smoke — layout híbrido', () => {
       prediagnosisData: { recommendation: 'Control en 12 meses.' },
       extractionStructuredData: {
         extracted_data: {
-          paciente: { nombre_completo: 'Patricio Peña', edad_anios: 34 },
           calidad: {
             repetibilidad_fvc_ml: 30,
             repetibilidad_fev1_ml: 40,
             pico_maximo: 'SI',
             calidad: 'A',
           },
-          parametros: [
-            {
-              label: 'FVC',
-              key: 'fvc_l',
-              m1: 2.3,
-              m2: 2.33,
-              m3: 2.26,
-              ref: 3.32,
-              lln: 2.69,
-            },
-          ],
         },
       },
       studyName: 'Espirometría',
@@ -88,7 +75,7 @@ describe('espirometry PDF smoke — layout híbrido', () => {
           'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
       },
       logoDataUrl: null,
-      graphsCropDataUrl,
+      sourceCropDataUrl,
     })
 
     const result = await generateEspirometryValidatedPdf({

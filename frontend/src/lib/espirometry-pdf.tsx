@@ -49,10 +49,9 @@ import {
 } from '@/lib/espirometry-ami-section'
 import {
   ensureEspirometrySourceCrop,
-  loadEspirometryGraphsCropDataUrl,
+  loadEspirometrySourceCropDataUrl,
   type EspirometrySourceCropMeta,
 } from '@/lib/espirometry-source-crop'
-import { buildEspirometryPdfExtractionView } from '@/lib/espirometry-pdf-extraction'
 import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
@@ -275,7 +274,7 @@ export interface BuildEspirometryPdfInput {
   }
   /** Data-URL del logo SME (si fue legible) o null para fallback texto. */
   logoDataUrl: string | null
-  graphsCropDataUrl?: string | null
+  sourceCropDataUrl?: string | null
   eventTestId?: string | null
   clinicalContext?: unknown
 }
@@ -288,7 +287,7 @@ async function resolveEspirometryCropMeta(input: {
   let meta = ctx?.espirometrySourceCrop as EspirometrySourceCropMeta | undefined
 
   if (meta?.relativePath) {
-    const preview = await loadEspirometryGraphsCropDataUrl(meta)
+    const preview = await loadEspirometrySourceCropDataUrl(meta)
     if (preview) return meta
   }
 
@@ -306,19 +305,19 @@ async function resolveEspirometryCropMeta(input: {
   return meta?.relativePath ? meta : null
 }
 
-export async function resolveEspirometryGraphsCropDataUrl(input: {
+export async function resolveEspirometrySourceCropDataUrlForPdf(input: {
   eventTestId?: string | null
-  graphsCropDataUrl?: string | null
+  sourceCropDataUrl?: string | null
   clinicalContext?: unknown
 }): Promise<string | null> {
-  if (input.graphsCropDataUrl) return input.graphsCropDataUrl
+  if (input.sourceCropDataUrl) return input.sourceCropDataUrl
 
   const meta = await resolveEspirometryCropMeta({
     eventTestId: input.eventTestId,
     clinicalContext: input.clinicalContext,
   })
   if (!meta) return null
-  return await loadEspirometryGraphsCropDataUrl(meta)
+  return await loadEspirometrySourceCropDataUrl(meta)
 }
 
 export function buildEspirometryPdfData(
@@ -333,10 +332,6 @@ export function buildEspirometryPdfData(
   const amiSection = buildEspirometryAmiSectionFromExtraction(
     input.extractionStructuredData,
   )
-  const extractionView = buildEspirometryPdfExtractionView(
-    input.extractionStructuredData,
-  )
-
   const patientFullName = `${input.patient.firstName} ${input.patient.lastName}`.trim()
   const diagnosis = (input.doctorDiagnosis ?? '').trim()
   return {
@@ -353,9 +348,8 @@ export function buildEspirometryPdfData(
     doctorDiagnosis: diagnosis.length > 0 ? diagnosis : 'Aceptado sin diagnóstico adicional explícito.',
     doctorNotes: input.doctorNotes ?? null,
     amiSection,
-    extractionView,
     recomendacionesValidadas,
-    graphsCropDataUrl: input.graphsCropDataUrl ?? null,
+    sourceCropDataUrl: input.sourceCropDataUrl ?? null,
     medico: input.medico,
     logoUrl: input.logoDataUrl ?? '',
   }
@@ -364,12 +358,12 @@ export function buildEspirometryPdfData(
 export async function buildEspirometryPdfDataAsync(
   input: BuildEspirometryPdfInput,
 ): Promise<EspirometryValidatedPDFData> {
-  const graphsCropDataUrl = await resolveEspirometryGraphsCropDataUrl({
+  const sourceCropDataUrl = await resolveEspirometrySourceCropDataUrlForPdf({
     eventTestId: input.eventTestId,
-    graphsCropDataUrl: input.graphsCropDataUrl,
+    sourceCropDataUrl: input.sourceCropDataUrl,
     clinicalContext: input.clinicalContext,
   })
-  return buildEspirometryPdfData({ ...input, graphsCropDataUrl })
+  return buildEspirometryPdfData({ ...input, sourceCropDataUrl })
 }
 
 /**
