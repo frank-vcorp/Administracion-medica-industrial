@@ -53,6 +53,7 @@ const styles = StyleSheet.create({
   clinicalPanel: {
     marginTop: 4,
     paddingTop: 4,
+    paddingHorizontal: 32,
     borderTopWidth: 0.75,
     borderTopColor: '#cbd5e1',
   },
@@ -90,15 +91,37 @@ const styles = StyleSheet.create({
     fontSize: 7,
     lineHeight: 1.4,
   },
-  signatureRow: {
-    marginTop: 6,
+  signatureArea: {
+    marginTop: 4,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
   },
-  signatureLeft: { flex: 1 },
-  signatureRight: { width: 120, alignItems: 'center' },
-  signatureImage: { width: 90, height: 32, objectFit: 'contain' },
+  signatureBox: {
+    width: 200,
+    alignItems: 'center',
+  },
+  signatureImage: {
+    width: 100,
+    height: 28,
+    objectFit: 'contain',
+    marginBottom: 2,
+  },
+  signatureLine: {
+    width: 160,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0f172a',
+    marginBottom: 2,
+  },
+  signatureName: {
+    fontSize: 7,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  signatureMeta: {
+    fontSize: 6.5,
+    textAlign: 'center',
+    color: '#475569',
+  },
   footer: {
     position: 'absolute',
     bottom: 14,
@@ -191,7 +214,7 @@ function AmiMetricsGrid({ ami }: { ami: EspirometryAmiSectionData }) {
 }
 
 const LETTER_WIDTH_PT = 612
-const SOURCE_IMAGE_MAX_HEIGHT_PT = 340
+const SOURCE_IMAGE_MAX_HEIGHT_PT = 328
 
 export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPDFData }) => {
   const recomendacionesText =
@@ -270,15 +293,19 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
             </View>
           ) : null}
 
-          <View style={styles.signatureRow}>
-            <View style={styles.signatureLeft}>
-              <Text>Realizó EM: {data.medico.fullName.toUpperCase()}</Text>
-              <Text>Ced. Prof.: {data.medico.professionalLicense}</Text>
-            </View>
-            <View style={styles.signatureRight}>
+          <View style={styles.signatureArea}>
+            <View style={styles.signatureBox}>
               {data.medico.signatureImageUrl ? (
                 <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
-              ) : null}
+              ) : (
+                <View style={styles.signatureLine} />
+              )}
+              <Text style={styles.signatureName}>
+                Realizó EM: {data.medico.fullName.toUpperCase()}
+              </Text>
+              <Text style={styles.signatureMeta}>
+                Ced. Prof.: {data.medico.professionalLicense}
+              </Text>
             </View>
           </View>
         </View>
