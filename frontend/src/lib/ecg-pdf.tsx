@@ -48,12 +48,25 @@ export async function buildEcgPdfDataAsync(input: BuildEcgPdfInput): Promise<Ecg
       worker: {
         select: {
           dob: true,
-          gender: true,
           company: { select: { name: true } },
         },
       },
     },
   })
+  const exam = await prisma.medicalExam.findUnique({
+    where: { eventId: input.eventId },
+    select: { physicalExamData: true },
+  })
+  const physicalExamData =
+    (exam?.physicalExamData as Record<string, unknown> | null) ?? {}
+  const datosPersonales =
+    (physicalExamData.datos_personales as Record<string, unknown> | null) ?? {}
+  const modulo1 = (physicalExamData.modulo1 as Record<string, unknown> | null) ?? {}
+  const sexLabelRaw =
+    (typeof physicalExamData.sexo === 'string' && physicalExamData.sexo) ||
+    (typeof datosPersonales.sexo === 'string' && datosPersonales.sexo) ||
+    (typeof modulo1.m1_sexo === 'string' && modulo1.m1_sexo) ||
+    null
 
   const eventDateRaw = event?.checkInDate ?? event?.createdAt ?? input.reviewCreatedAt
   const ageYears = (() => {
@@ -80,7 +93,7 @@ export async function buildEcgPdfDataAsync(input: BuildEcgPdfInput): Promise<Ecg
     signedAt: input.reviewCreatedAt,
     patient: {
       fullName,
-      sexLabel: event?.worker?.gender ?? '—',
+      sexLabel: sexLabelRaw ?? '—',
       ageLabel: ageYears != null ? `${ageYears} años` : '—',
       companyName,
     },
