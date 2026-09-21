@@ -685,7 +685,9 @@ export default function StudyAIPrediagnosisPanel({
                       ? 'espirometry'
                       : studyType === 'Campimetria'
                         ? 'campimetria'
-                        : null
+                        : studyType === 'Electrocardiograma'
+                          ? 'ecg'
+                          : null
                 if (!pdfKind) return null
                 const testIdPrefix = pdfKind
                 return (

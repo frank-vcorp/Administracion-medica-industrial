@@ -52,6 +52,7 @@ import {
   buildCampimetriaPdfDataAsync,
   generateCampimetriaValidatedPdf,
 } from '@/lib/campimetria-pdf'
+import { buildEcgPdfDataAsync, generateEcgValidatedPdf } from '@/lib/ecg-pdf'
 import { ensureEspirometrySourceCrop } from '@/lib/espirometry-source-crop'
 // IMPL-FEATURE-20260825-02: generación del PDF validado de Audiometría.
 // Mismo patrón que Espirometría: helper puro fuera del server action.
@@ -943,6 +944,24 @@ export async function submitDoctorStudyReview(
             clinicalContext: eventTestData?.clinicalContext,
           })
           pdfResult = await generateCampimetriaValidatedPdf({
+            reviewId: review.id,
+            data: pdfData,
+          })
+        } else if (studyType === 'Electrocardiograma') {
+          const pdfData = await buildEcgPdfDataAsync({
+            reviewId: review.id,
+            doctorStatus: typedDoctorStatus,
+            doctorDiagnosis: baseInput.doctorDiagnosis,
+            doctorNotes: baseInput.doctorNotes,
+            reviewCreatedAt: review.createdAt,
+            prediagnosisData: baseInput.prediagnosisData,
+            extractionStructuredData: baseInput.extractionStructuredData,
+            eventId: eventTestData?.eventId ?? eventId,
+            patient: baseInput.patient,
+            medico: baseInput.medico,
+            logoDataUrl: baseInput.logoDataUrl,
+          })
+          pdfResult = await generateEcgValidatedPdf({
             reviewId: review.id,
             data: pdfData,
           })
