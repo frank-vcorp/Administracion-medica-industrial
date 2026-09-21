@@ -295,7 +295,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="relative flex h-screen bg-ami-surface">
-      <AmiCornerWaveAccent />
       <aside
         className={`${
           sidebarCollapsed ? 'w-[4.5rem]' : 'w-64'
@@ -398,7 +397,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <main className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-ami-secondary/15 bg-white px-4 md:hidden">
+        <AmiCornerWaveAccent />
+        <header className="relative z-[1] flex h-14 flex-shrink-0 items-center justify-between border-b border-ami-secondary/15 bg-white px-4 md:hidden">
           <button
             type="button"
             aria-label="Abrir menú de navegación"
@@ -413,7 +413,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         {!isEventWorkspace && (
-          <header className="hidden h-16 flex-shrink-0 items-center justify-between border-b-[3px] border-b-[#00afaa] bg-white px-8 md:flex">
+          <header className="relative z-[1] hidden h-16 flex-shrink-0 items-center justify-between border-b-[3px] border-b-[#00afaa] bg-white px-8 md:flex">
             <div>
               <h2 className="text-lg font-semibold text-ami-secondary">Panel de Control</h2>
             </div>
@@ -435,7 +435,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </div>
           </header>
         )}
-        <div className={`flex-1 overflow-y-auto ${isEventWorkspace ? 'p-3 md:p-4' : 'p-4 md:p-8'}`}>
+        <div
+          className={`relative z-[1] flex-1 overflow-y-auto ${isEventWorkspace ? 'p-3 md:p-4' : 'p-4 md:p-8'}`}
+        >
           {children}
         </div>
         {showGlobalSearch && <GlobalSearchLauncher />}
