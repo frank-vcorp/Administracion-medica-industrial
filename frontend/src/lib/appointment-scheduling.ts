@@ -98,3 +98,10 @@ export function appointmentAgendaHour(
   })
   return Number(fmt.format(d))
 }
+
+/** Rango UTC que cubre un día de agenda (00:00–23:59:59.999) en zona AMI. */
+export function agendaDayUtcRange(dateStr: string): { gte: Date; lte: Date } {
+  const gte = parseAppointmentLocalDateTime(dateStr, '00:00')
+  const lte = new Date(parseAppointmentLocalDateTime(dateStr, '23:59').getTime() + 59_999)
+  return { gte, lte }
+}

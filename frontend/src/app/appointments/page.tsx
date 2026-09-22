@@ -68,12 +68,34 @@ function groupAppointmentsByHour(
         }, {} as Record<number, AppointmentWithWorker[]>)
 }
 
+/** Si quedaron varias citas activas del mismo paciente el mismo día (reagendos fallidos), mostrar solo la más reciente. */
+function dedupeAgendaByWorkerDay(items: AppointmentWithWorker[]): AppointmentWithWorker[] {
+    const byKey = new Map<string, AppointmentWithWorker>()
+    for (const apt of items) {
+        const workerKey = apt.workerId ?? apt.worker?.id ?? apt.id
+        const day = appointmentLocalDateString(apt.scheduledAt)
+        const key = `${workerKey}:${day}`
+        const prev = byKey.get(key)
+        if (!prev) {
+            byKey.set(key, apt)
+            continue
+        }
+        const prevCreated = new Date(prev.createdAt ?? 0).getTime()
+        const nextCreated = new Date(apt.createdAt ?? 0).getTime()
+        if (nextCreated >= prevCreated) {
+            byKey.set(key, apt)
+        }
+    }
+    return Array.from(byKey.values())
+}
+
 function agendaForDate(items: AppointmentWithWorker[], dateStr: string): AppointmentWithWorker[] {
-    return items.filter(
+    const filtered = items.filter(
         (apt) =>
             AGENDA_SLOT_STATUSES.has(apt.status) &&
             appointmentLocalDateString(apt.scheduledAt) === dateStr,
     )
+    return dedupeAgendaByWorkerDay(filtered)
 }
 
 function countAgendaForDate(items: AppointmentWithWorker[], dateStr: string): number {
@@ -99,12 +121,15 @@ function outsideBranchHours(
 
 interface AppointmentWithWorker {
     id: string;
+    workerId?: string;
+    createdAt?: Date | string;
     scheduledAt: Date;
     status: string;
     expedientId: string | null;
     qrCode: string | null;
     qrOperativo: string | null; // IMPL-20260519-10: QR operativo mínimo
     worker: {
+        id?: string;
         firstName: string;
         lastName: string;
         universalId: string | null;
@@ -361,7 +386,12 @@ export default function AppointmentsPage() {
                     outsideHoursAppointments={outsideBranchHours(nextDayAppointments, nextDate, startHour, endHour)}
                     hours={hours}
                     branchConfig={branchConfig}
-                    preview
+                    interactive
+                    onSelectTicket={setSelectedApt}
+                    onReschedule={setRescheduleApt}
+                    onGenerateInvite={handleGenerateInvite}
+                    onCheckIn={handleCheckIn}
+                    checkingIn={checkingIn}
                 />
             </div>
 
@@ -448,7 +478,10 @@ export default function AppointmentsPage() {
                 <RescheduleAppointmentModal
                     appointment={rescheduleApt}
                     onClose={() => setRescheduleApt(null)}
-                    onSuccess={loadData}
+                    onSuccess={(newDate) => {
+                        if (newDate) setSelectedDate(newDate)
+                        loadData()
+                    }}
                 />
             )}
 
@@ -669,7 +702,7 @@ function AgendaDayColumn({
                                                             >
                                                                 🎫
                                                             </button>
-                                                            {apt.status === 'SCHEDULED' && (
+                                                            {(apt.status === 'SCHEDULED' || apt.status === 'CONFIRMED') && (
                                                                 <>
                                                                     <button
                                                                         type="button"

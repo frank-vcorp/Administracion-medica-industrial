@@ -35,7 +35,11 @@ import {
 import { uploadPdfBuffer } from '@/lib/upload-pdf-buffer'
 import QRCode from 'qrcode'
 import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
-import { parseAppointmentLocalDateTime } from '@/lib/appointment-scheduling'
+import {
+  agendaDayUtcRange,
+  formatAppointmentAgendaDateString,
+  parseAppointmentLocalDateTime,
+} from '@/lib/appointment-scheduling'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -380,6 +384,18 @@ export async function rescheduleAppointment(
 
       await tx.appointment.update({
         where: { id: appointmentId },
+        data: { status: 'RESCHEDULED' },
+      })
+
+      const newAgendaDay = formatAppointmentAgendaDateString(scheduledAt)
+      const { gte, lte } = agendaDayUtcRange(newAgendaDay)
+      await tx.appointment.updateMany({
+        where: {
+          workerId: existing.workerId,
+          status: { in: ['SCHEDULED', 'CONFIRMED'] },
+          id: { not: newAppointment.id },
+          scheduledAt: { gte, lte },
+        },
         data: { status: 'RESCHEDULED' },
       })
 

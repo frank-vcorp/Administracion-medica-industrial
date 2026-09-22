@@ -13,7 +13,7 @@ interface AppointmentToReschedule {
 interface Props {
   appointment: AppointmentToReschedule
   onClose: () => void
-  onSuccess: () => void
+  onSuccess?: (newDate: string) => void
 }
 
 function toDateInputValue(scheduledAt: Date | string): string {
@@ -41,7 +41,7 @@ export default function RescheduleAppointmentModal({ appointment, onClose, onSuc
     startTransition(async () => {
       const result = await rescheduleAppointment(appointment.id, { date, time })
       if (result.success) {
-        onSuccess()
+        onSuccess?.(date)
         onClose()
       } else {
         setError(result.error || 'No se pudo reagendar')
