@@ -99,6 +99,20 @@ export function appointmentAgendaHour(
   return Number(fmt.format(d))
 }
 
+export function formatAppointmentAgendaTime(
+  scheduledAt: Date | string,
+  timeZone = AMI_APPOINTMENT_TIMEZONE,
+): string {
+  const d = new Date(scheduledAt)
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    hourCycle: 'h23',
+  }).format(d)
+}
+
 /** Rango UTC que cubre un día de agenda (00:00–23:59:59.999) en zona AMI. */
 export function agendaDayUtcRange(dateStr: string): { gte: Date; lte: Date } {
   const gte = parseAppointmentLocalDateTime(dateStr, '00:00')
