@@ -13,6 +13,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { getCurrentDoctorProfile } from "@/actions/doctor-profile.actions"
@@ -498,6 +500,7 @@ export default function ExamenMedicoEstudio({
   hasMedicalVerdict = false,
   testNameSnapshot = 'Examen Médico AMI',
 }: ExamenMedicoEstudioProps) {
+  const router = useRouter()
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
   const examVariant: ExamenMedicoVariant = resolveExamenMedicoVariant(
     testNameSnapshot,
@@ -994,6 +997,7 @@ export default function ExamenMedicoEstudio({
         onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED')
         if (markComplete) {
           setCaptureClosed(true)
+          router.push(navigateToValidatingView(eventId))
         }
       } else {
         setSaveError(res.error ?? 'Error al guardar')
@@ -2362,15 +2366,23 @@ export default function ExamenMedicoEstudio({
             </div>
           ) : aptitud ? (
             <div
-              className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800"
+              className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-3"
               data-testid="examen-medico-pdf-pending-notice"
               data-implementacion="IMPL-FEATURE-20260825-03"
               data-has-medical-verdict={String(hasMedicalVerdict)}
             >
-              ⏳ Captura guardada. La descarga del PDF y del ZIP se
-              habilitará después de <strong>Firmar y Emitir
-              Dictamen</strong> desde el panel del expediente (paso
-              <em> Validación</em>).
+              <p>
+                ⏳ Captura guardada. El PDF consolidado y el ZIP de cierre se
+                habilitan después de <strong>Firmar y Emitir Dictamen</strong>
+                (paso <em>Firma</em>).
+              </p>
+              <Link
+                href={navigateToValidatingView(eventId)}
+                className="inline-flex items-center justify-center rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold px-4 py-2.5 transition-colors"
+                data-testid="examen-medico-go-validating-link"
+              >
+                Ir a Firma y emitir dictamen →
+              </Link>
             </div>
           ) : null}
 

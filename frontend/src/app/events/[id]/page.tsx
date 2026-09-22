@@ -142,7 +142,9 @@ function EventView({ data }: EventViewProps) {
         <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
           {visualStepGroups.map((group, index) => {
             const vStep = index + 1
-            const isClickable = vStep <= currentVisualStep
+            const isClickable =
+              vStep <= currentVisualStep ||
+              (group.primary === 'VALIDATING' && event.status === 'IN_PROGRESS')
             const isSelectedView = vStep === activeViewVisualStep
             const isCompleted = vStep < currentVisualStep
 
@@ -180,7 +182,7 @@ function EventView({ data }: EventViewProps) {
       {/* PASO 2 y 3: WORKSPACE DE PAPELETA DE ESTUDIOS (ARCH-20260325-05) */}
       {/* Somatometría y Agudeza Visual son EventTests independientes dentro de la Papeleta. */}
       {/* TriageForm global eliminado: CHECKED_IN e IN_PROGRESS comparten el mismo workspace. */}
-      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') && (
+      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS' || activeView === 'VALIDATING') && (
         <PapeletaWorkspace
           eventId={serializedEventId}
           eventTests={serializedEventTests as Parameters<typeof PapeletaWorkspace>[0]['eventTests']}
@@ -198,7 +200,8 @@ function EventView({ data }: EventViewProps) {
       )}
 
       {/* IMPL-20260507-08: Cronograma operativo persistente — ADMIN + SUPERADMIN */}
-      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') && isAdminLike(userRole) && (
+      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS' || activeView === 'VALIDATING') &&
+        isAdminLike(userRole) && (
         <PapeletaCronograma
           eventId={serializedEventId}
           initialEntries={initialTimeline as Parameters<typeof PapeletaCronograma>[0]['initialEntries']}

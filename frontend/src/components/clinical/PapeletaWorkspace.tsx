@@ -33,6 +33,7 @@ import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import type { StudyPresentationSchema } from "@/types/calibration"
 import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
+import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
@@ -1311,6 +1312,8 @@ function StudyPanel({
   }
   const [campiRetryError, setCampiRetryError] = useState('')
   const [isCampiRetrying, startCampiRetry] = useTransition()
+  const [examenMedicoRetryError, setExamenMedicoRetryError] = useState('')
+  const [isExamenMedicoRetrying, startExamenMedicoRetry] = useTransition()
   const router = useRouter()
 
   const isMedico = isExamenMedico(test.testNameSnapshot)
@@ -1331,6 +1334,18 @@ function StudyPanel({
       const res = await retryCampimetriaPrediagnosis(test.id, eventId)
       if (!res.success) {
         setCampiRetryError(res.error)
+        return
+      }
+      router.refresh()
+    })
+  }
+
+  const onRetryExamenMedicoAI = () => {
+    startExamenMedicoRetry(async () => {
+      setExamenMedicoRetryError('')
+      const res = await retryExamenMedicoPrediagnosis(test.id, eventId)
+      if (!res.success) {
+        setExamenMedicoRetryError(res.error)
         return
       }
       router.refresh()
@@ -1512,7 +1527,7 @@ function StudyPanel({
         </div>
       )}
 
-      {/* Sección: Examen Médico (tipo formulario — IMPL-20260325-01) */}
+      {/* Sección: Examen Médico — layout 2 columnas (paridad audio/espiro/campi) */}
       {isMedico && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
@@ -1524,20 +1539,58 @@ function StudyPanel({
               </p>
             </div>
           </div>
-          <ExamenMedicoEstudio
-            eventId={eventId}
-            eventTestId={test.id}
-            testNameSnapshot={test.testNameSnapshot}
-            examData={examData}
-            prefilledData={prefilledData ?? null}
-            longitudinalData={longitudinalData ?? null}
-            readonly={readonly}
-            workerId={workerId}
-            somatometryEventTestId={somatometryEventTestId}
-            agudezaEventTestId={agudezaEventTestId}
-            onStatusChange={onExamenMedicoStatusChange}
-            hasMedicalVerdict={hasMedicalVerdict}
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ExamenMedicoEstudio
+              eventId={eventId}
+              eventTestId={test.id}
+              testNameSnapshot={test.testNameSnapshot}
+              examData={examData}
+              prefilledData={prefilledData ?? null}
+              longitudinalData={longitudinalData ?? null}
+              readonly={readonly}
+              workerId={workerId}
+              somatometryEventTestId={somatometryEventTestId}
+              agudezaEventTestId={agudezaEventTestId}
+              onStatusChange={onExamenMedicoStatusChange}
+              hasMedicalVerdict={hasMedicalVerdict}
+            />
+            <div className="space-y-3 lg:sticky lg:top-4 self-start">
+              {test.aiSnapshot ? (
+                <StudyAIPrediagnosisPanel
+                  prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
+                  snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
+                  reviewerUserId={reviewerUserId}
+                  reviewerRole={reviewerRole}
+                  eventId={eventId}
+                  existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
+                  readonly={readonly}
+                  studyType="ExamenMedico"
+                />
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center space-y-3">
+                  <span className="text-2xl block mb-1">🤖</span>
+                  <p className="text-sm text-slate-600 font-medium">Prediagnóstico IA</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Guarda el examen o cierra la captura para que la IA sugiera impresión y hallazgos.
+                    El médico valida o edita, igual que en audiometría o espirometría.
+                  </p>
+                  {!readonly && (
+                    <button
+                      type="button"
+                      disabled={isExamenMedicoRetrying}
+                      onClick={onRetryExamenMedicoAI}
+                      className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                    >
+                      {isExamenMedicoRetrying ? 'Generando…' : 'Generar prediagnóstico IA'}
+                    </button>
+                  )}
+                  {examenMedicoRetryError && (
+                    <p className="text-xs text-red-600">{examenMedicoRetryError}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

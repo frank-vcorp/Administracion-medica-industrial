@@ -366,3 +366,78 @@ export async function saveExamenMedicoPapeleta(
  * `context/interconsultas/HANDOFF_ARCH-20260809-01_v2_SOFIA_ANTECEDENTES-SUB-PESTANA.md`
  * y la versión previa en git (commit anterior a IMPL-20260809-02).
  */
+
+/** Reintenta prediagnóstico IA con el examen médico ya persistido en `MedicalExam`. */
+export async function retryExamenMedicoPrediagnosis(
+  eventTestId: string,
+  eventId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  if (!eventTestId || !eventId) {
+    return { success: false, error: 'Faltan parámetros obligatorios' }
+  }
+
+  const eventTest = await prisma.eventTest.findUnique({
+    where: { id: eventTestId },
+    select: { eventId: true, testNameSnapshot: true },
+  })
+  if (!eventTest) {
+    return { success: false, error: 'El estudio no existe.' }
+  }
+  if (eventTest.eventId !== eventId) {
+    return { success: false, error: 'El estudio no pertenece al evento indicado.' }
+  }
+  if (!eventTest.testNameSnapshot.toLowerCase().includes('examen medico')) {
+    return { success: false, error: 'Este reintento sólo aplica al examen médico.' }
+  }
+
+  const exam = await prisma.medicalExam.findUnique({
+    where: { eventId },
+    select: { physicalExamData: true },
+  })
+  const physical = exam?.physicalExamData
+  if (!physical || typeof physical !== 'object') {
+    return {
+      success: false,
+      error: 'No hay captura de examen médico guardada para generar prediagnóstico.',
+    }
+  }
+
+  try {
+    const data = ExamenMedicoCompletoSchema.parse(physical)
+    const aiResult = await triggerStructuredStudyAIPrediagnosis({
+      eventTestId,
+      eventId,
+      studyType: 'ExamenMedico',
+      extractedData: data as Record<string, unknown>,
+    })
+
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        resultNotes: buildStructuredAIResultNote({
+          success: aiResult.success,
+          studyLabel: 'Examen Médico',
+          summary: aiResult.summary ?? null,
+          clinicalState: aiResult.clinicalState ?? null,
+          error: aiResult.error ?? null,
+        }),
+      },
+    })
+
+    revalidatePath(`/events/${eventId}`)
+
+    if (!aiResult.success) {
+      return {
+        success: false,
+        error: aiResult.error ?? 'No se pudo generar el prediagnóstico.',
+      }
+    }
+    return { success: true }
+  } catch (err) {
+    console.error('[medical-exam] retryExamenMedicoPrediagnosis failed:', err)
+    return {
+      success: false,
+      error: 'No se pudo generar el prediagnóstico. Intente nuevamente.',
+    }
+  }
+}
