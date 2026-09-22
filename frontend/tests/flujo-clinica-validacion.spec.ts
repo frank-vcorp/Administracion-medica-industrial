@@ -16,7 +16,7 @@ test.describe('SPEC ARCH-20260921-01 — Clínica · checkout · encuesta · val
   test.describe.configure({ mode: 'serial' })
   test('recepción muestra kanban de 3 columnas', async ({ page }) => {
     await page.goto('/reception')
-    await expect(page.getByRole('heading', { name: 'Registro de pruebas' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'En sala de espera' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'En proceso' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Listo para checkout' })).toBeVisible()
   })

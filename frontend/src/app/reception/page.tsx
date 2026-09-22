@@ -87,9 +87,9 @@ export default async function ReceptionPage(props: { searchParams: Promise<{ dat
             </div>
 
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 overflow-hidden min-h-0">
-                <Lane title="Registro de pruebas" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
+                <Lane title="En sala de espera" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
                     {scheduled.length === 0 ? (
-                        <EmptyLane message="Sin pacientes en registro para este día" />
+                        <EmptyLane message="Sin pacientes en sala de espera para este día" />
                     ) : (
                         scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" nextStatus="IN_PROGRESS" />)
                     )}
