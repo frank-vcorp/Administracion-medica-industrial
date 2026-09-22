@@ -26,10 +26,9 @@ export function getStudyVisibleStep(input: StudyStepInput): StudyVisibleStep {
 
   if (status === 'PENDING' || status === 'IN_PROGRESS') return '1'
   if (status === 'SAMPLE_TAKEN') return '2'
-  if (status === 'RESULT_REGISTERED') {
+  if (status === 'RESULT_REGISTERED' || status === 'COMPLETED') {
     return isStudyInterpreted(interpretation) ? '3' : '2'
   }
-  if (status === 'COMPLETED') return '3'
 
   return '1'
 }

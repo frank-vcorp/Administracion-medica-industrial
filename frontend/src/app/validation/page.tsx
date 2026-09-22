@@ -9,7 +9,11 @@ import {
   EVENT_COMPLETENESS_LABELS,
   getEventCompletenessFromSteps,
 } from '@/lib/clinical/event-completeness'
-import type { EventTestPipelineStatus } from '@/lib/clinical/study-status-display'
+import {
+  buildStudyInterpretationFromSnapshot,
+  type EventTestPipelineStatus,
+  type StudyInterpretationInput,
+} from '@/lib/clinical/study-status-display'
 import { buildNotPerformedTestIdSet } from '@/lib/clinical/reception-checkout'
 import {
   getValidationStage,
@@ -33,12 +37,46 @@ async function getValidationQueue() {
           id: true,
           testNameSnapshot: true,
           status: true,
+          extractionSnapshots: {
+            where: { isSuperseded: false },
+            orderBy: { version: 'desc' },
+            take: 1,
+            select: {
+              aiPrediagnoses: {
+                where: { isSuperseded: false },
+                orderBy: { version: 'desc' },
+                take: 1,
+                select: {
+                  clinicalState: true,
+                  doctorReviews: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { doctorStatus: true },
+                  },
+                },
+              },
+            },
+          },
         },
         orderBy: { createdAt: 'asc' },
       },
     },
     orderBy: { dischargedAt: 'desc' },
     take: 200,
+  })
+}
+
+function interpretationFromEventTest(
+  test: Awaited<ReturnType<typeof getValidationQueue>>[number]['eventTests'][number],
+): StudyInterpretationInput | null {
+  const latestPredx = test.extractionSnapshots?.[0]?.aiPrediagnoses?.[0]
+  if (!latestPredx) return null
+  const latestReview = latestPredx.doctorReviews?.[0]
+  return buildStudyInterpretationFromSnapshot({
+    snapshot: { clinicalState: latestPredx.clinicalState },
+    existingReview: latestReview
+      ? { doctorStatus: latestReview.doctorStatus }
+      : null,
   })
 }
 
@@ -52,6 +90,7 @@ function toValidationRows(
       const eventTests = event.eventTests.map((test) => ({
         id: test.id,
         status: test.status as EventTestPipelineStatus,
+        interpretation: interpretationFromEventTest(test),
       }))
       const stage = getValidationStage(eventTests, notPerformedIds)
       const completeness = getEventCompletenessFromSteps(eventTests, notPerformedIds)

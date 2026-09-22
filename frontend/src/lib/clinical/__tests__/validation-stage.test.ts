@@ -20,11 +20,24 @@ describe('validation-stage (SPEC ARCH-20260921-01 §5.2)', () => {
     ).toBe('V2')
   })
 
+  it('V2 cuando COMPLETED sin interpretación médica', () => {
+    expect(
+      getValidationStage([
+        { id: 'a', status: 'COMPLETED' },
+        { id: 'b', status: 'RESULT_REGISTERED' },
+      ]),
+    ).toBe('V2')
+  })
+
   it('V3 cuando todos en paso 3 o E', () => {
     expect(
       getValidationStage(
         [
-          { id: 'a', status: 'COMPLETED' },
+          {
+            id: 'a',
+            status: 'COMPLETED',
+            interpretation: { doctorStatus: 'REVIEWED_ACCEPTED' },
+          },
           { id: 'b', status: 'SKIPPED' },
         ],
         new Set(['b']),

@@ -11,13 +11,19 @@ describe('study-step (SPEC ARCH-20260921-01)', () => {
     expect(getStudyVisibleStep({ status: 'IN_PROGRESS' })).toBe('1')
     expect(getStudyVisibleStep({ status: 'SAMPLE_TAKEN' })).toBe('2')
     expect(getStudyVisibleStep({ status: 'RESULT_REGISTERED' })).toBe('2')
-    expect(getStudyVisibleStep({ status: 'COMPLETED' })).toBe('3')
+    expect(getStudyVisibleStep({ status: 'COMPLETED' })).toBe('2')
   })
 
-  it('RESULT_REGISTERED interpretado cuenta como paso 3', () => {
+  it('RESULT_REGISTERED o COMPLETED interpretado cuenta como paso 3', () => {
     expect(
       getStudyVisibleStep({
         status: 'RESULT_REGISTERED',
+        interpretation: { doctorStatus: 'REVIEWED_ACCEPTED' },
+      }),
+    ).toBe('3')
+    expect(
+      getStudyVisibleStep({
+        status: 'COMPLETED',
         interpretation: { doctorStatus: 'REVIEWED_ACCEPTED' },
       }),
     ).toBe('3')
