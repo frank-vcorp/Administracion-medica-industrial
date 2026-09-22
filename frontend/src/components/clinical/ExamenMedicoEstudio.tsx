@@ -12,9 +12,11 @@
  */
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
+import { getCurrentDoctorProfile } from "@/actions/doctor-profile.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
 // PRIMERA sub-pestaña dentro de "Examen Médico" (componente controlado).
@@ -65,18 +67,12 @@ import {
 // auto-poblamiento para las recomendaciones del dictamen (catalogo
 // hallazgo → recomendacion + edicion manual).
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
+import { formatMedicoNombreYCedula } from "@/lib/clinical/medico-display"
 import {
   deriveAgudezaVisualResumen,
   VISION_SNELLEN_NO_APLICA,
   VISION_SNELLEN_SELECT_OPTIONS,
 } from "@/lib/clinical/agudeza-visual"
-// IMPL-20260817-11-C1 (ARCH-20260817-02 corte 4 DA-5): preview en vivo de los
-// 9 campos auto-poblados, renderizado ARRIBA del selector de aptitud. El medico
-// ve primero lo que se va a poblar y despues decide la aptitud.
-// Regla explicita de Frank (2026-08-17):
-//   "Quiero que se autopoble. Quiero que el medico solo llene lo
-//   estrictamente necesario."
-import LiveSummaryPreview from "@/components/clinical/LiveSummaryPreview"
 import { FlowserveExtension } from "@/components/clinical/examen-medico/FlowserveExtension"
 import { SodexoExtension } from "@/components/clinical/examen-medico/SodexoExtension"
 import {
@@ -521,6 +517,7 @@ export default function ExamenMedicoEstudio({
   // explícita a `?view=VALIDATING` tras Completar exitoso (ver
   // `navigateToValidatingView` helper puro arriba).
   const router = useRouter()
+  const { data: session } = useSession()
   const [form, setForm] = useState<Record<string, string>>(() => {
     const isPrimitive = (v: unknown) =>
       v === null || v === undefined || typeof v === 'string' ||
@@ -772,6 +769,82 @@ export default function ExamenMedicoEstudio({
   function handleField(name: string, value: string) {
     setForm(prev => ({ ...prev, [name]: value }))
   }
+
+  const sessionMedicoLine = useMemo(
+    () =>
+      formatMedicoNombreYCedula(
+        session?.user?.fullName ?? session?.user?.name ?? null,
+        null,
+      ),
+    [session?.user?.fullName, session?.user?.name],
+  )
+
+  useEffect(() => {
+    if (readonly) return
+    if ((form.medico_evaluador ?? '').trim()) return
+
+    let cancelled = false
+    const apply = (line: string) => {
+      if (!line || cancelled) return
+      setForm(prev => {
+        if ((prev.medico_evaluador ?? '').trim()) return prev
+        return { ...prev, medico_evaluador: line }
+      })
+    }
+
+    if (sessionMedicoLine) {
+      void getCurrentDoctorProfile().then(res => {
+        if (cancelled) return
+        if (res.success) {
+          apply(
+            formatMedicoNombreYCedula(
+              res.profile.fullName,
+              res.profile.professionalLicense,
+            ),
+          )
+        } else {
+          apply(sessionMedicoLine)
+        }
+      })
+    } else {
+      void getCurrentDoctorProfile().then(res => {
+        if (cancelled || !res.success) return
+        apply(
+          formatMedicoNombreYCedula(
+            res.profile.fullName,
+            res.profile.professionalLicense,
+          ),
+        )
+      })
+    }
+
+    return () => {
+      cancelled = true
+    }
+    // Solo al abrir / si aún no hay evaluador persistido.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readonly])
+
+  async function applyMedicoRevisorFromSession() {
+    const res = await getCurrentDoctorProfile()
+    const line = res.success
+      ? formatMedicoNombreYCedula(
+          res.profile.fullName,
+          res.profile.professionalLicense,
+        )
+      : sessionMedicoLine
+    if (!line) return
+    setForm(prev => ({ ...prev, medico_revisor: line }))
+  }
+
+  function handleAptitudSelect(value: string) {
+    const next = aptitud === value ? '' : value
+    setAptitud(next)
+    if (next && !readonly) {
+      void applyMedicoRevisorFromSession()
+    }
+  }
+
   function buildPayload() {
     // IMPL-20260809-02 (ARCH-20260809-01 v2): revert I-1. `antecedentes_captured`
     // ahora es estado levantado al padre y SE INCLUYE en el payload (objeto, no
@@ -866,12 +939,37 @@ export default function ExamenMedicoEstudio({
     setIsSavingAgudeza(false)
   }
 
+  async function resolveMedicoLinesForSave(): Promise<{
+    medico_evaluador?: string
+    medico_revisor?: string
+  }> {
+    const res = await getCurrentDoctorProfile()
+    const line = res.success
+      ? formatMedicoNombreYCedula(
+          res.profile.fullName,
+          res.profile.professionalLicense,
+        )
+      : sessionMedicoLine
+    if (!line) return {}
+    const patch: { medico_evaluador?: string; medico_revisor?: string } = {}
+    if (!(form.medico_evaluador ?? '').trim()) patch.medico_evaluador = line
+    if (aptitud && !(form.medico_revisor ?? '').trim()) patch.medico_revisor = line
+    return patch
+  }
+
   function handleSave(markComplete: boolean) {
     setSaveMsg('')
     setSaveError('')
     setAiWarning('')
     startTransition(async () => {
-      const payload = buildPayload()
+      const medicoPatch = await resolveMedicoLinesForSave()
+      if (Object.keys(medicoPatch).length > 0) {
+        setForm(prev => ({ ...prev, ...medicoPatch }))
+      }
+      const payload = {
+        ...buildPayload(),
+        ...medicoPatch,
+      }
       const res = await saveExamenMedicoPapeleta(eventId, eventTestId, payload, markComplete)
       if (res.success) {
         // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / FND-20260825-22):
@@ -1886,52 +1984,6 @@ export default function ExamenMedicoEstudio({
       {/* ── Sub-tab 4: Impresión Diagnóstica y Aptitud ────────────────── */}
           {activeInnerTab === 'impresion' && (
         <div className="space-y-4">
-          {/*
-            IMPL-20260817-11-C1 (ARCH-20260817-02 corte 4 DA-5): preview en vivo
-            de los 9 campos auto-poblados, renderizado ARRIBA del selector de
-            aptitud. Regla explicita de Frank (2026-08-17):
-              "Quiero que se autopoble. Quiero que el medico solo llene lo
-              estrictamente necesario."
-
-            - El medico ve primero lo que se va a firmar y despues decide la
-              aptitud (DA-5: tabla en vivo).
-            - Reactivo: como `form` viene del state del padre, cualquier
-              cambio en los combos / textareas re-renderiza este componente
-              sin recargar (AC-21).
-            - Los campos 6-9 muestran "Pendiente de resultado" si no hay IA
-              todavia; cuando llega el resultado IA, se actualiza (AC-22).
-            - IA no esta plumbed al componente padre todavia; cuando se
-              añada via props, se pasara como segundo argumento.
-          */}
-          <LiveSummaryPreview form={form} />
-
-          {/* Selección de Aptitud */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Aptitud laboral
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {APTITUD_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  disabled={readonly}
-                  onClick={() => setAptitud(aptitud === opt.value ? '' : opt.value)}
-                  // IMPL-20260817-08-C7 (ARCH-20260817-02 DA-1): `break-words` permite
-                  // que el literal largo "NO CUMPLE CON LOS CRITERIOS..." fluya sin
-                  // romper el grid 2-col.
-                  title={opt.value}
-                  className={`text-xs font-bold px-3 py-3 rounded-xl border-2 transition-all text-left break-words ${
-                    aptitud === opt.value
-                      ? opt.color + ' border-current ring-2 ring-offset-1 ring-current/30'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-60'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Resumen Clínico por Sistema — ARCH-20260325-09 */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Resumen Clínico por Sistema</p>
@@ -1983,18 +2035,6 @@ export default function ExamenMedicoEstudio({
                 })}
             </div>
           </div>
-
-          {/*
-            IMPL-20260817-09-C3 (ARCH-20260817-02 DA-5): el Resumen Ejecutivo
-            auto-poblado (9 campos del PDF canonico) ahora vive en su propio
-            archivo (`LiveSummaryPreview`) y se renderiza ARRIBA del selector
-            de aptitud — IMPL-20260817-11-C1 (Corte 4). El medico ve primero
-            lo que se va a poblar y despues decide la aptitud.
-
-            Regla explicita de Frank (2026-08-17):
-              "Quiero que se autopoble. Quiero que el medico solo llene lo
-              estrictamente necesario."
-          */}
 
           {/* Impresión Diagnóstica */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
@@ -2091,20 +2131,69 @@ export default function ExamenMedicoEstudio({
                 o quitar recomendaciones.
               </p>
             </div>
+          </div>
 
-            {/* Médicos firmantes — ARCH-20260325-09 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {/* Aptitud laboral — al final, antes de firmantes */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Aptitud laboral
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {APTITUD_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  disabled={readonly}
+                  onClick={() => handleAptitudSelect(opt.value)}
+                  title={opt.value}
+                  className={`text-xs font-bold px-3 py-3 rounded-xl border-2 transition-all text-left break-words ${
+                    aptitud === opt.value
+                      ? opt.color + ' border-current ring-2 ring-offset-1 ring-current/30'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-60'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Médicos firmantes — auto desde sesión / aptitud */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Médicos firmantes
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Médico Evaluador (Nombre y Cédula)</span>
-                <input type="text" value={form.medico_evaluador ?? ''} onChange={e => handleField('medico_evaluador', e.target.value)} disabled={readonly}
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Médico evaluador (nombre y cédula)
+                </span>
+                <input
+                  type="text"
+                  value={form.medico_evaluador ?? ''}
+                  onChange={e => handleField('medico_evaluador', e.target.value)}
+                  disabled={readonly}
                   className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                  placeholder="Dr. Nombre Apellido — Cédula: 0000000" />
+                  placeholder="Se completa con tu cuenta al abrir esta pestaña"
+                />
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Desde el perfil del usuario que captura el examen.
+                </p>
               </label>
               <label className="block">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Médico Revisor (Nombre y Cédula)</span>
-                <input type="text" value={form.medico_revisor ?? ''} onChange={e => handleField('medico_revisor', e.target.value)} disabled={readonly}
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Médico revisor (nombre y cédula)
+                </span>
+                <input
+                  type="text"
+                  value={form.medico_revisor ?? ''}
+                  onChange={e => handleField('medico_revisor', e.target.value)}
+                  disabled={readonly}
                   className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                  placeholder="Dr. Nombre Apellido — Cédula: 0000000" />
+                  placeholder="Se completa al elegir aptitud laboral"
+                />
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Quien selecciona la aptitud laboral (misma cuenta en sesión).
+                </p>
               </label>
             </div>
           </div>
