@@ -1036,13 +1036,43 @@ Responde en JSON con esta estructura exacta:
 
         # ── Gates Fase 4 (AC-4.4): enabled=false / prediagnosisEnabled=false ─
         if calibration_source == "calibration_disabled":
-            reason = (
-                "calibration_disabled: aiCalibration publicada con enabled=false"
-                if not bool(getattr(calibration_version, "enabled", True))
-                else "calibration_disabled: clinicalCriteria.prediagnosisEnabled=false"
+            fallback_effective = self._resolve_clinical_criteria(
+                calibration_version=None,
+                ai_calibration_shim=ai_calibration,
+                study_type=study_type,
             )
-            print(f"ℹ️ [ARCH-20260820-01 Fase 4] {reason} para {study_type}")
-            return _result_with_provider(
+            fallback_prompt = (fallback_effective.get("prompt") or "").strip()
+            can_use_runtime_fallback = (
+                study_type in PREDIAGNOSIS_SUPPORTED_TYPES
+                and bool(fallback_effective.get("prediagnosisEnabled"))
+                and bool(fallback_prompt)
+            )
+            if can_use_runtime_fallback:
+                calibration_source = "legacy_hardcoded"
+                legacy_hardcoded_reason = "published_disabled"
+                effective = fallback_effective
+                if ai_calibration and (ai_calibration.get("diagnosis") or {}).get("prompt"):
+                    prompt_source = "ai_calibration"
+                    _clinical_prompt_version = (ai_calibration.get("diagnosis") or {}).get(
+                        "version", "calibration_custom"
+                    )
+                else:
+                    prompt_source = "backend_fallback"
+                    _clinical_prompt_version = fallback_effective.get(
+                        "promptVersion", "backend_v2"
+                    )
+                print(
+                    f"ℹ️ [ARCH-20260820-01 Fase 4] V3 deshabilitada para {study_type}; "
+                    f"fallback runtime → legacy_hardcoded ({legacy_hardcoded_reason})"
+                )
+            else:
+                reason = (
+                    "calibration_disabled: aiCalibration publicada con enabled=false"
+                    if not bool(getattr(calibration_version, "enabled", True))
+                    else "calibration_disabled: clinicalCriteria.prediagnosisEnabled=false"
+                )
+                print(f"ℹ️ [ARCH-20260820-01 Fase 4] {reason} para {study_type}")
+                return _result_with_provider(
                 summary=(
                     "Prediagnóstico IA no habilitado para esta prueba: la versión "
                     "publicada tiene `enabled=false` o `clinicalCriteria.prediagnosisEnabled=false`."
@@ -1076,7 +1106,7 @@ Responde en JSON con esta estructura exacta:
                     clinical_model_used=clinical_model_used,
                     rendered_prompt=None,
                 ),
-            )
+                )
 
         # CB-14 / AC-4.5: document_extraction ⇒ clinicalCriteria=None ⇒ el
         # backend NO debe sintetizar prediagnóstico. Esta rama se cubre arriba

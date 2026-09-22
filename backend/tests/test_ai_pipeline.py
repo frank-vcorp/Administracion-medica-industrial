@@ -3136,10 +3136,21 @@ class TestPrediagnosisFase4ARCH20260820_01:
         self, mock_call, prediagnostic_svc
     ):
         """
-        AC-4.4: con `calibration_version.enabled=false` →
-        `AI_NON_CONCLUSIVE` con `non_conclusive_reason="calibration_disabled"`
-        **sin llamar** a DR7 (`_call_dr7_medical_chat` no se invoca).
+        AC-4.4: con `calibration_version.enabled=false` en tipos con soporte
+        clínico → fallback runtime `legacy_hardcoded` (published_disabled) e
+        invocación DR7 con prompt backend/shim, no snapshot calibration_disabled.
         """
+        mock_call.return_value = {
+            "summary": "Audiometría fallback V3 deshabilitada.",
+            "confidence": 0.75,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["Fallback runtime"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
         v3 = _FakeAICalibrationVersionResolved(
             operationMode="clinical_interpretation",
             enabled=False,  # <-- gate global
@@ -3167,12 +3178,10 @@ class TestPrediagnosisFase4ARCH20260820_01:
             extracted_data=self._AUDIO_MINIMA,
             calibration_version=v3,
         )
-        assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.non_conclusive_reason == "calibration_disabled"
-        assert result.calibration_source == "calibration_disabled"
-        assert result.legacy_hardcoded_reason is None
-        # DR7 NO se invocó.
-        mock_call.assert_not_called()
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.calibration_source == "legacy_hardcoded"
+        assert result.legacy_hardcoded_reason == "published_disabled"
+        mock_call.assert_called_once()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
     @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
@@ -3181,10 +3190,20 @@ class TestPrediagnosisFase4ARCH20260820_01:
         self, mock_call, prediagnostic_svc
     ):
         """
-        AC-4.4 (variante): `clinicalCriteria.prediagnosisEnabled=false` →
-        `AI_NON_CONCLUSIVE` con `non_conclusive_reason="calibration_disabled"`
-        sin llamar DR7, aunque `enabled` global sea true.
+        AC-4.4 (variante): `clinicalCriteria.prediagnosisEnabled=false` con
+        estudio soportado → mismo fallback runtime que enabled=false global.
         """
+        mock_call.return_value = {
+            "summary": "Audiometría fallback prediagnosisEnabled=false.",
+            "confidence": 0.70,
+            "clinical_state": "AI_PENDING_REVIEW",
+            "justification": ["Fallback runtime"],
+            "clinical_basis": [],
+            "citations": [],
+            "limitations": [],
+            "red_flags": [],
+            "non_conclusive_reason": None,
+        }
         v3 = _FakeAICalibrationVersionResolved(
             operationMode="clinical_interpretation",
             enabled=True,  # gate global OK
@@ -3212,10 +3231,10 @@ class TestPrediagnosisFase4ARCH20260820_01:
             extracted_data=self._AUDIO_MINIMA,
             calibration_version=v3,
         )
-        assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.non_conclusive_reason == "calibration_disabled"
-        assert result.calibration_source == "calibration_disabled"
-        mock_call.assert_not_called()
+        assert result.clinical_state == "AI_PENDING_REVIEW"
+        assert result.calibration_source == "legacy_hardcoded"
+        assert result.legacy_hardcoded_reason == "published_disabled"
+        mock_call.assert_called_once()
 
     # --- AC-4.5 --------------------------------------------------------
 

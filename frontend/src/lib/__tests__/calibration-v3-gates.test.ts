@@ -25,7 +25,7 @@ describe('calibration-v3-gates', () => {
     expect(gates?.blocksPrediagnosisResolver).toBe(true)
   })
 
-  it('omite medical_test_id si hay prompt legacy y V3 bloquea prediagnóstico', () => {
+  it('omite medical_test_id cuando V3 bloquea prediagnóstico (aun sin prompt legacy)', () => {
     const options = {
       aiCalibration: {
         schemaVersion: 'V3',
@@ -44,10 +44,8 @@ describe('calibration-v3-gates', () => {
           },
         ],
         currentPublishedVersionId: 'v1',
-        diagnosis: { enabled: true, prompt: 'prompt legacy espiro', version: 'v3' },
       },
     }
-    expect(hasLegacyDiagnosisPrompt(options)).toBe(true)
     expect(shouldOmitMedicalTestIdForLegacyPrediagnosis(options)).toBe(true)
   })
 })
