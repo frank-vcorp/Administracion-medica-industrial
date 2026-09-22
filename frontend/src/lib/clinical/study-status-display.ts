@@ -96,8 +96,9 @@ export function getOperationalDetail(
   if (interpretationDetail) return interpretationDetail
 
   switch (status) {
+    case 'PENDING':
     case 'IN_PROGRESS':
-      return 'En cabina · falta subir resultado'
+      return 'Falta subir el resultado'
     case 'SAMPLE_TAKEN':
       return 'Muestra tomada · esperando laboratorio'
     case 'SKIPPED':
@@ -109,13 +110,17 @@ export function getOperationalDetail(
   }
 }
 
+/**
+ * Texto bajo el nombre del estudio (recepción, papeleta).
+ * El badge ya muestra Pendiente/Realizado; aquí solo el detalle operativo.
+ */
 export function formatStudyStatusLine(
   status: EventTestPipelineStatus,
   interpretation?: StudyInterpretationInput | null,
 ): string {
-  const label = BUSINESS_STATUS_LABELS[toBusinessStudyStatus(status)]
   const detail = getOperationalDetail(status, interpretation)
-  return detail ? `${label} · ${detail}` : label
+  if (detail) return detail
+  return BUSINESS_STATUS_LABELS[toBusinessStudyStatus(status)]
 }
 
 export function getBusinessStatusBadgeClass(

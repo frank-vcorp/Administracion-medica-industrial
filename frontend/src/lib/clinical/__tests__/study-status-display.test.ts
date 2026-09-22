@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BUSINESS_STATUS_LABELS,
   formatStudyStatusLine,
   getInterpretationDetail,
   getOperationalDetail,
@@ -28,19 +27,20 @@ describe('study-status-display (DEC-20260907-01)', () => {
   it('conserva detalle operativo de laboratorio en SAMPLE_TAKEN', () => {
     expect(getOperationalDetail('SAMPLE_TAKEN')).toContain('laboratorio')
     expect(formatStudyStatusLine('SAMPLE_TAKEN')).toBe(
-      `${BUSINESS_STATUS_LABELS.PENDIENTE} · Muestra tomada · esperando laboratorio`,
+      'Muestra tomada · esperando laboratorio',
     )
   })
 
-  it('PENDING no agrega subtexto operativo', () => {
-    expect(getOperationalDetail('PENDING')).toBeNull()
-    expect(formatStudyStatusLine('PENDING')).toBe('Pendiente')
+  it('PENDING e IN_PROGRESS: falta subir resultado', () => {
+    expect(getOperationalDetail('PENDING')).toBe('Falta subir el resultado')
+    expect(getOperationalDetail('IN_PROGRESS')).toBe('Falta subir el resultado')
+    expect(formatStudyStatusLine('IN_PROGRESS')).toBe('Falta subir el resultado')
   })
 
   it('COMPLETED muestra interpretación pendiente por defecto (Word R-18)', () => {
     expect(getInterpretationDetail('COMPLETED')).toBe('Pendiente de interpretación')
     expect(getOperationalDetail('COMPLETED')).toBe('Pendiente de interpretación')
-    expect(formatStudyStatusLine('COMPLETED')).toBe('Realizado · Pendiente de interpretación')
+    expect(formatStudyStatusLine('COMPLETED')).toBe('Pendiente de interpretación')
   })
 
   it('RESULT_REGISTERED muestra estatus de interpretación', () => {
@@ -51,8 +51,6 @@ describe('study-status-display (DEC-20260907-01)', () => {
     const interpreted = { doctorStatus: 'REVIEWED_ACCEPTED' }
     expect(isStudyInterpreted(interpreted)).toBe(true)
     expect(getOperationalDetail('COMPLETED', interpreted)).toBe('Prueba interpretada')
-    expect(formatStudyStatusLine('COMPLETED', interpreted)).toBe(
-      'Realizado · Prueba interpretada',
-    )
+    expect(formatStudyStatusLine('COMPLETED', interpreted)).toBe('Prueba interpretada')
   })
 })
