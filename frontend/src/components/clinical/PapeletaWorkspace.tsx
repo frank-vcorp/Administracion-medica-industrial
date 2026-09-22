@@ -1535,7 +1535,7 @@ function StudyPanel({
             <div>
               <p className="text-sm font-bold text-blue-800">{test.testNameSnapshot} — Formulario Clínico</p>
               <p className="text-xs text-blue-600">
-                Completa las secciones: Módulo 1 → Exploración Física → Impresión / Aptitud
+                Antecedentes → Módulo 1 → Exploración física → Impresión clínica (somatometría y agudeza en el menú lateral)
               </p>
             </div>
           </div>
@@ -1553,6 +1553,7 @@ function StudyPanel({
               agudezaEventTestId={agudezaEventTestId}
               onStatusChange={onExamenMedicoStatusChange}
               hasMedicalVerdict={hasMedicalVerdict}
+              papeletaLayout
             />
             <div className="space-y-3 lg:sticky lg:top-4 self-start">
               {test.aiSnapshot ? (

@@ -229,6 +229,11 @@ interface ExamenMedicoEstudioProps {
   agudezaEventTestId?: string
   /** Nombre snapshot del estudio (ej. Examen Médico Flowserve). */
   testNameSnapshot?: string
+  /**
+   * En la papeleta, Somatometría / Agudeza son estudios aparte en el menú.
+   * Oculta las 4 outer-tabs y deja sólo el flujo clínico hasta Impresión clínica.
+   */
+  papeletaLayout?: boolean
 }
 
 // ─── Constantes de formularios ────────────────────────────────────────────────
@@ -499,6 +504,7 @@ export default function ExamenMedicoEstudio({
   agudezaEventTestId,
   hasMedicalVerdict = false,
   testNameSnapshot = 'Examen Médico AMI',
+  papeletaLayout = false,
 }: ExamenMedicoEstudioProps) {
   const router = useRouter()
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
@@ -679,7 +685,9 @@ export default function ExamenMedicoEstudio({
   }
 
   // ── Pestaña activa externa (1-4) ──────────────────────────────────────────
-  const [outerTab, setOuterTab] = useState<OuterTab>('somatometria')
+  const [outerTab, setOuterTab] = useState<OuterTab>(
+    papeletaLayout ? 'examen_medico' : 'somatometria',
+  )
 
   // ── Bloqueo de pestaña 4 ─────────────────────────────────────────────────
   const canAccessExamen = somaCompleted && vitalsCompleted && agudezaCompleted
@@ -1109,9 +1117,13 @@ export default function ExamenMedicoEstudio({
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
+  const showExamenMedicoPanel =
+    papeletaLayout || outerTab === 'examen_medico'
+
   return (
     <div className="space-y-4">
-      {/* ── Pestañas externas (1-4) ────────────────────────────────── */}
+      {/* ── Pestañas externas (1-4) — ocultas en papeleta (estudios en menú lateral) */}
+      {!papeletaLayout && (
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
         {outerTabs.map(tab => (
           <button
@@ -1137,6 +1149,7 @@ export default function ExamenMedicoEstudio({
           </button>
         ))}
       </div>
+      )}
 
       {!readonly && autosaveStatusLabel && (
         <p
@@ -1154,7 +1167,7 @@ export default function ExamenMedicoEstudio({
       {/* Banner de bloqueo visible cuando el médico intenta ir a Examen Médico sin completar prereqs.
           IMPL-20260809-02 (ARCH-20260809-01 v2): revert I-4. La condición vuelve
           a la original — ya no hay outer-tab 'antecedentes' que excluir. */}
-      {outerTab !== 'examen_medico' && !canAccessExamen && (
+      {!papeletaLayout && outerTab !== 'examen_medico' && !canAccessExamen && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-start gap-2">
           <span className="text-amber-500 text-sm mt-0.5">🔒</span>
           <p className="text-xs text-amber-800">
@@ -1170,7 +1183,7 @@ export default function ExamenMedicoEstudio({
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* PESTAÑA 1: SOMATOMETRÍA                                       */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      {outerTab === 'somatometria' && (
+      {!papeletaLayout && outerTab === 'somatometria' && (
         <div className="space-y-6">
           <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5">
             <span className="text-teal-600">⚖️</span>
@@ -1241,7 +1254,7 @@ export default function ExamenMedicoEstudio({
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* PESTAÑA 2: SIGNOS VITALES                                     */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      {outerTab === 'signos_vitales' && (
+      {!papeletaLayout && outerTab === 'signos_vitales' && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5">
             <span className="text-rose-600">💓</span>
@@ -1349,7 +1362,7 @@ export default function ExamenMedicoEstudio({
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* PESTAÑA 3: AGUDEZA VISUAL                                     */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      {outerTab === 'agudeza_visual' && (
+      {!papeletaLayout && outerTab === 'agudeza_visual' && (
         <div className="space-y-5">
           <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
             <span className="text-indigo-600">👁️</span>
@@ -1447,48 +1460,59 @@ export default function ExamenMedicoEstudio({
       {/* IMPL-20260809-02 (ARCH-20260809-01 v2): 'antecedentes' ya no es */}
       {/* outer-tab; ahora es primera inner-tab dentro de esta pestaña.   */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      {outerTab === 'examen_medico' && !canAccessExamen && (
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6 text-center space-y-3">
-          <div className="text-4xl">🔒</div>
-          <p className="text-base font-bold text-amber-800">Examen Médico bloqueado</p>
-          <p className="text-sm text-amber-700">
-            Para acceder a esta sección debes completar primero:
+      {showExamenMedicoPanel && !canAccessExamen && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 text-center space-y-3">
+          <div className="text-3xl">🔒</div>
+          <p className="text-sm font-bold text-amber-800">Completa los prerrequisitos</p>
+          <p className="text-xs text-amber-700">
+            {papeletaLayout
+              ? 'En el menú de estudios (izquierda), termina primero:'
+              : 'Para acceder a esta sección debes completar primero:'}
           </p>
-          <ul className="text-sm text-amber-700 space-y-1">
-            {!somaCompleted && (
-              <li>
-                <button onClick={() => setOuterTab('somatometria')} className="underline font-semibold hover:text-amber-900">
-                  ⚖️ Somatometría
-                </button>
-              </li>
-            )}
-            {!vitalsCompleted && (
-              <li>
-                <button onClick={() => setOuterTab('signos_vitales')} className="underline font-semibold hover:text-amber-900">
-                  💓 Signos Vitales
-                </button>
-              </li>
-            )}
-            {!agudezaCompleted && (
-              <li>
-                <button onClick={() => setOuterTab('agudeza_visual')} className="underline font-semibold hover:text-amber-900">
-                  👁️ Agudeza Visual
-                </button>
-              </li>
-            )}
+          <ul className="text-xs text-amber-800 space-y-1 font-medium">
+            {!somaCompleted && <li>⚖️ Somatometría (peso, talla y signos vitales)</li>}
+            {!vitalsCompleted && !papeletaLayout && <li>💓 Signos Vitales</li>}
+            {!agudezaCompleted && <li>👁️ Agudeza Visual</li>}
           </ul>
+          {!papeletaLayout && (
+            <ul className="text-sm text-amber-700 space-y-1">
+              {!somaCompleted && (
+                <li>
+                  <button onClick={() => setOuterTab('somatometria')} className="underline font-semibold hover:text-amber-900">
+                    Ir a Somatometría
+                  </button>
+                </li>
+              )}
+              {!vitalsCompleted && (
+                <li>
+                  <button onClick={() => setOuterTab('signos_vitales')} className="underline font-semibold hover:text-amber-900">
+                    Ir a Signos Vitales
+                  </button>
+                </li>
+              )}
+              {!agudezaCompleted && (
+                <li>
+                  <button onClick={() => setOuterTab('agudeza_visual')} className="underline font-semibold hover:text-amber-900">
+                    Ir a Agudeza Visual
+                  </button>
+                </li>
+              )}
+            </ul>
+          )}
         </div>
       )}
 
-      {outerTab === 'examen_medico' && canAccessExamen && (
-        <div className="space-y-4">
-          {/* Sub-tabs internos del Examen Médico */}
+      {showExamenMedicoPanel && canAccessExamen && (
+        <div className="space-y-3">
+          {/* Sub-tabs: Antecedentes → Impresión clínica */}
           <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
             {innerTabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveInnerTab(tab.id)}
-                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-colors flex-1 justify-center ${
+                className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-2 rounded-lg transition-colors justify-center ${
+                  papeletaLayout ? 'flex-1 min-w-[calc(50%-0.25rem)] sm:min-w-0 sm:flex-1' : 'flex-1'
+                } ${
                   activeInnerTab === tab.id
                     ? 'bg-white shadow text-teal-700'
                     : 'text-slate-500 hover:text-slate-700'

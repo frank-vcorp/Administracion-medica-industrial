@@ -135,36 +135,20 @@ export const EcgValidatedPDF = ({ data }: { data: EcgValidatedPDFData }) => (
       </View>
 
       <Text style={styles.docTitle}>Reporte de Electrocardiograma Validado</Text>
-      <Text style={styles.docSubtitle}>
-        Folio de revisión: {data.reviewId} · Estado:{' '}
-        {data.doctorStatus === 'REVIEWED_ACCEPTED' ? 'Aceptado' : 'Editado'} · Firmado:{' '}
-        {formatDate(data.signedAt)}
-      </Text>
+
+      <PatientIdentificationPdfBlock
+        patient={data.patient}
+        heading="Identificación del paciente"
+      />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>I. Datos del estudio y paciente</Text>
-        <View style={styles.row}>
-          <Text style={styles.label}>Estudio:</Text>
-          <Text style={styles.value}>{data.studyName}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Tipo:</Text>
-          <Text style={styles.value}>{data.studyType}</Text>
-        </View>
-        <PatientIdentificationPdfBlock
-          patient={data.patient}
-          heading="Identificación del paciente"
-        />
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>II. Interpretación del trazado</Text>
+        <Text style={styles.sectionTitle}>I. Interpretación del trazado</Text>
         <Text style={styles.paragraph}>{data.narrativeParagraph}</Text>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
-          III. Diagnóstico electrocardiográfico (validado por el médico)
+          II. Diagnóstico electrocardiográfico (validado por el médico)
         </Text>
         {data.diagnosisItems.length === 0 ? (
           <View style={styles.verdictBox}>
@@ -181,7 +165,7 @@ export const EcgValidatedPDF = ({ data }: { data: EcgValidatedPDFData }) => (
 
       {data.doctorNotes?.trim() ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>IV. Notas clínicas</Text>
+          <Text style={styles.sectionTitle}>III. Notas clínicas</Text>
           <Text style={styles.paragraph}>{data.doctorNotes.trim()}</Text>
         </View>
       ) : null}

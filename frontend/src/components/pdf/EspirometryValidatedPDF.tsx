@@ -43,7 +43,6 @@ const styles = StyleSheet.create({
     color: '#0f766e',
   },
   docTitle: { fontSize: 10, fontWeight: 'bold', marginBottom: 2, color: '#0f172a' },
-  docSubtitle: { fontSize: 6.5, color: '#475569', marginBottom: 6 },
   sourceWrap: {
     marginHorizontal: -14,
     marginBottom: 4,
@@ -138,18 +137,6 @@ const styles = StyleSheet.create({
     lineHeight: 1.35,
   },
 })
-
-const formatDate = (d: string | Date) => {
-  const date = d instanceof Date ? d : new Date(d)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('es-MX', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 export interface EspirometryValidatedPDFData {
   reviewId: string
@@ -252,11 +239,6 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
         </View>
 
         <Text style={styles.docTitle}>Estudio de Espirometría Validado</Text>
-        <Text style={styles.docSubtitle}>
-          Folio de revisión: {data.reviewId} · Estado:{' '}
-          {data.doctorStatus === 'REVIEWED_ACCEPTED' ? 'Aceptado' : 'Editado'} ·
-          Firmado: {formatDate(data.signedAt)}
-        </Text>
 
         <PatientIdentificationPdfBlock
           patient={data.patient}

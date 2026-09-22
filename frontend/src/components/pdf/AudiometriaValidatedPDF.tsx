@@ -244,33 +244,16 @@ export const AudiometriaValidatedPDF = ({
       </View>
 
       <Text style={styles.docTitle}>Reporte de Audiometría Validado</Text>
-      <Text style={styles.docSubtitle}>
-        Folio de revisión: {data.reviewId} · Estado:{' '}
-        {data.doctorStatus === 'REVIEWED_ACCEPTED' ? 'Aceptado' : 'Editado'} ·
-        Firmado: {formatDate(data.signedAt)}
-      </Text>
 
-      {/* I. DATOS DEL ESTUDIO Y PACIENTE */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>I. Datos del estudio y paciente</Text>
-        <View style={styles.row}>
-          <Text style={styles.label}>Estudio:</Text>
-          <Text style={styles.value}>{data.studyName}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Tipo:</Text>
-          <Text style={styles.value}>{data.studyType}</Text>
-        </View>
-        <PatientIdentificationPdfBlock
-          patient={data.patient}
-          heading="Identificación del paciente"
-        />
-      </View>
+      <PatientIdentificationPdfBlock
+        patient={data.patient}
+        heading="Identificación del paciente"
+      />
 
-      {/* II. EVIDENCIA AUDIOMÉTRICA (capa Fuente) */}
+      {/* I. EVIDENCIA AUDIOMÉTRICA (capa Fuente) */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
-          II. Evidencia audiométrica por oído y frecuencia (fuente)
+          I. Evidencia audiométrica por oído y frecuencia (fuente)
         </Text>
         {data.frecuencias.length === 0 ? (
           <Text style={styles.paragraph}>
@@ -322,10 +305,10 @@ export const AudiometriaValidatedPDF = ({
           etiologías — TAMBIÉN fue retirada en FND-20260825-14 (live
           sólo en el acordeón nativo del panel, FND-20260825-13). */}
 
-      {/* III. IMPRESIÓN DIAGNÓSTICA VALIDADA */}
+      {/* II. IMPRESIÓN DIAGNÓSTICA VALIDADA */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
-          III. Impresión diagnóstica (validada por el médico)
+          II. Impresión diagnóstica (validada por el médico)
         </Text>
         <View style={styles.verdictBox}>
           <Text style={styles.paragraph}>{data.doctorDiagnosis}</Text>

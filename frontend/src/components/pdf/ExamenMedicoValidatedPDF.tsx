@@ -374,10 +374,6 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
       </View>
 
       <Text style={styles.docTitle}>Reporte de Examen Médico — {variantLabel}</Text>
-      <Text style={styles.docSubtitle}>
-        Folio: {data.folio} · Estado: {statusLabel(data.status)} · Firmado:{' '}
-        {formatDate(data.signedAt)}
-      </Text>
 
       {/* I. IDENTIFICACIÓN E HISTORIA */}
       <View style={styles.section}>
