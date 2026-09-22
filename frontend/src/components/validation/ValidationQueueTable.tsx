@@ -213,7 +213,11 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                 <td className="px-6 py-4 text-right">
                   <div className="flex items-center justify-end gap-3">
                     <Link
-                      href={`/events/${row.eventId}`}
+                      href={
+                        row.stage === 'V3'
+                          ? `/events/${row.eventId}?view=VALIDATING`
+                          : `/events/${row.eventId}`
+                      }
                       className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold hover:underline"
                     >
                       Revisar

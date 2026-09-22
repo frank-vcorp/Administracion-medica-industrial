@@ -13,7 +13,6 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { getCurrentDoctorProfile } from "@/actions/doctor-profile.actions"
@@ -81,6 +80,7 @@ import {
   examenMedicoVariantLabel,
   type ExamenMedicoVariant,
 } from "@/lib/clinical/examen-medico-variant"
+import { EXAMEN_CAPTURE_CLOSED_KEY } from "@/lib/clinical/examen-medico-capture"
 import {
   emptyFlowserveExtension,
   emptySodexoExtension,
@@ -514,10 +514,6 @@ export default function ExamenMedicoEstudio({
   // en concreto `antecedentes_captured` (snapshot por cita) y `modulo1`
   // (sub-objeto Módulo 1). Sin este filtro, `String({...})` produce
   // `"[object Object]"` y revienta la validación Zod en `ExamenMedicoCompletoSchema`.
-  // IMPL-FEATURE-20260825-03 ronda 6 (FND-20260825-23): navegación
-  // explícita a `?view=VALIDATING` tras Completar exitoso (ver
-  // `navigateToValidatingView` helper puro arriba).
-  const router = useRouter()
   const { data: session } = useSession()
   const [form, setForm] = useState<Record<string, string>>(() => {
     const isPrimitive = (v: unknown) =>
@@ -537,14 +533,19 @@ export default function ExamenMedicoEstudio({
   // auto-pobladas desde hallazgos. Lazy init desde el snapshot persistido;
   // el medico puede editar/sobrescribir libremente. Boton "Regenerar
   // desde hallazgos" para volver al auto-poblado en cualquier momento.
-  const [recomendaciones, setRecomendaciones] = useState<string>(() =>
-    buildRecommendationsFromExam({
+  const [recomendaciones, setRecomendaciones] = useState<string>(() => {
+    const persisted = physicalExamData.recomendaciones_clinicas
+    if (typeof persisted === 'string' && persisted.trim()) return persisted
+    return buildRecommendationsFromExam({
       estado_nutricional: (physicalExamData.estado_nutricional as string) ?? null,
       agudeza_visual_resumen: (physicalExamData.agudeza_visual_resumen as string) ?? null,
       salud_bucal: (physicalExamData.salud_bucal as string) ?? null,
       presion_arterial_resumen: (physicalExamData.presion_arterial_resumen as string) ?? null,
       examen_medico_texto: (physicalExamData.impresion_diagnostica as string) ?? null,
     })
+  })
+  const [captureClosed, setCaptureClosed] = useState<boolean>(
+    physicalExamData[EXAMEN_CAPTURE_CLOSED_KEY] === true,
   )
   // IMPL-20260809-02: default 'antecedentes' (era 'declarativa' en v1) — la primera
   // sub-pestaña visible al abrir Examen Médico es Antecedentes.
@@ -691,7 +692,9 @@ export default function ExamenMedicoEstudio({
 
   // ── Indicadores de completitud para ExamenMedico (pestaña 4) ─────────────
   const hasPhysicalExam = Object.keys(physicalExamData).some(k => physicalExamData[k] !== null && physicalExamData[k] !== '')
-  const hasAptitud = !!physicalExamData.aptitud || !!physicalExamData.impresion_diagnostica
+  const hasImpresionCapturada =
+    typeof physicalExamData.impresion_diagnostica === 'string' &&
+    physicalExamData.impresion_diagnostica.trim().length > 0
   const hasM1 = Object.entries(modulo1).some(([, v]) => v && v.trim() !== '' && v !== 'NEGADO' && v !== 'NO')
 
   // IMPL-20260817-01-C2: ¿algún campo de exploración física tiene valor POSITIVO?
@@ -760,7 +763,7 @@ export default function ExamenMedicoEstudio({
           done: hasExtension,
         }]
       : []),
-    { id: 'impresion', label: 'Impresión y Aptitud', icon: '✅', done: hasAptitud },
+    { id: 'impresion', label: 'Impresión clínica', icon: '✅', done: hasImpresionCapturada },
   ]
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -863,6 +866,7 @@ export default function ExamenMedicoEstudio({
     return {
       ...form,
       aptitud: aptitud || undefined,
+      recomendaciones_clinicas: recomendaciones.trim() || undefined,
       modulo1,
       antecedentes_captured: antecedentesCaptured,
       exam_variant: examVariant,
@@ -979,7 +983,7 @@ export default function ExamenMedicoEstudio({
         // Cuando es sólo borrador, NO tocamos el Event (res.status === null).
         setSaveMsg(
           markComplete
-            ? '🏁 Examen Médico completado. Procede a firmar y emitir el dictamen general.'
+            ? '🏁 Captura del examen médico cerrada. El estudio queda pendiente de interpretación/diagnóstico; la aptitud laboral se define al emitir el dictamen en Validación.'
             : '✅ Borrador guardado.',
         )
         if (res.aiWarning) {
@@ -987,17 +991,9 @@ export default function ExamenMedicoEstudio({
         }
         // Notificamos al padre el nuevo studyStatus siempre (el Event
         // status sólo si cambió — null en borrador).
-        onStatusChange?.(res.studyStatus ?? (markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'))
-
-        // IMPL-FEATURE-20260825-03 ronda 6 (FND-20260825-23):
-        // tras un Completar exitoso, navegar al panel de Validación
-        // (`?view=VALIDATING`) para que `activeView === event.status` y
-        // `EventFlowController` muestre el flujo "Firmar y Emitir Dictamen".
-        // Sin esto, la URL conserva `?view=IN_PROGRESS` y el médico ve
-        // sólo lectura. No tocamos la navegación en el caso de borrador
-        // (`res.status === null` o `markComplete === false`).
-        if (markComplete && res.status === 'VALIDATING') {
-          router.push(navigateToValidatingView(eventId))
+        onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED')
+        if (markComplete) {
+          setCaptureClosed(true)
         }
       } else {
         setSaveError(res.error ?? 'Error al guardar')
@@ -1089,7 +1085,13 @@ export default function ExamenMedicoEstudio({
     { id: 'somatometria', label: 'Somatometría', icon: '⚖️', done: somaCompleted, locked: false },
     { id: 'signos_vitales', label: 'Signos Vitales', icon: '💓', done: vitalsCompleted, locked: false },
     { id: 'agudeza_visual', label: 'Agudeza Visual', icon: '👁️', done: agudezaCompleted, locked: false },
-    { id: 'examen_medico', label: 'Examen Médico', icon: '🩺', done: hasAptitud, locked: !canAccessExamen },
+    {
+      id: 'examen_medico',
+      label: 'Examen Médico',
+      icon: '🩺',
+      done: captureClosed,
+      locked: !canAccessExamen,
+    },
   ]
   const modulo1Tabs: [M1Tab, string, string][] = [
     ...(modulo1['m1_sexo'] === 'Femenino'
@@ -2223,10 +2225,15 @@ export default function ExamenMedicoEstudio({
             </div>
           </div>
 
-          {/* Aptitud laboral — al final, antes de firmantes */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+          {/* Aptitud laboral — decisión de cierre (V3), no de captura del examen */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Aptitud laboral
+              Aptitud laboral (dictamen)
+            </p>
+            <p className="text-[11px] text-slate-500 leading-snug">
+              No forma parte del cierre de captura. Se confirma al{' '}
+              <strong>firmar y emitir dictamen</strong> desde Validación, cuando
+              los estudios estén listos (etapa V3).
             </p>
             <div className="grid grid-cols-2 gap-2">
               {APTITUD_OPTIONS.map(opt => (
@@ -2385,11 +2392,28 @@ export default function ExamenMedicoEstudio({
               </button>
               <button
                 onClick={() => handleSave(true)}
-                disabled={isPending || !aptitud || !form.impresion_diagnostica}
+                disabled={
+                  isPending ||
+                  captureClosed ||
+                  !(form.impresion_diagnostica ?? '').trim() ||
+                  !recomendaciones.trim()
+                }
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={!aptitud ? 'Selecciona aptitud antes de completar' : !form.impresion_diagnostica ? 'Agrega impresión diagnóstica' : ''}
+                title={
+                  captureClosed
+                    ? 'La captura ya está cerrada'
+                    : !(form.impresion_diagnostica ?? '').trim()
+                      ? 'Agrega impresión diagnóstica'
+                      : !recomendaciones.trim()
+                        ? 'Ingresa recomendaciones'
+                        : ''
+                }
               >
-                {isPending ? 'Guardando...' : '🏁 Completar Examen Médico'}
+                {isPending
+                  ? 'Guardando...'
+                  : captureClosed
+                    ? '✓ Captura cerrada — listo para revisión'
+                    : '🏁 Cerrar captura del examen'}
               </button>
             </div>
           )}

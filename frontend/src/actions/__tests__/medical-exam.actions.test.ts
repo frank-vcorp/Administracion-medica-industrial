@@ -187,7 +187,7 @@ describe('medical-exam.actions saveExamenMedicoPapeleta (IMPL-20260809-02)', () 
     )
   })
 
-  it('4. markComplete=true → status COMPLETED', async () => {
+  it('4. markComplete=true → status RESULT_REGISTERED (captura cerrada, V2)', async () => {
     await saveExamenMedicoPapeleta(
       'evt-1',
       'et-1',
@@ -195,7 +195,7 @@ describe('medical-exam.actions saveExamenMedicoPapeleta (IMPL-20260809-02)', () 
       true,
     )
     expect(mockEventTestUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'et-1' }, data: { status: 'COMPLETED' } }),
+      expect.objectContaining({ where: { id: 'et-1' }, data: { status: 'RESULT_REGISTERED' } }),
     )
   })
 

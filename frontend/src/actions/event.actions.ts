@@ -14,7 +14,11 @@ import {
     buildNotPerformedTestIdSet,
     isCheckoutEnabled,
     getCheckoutEligibility,
+    type ReceptionCheckoutTest,
 } from "@/lib/clinical/reception-checkout"
+import { isExamenMedicoCaptureClosed } from "@/lib/clinical/examen-medico-capture"
+import { isExamenMedicoTestName } from "@/lib/clinical/examen-medico-variant"
+import type { EventTestPipelineStatus } from "@/lib/clinical/study-status-display"
 import { agendaDayUtcRange, todayAgendaDateString } from "@/lib/appointment-scheduling"
 
 /** Límites del día de agenda AMI (YYYY-MM-DD) para filtrar eventos del kanban. */
@@ -52,9 +56,25 @@ const kanbanEventSelect = {
     branch: true,
 } as const
 
+function toReceptionCheckoutTests(
+    eventTests: ReadonlyArray<{ id: string; status: string; testNameSnapshot: string }>,
+    physicalExamData: Record<string, unknown> | null | undefined,
+): ReceptionCheckoutTest[] {
+    const captureClosed = isExamenMedicoCaptureClosed(physicalExamData)
+    return eventTests.map((t) => ({
+        id: t.id,
+        status: t.status as EventTestPipelineStatus,
+        testNameSnapshot: t.testNameSnapshot,
+        examenCaptureClosed: isExamenMedicoTestName(t.testNameSnapshot)
+            ? captureClosed
+            : undefined,
+    }))
+}
+
 const kanbanCheckoutSelect = {
     ...kanbanEventSelect,
     dischargedAt: true,
+    exam: { select: { physicalExamData: true } },
     worker: {
         select: {
             firstName: true,
@@ -115,9 +135,12 @@ export async function getEventsKanban(date?: string) {
 
         for (const event of clinicEvents) {
             const notPerformedIds = incidencesByEvent.get(event.id) ?? new Set<string>()
+            const physicalExamData =
+                (event.exam?.physicalExamData as Record<string, unknown> | null | undefined) ??
+                null
             const checkoutInput = {
                 dischargedAt: event.dischargedAt,
-                eventTests: event.eventTests,
+                eventTests: toReceptionCheckoutTests(event.eventTests, physicalExamData),
             }
 
             if (isCheckoutEnabled(checkoutInput, notPerformedIds)) {
@@ -162,7 +185,8 @@ export async function dischargePatientFromReception(eventId: string) {
                 id: true,
                 dischargedAt: true,
                 workerId: true,
-                eventTests: { select: { id: true, status: true } },
+                exam: { select: { physicalExamData: true } },
+                eventTests: { select: { id: true, status: true, testNameSnapshot: true } },
             },
         })
 
@@ -180,8 +204,14 @@ export async function dischargePatientFromReception(eventId: string) {
         })
         const notPerformedIds = buildNotPerformedTestIdSet(timelineEntries)
 
+        const physicalExamData =
+            (event.exam?.physicalExamData as Record<string, unknown> | null | undefined) ??
+            null
         const eligibility = getCheckoutEligibility(
-            { dischargedAt: event.dischargedAt, eventTests: event.eventTests },
+            {
+                dischargedAt: event.dischargedAt,
+                eventTests: toReceptionCheckoutTests(event.eventTests, physicalExamData),
+            },
             notPerformedIds,
         )
 

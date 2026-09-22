@@ -317,15 +317,23 @@ test.describe('Flujo E2E — 4 pruebas clínicas', () => {
     await page.locator('button').filter({ hasText: /EXAMEN MEDICO/i }).first().click()
     await page
       .getByRole('button', {
-        name: /impresión y aptitud|impresi.n diagn.stica y aptitud|impresi.n \/ aptitud/i,
+        name: /impresión clínica|impresión y aptitud|impresi.n diagn.stica/i,
       })
       .first()
       .click()
-    await page.getByRole('button', { name: /completar examen médico/i }).click()
-    await expect(page.getByText(/examen m.dico completado|firmar y emitir/i).first()).toBeVisible({
+    await page
+      .getByPlaceholder(/diagnósticos principales|hallazgos clínicos/i)
+      .fill('Impresión E2E — examen sin aptitud en captura.')
+    const recBox = page.getByPlaceholder(/recomendación uno/i)
+    if (await recBox.isVisible()) {
+      await recBox.fill('1.- Control anual E2E.')
+    }
+    await page.getByRole('button', { name: /cerrar captura del examen|completar examen médico/i }).click()
+    await expect(page.getByText(/captura del examen m.dico cerrada|pendiente de interpretaci/i).first()).toBeVisible({
       timeout: 30_000,
     })
 
+    await page.goto(`/events/${eventId}?view=VALIDATING`)
     const verdictHeading = page.getByRole('heading', { name: 'Reporte médico de aptitud' })
     await expect(verdictHeading).toBeVisible({ timeout: 30_000 })
 

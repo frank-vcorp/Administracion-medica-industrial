@@ -50,6 +50,35 @@ describe('reception-checkout (SPEC ARCH-20260921-01 §4.4)', () => {
     ).toBe(true)
   })
 
+  it('bloquea checkout si examen médico no cerró captura (aunque esté IN_PROGRESS)', () => {
+    expect(
+      getCheckoutEligibility({
+        dischargedAt: null,
+        eventTests: [
+          { id: 'em', status: 'IN_PROGRESS', testNameSnapshot: 'Examen Médico AMI', examenCaptureClosed: false },
+          { id: 'lab', status: 'IN_PROGRESS', testNameSnapshot: 'Laboratorio' },
+        ],
+      }),
+    ).toEqual({ eligible: false, reason: 'pending_studies' })
+  })
+
+  it('habilita checkout cuando examen médico tiene captura cerrada', () => {
+    expect(
+      isCheckoutEnabled({
+        dischargedAt: null,
+        eventTests: [
+          {
+            id: 'em',
+            status: 'RESULT_REGISTERED',
+            testNameSnapshot: 'Examen Médico AMI',
+            examenCaptureClosed: true,
+          },
+          { id: 'soma', status: 'COMPLETED', testNameSnapshot: 'Somatometría' },
+        ],
+      }),
+    ).toBe(true)
+  })
+
   it('bloquea si ya tiene dischargedAt', () => {
     expect(
       getCheckoutEligibility({

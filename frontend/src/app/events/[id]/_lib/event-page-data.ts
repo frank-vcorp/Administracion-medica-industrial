@@ -95,8 +95,19 @@ export async function fetchEventPageData(input: {
   id: string
   view?: string
 }): Promise<EventPageData | null> {
-  const event = await getEventById(input.id)
+  let event = await getEventById(input.id)
   if (!event) return null
+
+  if (
+    input.view === 'VALIDATING' &&
+    event.status === 'IN_PROGRESS'
+  ) {
+    await prisma.medicalEvent.update({
+      where: { id: input.id },
+      data: { status: 'VALIDATING' },
+    })
+    event = { ...event, status: 'VALIDATING' }
+  }
 
   // Helper para los pasos: redirect si el shell aún no está sincronizado
   if (!input.view && event.status === 'IN_PROGRESS') {

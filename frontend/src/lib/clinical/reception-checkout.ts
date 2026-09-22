@@ -6,6 +6,11 @@ import {
   type StudyInterpretationInput,
 } from '@/lib/clinical/study-status-display'
 import {
+  filterEventTestsForCheckout,
+  isExamenMedicoCaptureClosed,
+} from '@/lib/clinical/examen-medico-capture'
+import { isExamenMedicoTestName } from '@/lib/clinical/examen-medico-variant'
+import {
   getStudyVisibleStep,
   isStep1DoneForCheckout,
   type StudyStepInput,
@@ -14,7 +19,10 @@ import {
 export type ReceptionCheckoutTest = {
   id: string
   status: EventTestPipelineStatus
+  testNameSnapshot?: string | null
   interpretation?: StudyInterpretationInput | null
+  /** Solo Examen Médico: true tras «Cerrar captura» con todas las fases. */
+  examenCaptureClosed?: boolean
 }
 
 export type ReceptionCheckoutEvent = {
@@ -45,12 +53,22 @@ export function getCheckoutEligibility(
     return { eligible: false, reason: 'already_discharged' }
   }
 
-  const tests = event.eventTests.filter((t) => t.status !== 'CANCELLED')
+  const tests = filterEventTestsForCheckout(
+    event.eventTests.filter((t) => t.status !== 'CANCELLED'),
+  )
   if (tests.length === 0) {
     return { eligible: false, reason: 'no_tests' }
   }
 
   for (const test of tests) {
+    const name = test.testNameSnapshot ?? ''
+    if (isExamenMedicoTestName(name)) {
+      if (!test.examenCaptureClosed) {
+        return { eligible: false, reason: 'pending_studies' }
+      }
+      continue
+    }
+
     const input = toStepInput(test, notPerformedTestIds)
 
     if (getStudyVisibleStep(input) === 'INVALID') {

@@ -752,4 +752,8 @@ export const ExamenMedicoCompletoSchema = ExploracionFisicaSchema
         SODEXO: z.record(z.string(), z.any()).optional(),
       })
       .optional(),
+    /** Recomendaciones editables en impresión clínica (antes del cierre de captura). */
+    recomendaciones_clinicas: cleanString.optional(),
+    /** true tras «Cerrar captura» — habilita checkout en recepción. */
+    examen_capture_closed: z.boolean().optional(),
   });

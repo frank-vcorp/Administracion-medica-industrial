@@ -13,6 +13,7 @@ import {
   ExamenMedicoCompletoSchema,
 } from "@/schemas/clinical/exam.schema"
 import { deriveAgudezaVisualResumen } from "@/lib/clinical/agudeza-visual"
+import { assertExamenMedicoReadyToClose } from "@/lib/clinical/examen-medico-capture"
 
 /**
  * @id ARCH-20260326-01
@@ -219,13 +220,13 @@ export async function updateExploracionFisica(eventId: string, rawData: unknown)
  *
  * @id IMPL-20260325-01
  * @id IMPL-FEATURE-20260825-03 (ronda 4 / DEC-20260825-19 / FND-20260825-22):
- *   cuando `markComplete=true`, el MedicalEvent pasa a `VALIDATING`
- *   (no firma, no auto-crea `MedicalVerdict`). El médico revisa y firma
- *   desde el flujo existente "Firmar y Emitir Dictamen" en
- *   `EventFlowController`. PDF y ZIP sólo se habilitan con verdict
- *   emitido (BR-20260825-20). El `EventTest` del estudio se marca
- *   `COMPLETED` (o `RESULT_REGISTERED` si no es completar) — sigue
- *   siendo la unidad de captura del médico.
+ *   cuando `markComplete=true`, NO se pasa a `VALIDATING` ni se exige
+ *   aptitud: se cierra la captura clínica del estudio y queda
+ *   `RESULT_REGISTERED` (paso 2 — pendiente de interpretación/diagnóstico
+ *   por estudio, SPEC ARCH-20260921-01 V2). La aptitud laboral y la firma
+ *   del dictamen ocurren después (V3) vía `EventFlowController` cuando el
+ *   expediente abre `?view=VALIDATING`. PDF y ZIP sólo con verdict emitido
+ *   (BR-20260825-20).
  */
 export async function saveExamenMedicoPapeleta(
   eventId: string,
@@ -242,13 +243,40 @@ export async function saveExamenMedicoPapeleta(
     const autosave = options?.autosave === true
     const data = ExamenMedicoCompletoSchema.parse(rawData)
 
+    const priorExam = await prisma.medicalExam.findUnique({
+      where: { eventId },
+      select: {
+        physicalExamData: true,
+        somatometryData: true,
+        eyeAcuityData: true,
+      },
+    })
+    const priorPhysical =
+      (priorExam?.physicalExamData as Record<string, unknown> | undefined) ?? {}
+
+    const physicalPayload: Record<string, unknown> = { ...data }
+
+    if (markComplete) {
+      const gateError = assertExamenMedicoReadyToClose({
+        somatometryData: priorExam?.somatometryData as Record<string, unknown> | null,
+        eyeAcuityData: priorExam?.eyeAcuityData as Record<string, unknown> | null,
+        physicalExamData: physicalPayload,
+      })
+      if (gateError) {
+        return { success: false, error: gateError }
+      }
+      physicalPayload.examen_capture_closed = true
+    } else if (priorPhysical.examen_capture_closed === true) {
+      physicalPayload.examen_capture_closed = true
+    }
+
     await prisma.medicalExam.upsert({
       where: { eventId },
-      update: { physicalExamData: data },
-      create: { eventId, physicalExamData: data },
+      update: { physicalExamData: physicalPayload },
+      create: { eventId, physicalExamData: physicalPayload },
     })
 
-    const newStudyStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
+    const newStudyStatus = 'RESULT_REGISTERED'
     const currentTest = await prisma.eventTest.findUnique({
       where: { id: eventTestId },
       select: { status: true },
@@ -258,20 +286,6 @@ export async function saveExamenMedicoPapeleta(
       await prisma.eventTest.update({
         where: { id: eventTestId },
         data: { status: newStudyStatus },
-      })
-    }
-
-    // DEC-20260825-19 / FND-20260825-22 / BR-20260825-20:
-    // Completar NO firma ni emite MedicalVerdict. Sólo lleva el
-    // MedicalEvent al paso `VALIDATING`. El médico firma explícitamente
-    // desde `EventFlowController.handleSign` (saveVerdict +
-    // signMedicalDictamPDF). Mantenemos `EventTest.status` como `COMPLETED`
-    // porque ésa es la unidad de captura del estudio y debe reflejar
-    // que el médico terminó la captura del Examen Médico.
-    if (markComplete) {
-      await prisma.medicalEvent.update({
-        where: { id: eventId },
-        data: { status: 'VALIDATING' },
       })
     }
 
@@ -299,13 +313,18 @@ export async function saveExamenMedicoPapeleta(
       })
 
       revalidatePath(`/events/${eventId}`)
+      if (markComplete) {
+        revalidatePath('/reception')
+      }
 
       await writeTimelineEntry({
         eventId,
         eventTestId,
         entryType: 'MEDICAL_EXAM_SAVED',
         area: 'Examen Médico',
-        title: markComplete ? 'Examen médico completado' : 'Examen médico guardado',
+        title: markComplete
+          ? 'Captura del examen médico cerrada'
+          : 'Examen médico guardado',
       })
     }
 
@@ -314,9 +333,8 @@ export async function saveExamenMedicoPapeleta(
     // refrescar el header del expediente sin tener que re-leer el event.
     return {
       success: true,
-      // Event status: 'VALIDATING' si completar, sin cambio si borrador.
-      // Usamos `null` para borrador porque no tocamos el Event.
-      status: markComplete ? 'VALIDATING' : null,
+      // El Event no cambia de estado al completar captura (null).
+      status: null,
       studyStatus: shouldUpdateStatus ? newStudyStatus : (currentTest?.status ?? newStudyStatus),
       aiWarning,
     }
