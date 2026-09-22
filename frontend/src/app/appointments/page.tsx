@@ -17,6 +17,10 @@ import RescheduleAppointmentModal from '@/components/RescheduleAppointmentModal'
 import { WeeklyAppointmentsModal } from '@/components/appointments/WeeklyAppointmentsModal'
 import { PendingStudiesModal } from '@/components/appointments/PendingStudiesModal'
 import Link from 'next/link'
+import {
+    appointmentAgendaHour,
+    formatAppointmentAgendaDateString,
+} from '@/lib/appointment-scheduling'
 
 /** Citas que ocupan cupo visible en la agenda del día. */
 const AGENDA_SLOT_STATUSES = new Set(['SCHEDULED', 'CONFIRMED'])
@@ -35,9 +39,8 @@ function addDaysToDateString(dateStr: string, days: number): string {
     return formatLocalDateString(date)
 }
 
-function appointmentLocalDateString(scheduledAt: Date): string {
-    const aptDate = new Date(scheduledAt)
-    return formatLocalDateString(aptDate)
+function appointmentLocalDateString(scheduledAt: Date | string): string {
+    return formatAppointmentAgendaDateString(scheduledAt)
 }
 
 function formatDayHeading(dateStr: string): string {
@@ -58,19 +61,35 @@ function groupAppointmentsByHour(
         .filter((apt) => AGENDA_SLOT_STATUSES.has(apt.status))
         .reduce((acc, apt) => {
             if (appointmentLocalDateString(apt.scheduledAt) !== dateStr) return acc
-            const hour = new Date(apt.scheduledAt).getHours()
+            const hour = appointmentAgendaHour(apt.scheduledAt)
             if (!acc[hour]) acc[hour] = []
             acc[hour].push(apt)
             return acc
         }, {} as Record<number, AppointmentWithWorker[]>)
 }
 
-function countAgendaForDate(items: AppointmentWithWorker[], dateStr: string): number {
+function agendaForDate(items: AppointmentWithWorker[], dateStr: string): AppointmentWithWorker[] {
     return items.filter(
         (apt) =>
             AGENDA_SLOT_STATUSES.has(apt.status) &&
             appointmentLocalDateString(apt.scheduledAt) === dateStr,
-    ).length
+    )
+}
+
+function countAgendaForDate(items: AppointmentWithWorker[], dateStr: string): number {
+    return agendaForDate(items, dateStr).length
+}
+
+function outsideBranchHours(
+    items: AppointmentWithWorker[],
+    dateStr: string,
+    startHour: number,
+    endHour: number,
+): AppointmentWithWorker[] {
+    return agendaForDate(items, dateStr).filter((apt) => {
+        const h = appointmentAgendaHour(apt.scheduledAt)
+        return h < startHour || h > endHour
+    })
 }
 
 /**
@@ -325,6 +344,7 @@ export default function AppointmentsPage() {
                     title="Agenda del día"
                     subtitle={formatDayHeading(selectedDate)}
                     groupedAppointments={groupedAppointments}
+                    outsideHoursAppointments={outsideBranchHours(appointments, selectedDate, startHour, endHour)}
                     hours={hours}
                     branchConfig={branchConfig}
                     interactive
@@ -338,6 +358,7 @@ export default function AppointmentsPage() {
                     title="Día siguiente"
                     subtitle={formatDayHeading(nextDate)}
                     groupedAppointments={groupedNextDayAppointments}
+                    outsideHoursAppointments={outsideBranchHours(nextDayAppointments, nextDate, startHour, endHour)}
                     hours={hours}
                     branchConfig={branchConfig}
                     preview
@@ -547,6 +568,7 @@ function AgendaDayColumn({
     title,
     subtitle,
     groupedAppointments,
+    outsideHoursAppointments = [],
     hours,
     branchConfig,
     preview = false,
@@ -560,6 +582,7 @@ function AgendaDayColumn({
     title: string
     subtitle: string
     groupedAppointments: Record<number, AppointmentWithWorker[]>
+    outsideHoursAppointments?: AppointmentWithWorker[]
     hours: number[]
     branchConfig: { hourlyCapacity: number }
     preview?: boolean
@@ -570,7 +593,9 @@ function AgendaDayColumn({
     onCheckIn?: (aptId: string) => void
     checkingIn?: string | null
 }) {
-    const total = Object.values(groupedAppointments).reduce((sum, list) => sum + list.length, 0)
+    const total =
+        Object.values(groupedAppointments).reduce((sum, list) => sum + list.length, 0) +
+        outsideHoursAppointments.length
 
     return (
         <div className={`bg-white rounded-3xl border shadow-xl shadow-slate-200/50 overflow-hidden ${preview ? 'border-indigo-200' : 'border-slate-200'}`}>
@@ -684,6 +709,30 @@ function AgendaDayColumn({
                         </div>
                     )
                 })}
+
+                {outsideHoursAppointments.length > 0 && (
+                    <div className="border-t border-amber-200 bg-amber-50/60 p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800 mb-2">
+                            Fuera de horario de sucursal ({outsideHoursAppointments.length})
+                        </p>
+                        <div className="space-y-2">
+                            {outsideHoursAppointments.map((apt) => (
+                                <div
+                                    key={apt.id}
+                                    className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-slate-700"
+                                >
+                                    <span className="font-bold">
+                                        {apt.worker?.firstName} {apt.worker?.lastName}
+                                    </span>
+                                    <span className="text-amber-700 font-mono text-xs ml-2">
+                                        {String(appointmentAgendaHour(apt.scheduledAt)).padStart(2, '0')}:00
+                                    </span>
+                                    <span className="text-slate-500 text-xs ml-2">{apt.expedientId}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )

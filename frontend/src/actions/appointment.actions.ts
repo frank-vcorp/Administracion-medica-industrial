@@ -35,6 +35,7 @@ import {
 import { uploadPdfBuffer } from '@/lib/upload-pdf-buffer'
 import QRCode from 'qrcode'
 import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
+import { parseAppointmentLocalDateTime } from '@/lib/appointment-scheduling'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -310,7 +311,7 @@ export async function rescheduleAppointment(
       return { success: false, error: 'Fecha y hora son obligatorias' }
     }
 
-    const scheduledAt = new Date(`${data.date}T${data.time}:00`)
+    const scheduledAt = parseAppointmentLocalDateTime(data.date, data.time)
     if (Number.isNaN(scheduledAt.getTime())) {
       return { success: false, error: 'Fecha u hora inválida' }
     }

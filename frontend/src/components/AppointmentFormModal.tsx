@@ -10,6 +10,7 @@ import {
 } from '@/actions/medical-profiles'
 import { useRouter, useSearchParams } from 'next/navigation'
 import WorkerFormModal, { type WorkerCreatedPayload } from '@/components/WorkerFormModal'
+import { parseAppointmentLocalDateTime } from '@/lib/appointment-scheduling'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
@@ -293,7 +294,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
             }
 
             // Combinar fecha y hora
-            const scheduledAt = new Date(`${date}T${time}:00`)
+            const scheduledAt = parseAppointmentLocalDateTime(date, time)
 
             try {
                 const result = await createAppointment({
