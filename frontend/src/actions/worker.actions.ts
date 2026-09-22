@@ -12,6 +12,7 @@ import { generateUniversalId } from "@/lib/id.utils"
 import { logAudit } from "@/actions/audit.actions"
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
+import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
 
 // Get all workers with their company name and medical profile
 // @id IMPL-20260313-07
@@ -136,12 +137,7 @@ async function validateMedicalProfileForCompany(
     medicalProfileId: string,
     companyId: string
 ): Promise<boolean> {
-    const profile = await prisma.medicalProfile.findUnique({
-        where: { id: medicalProfileId },
-        select: { companyId: true },
-    })
-    if (!profile) return false
-    return profile.companyId === null || profile.companyId === companyId
+    return isMedicalProfileAssignableToCompany(medicalProfileId, companyId)
 }
 
 export async function createWorker(formData: FormData) {

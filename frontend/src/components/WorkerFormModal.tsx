@@ -9,7 +9,7 @@ import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 import { isPublicGeneralCompany } from '@/lib/public-general-company'
 import {
   createPublicGeneralQuickProfile,
-  getMedicalProfilesForCompany,
+  getAssignableMedicalProfilesForCompany,
 } from '@/actions/medical-profiles'
 import PublicGeneralProfilePicker, {
   type AvailableTestOption,
@@ -214,7 +214,7 @@ export default function WorkerFormModal({
 
         let cancelled = false
         setProfilesLoading(true)
-        getMedicalProfilesForCompany(effectiveCompanyId)
+        getAssignableMedicalProfilesForCompany(effectiveCompanyId)
             .then((rows) => {
                 if (cancelled) return
                 setCompanyProfileOptions(
@@ -254,7 +254,9 @@ export default function WorkerFormModal({
     const companySpecificProfiles = companyProfileOptions.filter(
         (p) => p.companyId === effectiveCompanyId,
     )
-    const globalProfiles = companyProfileOptions.filter((p) => p.companyId === null)
+    const publicGeneralProfiles = companyProfileOptions.filter(
+        (p) => p.companyId !== effectiveCompanyId,
+    )
 
     function handleOpen() {
         setInternalOpen(true)
@@ -724,9 +726,9 @@ export default function WorkerFormModal({
                                                     ))}
                                                 </optgroup>
                                             )}
-                                            {globalProfiles.length > 0 && (
-                                                <optgroup label="Perfiles globales">
-                                                    {globalProfiles.map((p) => (
+                                            {publicGeneralProfiles.length > 0 && (
+                                                <optgroup label="Perfiles Público General">
+                                                    {publicGeneralProfiles.map((p) => (
                                                         <option key={p.id} value={p.id}>{p.name}</option>
                                                     ))}
                                                 </optgroup>

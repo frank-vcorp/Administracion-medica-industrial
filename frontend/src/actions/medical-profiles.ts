@@ -26,6 +26,11 @@ import {
   buildPbProfileNameFromTests,
   ensurePbProfileName,
 } from '@/lib/public-general-profile-name'
+import {
+  PUBLIC_GENERAL_COMPANY_NAME,
+  PUBLIC_GENERAL_COMPANY_RFC,
+  PUBLIC_GENERAL_LEGACY_NAMES,
+} from '@/lib/public-general-company'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA ZOD
@@ -151,6 +156,50 @@ export async function getMedicalProfileOptions() {
     select: { id: true, name: true, companyId: true },
     orderBy: { name: 'asc' },
   })
+}
+
+async function findPublicGeneralCompanyId(): Promise<string | null> {
+  const row = await prisma.company.findFirst({
+    where: {
+      OR: [
+        { rfc: PUBLIC_GENERAL_COMPANY_RFC },
+        { name: { equals: PUBLIC_GENERAL_COMPANY_NAME, mode: 'insensitive' } },
+        ...PUBLIC_GENERAL_LEGACY_NAMES.map((legacyName) => ({
+          name: { equals: legacyName, mode: 'insensitive' as const },
+        })),
+      ],
+    },
+    select: { id: true },
+  })
+  return row?.id ?? null
+}
+
+/** Perfiles que se pueden asignar a pacientes/citas de una empresa: propios + Público General. */
+export async function getAssignableMedicalProfilesForCompany(companyId: string) {
+  const publicGeneralId = await findPublicGeneralCompanyId()
+  const companyIds = [companyId]
+  if (publicGeneralId && publicGeneralId !== companyId) {
+    companyIds.push(publicGeneralId)
+  }
+  return await prisma.medicalProfile.findMany({
+    where: { companyId: { in: companyIds } },
+    select: { id: true, name: true, companyId: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+export async function isMedicalProfileAssignableToCompany(
+  medicalProfileId: string,
+  companyId: string,
+): Promise<boolean> {
+  const profile = await prisma.medicalProfile.findUnique({
+    where: { id: medicalProfileId },
+    select: { companyId: true },
+  })
+  if (!profile?.companyId) return false
+  if (profile.companyId === companyId) return true
+  const publicGeneralId = await findPublicGeneralCompanyId()
+  return publicGeneralId !== null && profile.companyId === publicGeneralId
 }
 
 export async function getMedicalProfilesForCompany(companyId: string) {

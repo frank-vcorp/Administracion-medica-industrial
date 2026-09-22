@@ -4,7 +4,10 @@ import { useState, useTransition, useEffect, useMemo } from 'react'
 import { createAppointment } from '@/actions/appointment.actions'
 import { getWorkersByCompany } from '@/actions/worker.actions'
 import { getBranches, getCompanies } from '@/actions/admin.actions'
-import { getMedicalProfilesForCompany, getMedicalProfileOptions } from '@/actions/medical-profiles'
+import {
+    getAssignableMedicalProfilesForCompany,
+    getMedicalProfileOptions,
+} from '@/actions/medical-profiles'
 import { useRouter, useSearchParams } from 'next/navigation'
 import WorkerFormModal, { type WorkerCreatedPayload } from '@/components/WorkerFormModal'
 
@@ -82,9 +85,9 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         () => profiles.filter((p) => p.companyId === selectedCompanyId),
         [profiles, selectedCompanyId],
     )
-    const globalProfiles = useMemo(
-        () => profiles.filter((p) => p.companyId === null),
-        [profiles],
+    const publicGeneralProfiles = useMemo(
+        () => profiles.filter((p) => p.companyId !== selectedCompanyId),
+        [profiles, selectedCompanyId],
     )
 
     // Detect URL params (e.g. from create-worker redirect)
@@ -147,7 +150,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                 setSelectedBranchId(company.defaultBranchId)
                             }
                             // Auto-seleccionar perfil del paciente
-                            const pData = await getMedicalProfilesForCompany(companyIdToUse)
+                            const pData = await getAssignableMedicalProfilesForCompany(companyIdToUse)
                             setProfiles(pData)
                             if (worker.medicalProfileId) {
                                 setSelectedProfileId(worker.medicalProfileId)
@@ -155,7 +158,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                         }
                     } else {
                         // Cargar perfiles para la empresa preseleccionada
-                        const pData = await getMedicalProfilesForCompany(companyIdToUse)
+                        const pData = await getAssignableMedicalProfilesForCompany(companyIdToUse)
                         setProfiles(pData)
                     }
                     setPreselectedCompanyId(null)
@@ -221,7 +224,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         try {
             const [wData, pData] = await Promise.all([
                 getWorkersByCompany(companyId),
-                getMedicalProfilesForCompany(companyId),
+                getAssignableMedicalProfilesForCompany(companyId),
             ])
             setWorkers(wData)
             setProfiles(pData)
@@ -233,7 +236,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
     async function refreshWorkersAndSelect(companyId: string, workerId: string) {
         const [wData, pData] = await Promise.all([
             getWorkersByCompany(companyId),
-            getMedicalProfilesForCompany(companyId),
+            getAssignableMedicalProfilesForCompany(companyId),
         ])
         setWorkers(wData)
         setProfiles(pData)
@@ -531,9 +534,9 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                             ))}
                                         </optgroup>
                                     )}
-                                    {globalProfiles.length > 0 && (
-                                        <optgroup label="Perfiles globales">
-                                            {globalProfiles.map((p) => (
+                                    {publicGeneralProfiles.length > 0 && (
+                                        <optgroup label="Perfiles Público General">
+                                            {publicGeneralProfiles.map((p) => (
                                                 <option key={p.id} value={p.id}>{p.name}</option>
                                             ))}
                                         </optgroup>

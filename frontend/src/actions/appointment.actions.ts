@@ -34,6 +34,7 @@ import {
 } from '@/lib/informed-consent-pdf'
 import { uploadPdfBuffer } from '@/lib/upload-pdf-buffer'
 import QRCode from 'qrcode'
+import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -102,6 +103,19 @@ export async function createAppointment(data: {
         select: { medicalProfileId: true },
       })
       resolvedServiceProfileId = workerProfile?.medicalProfileId ?? null
+    }
+
+    if (resolvedServiceProfileId) {
+      const profileOk = await isMedicalProfileAssignableToCompany(
+        resolvedServiceProfileId,
+        data.companyId,
+      )
+      if (!profileOk) {
+        return {
+          success: false,
+          error: 'El perfil médico no corresponde a la empresa ni a Público General.',
+        }
+      }
     }
 
     // IMPL-20260519-10: QR operativo mínimo — payload AMI|NOMBRE=...|FN=YYYY-MM-DD
