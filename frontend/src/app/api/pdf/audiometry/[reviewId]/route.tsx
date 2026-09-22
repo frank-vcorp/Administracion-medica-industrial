@@ -90,8 +90,10 @@ export async function GET(
               structuredData: true,
               eventTest: {
                 select: {
+                  id: true,
                   testNameSnapshot: true,
                   eventId: true,
+                  clinicalContext: true,
                   event: {
                     select: {
                       worker: {
@@ -172,6 +174,8 @@ export async function GET(
     const data = await buildAudiometriaPdfDataAsync({
       reviewId: review.id,
       eventId: eventTest?.eventId ?? null,
+      eventTestId: eventTest?.id ?? null,
+      clinicalContext: eventTest?.clinicalContext,
       doctorStatus:
         review.doctorStatus === 'REVIEWED_ACCEPTED'
           ? 'REVIEWED_ACCEPTED'

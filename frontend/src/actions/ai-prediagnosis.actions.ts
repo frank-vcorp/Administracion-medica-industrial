@@ -59,6 +59,7 @@ import {
 } from '@/lib/campimetria-pdf'
 import { buildEcgPdfDataAsync, generateEcgValidatedPdf } from '@/lib/ecg-pdf'
 import { ensureEspirometrySourceCrop } from '@/lib/espirometry-source-crop'
+import { ensureAudiometrySourceCrop } from '@/lib/audiometry-source-crop'
 // IMPL-FEATURE-20260825-02: generación del PDF validado de Audiometría.
 // Mismo patrón que Espirometría: helper puro fuera del server action.
 import {
@@ -948,10 +949,20 @@ export async function submitDoctorStudyReview(
             ? 'REVIEWED_ACCEPTED' as const
             : 'REVIEWED_EDITED' as const
         if (studyType === 'Audiometria') {
+          const eventTestId = eventTestData?.id ?? null
+          if (eventTestId) {
+            try {
+              await ensureAudiometrySourceCrop(eventTestId, { force: true })
+            } catch (cropErr) {
+              console.warn('[audiometry-pdf] Recorte en validación:', cropErr)
+            }
+          }
           const pdfData = await buildAudiometriaPdfDataAsync({
             ...baseInput,
             doctorStatus: typedDoctorStatus,
             eventId: eventTestData?.eventId ?? eventId,
+            eventTestId,
+            clinicalContext: eventTestData?.clinicalContext,
           })
           pdfResult = await generateAudiometriaValidatedPdf({
             reviewId: review.id,

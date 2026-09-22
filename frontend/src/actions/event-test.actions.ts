@@ -43,6 +43,21 @@ async function maybeCropEspirometrySourceAfterUpload(
   }
 }
 
+async function maybeCropAudiometrySourceAfterUpload(
+  eventTestId: string,
+  fileName: string,
+  studyType: string | null | undefined,
+): Promise<void> {
+  if (studyType !== 'Audiometria') return
+  if (!fileName.toLowerCase().endsWith('.pdf')) return
+  try {
+    const { ensureAudiometrySourceCrop } = await import('@/lib/audiometry-source-crop')
+    await ensureAudiometrySourceCrop(eventTestId)
+  } catch (err) {
+    console.warn('[event-test] Recorte audiometría no disponible:', err)
+  }
+}
+
 /**
  * @id ARCH-20260326-01
  * @backup context/checkpoints/CHK_ARCH-20260326-01.md
@@ -1123,6 +1138,11 @@ export async function uploadEventTestFile(formData: FormData) {
             file.name,
             (formData.get('study_type') as string) || canonicalTypeForXml,
           )
+          await maybeCropAudiometrySourceAfterUpload(
+            eventTestId,
+            file.name,
+            (formData.get('study_type') as string) || canonicalTypeForXml,
+          )
           const extractionSnapshotData = v2Result.extractionSnapshotId
           ? {
               id: v2Result.extractionSnapshotId,
@@ -1234,6 +1254,11 @@ export async function uploadEventTestFile(formData: FormData) {
     })
     if (fileUrl) {
       await maybeCropEspirometrySourceAfterUpload(
+        eventTestId,
+        file.name,
+        canonicalTypeForXml ?? (formData.get('study_type') as string) ?? null,
+      )
+      await maybeCropAudiometrySourceAfterUpload(
         eventTestId,
         file.name,
         canonicalTypeForXml ?? (formData.get('study_type') as string) ?? null,

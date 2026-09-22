@@ -64,8 +64,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#0f766e',
   },
-  docTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 4, color: '#0f172a' },
-  docSubtitle: { fontSize: 9, color: '#475569', marginBottom: 14 },
+  docTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: '#0f172a' },
+  sourceWrap: {
+    marginHorizontal: -36,
+    marginBottom: 8,
+  },
+  sourceImage: {
+    width: '100%',
+    objectFit: 'contain',
+  },
   section: { marginBottom: 12 },
   sectionTitle: {
     fontSize: 10,
@@ -177,6 +184,9 @@ export interface AudiometriaValidatedPDFData {
     signatureImageUrl: string
   }
   logoUrl: string
+  /** Recorte del audiograma tonal (PDF DD65) — sustituye tabla TA/VO. */
+  sourceCropDataUrl?: string | null
+  sourceCropAspectRatio?: number | null
 }
 
 const formatDate = (d: string | Date) => {
@@ -191,10 +201,8 @@ const formatDate = (d: string | Date) => {
   })
 }
 
-const formatDb = (v: number | null | undefined) => {
-  if (typeof v !== 'number' || Number.isNaN(v)) return '—'
-  return `${v} dB`
-}
+const A4_CONTENT_WIDTH_PT = 523
+const SOURCE_IMAGE_MAX_HEIGHT_PT = 360
 
 // FND-20260825-14 / FND-20260825-15 — Retiro de las secciones "Criterio
 // audiométrico AMI (referencia)" (DEC-20260825-10) y "Criterios
@@ -216,7 +224,16 @@ export const AudiometriaValidatedPDF = ({
   data,
 }: {
   data: AudiometriaValidatedPDFData
-}) => (
+}) => {
+  const sourceImageHeight =
+    data.sourceCropAspectRatio && data.sourceCropAspectRatio > 0
+      ? Math.min(
+          SOURCE_IMAGE_MAX_HEIGHT_PT,
+          A4_CONTENT_WIDTH_PT / data.sourceCropAspectRatio,
+        )
+      : 320
+
+  return (
   <Document
     title={`Audiometria-validada-${data.reviewId.slice(0, 8)}`}
     author={`Dr(a). ${data.medico.fullName}`}
@@ -250,45 +267,23 @@ export const AudiometriaValidatedPDF = ({
         heading="Identificación del paciente"
       />
 
-      {/* I. EVIDENCIA AUDIOMÉTRICA (capa Fuente) */}
+      {/* I. Audiograma tonal (recorte documento fuente DD65) */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
-          I. Evidencia audiométrica por oído y frecuencia (fuente)
+          I. Audiograma tonal (documento fuente)
         </Text>
-        {data.frecuencias.length === 0 ? (
-          <Text style={styles.paragraph}>
-            Sin umbrales detectados en el documento fuente.
-          </Text>
-        ) : (
-          <View style={styles.table}>
-            <View style={styles.tableHeader}>
-              <Text style={styles.tableHeaderCell}>Hz</Text>
-              <Text style={styles.tableHeaderCell}>TA OD</Text>
-              <Text style={styles.tableHeaderCell}>TA OI</Text>
-              <Text style={styles.tableHeaderCell}>VO OD</Text>
-              <Text style={styles.tableHeaderCell}>VO OI</Text>
-            </View>
-            {data.frecuencias.map((f, idx) => (
-              <View
-                key={f}
-                style={idx % 2 === 0 ? styles.tableRow : styles.tableRowAlt}
-              >
-                <Text style={styles.tableCell}>{f}</Text>
-                <Text style={styles.tableCell}>
-                  {formatDb(data.taOd[f] ?? null)}
-                </Text>
-                <Text style={styles.tableCell}>
-                  {formatDb(data.taOi[f] ?? null)}
-                </Text>
-                <Text style={styles.tableCell}>
-                  {formatDb(data.voOd[f] ?? null)}
-                </Text>
-                <Text style={styles.tableCell}>
-                  {formatDb(data.voOi[f] ?? null)}
-                </Text>
-              </View>
-            ))}
+        {data.sourceCropDataUrl ? (
+          <View style={styles.sourceWrap}>
+            <Image
+              style={[styles.sourceImage, { height: sourceImageHeight }]}
+              src={data.sourceCropDataUrl}
+            />
           </View>
+        ) : (
+          <Text style={styles.paragraph}>
+            Gráficas del audiómetro no disponibles en este entorno. Consulte el
+            PDF original vinculado al estudio en la papeleta.
+          </Text>
         )}
       </View>
 
@@ -318,7 +313,7 @@ export const AudiometriaValidatedPDF = ({
       {/* IV. RECOMENDACIONES VALIDADAS */}
       {data.recomendacionesValidadas.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>IV. Recomendaciones validadas</Text>
+          <Text style={styles.sectionTitle}>III. Recomendaciones validadas</Text>
           {data.recomendacionesValidadas.map((r, i) => (
             <Text key={i} style={styles.bulletItem}>
               • {r}
@@ -330,7 +325,7 @@ export const AudiometriaValidatedPDF = ({
       {/* V. NOTAS */}
       {data.doctorNotes ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>V. Notas clínicas</Text>
+          <Text style={styles.sectionTitle}>IV. Notas clínicas</Text>
           <Text style={styles.paragraph}>{data.doctorNotes}</Text>
         </View>
       ) : null}
@@ -364,7 +359,8 @@ export const AudiometriaValidatedPDF = ({
       </Text>
     </Page>
   </Document>
-)
+  )
+}
 
 // FND-20260825-15: `formatBool` ya NO se usa en este PDF (la sección
 // "Criterios audiométricos derivados" se retiró). Se elimina la

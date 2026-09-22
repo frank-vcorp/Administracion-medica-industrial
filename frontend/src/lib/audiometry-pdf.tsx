@@ -54,6 +54,7 @@ import {
   resolvePatientIdentificationForPdf,
   type PatientIdentificationPdf,
 } from '@/lib/pdf/patient-identification'
+import { resolveAudiometrySourceCropForPdf } from '@/lib/audiometry-source-crop'
 
 export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl }
 
@@ -83,6 +84,10 @@ export interface BuildAudiometriaPdfInput {
   /** Si se omite, se deriva de `patient` (nombre/empresa/ID). */
   patientIdentification?: PatientIdentificationPdf
   eventId?: string | null
+  eventTestId?: string | null
+  clinicalContext?: unknown
+  sourceCropDataUrl?: string | null
+  sourceCropAspectRatio?: number | null
 }
 
 export function buildAudiometriaPdfData(
@@ -197,12 +202,20 @@ export function buildAudiometriaPdfData(
     recomendacionesValidadas,
     medico: input.medico,
     logoUrl: input.logoDataUrl ?? '',
+    sourceCropDataUrl: input.sourceCropDataUrl ?? null,
+    sourceCropAspectRatio: input.sourceCropAspectRatio ?? null,
   }
 }
 
 export async function buildAudiometriaPdfDataAsync(
   input: BuildAudiometriaPdfInput,
 ): Promise<AudiometriaValidatedPDFData> {
+  const sourceCrop = await resolveAudiometrySourceCropForPdf({
+    eventTestId: input.eventTestId,
+    clinicalContext: input.clinicalContext,
+    sourceCropDataUrl: input.sourceCropDataUrl,
+    sourceCropAspectRatio: input.sourceCropAspectRatio,
+  })
   const patientIdentification =
     input.patientIdentification ??
     (await resolvePatientIdentificationForPdf({
@@ -213,7 +226,12 @@ export async function buildAudiometriaPdfDataAsync(
       companyName: input.patient.companyName,
       attentionDate: input.reviewCreatedAt,
     }))
-  return buildAudiometriaPdfData({ ...input, patientIdentification })
+  return buildAudiometriaPdfData({
+    ...input,
+    patientIdentification,
+    sourceCropDataUrl: sourceCrop.dataUrl,
+    sourceCropAspectRatio: sourceCrop.aspectRatio,
+  })
 }
 
 export interface GenerateAudiometriaPdfResult {
