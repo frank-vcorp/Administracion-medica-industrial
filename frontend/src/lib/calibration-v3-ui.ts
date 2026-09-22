@@ -67,7 +67,7 @@ export function isOperationModeValue(value: unknown): value is OperationMode {
  *
  * Devuelve `null` si no hay versiones o todas están `superseded`.
  */
-function resolveCurrentPublishedVersion(
+export function resolveCurrentPublishedVersion(
   root: AICalibrationV3,
 ): AICalibrationVersionV3 | null {
   const list = root.publishedVersions ?? []
@@ -77,6 +77,25 @@ function resolveCurrentPublishedVersion(
     if (match) return match
   }
   return list.find((v) => v.status === "published" || v.status === "disabled") ?? null
+}
+
+/**
+ * Fragmento de `aiCalibration` listo para upload IA desde la versión V3
+ * publicada vigente (prompt de extracción en `publishedVersions`, no en la raíz).
+ */
+export function getV3PublishedAiCalibrationSlice(
+  root: AICalibrationV3 | null,
+): Record<string, unknown> | null {
+  if (!root) return null
+  const vigent = resolveCurrentPublishedVersion(root)
+  if (!vigent?.extraction) return null
+  const prompt = vigent.extraction.prompt
+  if (typeof prompt !== 'string' || !prompt.trim()) return null
+  return {
+    enabled: vigent.enabled,
+    canonicalStudyType: vigent.canonicalStudyType,
+    extraction: vigent.extraction,
+  }
 }
 
 /**

@@ -1280,6 +1280,13 @@ async def v2_upload_and_analyze(
         from app.services.ai.app_config import (
             get_extraction_default_provider_sync as _get_default_provider_sync,
         )
+        _STUDY_TYPE_ALIASES = {
+            "ECG": "Electrocardiograma",
+            "ekg": "Electrocardiograma",
+            "Ekg": "Electrocardiograma",
+        }
+        if study_type:
+            study_type = _STUDY_TYPE_ALIASES.get(study_type, study_type)
         if study_type:
             detected_type = study_type
             classification_dict = {"detected_type": study_type, "confidence": 1.0, "reason": "provided_by_caller"}

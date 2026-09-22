@@ -11,7 +11,11 @@ import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { EventTestStatus, Prisma } from "@prisma/client"
 import { triggerStudyAIAnalysis } from "./ai-prediagnosis.actions"
-import { isAIEligibleEventTest, getCanonicalAIStudyType } from "@/lib/study-ai"
+import {
+  isAIEligibleEventTest,
+  getCanonicalAIStudyType,
+  normalizeStudyTypeForBackend,
+} from "@/lib/study-ai"
 // ARCH-20260820-01 Fase 3 (SPEC §9.1): Events consume la versión `published`
 // del resolver antes de caer a la heurística de nombre (fallback trazado).
 // FIX-20260820-01-VERCEL-BUILD: helper síncrono se importa desde el módulo
@@ -894,9 +898,12 @@ export async function uploadEventTestFile(formData: FormData) {
         // enabled=true: enrutar por canonicalStudyType published si existe.
         if (published.canonicalStudyType) {
           isAIEligible = true
-          canonicalTypeForXml = published.canonicalStudyType
+          const routedType =
+            normalizeStudyTypeForBackend(published.canonicalStudyType) ??
+            published.canonicalStudyType
+          canonicalTypeForXml = routedType
           calibrationSource = 'published_v3'
-          formData.set('study_type', published.canonicalStudyType)
+          formData.set('study_type', routedType)
         } else {
           // V3 published sin canonicalStudyType (document_extraction sin
           // routing XML): la IA puede disparar sin study_type canónico.
@@ -1268,7 +1275,9 @@ export async function regenerateStudyAI(
     let publishedVersionId: string | null = null
 
     if (published && published.enabled && published.canonicalStudyType) {
-      canonicalType = published.canonicalStudyType
+      canonicalType =
+        normalizeStudyTypeForBackend(published.canonicalStudyType) ??
+        published.canonicalStudyType
       calibrationSource = 'published_v3'
       publishedVersionId = published.versionId
     } else {

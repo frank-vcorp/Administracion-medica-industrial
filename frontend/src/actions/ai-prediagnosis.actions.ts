@@ -25,8 +25,11 @@
  */
 'use server'
 
-import { resolveAiCalibrationForUpload } from '@/lib/clinical/default-ai-calibration'
-import { getCanonicalAIStudyType } from '@/lib/study-ai'
+import {
+  readStoredAiCalibrationFromTestOptions,
+  resolveAiCalibrationForUpload,
+} from '@/lib/clinical/default-ai-calibration'
+import { getCanonicalAIStudyType, normalizeStudyTypeForBackend } from '@/lib/study-ai'
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
@@ -239,6 +242,7 @@ export async function triggerStudyAIAnalysis(
         testNameSnapshot: true,
         test: {
           select: {
+            id: true,
             options: true,
             category: { select: { name: true } },
             code: true,
@@ -255,26 +259,22 @@ export async function triggerStudyAIAnalysis(
         }) ?? null
     }
 
+    studyType = normalizeStudyTypeForBackend(studyType) ?? studyType
+
     const testOptions = eventTest?.test?.options
-    const storedCalibration =
-      testOptions &&
-      typeof testOptions === 'object' &&
-      !Array.isArray(testOptions) &&
-      'aiCalibration' in testOptions &&
-      testOptions.aiCalibration &&
-      typeof testOptions.aiCalibration === 'object' &&
-      !Array.isArray(testOptions.aiCalibration)
-        ? (testOptions.aiCalibration as Prisma.JsonObject)
-        : null
+    const storedCalibration = readStoredAiCalibrationFromTestOptions(testOptions)
 
     const aiCalibration = resolveAiCalibrationForUpload(
-      storedCalibration as Record<string, unknown> | null,
+      storedCalibration,
       studyType,
     ) as Prisma.JsonObject | null
 
     const uploadForm = new FormData()
     uploadForm.append('file', file)
     uploadForm.append('triggered_by_user_id', triggeredByUserId)
+    if (eventTest?.test?.id) {
+      uploadForm.append('medical_test_id', eventTest.test.id)
+    }
     if (studyType) {
       uploadForm.append('study_type', studyType)
     }

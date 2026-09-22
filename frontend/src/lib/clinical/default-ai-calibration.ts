@@ -4,11 +4,14 @@
  * No sustituye calibración publicada en admin; solo evita EXTRACTION_PROMPT_NOT_CONFIGURED.
  */
 
+import type { AICalibrationV3 } from '@/types/calibration'
+import { getV3PublishedAiCalibrationSlice } from '@/lib/calibration-v3-ui'
+
 export const ECG_EXTRACTION_VERSION = 'ecg-ami-bootstrap-v1'
 
 export const ECG_EXTRACTION_PROMPT = `EXTRACCIÓN DE ELECTROCARDIOGRAMA (ECG / Electrocardiograma)
 
-Devuelve SOLO un objeto JSON válido (sin markdown, sin comentarios).
+Devuelve SOLO un objeto JSON válido. Sin markdown, sin comentarios, sin bloques <think>. JSON único que empieza con { y termina con }.
 
 Campos esperados:
 {
@@ -42,9 +45,17 @@ function hasExtractionPrompt(aiCalibration: JsonRecord | null | undefined): bool
   return typeof prompt === 'string' && prompt.trim().length > 0
 }
 
-function bootstrapForStudyType(studyType: string | null | undefined): JsonRecord | null {
+function isEcgStudyType(studyType: string | null | undefined): boolean {
   const type = (studyType ?? '').trim()
-  if (type === 'Electrocardiograma') {
+  return (
+    type === 'Electrocardiograma' ||
+    type === 'ECG' ||
+    type.toLowerCase() === 'ekg'
+  )
+}
+
+function bootstrapForStudyType(studyType: string | null | undefined): JsonRecord | null {
+  if (isEcgStudyType(studyType)) {
     return {
       enabled: true,
       canonicalStudyType: 'ECG',
@@ -56,6 +67,25 @@ function bootstrapForStudyType(studyType: string | null | undefined): JsonRecord
     }
   }
   return null
+}
+
+/** Lee calibración legacy o el slice de la versión V3 publicada (prompt en publishedVersions). */
+export function readStoredAiCalibrationFromTestOptions(
+  options: unknown,
+): JsonRecord | null {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    return null
+  }
+  const rawCal = (options as JsonRecord).aiCalibration
+  if (!rawCal || typeof rawCal !== 'object' || Array.isArray(rawCal)) {
+    return null
+  }
+  const cal = rawCal as JsonRecord
+  if (cal.schemaVersion === 'V3') {
+    const slice = getV3PublishedAiCalibrationSlice(cal as unknown as AICalibrationV3)
+    return slice ?? null
+  }
+  return cal
 }
 
 /** Fusiona calibración de BD con bootstrap AMI si falta prompt de extracción. */

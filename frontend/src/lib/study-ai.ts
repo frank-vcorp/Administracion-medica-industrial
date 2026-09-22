@@ -25,6 +25,26 @@ export type CanonicalAIStudyType =
   | 'ExamenMedico'
   | 'Otro'
 
+/** Alias de calibración V3 / catálogo → `study_type` del backend Python. */
+const BACKEND_STUDY_TYPE_ALIASES: Record<string, CanonicalAIStudyType> = {
+  ECG: 'Electrocardiograma',
+  ekg: 'Electrocardiograma',
+  Ekg: 'Electrocardiograma',
+}
+
+/**
+ * Normaliza `canonicalStudyType` de V3 (p. ej. `ECG`) al literal que espera
+ * el pipeline V2 (`Electrocardiograma`).
+ */
+export function normalizeStudyTypeForBackend(
+  studyType: string | null | undefined,
+): CanonicalAIStudyType | string | null {
+  if (!studyType || typeof studyType !== 'string') return null
+  const trimmed = studyType.trim()
+  if (!trimmed) return null
+  return BACKEND_STUDY_TYPE_ALIASES[trimmed] ?? trimmed
+}
+
 /** Referencia mínima de EventTest necesaria para determinar elegibilidad */
 export interface StudyTestRef {
   testNameSnapshot: string
