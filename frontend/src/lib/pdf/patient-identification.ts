@@ -91,13 +91,13 @@ function normalizePdfVitalLabel(value: string | null | undefined): string | null
   return t
 }
 
-function readScalarField(
-  ...candidates: Array<string | number | null | undefined>
-): string | null {
+function readScalarField(...candidates: unknown[]): string | null {
   for (const c of candidates) {
     if (c === null || c === undefined) continue
-    const t = String(c).trim()
-    if (t.length > 0) return t
+    if (typeof c === 'string' || typeof c === 'number' || typeof c === 'boolean') {
+      const t = String(c).trim()
+      if (t.length > 0) return t
+    }
   }
   return null
 }
@@ -189,6 +189,11 @@ export async function resolvePatientIdentificationForPdf(args: {
   ageYears?: number | null
   ageLabel?: string | null
   attentionDate?: Date | string | null
+  weightLabel?: string | null
+  heightLabel?: string | null
+  temperatureLabel?: string | null
+  heartRateLabel?: string | null
+  bloodPressureLabel?: string | null
 }): Promise<PatientIdentificationPdf> {
   const base = buildPatientIdentificationPdf(args)
   if (!args.eventId) return base
