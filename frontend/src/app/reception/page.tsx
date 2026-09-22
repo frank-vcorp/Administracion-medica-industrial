@@ -189,7 +189,11 @@ function PatientCard({ event, status, nextStatus }: {
                     {nextStatus && (
                         <StatusUpdateButton eventId={event.id} nextStatus={nextStatus} />
                     )}
-                    <Link href={`/events/${event.id}`} className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all">
+                    <Link
+                        href={`/events/${event.id}`}
+                        prefetch={true}
+                        className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all"
+                    >
                         Abrir <span className="text-xs">→</span>
                     </Link>
                 </div>

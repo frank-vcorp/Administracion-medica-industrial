@@ -11,11 +11,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { getEventById } from '@/actions/medical-event.actions'
-import { getMedicalExam } from '@/actions/medical-exam.actions'
-import { getPrefilledDataForEvent } from '@/actions/prefilled-invitation.actions'
 import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
-import { getEventTimeline } from '@/actions/timeline.actions'
 import { getIntakeSourceLabel } from './intake-source-label'
+import { isAdminLike } from '@/lib/auth/roles'
+import { getTimelineForEvent } from '@/lib/timeline.service'
 
 const STATUS_NAMES: Record<string, string> = {
   SCHEDULED: 'Ingreso',
@@ -105,24 +104,7 @@ export async function fetchEventPageData(input: {
     redirect(`/events/${input.id}?view=IN_PROGRESS`)
   }
 
-  const examRes = await getMedicalExam(input.id)
-  const medicalExam = examRes.success ? examRes.data : null
-  const historyRes = await getWorkerClinicalHistory(event.worker.id)
-  const prefilledRes = await getPrefilledDataForEvent(input.id)
-  const prefilledData =
-    prefilledRes.success && prefilledRes.data ? prefilledRes.data.module1Data : null
-
-  const session = await getServerSession(authOptions)
-  const reviewerUserId = session?.user?.id ?? 'system'
-  const userRole = session?.user?.role ?? null
-
-  let initialTimeline: unknown[] = []
-  if (userRole === 'ADMIN') {
-    const timelineRes = await getEventTimeline(input.id)
-    if (timelineRes.success && timelineRes.data) {
-      initialTimeline = timelineRes.data
-    }
-  }
+  const medicalExam = event.exam ?? null
 
   const eventWithIntake = event as typeof event & {
     intakeSource?: string | null
@@ -131,20 +113,46 @@ export async function fetchEventPageData(input: {
     appointmentId?: string | null
   }
 
-  const [projectRef, intakeCreator] = await Promise.all([
-    eventWithIntake.projectId
-      ? prisma.project.findUnique({
-          where: { id: eventWithIntake.projectId },
-          select: { id: true, name: true },
-        })
-      : Promise.resolve(null),
-    eventWithIntake.intakeCreatedByUserId
-      ? prisma.user.findUnique({
-          where: { id: eventWithIntake.intakeCreatedByUserId },
-          select: { id: true, fullName: true },
-        })
-      : Promise.resolve(null),
-  ])
+  const appointmentId = eventWithIntake.appointmentId ?? null
+
+  const session = await getServerSession(authOptions)
+  const reviewerUserId = session?.user?.id ?? 'system'
+  const userRole = session?.user?.role ?? null
+
+  const timelinePromise = isAdminLike(userRole)
+    ? getTimelineForEvent(input.id)
+        .then((entries) => JSON.parse(JSON.stringify(entries)) as unknown[])
+        .catch(() => [] as unknown[])
+    : Promise.resolve([] as unknown[])
+
+  const [historyRes, prefilledInvitation, projectRef, intakeCreator, initialTimeline] =
+    await Promise.all([
+      getWorkerClinicalHistory(event.worker.id),
+      appointmentId
+        ? prisma.prefilledInvitation.findUnique({
+            where: { appointmentId },
+            select: { module1Data: true, status: true, submittedAt: true },
+          })
+        : Promise.resolve(null),
+      eventWithIntake.projectId
+        ? prisma.project.findUnique({
+            where: { id: eventWithIntake.projectId },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve(null),
+      eventWithIntake.intakeCreatedByUserId
+        ? prisma.user.findUnique({
+            where: { id: eventWithIntake.intakeCreatedByUserId },
+            select: { id: true, fullName: true },
+          })
+        : Promise.resolve(null),
+      timelinePromise,
+    ])
+
+  const prefilledData =
+    prefilledInvitation?.module1Data
+      ? (prefilledInvitation.module1Data as Record<string, unknown>)
+      : null
 
   const intakeSourceLabel = getIntakeSourceLabel(
     eventWithIntake.intakeSource,

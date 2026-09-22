@@ -45,6 +45,7 @@ import ClinicalExtractionRenderer from "@/components/clinical/ClinicalExtraction
 import { isAIEligibleEventTest, getAIWorkflowLabel, getCanonicalAIStudyType } from "@/lib/study-ai"
 // ARCH-20260507-07: Bloque de trazabilidad operativa ligera (sin cambiar flujo)
 import TraceabilidadLigera from "@/components/clinical/TraceabilidadLigera"
+import { StudyMenuIcon } from "@/components/clinical/StudyMenuIcon"
 // IMPL-20260824-01 (FEATURE-20260824-01): criterios clínicos de Espirometría
 // mostrados en la columna derecha entre el visor y el panel IA. Sólo
 // presentación; consume el snapshot ya extraído sin recalcular ni reinterpretar.
@@ -326,22 +327,6 @@ function resolveSampleGroup(test: StudyTest): string {
   if (name.includes('orina') || name.includes('ego') || name.includes('urin')) return 'orina'
   if (name.includes('heces') || name.includes('copro')) return 'heces'
   return 'otro'
-}
-
-function getStudyIcon(test: StudyTest): string {  if (isExamenMedico(test.testNameSnapshot)) return '📋'
-  if (isSomatometria(test.testNameSnapshot)) return '⚖️'
-  if (isAgudezaVisual(test.testNameSnapshot)) return '👁️'
-  // IMPL-20260326-18: íconos por type canónico del helper central
-  const canonical = getCanonicalAIStudyType(test)
-  if (canonical === 'Audiometria') return '🎧'
-  if (canonical === 'Espirometria') return '💨'
-  if (canonical === 'Campimetria') return '🗺️'
-  if (canonical === 'Electrocardiograma') return '💓'
-  if (canonical === 'RiesgoCardiovascular') return '🫀'
-  if (canonical === 'Rayos_X') return '🔬'
-  if (test.fileUrl) return '📄'
-  if (isLabTest(test)) return '🧪'
-  return '🔬'
 }
 
 // --- Componente principal ---
@@ -720,7 +705,7 @@ export default function PapeletaWorkspace({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xl shrink-0">{getStudyIcon(test)}</span>
+                    <StudyMenuIcon test={test} />
                     <div className="min-w-0">
                       <p className="font-semibold text-slate-800 text-sm group-hover:text-teal-700 truncate">
                         {test.testNameSnapshot}
@@ -789,14 +774,17 @@ export default function PapeletaWorkspace({
             <button
               key={t.id}
               onClick={() => { setActiveTestId(t.id); setUploadError('') }}
-              className={`text-left px-3 py-2 border-l-2 transition-colors ${
+              className={`flex w-full items-start gap-2 px-2 py-2 border-l-2 transition-colors ${
                 t.id === activeTestId
-                  ? 'bg-white border-teal-500 text-teal-700'
+                  ? 'bg-white border-[#592c82] text-[#592c82]'
                   : 'border-transparent text-slate-600 hover:bg-white hover:text-slate-800'
               }`}
             >
-              <p className="text-xs font-semibold truncate">{t.testNameSnapshot}</p>
-              <StudyStatusBadge status={t.status} aiSnapshot={t.aiSnapshot} variant="compact" className="items-start mt-1" />
+              <StudyMenuIcon test={t} active={t.id === activeTestId} className="mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold truncate">{t.testNameSnapshot}</p>
+                <StudyStatusBadge status={t.status} aiSnapshot={t.aiSnapshot} variant="compact" className="items-start mt-1" />
+              </div>
             </button>
           ))}
         </nav>

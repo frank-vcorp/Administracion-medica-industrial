@@ -91,8 +91,6 @@ export const getEventById = async (id: string) => {
                 },
                 orderBy: { createdAt: 'asc' }
             },
-            studies: true,
-            labs: true,
             verdict: true
         }
     })
