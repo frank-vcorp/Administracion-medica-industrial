@@ -1,14 +1,19 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import ReceptionCheckoutModal, {
   type ReceptionCheckoutPatient,
 } from '@/components/reception/ReceptionCheckoutModal'
+import ReceptionEventTestsList, {
+  type ReceptionKanbanTest,
+} from '@/components/reception/ReceptionEventTestsList'
 
 type Props = {
   event: {
     id: string
     checkInDate?: Date | string | null
+    eventTests?: ReceptionKanbanTest[]
     worker: {
       firstName: string
       lastName: string
@@ -54,10 +59,22 @@ export default function ReceptionCheckoutCard({ event, intakeBadge }: Props) {
           </span>
         </div>
 
-        <div className="mt-2 flex items-center justify-between border-t border-slate-50 pt-4">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
-            Pruebas realizadas
-          </span>
+        <div className="mt-2 border-t border-slate-50 pt-3">
+          <ReceptionEventTestsList
+            eventId={event.id}
+            tests={event.eventTests ?? []}
+            variant="checkout"
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-slate-50 pt-3">
+          <Link
+            href={`/events/${event.id}?view=IN_PROGRESS`}
+            prefetch
+            className="rounded-md border border-indigo-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 transition hover:bg-indigo-50"
+          >
+            Ver papeleta
+          </Link>
           <button
             type="button"
             onClick={() =>

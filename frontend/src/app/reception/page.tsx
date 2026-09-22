@@ -8,6 +8,7 @@ import CheckInModal from "@/components/CheckInModal"
 import QRScannerModal from "@/components/QRScannerModal"
 import StatusUpdateButton from "@/components/StatusUpdateButton"
 import ReceptionCheckoutCard from "@/components/reception/ReceptionCheckoutCard"
+import ReceptionEventTestsList from "@/components/reception/ReceptionEventTestsList"
 import ReceptionDayFilter from "@/components/reception/ReceptionDayFilter"
 import prisma from "@/lib/prisma"
 import Link from "next/link"
@@ -149,6 +150,7 @@ function PatientCard({ event, status, nextStatus }: {
         intakeSource?: string | null,
         appointmentId?: string | null,
         checkInDate?: Date | null,
+        eventTests?: { id: string; status: string; testNameSnapshot: string }[],
         worker: { firstName: string, lastName: string, company: { name: string } | null }
     },
     status: 'waiting' | 'progress' | 'done',
@@ -177,6 +179,13 @@ function PatientCard({ event, status, nextStatus }: {
                 </span>
             </div>
 
+            <div className="mb-3">
+                <ReceptionEventTestsList
+                    eventId={event.id}
+                    tests={event.eventTests ?? []}
+                />
+            </div>
+
             <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-50">
                 <div className="flex gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${status === 'waiting' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
@@ -190,11 +199,11 @@ function PatientCard({ event, status, nextStatus }: {
                         <StatusUpdateButton eventId={event.id} nextStatus={nextStatus} />
                     )}
                     <Link
-                        href={`/events/${event.id}`}
+                        href={`/events/${event.id}?view=IN_PROGRESS`}
                         prefetch={true}
                         className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all"
                     >
-                        Abrir <span className="text-xs">→</span>
+                        Papeleta <span className="text-xs">→</span>
                     </Link>
                 </div>
             </div>

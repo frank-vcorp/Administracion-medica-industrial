@@ -64,7 +64,8 @@ const kanbanCheckoutSelect = {
         },
     },
     eventTests: {
-        select: { id: true, status: true },
+        select: { id: true, status: true, testNameSnapshot: true },
+        orderBy: { createdAt: 'asc' },
     },
 } as const
 
