@@ -377,6 +377,28 @@ type EventTestEligibilityRow = {
   } | null
 }
 
+/** V3 published con enabled=false: seguir pipeline vía heurística legacy trazada (AC-3.3). */
+function applyLegacyHeuristicWhenV3Disabled(
+  eventTest: EventTestEligibilityRow,
+  formData: FormData,
+): {
+  isAIEligible: boolean
+  canonicalTypeForXml: string | null
+  calibrationSource: 'legacy_heuristic'
+  publishedVersionId: null
+} {
+  const canonicalType = getCanonicalAIStudyType(eventTest)
+  if (canonicalType) {
+    formData.set('study_type', canonicalType)
+  }
+  return {
+    isAIEligible: true,
+    canonicalTypeForXml: canonicalType,
+    calibrationSource: 'legacy_heuristic',
+    publishedVersionId: null,
+  }
+}
+
 /** Parser XML directo (FIX-20260729-03-G-XML) no usa DR7; permitir aunque V3 tenga enabled=false. */
 async function allowAudiometryXmlWhenCalibrationDisabled(
   eventTest: EventTestEligibilityRow,
@@ -914,19 +936,27 @@ export async function uploadEventTestFile(formData: FormData) {
             file,
           )
           if (!xmlAudiometryBypass) {
-            // AC-3.1 / CB-02 / SPEC §15 regla 8: gate enabled=false no-negociable.
-            return await persistCalibrationDisabledSnapshot({
-              eventTestId,
-              eventId,
-              triggeredByUserId,
-              versionId: published.versionId,
-              versionNumber: published.versionNumber,
-            })
-          }
+            if (isAIEligibleEventTest(eventTest)) {
+              const legacy = applyLegacyHeuristicWhenV3Disabled(eventTest, formData)
+              isAIEligible = legacy.isAIEligible
+              canonicalTypeForXml = legacy.canonicalTypeForXml
+              calibrationSource = legacy.calibrationSource
+              publishedVersionId = legacy.publishedVersionId
+            } else {
+              return await persistCalibrationDisabledSnapshot({
+                eventTestId,
+                eventId,
+                triggeredByUserId,
+                versionId: published.versionId,
+                versionNumber: published.versionNumber,
+              })
+            }
+          } else {
           isAIEligible = true
           canonicalTypeForXml = 'Audiometria'
           calibrationSource = 'published_v3'
           formData.set('study_type', 'Audiometria')
+          }
         } else if (published.canonicalStudyType) {
         // enabled=true: enrutar por canonicalStudyType published si existe.
           isAIEligible = true
@@ -1300,15 +1330,17 @@ export async function regenerateStudyAI(
           )),
       )
       if (!xmlAudiometryBypass) {
-        // AC-3.1: gate enabled=false → no regenera IA; persiste snapshot disabled.
-        const disabled = await persistCalibrationDisabledSnapshot({
-          eventTestId,
-          eventId,
-          triggeredByUserId,
-          versionId: published.versionId,
-          versionNumber: published.versionNumber,
-        })
-        return { success: disabled.success, error: undefined }
+        if (!eventTest || !isAIEligibleEventTest(eventTest)) {
+          const disabled = await persistCalibrationDisabledSnapshot({
+            eventTestId,
+            eventId,
+            triggeredByUserId,
+            versionId: published.versionId,
+            versionNumber: published.versionNumber,
+          })
+          return { success: disabled.success, error: undefined }
+        }
+        // IA elegible: regenerar con heurística legacy (mismo criterio que upload).
       }
     }
 
@@ -1327,6 +1359,16 @@ export async function regenerateStudyAI(
       calibrationSource = 'published_v3'
       publishedVersionId = published.versionId
       canonicalType = 'Audiometria'
+    } else if (
+      published &&
+      !published.enabled &&
+      xmlAudiometryBypass === false &&
+      eventTest &&
+      isAIEligibleEventTest(eventTest)
+    ) {
+      calibrationSource = 'legacy_heuristic'
+      publishedVersionId = null
+      canonicalType = getCanonicalAIStudyType(eventTest)
     } else {
       // AC-3.3: no hay published (o published sin canonicalStudyType) →
       // heurística de nombre como fallback trazado (SPEC §12.1).

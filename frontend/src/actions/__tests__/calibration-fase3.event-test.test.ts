@@ -76,6 +76,7 @@ vi.mock('@/actions/calibration-v3.actions', () => ({
 vi.mock('@/lib/study-ai', () => ({
   getCanonicalAIStudyType: (...args: unknown[]) => mockGetCanonical(...args),
   isAIEligibleEventTest: (...args: unknown[]) => mockIsAIEligible(...args),
+  normalizeStudyTypeForBackend: (studyType: string | null | undefined) => studyType ?? null,
 }))
 vi.mock('@/lib/timeline.service', () => ({
   writeTimelineEntry: (...args: unknown[]) => mockWriteTimeline(...args),
@@ -85,17 +86,24 @@ import { uploadEventTestFile } from '@/actions/event-test.actions'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function buildFormData(overrides: Partial<{
-  eventTestId: string
-  eventId: string
-  triggeredByUserId: string
-}> = {}): FormData {
+function buildFormData(
+  overrides: Partial<{
+    eventTestId: string
+    eventId: string
+    triggeredByUserId: string
+    fileName: string
+    mime: string
+  }> = {},
+): FormData {
   const fd = new FormData()
   fd.set('eventTestId', overrides.eventTestId ?? 'et-disabled-1')
   fd.set('eventId', overrides.eventId ?? 'ev-1')
   fd.set('triggeredByUserId', overrides.triggeredByUserId ?? 'user-1')
-  // File mock mínimo (no se lee en la rama disabled, que retorna antes).
-  const file = new File(['dummy'], 'sample.xml', { type: 'application/xml' })
+  const file = new File(
+    ['dummy'],
+    overrides.fileName ?? 'sample.pdf',
+    { type: overrides.mime ?? 'application/pdf' },
+  )
   fd.set('file', file)
   return fd
 }
@@ -105,6 +113,7 @@ function buildFormData(overrides: Partial<{
 describe('ARCH-20260820-01 Fase 3 — AC-3.1 uploadEventTestFile con enabled=false', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockIsAIEligible.mockReturnValue(false)
     mockStudyExtractionSnapshotFindMany.mockResolvedValue([])
     mockStudyExtractionSnapshotUpdateMany.mockResolvedValue({ count: 0 })
     mockAIPrediagnosisSnapshotUpdateMany.mockResolvedValue({ count: 0 })
@@ -126,7 +135,7 @@ describe('ARCH-20260820-01 Fase 3 — AC-3.1 uploadEventTestFile con enabled=fal
   })
 
   it('enabled=false published → NO dispara IA y persiste snapshot calibration_disabled', async () => {
-    // El resolver published reporta enabled=false.
+    mockIsAIEligible.mockReturnValue(false)
     mockGetPublished.mockResolvedValue({
       enabled: false,
       canonicalStudyType: 'Audiometria',
@@ -173,10 +182,13 @@ describe('ARCH-20260820-01 Fase 3 — AC-3.1 uploadEventTestFile con enabled=fal
     expect(logCall).toContain('calibration_disabled')
   })
 
-  it('enabled=false → no se invoca la heurística de nombre (no hace falta)', async () => {
+  it('enabled=false + estudio IA elegible → fallback legacy_heuristic (dispara IA)', async () => {
+    mockIsAIEligible.mockReturnValue(true)
+    mockGetCanonical.mockReturnValue('Espirometria')
+    mockTriggerStudyAI.mockResolvedValue({ success: true, fileUrl: '/f.pdf' })
     mockGetPublished.mockResolvedValue({
       enabled: false,
-      canonicalStudyType: 'Audiometria',
+      canonicalStudyType: 'Espirometria',
       versionId: 'cal-v3-002',
       versionNumber: 2,
       source: 'published_v3',
@@ -184,13 +196,14 @@ describe('ARCH-20260820-01 Fase 3 — AC-3.1 uploadEventTestFile con enabled=fal
 
     await uploadEventTestFile(buildFormData())
 
-    // Como published.enabled=false corta antes del fallback, la heurística
-    // no se evalúa (no es necesaria: el gate tiene prioridad).
-    expect(mockGetCanonical).not.toHaveBeenCalled()
-    expect(mockIsAIEligible).not.toHaveBeenCalled()
+    expect(mockIsAIEligible).toHaveBeenCalled()
+    expect(mockGetCanonical).toHaveBeenCalled()
+    expect(mockTriggerStudyAI).toHaveBeenCalled()
+    expect(mockStudyExtractionSnapshotCreate).not.toHaveBeenCalled()
   })
 
   it('snapshot disabled marca snapshots previos como superseded (inmutabilidad)', async () => {
+    mockIsAIEligible.mockReturnValue(false)
     // Hay un snapshot vigente previo que debe quedar superseded.
     mockStudyExtractionSnapshotFindMany.mockResolvedValue([{ id: 'old-snap-1' }])
     mockGetPublished.mockResolvedValue({

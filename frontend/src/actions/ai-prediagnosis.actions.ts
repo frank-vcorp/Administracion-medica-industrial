@@ -191,6 +191,7 @@ export interface StudySnapshotsResult {
 import {
   extractAndValidateClinicalContext,
 } from '@/lib/clinical/clinical-context-propagation'
+import { shouldOmitMedicalTestIdForLegacyPrediagnosis } from '@/lib/calibration-v3-gates'
 
 // ---------------------------------------------------------------------------
 // triggerStudyAIAnalysis
@@ -272,7 +273,8 @@ export async function triggerStudyAIAnalysis(
     const uploadForm = new FormData()
     uploadForm.append('file', file)
     uploadForm.append('triggered_by_user_id', triggeredByUserId)
-    if (eventTest?.test?.id) {
+    const omitMedicalTestId = shouldOmitMedicalTestIdForLegacyPrediagnosis(testOptions)
+    if (eventTest?.test?.id && !omitMedicalTestId) {
       uploadForm.append('medical_test_id', eventTest.test.id)
     }
     if (studyType) {
