@@ -270,10 +270,11 @@ export async function saveExamenMedicoPapeleta(
       physicalPayload.examen_capture_closed = true
     }
 
+    const physicalJson = physicalPayload as Prisma.InputJsonValue
     await prisma.medicalExam.upsert({
       where: { eventId },
-      update: { physicalExamData: physicalPayload },
-      create: { eventId, physicalExamData: physicalPayload },
+      update: { physicalExamData: physicalJson },
+      create: { eventId, physicalExamData: physicalJson },
     })
 
     const newStudyStatus = 'RESULT_REGISTERED'
