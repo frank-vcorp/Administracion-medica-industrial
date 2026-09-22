@@ -119,3 +119,88 @@ export function agendaDayUtcRange(dateStr: string): { gte: Date; lte: Date } {
   const lte = new Date(parseAppointmentLocalDateTime(dateStr, '23:59').getTime() + 59_999)
   return { gte, lte }
 }
+
+/** Fecha de calendario operativo (YYYY-MM-DD) en zona AMI — para recepción y agenda. */
+export function todayAgendaDateString(timeZone = AMI_APPOINTMENT_TIMEZONE): string {
+  return formatAppointmentAgendaDateString(new Date(), timeZone)
+}
+
+const AGENDA_WEEKDAY: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+}
+
+/** Suma días de calendario en zona AMI (dateStr YYYY-MM-DD). */
+export function addAgendaDays(
+  dateStr: string,
+  days: number,
+  timeZone = AMI_APPOINTMENT_TIMEZONE,
+): string {
+  const anchor = parseAppointmentLocalDateTime(dateStr, '12:00')
+  const shifted = new Date(anchor.getTime() + days * 86_400_000)
+  return formatAppointmentAgendaDateString(shifted, timeZone)
+}
+
+/** Lunes de la semana de agenda que contiene `dateStr`. */
+export function getAgendaWeekStartMonday(dateStr: string, timeZone = AMI_APPOINTMENT_TIMEZONE): string {
+  const anchor = parseAppointmentLocalDateTime(dateStr, '12:00')
+  const wdLabel = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'short',
+  }).format(anchor)
+  const weekday = AGENDA_WEEKDAY[wdLabel] ?? 0
+  const diff = weekday === 0 ? -6 : 1 - weekday
+  return addAgendaDays(dateStr, diff, timeZone)
+}
+
+/** Rango UTC lunes–domingo (inicio en `weekStartMonday` YYYY-MM-DD). */
+export function agendaWeekUtcRange(weekStartMonday: string): { gte: Date; lte: Date } {
+  const weekEnd = addAgendaDays(weekStartMonday, 6)
+  const { gte } = agendaDayUtcRange(weekStartMonday)
+  const { lte } = agendaDayUtcRange(weekEnd)
+  return { gte, lte }
+}
+
+export function currentAgendaYearMonth(offsetMonths = 0): { year: number; month: number } {
+  const [year, month, day] = todayAgendaDateString().split('-').map(Number)
+  let y = year
+  let m = month + offsetMonths
+  while (m < 1) {
+    m += 12
+    y -= 1
+  }
+  while (m > 12) {
+    m -= 12
+    y += 1
+  }
+  void day
+  return { year: y, month: m }
+}
+
+/** Rango UTC del mes de calendario AMI (month 1–12). */
+export function agendaMonthUtcRange(year: number, month: number): { gte: Date; lte: Date } {
+  const first = `${year}-${String(month).padStart(2, '0')}-01`
+  const nextYear = month === 12 ? year + 1 : year
+  const nextMonth = month === 12 ? 1 : month + 1
+  const firstNext = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
+  const gte = parseAppointmentLocalDateTime(first, '00:00')
+  const lte = new Date(parseAppointmentLocalDateTime(firstNext, '00:00').getTime() - 1)
+  return { gte, lte }
+}
+
+/** Etiqueta larga del día de agenda (es-MX, zona AMI). */
+export function formatAgendaDayHeading(dateStr: string, timeZone = AMI_APPOINTMENT_TIMEZONE): string {
+  const d = parseAppointmentLocalDateTime(dateStr, '12:00')
+  return d.toLocaleDateString('es-MX', {
+    timeZone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}

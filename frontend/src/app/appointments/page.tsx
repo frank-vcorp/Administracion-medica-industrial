@@ -18,40 +18,23 @@ import { WeeklyAppointmentsModal } from '@/components/appointments/WeeklyAppoint
 import { PendingStudiesModal } from '@/components/appointments/PendingStudiesModal'
 import Link from 'next/link'
 import {
+    addAgendaDays,
     appointmentAgendaHour,
+    formatAgendaDayHeading,
     formatAppointmentAgendaDateString,
     formatAppointmentAgendaTime,
+    todayAgendaDateString,
 } from '@/lib/appointment-scheduling'
 
 /** Citas que ocupan cupo visible en la agenda del día. */
 const AGENDA_SLOT_STATUSES = new Set(['SCHEDULED', 'CONFIRMED'])
-
-function formatLocalDateString(date: Date): string {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-}
-
-function addDaysToDateString(dateStr: string, days: number): string {
-    const [year, month, day] = dateStr.split('-').map(Number)
-    const date = new Date(year, month - 1, day)
-    date.setDate(date.getDate() + days)
-    return formatLocalDateString(date)
-}
 
 function appointmentLocalDateString(scheduledAt: Date | string): string {
     return formatAppointmentAgendaDateString(scheduledAt)
 }
 
 function formatDayHeading(dateStr: string): string {
-    const [year, month, day] = dateStr.split('-').map(Number)
-    const date = new Date(year, month - 1, day)
-    return date.toLocaleDateString('es-MX', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-    })
+    return formatAgendaDayHeading(dateStr)
 }
 
 function groupAppointmentsByHour(
@@ -161,7 +144,7 @@ export default function AppointmentsPage() {
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
     // IMPL-20260318-08: Estado del modal de corroboración
     const [corroborationData, setCorroborationData] = useState<Parameters<typeof CorroborationModal>[0]['appointment'] | null>(null)
-    const [selectedDate, setSelectedDate] = useState<string>(() => formatLocalDateString(new Date()))
+    const [selectedDate, setSelectedDate] = useState<string>(() => todayAgendaDateString())
     const [error, setError] = useState<string | null>(null)
     const [checkInError, setCheckInError] = useState<string | null>(null)
     const [rescheduleApt, setRescheduleApt] = useState<AppointmentWithWorker | null>(null)
@@ -186,7 +169,7 @@ export default function AppointmentsPage() {
         })
     }, [])
 
-    const nextDate = addDaysToDateString(selectedDate, 1)
+    const nextDate = addAgendaDays(selectedDate, 1)
 
     const loadData = async () => {
         if (!selectedBranchId) return // Esperar a tener sucursal seleccionada
@@ -589,7 +572,7 @@ export default function AppointmentsPage() {
                                     <div className="text-right">
                                         <p className="text-[9px] font-bold text-slate-400 uppercase">Hora</p>
                                         <p className="text-xs font-black text-slate-700">
-                                            {new Date(selectedApt.scheduledAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                            {formatAppointmentAgendaTime(selectedApt.scheduledAt)}
                                         </p>
                                     </div>
                                 </div>

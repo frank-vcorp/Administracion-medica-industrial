@@ -37,7 +37,9 @@ import QRCode from 'qrcode'
 import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
 import {
   agendaDayUtcRange,
+  agendaWeekUtcRange,
   formatAppointmentAgendaDateString,
+  formatAppointmentAgendaTime,
   parseAppointmentLocalDateTime,
 } from '@/lib/appointment-scheduling'
 
@@ -207,22 +209,9 @@ export async function getAppointments(date?: string, branchId?: string) {
 
     const filters: Record<string, unknown> = {}
 
-    // Filtro por fecha (Fix: manejar range ampliado para cubrir timezones)
-    if (date) {
-      // date viene como "2023-10-25"
-      // Buscamos con holgura de +/- 1 día para capturar citas que por timezone caen en día anterior/siguiente UTC
-      const targetDate = new Date(`${date}T12:00:00.000Z`)
-      const startRange = new Date(targetDate)
-      startRange.setDate(startRange.getDate() - 1) // Día anterior
-      const endRange = new Date(targetDate)
-      endRange.setDate(endRange.getDate() + 1) // Día siguiente
-
-      filters.scheduledAt = {
-        gte: startRange,
-        lte: endRange,
-      }
-      
-      // NOTA: El frontend deberá filtrar visualmente las que no correspondan al día seleccionado localmente
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const { gte, lte } = agendaDayUtcRange(date)
+      filters.scheduledAt = { gte, lte }
     }
 
     // Filtro por sucursal
@@ -735,7 +724,7 @@ export async function processQRCheckIn(qrContent: string) {
     if (diffMinutes < -60) {
         return { 
             success: false, 
-            error: `Cita programada para las ${scheduledDate.toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}. Llegaste demasiado temprano.` 
+            error: `Cita programada para las ${formatAppointmentAgendaTime(scheduledDate)}. Llegaste demasiado temprano.` 
         }
     }
 
@@ -845,9 +834,7 @@ export async function getPendingStudyPatientsForDay(date: string, branchId: stri
       return { success: false, error: 'No autenticado', rows: [] as PendingStudyPatientRow[] }
     }
 
-    const [year, month, day] = date.split('-').map(Number)
-    const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0)
-    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
+    const { gte: dayStart, lte: dayEnd } = agendaDayUtcRange(date)
 
     const events = await prisma.medicalEvent.findMany({
       where: {
@@ -909,19 +896,12 @@ export async function getAppointmentsForWeek(weekStartDate: string, branchId: st
       return { success: false, error: 'No autenticado' }
     }
 
-    const [year, month, day] = weekStartDate.split('-').map(Number)
-    const weekStart = new Date(year, month - 1, day, 0, 0, 0, 0)
-    const weekEnd = new Date(year, month - 1, day + 6, 23, 59, 59, 999)
-
-    const startRange = new Date(weekStart)
-    startRange.setDate(startRange.getDate() - 1)
-    const endRange = new Date(weekEnd)
-    endRange.setDate(endRange.getDate() + 1)
+    const { gte, lte } = agendaWeekUtcRange(weekStartDate)
 
     const appointments = await prisma.appointment.findMany({
       where: {
         branchId,
-        scheduledAt: { gte: startRange, lte: endRange },
+        scheduledAt: { gte, lte },
       },
       include: {
         worker: {
@@ -958,15 +938,11 @@ export async function getAppointmentsForOverview(date: string) {
       return { success: false, error: 'No autenticado' }
     }
 
-    const targetDate = new Date(`${date}T12:00:00.000Z`)
-    const startRange = new Date(targetDate)
-    startRange.setDate(startRange.getDate() - 1)
-    const endRange = new Date(targetDate)
-    endRange.setDate(endRange.getDate() + 1)
+    const { gte, lte } = agendaDayUtcRange(date)
 
     const appointments = await prisma.appointment.findMany({
       where: {
-        scheduledAt: { gte: startRange, lte: endRange },
+        scheduledAt: { gte, lte },
       },
       include: {
         worker: { select: { firstName: true, lastName: true } },

@@ -24,6 +24,7 @@ import { useRouter } from 'next/navigation'
 import IdentityLightbox from '@/components/IdentityLightbox'
 import SignaturePad, { type SignaturePadHandle } from '@/components/reception/SignaturePad'
 import { InformedConsentDocument } from '@/components/reception/InformedConsentDocument'
+import { formatAppointmentAgendaTime, todayAgendaDateString } from '@/lib/appointment-scheduling'
 
 // ── Etiquetas de catálogos ──────────────────────────────────────────────────
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -118,7 +119,6 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
   // previa (boton "Ver ampliado" en la referencia compacta).
   const [priorIdentityLightboxOpen, setPriorIdentityLightboxOpen] = useState(false)
 
-  const scheduled = new Date(appointment.scheduledAt)
   const hasLastEvidence = !!worker.lastIdentityFrontFileUrl
 
   const nameChanged =
@@ -165,9 +165,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
 
       if (result.success) {
         onClose()
-        const today = new Date()
-        const dateParam = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-        router.push(`/reception?date=${dateParam}`)
+        router.push(`/reception?date=${todayAgendaDateString()}`)
         router.refresh()
       } else {
         setError(result.error || 'Error en el cierre de recepción.')
@@ -289,7 +287,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">Hora Cita</p>
                 <p className="text-sm font-medium text-slate-700">
-                  {scheduled.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                  {formatAppointmentAgendaTime(appointment.scheduledAt)}
                 </p>
               </div>
             </div>

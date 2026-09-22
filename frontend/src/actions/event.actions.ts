@@ -15,29 +15,17 @@ import {
     isCheckoutEnabled,
     getCheckoutEligibility,
 } from "@/lib/clinical/reception-checkout"
+import { agendaDayUtcRange, todayAgendaDateString } from "@/lib/appointment-scheduling"
 
-/** Límites del día local (YYYY-MM-DD) para filtrar eventos del kanban. */
-function localDayBounds(dateStr: string): { start: Date; end: Date } {
-    const [y, m, d] = dateStr.split('-').map(Number)
-    if (!y || !m || !d) {
-        const now = new Date()
-        return {
-            start: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0),
-            end: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
-        }
+/** Límites del día de agenda AMI (YYYY-MM-DD) para filtrar eventos del kanban. */
+function receptionDayBounds(dateStr: string): { start: Date; end: Date } {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const fallback = todayAgendaDateString()
+        const { gte, lte } = agendaDayUtcRange(fallback)
+        return { start: gte, end: lte }
     }
-    return {
-        start: new Date(y, m - 1, d, 0, 0, 0, 0),
-        end: new Date(y, m - 1, d, 23, 59, 59, 999),
-    }
-}
-
-function todayLocalDateString(): string {
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = String(now.getMonth() + 1).padStart(2, '0')
-    const d = String(now.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
+    const { gte, lte } = agendaDayUtcRange(dateStr)
+    return { start: gte, end: lte }
 }
 
 const RECEPTION_DISCHARGE_ROLES = ['ADMIN', 'SUPERADMIN', 'RECEPTIONIST', 'CAPTURIST'] as const
@@ -82,8 +70,8 @@ const kanbanCheckoutSelect = {
 
 export async function getEventsKanban(date?: string) {
     try {
-        const dateStr = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayLocalDateString()
-        const { start, end } = localDayBounds(dateStr)
+        const dateStr = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayAgendaDateString()
+        const { start, end } = receptionDayBounds(dateStr)
         const dayFilter = eventDayFilter(start, end)
 
         const clinicEvents = await prisma.medicalEvent.findMany({

@@ -1,5 +1,6 @@
 'use client'
 
+import { todayAgendaDateString } from '@/lib/appointment-scheduling'
 import { useRouter } from 'next/navigation'
 
 interface Props {
@@ -15,17 +16,10 @@ export default function ReceptionDayFilter({ selectedDate }: Props) {
     }
 
     function goToToday() {
-        const now = new Date()
-        const y = now.getFullYear()
-        const m = String(now.getMonth() + 1).padStart(2, '0')
-        const d = String(now.getDate()).padStart(2, '0')
-        router.replace(`/reception?date=${y}-${m}-${d}`)
+        router.replace(`/reception?date=${todayAgendaDateString()}`)
     }
 
-    const isToday = selectedDate === (() => {
-        const now = new Date()
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    })()
+    const isToday = selectedDate === todayAgendaDateString()
 
     return (
         <div className="flex items-center gap-2 flex-wrap">

@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getAppointmentsForWeek } from '@/actions/appointment.actions'
+import {
+  addAgendaDays,
+  AMI_APPOINTMENT_TIMEZONE,
+  formatAppointmentAgendaDateString,
+  formatAppointmentAgendaTime,
+  getAgendaWeekStartMonday,
+  parseAppointmentLocalDateTime,
+  todayAgendaDateString,
+} from '@/lib/appointment-scheduling'
 
 const AGENDA_SLOT_STATUSES = new Set(['SCHEDULED', 'CONFIRMED'])
 
@@ -14,45 +23,26 @@ type WeekAppointment = {
   company: { name: string } | null
 }
 
-function formatLocalDateString(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function addDaysToDateString(dateStr: string, days: number): string {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  date.setDate(date.getDate() + days)
-  return formatLocalDateString(date)
-}
-
-/** Lunes de la semana que contiene `dateStr`. */
-function getWeekStartMonday(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  const weekday = date.getDay()
-  const diff = weekday === 0 ? -6 : 1 - weekday
-  date.setDate(date.getDate() + diff)
-  return formatLocalDateString(date)
-}
-
 function appointmentLocalDateString(scheduledAt: Date | string): string {
-  return formatLocalDateString(new Date(scheduledAt))
+  return formatAppointmentAgendaDateString(scheduledAt)
 }
 
 function formatWeekRangeLabel(weekStart: string): string {
-  const weekEnd = addDaysToDateString(weekStart, 6)
-  const [sy, sm, sd] = weekStart.split('-').map(Number)
-  const [ey, em, ed] = weekEnd.split('-').map(Number)
-  const start = new Date(sy, sm - 1, sd)
-  const end = new Date(ey, em - 1, ed)
-  const startLabel = start.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+  const weekEnd = addAgendaDays(weekStart, 6)
+  const start = parseAppointmentLocalDateTime(weekStart, '12:00')
+  const end = parseAppointmentLocalDateTime(weekEnd, '12:00')
+  const startYear = formatAppointmentAgendaDateString(start).slice(0, 4)
+  const endYear = formatAppointmentAgendaDateString(end).slice(0, 4)
+  const startLabel = start.toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: AMI_APPOINTMENT_TIMEZONE,
+  })
   const endLabel = end.toLocaleDateString('es-MX', {
     day: 'numeric',
     month: 'short',
-    year: start.getFullYear() === end.getFullYear() ? undefined : 'numeric',
+    year: startYear === endYear ? undefined : 'numeric',
+    timeZone: AMI_APPOINTMENT_TIMEZONE,
   })
   return `${startLabel} – ${endLabel}`
 }
@@ -74,13 +64,13 @@ export function WeeklyAppointmentsModal({
   branchName?: string
   onSelectDate?: (date: string) => void
 }) {
-  const [weekStart, setWeekStart] = useState(() => getWeekStartMonday(anchorDate))
+  const [weekStart, setWeekStart] = useState(() => getAgendaWeekStartMonday(anchorDate))
   const [appointments, setAppointments] = useState<WeekAppointment[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDaysToDateString(weekStart, i)),
+    () => Array.from({ length: 7 }, (_, i) => addAgendaDays(weekStart, i)),
     [weekStart],
   )
 
@@ -100,7 +90,7 @@ export function WeeklyAppointmentsModal({
 
   useEffect(() => {
     if (!open) return
-    setWeekStart(getWeekStartMonday(anchorDate))
+    setWeekStart(getAgendaWeekStartMonday(anchorDate))
   }, [open, anchorDate])
 
   useEffect(() => {
@@ -136,7 +126,7 @@ export function WeeklyAppointmentsModal({
 
   if (!open) return null
 
-  const todayStr = formatLocalDateString(new Date())
+  const todayStr = todayAgendaDateString()
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
@@ -167,7 +157,7 @@ export function WeeklyAppointmentsModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setWeekStart((s) => addDaysToDateString(s, -7))}
+              onClick={() => setWeekStart((s) => addAgendaDays(s, -7))}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"
               aria-label="Semana anterior"
             >
@@ -175,14 +165,14 @@ export function WeeklyAppointmentsModal({
             </button>
             <button
               type="button"
-              onClick={() => setWeekStart(getWeekStartMonday(formatLocalDateString(new Date())))}
+              onClick={() => setWeekStart(getAgendaWeekStartMonday(todayAgendaDateString()))}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
             >
               Hoy
             </button>
             <button
               type="button"
-              onClick={() => setWeekStart((s) => addDaysToDateString(s, 7))}
+              onClick={() => setWeekStart((s) => addAgendaDays(s, 7))}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"
               aria-label="Semana siguiente"
             >
@@ -265,10 +255,7 @@ export function WeeklyAppointmentsModal({
                         </p>
                       ) : (
                         dayAppointments.map((apt) => {
-                          const time = new Date(apt.scheduledAt).toLocaleTimeString('es-MX', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
+                          const time = formatAppointmentAgendaTime(apt.scheduledAt)
                           return (
                             <button
                               key={apt.id}

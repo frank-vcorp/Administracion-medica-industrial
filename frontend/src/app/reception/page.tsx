@@ -11,6 +11,11 @@ import ReceptionCheckoutCard from "@/components/reception/ReceptionCheckoutCard"
 import ReceptionDayFilter from "@/components/reception/ReceptionDayFilter"
 import prisma from "@/lib/prisma"
 import Link from "next/link"
+import {
+    formatAgendaDayHeading,
+    formatAppointmentAgendaTime,
+    todayAgendaDateString,
+} from "@/lib/appointment-scheduling"
 
 export const dynamic = 'force-dynamic'
 
@@ -19,23 +24,8 @@ type IntakeSourceBadge = {
     tone: string
 }
 
-function todayLocalDateString(): string {
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = String(now.getMonth() + 1).padStart(2, '0')
-    const d = String(now.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
-}
-
 function formatDayLabel(dateStr: string): string {
-    const [y, m, d] = dateStr.split('-').map(Number)
-    const date = new Date(y, m - 1, d)
-    return date.toLocaleDateString('es-MX', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-    })
+    return formatAgendaDayHeading(dateStr)
 }
 
 function getIntakeSourceBadge(event: { intakeSource?: string | null, appointmentId?: string | null }): IntakeSourceBadge {
@@ -62,7 +52,7 @@ export default async function ReceptionPage(props: { searchParams: Promise<{ dat
     const selectedDate =
         searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date)
             ? searchParams.date
-            : todayLocalDateString()
+            : todayAgendaDateString()
 
     const { scheduled, inProgress, readyForCheckout } = await getEventsKanban(selectedDate)
     const totalCount = scheduled.length + inProgress.length + readyForCheckout.length
@@ -167,9 +157,7 @@ function PatientCard({ event, status, nextStatus }: {
     const workerName = event.worker ? `${event.worker.firstName} ${event.worker.lastName}` : "Desconocido"
     const companyName = event.worker?.company?.name || 'Empresa Vinculada'
     const intakeBadge = getIntakeSourceBadge(event)
-    const checkInTime = event.checkInDate
-        ? new Date(event.checkInDate).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-        : null
+    const checkInTime = event.checkInDate ? formatAppointmentAgendaTime(event.checkInDate) : null
 
     return (
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-slate-200/50 hover:border-indigo-200 transition-all duration-300 relative overflow-hidden group">

@@ -17,12 +17,18 @@
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
+import {
+  agendaDayUtcRange,
+  agendaMonthUtcRange,
+  AMI_APPOINTMENT_TIMEZONE,
+  currentAgendaYearMonth,
+  todayAgendaDateString,
+} from '@/lib/appointment-scheduling'
 
 function getMonthBounds(offsetMonths = 0) {
-  const anchor = new Date()
-  const start = new Date(anchor.getFullYear(), anchor.getMonth() + offsetMonths, 1, 0, 0, 0, 0)
-  const end = new Date(anchor.getFullYear(), anchor.getMonth() + offsetMonths + 1, 0, 23, 59, 59, 999)
-  return { start, end }
+  const { year, month } = currentAgendaYearMonth(offsetMonths)
+  const { gte, lte } = agendaMonthUtcRange(year, month)
+  return { start: gte, end: lte, year, month }
 }
 
 function formatTrendVsPrevious(current: number, previous: number): string {
@@ -82,19 +88,13 @@ export async function getDashboardKPIs() {
       throw new Error('Usuario no autenticado')
     }
 
-    // Obtener fecha de hoy (inicio y fin del día)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const { gte: todayStart, lte: todayEnd } = agendaDayUtcRange(todayAgendaDateString())
 
-    const endOfDay = new Date()
-    endOfDay.setHours(23, 59, 59, 999)
-
-    // KPI 1: Conteo de citas de hoy
     const appointmentsToday = await prisma.appointment.count({
       where: {
         scheduledAt: {
-          gte: today,
-          lte: endOfDay,
+          gte: todayStart,
+          lte: todayEnd,
         },
       },
     })
@@ -117,7 +117,12 @@ export async function getDashboardKPIs() {
     // KPI 4: Total de trabajadores únicos en el sistema
     const totalWorkers = await prisma.worker.count()
 
-    const { start: monthStart, end: monthEnd } = getMonthBounds(0)
+    const {
+      start: monthStart,
+      end: monthEnd,
+      year: monthYear,
+      month: monthNumber,
+    } = getMonthBounds(0)
     const { start: prevMonthStart, end: prevMonthEnd } = getMonthBounds(-1)
 
     const [
@@ -150,7 +155,11 @@ export async function getDashboardKPIs() {
         totalWorkers,
       },
       monthlySummary: {
-        monthLabel: monthStart.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }),
+        monthLabel: new Date(Date.UTC(monthYear, monthNumber - 1, 15)).toLocaleDateString('es-MX', {
+          month: 'long',
+          year: 'numeric',
+          timeZone: AMI_APPOINTMENT_TIMEZONE,
+        }),
         appointmentsThisMonth,
         appointmentsTrend: formatTrendVsPrevious(appointmentsThisMonth, appointmentsLastMonth),
         eventsThisMonth,
@@ -177,7 +186,11 @@ export async function getDashboardKPIs() {
         totalWorkers: 0,
       },
       monthlySummary: {
-        monthLabel: new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }),
+        monthLabel: new Date().toLocaleDateString('es-MX', {
+          month: 'long',
+          year: 'numeric',
+          timeZone: AMI_APPOINTMENT_TIMEZONE,
+        }),
         appointmentsThisMonth: 0,
         appointmentsTrend: 'Sin variación vs mes anterior',
         eventsThisMonth: 0,

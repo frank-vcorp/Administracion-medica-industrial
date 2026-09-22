@@ -9,6 +9,11 @@ import { useEffect, useState, useCallback } from 'react'
 import Image from 'next/image'
 import { getAppointmentsForOverview } from '@/actions/appointment.actions'
 import Link from 'next/link'
+import {
+    formatAppointmentAgendaDateString,
+    formatAppointmentAgendaTime,
+    todayAgendaDateString,
+} from '@/lib/appointment-scheduling'
 
 interface AppointmentOverview {
     id: string
@@ -43,13 +48,7 @@ export default function AppointmentsOverviewPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [selectedApt, setSelectedApt] = useState<AppointmentOverview | null>(null)
-    const [selectedDate, setSelectedDate] = useState<string>(() => {
-        const now = new Date()
-        const y = now.getFullYear()
-        const m = String(now.getMonth() + 1).padStart(2, '0')
-        const d = String(now.getDate()).padStart(2, '0')
-        return `${y}-${m}-${d}`
-    })
+    const [selectedDate, setSelectedDate] = useState<string>(() => todayAgendaDateString())
 
     const loadData = useCallback(async () => {
         setLoading(true)
@@ -73,11 +72,8 @@ export default function AppointmentsOverviewPage() {
         loadData()
     }, [loadData])
 
-    /** Devuelve true si la cita pertenece al día seleccionado (comparación en hora local) */
     function isOnSelectedDate(scheduledAt: Date | string) {
-        const d = new Date(scheduledAt)
-        const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        return local === selectedDate
+        return formatAppointmentAgendaDateString(scheduledAt) === selectedDate
     }
 
     // Agrupar citas por sucursal
@@ -206,14 +202,13 @@ export default function AppointmentsOverviewPage() {
                                     </div>
                                 ) : (
                                     dayApts.map(apt => {
-                                        const scheduled = new Date(apt.scheduledAt)
+                                        const scheduledTime = formatAppointmentAgendaTime(apt.scheduledAt)
                                         const statusInfo = STATUS_MAP[apt.status] ?? STATUS_MAP.SCHEDULED
                                         return (
                                             <div key={apt.id} className="px-4 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
                                                 <div className="text-center w-12 flex-shrink-0">
                                                     <p className="text-xs font-black text-slate-700 font-mono">
-                                                        {scheduled.getHours().toString().padStart(2, '0')}:
-                                                        {scheduled.getMinutes().toString().padStart(2, '0')}
+                                                        {scheduledTime}
                                                     </p>
                                                 </div>
                                                 <div className="flex-grow min-w-0">
@@ -313,7 +308,7 @@ export default function AppointmentsOverviewPage() {
                                     <div className="text-right">
                                         <p className="text-[9px] font-bold text-slate-400 uppercase">Hora</p>
                                         <p className="text-xs font-black text-slate-700">
-                                            {new Date(selectedApt.scheduledAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                            {formatAppointmentAgendaTime(selectedApt.scheduledAt)}
                                         </p>
                                     </div>
                                 </div>

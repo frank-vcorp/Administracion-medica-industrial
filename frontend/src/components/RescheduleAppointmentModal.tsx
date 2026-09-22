@@ -2,6 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import { rescheduleAppointment } from '@/actions/appointment.actions'
+import {
+  formatAppointmentAgendaDateString,
+  formatAppointmentAgendaTime,
+} from '@/lib/appointment-scheduling'
 
 interface AppointmentToReschedule {
   id: string
@@ -17,16 +21,11 @@ interface Props {
 }
 
 function toDateInputValue(scheduledAt: Date | string): string {
-  const d = new Date(scheduledAt)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return formatAppointmentAgendaDateString(scheduledAt)
 }
 
 function toTimeInputValue(scheduledAt: Date | string): string {
-  const d = new Date(scheduledAt)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return formatAppointmentAgendaTime(scheduledAt)
 }
 
 export default function RescheduleAppointmentModal({ appointment, onClose, onSuccess }: Props) {

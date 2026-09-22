@@ -10,7 +10,7 @@ import {
 } from '@/actions/medical-profiles'
 import { useRouter, useSearchParams } from 'next/navigation'
 import WorkerFormModal, { type WorkerCreatedPayload } from '@/components/WorkerFormModal'
-import { parseAppointmentLocalDateTime } from '@/lib/appointment-scheduling'
+import { parseAppointmentLocalDateTime, todayAgendaDateString } from '@/lib/appointment-scheduling'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
@@ -567,10 +567,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                         type="date" 
                                         name="date" 
                                         required 
-                                        defaultValue={(() => {
-                                            const now = new Date(); 
-                                            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                                        })()}
+                                        defaultValue={todayAgendaDateString()}
                                         className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none" 
                                     />
                                 </div>
