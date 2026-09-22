@@ -14,8 +14,8 @@ type StudyStatusBadgeProps = {
   status: EventTestPipelineStatus
   interpretation?: StudyInterpretationInput | null
   aiSnapshot?: Parameters<typeof buildStudyInterpretationFromSnapshot>[0]
-  /** 'inline' = badge + detalle en columna; 'compact' = solo badge */
-  variant?: 'inline' | 'compact'
+  /** 'inline' | 'sidebar' = badge + detalle; 'compact' = solo badge (evitar en listas laterales) */
+  variant?: 'inline' | 'compact' | 'sidebar'
   className?: string
 }
 
@@ -32,15 +32,24 @@ export function StudyStatusBadge({
   const business = toBusinessStudyStatus(status)
   const detail = getOperationalDetail(status, resolvedInterpretation)
 
+  const showDetail = (variant === 'inline' || variant === 'sidebar') && detail
+  const alignEnd = variant === 'inline'
+
   return (
-    <div className={`flex flex-col items-end ${className}`.trim()}>
+    <div
+      className={`flex flex-col ${alignEnd ? 'items-end' : 'items-start'} ${className}`.trim()}
+    >
       <span
         className={`text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${getBusinessStatusBadgeClass(status)}`}
       >
         {BUSINESS_STATUS_LABELS[business]}
       </span>
-      {variant === 'inline' && detail && (
-        <p className="text-[10px] text-slate-500 mt-0.5 text-right max-w-[11rem] leading-tight">
+      {showDetail && (
+        <p
+          className={`text-[10px] text-slate-600 mt-0.5 leading-tight max-w-[11rem] ${
+            alignEnd ? 'text-right' : 'text-left'
+          }`}
+        >
           {detail}
         </p>
       )}

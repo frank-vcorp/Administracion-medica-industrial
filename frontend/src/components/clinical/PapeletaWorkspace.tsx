@@ -719,7 +719,7 @@ export default function PapeletaWorkspace({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <StudyStepChips status={test.status} aiSnapshot={test.aiSnapshot} compact />
-                    <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} />
+                    <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} variant="inline" />
                     <span className="text-slate-400 group-hover:text-teal-600 text-sm">→</span>
                   </div>
                 </div>
@@ -766,7 +766,7 @@ export default function PapeletaWorkspace({
       <div className="flex min-h-[480px]">
 
         {/* Sidebar de navegación lateral (solo desktop) */}
-        <nav className="hidden md:flex flex-col w-44 border-r border-slate-200 bg-slate-50 pt-2 pb-3 shrink-0">
+        <nav className="hidden md:flex flex-col w-52 border-r border-slate-200 bg-slate-50 pt-2 pb-3 shrink-0">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1.5">
             Estudios
           </p>
@@ -781,9 +781,15 @@ export default function PapeletaWorkspace({
               }`}
             >
               <StudyMenuIcon test={t} active={t.id === activeTestId} className="mt-0.5" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold truncate">{t.testNameSnapshot}</p>
-                <StudyStatusBadge status={t.status} aiSnapshot={t.aiSnapshot} variant="compact" className="items-start mt-1" />
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-xs font-semibold truncate leading-tight">{t.testNameSnapshot}</p>
+                <StudyStepChips status={t.status} aiSnapshot={t.aiSnapshot} compact />
+                <StudyStatusBadge
+                  status={t.status}
+                  aiSnapshot={t.aiSnapshot}
+                  variant="sidebar"
+                  className="items-start"
+                />
               </div>
             </button>
           ))}

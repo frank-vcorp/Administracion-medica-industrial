@@ -97,7 +97,7 @@ export function getOperationalDetail(
 
   switch (status) {
     case 'IN_PROGRESS':
-      return 'En proceso'
+      return 'En cabina · falta subir resultado'
     case 'SAMPLE_TAKEN':
       return 'Muestra tomada · esperando laboratorio'
     case 'SKIPPED':
