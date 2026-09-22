@@ -137,7 +137,7 @@ function Lane({ title, count, children, color, borderColor, icon }: { title: str
                 </div>
                 <span className="bg-white text-slate-800 px-3 py-1 rounded-full text-xs font-black shadow-sm border border-slate-50">{count}</span>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin relative z-10">
+            <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin relative z-10">
                 {children}
             </div>
         </div>
@@ -162,7 +162,7 @@ function PatientCard({ event, status, nextStatus }: {
     const checkInTime = event.checkInDate ? formatAppointmentAgendaTime(event.checkInDate) : null
 
     return (
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-slate-200/50 hover:border-indigo-200 transition-all duration-300 relative overflow-hidden group">
+        <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-indigo-200 transition-all duration-200 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-bl-full"></div>
 
             <div className="flex justify-between items-start mb-2">
@@ -179,10 +179,11 @@ function PatientCard({ event, status, nextStatus }: {
                 </span>
             </div>
 
-            <div className="mb-3">
+            <div className="mb-2">
                 <ReceptionEventTestsList
                     eventId={event.id}
                     tests={event.eventTests ?? []}
+                    variant="compact"
                 />
             </div>
 
