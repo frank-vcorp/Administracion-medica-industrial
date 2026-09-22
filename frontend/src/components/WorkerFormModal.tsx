@@ -2,7 +2,7 @@
 
 // IMPL-20260318-01: WorkerFormModal — modo dual (crear/editar)
 // Perfil médico por empresa (sustituye puesto de trabajo en alta de paciente)
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition, useEffect, useRef } from 'react'
 import { createWorker, updateWorker } from '@/actions/worker.actions'
 import { useRouter } from 'next/navigation'
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
@@ -134,6 +134,7 @@ export default function WorkerFormModal({
     const [selectedBranchId, setSelectedBranchId] = useState('')
     const [companyProfileOptions, setCompanyProfileOptions] = useState<MedicalProfileOption[]>([])
     const [profilesLoading, setProfilesLoading] = useState(false)
+    const prevModalOpenRef = useRef(false)
     const router = useRouter()
 
     const isCreateMode = !workerToEdit
@@ -158,11 +159,16 @@ export default function WorkerFormModal({
     }, [workerToEdit?.id])
 
     useEffect(() => {
-        if (!modalOpen || workerToEdit) return
-        if (!defaultCompanyId) return
+        const justOpened = modalOpen && !prevModalOpenRef.current
+        prevModalOpenRef.current = modalOpen
+        if (!justOpened || workerToEdit) return
 
-        setSelectedCompanyId(defaultCompanyId)
-        setSelectedMedicalProfileId('')
+        if (defaultCompanyId) {
+            setSelectedCompanyId(defaultCompanyId)
+            setSelectedMedicalProfileId('')
+        }
+
+        if (!defaultCompanyId) return
 
         if (publicGeneralMode) {
             setContactEmail('')
@@ -233,10 +239,17 @@ export default function WorkerFormModal({
 
     useEffect(() => {
         if (!modalOpen || publicGeneralMode || !selectedMedicalProfileId) return
+        if (profilesLoading || companyProfileOptions.length === 0) return
         if (!companyProfileOptions.some((p) => p.id === selectedMedicalProfileId)) {
             setSelectedMedicalProfileId('')
         }
-    }, [companyProfileOptions, modalOpen, publicGeneralMode, selectedMedicalProfileId])
+    }, [
+        companyProfileOptions,
+        modalOpen,
+        publicGeneralMode,
+        selectedMedicalProfileId,
+        profilesLoading,
+    ])
 
     const companySpecificProfiles = companyProfileOptions.filter(
         (p) => p.companyId === effectiveCompanyId,
