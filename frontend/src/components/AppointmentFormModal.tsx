@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition, useEffect, useMemo } from 'react'
 import { createAppointment } from '@/actions/appointment.actions'
 import { getWorkersByCompany } from '@/actions/worker.actions'
 import { getBranches, getCompanies } from '@/actions/admin.actions'
@@ -77,6 +77,15 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
     const [allMedicalProfiles, setAllMedicalProfiles] = useState<MedicalProfileOption[]>([])
     const router = useRouter()
     const searchParams = useSearchParams()
+
+    const companySpecificProfiles = useMemo(
+        () => profiles.filter((p) => p.companyId === selectedCompanyId),
+        [profiles, selectedCompanyId],
+    )
+    const globalProfiles = useMemo(
+        () => profiles.filter((p) => p.companyId === null),
+        [profiles],
+    )
 
     // Detect URL params (e.g. from create-worker redirect)
     useEffect(() => {
@@ -507,18 +516,43 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                     name="serviceProfileId"
                                     value={selectedProfileId}
                                     onChange={(e) => setSelectedProfileId(e.target.value)}
-                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-500 p-3 rounded-xl text-sm transition-all outline-none"
+                                    disabled={!selectedCompanyId}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-500 p-3 rounded-xl text-sm transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <option value="">Sin perfil asignado</option>
-                                    {profiles.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
+                                    <option value="">
+                                        {selectedCompanyId
+                                            ? 'Sin perfil asignado'
+                                            : 'Primero selecciona una empresa'}
+                                    </option>
+                                    {companySpecificProfiles.length > 0 && (
+                                        <optgroup label="Perfiles de esta empresa">
+                                            {companySpecificProfiles.map((p) => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </optgroup>
+                                    )}
+                                    {globalProfiles.length > 0 && (
+                                        <optgroup label="Perfiles globales">
+                                            {globalProfiles.map((p) => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </optgroup>
+                                    )}
                                 </select>
-                                {!selectedWorker && (
-                                    <p className="text-[10px] text-slate-400 ml-1">Selecciona un trabajador para ver los perfiles disponibles.</p>
+                                {!selectedCompanyId && (
+                                    <p className="text-[10px] text-slate-400 ml-1">
+                                        Los perfiles se filtran por la empresa de la cita.
+                                    </p>
                                 )}
-                                {selectedWorker && profiles.length === 0 && (
-                                    <p className="text-[10px] text-amber-500 ml-1">⚠️ Esta empresa no tiene perfiles médicos configurados.</p>
+                                {selectedCompanyId && profiles.length === 0 && (
+                                    <p className="text-[10px] text-amber-500 ml-1">
+                                        ⚠️ Esta empresa no tiene perfiles médicos. Configúralos en la ficha de la empresa.
+                                    </p>
+                                )}
+                                {selectedWorker && !selectedWorker.medicalProfileId && selectedCompanyId && profiles.length > 0 && (
+                                    <p className="text-[10px] text-slate-400 ml-1">
+                                        El paciente no tiene perfil por defecto; elige uno para esta cita.
+                                    </p>
                                 )}
                             </div>
 
