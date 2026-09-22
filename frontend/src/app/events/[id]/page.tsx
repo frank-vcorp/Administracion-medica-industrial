@@ -21,6 +21,7 @@ import {
   type EventPageData,
 } from './_lib/event-page-data'
 import { shouldRenderEventFlowController } from './_lib/event-flow-visibility'
+import { isAdminLike } from '@/lib/auth/roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -196,8 +197,8 @@ function EventView({ data }: EventViewProps) {
         />
       )}
 
-      {/* IMPL-20260507-08: Cronograma operativo persistente — solo ADMIN (ARCH-20260507-08) */}
-      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') && userRole === 'ADMIN' && (
+      {/* IMPL-20260507-08: Cronograma operativo persistente — ADMIN + SUPERADMIN */}
+      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') && isAdminLike(userRole) && (
         <PapeletaCronograma
           eventId={serializedEventId}
           initialEntries={initialTimeline as Parameters<typeof PapeletaCronograma>[0]['initialEntries']}
@@ -205,7 +206,7 @@ function EventView({ data }: EventViewProps) {
       )}
 
       {/* IMPL-20260707-16: Slice C — Sección Laboratorio (LabOrders + LabResults) */}
-      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS' || activeView === 'VALIDATING') && userRole === 'ADMIN' && (
+      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS' || activeView === 'VALIDATING') && isAdminLike(userRole) && (
         <LabSection
           medicalEventId={serializedEventId}
           workerId={event.worker.id}
