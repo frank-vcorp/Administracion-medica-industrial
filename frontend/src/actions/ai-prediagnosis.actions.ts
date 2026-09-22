@@ -25,6 +25,8 @@
  */
 'use server'
 
+import { resolveAiCalibrationForUpload } from '@/lib/clinical/default-ai-calibration'
+import { getCanonicalAIStudyType } from '@/lib/study-ai'
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
@@ -221,7 +223,7 @@ export async function triggerStudyAIAnalysis(
   try {
     // 1. Llamar al backend V2
     // IMPL-20260326-18: Reenviar study_type canónico si fue determinado por el helper central
-    const studyType = (formData.get('study_type') as string) || null
+    let studyType = (formData.get('study_type') as string) || null
     // ARCH-20260820-01 Fase 3 (SPEC §9.1, §12.1, §17.4): propagar la fuente de
     // resolución de la calibración al snapshot de extracción/prediagnóstico.
     //   - 'published_v3'        → routing por canonicalStudyType published (AC-3.2)
@@ -234,16 +236,27 @@ export async function triggerStudyAIAnalysis(
     const eventTest = await prisma.eventTest.findUnique({
       where: { id: eventTestId },
       select: {
+        testNameSnapshot: true,
         test: {
           select: {
             options: true,
+            category: { select: { name: true } },
+            code: true,
           },
         },
       },
     })
 
+    if (!studyType && eventTest) {
+      studyType =
+        getCanonicalAIStudyType({
+          testNameSnapshot: eventTest.testNameSnapshot,
+          test: eventTest.test,
+        }) ?? null
+    }
+
     const testOptions = eventTest?.test?.options
-    const aiCalibration =
+    const storedCalibration =
       testOptions &&
       typeof testOptions === 'object' &&
       !Array.isArray(testOptions) &&
@@ -253,6 +266,11 @@ export async function triggerStudyAIAnalysis(
       !Array.isArray(testOptions.aiCalibration)
         ? (testOptions.aiCalibration as Prisma.JsonObject)
         : null
+
+    const aiCalibration = resolveAiCalibrationForUpload(
+      storedCalibration as Record<string, unknown> | null,
+      studyType,
+    ) as Prisma.JsonObject | null
 
     const uploadForm = new FormData()
     uploadForm.append('file', file)
