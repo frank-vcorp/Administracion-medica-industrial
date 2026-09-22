@@ -6,6 +6,10 @@
 
 import type { AICalibrationV3 } from '@/types/calibration'
 import { getV3PublishedAiCalibrationSlice } from '@/lib/calibration-v3-ui'
+import {
+  EXTRACTION_VERSION as ESPIRO_EXTRACTION_VERSION,
+  NEW_EXTRACTION_PROMPT as ESPIRO_EXTRACTION_PROMPT,
+} from '../../../scripts/update-espirometria-extraction-prompt'
 
 export const ECG_EXTRACTION_VERSION = 'ecg-ami-bootstrap-v1'
 
@@ -54,6 +58,23 @@ function isEcgStudyType(studyType: string | null | undefined): boolean {
   )
 }
 
+function isEspirometriaStudyType(studyType: string | null | undefined): boolean {
+  const type = (studyType ?? '').trim()
+  return type === 'Espirometria' || type === 'Espirometría'
+}
+
+function calibrationSliceFromRecord(record: JsonRecord | null | undefined): JsonRecord | null {
+  if (!record || typeof record !== 'object') return null
+  if (!hasExtractionPrompt(record)) return null
+  const slice: JsonRecord = {
+    enabled: record.enabled ?? true,
+    extraction: record.extraction,
+  }
+  if (record.canonicalStudyType) slice.canonicalStudyType = record.canonicalStudyType
+  if (record.diagnosis) slice.diagnosis = record.diagnosis
+  return slice
+}
+
 function bootstrapForStudyType(studyType: string | null | undefined): JsonRecord | null {
   if (isEcgStudyType(studyType)) {
     return {
@@ -62,6 +83,17 @@ function bootstrapForStudyType(studyType: string | null | undefined): JsonRecord
       extraction: {
         prompt: ECG_EXTRACTION_PROMPT,
         version: ECG_EXTRACTION_VERSION,
+      },
+      bootstrap: true,
+    }
+  }
+  if (isEspirometriaStudyType(studyType)) {
+    return {
+      enabled: true,
+      canonicalStudyType: 'Espirometria',
+      extraction: {
+        prompt: ESPIRO_EXTRACTION_PROMPT,
+        version: ESPIRO_EXTRACTION_VERSION,
       },
       bootstrap: true,
     }
@@ -82,8 +114,27 @@ export function readStoredAiCalibrationFromTestOptions(
   }
   const cal = rawCal as JsonRecord
   if (cal.schemaVersion === 'V3') {
-    const slice = getV3PublishedAiCalibrationSlice(cal as unknown as AICalibrationV3)
-    return slice ?? null
+    const root = cal as unknown as AICalibrationV3
+    const published = getV3PublishedAiCalibrationSlice(root)
+    if (published && hasExtractionPrompt(published)) {
+      return published
+    }
+
+    const fromDraft = root.draft
+      ? calibrationSliceFromRecord(root.draft as unknown as JsonRecord)
+      : null
+    if (fromDraft) return fromDraft
+
+    const legacySnapshot = root.legacyV1V2Snapshot?.snapshot
+    const fromLegacy = legacySnapshot
+      ? calibrationSliceFromRecord(legacySnapshot as JsonRecord)
+      : null
+    if (fromLegacy) return fromLegacy
+
+    const fromRootLegacy = calibrationSliceFromRecord(cal)
+    if (fromRootLegacy) return fromRootLegacy
+
+    return published
   }
   return cal
 }

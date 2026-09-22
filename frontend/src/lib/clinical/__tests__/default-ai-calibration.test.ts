@@ -60,4 +60,45 @@ describe('default-ai-calibration', () => {
   it('no bootstrap para tipos sin plantilla', () => {
     expect(resolveAiCalibrationForUpload(null, 'Rayos_X')).toBeNull()
   })
+
+  it('inyecta extracción Espirometría cuando falta prompt en catálogo', () => {
+    const resolved = resolveAiCalibrationForUpload(null, 'Espirometria')
+    expect(resolved).not.toBeNull()
+    const ext = resolved?.extraction as { prompt?: string; version?: string }
+    expect(ext.prompt?.length).toBeGreaterThan(200)
+    expect(ext.version).toBe('espirometria-sibelmed-v7')
+  })
+
+  it('V3 publicada sin prompt usa legacyV1V2Snapshot', () => {
+    const stored = readStoredAiCalibrationFromTestOptions({
+      aiCalibration: {
+        schemaVersion: 'V3',
+        currentPublishedVersionId: 'v1',
+        publishedVersions: [
+          {
+            versionId: 'v1',
+            status: 'published',
+            enabled: false,
+            canonicalStudyType: 'Espirometria',
+            extraction: { prompt: '', version: 'empty' },
+            fieldDefinitions: [],
+            clinicalCriteria: null,
+            presentation: { schema: {} },
+          },
+        ],
+        familyTemplateId: null,
+        draft: null,
+        legacyV1V2Snapshot: {
+          snapshot: {
+            extraction: { prompt: 'Prompt legacy espiro', version: 'legacy-v6' },
+          },
+          migratedAt: '2026-01-01',
+          migratedBy: null,
+          sourceSchemaVersion: 'V2',
+        },
+      },
+    })
+    const ext = stored?.extraction as { prompt?: string }
+    expect(ext.prompt).toBe('Prompt legacy espiro')
+  })
 })
