@@ -34,6 +34,8 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { ExamenMedicoVariantAppendixPages } from '@/components/pdf/ExamenMedicoVariantAppendix'
 import { examenMedicoVariantLabel } from '@/lib/clinical/examen-medico-variant'
+import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
+import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
@@ -162,6 +164,9 @@ export interface ExamenMedicoPDFData {
   /** Estado de la revisión que origina este PDF (REVIEWED_ACCEPTED o
    *  REVIEWED_EDITED) o 'SIGNED' si viene del `MedicalVerdict.signedAt`. */
   status: 'SIGNED' | 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
+
+  /** Bloque estándar (mismos campos que PDFs por estudio). */
+  patientIdentification: PatientIdentificationPdf
 
   // I. Identificación e historia
   paciente: {
@@ -379,6 +384,8 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
         <Text style={styles.sectionTitle}>
           I. Identificación del paciente e historia ocupacional
         </Text>
+
+        <PatientIdentificationPdfBlock patient={data.patientIdentification} />
 
         <Text style={styles.subTitle}>Paciente</Text>
         <View style={styles.grid2}>

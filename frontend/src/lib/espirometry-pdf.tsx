@@ -54,6 +54,11 @@ import {
   type EspirometrySourceCropMeta,
 } from '@/lib/espirometry-source-crop'
 import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
+import {
+  buildPatientIdentificationPdf,
+  resolvePatientIdentificationForPdf,
+  type PatientIdentificationPdf,
+} from '@/lib/pdf/patient-identification'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -279,6 +284,8 @@ export interface BuildEspirometryPdfInput {
   sourceCropAspectRatio?: number | null
   eventTestId?: string | null
   clinicalContext?: unknown
+  patientIdentification?: PatientIdentificationPdf
+  eventId?: string | null
 }
 
 async function resolveEspirometryCropMeta(input: {
@@ -377,11 +384,14 @@ export function buildEspirometryPdfData(
     signedAt: input.reviewCreatedAt,
     studyName: input.studyName ?? 'Espirometría',
     studyType: input.studyType ?? 'Espirometria',
-    patient: {
-      fullName: patientFullName.length > 0 ? patientFullName : '—',
-      universalId: input.patient.universalId ?? null,
-      companyName: input.patient.companyName ?? null,
-    },
+    patient:
+      input.patientIdentification ??
+      buildPatientIdentificationPdf({
+        firstName: input.patient.firstName,
+        lastName: input.patient.lastName,
+        universalId: input.patient.universalId,
+        companyName: input.patient.companyName,
+      }),
     doctorStatus: input.doctorStatus,
     doctorDiagnosis: diagnosis.length > 0 ? diagnosis : 'Aceptado sin diagnóstico adicional explícito.',
     doctorNotes: input.doctorNotes ?? null,
@@ -403,8 +413,18 @@ export async function buildEspirometryPdfDataAsync(
     sourceCropAspectRatio: input.sourceCropAspectRatio,
     clinicalContext: input.clinicalContext,
   })
+  const patientIdentification =
+    input.patientIdentification ??
+    (await resolvePatientIdentificationForPdf({
+      eventId: input.eventId,
+      firstName: input.patient.firstName,
+      lastName: input.patient.lastName,
+      universalId: input.patient.universalId,
+      companyName: input.patient.companyName,
+    }))
   return buildEspirometryPdfData({
     ...input,
+    patientIdentification,
     sourceCropDataUrl: bottomHalfCrop.dataUrl,
     sourceCropAspectRatio: bottomHalfCrop.aspectRatio,
   })

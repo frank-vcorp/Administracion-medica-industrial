@@ -63,7 +63,7 @@ import { ensureEspirometrySourceCrop } from '@/lib/espirometry-source-crop'
 // Mismo patrón que Espirometría: helper puro fuera del server action.
 import {
   generateAudiometriaValidatedPdf,
-  buildAudiometriaPdfData,
+  buildAudiometriaPdfDataAsync,
 } from '@/lib/audiometry-pdf'
 import { validateDoctorProfileForPdf } from '@/schemas/clinical/doctor-profile.schema'
 import { authOptions } from '@/auth'
@@ -948,9 +948,10 @@ export async function submitDoctorStudyReview(
             ? 'REVIEWED_ACCEPTED' as const
             : 'REVIEWED_EDITED' as const
         if (studyType === 'Audiometria') {
-          const pdfData = buildAudiometriaPdfData({
+          const pdfData = await buildAudiometriaPdfDataAsync({
             ...baseInput,
             doctorStatus: typedDoctorStatus,
+            eventId: eventTestData?.eventId ?? eventId,
           })
           pdfResult = await generateAudiometriaValidatedPdf({
             reviewId: review.id,
@@ -1002,6 +1003,7 @@ export async function submitDoctorStudyReview(
               ...baseInput,
               doctorStatus: typedDoctorStatus,
               eventTestId,
+              eventId: eventTestData?.eventId ?? eventId,
               clinicalContext: eventTestData?.clinicalContext,
             })
             pdfResult = await generateEspirometryValidatedPdf({

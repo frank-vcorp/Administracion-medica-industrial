@@ -17,7 +17,7 @@ import {
   hasConsolidation,
 } from '@/lib/dictamen-general-ami'
 import {
-  buildExamenMedicoPdfData,
+  buildExamenMedicoPdfDataAsync,
   generateExamenMedicoValidatedPdf,
 } from '@/lib/examen-medico-pdf'
 
@@ -587,7 +587,7 @@ export async function reemitSignedDictamen(
     let buffer: Buffer
     try {
       const result = await generateExamenMedicoValidatedPdf({
-        data: buildExamenMedicoPdfData(consolidado.data),
+        data: await buildExamenMedicoPdfDataAsync(consolidado.data),
         eventId,
       })
       buffer = result.buffer

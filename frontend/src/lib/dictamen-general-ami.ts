@@ -252,6 +252,8 @@ export async function buildDictamenGeneralAmiConsolidado(
     folio: event.verdict.id,
     signedAt: event.verdict.signedAt ?? new Date(),
     status: 'SIGNED',
+    eventId: event.id,
+    attentionDate: event.checkInDate ?? event.createdAt,
     worker: {
       firstName: event.worker.firstName ?? '',
       lastName: event.worker.lastName ?? '',

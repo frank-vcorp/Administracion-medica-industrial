@@ -35,6 +35,8 @@
  *     documento).
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
+import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 
 const styles = StyleSheet.create({
   page: { padding: 36, fontFamily: 'Helvetica', fontSize: 10, color: '#0f172a' },
@@ -147,11 +149,7 @@ export interface AudiometriaValidatedPDFData {
   signedAt: string | Date
   studyName: string
   studyType: string
-  patient: {
-    fullName: string
-    universalId?: string | null
-    companyName?: string | null
-  }
+  patient: PatientIdentificationPdf
   doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
   doctorDiagnosis: string
   doctorNotes?: string | null
@@ -263,22 +261,10 @@ export const AudiometriaValidatedPDF = ({
           <Text style={styles.label}>Tipo:</Text>
           <Text style={styles.value}>{data.studyType}</Text>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Paciente:</Text>
-          <Text style={styles.value}>{data.patient.fullName}</Text>
-        </View>
-        {data.patient.universalId ? (
-          <View style={styles.row}>
-            <Text style={styles.label}>ID paciente:</Text>
-            <Text style={styles.value}>{data.patient.universalId}</Text>
-          </View>
-        ) : null}
-        {data.patient.companyName ? (
-          <View style={styles.row}>
-            <Text style={styles.label}>Empresa:</Text>
-            <Text style={styles.value}>{data.patient.companyName}</Text>
-          </View>
-        ) : null}
+        <PatientIdentificationPdfBlock
+          patient={data.patient}
+          heading="Identificación del paciente"
+        />
       </View>
 
       {/* II. EVIDENCIA AUDIOMÉTRICA (capa Fuente) */}

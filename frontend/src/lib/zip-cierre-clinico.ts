@@ -30,7 +30,7 @@
 import prisma from '@/lib/prisma'
 import { buildZip, type ZipEntry } from '@/lib/zip-store'
 import {
-  buildExamenMedicoPdfData,
+  buildExamenMedicoPdfDataAsync,
   generateExamenMedicoValidatedPdf,
 } from '@/lib/examen-medico-pdf'
 import { dictamenBackendUrl } from '@/lib/dictamen-pdf'
@@ -472,7 +472,7 @@ export async function buildCierreClinicoZip(
   // IMPL-20260826-08: las recomendaciones viven en `ExamenMedicoPDFData`
   // (output de `buildExamenMedicoPdfData`), NO en `BuildExamenMedicoPdfInput`.
   // Por eso primero transformamos el payload y luego persistimos.
-  const dataFinal = buildExamenMedicoPdfData(data)
+  const dataFinal = await buildExamenMedicoPdfDataAsync(data)
   if (recomendacionesPersisted) {
     dataFinal.recomendaciones = recomendacionesPersisted
       .split(/\s*\d+\.\-\s+/)

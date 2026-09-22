@@ -24,6 +24,10 @@ import {
   resolveValidatedRecommendations,
 } from '@/lib/espirometry-pdf'
 import { resolveAmiLogoDataUrl } from '@/lib/ami-brand'
+import {
+  resolvePatientIdentificationForPdf,
+  type PatientIdentificationPdf,
+} from '@/lib/pdf/patient-identification'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -102,6 +106,7 @@ export interface BuildCampimetriaPdfInput {
     signatureImageUrl: string
   }
   logoDataUrl: string | null
+  patientIdentification?: PatientIdentificationPdf
 }
 
 export async function buildCampimetriaPdfDataAsync(
@@ -133,21 +138,16 @@ export async function buildCampimetriaPdfDataAsync(
     longitudinalData: null,
   })
 
-  const eventDateRaw = event?.checkInDate ?? event?.createdAt ?? input.reviewCreatedAt
-  const eventDateLabel = new Intl.DateTimeFormat('es-MX', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(eventDateRaw)
-
-  const ageYears = (() => {
-    const dob = event?.worker?.dob
-    if (!dob) return null
-    let age = eventDateRaw.getFullYear() - dob.getFullYear()
-    const m = eventDateRaw.getMonth() - dob.getMonth()
-    if (m < 0 || (m === 0 && eventDateRaw.getDate() < dob.getDate())) age -= 1
-    return age >= 0 && age < 130 ? age : null
-  })()
+  const patient =
+    input.patientIdentification ??
+    (await resolvePatientIdentificationForPdf({
+      eventId: input.eventId,
+      firstName: input.patient.firstName,
+      lastName: input.patient.lastName,
+      universalId: input.patient.universalId,
+      companyName: input.patient.companyName,
+      attentionDate: input.reviewCreatedAt,
+    }))
 
   const predxData = (input.prediagnosisData as Record<string, unknown> | null) ?? {}
   const recomendacionesValidadas = resolveValidatedRecommendations(
@@ -181,22 +181,12 @@ export async function buildCampimetriaPdfDataAsync(
     ISHIHARA_PLATES.map(p => [p.id, payload.ishihara.ojo_izquierdo[p.id] ?? '']),
   ) as Record<string, string>
 
-  const patientFullName = `${input.patient.firstName} ${input.patient.lastName}`.trim()
-
   return {
     reviewId: input.reviewId,
     signedAt: input.reviewCreatedAt,
     formatCode: '005-2018',
     studyName: input.studyName ?? 'Campimetría',
-    patient: {
-      fullName: patientFullName || '—',
-      companyName:
-        input.patient.companyName ??
-        event?.worker?.company?.name ??
-        null,
-      ageYears,
-      eventDate: eventDateLabel,
-    },
+    patient,
     antecedentes: {
       usoLentes: siNoLabel(payload.antecedentes.uso_lentes),
       tiempoLentes:

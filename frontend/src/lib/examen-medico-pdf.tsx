@@ -66,6 +66,11 @@ import { deriveAgudezaVisualResumen } from '@/lib/clinical/agudeza-visual'
 
 export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl } from '@/lib/ami-brand'
 import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
+import {
+  buildPatientIdentificationPdf,
+  resolvePatientIdentificationForPdf,
+  type PatientIdentificationPdf,
+} from '@/lib/pdf/patient-identification'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -184,6 +189,9 @@ export interface BuildExamenMedicoPdfInput {
   folio: string
   signedAt: Date
   status: ExamenMedicoPDFData['status']
+  eventId?: string | null
+  attentionDate?: Date | string | null
+  patientIdentification?: PatientIdentificationPdf
   worker: BuildExamenMedicoPdfWorkerInput
   ahf: {
     diabetes?: string | null
@@ -416,10 +424,35 @@ export function buildExamenMedicoPdfData(
     epp: s(input.historiaOcupacional?.epp) || null,
   }
 
+  const taRaw = s(input.somatometria?.ta)
+  const patientIdentification =
+    input.patientIdentification ??
+    buildPatientIdentificationPdf({
+      firstName: input.worker.firstName,
+      lastName: input.worker.lastName,
+      universalId: input.worker.universalId,
+      companyName: paciente.empresa,
+      sexLabel: paciente.sexo,
+      ageLabel: paciente.edad ? `${paciente.edad} años` : null,
+      attentionDate: input.attentionDate ?? input.signedAt,
+      weightLabel: s(input.somatometria?.peso) ? `${s(input.somatometria?.peso)} kg` : null,
+      heightLabel: s(input.somatometria?.talla) ? `${s(input.somatometria?.talla)} m` : null,
+      temperatureLabel: s(input.somatometria?.temperatura)
+        ? `${s(input.somatometria?.temperatura)} °C`
+        : null,
+      heartRateLabel: s(input.somatometria?.fc) ? `${s(input.somatometria?.fc)} lpm` : null,
+      bloodPressureLabel: taRaw
+        ? taRaw.includes('mmHg')
+          ? taRaw
+          : `${taRaw} mmHg`
+        : null,
+    })
+
   return {
     folio: input.folio,
     signedAt: input.signedAt,
     status: input.status,
+    patientIdentification,
     paciente,
     ahf: {
       diabetes: s(input.ahf.diabetes) || null,
@@ -545,6 +578,23 @@ export function buildExamenMedicoPdfData(
     variant: input.variant ?? 'AMI',
     variantExtensions: input.variantExtensions ?? {},
   }
+}
+
+export async function buildExamenMedicoPdfDataAsync(
+  input: BuildExamenMedicoPdfInput,
+): Promise<ExamenMedicoPDFData> {
+  const patientIdentification =
+    input.patientIdentification ??
+    (await resolvePatientIdentificationForPdf({
+      eventId: input.eventId,
+      firstName: input.worker.firstName,
+      lastName: input.worker.lastName,
+      universalId: input.worker.universalId,
+      companyName: input.historiaOcupacional?.empresa ?? input.worker.empresa,
+      sexLabel: input.worker.sexo,
+      attentionDate: input.attentionDate ?? input.signedAt,
+    }))
+  return buildExamenMedicoPdfData({ ...input, patientIdentification })
 }
 
 // ──────────────────────────────────────────────────────────────────────────

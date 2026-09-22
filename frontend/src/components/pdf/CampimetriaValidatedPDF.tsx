@@ -4,6 +4,8 @@
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { ISHIHARA_PLATES } from '@/schemas/clinical/campimetria-questionnaire.schema'
+import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
+import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 
 const styles = StyleSheet.create({
   page: {
@@ -156,12 +158,7 @@ export interface CampimetriaValidatedPDFData {
   signedAt: string | Date
   formatCode: string
   studyName: string
-  patient: {
-    fullName: string
-    companyName: string | null
-    ageYears: number | null
-    eventDate: string
-  }
+  patient: PatientIdentificationPdf
   antecedentes: {
     usoLentes: string
     tiempoLentes: string
@@ -276,20 +273,7 @@ export function CampimetriaValidatedPDF({ data }: { data: CampimetriaValidatedPD
           )}
         </View>
 
-        <View style={styles.patientRow}>
-          <Text style={styles.patientLabel}>NOMBRE:</Text>
-          <Text style={[styles.patientValue, { flex: 1 }]}>{data.patient.fullName.toUpperCase()}</Text>
-          <Text style={styles.patientLabel}>EDAD:</Text>
-          <Text style={styles.patientValue}>
-            {data.patient.ageYears != null ? `${data.patient.ageYears} AÑOS` : '—'}
-          </Text>
-        </View>
-        <View style={styles.patientRow}>
-          <Text style={styles.patientLabel}>EMPRESA:</Text>
-          <Text style={[styles.patientValue, { flex: 1 }]}>{v(data.patient.companyName)}</Text>
-          <Text style={styles.patientLabel}>FECHA:</Text>
-          <Text style={styles.patientValue}>{data.patient.eventDate}</Text>
-        </View>
+        <PatientIdentificationPdfBlock patient={data.patient} />
 
         <Text style={styles.sectionBar}>Antecedentes oftalmológicos de importancia</Text>
         <View style={styles.gridRow}>

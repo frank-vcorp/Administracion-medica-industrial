@@ -5,6 +5,8 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import type { EspirometryAmiSectionData } from '@/lib/espirometry-ami-section'
 import { formatAmiSectionMl } from '@/lib/espirometry-ami-section'
+import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
+import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 
 const styles = StyleSheet.create({
   page: {
@@ -154,11 +156,7 @@ export interface EspirometryValidatedPDFData {
   signedAt: string | Date
   studyName: string
   studyType: string
-  patient: {
-    fullName: string
-    universalId?: string | null
-    companyName?: string | null
-  }
+  patient: PatientIdentificationPdf
   doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
   doctorDiagnosis: string
   doctorNotes?: string | null
@@ -259,6 +257,11 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
           {data.doctorStatus === 'REVIEWED_ACCEPTED' ? 'Aceptado' : 'Editado'} ·
           Firmado: {formatDate(data.signedAt)}
         </Text>
+
+        <PatientIdentificationPdfBlock
+          patient={data.patient}
+          heading="Identificación del paciente"
+        />
 
         <View style={styles.sourceWrap}>
           {data.sourceCropDataUrl ? (

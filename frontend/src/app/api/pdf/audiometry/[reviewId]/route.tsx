@@ -31,7 +31,7 @@ import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import {
   generateAudiometriaValidatedPdf,
-  buildAudiometriaPdfData,
+  buildAudiometriaPdfDataAsync,
   resolveAmiLogoDataUrl,
 } from '@/lib/audiometry-pdf'
 
@@ -169,8 +169,9 @@ export async function GET(
   try {
     const worker = eventTest?.event?.worker
     const logoDataUrl = await resolveAmiLogoDataUrl()
-    const data = buildAudiometriaPdfData({
+    const data = await buildAudiometriaPdfDataAsync({
       reviewId: review.id,
+      eventId: eventTest?.eventId ?? null,
       doctorStatus:
         review.doctorStatus === 'REVIEWED_ACCEPTED'
           ? 'REVIEWED_ACCEPTED'

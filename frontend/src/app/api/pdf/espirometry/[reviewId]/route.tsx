@@ -197,6 +197,7 @@ export async function GET(
       studyType:
         review.prediagnosisSnapshot?.extractionSnapshot?.studyType ?? null,
       eventTestId: eventTest?.id ?? null,
+      eventId: eventTest?.eventId ?? null,
       clinicalContext: eventTest?.clinicalContext,
       patient: {
         firstName: worker?.firstName ?? '',

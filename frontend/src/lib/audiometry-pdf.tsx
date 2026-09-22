@@ -49,6 +49,11 @@ import {
   resolveValidatedRecommendations,
 } from '@/lib/espirometry-pdf'
 import { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl } from '@/lib/ami-brand'
+import {
+  buildPatientIdentificationPdf,
+  resolvePatientIdentificationForPdf,
+  type PatientIdentificationPdf,
+} from '@/lib/pdf/patient-identification'
 
 export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl }
 
@@ -75,6 +80,9 @@ export interface BuildAudiometriaPdfInput {
     signatureImageUrl: string
   }
   logoDataUrl: string | null
+  /** Si se omite, se deriva de `patient` (nombre/empresa/ID). */
+  patientIdentification?: PatientIdentificationPdf
+  eventId?: string | null
 }
 
 export function buildAudiometriaPdfData(
@@ -167,11 +175,14 @@ export function buildAudiometriaPdfData(
     signedAt: input.reviewCreatedAt,
     studyName: input.studyName ?? 'Audiometría',
     studyType: input.studyType ?? 'Audiometria',
-    patient: {
-      fullName: patientFullName.length > 0 ? patientFullName : '—',
-      universalId: input.patient.universalId ?? null,
-      companyName: input.patient.companyName ?? null,
-    },
+    patient:
+      input.patientIdentification ??
+      buildPatientIdentificationPdf({
+        firstName: input.patient.firstName,
+        lastName: input.patient.lastName,
+        universalId: input.patient.universalId,
+        companyName: input.patient.companyName,
+      }),
     doctorStatus: input.doctorStatus,
     doctorDiagnosis:
       diagnosis.length > 0
@@ -187,6 +198,22 @@ export function buildAudiometriaPdfData(
     medico: input.medico,
     logoUrl: input.logoDataUrl ?? '',
   }
+}
+
+export async function buildAudiometriaPdfDataAsync(
+  input: BuildAudiometriaPdfInput,
+): Promise<AudiometriaValidatedPDFData> {
+  const patientIdentification =
+    input.patientIdentification ??
+    (await resolvePatientIdentificationForPdf({
+      eventId: input.eventId,
+      firstName: input.patient.firstName,
+      lastName: input.patient.lastName,
+      universalId: input.patient.universalId,
+      companyName: input.patient.companyName,
+      attentionDate: input.reviewCreatedAt,
+    }))
+  return buildAudiometriaPdfData({ ...input, patientIdentification })
 }
 
 export interface GenerateAudiometriaPdfResult {

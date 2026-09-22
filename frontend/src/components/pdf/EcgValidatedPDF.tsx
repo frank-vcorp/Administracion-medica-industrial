@@ -3,6 +3,8 @@
  * Audiometría / reportes clínicos AMI (membrete teal, secciones numeradas).
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
+import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 
 const styles = StyleSheet.create({
   page: { padding: 36, fontFamily: 'Helvetica', fontSize: 10, color: '#0f172a' },
@@ -84,13 +86,7 @@ export interface EcgValidatedPDFData {
   studyName: string
   studyType: string
   doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
-  patient: {
-    fullName: string
-    sexLabel: string
-    ageLabel: string
-    companyName: string
-    universalId?: string | null
-  }
+  patient: PatientIdentificationPdf
   narrativeParagraph: string
   diagnosisItems: string[]
   doctorNotes?: string | null
@@ -112,14 +108,6 @@ const formatDate = (d: string | Date) => {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-const formatGender = (g: string | null | undefined): string => {
-  if (!g || g === '—') return '—'
-  const u = g.toUpperCase()
-  if (u === 'M' || u === 'MALE' || u === 'MASCULINO') return 'Masculino'
-  if (u === 'F' || u === 'FEMALE' || u === 'FEMENINO') return 'Femenino'
-  return g
 }
 
 export const EcgValidatedPDF = ({ data }: { data: EcgValidatedPDFData }) => (
@@ -163,30 +151,10 @@ export const EcgValidatedPDF = ({ data }: { data: EcgValidatedPDFData }) => (
           <Text style={styles.label}>Tipo:</Text>
           <Text style={styles.value}>{data.studyType}</Text>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Paciente:</Text>
-          <Text style={styles.value}>{data.patient.fullName}</Text>
-        </View>
-        {data.patient.universalId ? (
-          <View style={styles.row}>
-            <Text style={styles.label}>ID paciente:</Text>
-            <Text style={styles.value}>{data.patient.universalId}</Text>
-          </View>
-        ) : null}
-        <View style={styles.row}>
-          <Text style={styles.label}>Sexo:</Text>
-          <Text style={styles.value}>{formatGender(data.patient.sexLabel)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Edad:</Text>
-          <Text style={styles.value}>{data.patient.ageLabel}</Text>
-        </View>
-        {data.patient.companyName && data.patient.companyName !== '—' ? (
-          <View style={styles.row}>
-            <Text style={styles.label}>Empresa:</Text>
-            <Text style={styles.value}>{data.patient.companyName}</Text>
-          </View>
-        ) : null}
+        <PatientIdentificationPdfBlock
+          patient={data.patient}
+          heading="Identificación del paciente"
+        />
       </View>
 
       <View style={styles.section}>

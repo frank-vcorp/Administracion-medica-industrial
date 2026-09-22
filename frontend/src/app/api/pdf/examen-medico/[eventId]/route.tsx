@@ -41,7 +41,7 @@ import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import {
   generateExamenMedicoValidatedPdf,
-  buildExamenMedicoPdfData,
+  buildExamenMedicoPdfDataAsync,
   resolveAmiLogoDataUrl,
 } from '@/lib/examen-medico-pdf'
 import {
@@ -103,6 +103,8 @@ export async function GET(
     where: { id: eventId },
     select: {
       id: true,
+      checkInDate: true,
+      createdAt: true,
       worker: {
         select: {
           firstName: true,
@@ -313,10 +315,12 @@ export async function GET(
     // no escribió nada (DA-7).
     const recomendacionesPersisted = str(event.verdict.recommendations)
 
-    const data = buildExamenMedicoPdfData({
+    const data = await buildExamenMedicoPdfDataAsync({
       folio: event.verdict.id,
       signedAt: event.verdict.signedAt,
       status: 'SIGNED',
+      eventId: event.id,
+      attentionDate: event.checkInDate ?? event.createdAt,
       worker: {
         firstName: event.worker.firstName ?? '',
         lastName: event.worker.lastName ?? '',

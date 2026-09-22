@@ -14,6 +14,7 @@ import {
   parseEcgDiagnosisItems,
   parseEcgFromExtraction,
 } from '@/lib/clinical/ecg-report'
+import { resolvePatientIdentificationForPdf } from '@/lib/pdf/patient-identification'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -29,6 +30,7 @@ export interface BuildEcgPdfInput {
   patient: {
     firstName: string
     lastName: string
+    universalId?: string | null
     companyName?: string | null
   }
   medico: {
@@ -40,54 +42,17 @@ export interface BuildEcgPdfInput {
 }
 
 export async function buildEcgPdfDataAsync(input: BuildEcgPdfInput): Promise<EcgValidatedPDFData> {
-  const event = await prisma.medicalEvent.findUnique({
-    where: { id: input.eventId },
-    select: {
-      checkInDate: true,
-      createdAt: true,
-      worker: {
-        select: {
-          dob: true,
-          universalId: true,
-          company: { select: { name: true } },
-        },
-      },
-    },
-  })
-  const exam = await prisma.medicalExam.findUnique({
-    where: { eventId: input.eventId },
-    select: { physicalExamData: true },
-  })
-  const physicalExamData =
-    (exam?.physicalExamData as Record<string, unknown> | null) ?? {}
-  const datosPersonales =
-    (physicalExamData.datos_personales as Record<string, unknown> | null) ?? {}
-  const modulo1 = (physicalExamData.modulo1 as Record<string, unknown> | null) ?? {}
-  const sexLabelRaw =
-    (typeof physicalExamData.sexo === 'string' && physicalExamData.sexo) ||
-    (typeof datosPersonales.sexo === 'string' && datosPersonales.sexo) ||
-    (typeof modulo1.m1_sexo === 'string' && modulo1.m1_sexo) ||
-    null
-
-  const eventDateRaw = event?.checkInDate ?? event?.createdAt ?? input.reviewCreatedAt
-  const ageYears = (() => {
-    const dob = event?.worker?.dob
-    if (!dob) return null
-    let age = eventDateRaw.getFullYear() - dob.getFullYear()
-    const m = eventDateRaw.getMonth() - dob.getMonth()
-    if (m < 0 || (m === 0 && eventDateRaw.getDate() < dob.getDate())) age -= 1
-    return age >= 0 && age < 130 ? age : null
-  })()
-
   const ecg = parseEcgFromExtraction(input.extractionStructuredData)
   const narrativeParagraph = buildEcgNarrativeParagraph(ecg, input.doctorNotes)
   const diagnosisItems = parseEcgDiagnosisItems(input.doctorDiagnosis)
 
-  const fullName = `${input.patient.firstName} ${input.patient.lastName}`.trim() || '—'
-  const companyName =
-    input.patient.companyName?.trim() ||
-    event?.worker?.company?.name?.trim() ||
-    '—'
+  const patient = await resolvePatientIdentificationForPdf({
+    eventId: input.eventId,
+    firstName: input.patient.firstName,
+    lastName: input.patient.lastName,
+    universalId: input.patient.universalId,
+    companyName: input.patient.companyName,
+  })
 
   return {
     reviewId: input.reviewId,
@@ -95,13 +60,7 @@ export async function buildEcgPdfDataAsync(input: BuildEcgPdfInput): Promise<Ecg
     doctorStatus: input.doctorStatus,
     studyName: 'Electrocardiograma en reposo',
     studyType: 'Electrocardiograma',
-    patient: {
-      fullName,
-      sexLabel: sexLabelRaw ?? '—',
-      ageLabel: ageYears != null ? `${ageYears} años` : '—',
-      companyName,
-      universalId: event?.worker?.universalId ?? null,
-    },
+    patient,
     narrativeParagraph,
     diagnosisItems,
     doctorNotes: input.doctorNotes ?? null,
