@@ -1,99 +1,99 @@
 /**
- * Informe validado de electrocardiograma en reposo (formato AMI / RD2026).
+ * Informe validado de electrocardiograma — mismo formato visual que
+ * Audiometría / reportes clínicos AMI (membrete teal, secciones numeradas).
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 
 const styles = StyleSheet.create({
-  page: {
-    paddingTop: 18,
-    paddingBottom: 56,
-    paddingHorizontal: 36,
-    fontFamily: 'Helvetica',
-    fontSize: 9,
-    color: '#1e293b',
-    lineHeight: 1.45,
-  },
+  page: { padding: 36, fontFamily: 'Helvetica', fontSize: 10, color: '#0f172a' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
+    marginBottom: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#7c3aed',
+    borderBottomColor: '#0f766e',
     paddingBottom: 8,
   },
-  headerLeft: { flex: 1, paddingRight: 12 },
-  brand: { fontSize: 11, fontWeight: 'bold', color: '#6d28d9' },
-  brandSub: { fontSize: 6.5, color: '#64748b', marginTop: 1 },
-  logoImage: { width: 100, height: 36, objectFit: 'contain' },
+  headerLeft: { flexDirection: 'column' },
+  brand: { fontSize: 16, fontWeight: 'bold', color: '#0f766e' },
+  brandSub: { fontSize: 8, color: '#475569' },
+  headerRight: { alignItems: 'flex-end', justifyContent: 'flex-start', width: 140 },
+  logoImage: { width: 130, height: 48, objectFit: 'contain' },
   logoFallback: {
-    width: 100,
-    height: 36,
+    width: 130,
+    height: 48,
     borderWidth: 1,
     borderColor: '#cbd5e1',
     textAlign: 'center',
-    paddingTop: 10,
-    fontSize: 11,
+    paddingTop: 14,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#6d28d9',
+    color: '#0f766e',
   },
-  patientGrid: { marginBottom: 10 },
-  patientRow: { flexDirection: 'row', marginBottom: 3 },
-  patientLabel: { fontWeight: 'bold', width: 72, color: '#6d28d9' },
-  patientValue: { flex: 1 },
-  studyTitle: {
+  docTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 4, color: '#0f172a' },
+  docSubtitle: { fontSize: 9, color: '#475569', marginBottom: 14 },
+  section: { marginBottom: 12 },
+  sectionTitle: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#6d28d9',
-    marginTop: 6,
-    marginBottom: 10,
-    textTransform: 'uppercase',
-  },
-  narrative: { marginBottom: 14, textAlign: 'justify' },
-  dxTitle: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    color: '#6d28d9',
+    backgroundColor: '#f1f5f9',
+    padding: 5,
     marginBottom: 6,
+    color: '#0f172a',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  dxItem: { marginBottom: 4, paddingLeft: 4 },
-  signatureArea: { marginTop: 22, alignItems: 'center' },
-  signatureImage: { width: 120, height: 36, objectFit: 'contain', marginBottom: 4 },
-  signatureLine: {
-    width: 200,
-    borderBottomWidth: 1,
-    borderBottomColor: '#0f172a',
-    marginBottom: 4,
+  row: { flexDirection: 'row', marginBottom: 3 },
+  label: { width: 130, fontSize: 9, fontWeight: 'bold', color: '#475569' },
+  value: { flex: 1, fontSize: 9, color: '#0f172a' },
+  paragraph: { fontSize: 9, lineHeight: 1.5, color: '#0f172a', marginBottom: 4 },
+  bulletItem: { fontSize: 9, marginLeft: 8, marginBottom: 3 },
+  verdictBox: {
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 4,
+    backgroundColor: '#f8fafc',
+    marginBottom: 6,
   },
-  signatureName: { fontSize: 9, fontWeight: 'bold', textAlign: 'center' },
-  signatureMeta: { fontSize: 8, textAlign: 'center', color: '#475569', marginTop: 2 },
+  signatureArea: { marginTop: 36, flexDirection: 'row', justifyContent: 'flex-end' },
+  signatureBox: { width: 240, alignItems: 'center' },
+  signatureImage: { width: 200, height: 70, objectFit: 'contain', marginBottom: 4 },
+  signatureLine: { width: 200, borderBottomWidth: 1, borderBottomColor: '#0f172a', marginBottom: 4 },
+  signatureName: { fontSize: 10, fontWeight: 'bold', color: '#0f172a' },
+  signatureLicense: { fontSize: 9, color: '#475569' },
+  signatureDate: { fontSize: 8, color: '#94a3b8', marginTop: 2 },
   footer: {
     position: 'absolute',
-    bottom: 16,
+    bottom: 24,
     left: 36,
     right: 36,
     textAlign: 'center',
-    fontSize: 6,
+    fontSize: 7,
     color: '#94a3b8',
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
-    paddingTop: 6,
-    lineHeight: 1.35,
+    paddingTop: 8,
+    lineHeight: 1.4,
   },
 })
 
 export interface EcgValidatedPDFData {
   reviewId: string
   signedAt: string | Date
+  studyName: string
+  studyType: string
+  doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
   patient: {
     fullName: string
     sexLabel: string
     ageLabel: string
     companyName: string
+    universalId?: string | null
   }
   narrativeParagraph: string
   diagnosisItems: string[]
+  doctorNotes?: string | null
   medico: {
     fullName: string
     professionalLicense: string
@@ -102,88 +102,145 @@ export interface EcgValidatedPDFData {
   logoUrl: string
 }
 
+const formatDate = (d: string | Date) => {
+  const date = d instanceof Date ? d : new Date(d)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleString('es-MX', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 const formatGender = (g: string | null | undefined): string => {
-  if (!g) return '—'
+  if (!g || g === '—') return '—'
   const u = g.toUpperCase()
   if (u === 'M' || u === 'MALE' || u === 'MASCULINO') return 'Masculino'
   if (u === 'F' || u === 'FEMALE' || u === 'FEMENINO') return 'Femenino'
   return g
 }
 
-export const EcgValidatedPDF = ({ data }: { data: EcgValidatedPDFData }) => {
-  const logoSrc = data.logoUrl
-
-  return (
-    <Document
-      title={`ECG-${data.reviewId.slice(0, 8)}`}
-      author={`Dr(a). ${data.medico.fullName}`}
-      subject="Electrocardiograma en reposo validado"
-    >
-      <Page size="LETTER" style={styles.page}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.brand}>Administración Médica Industrial</Text>
-            <Text style={styles.brandSub}>Salud para tu empresa®</Text>
-            <Text style={styles.brandSub}>
-              Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
-            </Text>
-          </View>
-          {logoSrc ? (
-            <Image style={styles.logoImage} src={logoSrc} />
+export const EcgValidatedPDF = ({ data }: { data: EcgValidatedPDFData }) => (
+  <Document
+    title={`ECG-validado-${data.reviewId.slice(0, 8)}`}
+    author={`Dr(a). ${data.medico.fullName}`}
+    subject="Reporte de Electrocardiograma validado por el médico"
+  >
+    <Page size="A4" style={styles.page}>
+      <View style={styles.header} fixed>
+        <View style={styles.headerLeft}>
+          <Text style={styles.brand}>Administración Médica Industrial</Text>
+          <Text style={styles.brandSub}>
+            Evaluaciones médicas · Outsourcing · Capacitación
+          </Text>
+          <Text style={styles.brandSub}>Ergonomía · Fisioterapia · Nutrición</Text>
+        </View>
+        <View style={styles.headerRight}>
+          {data.logoUrl ? (
+            <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
-            <Text style={styles.logoFallback}>AMI</Text>
+            <Text style={styles.logoFallback}>SME</Text>
           )}
         </View>
+      </View>
 
-        <View style={styles.patientGrid}>
-          <View style={styles.patientRow}>
-            <Text style={styles.patientLabel}>PACIENTE:</Text>
-            <Text style={styles.patientValue}>{data.patient.fullName}</Text>
-          </View>
-          <View style={styles.patientRow}>
-            <Text style={styles.patientLabel}>SEXO:</Text>
-            <Text style={styles.patientValue}>{formatGender(data.patient.sexLabel)}</Text>
-          </View>
-          <View style={styles.patientRow}>
-            <Text style={styles.patientLabel}>EDAD:</Text>
-            <Text style={styles.patientValue}>{data.patient.ageLabel}</Text>
-          </View>
-          <View style={styles.patientRow}>
-            <Text style={styles.patientLabel}>EMPRESA:</Text>
-            <Text style={styles.patientValue}>{data.patient.companyName}</Text>
-          </View>
+      <Text style={styles.docTitle}>Reporte de Electrocardiograma Validado</Text>
+      <Text style={styles.docSubtitle}>
+        Folio de revisión: {data.reviewId} · Estado:{' '}
+        {data.doctorStatus === 'REVIEWED_ACCEPTED' ? 'Aceptado' : 'Editado'} · Firmado:{' '}
+        {formatDate(data.signedAt)}
+      </Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>I. Datos del estudio y paciente</Text>
+        <View style={styles.row}>
+          <Text style={styles.label}>Estudio:</Text>
+          <Text style={styles.value}>{data.studyName}</Text>
         </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Tipo:</Text>
+          <Text style={styles.value}>{data.studyType}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Paciente:</Text>
+          <Text style={styles.value}>{data.patient.fullName}</Text>
+        </View>
+        {data.patient.universalId ? (
+          <View style={styles.row}>
+            <Text style={styles.label}>ID paciente:</Text>
+            <Text style={styles.value}>{data.patient.universalId}</Text>
+          </View>
+        ) : null}
+        <View style={styles.row}>
+          <Text style={styles.label}>Sexo:</Text>
+          <Text style={styles.value}>{formatGender(data.patient.sexLabel)}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Edad:</Text>
+          <Text style={styles.value}>{data.patient.ageLabel}</Text>
+        </View>
+        {data.patient.companyName && data.patient.companyName !== '—' ? (
+          <View style={styles.row}>
+            <Text style={styles.label}>Empresa:</Text>
+            <Text style={styles.value}>{data.patient.companyName}</Text>
+          </View>
+        ) : null}
+      </View>
 
-        <Text style={styles.studyTitle}>Tipo de estudio: Electrocardiograma en reposo</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>II. Interpretación del trazado</Text>
+        <Text style={styles.paragraph}>{data.narrativeParagraph}</Text>
+      </View>
 
-        <Text style={styles.narrative}>{data.narrativeParagraph}</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>
+          III. Diagnóstico electrocardiográfico (validado por el médico)
+        </Text>
+        {data.diagnosisItems.length === 0 ? (
+          <View style={styles.verdictBox}>
+            <Text style={styles.paragraph}>—</Text>
+          </View>
+        ) : (
+          data.diagnosisItems.map((item, idx) => (
+            <Text key={`dx-${idx}`} style={styles.bulletItem}>
+              {idx + 1}. {item}
+            </Text>
+          ))
+        )}
+      </View>
 
-        <Text style={styles.dxTitle}>Diagnóstico electrocardiográfico:</Text>
-        {data.diagnosisItems.map((item, idx) => (
-          <Text key={`dx-${idx}`} style={styles.dxItem}>
-            {idx + 1}.- {item}
-          </Text>
-        ))}
+      {data.doctorNotes?.trim() ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>IV. Notas clínicas</Text>
+          <Text style={styles.paragraph}>{data.doctorNotes.trim()}</Text>
+        </View>
+      ) : null}
 
-        <View style={styles.signatureArea}>
+      <View style={styles.signatureArea}>
+        <View style={styles.signatureBox}>
           {data.medico.signatureImageUrl ? (
             <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
           ) : (
             <View style={styles.signatureLine} />
           )}
-          <Text style={styles.signatureName}>{data.medico.fullName.toUpperCase()}</Text>
-          <Text style={styles.signatureMeta}>Ced. Prof. {data.medico.professionalLicense}</Text>
-          <Text style={styles.signatureMeta}>AMI SALUD RESPONSABLE S.A. DE C.V.</Text>
+          <Text style={styles.signatureName}>Dr(a). {data.medico.fullName}</Text>
+          <Text style={styles.signatureLicense}>
+            Cédula profesional: {data.medico.professionalLicense}
+          </Text>
+          <Text style={styles.signatureDate}>Fecha y hora: {formatDate(data.signedAt)}</Text>
         </View>
+      </View>
 
-        <Text style={styles.footer} fixed>
-          Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro — (442) 225-52-67 —
-          www.medicaindustrial.com
-          {'\n'}
-          Este documento es un reporte clínico validado por el médico firmante. Queda prohibida su alteración o
-          reproducción no autorizada.
-        </Text>
-      </Page>
-    </Document>
-  )
-}
+      <Text style={styles.footer} fixed>
+        Administración Médica Industrial — Circuito del Mesón #135, Col. Del Prado, C.P. 76030,
+        Santiago de Querétaro — (442) 225-52-67 — www.medicaindustrial.com
+        {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia ·
+        Nutrición
+        {'\n'}Este documento es un reporte clínico validado por el médico firmante. Queda
+        prohibida su alteración o reproducción no autorizada.
+      </Text>
+    </Page>
+  </Document>
+)

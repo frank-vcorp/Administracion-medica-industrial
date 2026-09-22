@@ -48,6 +48,7 @@ export async function buildEcgPdfDataAsync(input: BuildEcgPdfInput): Promise<Ecg
       worker: {
         select: {
           dob: true,
+          universalId: true,
           company: { select: { name: true } },
         },
       },
@@ -91,14 +92,19 @@ export async function buildEcgPdfDataAsync(input: BuildEcgPdfInput): Promise<Ecg
   return {
     reviewId: input.reviewId,
     signedAt: input.reviewCreatedAt,
+    doctorStatus: input.doctorStatus,
+    studyName: 'Electrocardiograma en reposo',
+    studyType: 'Electrocardiograma',
     patient: {
       fullName,
       sexLabel: sexLabelRaw ?? '—',
       ageLabel: ageYears != null ? `${ageYears} años` : '—',
       companyName,
+      universalId: event?.worker?.universalId ?? null,
     },
     narrativeParagraph,
     diagnosisItems,
+    doctorNotes: input.doctorNotes ?? null,
     medico: input.medico,
     logoUrl: input.logoDataUrl ?? '',
   }
