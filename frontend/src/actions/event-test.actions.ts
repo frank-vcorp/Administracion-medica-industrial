@@ -368,6 +368,29 @@ async function isXmlFile(file: File): Promise<boolean> {
   return false
 }
 
+type EventTestEligibilityRow = {
+  testNameSnapshot: string
+  test: {
+    id: string
+    code: string | null
+    category: { name: string } | null
+  } | null
+}
+
+/** Parser XML directo (FIX-20260729-03-G-XML) no usa DR7; permitir aunque V3 tenga enabled=false. */
+async function allowAudiometryXmlWhenCalibrationDisabled(
+  eventTest: EventTestEligibilityRow,
+  published: { enabled: boolean; canonicalStudyType: string | null },
+  file: File,
+): Promise<boolean> {
+  if (published.enabled) return false
+  const canonical =
+    published.canonicalStudyType ?? getCanonicalAIStudyType(eventTest)
+  const routed = normalizeStudyTypeForBackend(canonical ?? '')
+  if (routed !== 'Audiometria') return false
+  return await isXmlFile(file)
+}
+
 /**
  * FIX-20260729-03-G-XML: Persiste los snapshots inmutables (extracción +
  * prediagnóstico) resultantes del parser XML directo, manteniendo la misma
@@ -885,18 +908,27 @@ export async function uploadEventTestFile(formData: FormData) {
         publishedVersionId = published.versionId
 
         if (!published.enabled) {
-          // AC-3.1 / CB-02 / SPEC §15 regla 8: gate enabled=false no-negociable.
-          return await persistCalibrationDisabledSnapshot({
-            eventTestId,
-            eventId,
-            triggeredByUserId,
-            versionId: published.versionId,
-            versionNumber: published.versionNumber,
-          })
-        }
-
+          const xmlAudiometryBypass = await allowAudiometryXmlWhenCalibrationDisabled(
+            eventTest,
+            published,
+            file,
+          )
+          if (!xmlAudiometryBypass) {
+            // AC-3.1 / CB-02 / SPEC §15 regla 8: gate enabled=false no-negociable.
+            return await persistCalibrationDisabledSnapshot({
+              eventTestId,
+              eventId,
+              triggeredByUserId,
+              versionId: published.versionId,
+              versionNumber: published.versionNumber,
+            })
+          }
+          isAIEligible = true
+          canonicalTypeForXml = 'Audiometria'
+          calibrationSource = 'published_v3'
+          formData.set('study_type', 'Audiometria')
+        } else if (published.canonicalStudyType) {
         // enabled=true: enrutar por canonicalStudyType published si existe.
-        if (published.canonicalStudyType) {
           isAIEligible = true
           const routedType =
             normalizeStudyTypeForBackend(published.canonicalStudyType) ??
@@ -1257,16 +1289,27 @@ export async function regenerateStudyAI(
     // trazada con source="legacy_heuristic".
     const published = await getPublishedCalibrationForEventTest(eventTestId)
 
+    let xmlAudiometryBypass = false
     if (published && !published.enabled) {
-      // AC-3.1: gate enabled=false → no regenera IA; persiste snapshot disabled.
-      const disabled = await persistCalibrationDisabledSnapshot({
-        eventTestId,
-        eventId,
-        triggeredByUserId,
-        versionId: published.versionId,
-        versionNumber: published.versionNumber,
-      })
-      return { success: disabled.success, error: undefined }
+      xmlAudiometryBypass = Boolean(
+        eventTest &&
+          (await allowAudiometryXmlWhenCalibrationDisabled(
+            eventTest,
+            published,
+            file,
+          )),
+      )
+      if (!xmlAudiometryBypass) {
+        // AC-3.1: gate enabled=false → no regenera IA; persiste snapshot disabled.
+        const disabled = await persistCalibrationDisabledSnapshot({
+          eventTestId,
+          eventId,
+          triggeredByUserId,
+          versionId: published.versionId,
+          versionNumber: published.versionNumber,
+        })
+        return { success: disabled.success, error: undefined }
+      }
     }
 
     // Determinar tipo canónico: published wins; heurística como fallback trazado.
@@ -1280,6 +1323,10 @@ export async function regenerateStudyAI(
         published.canonicalStudyType
       calibrationSource = 'published_v3'
       publishedVersionId = published.versionId
+    } else if (xmlAudiometryBypass && published) {
+      calibrationSource = 'published_v3'
+      publishedVersionId = published.versionId
+      canonicalType = 'Audiometria'
     } else {
       // AC-3.3: no hay published (o published sin canonicalStudyType) →
       // heurística de nombre como fallback trazado (SPEC §12.1).
@@ -1304,6 +1351,47 @@ export async function regenerateStudyAI(
     const medicalTestIdForForm = eventTest?.test?.id
     if (medicalTestIdForForm) {
       formData.set('medical_test_id', medicalTestIdForForm)
+    }
+
+    const calibrationVersionIdForXml =
+      publishedVersionId ?? published?.versionId ?? null
+
+    if (canonicalType === 'Audiometria' && (await isXmlFile(file))) {
+      const xmlResponse = await uploadXmlAudiometryDirect(
+        apiBase,
+        eventTestId,
+        file,
+        triggeredByUserId,
+      )
+      if (xmlResponse.success && xmlResponse.payload) {
+        const persisted = await persistXmlDirectSnapshots({
+          eventTestId,
+          eventId,
+          triggeredByUserId,
+          calibrationSource,
+          calibrationVersionId: calibrationVersionIdForXml,
+          xmlResult: xmlResponse.payload,
+        })
+        await prisma.eventTest.update({
+          where: { id: eventTestId },
+          data: {
+            resultNotes: buildAIResultNote({
+              success: true,
+              summary: persisted.summary,
+              clinicalState: persisted.clinicalState,
+            }),
+          },
+        })
+        revalidatePath(`/events/${eventId}`)
+        return { success: true }
+      }
+      const xmlErr = xmlResponse.error || 'Parser XML directo no disponible.'
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: { resultNotes: `Error al regenerar IA: ${xmlErr}` },
+      })
+      revalidatePath(`/events/${eventId}`)
+      return { success: false, error: xmlErr }
     }
 
     const aiResult = await triggerStudyAIAnalysis(formData)

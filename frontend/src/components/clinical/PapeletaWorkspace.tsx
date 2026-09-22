@@ -65,7 +65,6 @@ import { ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/es
 // `EventTest.clinicalContext`.
 import AudiometriaQuestionnaireModal from "@/components/clinical/AudiometriaQuestionnaireModal"
 import AudiometriaQuestionnaireSummary from "@/components/clinical/AudiometriaQuestionnaireSummary"
-import AudiometriaClinicalCriteriaPanel from "@/components/clinical/AudiometriaClinicalCriteriaPanel"
 import type {
   AudiometriaQuestionnairePayload,
 } from "@/schemas/clinical/audiometria-questionnaire.schema"
@@ -1860,15 +1859,6 @@ function StudyPanel({
                 version={test.extractionSnapshot.version}
               />
             ) : null}
-            {getCanonicalAIStudyType(test) === 'Audiometria' && test.extractionSnapshot ? (
-              <AudiometriaClinicalCriteriaPanel
-                extractedData={
-                  (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined) ?? null
-                }
-                version={test.extractionSnapshot.version}
-              />
-            ) : null}
-
             {/* Panel de Prediagnóstico IA — debajo del archivo vinculado, en la columna derecha.
                 FIX-20260812-19: movido desde la columna izquierda para alinear
                 con el archivo vinculado (mismo eje visual: evidencia documental
