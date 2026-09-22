@@ -12,7 +12,7 @@
  */
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
@@ -68,6 +68,7 @@ import {
 // hallazgo → recomendacion + edicion manual).
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
 import { formatMedicoNombreYCedula } from "@/lib/clinical/medico-display"
+import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
 import {
   deriveAgudezaVisualResumen,
   VISION_SNELLEN_NO_APLICA,
@@ -1004,6 +1005,82 @@ export default function ExamenMedicoEstudio({
     })
   }
 
+  const somaAutosavePayload = useMemo(
+    () => ({
+      ...somaForm,
+      ...vitalsForm,
+      imc: parseFloat(imc),
+      complexion,
+    }),
+    [somaForm, vitalsForm, imc, complexion],
+  )
+
+  const examSnapshotKey = useMemo(
+    () => JSON.stringify(buildPayload()),
+    [
+      form,
+      aptitud,
+      modulo1,
+      antecedentesCaptured,
+      flowserveExt,
+      sodexoExt,
+      examVariant,
+    ],
+  )
+
+  const onAutosaveExam = useCallback(async () => {
+    const medicoPatch = await resolveMedicoLinesForSave()
+    if (Object.keys(medicoPatch).length > 0) {
+      setForm(prev => ({ ...prev, ...medicoPatch }))
+    }
+    const payload = { ...buildPayload(), ...medicoPatch }
+    const res = await saveExamenMedicoPapeleta(
+      eventId,
+      eventTestId,
+      payload,
+      false,
+      { autosave: true },
+    )
+    return res.success
+  }, [
+    eventId,
+    eventTestId,
+    examSnapshotKey,
+    aptitud,
+    form,
+    modulo1,
+    antecedentesCaptured,
+    flowserveExt,
+    sodexoExt,
+    examVariant,
+    sessionMedicoLine,
+  ])
+
+  const { statusLabel: autosaveStatusLabel } = useExamenMedicoAutosave({
+    enabled: !readonly,
+    eventId,
+    eventTestId,
+    outerTab,
+    somaPayload: somaAutosavePayload,
+    agudezaPayload: agudezaForm,
+    examSnapshotKey,
+    onAutosaveExam,
+    onAfterSomaAutosave: () => {
+      if (somaForm.peso_kg?.trim() || somaForm.talla_m?.trim()) {
+        setSomaCompleted(true)
+      }
+      if (vitalsForm.ta_sistolica?.trim() || vitalsForm.fc_min?.trim()) {
+        setVitalsCompleted(true)
+      }
+    },
+    onAfterAgudezaAutosave: () => {
+      const hasVision = VISUAL_FIELDS_NAMES.some(
+        f => (agudezaForm[f] ?? '').trim() && agudezaForm[f] !== NO_APLICA,
+      )
+      if (hasVision) setAgudezaCompleted(true)
+    },
+  })
+
   // ── Pestañas externas ─────────────────────────────────────────────────────
   // IMPL-20260809-02 (ARCH-20260809-01 v2): revert. outerTabs vuelve a 4 entradas
   // (estado pre-v1). 'antecedentes' ahora vive como sub-pestaña dentro de
@@ -1054,6 +1131,19 @@ export default function ExamenMedicoEstudio({
           </button>
         ))}
       </div>
+
+      {!readonly && autosaveStatusLabel && (
+        <p
+          className={`text-[11px] px-3 py-1.5 rounded-lg border ${
+            autosaveStatusLabel.includes('Error')
+              ? 'bg-red-50 border-red-200 text-red-700'
+              : 'bg-slate-50 border-slate-200 text-slate-600'
+          }`}
+          aria-live="polite"
+        >
+          {autosaveStatusLabel}
+        </p>
+      )}
 
       {/* Banner de bloqueo visible cuando el médico intenta ir a Examen Médico sin completar prereqs.
           IMPL-20260809-02 (ARCH-20260809-01 v2): revert I-4. La condición vuelve

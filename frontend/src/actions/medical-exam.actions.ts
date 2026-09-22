@@ -18,6 +18,11 @@ import { deriveAgudezaVisualResumen } from "@/lib/clinical/agudeza-visual"
  * @id ARCH-20260326-01
  * @backup context/checkpoints/CHK_ARCH-20260326-01.md
  */
+export type MedicalExamPersistOptions = {
+  /** Guardado en segundo plano: solo persiste datos, sin IA ni cronograma. */
+  autosave?: boolean
+}
+
 function buildStructuredAIResultNote(input: { success: boolean; studyLabel: string; summary?: string | null; clinicalState?: string | null; error?: string | null }) {
   if (input.success) {
     const summary = input.summary?.trim()
@@ -41,20 +46,27 @@ export async function getMedicalExam(eventId: string) {
   }
 }
 
-export async function updateSomatometria(eventId: string, rawData: unknown) {
+export async function updateSomatometria(
+  eventId: string,
+  rawData: unknown,
+  options?: MedicalExamPersistOptions,
+) {
   try {
     const data = SomatometriaVitalesSchema.parse(rawData)
-    
+    const autosave = options?.autosave === true
+
     await prisma.medicalExam.upsert({
       where: { eventId },
       update: { somatometryData: data },
       create: { eventId, somatometryData: data }
     })
-    
-    await prisma.medicalEvent.update({
-      where: { id: eventId },
-      data: { status: 'IN_PROGRESS' }
-    })
+
+    if (!autosave) {
+      await prisma.medicalEvent.update({
+        where: { id: eventId },
+        data: { status: 'IN_PROGRESS' }
+      })
+    }
 
     const eventTest = await prisma.eventTest.findFirst({
       where: {
@@ -68,7 +80,7 @@ export async function updateSomatometria(eventId: string, rawData: unknown) {
     })
 
     let aiWarning: string | undefined
-    if (eventTest) {
+    if (eventTest && !autosave) {
       const aiResult = await triggerStructuredStudyAIPrediagnosis({
         eventTestId: eventTest.id,
         eventId,
@@ -89,8 +101,10 @@ export async function updateSomatometria(eventId: string, rawData: unknown) {
         },
       })
     }
-    
-    revalidatePath(`/events/${eventId}`)
+
+    if (!autosave) {
+      revalidatePath(`/events/${eventId}`)
+    }
     return { success: true, aiWarning }
   } catch (error: unknown) {
     console.error("Error updating somatometry:", error)
@@ -98,8 +112,13 @@ export async function updateSomatometria(eventId: string, rawData: unknown) {
   }
 }
 
-export async function updateAgudezaVisual(eventId: string, rawData: unknown) {
+export async function updateAgudezaVisual(
+  eventId: string,
+  rawData: unknown,
+  options?: MedicalExamPersistOptions,
+) {
   try {
+    const autosave = options?.autosave === true
     const data = AgudezaVisualSchema.parse(rawData)
     const agudezaResumen = deriveAgudezaVisualResumen(
       data.vision_lejana_od,
@@ -140,7 +159,7 @@ export async function updateAgudezaVisual(eventId: string, rawData: unknown) {
     })
 
     let aiWarning: string | undefined
-    if (eventTest) {
+    if (eventTest && !autosave) {
       const aiResult = await triggerStructuredStudyAIPrediagnosis({
         eventTestId: eventTest.id,
         eventId,
@@ -161,8 +180,10 @@ export async function updateAgudezaVisual(eventId: string, rawData: unknown) {
         },
       })
     }
-    
-    revalidatePath(`/events/${eventId}`)
+
+    if (!autosave) {
+      revalidatePath(`/events/${eventId}`)
+    }
     return { success: true, aiWarning }
   } catch (error: unknown) {
     console.error("Error updating visual acuity:", error)
@@ -210,13 +231,15 @@ export async function saveExamenMedicoPapeleta(
   eventId: string,
   eventTestId: string,
   rawData: unknown,
-  markComplete = false
+  markComplete = false,
+  options?: MedicalExamPersistOptions,
 ) {
   if (!eventId || !eventTestId) {
     return { success: false, error: 'Parámetros incompletos' }
   }
 
   try {
+    const autosave = options?.autosave === true
     const data = ExamenMedicoCompletoSchema.parse(rawData)
 
     await prisma.medicalExam.upsert({
@@ -226,10 +249,17 @@ export async function saveExamenMedicoPapeleta(
     })
 
     const newStudyStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
-    await prisma.eventTest.update({
+    const currentTest = await prisma.eventTest.findUnique({
       where: { id: eventTestId },
-      data: { status: newStudyStatus },
+      select: { status: true },
     })
+    const shouldUpdateStatus = markComplete || currentTest?.status !== 'COMPLETED'
+    if (shouldUpdateStatus) {
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: { status: newStudyStatus },
+      })
+    }
 
     // DEC-20260825-19 / FND-20260825-22 / BR-20260825-20:
     // Completar NO firma ni emite MedicalVerdict. Sólo lleva el
@@ -245,36 +275,39 @@ export async function saveExamenMedicoPapeleta(
       })
     }
 
-    const aiResult = await triggerStructuredStudyAIPrediagnosis({
-      eventTestId,
-      eventId,
-      studyType: 'ExamenMedico',
-      extractedData: data as Record<string, unknown>,
-    })
+    let aiWarning: string | undefined
+    if (!autosave) {
+      const aiResult = await triggerStructuredStudyAIPrediagnosis({
+        eventTestId,
+        eventId,
+        studyType: 'ExamenMedico',
+        extractedData: data as Record<string, unknown>,
+      })
+      aiWarning = aiResult.success ? undefined : aiResult.error
 
-    await prisma.eventTest.update({
-      where: { id: eventTestId },
-      data: {
-        resultNotes: buildStructuredAIResultNote({
-          success: aiResult.success,
-          studyLabel: 'Examen Médico',
-          summary: aiResult.summary ?? null,
-          clinicalState: aiResult.clinicalState ?? null,
-          error: aiResult.error ?? null,
-        }),
-      },
-    })
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: {
+          resultNotes: buildStructuredAIResultNote({
+            success: aiResult.success,
+            studyLabel: 'Examen Médico',
+            summary: aiResult.summary ?? null,
+            clinicalState: aiResult.clinicalState ?? null,
+            error: aiResult.error ?? null,
+          }),
+        },
+      })
 
-    revalidatePath(`/events/${eventId}`)
+      revalidatePath(`/events/${eventId}`)
 
-    // IMPL-20260507-08: Entrada automática en cronograma (ARCH-20260507-08)
-    await writeTimelineEntry({
-      eventId,
-      eventTestId,
-      entryType: 'MEDICAL_EXAM_SAVED',
-      area: 'Examen Médico',
-      title: markComplete ? 'Examen médico completado' : 'Examen médico guardado',
-    })
+      await writeTimelineEntry({
+        eventId,
+        eventTestId,
+        entryType: 'MEDICAL_EXAM_SAVED',
+        area: 'Examen Médico',
+        title: markComplete ? 'Examen médico completado' : 'Examen médico guardado',
+      })
+    }
 
     // Devolvemos `status` (Event) además de `studyStatus` (EventTest) para
     // que el caller (PapeletaWorkspace / ExamenMedicoEstudio) pueda
@@ -284,8 +317,8 @@ export async function saveExamenMedicoPapeleta(
       // Event status: 'VALIDATING' si completar, sin cambio si borrador.
       // Usamos `null` para borrador porque no tocamos el Event.
       status: markComplete ? 'VALIDATING' : null,
-      studyStatus: newStudyStatus,
-      aiWarning: aiResult.success ? undefined : aiResult.error,
+      studyStatus: shouldUpdateStatus ? newStudyStatus : (currentTest?.status ?? newStudyStatus),
+      aiWarning,
     }
   } catch (error: unknown) {
     console.error("Error saving examen médico papeleta:", error)
