@@ -7,7 +7,10 @@ import { createWorker, updateWorker } from '@/actions/worker.actions'
 import { useRouter } from 'next/navigation'
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 import { isPublicGeneralCompany } from '@/lib/public-general-company'
-import { createPublicGeneralQuickProfile } from '@/actions/medical-profiles'
+import {
+  createPublicGeneralQuickProfile,
+  getMedicalProfilesForCompany,
+} from '@/actions/medical-profiles'
 import PublicGeneralProfilePicker, {
   type AvailableTestOption,
   type ProfileMode,
@@ -95,15 +98,6 @@ interface WorkerFormModalProps {
     stacked?: boolean
 }
 
-function profilesForCompany(
-    profiles: MedicalProfileOption[],
-    companyId: string
-): MedicalProfileOption[] {
-    return profiles.filter(
-        (p) => p.companyId === companyId || p.companyId === null
-    )
-}
-
 export default function WorkerFormModal({
     companies,
     medicalProfiles,
@@ -138,9 +132,16 @@ export default function WorkerFormModal({
     const [pgQuickTestIds, setPgQuickTestIds] = useState<string[]>([])
     const [pgCustomProfileName, setPgCustomProfileName] = useState('')
     const [selectedBranchId, setSelectedBranchId] = useState('')
+    const [companyProfileOptions, setCompanyProfileOptions] = useState<MedicalProfileOption[]>([])
+    const [profilesLoading, setProfilesLoading] = useState(false)
     const router = useRouter()
 
     const isCreateMode = !workerToEdit
+    const effectiveCompanyId =
+        selectedCompanyId ||
+        (lockCompany && defaultCompanyId ? defaultCompanyId : '') ||
+        workerToEdit?.companyId ||
+        ''
     const accentBarClass = workerToEdit ? 'bg-amber-500' : publicGeneralMode ? 'bg-teal-500' : 'bg-blue-500'
     const submitButtonClass = workerToEdit
         ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100'
@@ -195,9 +196,52 @@ export default function WorkerFormModal({
         setContactPhone(company.phone || '')
     }, [selectedCompanyId, companies, isCreateMode, publicGeneralMode])
 
-    const filteredMedicalProfiles = selectedCompanyId
-        ? profilesForCompany(medicalProfiles, selectedCompanyId)
-        : []
+    useEffect(() => {
+        if (!modalOpen || publicGeneralMode) {
+            setCompanyProfileOptions([])
+            return
+        }
+        if (!effectiveCompanyId) {
+            setCompanyProfileOptions([])
+            return
+        }
+
+        let cancelled = false
+        setProfilesLoading(true)
+        getMedicalProfilesForCompany(effectiveCompanyId)
+            .then((rows) => {
+                if (cancelled) return
+                setCompanyProfileOptions(
+                    rows.map((p) => ({
+                        id: p.id,
+                        name: p.name,
+                        companyId: p.companyId,
+                    })),
+                )
+            })
+            .catch(() => {
+                if (!cancelled) setCompanyProfileOptions([])
+            })
+            .finally(() => {
+                if (!cancelled) setProfilesLoading(false)
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [modalOpen, publicGeneralMode, effectiveCompanyId])
+
+    useEffect(() => {
+        if (!modalOpen || publicGeneralMode || !selectedMedicalProfileId) return
+        if (!companyProfileOptions.some((p) => p.id === selectedMedicalProfileId)) {
+            setSelectedMedicalProfileId('')
+        }
+    }, [companyProfileOptions, modalOpen, publicGeneralMode, selectedMedicalProfileId])
+
+    const companySpecificProfiles = companyProfileOptions.filter(
+        (p) => p.companyId === effectiveCompanyId,
+    )
+    const globalProfiles = companyProfileOptions.filter((p) => p.companyId === null)
 
     function handleOpen() {
         setInternalOpen(true)
@@ -565,7 +609,7 @@ export default function WorkerFormModal({
 
                             {publicGeneralMode && !workerToEdit ? (
                                 <>
-                                    <input type="hidden" name="companyId" value={selectedCompanyId} />
+                                    <input type="hidden" name="companyId" value={effectiveCompanyId} />
                                     <div className="rounded-xl border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
                                         Empresa fija: <strong>Público General</strong>
                                     </div>
@@ -610,10 +654,10 @@ export default function WorkerFormModal({
                                 <>
                                     {!publicGeneralMode || workerToEdit ? (
                                         publicGeneralMode && workerToEdit ? (
-                                            <input type="hidden" name="companyId" value={selectedCompanyId} />
+                                            <input type="hidden" name="companyId" value={effectiveCompanyId} />
                                         ) : lockCompany && defaultCompanyId && !workerToEdit ? (
                                             <>
-                                                <input type="hidden" name="companyId" value={selectedCompanyId} />
+                                                <input type="hidden" name="companyId" value={effectiveCompanyId} />
                                                 <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
                                                     Empresa:{' '}
                                                     <strong>
@@ -649,17 +693,37 @@ export default function WorkerFormModal({
                                             name="medicalProfileId"
                                             value={selectedMedicalProfileId}
                                             onChange={e => setSelectedMedicalProfileId(e.target.value)}
-                                            disabled={!selectedCompanyId}
-                                            required={!!selectedCompanyId}
+                                            disabled={!effectiveCompanyId || profilesLoading}
+                                            required={!!effectiveCompanyId}
                                             className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-500 p-3 rounded-xl text-sm outline-none appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             <option value="">
-                                                {selectedCompanyId ? '-- Seleccionar Perfil --' : '← Selecciona primero una empresa'}
+                                                {!effectiveCompanyId
+                                                    ? '← Selecciona primero una empresa'
+                                                    : profilesLoading
+                                                        ? 'Cargando perfiles…'
+                                                        : '-- Seleccionar Perfil --'}
                                             </option>
-                                            {filteredMedicalProfiles.map(p => (
-                                                <option key={p.id} value={p.id}>{p.name}</option>
-                                            ))}
+                                            {companySpecificProfiles.length > 0 && (
+                                                <optgroup label="Perfiles de esta empresa">
+                                                    {companySpecificProfiles.map((p) => (
+                                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                                    ))}
+                                                </optgroup>
+                                            )}
+                                            {globalProfiles.length > 0 && (
+                                                <optgroup label="Perfiles globales">
+                                                    {globalProfiles.map((p) => (
+                                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                                    ))}
+                                                </optgroup>
+                                            )}
                                         </select>
+                                        {effectiveCompanyId && !profilesLoading && companyProfileOptions.length === 0 && (
+                                            <p className="text-[10px] text-amber-600 ml-1">
+                                                Esta empresa no tiene perfiles médicos. Créalos en la ficha de la empresa.
+                                            </p>
+                                        )}
                                     </div>
                                 </>
                             )}
