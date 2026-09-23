@@ -30,6 +30,15 @@ def _read_env_var(key: str) -> str | None:
     return None
 
 
+# M3-only extracción: reintentos ante salida no-JSON (p. ej. bloques ).
+M3_JSON_MAX_ATTEMPTS = 3
+M3_JSON_RETRY_SUFFIX = (
+    "\n\nREGLA FINAL OBLIGATORIA: Devuelve ÚNICAMENTE un objeto JSON válido. "
+    "Sin markdown, sin comentarios, sin bloques de razonamiento del modelo, "
+    "sin texto explicativo antes ni después del JSON."
+)
+
+
 async def _resolve_key_for(provider: str) -> KeyResolution:
     """
     IMPL-20260809-06 — Resuelve la key de un proveedor vía key_resolver singleton.
@@ -85,12 +94,55 @@ class GeminiBase:
         return "\n".join(fragments).strip()
 
     @staticmethod
+    def _strip_llm_reasoning_blocks(text: str) -> str:
+        """
+        Elimina bloques de razonamiento del modelo (MiniMax M3 a veces los emite
+        aun con response_format=json_object). Conserva el JSON si viene después.
+        """
+        if not text:
+            return text
+        cleaned = text
+        _ot = chr(60)  # <
+        _ct = chr(62)  # >
+        think_block = (
+            _ot + "think" + _ct + r".*?" + _ot + "/think" + _ct
+        )
+        cleaned = re.sub(
+            think_block,
+            "",
+            cleaned,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"<think>.*?</think>",
+            "",
+            cleaned,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        # Bloque de thinking truncado (sin cierre): cortar en el primer `{`.
+        truncated_prefix = (
+            r"^\s*(?:"
+            + _ot
+            + "think"
+            + _ct
+            + r"|"
+            + r"<think>"
+            + r")"
+        )
+        if re.match(truncated_prefix, cleaned, re.IGNORECASE):
+            brace = cleaned.find("{")
+            if brace != -1:
+                cleaned = cleaned[brace:]
+        return cleaned.strip()
+
+    @staticmethod
     def _sanitize_model_json_text(text: str) -> str:
         """
         IMPL-20260603-01. Respaldo: context/SPECs/SPEC_FIX-20260603-04-FEATHERLESS-CONTENT-NORMALIZATION.md.
         Remueve fences Markdown y tokens de relleno antes del parseo tolerante.
         """
         cleaned_text = text or ""
+        cleaned_text = GeminiBase._strip_llm_reasoning_blocks(cleaned_text)
         cleaned_text = re.sub(r"^\s*(?:<pad>\s*)+", "", cleaned_text, flags=re.IGNORECASE)
         cleaned_text = cleaned_text.replace("```json", "").replace("```JSON", "")
         cleaned_text = cleaned_text.replace("```", "")
@@ -740,24 +792,8 @@ class M3VisionBase:
         with open(file_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode("utf-8")
 
-    def call_m3(self, file_path: str, prompt: str) -> Dict[str, Any]:
-        """
-        Llama a MiniMax M3 con imagen + prompt y retorna JSON parseado.
-        ARCH-20260809-02: único punto de entrada al proveedor M3.
-
-        IMPL-20260809-06: refresca keys vía resolver al inicio.
-
-        Protocolo:
-          - Convierte el archivo a base64 JPEG.
-          - Llama al modelo con content multimodal (texto + image_url base64).
-          - Parsea la respuesta como JSON con tolerancia a texto extra.
-
-        Raises:
-            RuntimeError: Si openai SDK no está instalado.
-            Exception:    Si M3 devuelve error HTTP o la respuesta no es JSON.
-            No devuelve dict vacío ante fallo — propaga la excepción para que
-            el dispatcher de ExtractorService decida si dispara fallback a Gemini.
-        """
+    def _call_m3_completion(self, file_path: str, prompt: str) -> str:
+        """Una llamada HTTP a M3; retorna texto crudo del modelo."""
         self._refresh_keys()
         # FIX-20260812-14: si tras `_refresh_keys()` la key sigue vacía, NO
         # instanciar el cliente OpenAI. Antes, `OpenAI(api_key="", base_url=...)`
@@ -838,17 +874,43 @@ class M3VisionBase:
             print(f"❌ M3 Vision Error: {type(e).__name__}")
             raise
 
-        # Reutiliza los helpers de GeminiBase (mismo formato OpenAI-compatible).
-        raw_text = GeminiBase._sanitize_model_json_text(
-            GeminiBase._extract_openai_choice_text(
-                response.choices[0] if response.choices else None
-            )
+        raw_text = GeminiBase._extract_openai_choice_text(
+            response.choices[0] if response.choices else None
         )
-        if not raw_text:
+        if not (raw_text or "").strip():
             raise ValueError("Respuesta M3 vacía o sin bloques de texto recuperables")
+        return raw_text
 
+    def _parse_m3_json_response(self, raw_text: str) -> Dict[str, Any]:
+        sanitized = GeminiBase._sanitize_model_json_text(raw_text)
+        if not sanitized:
+            raise ValueError("Respuesta M3 vacía tras saneamiento")
         try:
-            return M3VisionBase._tolerant_json_parse(raw_text)
+            return M3VisionBase._tolerant_json_parse(sanitized)
         except ValueError as e:
-            print(f"❌ Error parseando JSON de M3: {raw_text[:300]!r}")
+            print(f"❌ Error parseando JSON de M3: {sanitized[:300]!r}")
             raise ValueError(f"Respuesta de M3 no es JSON válido: {e}") from e
+
+    def call_m3(self, file_path: str, prompt: str) -> Dict[str, Any]:
+        """
+        Llama a MiniMax M3 con imagen + prompt y retorna JSON parseado.
+        Reintenta hasta M3_JSON_MAX_ATTEMPTS si la salida no es JSON parseable.
+        """
+        last_json_err: Optional[ValueError] = None
+        for attempt in range(1, M3_JSON_MAX_ATTEMPTS + 1):
+            effective_prompt = prompt
+            if attempt > 1:
+                effective_prompt = f"{prompt}{M3_JSON_RETRY_SUFFIX}"
+            try:
+                raw = self._call_m3_completion(file_path, effective_prompt)
+                return self._parse_m3_json_response(raw)
+            except ValueError as e:
+                if "no es JSON" not in str(e) and "Respuesta M3 vacía" not in str(e):
+                    raise
+                last_json_err = e
+                print(
+                    f"⚠️ M3 extracción no-JSON (intento {attempt}/"
+                    f"{M3_JSON_MAX_ATTEMPTS}); reintentando…"
+                )
+        assert last_json_err is not None
+        raise last_json_err

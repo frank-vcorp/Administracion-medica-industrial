@@ -39,6 +39,47 @@ from app.schemas.medical import (
 EXTRACTION_PROVIDERS = frozenset({"gemini", "m3"})
 
 
+def _coerce_extraction_provider_m3_only(provider: str) -> str:
+    """Política producto: extracción documental solo con MiniMax M3."""
+    if provider == "gemini":
+        print(
+            "ℹ️ [M3-ONLY] Calibración/override pedía 'gemini'; "
+            "usando 'm3' (sin fallback ni segundo proveedor)."
+        )
+        return "m3"
+    return provider
+
+
+def _effective_extraction_model(provider: str, model: Optional[str]) -> str:
+    """Evita enviar modelos Gemini cuando la política forzó provider=m3."""
+    if provider != "m3":
+        return model or os.environ.get("GEMINI_MODEL_EXTRACTION", "gemini-2.5-flash")
+    if not model or "gemini" in str(model).lower():
+        return os.environ.get("M3_DEFAULT_MODEL", "MiniMax-M3")
+    return model
+
+
+def _coerce_audiometry_threshold_value(value: Any) -> Optional[int]:
+    """Normaliza umbrales TA/VO; tolera números anidados en dict del LLM."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        for key in ("value", "db", "umbral", "threshold", "hl", "dB"):
+            if key in value and value[key] is not None:
+                return _coerce_audiometry_threshold_value(value[key])
+        for nested in value.values():
+            coerced = _coerce_audiometry_threshold_value(nested)
+            if coerced is not None:
+                return coerced
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        return int(str(value).strip())
+    except (ValueError, TypeError):
+        return None
+
+
 # ARCH-20260809-02: Excepciones de control del dispatcher (no son errores de upstream;
 # el caller las trata de forma específica para devolver trazabilidad y status code).
 class ExtractionProviderUnknownError(ValueError):
@@ -356,11 +397,12 @@ notas de calidad y gráficas.
         # 1. Normalizar: str keys, int values, omitir nulos
         for ear_key in ("oido_derecho", "oido_izquierdo"):
             if isinstance(result.get(ear_key), dict):
-                result[ear_key] = {
-                    str(k): int(v)
-                    for k, v in result[ear_key].items()
-                    if v is not None
-                }
+                normalized_ear: Dict[str, int] = {}
+                for k, v in result[ear_key].items():
+                    coerced = _coerce_audiometry_threshold_value(v)
+                    if coerced is not None:
+                        normalized_ear[str(k)] = coerced
+                result[ear_key] = normalized_ear
 
         # 2. Derivar frecuencias_detectadas si null
         if not result.get("frecuencias_detectadas"):
@@ -745,7 +787,10 @@ notas de calidad y gráficas.
                     f"EXTRACTION_PROVIDER_UNKNOWN: proveedor '{override_provider}' "
                     "no soportado. Usa 'gemini' o 'm3'."
                 )
-            return override_provider, override_model or self._default_model_for(override_provider)
+            provider = _coerce_extraction_provider_m3_only(override_provider)
+            return provider, _effective_extraction_model(
+                provider, override_model or self._default_model_for(provider)
+            )
 
         # 2. aiCalibration.extraction
         extraction_cfg = (calibration or {}).get("extraction") or {}
@@ -756,12 +801,14 @@ notas de calidad y gráficas.
                     f"EXTRACTION_PROVIDER_UNKNOWN: aiCalibration.extraction.provider "
                     f"'{cfg_provider}' no soportado. Usa 'gemini' o 'm3'."
                 )
-            cfg_model = (
+            provider = _coerce_extraction_provider_m3_only(cfg_provider)
+            cfg_model = _effective_extraction_model(
+                provider,
                 override_model
                 or extraction_cfg.get("model")
-                or self._default_model_for(cfg_provider)
+                or self._default_model_for(provider),
             )
-            return cfg_provider, cfg_model
+            return provider, cfg_model
 
         # 3. Default global persistido en AppConfig (ARCH-20260809-05).
         # Si AppConfig no existe / valor inválido / BD caída → fallback "gemini"
@@ -779,7 +826,10 @@ notas de calidad y gráficas.
             default_provider = EXTRACTION_DEFAULT_PROVIDER_FALLBACK
         if default_provider not in EXTRACTION_PROVIDERS:
             default_provider = EXTRACTION_DEFAULT_PROVIDER_FALLBACK
-        return default_provider, override_model or self._default_model_for(default_provider)
+        provider = _coerce_extraction_provider_m3_only(default_provider)
+        return provider, _effective_extraction_model(
+            provider, override_model or self._default_model_for(provider)
+        )
 
     def _is_m3_unavailable(self, provider: str) -> bool:
         """
@@ -807,8 +857,8 @@ notas de calidad y gráficas.
         selected_study_type: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], str, Optional[str]]:
         """
-        ARCH-20260809-02: Ejecuta la llamada al proveedor resolviendo fallback
-        M3→Gemini según los triggers del SPEC §7.
+        ARCH-20260809-02 / M3-ONLY: Ejecuta la extracción únicamente vía MiniMax M3
+        (sin fallback a Gemini).
 
         IMPL-20260809-06: stashes `key_source` y `key_resolution_warning` del
         proveedor que efectivamente respondió en `self._last_call_key_source`
@@ -818,27 +868,23 @@ notas de calidad y gráficas.
             (extracted_dict, provider_used, fallback_reason)
             - extracted_dict: resultado parseado (dict).
             - provider_used: 'gemini' o 'm3' (el que efectivamente respondió).
-            - fallback_reason: None o uno de ('m3_5xx', 'm3_timeout',
-              'm3_4xx_persistent', 'm3_not_configured').
+            - fallback_reason: siempre None (política M3-only).
 
         Raises:
             ExtractionProviderUnknownError: Si provider no reconocido.
             ExtractionAuthError: Si M3 responde 401/403 (sin fallback).
-            Exception: Si provider='gemini' falla (sin fallback por contrato).
+            Exception: Si M3 falla (sin segundo proveedor).
         """
+        provider = _coerce_extraction_provider_m3_only(provider)
+        if provider != "m3":
+            raise ExtractionProviderUnknownError(
+                f"EXTRACTION_PROVIDER_UNKNOWN: solo 'm3' está habilitado; "
+                f"recibido '{provider}'."
+            )
+
         # Inicializa el stash por-provider para trazabilidad de key.
         if not hasattr(self, "_last_call_key_source"):
             self._last_call_key_source = {}
-
-        # Caso especial: provider=m3 sin M3_API_KEY → fallback inmediato.
-        if provider == "m3" and self._is_m3_unavailable(provider):
-            print("⚠️ [ARCH-20260809-02] M3 no configurado → fallback a Gemini")
-            result = self.call_gemini(file_path, prompt)
-            self._last_call_key_source["gemini"] = (
-                getattr(self, "key_source", None),
-                getattr(self, "key_resolution_warning", None),
-            )
-            return result, "gemini", "m3_not_configured"
 
         if provider == "m3":
             try:
@@ -892,79 +938,17 @@ notas de calidad y gráficas.
                     reason="credentials_unavailable",
                 ) from creds_err
             except Exception as e:
-                # Detectar tipo de error para clasificar el fallback.
                 fallback_reason = _classify_m3_failure(e)
-                if fallback_reason is None:
-                    # Es un error que NO es trigger de fallback
-                    # (ej. JSON no parseable → propagar).
-                    raise
-                # M3_AUTH_ERROR (401/403): error explícito, sin fallback.
                 if fallback_reason == "m3_auth":
                     raise ExtractionAuthError(
                         f"M3_AUTH_ERROR: credenciales M3 inválidas o sin permisos "
                         f"({type(e).__name__}). Verifica M3_API_KEY y permisos del plan Pro."
                     ) from e
-                print(
-                    f"⚠️ [ARCH-20260809-02] M3 falló ({fallback_reason}) "
-                    "→ fallback a Gemini"
-                )
-                result = self.call_gemini(file_path, prompt)
-                self._last_call_key_source["gemini"] = (
-                    getattr(self, "key_source", None),
-                    getattr(self, "key_resolution_warning", None),
-                )
-                return result, "gemini", fallback_reason
+                raise
 
-        # provider == "gemini": sin fallback por contrato.
-        # FIX-20260810-05: si Gemini responde 401/403, envolver en
-        # ExtractionAuthError(provider="gemini") para que la capa HTTP
-        # boundary (calibration.py) responda 503 con error_code accionable
-        # (`GEMINI_API_KEY_EXPIRED`) en lugar del 500 opaco previo.
-        try:
-            result = self.call_gemini(file_path, prompt)
-        except ValueError as gemini_json_err:
-            # SPEC-FIX-20260824-01: paridad con M3 — clasificar rechazos de
-            # modalidad del proveedor Gemini como STUDY_TYPE_MISMATCH.
-            # Gemini NO tiene fallback por contrato; si la detección dispara,
-            # propagamos la StudyTypeMismatchError sin fallback.
-            raw_response = extract_raw_response_text_from_value_error(gemini_json_err)
-            assessment = detect_study_type_mismatch(raw_response, selected_study_type)
-            if assessment.is_mismatch:
-                msg = build_user_facing_message(
-                    assessment.selected_study_type,
-                    assessment.detected_study_type,
-                )
-                raise StudyTypeMismatchError(
-                    selected_study_type=assessment.selected_study_type,
-                    detected_study_type=assessment.detected_study_type,
-                    provider="gemini",
-                    provider_text=raw_response,
-                    message=msg,
-                ) from gemini_json_err
-            raise
-        except Exception as gemini_err:
-            status_code = getattr(gemini_err, "response", None)
-            status_code = getattr(status_code, "status_code", None) if status_code is not None else None
-            if status_code is None:
-                # Algunas libs (urllib3) exponen `.status` en el error.
-                status_code = getattr(gemini_err, "status", None)
-            if status_code in (401, 403):
-                # Sanitizar: NO incluir `str(gemini_err)` porque la URL de
-                # Gemini contiene la key como query param (?key=AIzaSy...).
-                # Sólo exponer tipo + status (B-6).
-                raise ExtractionAuthError(
-                    message=(
-                        f"GEMINI_API_KEY_REVOKED: Gemini respondió HTTP {status_code}. "
-                        "Rota la key en /admin/ai-keys o cambia el proveedor de extracción."
-                    ),
-                    provider="gemini",
-                ) from gemini_err
-            raise
-        self._last_call_key_source["gemini"] = (
-            getattr(self, "key_source", None),
-            getattr(self, "key_resolution_warning", None),
+        raise ExtractionProviderUnknownError(
+            "EXTRACTION_PROVIDER_UNKNOWN: dispatcher M3-only sin ruta alternativa."
         )
-        return result, "gemini", None
 
     def extract_by_type(
         self,
@@ -982,8 +966,8 @@ notas de calidad y gráficas.
         No existe fallback de extracción en el backend.
 
         ARCH-20260809-02: Selector multi-proveedor con override por payload.
-        Precedencia: override > aiCalibration.extraction > default 'gemini'.
-        Política de fallback unidireccional M3 → Gemini (triggers en _call_with_dispatch).
+        Precedencia: override > aiCalibration.extraction > default AppConfig (m3).
+        Política M3-only: sin fallback a Gemini; reintentos JSON en M3VisionBase.call_m3.
 
         Args:
             file_path:                  Ruta del archivo
