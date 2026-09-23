@@ -12,9 +12,9 @@ from app.services.pdf.espirometry_source_crop import file_url_to_storage_key
 
 AUDIOMETRY_CROP_SUBDIR = "audiometry-crops"
 AUDIOMETRY_RENDER_DPI = 150
-AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO = 0.19
+AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO = 0.27
 AUDIOMETRY_DD65_AUDIOGRAM_Y1_RATIO = 0.71
-AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID = "dd65-audiogram-tono-puro-v2"
+AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID = "dd65-audiogram-tono-puro-v3"
 
 
 def audiometry_crop_output_key(event_test_id: str) -> str:
