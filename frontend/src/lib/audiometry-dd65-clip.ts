@@ -1,13 +1,15 @@
 /**
- * Recorte vertical del PDF DD65 V2: desde el título «Audiograma Tono Puro»
- * hasta justo antes del bloque «Notas:» (gráficas bilaterales + tabla central).
+ * Recorte vertical del PDF DD65 V2 (p. ej. `audio normal.pdf`):
+ *   - Inicio: título «Audiograma Tono Puro» (sin datos del paciente arriba).
+ *   - Fin: justo antes de «Descripción» / «DESCRIPCIÓN AUDIOMÉTRICA».
  *
- * Calibrado con reportes AMI / capturas de Frank (FND-20260825-05, 2026-08-25).
- * Ratios sobre la página 1 rasterizada a ancho completo.
+ * Ratios sobre la página 1 rasterizada a ancho completo @ AUDIOMETRY_RENDER_DPI.
+ * Carta ≈ 612×792 pt; estos ratios equivalen ~150–560 pt desde el borde superior
+ * del bitmap (Y crece hacia abajo en el PNG).
  */
-export const AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO = 0.035
-export const AUDIOMETRY_DD65_AUDIOGRAM_Y1_RATIO = 0.87
+export const AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO = 0.19
+export const AUDIOMETRY_DD65_AUDIOGRAM_Y1_RATIO = 0.71
 
-export const AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID = 'dd65-audiogram-tono-puro-v1'
+export const AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID = 'dd65-audiogram-tono-puro-v2'
 
 export const AUDIOMETRY_RENDER_DPI = 150

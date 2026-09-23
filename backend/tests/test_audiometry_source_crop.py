@@ -41,5 +41,5 @@ def test_crop_audiometry_audiogram_band_from_pdf():
     assert img.width > 50
     assert img.height > 50
     assert img.height < 5000
-    assert AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO == 0.035
-    assert AUDIOMETRY_DD65_AUDIOGRAM_Y1_RATIO == 0.87
+    assert AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO == 0.19
+    assert AUDIOMETRY_DD65_AUDIOGRAM_Y1_RATIO == 0.71
