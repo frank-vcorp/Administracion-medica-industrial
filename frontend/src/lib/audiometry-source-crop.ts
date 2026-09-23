@@ -80,6 +80,66 @@ async function readSourceCropPngBuffer(
   }
 }
 
+async function cropViaBackend(
+  eventTestId: string,
+  fileUrl: string,
+): Promise<AudiometrySourceCropMeta | null> {
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    ''
+
+  const endpoint = apiBase
+    ? `${apiBase.replace(/\/+$/, '')}/api/v2/event-tests/audiometry-source-crop`
+    : '/api/v2/event-tests/audiometry-source-crop'
+
+  try {
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'AMI-Audiometry-Crop/1.0',
+      },
+      body: JSON.stringify({
+        event_test_id: eventTestId,
+        file_url: fileUrl,
+      }),
+    })
+
+    if (!resp.ok) {
+      console.warn(
+        '[audiometry-crop] Backend respondió',
+        resp.status,
+        await resp.text().catch(() => ''),
+      )
+      return null
+    }
+
+    const payload = (await resp.json()) as {
+      status?: string
+      relative_path?: string
+      file_url?: string
+      template_id?: string
+      generated_at?: string
+    }
+
+    if (payload.status !== 'success' || !payload.relative_path) {
+      return null
+    }
+
+    return {
+      relativePath: payload.relative_path,
+      fileUrl: payload.file_url ?? `/api/files/${payload.relative_path}`,
+      templateId: AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID,
+      generatedAt: payload.generated_at ?? new Date().toISOString(),
+    }
+  } catch (err) {
+    console.warn('[audiometry-crop] Backend no disponible:', err)
+    return null
+  }
+}
+
 export async function cropAudiometryAudiogramFromPdfLocal(
   pdfBuffer: Buffer,
 ): Promise<Buffer> {
@@ -175,17 +235,21 @@ export async function ensureAudiometrySourceCrop(
     return null
   }
 
-  const pdfBytes = await readEventTestSourcePdfBytes(fileUrl)
-  if (!pdfBytes) return null
+  let meta =
+    (await cropViaBackend(eventTestId, fileUrl)) ??
+    (await (async () => {
+      const pdfBytes = await readEventTestSourcePdfBytes(fileUrl)
+      if (!pdfBytes) return null
+      try {
+        const pngBuffer = await cropAudiometryAudiogramFromPdfLocal(pdfBytes)
+        return await persistAudiometrySourceCropPng(eventTestId, pngBuffer)
+      } catch (err) {
+        console.warn('[audiometry-crop] Recorte local falló:', err)
+        return null
+      }
+    })())
 
-  let meta: AudiometrySourceCropMeta | null = null
-  try {
-    const pngBuffer = await cropAudiometryAudiogramFromPdfLocal(pdfBytes)
-    meta = await persistAudiometrySourceCropPng(eventTestId, pngBuffer)
-  } catch (err) {
-    console.warn('[audiometry-crop] Recorte local falló:', err)
-    return null
-  }
+  if (!meta) return null
 
   await prisma.eventTest.update({
     where: { id: eventTestId },

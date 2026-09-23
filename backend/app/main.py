@@ -1914,6 +1914,69 @@ class EspirometrySourceCropRequest(BaseModel):
     file_url: str
 
 
+class AudiometrySourceCropRequest(BaseModel):
+    event_test_id: str
+    file_url: str
+
+
+@app.post("/api/v2/event-tests/audiometry-source-crop")
+async def v2_event_test_audiometry_source_crop(body: AudiometrySourceCropRequest):
+    """
+    Genera el recorte PNG del audiograma tonal (DD65) en la primera página.
+    Corre en Railway (poppler + Pillow). Ratios Y0/Y1 alineados con el frontend.
+    """
+    from app.services.pdf.audiometry_source_crop import (
+        AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID,
+        audiometry_crop_output_key,
+        crop_audiometry_audiogram_band_from_pdf,
+        file_url_to_storage_key,
+    )
+
+    event_test_id = (body.event_test_id or "").strip()
+    if not event_test_id:
+        raise HTTPException(status_code=400, detail="event_test_id es obligatorio")
+
+    source_key = file_url_to_storage_key(body.file_url)
+    if not source_key:
+        raise HTTPException(status_code=400, detail="file_url inválida")
+
+    pdf_bytes: Optional[bytes] = _download_file_from_s3(source_key)
+    if pdf_bytes is None:
+        local_path = os.path.join(UPLOAD_DIR, source_key)
+        if os.path.isfile(local_path):
+            with open(local_path, "rb") as fh:
+                pdf_bytes = fh.read()
+
+    if not pdf_bytes:
+        raise HTTPException(status_code=404, detail="PDF fuente no encontrado")
+
+    try:
+        png_bytes = crop_audiometry_audiogram_band_from_pdf(pdf_bytes)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Recorte audiometría falló: {_sanitize_error(str(e))}",
+        ) from e
+
+    out_key = audiometry_crop_output_key(event_test_id)
+    if _s3_enabled and _upload_file_to_s3(png_bytes, out_key):
+        file_url = f"/api/files/{out_key}"
+    else:
+        local_out = os.path.join(UPLOAD_DIR, out_key)
+        os.makedirs(os.path.dirname(local_out), exist_ok=True)
+        with open(local_out, "wb") as fh:
+            fh.write(png_bytes)
+        file_url = f"/api/files/{out_key}"
+
+    return {
+        "status": "success",
+        "relative_path": out_key,
+        "file_url": file_url,
+        "template_id": AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+
 @app.post("/api/v2/event-tests/espirometry-source-crop")
 async def v2_event_test_espirometry_source_crop(body: EspirometrySourceCropRequest):
     """

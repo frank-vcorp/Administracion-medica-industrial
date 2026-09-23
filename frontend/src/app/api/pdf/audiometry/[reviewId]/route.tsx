@@ -34,6 +34,11 @@ import {
   buildAudiometriaPdfDataAsync,
   resolveAmiLogoDataUrl,
 } from '@/lib/audiometry-pdf'
+import {
+  ensureAudiometrySourceCrop,
+  loadAudiometrySourceCrop,
+  type AudiometrySourceCropMeta,
+} from '@/lib/audiometry-source-crop'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -135,8 +140,28 @@ export async function GET(
   const universalId = eventTest?.event?.worker?.universalId ?? reviewId.slice(0, 8)
   const filename = `Audiometria-${universalId}.pdf`
 
-  // Fast-path: servir desde disco si está persistido.
-  if (review.validatedPdfUrl) {
+  let cropMeta: AudiometrySourceCropMeta | null = null
+  if (eventTest?.id) {
+    try {
+      cropMeta = await ensureAudiometrySourceCrop(eventTest.id)
+    } catch (cropErr) {
+      console.warn('[audiometry-pdf] Recorte fuente antes de PDF:', cropErr)
+    }
+  }
+  const cropPreview =
+    cropMeta ? await loadAudiometrySourceCrop(cropMeta) : null
+  const cropGeneratedAt = cropMeta?.generatedAt
+    ? new Date(cropMeta.generatedAt)
+    : null
+  const pdfGeneratedAt =
+    review.validatedPdfGeneratedAt ?? review.createdAt
+  const pdfIncludesCrop =
+    !!cropPreview &&
+    !!cropGeneratedAt &&
+    pdfGeneratedAt >= cropGeneratedAt
+
+  // Fast-path: sólo si el PDF en disco ya incluye el recorte (posterior al PNG).
+  if (review.validatedPdfUrl && pdfIncludesCrop) {
     try {
       const filePath = path.join(REPO_UPLOAD_DIR, review.validatedPdfUrl)
       const buffer = await readFile(filePath)
