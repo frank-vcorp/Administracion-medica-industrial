@@ -202,7 +202,8 @@ const formatDate = (d: string | Date) => {
 }
 
 const A4_CONTENT_WIDTH_PT = 523
-const SOURCE_IMAGE_MAX_HEIGHT_PT = 360
+/** Techo de altura del recorte embebido (evita 2ª hoja en A4). */
+const SOURCE_IMAGE_MAX_HEIGHT_PT = 300
 
 // FND-20260825-14 / FND-20260825-15 — Retiro de las secciones "Criterio
 // audiométrico AMI (referencia)" (DEC-20260825-10) y "Criterios
@@ -231,7 +232,7 @@ export const AudiometriaValidatedPDF = ({
           SOURCE_IMAGE_MAX_HEIGHT_PT,
           A4_CONTENT_WIDTH_PT / data.sourceCropAspectRatio,
         )
-      : 320
+      : 280
 
   return (
   <Document
