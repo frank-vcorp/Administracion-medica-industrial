@@ -5,6 +5,8 @@ import { useMemo, useState } from 'react'
 
 import type { ValidationStage } from '@/lib/clinical/validation-stage'
 
+import PartialResultSendModal from '@/components/validation/PartialResultSendModal'
+
 export type ValidationQueueRow = {
   eventId: string
   sortDate: string
@@ -22,6 +24,7 @@ export type ValidationQueueRow = {
   completenessLabel: string
   completenessBadgeClass: string
   phone: string | null
+  partialSendEligible: boolean
 }
 
 type CompanyOption = { id: string; name: string }
@@ -44,6 +47,10 @@ interface Props {
 }
 
 export default function ValidationQueueTable({ rows, companies }: Props) {
+  const [partialModal, setPartialModal] = useState<{
+    eventId: string
+    patientName: string
+  } | null>(null)
   const [search, setSearch] = useState('')
   const [companyId, setCompanyId] = useState('')
   const [completenessFilter, setCompletenessFilter] = useState<CompletenessFilter>('ALL')
@@ -76,6 +83,13 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
   }, [rows, search, companyId, completenessFilter, stageFilter])
 
   return (
+    <>
+    <PartialResultSendModal
+      eventId={partialModal?.eventId ?? ''}
+      patientName={partialModal?.patientName ?? ''}
+      open={Boolean(partialModal)}
+      onClose={() => setPartialModal(null)}
+    />
     <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-100 border border-slate-100 overflow-hidden">
       <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex flex-col lg:flex-row gap-3 lg:items-end">
         <div className="flex-1 space-y-1">
@@ -228,6 +242,21 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                     >
                       Revisar
                     </Link>
+                    {row.partialSendEligible && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPartialModal({
+                            eventId: row.eventId,
+                            patientName: row.patientName,
+                          })
+                        }
+                        className="text-sky-700 hover:text-sky-900 text-xs font-semibold hover:underline"
+                        title="Envío manual de resultados de laboratorio (un correo)"
+                      >
+                        Envío parcial
+                      </button>
+                    )}
                     {row.hasMedicalVerdict ? (
                       <>
                         <a
@@ -272,5 +301,6 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
         </tbody>
       </table>
     </div>
+    </>
   )
 }

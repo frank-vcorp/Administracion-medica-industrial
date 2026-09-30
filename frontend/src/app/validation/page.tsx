@@ -22,6 +22,7 @@ import {
   type ValidationStage,
 } from '@/lib/clinical/validation-stage'
 import { formatVisitDuration } from '@/lib/clinical/visit-duration'
+import { evaluatePartialSendEligibility } from '@/lib/clinical/partial-result-send'
 
 async function getValidationQueue() {
   return prisma.medicalEvent.findMany({
@@ -31,6 +32,8 @@ async function getValidationQueue() {
     },
     include: {
       verdict: { select: { id: true } },
+      exam: { select: { physicalExamData: true } },
+      labOrders: { select: { id: true }, take: 1 },
       worker: {
         include: { company: true },
       },
@@ -39,6 +42,13 @@ async function getValidationQueue() {
           id: true,
           testNameSnapshot: true,
           status: true,
+          fileUrl: true,
+          test: {
+            select: {
+              categoryId: true,
+              category: { select: { name: true } },
+            },
+          },
           extractionSnapshots: {
             where: { isSuperseded: false },
             orderBy: { version: 'desc' },
@@ -53,7 +63,11 @@ async function getValidationQueue() {
                   doctorReviews: {
                     orderBy: { createdAt: 'desc' },
                     take: 1,
-                    select: { doctorStatus: true },
+                    select: {
+                      doctorStatus: true,
+                      validatedPdfUrl: true,
+                      validatedPdfError: true,
+                    },
                   },
                 },
               },
@@ -94,6 +108,32 @@ function toValidationRows(
         status: test.status as EventTestPipelineStatus,
         interpretation: interpretationFromEventTest(test),
       }))
+
+      const partialEventTests = event.eventTests.map((test) => {
+        const latestReview = test.extractionSnapshots?.[0]?.aiPrediagnoses?.[0]?.doctorReviews?.[0]
+        const hasValidatedPdf = Boolean(
+          latestReview?.validatedPdfUrl && !latestReview?.validatedPdfError,
+        )
+        return {
+          id: test.id,
+          status: test.status as EventTestPipelineStatus,
+          testNameSnapshot: test.testNameSnapshot,
+          fileUrl: test.fileUrl,
+          test: test.test,
+          interpretation: interpretationFromEventTest(test),
+          hasValidatedPdf,
+        }
+      })
+      const physicalExamData =
+        event.exam?.physicalExamData && typeof event.exam.physicalExamData === 'object'
+          ? (event.exam.physicalExamData as Record<string, unknown>)
+          : null
+      const partialGate = evaluatePartialSendEligibility({
+        eventTests: partialEventTests,
+        examPhysicalExamData: physicalExamData,
+        hasLabOrder: event.labOrders.length > 0,
+        notPerformedTestIds: notPerformedIds,
+      })
       const stage = getValidationStage(eventTests, notPerformedIds)
       const completeness = getEventCompletenessFromSteps(eventTests, notPerformedIds)
       const sortDate = (event.dischargedAt ?? event.checkInDate ?? event.updatedAt).toISOString()
@@ -122,6 +162,7 @@ function toValidationRows(
         completenessLabel: EVENT_COMPLETENESS_LABELS[completeness],
         completenessBadgeClass: EVENT_COMPLETENESS_BADGE[completeness],
         phone: event.worker.phone,
+        partialSendEligible: partialGate.eligible,
       }
     })
     .sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())

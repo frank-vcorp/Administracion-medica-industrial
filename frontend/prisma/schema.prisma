@@ -88,6 +88,7 @@ model User {
   // después.
   professionalLicense       String?
   signatureImageUrl         String?
+  resultDeliveryLogs        ResultDeliveryLog[]       @relation("ResultDeliverySender")
 
   @@map("users")
 }
@@ -447,8 +448,25 @@ model MedicalEvent {
   // (accesibles por la consulta Prisma anidada; no requiere relation directa
   //  porque el modelo MedicalEvent no tiene FK explícita a LabResult)
   satisfactionSurveys   SatisfactionSurvey[]
+  resultDeliveryLogs  ResultDeliveryLog[]
 
   @@map("medical_events")
+}
+
+/// DEC-20260930-01: auditoría de envíos parciales de resultados (laboratorio).
+model ResultDeliveryLog {
+  id              String       @id @default(uuid())
+  medicalEventId  String
+  medicalEvent    MedicalEvent @relation(fields: [medicalEventId], references: [id], onDelete: Cascade)
+  mode            String       @default("PARTIAL_LAB")
+  eventTestIds    Json
+  recipientEmails Json
+  sentAt          DateTime     @default(now())
+  sentByUserId    String?
+  sentByUser      User?        @relation("ResultDeliverySender", fields: [sentByUserId], references: [id], onDelete: SetNull)
+
+  @@index([medicalEventId, sentAt])
+  @@map("result_delivery_logs")
 }
 
 model MedicalExam {
