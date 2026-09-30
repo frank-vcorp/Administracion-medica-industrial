@@ -374,7 +374,29 @@ test.describe('Flujo End-to-End Completo', () => {
       buffer: dummyFile,
     });
 
-    const confirmButton = corroborationModal.getByRole('button', { name: /confirmar y hacer check-in/i });
+    await corroborationModal.getByRole('button', { name: /continuar al consentimiento/i }).click();
+    await expect(
+      authenticatedPage.getByRole('heading', { name: 'Consentimiento Informado' }),
+    ).toBeVisible({ timeout: 15000 });
+    await corroborationModal.getByRole('checkbox', { name: /doy mi consentimiento/i }).check();
+    await corroborationModal.getByRole('checkbox', { name: /confirmo que he leído/i }).check();
+    await corroborationModal
+      .getByRole('checkbox', { name: /confirmo que mis datos son correctos/i })
+      .check();
+    const canvas = corroborationModal.locator('.border-dashed.border-violet-200 canvas').first();
+    await expect(canvas).toBeVisible({ timeout: 10000 });
+    const box = await canvas.boundingBox();
+    if (box) {
+      await authenticatedPage.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.5);
+      await authenticatedPage.mouse.down();
+      await authenticatedPage.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5, {
+        steps: 8,
+      });
+      await authenticatedPage.mouse.up();
+    }
+    const confirmButton = corroborationModal.getByRole('button', {
+      name: /firmar y confirmar ingreso/i,
+    });
     await expect(confirmButton).toBeEnabled({ timeout: 10000 });
     await confirmButton.click();
 

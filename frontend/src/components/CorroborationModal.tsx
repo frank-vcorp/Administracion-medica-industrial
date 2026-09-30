@@ -119,6 +119,10 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
   // previa (boton "Ver ampliado" en la referencia compacta).
   const [priorIdentityLightboxOpen, setPriorIdentityLightboxOpen] = useState(false)
 
+  const [consentGiven, setConsentGiven] = useState(false)
+  const [consentDocumentRead, setConsentDocumentRead] = useState(false)
+  const [consentDataCorrect, setConsentDataCorrect] = useState(false)
+
   const hasLastEvidence = !!worker.lastIdentityFrontFileUrl
 
   const nameChanged =
@@ -143,6 +147,10 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
     setError(null)
     startTransition(async () => {
       const signatureDataUrl = signaturePadRef.current?.toDataURL()
+      if (!consentGiven || !consentDocumentRead || !consentDataCorrect) {
+        setError('Marca las tres confirmaciones del consentimiento antes de continuar.')
+        return
+      }
       if (!signatureDataUrl) {
         setError('Debes firmar el consentimiento informado con autógrafo.')
         return
@@ -210,8 +218,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
               </h2>
               <p className="text-amber-100 text-xs font-medium">
                 {step === 1
-                  ? 'Paso 1 de 2 · Verifica la identidad antes del check-in'
-                  : 'Paso 2 de 2 · Firma autógrafa obligatoria para completar el check-in'}
+                  ? 'Paso 1 de 2 · Verifica la identidad antes del ingreso'
+                  : 'Paso 2 de 2 · Consentimiento informado y firma para registrar el ingreso'}
               </p>
             </div>
           </div>
@@ -545,6 +553,45 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 </p>
               </div>
 
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentGiven}
+                    onChange={e => setConsentGiven(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-slate-800">
+                    Doy mi consentimiento
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentDocumentRead}
+                    onChange={e => setConsentDocumentRead(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-slate-800">
+                    Confirmo que he leído el documento
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentDataCorrect}
+                    onChange={e => setConsentDataCorrect(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-slate-800">
+                    Confirmo que mis datos son correctos
+                    <span className="block text-xs font-normal text-slate-500 mt-0.5">
+                      Nombre registrado: {patientDisplayName.trim() || '—'}
+                    </span>
+                  </span>
+                </label>
+              </div>
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <label className="text-xs font-bold text-slate-600">
@@ -598,7 +645,13 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
           ) : (
             <>
               <button
-                onClick={() => { setStep(1); setError(null) }}
+                onClick={() => {
+                  setStep(1)
+                  setError(null)
+                  setConsentGiven(false)
+                  setConsentDocumentRead(false)
+                  setConsentDataCorrect(false)
+                }}
                 disabled={isPending}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-2xl font-bold text-sm transition-all disabled:opacity-50"
               >
@@ -606,10 +659,14 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={isPending}
+                disabled={
+                  isPending || !consentGiven || !consentDocumentRead || !consentDataCorrect
+                }
                 className="flex-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-6 rounded-2xl font-black text-sm transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isPending ? '⏳ Procesando...' : '✅ Firmar y Hacer Check-In'}
+                {isPending
+                  ? '⏳ Procesando...'
+                  : '✅ Firmar y confirmar ingreso'}
               </button>
             </>
           )}

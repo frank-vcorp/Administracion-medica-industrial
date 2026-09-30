@@ -49,8 +49,11 @@ export async function completeAppointmentCheckIn(
     timeout: 15000,
   })
 
+  await modal.getByRole('checkbox', { name: /doy mi consentimiento/i }).check()
+  await modal.getByRole('checkbox', { name: /confirmo que he leído/i }).check()
+  await modal.getByRole('checkbox', { name: /confirmo que mis datos son correctos/i }).check()
   await drawInformedConsentSignature(page)
-  await modal.getByRole('button', { name: /firmar y hacer check-in/i }).click()
+  await modal.getByRole('button', { name: /firmar y confirmar ingreso/i }).click()
 
   await page.waitForURL(/\/reception/, { timeout: 30000 })
 }
