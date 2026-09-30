@@ -9,7 +9,7 @@
 | 3 | Al agendar: WA/correo + preparación por prueba + leyenda del pase | 🟡 | Falta trípticos Leticia + cableado envío (SMTP/WA) |
 | 4 | Reporte recomendaciones **paciente** y **empleador** | 🔴 | Verificar con Leticia vs `recomendaciones_clinicas` / PDFs actuales |
 | 5 | Consentimiento (no “check-in” en etiqueta paciente/recepción) | ✅ | R-09 + UI «Doy mi consentimiento» en citas/QR (`d0a7f51`) |
-| 6 | Campimetría: número inválido en rojo | 🔴 | Abierto |
+| 6 | Campimetría: número inválido en rojo | ✅ | Ishihara: normales por defecto + celda/banner rojo si alterado (`eb3d913`) |
 | 7 | Envío parcial examen médico (lab) | ✅ | DEC-20260930-01 |
 | 8 | Examen médico: prediagnóstico al cierre (Impresión), workspace amplio | ✅ | `papeletaLayout` + panel IA solo en pestaña Impresión (`PapeletaWorkspace` 2 cols); menú lateral estudios; header evento compacto |
 | 9 | Excel encuestas + dashboard gráficas | ✅ | #15 — satisfaction export + dashboard |
