@@ -1311,6 +1311,8 @@ function StudyPanel({
   const [isCampiRetrying, startCampiRetry] = useTransition()
   const [examenMedicoRetryError, setExamenMedicoRetryError] = useState('')
   const [isExamenMedicoRetrying, startExamenMedicoRetry] = useTransition()
+  const [examenMedicoActiveSection, setExamenMedicoActiveSection] = useState('')
+  const showExamenMedicoPrediagnosis = examenMedicoActiveSection === 'impresion'
   const router = useRouter()
 
   const isMedico = isExamenMedico(test.testNameSnapshot)
@@ -1536,7 +1538,9 @@ function StudyPanel({
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div
+            className={`grid grid-cols-1 gap-4 ${showExamenMedicoPrediagnosis ? 'lg:grid-cols-2' : ''}`}
+          >
             <ExamenMedicoEstudio
               eventId={eventId}
               eventTestId={test.id}
@@ -1551,7 +1555,9 @@ function StudyPanel({
               onStatusChange={onExamenMedicoStatusChange}
               hasMedicalVerdict={hasMedicalVerdict}
               papeletaLayout
+              onPapeletaActiveSectionChange={setExamenMedicoActiveSection}
             />
+            {showExamenMedicoPrediagnosis && (
             <div className="space-y-3 lg:sticky lg:top-4 self-start">
               {test.aiSnapshot ? (
                 <StudyAIPrediagnosisPanel
@@ -1588,6 +1594,7 @@ function StudyPanel({
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
       )}

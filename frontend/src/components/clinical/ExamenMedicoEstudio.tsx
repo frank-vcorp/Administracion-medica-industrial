@@ -231,6 +231,8 @@ interface ExamenMedicoEstudioProps {
   testNameSnapshot?: string
   /** Papeleta: una barra de pestañas (Somatometría → Agudeza → Antecedentes → …). */
   papeletaLayout?: boolean
+  /** Papeleta: pestaña visible (outer o inner) para sincronizar UI del workspace. */
+  onPapeletaActiveSectionChange?: (section: OuterTab | InnerTab) => void
 }
 
 // ─── Constantes de formularios ────────────────────────────────────────────────
@@ -502,6 +504,7 @@ export default function ExamenMedicoEstudio({
   hasMedicalVerdict = false,
   testNameSnapshot = 'Examen Médico AMI',
   papeletaLayout = false,
+  onPapeletaActiveSectionChange,
 }: ExamenMedicoEstudioProps) {
   const router = useRouter()
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
@@ -683,6 +686,18 @@ export default function ExamenMedicoEstudio({
 
   // ── Pestaña activa externa (1-4) ──────────────────────────────────────────
   const [outerTab, setOuterTab] = useState<OuterTab>('somatometria')
+
+  useEffect(() => {
+    if (!papeletaLayout || !onPapeletaActiveSectionChange) return
+    onPapeletaActiveSectionChange(
+      outerTab === 'examen_medico' ? activeInnerTab : outerTab,
+    )
+  }, [
+    papeletaLayout,
+    outerTab,
+    activeInnerTab,
+    onPapeletaActiveSectionChange,
+  ])
 
   // ── Bloqueo de pestaña 4 ─────────────────────────────────────────────────
   const canAccessExamen = somaCompleted && vitalsCompleted && agudezaCompleted
