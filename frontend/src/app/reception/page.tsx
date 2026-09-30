@@ -17,6 +17,7 @@ import {
     formatAppointmentAgendaTime,
     todayAgendaDateString,
 } from "@/lib/appointment-scheduling"
+import { formatVisitDuration } from "@/lib/clinical/visit-duration"
 
 export const dynamic = 'force-dynamic'
 
@@ -160,6 +161,7 @@ function PatientCard({ event, status, nextStatus }: {
     const companyName = event.worker?.company?.name || 'Empresa Vinculada'
     const intakeBadge = getIntakeSourceBadge(event)
     const checkInTime = event.checkInDate ? formatAppointmentAgendaTime(event.checkInDate) : null
+    const visitDuration = formatVisitDuration(event.checkInDate)
 
     return (
         <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-indigo-200 transition-all duration-200 relative overflow-hidden group">
@@ -171,7 +173,10 @@ function PatientCard({ event, status, nextStatus }: {
             </div>
             <p className="text-[11px] font-bold text-slate-400 mb-1">{companyName}</p>
             {checkInTime && (
-                <p className="text-[10px] text-slate-400 mb-3">Ingreso {checkInTime}</p>
+                <p className="text-[10px] text-slate-400 mb-3">
+                    Ingreso {checkInTime}
+                    {visitDuration ? ` · en sede ${visitDuration}` : ''}
+                </p>
             )}
             <div className="mb-4">
                 <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${intakeBadge.tone}`}>

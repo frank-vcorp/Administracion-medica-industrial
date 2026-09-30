@@ -7,6 +7,7 @@ import ReceptionCheckoutModal, {
 import ReceptionEventTestsList, {
   type ReceptionKanbanTest,
 } from '@/components/reception/ReceptionEventTestsList'
+import { formatVisitDuration } from '@/lib/clinical/visit-duration'
 
 type Props = {
   event: {
@@ -34,6 +35,7 @@ export default function ReceptionCheckoutCard({ event, intakeBadge }: Props) {
         minute: '2-digit',
       })
     : null
+  const visitDuration = formatVisitDuration(event.checkInDate)
 
   return (
     <>
@@ -45,7 +47,8 @@ export default function ReceptionCheckoutCard({ event, intakeBadge }: Props) {
             </p>
             <p className="truncate text-[10px] font-medium text-slate-500">
               {companyName}
-              {checkInTime ? ` · ${checkInTime}` : ''}
+              {checkInTime ? ` · ingreso ${checkInTime}` : ''}
+              {visitDuration ? ` · en sede ${visitDuration}` : ''}
             </p>
           </div>
           <span

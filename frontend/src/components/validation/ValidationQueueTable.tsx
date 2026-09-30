@@ -8,6 +8,8 @@ import type { ValidationStage } from '@/lib/clinical/validation-stage'
 export type ValidationQueueRow = {
   eventId: string
   sortDate: string
+  visitDurationLabel: string | null
+  hasMedicalVerdict: boolean
   patientName: string
   universalId: string
   companyId: string | null
@@ -144,6 +146,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-medium">
           <tr>
             <th className="px-6 py-4">Fecha</th>
+            <th className="px-6 py-4">Tiempo en sede</th>
             <th className="px-6 py-4">Paciente</th>
             <th className="px-6 py-4">ID</th>
             <th className="px-6 py-4">Empresa</th>
@@ -156,7 +159,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
         <tbody className="divide-y divide-slate-100">
           {filteredRows.length === 0 && (
             <tr>
-              <td colSpan={8} className="p-8 text-center text-slate-400">
+              <td colSpan={9} className="p-8 text-center text-slate-400">
                 No hay expedientes pendientes de validación con los filtros actuales
               </td>
             </tr>
@@ -174,6 +177,9 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
               <tr key={row.eventId} className="hover:bg-slate-50 transition-colors">
                 <td className="px-6 py-4 text-slate-600 whitespace-nowrap">
                   {formatListDate(row.sortDate)}
+                </td>
+                <td className="px-6 py-4 text-slate-600 whitespace-nowrap text-xs font-semibold">
+                  {row.visitDurationLabel ?? '—'}
                 </td>
                 <td className="px-6 py-4 font-medium text-slate-900">{row.patientName}</td>
                 <td className="px-6 py-4 font-mono text-xs text-slate-500">
@@ -211,7 +217,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <div className="flex items-center justify-end gap-3">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <Link
                       href={
                         row.stage === 'V3'
@@ -222,6 +228,33 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                     >
                       Revisar
                     </Link>
+                    {row.hasMedicalVerdict ? (
+                      <>
+                        <a
+                          href={`/api/pdf/examen-medico/${row.eventId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-violet-700 hover:text-violet-900 text-xs font-semibold hover:underline"
+                          title="Dictamen / reporte final consolidado (PDF)"
+                        >
+                          Reporte final
+                        </a>
+                        <a
+                          href={`/api/zip/clinical-closure/${row.eventId}`}
+                          className="text-slate-600 hover:text-slate-800 text-xs font-semibold hover:underline"
+                          title="ZIP de cierre clínico"
+                        >
+                          ZIP
+                        </a>
+                      </>
+                    ) : (
+                      <span
+                        className="text-[10px] font-medium text-slate-400"
+                        title="Disponible tras firmar y emitir el dictamen (etapa V3)"
+                      >
+                        Reporte pendiente
+                      </span>
+                    )}
                     <a
                       href={waLink}
                       target="_blank"

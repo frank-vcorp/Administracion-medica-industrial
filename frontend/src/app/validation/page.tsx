@@ -21,6 +21,7 @@ import {
   VALIDATION_STAGE_LABELS,
   type ValidationStage,
 } from '@/lib/clinical/validation-stage'
+import { formatVisitDuration } from '@/lib/clinical/visit-duration'
 
 async function getValidationQueue() {
   return prisma.medicalEvent.findMany({
@@ -29,6 +30,7 @@ async function getValidationQueue() {
       status: { notIn: ['COMPLETED', 'CANCELED'] },
     },
     include: {
+      verdict: { select: { id: true } },
       worker: {
         include: { company: true },
       },
@@ -95,10 +97,16 @@ function toValidationRows(
       const stage = getValidationStage(eventTests, notPerformedIds)
       const completeness = getEventCompletenessFromSteps(eventTests, notPerformedIds)
       const sortDate = (event.dischargedAt ?? event.checkInDate ?? event.updatedAt).toISOString()
+      const visitDurationLabel = formatVisitDuration(
+        event.checkInDate,
+        event.dischargedAt,
+      )
 
       return {
         eventId: event.id,
         sortDate,
+        visitDurationLabel,
+        hasMedicalVerdict: Boolean(event.verdict),
         patientName: `${event.worker.firstName} ${event.worker.lastName}`,
         universalId: event.worker.universalId,
         companyId: event.worker.companyId,
