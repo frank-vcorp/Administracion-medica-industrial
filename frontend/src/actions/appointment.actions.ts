@@ -827,7 +827,10 @@ export type PendingStudyPatientRow = {
  * Pacientes con pruebas clínicas pendientes (check-in del día + sucursal).
  * AMI-SR F-017 minuta #18 — clic en KPI → ir al expediente / estudio.
  */
-export async function getPendingStudyPatientsForDay(date: string, branchId: string) {
+export async function getPendingStudyPatientsForDay(
+  date: string,
+  branchId?: string | null,
+) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -838,7 +841,7 @@ export async function getPendingStudyPatientsForDay(date: string, branchId: stri
 
     const events = await prisma.medicalEvent.findMany({
       where: {
-        branchId,
+        ...(branchId ? { branchId } : {}),
         status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'VALIDATING'] },
         checkInDate: { gte: dayStart, lte: dayEnd },
         eventTests: {

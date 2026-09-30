@@ -89,11 +89,14 @@ export type EventPageData = {
   initialTimeline: unknown[]
   receivedBy: string
   canRegisterPayments: boolean
+  /** Deep link `?eventTest=` — id de EventTest a abrir en la papeleta. */
+  initialEventTestId: string | null
 }
 
 export async function fetchEventPageData(input: {
   id: string
   view?: string
+  eventTest?: string
 }): Promise<EventPageData | null> {
   let event = await getEventById(input.id)
   if (!event) return null
@@ -112,7 +115,9 @@ export async function fetchEventPageData(input: {
   // Helper para los pasos: redirect si el shell aún no está sincronizado
   if (!input.view && event.status === 'IN_PROGRESS') {
     const { redirect } = await import('next/navigation')
-    redirect(`/events/${input.id}?view=IN_PROGRESS`)
+    const qs = new URLSearchParams({ view: 'IN_PROGRESS' })
+    if (input.eventTest) qs.set('eventTest', input.eventTest)
+    redirect(`/events/${input.id}?${qs.toString()}`)
   }
 
   const medicalExam = event.exam ?? null
@@ -429,6 +434,12 @@ export async function fetchEventPageData(input: {
     VISUAL_STEP_GROUPS.findIndex((g) => g.ids.includes(activeView)) + 1,
   )
 
+  const testIds = new Set(
+    (serializedEventTests as { id?: string }[]).map((t) => t.id).filter(Boolean),
+  )
+  const initialEventTestId =
+    input.eventTest && testIds.has(input.eventTest) ? input.eventTest : null
+
   return {
     event,
     serializedExam,
@@ -458,5 +469,6 @@ export async function fetchEventPageData(input: {
     initialTimeline,
     receivedBy,
     canRegisterPayments,
+    initialEventTestId,
   }
 }

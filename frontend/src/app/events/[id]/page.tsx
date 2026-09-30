@@ -56,6 +56,7 @@ function EventView({ data }: EventViewProps) {
     canRegisterPayments,
     examSummary,
     hasMedicalVerdict,
+    initialEventTestId,
   } = data
 
   return (
@@ -196,6 +197,7 @@ function EventView({ data }: EventViewProps) {
           prefilledData={prefilledData ? JSON.parse(JSON.stringify(prefilledData)) : null}
           longitudinalData={longitudinalData ? JSON.parse(JSON.stringify(longitudinalData)) : null}
           hasMedicalVerdict={hasMedicalVerdict}
+          initialEventTestId={initialEventTestId}
         />
       )}
 
@@ -240,11 +242,15 @@ function EventView({ data }: EventViewProps) {
 
 export default async function EventPage(props: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ view?: string }>
+  searchParams: Promise<{ view?: string; eventTest?: string }>
 }) {
   const { id } = await props.params
   const searchParams = await props.searchParams
-  const data = await fetchEventPageData({ id, view: searchParams?.view })
+  const data = await fetchEventPageData({
+    id,
+    view: searchParams?.view,
+    eventTest: searchParams?.eventTest,
+  })
   if (!data) notFound()
   return <EventView data={data} />
 }

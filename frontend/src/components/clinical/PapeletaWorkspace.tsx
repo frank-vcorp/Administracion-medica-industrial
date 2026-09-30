@@ -196,6 +196,8 @@ interface PapeletaWorkspaceProps {
    * ZIP sólo con verdict emitido).
    */
   hasMedicalVerdict?: boolean
+  /** Minuta #18: abrir directamente el estudio indicado en la URL (`?eventTest=`). */
+  initialEventTestId?: string | null
 }
 
 // --- IMPL-20260516-04: Etapas del pipeline IA para progreso visual por hitos ---
@@ -344,6 +346,7 @@ export default function PapeletaWorkspace({
   reviewerUserId = 'system',
   reviewerRole,
   hasMedicalVerdict = false,
+  initialEventTestId = null,
 }: PapeletaWorkspaceProps) {
   const router = useRouter()
   const [activeTestId, setActiveTestId] = useState<string | null>(null)
@@ -413,6 +416,12 @@ export default function PapeletaWorkspace({
   useEffect(() => {
     setLocalTests(eventTests)
   }, [eventTests])
+
+  useEffect(() => {
+    if (!initialEventTestId) return
+    const match = eventTests.find(t => t.id === initialEventTestId)
+    if (match) setActiveTestId(initialEventTestId)
+  }, [initialEventTestId, eventTests])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Actualizaciones optimistas del estado local

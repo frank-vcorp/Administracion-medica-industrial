@@ -36,9 +36,11 @@ export function PendingStudiesModal({
 
   const totalTests = rows.reduce((sum, row) => sum + row.pendingTests.length, 0)
 
-  const goToStudy = (eventId: string) => {
+  const goToStudy = (eventId: string, eventTestId?: string) => {
     onClose()
-    router.push(`/events/${eventId}?view=IN_PROGRESS`)
+    const params = new URLSearchParams({ view: 'IN_PROGRESS' })
+    if (eventTestId) params.set('eventTest', eventTestId)
+    router.push(`/events/${eventId}?${params.toString()}`)
   }
 
   return (
@@ -105,11 +107,11 @@ export function PendingStudiesModal({
                     </div>
                     <button
                       type="button"
-                      onClick={() => goToStudy(row.eventId)}
-                      className="shrink-0 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-700"
-                    >
-                      Ver expediente
-                    </button>
+                    onClick={() => goToStudy(row.eventId)}
+                    className="shrink-0 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-700"
+                  >
+                    Ver expediente
+                  </button>
                   </div>
 
                   <ul className="mt-3 space-y-2">
@@ -117,7 +119,7 @@ export function PendingStudiesModal({
                       <li key={test.id}>
                         <button
                           type="button"
-                          onClick={() => goToStudy(row.eventId)}
+                          onClick={() => goToStudy(row.eventId, test.id)}
                           className="flex w-full items-center justify-between gap-3 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2.5 text-left transition hover:border-amber-200 hover:bg-amber-50"
                         >
                           <span className="min-w-0">

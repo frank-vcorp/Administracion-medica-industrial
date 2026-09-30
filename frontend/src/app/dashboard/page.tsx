@@ -1,14 +1,22 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowRight, Calendar, CircleCheck, Clock, Users } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowRight, Calendar, CircleCheck, Clock, FlaskConical, Users } from 'lucide-react'
 import { getDashboardKPIs } from '@/actions/dashboard.actions'
+import {
+    getPendingStudyPatientsForDay,
+    type PendingStudyPatientRow,
+} from '@/actions/appointment.actions'
+import { formatAgendaDayHeading, todayAgendaDateString } from '@/lib/appointment-scheduling'
+import { PendingStudiesModal } from '@/components/appointments/PendingStudiesModal'
 
 /**
  * Dashboard KPIs - Página principal del sistema
  * Muestra métricas clave en tiempo real
- * 
+ *
  * IMPL-20260225-06-UI: Implementación de UI Sprint 7
+ * Minuta #18: KPIs navegables + listado de pruebas pendientes (todas las sedes).
  */
 export default function DashboardPage() {
     const [kpis, setKpis] = useState({
@@ -27,20 +35,30 @@ export default function DashboardPage() {
         workersThisMonth: 0,
         workersTrend: '',
     })
+    const [pendingStudyRows, setPendingStudyRows] = useState<PendingStudyPatientRow[]>([])
+    const [pendingModalOpen, setPendingModalOpen] = useState(false)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
+
+    const todayStr = todayAgendaDateString()
 
     useEffect(() => {
         async function loadKPIs() {
             try {
-                const result = await getDashboardKPIs()
-                if (result.success) {
-                    setKpis(result.kpis)
-                    if (result.monthlySummary) {
-                        setMonthlySummary(result.monthlySummary)
+                const [kpiResult, pendingResult] = await Promise.all([
+                    getDashboardKPIs(),
+                    getPendingStudyPatientsForDay(todayStr),
+                ])
+                if (kpiResult.success) {
+                    setKpis(kpiResult.kpis)
+                    if (kpiResult.monthlySummary) {
+                        setMonthlySummary(kpiResult.monthlySummary)
                     }
                 } else {
-                    setError(result.error || 'Error al cargar KPIs')
+                    setError(kpiResult.error || 'Error al cargar KPIs')
+                }
+                if (pendingResult.success) {
+                    setPendingStudyRows(pendingResult.rows)
                 }
             } catch {
                 setError('Error desconocido')
@@ -50,7 +68,12 @@ export default function DashboardPage() {
         }
 
         loadKPIs()
-    }, [])
+    }, [todayStr])
+
+    const pendingTestsCount = pendingStudyRows.reduce(
+        (sum, row) => sum + row.pendingTests.length,
+        0,
+    )
 
     if (loading) {
         return <div className="text-center py-8">Cargando métricas...</div>
@@ -83,32 +106,50 @@ export default function DashboardPage() {
             </div>
 
             {/* Stats Grid - Premium KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
                 <StatCard
                     title="Citas de Hoy"
                     value={kpis.appointmentsToday}
                     icon={<Calendar className="h-5 w-5 stroke-[1.5]" />}
                     description="Agenda diaria"
+                    href="/appointments"
                 />
                 <StatCard
                     title="Pacientes en espera"
                     value={kpis.activeEvents}
                     icon={<Clock className="h-5 w-5 stroke-[1.5]" />}
-                    description="Pacientes en sede"
+                    description="Recepción y sala"
+                    href="/reception"
+                />
+                <StatCard
+                    title="Pruebas pendientes"
+                    value={pendingTestsCount}
+                    icon={<FlaskConical className="h-5 w-5 stroke-[1.5]" />}
+                    description="Ver listado del día"
+                    onClick={() => setPendingModalOpen(true)}
                 />
                 <StatCard
                     title="Completados"
                     value={kpis.completedEvents}
                     icon={<CircleCheck className="h-5 w-5 stroke-[1.5]" />}
-                    description="Reporte médico de aptitud"
+                    description="Cola de validación"
+                    href="/validation"
                 />
                 <StatCard
                     title="Total Padron"
                     value={kpis.totalWorkers}
                     icon={<Users className="h-5 w-5 stroke-[1.5]" />}
-                    description="Pacientes atendidos"
+                    description="Pacientes registrados"
+                    href="/workers"
                 />
             </div>
+
+            <PendingStudiesModal
+                open={pendingModalOpen}
+                onClose={() => setPendingModalOpen(false)}
+                rows={pendingStudyRows}
+                dateLabel={formatAgendaDayHeading(todayStr)}
+            />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Content: Performance & Status */}
@@ -170,9 +211,30 @@ export default function DashboardPage() {
     )
 }
 
-function StatCard({ title, value, icon, description }: { title: string, value: number, icon: ReactNode, description: string }) {
-    return (
-        <div className="bg-white p-6 rounded-[2rem] border border-ami-secondary/10 shadow-sm hover:border-ami-secondary/20 transition-all group cursor-default">
+function StatCard({
+    title,
+    value,
+    icon,
+    description,
+    href,
+    onClick,
+}: {
+    title: string
+    value: number
+    icon: ReactNode
+    description: string
+    href?: string
+    onClick?: () => void
+}) {
+    const interactive = Boolean(href || onClick)
+    const className = `bg-white p-6 rounded-[2rem] border border-ami-secondary/10 shadow-sm transition-all group block w-full text-left ${
+        interactive
+            ? 'cursor-pointer hover:border-ami-secondary/30 hover:shadow-md active:scale-[0.99]'
+            : 'cursor-default'
+    }`
+
+    const inner = (
+        <>
             <div className="flex items-start justify-between">
                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-ami-secondary/10 text-ami-secondary">
                     {icon}
@@ -184,9 +246,32 @@ function StatCard({ title, value, icon, description }: { title: string, value: n
             </div>
             <div className="mt-6 flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-medium">{description}</span>
+                {interactive && (
+                    <span className="text-ami-secondary font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                        Ir →
+                    </span>
+                )}
             </div>
-        </div>
+        </>
     )
+
+    if (href) {
+        return (
+            <Link href={href} className={className}>
+                {inner}
+            </Link>
+        )
+    }
+
+    if (onClick) {
+        return (
+            <button type="button" onClick={onClick} className={className}>
+                {inner}
+            </button>
+        )
+    }
+
+    return <div className={className}>{inner}</div>
 }
 
 function InfoBox({ label, value, trend }: { label: string; value: string; trend: string }) {
@@ -198,4 +283,3 @@ function InfoBox({ label, value, trend }: { label: string; value: string; trend:
         </div>
     )
 }
-
