@@ -109,6 +109,16 @@ export function PatientIdentificationPdfBlock({ patient, heading }: Props) {
           <GridCell label="Edad:" value={display(patient.ageLabel)} />
           <GridCell label="Atención:" value={display(patient.attentionDate)} last />
         </View>
+        {(patient.workAreaLabel || patient.tenureInAreaLabel) && (
+          <View style={styles.gridRow}>
+            <GridCell label="Área:" value={display(patient.workAreaLabel)} />
+            <GridCell
+              label="Tiempo en área:"
+              value={display(patient.tenureInAreaLabel)}
+              last
+            />
+          </View>
+        )}
         <View style={styles.vitalsRow}>
           <VitalPart label="Peso: " value={display(patient.weightLabel)} />
           <Text style={styles.vitalSep}>·</Text>

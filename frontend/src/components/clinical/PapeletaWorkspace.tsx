@@ -163,6 +163,10 @@ type WorkerInfo = {
   profile: string
   ageYears?: number | null
   eventDate?: string
+  workArea?: string | null
+  tenureLabel?: string | null
+  occupationalLine?: string | null
+  visitDurationLabel?: string | null
 }
 
 type MedicalExamData = {

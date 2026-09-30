@@ -15,6 +15,11 @@ import { getWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { getIntakeSourceLabel } from './intake-source-label'
 import { isAdminLike } from '@/lib/auth/roles'
 import { getTimelineForEvent } from '@/lib/timeline.service'
+import {
+  formatOccupationalIdentificationLine,
+  resolveOccupationalIdentification,
+} from '@/lib/clinical/occupational-identification'
+import { formatVisitDuration } from '@/lib/clinical/visit-duration'
 
 const STATUS_NAMES: Record<string, string> = {
   SCHEDULED: 'Ingreso',
@@ -73,6 +78,10 @@ export type EventPageData = {
     profile: string
     ageYears: number | null
     eventDate: string
+    workArea: string | null
+    tenureLabel: string | null
+    occupationalLine: string | null
+    visitDurationLabel: string | null
   }
   review: string
   userRole: string | null
@@ -203,11 +212,6 @@ export async function fetchEventPageData(input: {
     event as typeof event & { appointment?: AppointmentExtras }
   ).appointment
 
-  const antecedentesCaptured = physicalExamData?.antecedentes_captured as
-    | { datos_personales?: { puesto_actual?: string } }
-    | undefined
-  const puestoActual = antecedentesCaptured?.datos_personales?.puesto_actual?.trim() ?? ''
-
   const eventDateRaw = event.checkInDate ?? event.createdAt
   const eventDateLabel = new Intl.DateTimeFormat('es-MX', {
     day: '2-digit',
@@ -224,19 +228,6 @@ export async function fetchEventPageData(input: {
     if (m < 0 || (m === 0 && asOf.getDate() < dob.getDate())) age -= 1
     return age >= 0 && age < 130 ? age : null
   })()
-
-  const workerInfo = {
-    name: `${event.worker.firstName} ${event.worker.lastName}`,
-    position: puestoActual,
-    company:
-      event.worker.company?.name ||
-      (eventWithIntake.intakeSource === 'EXTERNAL_WALK_IN'
-        ? 'Externo sin empresa'
-        : '—'),
-    profile: appointmentWithProfile?.serviceProfile?.name || '',
-    ageYears,
-    eventDate: eventDateLabel,
-  }
 
   const paymentRoles = [
     'ADMIN',
@@ -284,6 +275,29 @@ export async function fetchEventPageData(input: {
         ...(rootPT ? { patologicos: rootPT } : {}),
       }
     : legacyBase
+
+  const occupational = resolveOccupationalIdentification([
+    physicalExamData,
+    prefilledData,
+    longitudinalData as Record<string, unknown> | null,
+  ])
+
+  const workerInfo = {
+    name: `${event.worker.firstName} ${event.worker.lastName}`,
+    position: occupational.position ?? '',
+    company:
+      event.worker.company?.name ||
+      (eventWithIntake.intakeSource === 'EXTERNAL_WALK_IN'
+        ? 'Externo sin empresa'
+        : '—'),
+    profile: appointmentWithProfile?.serviceProfile?.name || '',
+    ageYears,
+    eventDate: eventDateLabel,
+    workArea: occupational.workArea,
+    tenureLabel: occupational.tenureLabel,
+    occupationalLine: formatOccupationalIdentificationLine(occupational),
+    visitDurationLabel: formatVisitDuration(event.checkInDate),
+  }
 
   type EventTestWithExtras = (typeof event.eventTests)[0] & {
     fileUrl?: string | null

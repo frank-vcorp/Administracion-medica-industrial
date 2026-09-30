@@ -83,7 +83,24 @@ function EventView({ data }: EventViewProps) {
                 <span className="font-medium text-slate-600">{event.worker.company?.name || '---'}</span>
                 <span>•</span>
                 <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">#{event.id.slice(0, 8)}</span>
+                {workerInfo.eventDate && (
+                  <>
+                    <span>•</span>
+                    <span>Atención {workerInfo.eventDate}</span>
+                  </>
+                )}
+                {workerInfo.visitDurationLabel && (
+                  <>
+                    <span>•</span>
+                    <span className="text-teal-700 font-semibold">En sede {workerInfo.visitDurationLabel}</span>
+                  </>
+                )}
               </div>
+              {workerInfo.occupationalLine && (
+                <p className="text-[11px] text-slate-600 mt-0.5 font-medium">
+                  {workerInfo.occupationalLine}
+                </p>
+              )}
             </div>
           </div>
 

@@ -5,10 +5,32 @@ import { describe, expect, it } from 'vitest'
 import {
   CampimetriaQuestionnairePayloadSchema,
   CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
+  defaultCampimetriaDraftPayload,
   defaultCampimetriaQuestionnairePayload,
+  deriveIshiharaResultado,
+  expectedIshiharaAnswers,
+  isIshiharaPlateAnswerCorrect,
 } from '../campimetria-questionnaire.schema'
 import { buildCampimetriaImpresion, buildCampimetriaExtractedData } from '@/lib/clinical/campimetria-report'
 import { inheritAcuityFromExam } from '@/lib/clinical/campimetria-inherited'
+
+describe('Ishihara defaults y validación por placa', () => {
+  it('borrador nuevo trae placas normales y resultado NORMAL', () => {
+    const draft = defaultCampimetriaDraftPayload()
+    const expected = expectedIshiharaAnswers()
+    expect(draft.ishihara.resultado).toBe('NORMAL')
+    expect(draft.ishihara.ojo_derecho).toEqual(expected)
+    expect(draft.ishihara.ojo_izquierdo).toEqual(expected)
+    expect(deriveIshiharaResultado(draft.ishihara)).toBe('NORMAL')
+  })
+
+  it('isIshiharaPlateAnswerCorrect: vacío ok; distinto al esperado no', () => {
+    expect(isIshiharaPlateAnswerCorrect('p03', '')).toBe(true)
+    expect(isIshiharaPlateAnswerCorrect('p03', '03')).toBe(true)
+    expect(isIshiharaPlateAnswerCorrect('p03', '3')).toBe(true)
+    expect(isIshiharaPlateAnswerCorrect('p03', '99')).toBe(false)
+  })
+})
 
 describe('CampimetriaQuestionnairePayloadSchema', () => {
   it('acepta el payload default (caso feliz, todo normal)', () => {

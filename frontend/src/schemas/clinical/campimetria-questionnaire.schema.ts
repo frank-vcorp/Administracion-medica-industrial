@@ -268,6 +268,16 @@ export function normalizeIshiharaAnswer(raw: string): string {
   return trimmed.replace(/^0+(?=\d)/, '')
 }
 
+/** `true` si vacío (sin alertar) o coincide con la placa esperada. */
+export function isIshiharaPlateAnswerCorrect(
+  plateId: IshiharaPlateId,
+  raw: string,
+): boolean {
+  const norm = normalizeIshiharaAnswer(raw)
+  if (!norm) return true
+  return norm === expectedIshiharaAnswers()[plateId]
+}
+
 export function deriveIshiharaResultado(input: {
   resultado: IshiharaResultado
   ojo_derecho: Record<IshiharaPlateId, string>
@@ -318,9 +328,9 @@ export function defaultExploracionOjo(): ExploracionOjoCampimetria {
   }
 }
 
-/** Borrador vacío para abrir captura nueva (Ishihara pendiente hasta llenar placas). */
+/** Borrador nuevo: Ishihara precargado con respuestas normales (operación AMI). */
 export function defaultCampimetriaDraftPayload(): CampimetriaQuestionnairePayload {
-  const emptyPlates = emptyIshiharaPlates()
+  const plates = expectedIshiharaAnswers()
   return {
     schemaVersion: CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
     capturedAt: new Date().toISOString(),
@@ -336,11 +346,11 @@ export function defaultCampimetriaDraftPayload(): CampimetriaQuestionnairePayloa
       ojo_izquierdo: 'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES',
       ojo_derecho: 'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES',
     },
-    ishihara: {
-      resultado: 'ALTERADO',
-      ojo_derecho: { ...emptyPlates },
-      ojo_izquierdo: { ...emptyPlates },
-    },
+    ishihara: applyIshiharaDerivation({
+      resultado: 'NORMAL',
+      ojo_derecho: { ...plates },
+      ojo_izquierdo: { ...plates },
+    }),
   }
 }
 

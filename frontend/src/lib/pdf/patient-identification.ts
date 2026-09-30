@@ -2,6 +2,7 @@
  * Identificación del paciente — bloque común en PDFs validados por estudio.
  */
 import prisma from '@/lib/prisma'
+import { resolveOccupationalIdentification } from '@/lib/clinical/occupational-identification'
 
 export type PatientIdentificationPdf = {
   fullName: string
@@ -16,6 +17,10 @@ export type PatientIdentificationPdf = {
   temperatureLabel: string | null
   heartRateLabel: string | null
   bloodPressureLabel: string | null
+  /** Área / departamento (datos personales del expediente). */
+  workAreaLabel: string | null
+  /** Antigüedad en el área (años/meses capturados). */
+  tenureInAreaLabel: string | null
 }
 
 export function formatPdfGender(g: string | null | undefined): string {
@@ -59,6 +64,8 @@ export function buildPatientIdentificationPdf(input: {
   temperatureLabel?: string | null
   heartRateLabel?: string | null
   bloodPressureLabel?: string | null
+  workAreaLabel?: string | null
+  tenureInAreaLabel?: string | null
 }): PatientIdentificationPdf {
   const fromParts = `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim()
   const fullName = (input.fullName?.trim() || fromParts || '—').trim() || '—'
@@ -82,6 +89,8 @@ export function buildPatientIdentificationPdf(input: {
     temperatureLabel: normalizePdfVitalLabel(input.temperatureLabel),
     heartRateLabel: normalizePdfVitalLabel(input.heartRateLabel),
     bloodPressureLabel: normalizePdfVitalLabel(input.bloodPressureLabel),
+    workAreaLabel: normalizePdfVitalLabel(input.workAreaLabel),
+    tenureInAreaLabel: normalizePdfVitalLabel(input.tenureInAreaLabel),
   }
 }
 
@@ -242,6 +251,10 @@ export async function resolvePatientIdentificationForPdf(args: {
 
   const sexLabel = base.sexLabel ?? readSexFromPhysicalExam(physicalExamData)
 
+  const occupational = resolveOccupationalIdentification([
+    physicalExamData,
+  ])
+
   return buildPatientIdentificationPdf({
     firstName: args.firstName,
     lastName: args.lastName,
@@ -256,5 +269,7 @@ export async function resolvePatientIdentificationForPdf(args: {
     temperatureLabel: args.temperatureLabel ?? basicVitals.temperatureLabel,
     heartRateLabel: args.heartRateLabel ?? basicVitals.heartRateLabel,
     bloodPressureLabel: args.bloodPressureLabel ?? basicVitals.bloodPressureLabel,
+    workAreaLabel: args.workAreaLabel ?? occupational.workArea,
+    tenureInAreaLabel: args.tenureInAreaLabel ?? occupational.tenureLabel,
   })
 }

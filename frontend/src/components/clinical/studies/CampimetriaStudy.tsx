@@ -26,6 +26,7 @@ import {
   deriveIshiharaResultado,
   emptyIshiharaPlates,
   expectedIshiharaAnswers,
+  isIshiharaPlateAnswerCorrect,
   type CampimetriaQuestionnairePayload,
   type ExploracionEstadoCampimetria,
   type ExploracionOjoCampimetria,
@@ -49,6 +50,7 @@ type WorkerBanner = {
   company: string
   ageYears?: number | null
   eventDate?: string
+  occupationalLine?: string | null
 }
 
 export default function CampimetriaStudy({
@@ -163,7 +165,7 @@ export default function CampimetriaStudy({
       ...prev,
       ishihara: applyIshiharaDerivation({
         ...prev.ishihara,
-        resultado: 'ALTERADO',
+        resultado: 'NORMAL',
         ojo_derecho: { ...plates },
         ojo_izquierdo: { ...plates },
       }),
@@ -179,11 +181,11 @@ export default function CampimetriaStudy({
             ojo_derecho: emptyIshiharaPlates(),
             ojo_izquierdo: emptyIshiharaPlates(),
           }
-        : {
-            resultado: 'ALTERADO',
-            ojo_derecho: emptyIshiharaPlates(),
-            ojo_izquierdo: emptyIshiharaPlates(),
-          },
+        : applyIshiharaDerivation({
+            resultado: 'NORMAL',
+            ojo_derecho: { ...expectedIshiharaAnswers() },
+            ojo_izquierdo: { ...expectedIshiharaAnswers() },
+          }),
     }))
   }
 
@@ -272,6 +274,9 @@ export default function CampimetriaStudy({
             {workerInfo.company ? ` · ${workerInfo.company}` : ''}
             {workerInfo.eventDate ? ` · ${workerInfo.eventDate}` : ''}
           </p>
+          {workerInfo.occupationalLine && (
+            <p className="text-xs text-slate-700 font-medium">{workerInfo.occupationalLine}</p>
+          )}
           <div className="text-xs text-slate-600 space-y-1">
             {inheritedAnt.map(a => (
               <p key={a.label}>
@@ -474,7 +479,7 @@ export default function CampimetriaStudy({
                   ishiharaDerived === 'NORMAL'
                     ? 'bg-emerald-100 text-emerald-800'
                     : ishiharaDerived === 'ALTERADO'
-                      ? 'bg-amber-100 text-amber-800'
+                      ? 'bg-red-100 text-red-800 border border-red-200'
                       : ishiharaDerived === 'NO APLICA'
                         ? 'bg-slate-200 text-slate-600'
                         : 'bg-slate-100 text-slate-500'
@@ -505,8 +510,17 @@ export default function CampimetriaStudy({
             Prueba no aplica
           </label>
           <p className="text-xs text-slate-500">
-            Captura el número que ve el paciente en cada placa. El resultado se calcula solo.
+            Por defecto vienen las respuestas normales. Si el paciente ve otro número, corrige la
+            celda; se marcará en rojo y el resultado pasará a alterado.
           </p>
+          {ishiharaDerived === 'ALTERADO' && form.ishihara.resultado !== 'NO APLICA' && (
+            <p
+              role="alert"
+              className="text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"
+            >
+              Hay al menos una placa con número distinto al esperado (normal). Revise OD y OI.
+            </p>
+          )}
           <img
             src="/clinical/campimetria/ishihara.png"
             alt="Placas de Ishihara de referencia (12, 45, 3, 5, 2, 26, 74)"
@@ -531,17 +545,33 @@ export default function CampimetriaStudy({
                       <td className="py-1 pr-2 font-semibold text-slate-700">
                         {ojo === 'ojo_izquierdo' ? 'OI' : 'OD'}
                       </td>
-                      {ISHIHARA_PLATES.map(plate => (
+                      {ISHIHARA_PLATES.map(plate => {
+                        const raw = form.ishihara[ojo][plate.id]
+                        const abnormal =
+                          form.ishihara.resultado !== 'NO APLICA' &&
+                          !isIshiharaPlateAnswerCorrect(plate.id, raw)
+                        return (
                         <td key={plate.id} className="p-1">
                           <input
                             disabled={readonly}
-                            value={form.ishihara[ojo][plate.id]}
+                            value={raw}
                             onChange={e => setPlate(ojo, plate.id, e.target.value)}
-                            className="w-full rounded-lg border border-slate-200 p-1 text-center"
+                            aria-invalid={abnormal}
+                            title={
+                              abnormal
+                                ? `Esperado: ${plate.displayExpected ?? plate.expected}`
+                                : undefined
+                            }
+                            className={`w-full rounded-lg border p-1 text-center font-semibold ${
+                              abnormal
+                                ? 'border-red-500 bg-red-50 text-red-800 ring-1 ring-red-300'
+                                : 'border-slate-200 bg-white text-slate-800'
+                            }`}
                             placeholder="—"
                           />
                         </td>
-                      ))}
+                        )
+                      })}
                     </tr>
                   ))}
                 </tbody>
