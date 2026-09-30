@@ -203,6 +203,8 @@ export async function resolvePatientIdentificationForPdf(args: {
   temperatureLabel?: string | null
   heartRateLabel?: string | null
   bloodPressureLabel?: string | null
+  workAreaLabel?: string | null
+  tenureInAreaLabel?: string | null
 }): Promise<PatientIdentificationPdf> {
   const base = buildPatientIdentificationPdf(args)
   if (!args.eventId) return base
