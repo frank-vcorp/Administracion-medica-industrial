@@ -744,12 +744,9 @@ function ProfileModal({
                 </button>
               </div>
               {emailError && <p className="mt-1 text-xs text-red-600">{emailError}</p>}
-              {/* El note sobre persistir tras tener profileId se omite de UI para no confundir */}
-              {profileId === null && initialEmails.length === 0 && emails.some((e) => e.id.startsWith('temp-')) && (
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Los correos nuevos se guardarán al guardar el perfil.
-                </p>
-              )}
+              <p className="mt-1 text-[11px] text-slate-500">
+                Los correos se guardan al pulsar «Guardar Perfil».
+              </p>
             </div>
           </div>
 
