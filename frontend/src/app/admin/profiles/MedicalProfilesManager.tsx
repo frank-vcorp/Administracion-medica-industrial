@@ -20,6 +20,7 @@ import {
   removeProfileReportEmail,
   cloneMedicalProfile,
 } from '@/actions/medical-profiles'
+import { MedicalProfileNameBuilderFields } from '@/components/medical-profiles/MedicalProfileNameBuilderFields'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS LOCALES
@@ -421,6 +422,8 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
           availableTests={availableTests}
           initialTestIds={editTarget.tests.map(({ test }) => test.id)}
           initialName={editTarget.name}
+          companyLegalName={editTarget.company?.name ?? null}
+          initialCompanyId={editTarget.companyId}
           initialSpecialNotes={editTarget.specialNotes ?? ''}
           initialEmails={editTarget.reportEmails ?? []}
           onClose={() => setEditTarget(null)}
@@ -546,6 +549,8 @@ function ProfileModal({
   availableTests,
   initialTestIds,
   initialName = '',
+  companyLegalName = null,
+  initialCompanyId = null,
   initialSpecialNotes = '',
   initialEmails = [],
   onClose,
@@ -557,6 +562,8 @@ function ProfileModal({
   availableTests: AvailableTest[]
   initialTestIds: string[]
   initialName?: string
+  companyLegalName?: string | null
+  initialCompanyId?: string | null
   initialSpecialNotes?: string
   initialEmails?: ProfileEmail[]
   onClose: () => void
@@ -564,6 +571,7 @@ function ProfileModal({
   isPending: boolean
   readOnlyEmails?: boolean
 }) {
+  const useStructuredName = Boolean(companyLegalName && initialCompanyId)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(initialTestIds))
   const [emails, setEmails] = useState<ProfileEmail[]>(initialEmails)
   const [newEmail, setNewEmail] = useState('')
@@ -665,14 +673,23 @@ function ProfileModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 overflow-hidden">
-          {/* Nombre del perfil */}
-          <input
-            name="name"
-            placeholder="Nombre del perfil (ej. Ingreso Operativo)"
-            defaultValue={initialName}
-            required
-            className="w-full border border-slate-200 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+          {initialCompanyId && (
+            <input type="hidden" name="companyId" value={initialCompanyId} />
+          )}
+          {useStructuredName && companyLegalName ? (
+            <MedicalProfileNameBuilderFields
+              companyLegalName={companyLegalName}
+              initialFullName={initialName}
+            />
+          ) : (
+            <input
+              name="name"
+              placeholder="Nombre del perfil (ej. Ingreso Operativo)"
+              defaultValue={initialName}
+              required
+              className="w-full border border-slate-200 p-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          )}
 
           {/* Selección de pruebas */}
           <div className="flex-1 overflow-hidden flex flex-col">

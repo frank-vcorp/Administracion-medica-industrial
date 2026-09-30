@@ -22,6 +22,11 @@ import {
   removeProfileReportEmail,
   cloneMedicalProfile,
 } from '@/actions/medical-profiles'
+import { MedicalProfileNameBuilderFields } from '@/components/medical-profiles/MedicalProfileNameBuilderFields'
+import {
+  buildMedicalProfileDisplayName,
+  initialGenderAndLabelFromProfileName,
+} from '@/lib/medical-profile-display-name'
 
 type AvailableTest = {
   id: string
@@ -274,6 +279,7 @@ export default function CompanyMedicalProfilesPanel({
         <ProfileModal
           title="Nuevo Perfil Médico"
           companyId={companyId}
+          companyLegalName={companyName}
           availableTests={availableTests}
           initialName=""
           initialTestIds={[]}
@@ -287,6 +293,7 @@ export default function CompanyMedicalProfilesPanel({
         <ProfileModal
           title={`Editar: ${editTarget.name}`}
           companyId={companyId}
+          companyLegalName={companyName}
           availableTests={availableTests}
           initialName={editTarget.name}
           initialTestIds={editTarget.tests.map(({ test }) => test.id)}
@@ -312,7 +319,8 @@ export default function CompanyMedicalProfilesPanel({
               </button>
             </div>
             <CloneForm
-              initialName={`${cloneSource.name} (Copia)`}
+              companyLegalName={companyName}
+              sourceName={cloneSource.name}
               isPending={isPending}
               onCancel={() => setCloneSource(null)}
               onSubmit={(newName) => handleClone(cloneSource.id, newName, () => setCloneSource(null))}
@@ -325,40 +333,51 @@ export default function CompanyMedicalProfilesPanel({
 }
 
 function CloneForm({
-  initialName,
+  companyLegalName,
+  sourceName,
   isPending,
   onCancel,
   onSubmit,
 }: {
-  initialName: string
+  companyLegalName: string
+  sourceName: string
   isPending: boolean
   onCancel: () => void
   onSubmit: (newName: string) => void
 }) {
-  const [name, setName] = useState(initialName)
+  const base = initialGenderAndLabelFromProfileName(sourceName)
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault()
-        onSubmit(name)
+        const fd = new FormData(e.currentTarget)
+        const gender = fd.get('profileGender')
+        const labelRaw = fd.get('profileLabel')
+        const label = typeof labelRaw === 'string' ? labelRaw.trim() : ''
+        if (gender !== 'MALE' && gender !== 'FEMALE' || !label) return
+        try {
+          onSubmit(
+            buildMedicalProfileDisplayName({
+              companyLegalName,
+              gender,
+              profileLabel: label,
+            }),
+          )
+        } catch {
+          /* validation en UI */
+        }
       }}
       className="space-y-4"
     >
       <p className="text-sm text-slate-600">
-        Se creará un clon con las mismas pruebas, correos y notas. El nombre debe ser único.
+        Se creará un clon con las mismas pruebas, correos y notas. Ajusta género o nombre si hace falta.
       </p>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          Nombre del clon <span className="text-red-500">*</span>
-        </label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          maxLength={200}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-        />
-      </div>
+      <MedicalProfileNameBuilderFields
+        companyLegalName={companyLegalName}
+        initialFullName={sourceName}
+        initialProfileLabel={`${base.profileLabel} (Copia)`}
+      />
       <div className="flex justify-end gap-2">
         <button
           type="button"
@@ -369,7 +388,7 @@ function CloneForm({
         </button>
         <button
           type="submit"
-          disabled={isPending || !name.trim()}
+          disabled={isPending}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow transition-colors hover:bg-blue-700 disabled:opacity-50"
         >
           {isPending ? 'Clonando…' : 'Crear clon'}
@@ -410,6 +429,7 @@ function ProfileTestsSummary({ tests }: { tests: CompanyMedicalProfile['tests'] 
 function ProfileModal({
   title,
   companyId,
+  companyLegalName,
   availableTests,
   initialName,
   initialTestIds,
@@ -421,6 +441,7 @@ function ProfileModal({
 }: {
   title: string
   companyId: string
+  companyLegalName: string
   availableTests: AvailableTest[]
   initialName: string
   initialTestIds: string[]
@@ -556,20 +577,10 @@ function ProfileModal({
           <input type="hidden" name="companyId" value={companyId} />
 
           <div className="space-y-4 overflow-hidden">
-            <div>
-              <label htmlFor="company-profile-name" className="mb-1 block text-sm font-medium text-slate-700">
-                Nombre del perfil <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="company-profile-name"
-                name="name"
-                defaultValue={initialName}
-                required
-                maxLength={200}
-                placeholder="Ej: Ingreso Soldadura"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-slate-400"
-              />
-            </div>
+            <MedicalProfileNameBuilderFields
+              companyLegalName={companyLegalName}
+              initialFullName={initialName}
+            />
 
             <div className="overflow-hidden rounded-xl border border-slate-200">
               <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">

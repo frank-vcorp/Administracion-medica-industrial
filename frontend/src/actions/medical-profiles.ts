@@ -31,6 +31,10 @@ import {
   PUBLIC_GENERAL_COMPANY_RFC,
   PUBLIC_GENERAL_LEGACY_NAMES,
 } from '@/lib/public-general-company'
+import {
+  buildMedicalProfileDisplayName,
+  type MedicalProfileNameGender,
+} from '@/lib/medical-profile-display-name'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA ZOD
@@ -176,6 +180,94 @@ function revalidateCompanyProfilePath(companyId: string | null | undefined) {
   }
 
   revalidatePath(`/companies/${companyId}`)
+}
+
+const ProfileGenderSchema = z.enum(['MALE', 'FEMALE'], {
+  message: 'Selecciona Masculino o Femenino',
+})
+
+async function resolveMedicalProfileNameForSave(
+  formData: FormData,
+  companyId: string | null,
+): Promise<{ success: true; name: string } | { success: false; error: string }> {
+  const useStructured = formData.get('useStructuredProfileName') === '1'
+
+  if (useStructured && companyId) {
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true },
+    })
+    if (!company) {
+      return { success: false, error: 'Empresa no encontrada' }
+    }
+
+    const genderParsed = ProfileGenderSchema.safeParse(formData.get('profileGender'))
+    const labelRaw = formData.get('profileLabel')
+    const profileLabel =
+      typeof labelRaw === 'string' ? labelRaw.trim() : ''
+
+    if (!genderParsed.success) {
+      return { success: false, error: genderParsed.error.issues[0].message }
+    }
+    if (!profileLabel) {
+      return { success: false, error: 'El nombre del perfil es obligatorio' }
+    }
+    if (profileLabel.length > 120) {
+      return { success: false, error: 'El nombre del perfil no puede exceder 120 caracteres' }
+    }
+
+    let name: string
+    try {
+      name = buildMedicalProfileDisplayName({
+        companyLegalName: company.name,
+        gender: genderParsed.data as MedicalProfileNameGender,
+        profileLabel,
+      })
+    } catch {
+      return { success: false, error: 'No se pudo generar el nombre del perfil' }
+    }
+
+    if (name.length > 200) {
+      return {
+        success: false,
+        error: 'El nombre generado es demasiado largo; acorta el nombre del perfil',
+      }
+    }
+
+    return { success: true, name }
+  }
+
+  const rawName = formData.get('name')
+  const name = typeof rawName === 'string' ? rawName.trim() : ''
+  if (!name) {
+    return { success: false, error: 'El nombre del perfil es obligatorio' }
+  }
+  if (name.length > 200) {
+    return { success: false, error: 'El nombre no puede exceder 200 caracteres' }
+  }
+  return { success: true, name }
+}
+
+async function assertUniqueProfileNameForCompany(
+  name: string,
+  companyId: string | null,
+  excludeProfileId?: string,
+): Promise<ActionResult> {
+  const duplicate = await prisma.medicalProfile.findFirst({
+    where: {
+      name: { equals: name, mode: 'insensitive' },
+      companyId: companyId ?? null,
+      ...(excludeProfileId ? { id: { not: excludeProfileId } } : {}),
+    },
+    select: { id: true },
+  })
+  if (duplicate) {
+    return {
+      success: false,
+      error: 'Ya existe un perfil con ese nombre para esta empresa. Cambia el género o el nombre del perfil.',
+    }
+  }
+  return { success: true }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,16 +439,27 @@ export async function createMedicalProfile(
   const testIds = parseTestIds(formData)
   const rawCompanyId = formData.get('companyId')
   const rawSpecialNotes = formData.get('specialNotes')
+  const companyId = typeof rawCompanyId === 'string' && rawCompanyId ? rawCompanyId : null
+
+  const resolvedName = await resolveMedicalProfileNameForSave(formData, companyId)
+  if (!resolvedName.success) {
+    return { success: false, error: resolvedName.error }
+  }
 
   const parsed = MedicalProfileSchema.safeParse({
-    name: formData.get('name'),
-    companyId: typeof rawCompanyId === 'string' && rawCompanyId ? rawCompanyId : null,
+    name: resolvedName.name,
+    companyId,
     testIds,
     specialNotes: typeof rawSpecialNotes === 'string' && rawSpecialNotes ? rawSpecialNotes : null,
   })
 
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  const unique = await assertUniqueProfileNameForCompany(parsed.data.name, parsed.data.companyId ?? null)
+  if (!unique.success) {
+    return unique
   }
 
   const reportEmails = parseReportEmailsFromFormData(formData)
@@ -477,15 +580,34 @@ export async function updateMedicalProfile(
     select: { companyId: true },
   })
 
+  const companyId =
+    typeof rawCompanyId === 'string' && rawCompanyId
+      ? rawCompanyId
+      : previousProfile?.companyId ?? null
+
+  const resolvedName = await resolveMedicalProfileNameForSave(formData, companyId)
+  if (!resolvedName.success) {
+    return { success: false, error: resolvedName.error }
+  }
+
   const parsed = MedicalProfileSchema.safeParse({
-    name: formData.get('name'),
-    companyId: typeof rawCompanyId === 'string' && rawCompanyId ? rawCompanyId : null,
+    name: resolvedName.name,
+    companyId,
     testIds,
     specialNotes: typeof rawSpecialNotes === 'string' ? rawSpecialNotes : null,
   })
 
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  const unique = await assertUniqueProfileNameForCompany(
+    parsed.data.name,
+    parsed.data.companyId ?? null,
+    id,
+  )
+  if (!unique.success) {
+    return unique
   }
 
   const reportEmails = parseReportEmailsFromFormData(formData)
