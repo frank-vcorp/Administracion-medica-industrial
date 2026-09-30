@@ -632,9 +632,20 @@ function ProfileModal({
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setEmailError(null)
+    if (!readOnlyEmails && emails.length < 1) {
+      setEmailError('Agrega al menos un correo de envío de resultados.')
+      return
+    }
     const formData = new FormData(e.currentTarget)
     // Serializar IDs seleccionados como JSON (parseTestIds() en el server action lo espera así)
     formData.set('testIds', JSON.stringify(Array.from(selectedIds)))
+    if (!readOnlyEmails) {
+      formData.set(
+        'reportEmails',
+        JSON.stringify(emails.map((em) => ({ email: em.email, label: em.label }))),
+      )
+    }
     onSubmit(formData)
   }
 
@@ -726,6 +737,7 @@ function ProfileModal({
           <div>
             <p className="text-sm font-semibold text-slate-700 mb-1">
               Correos de envío de resultados{' '}
+              {!readOnlyEmails && <span className="text-red-500">*</span>}{' '}
               <span className="text-amber-600 text-xs">({emails.length} configurados)</span>
             </p>
             {emails.length > 0 && (

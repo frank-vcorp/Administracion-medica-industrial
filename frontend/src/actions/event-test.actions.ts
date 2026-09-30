@@ -25,6 +25,7 @@ import { extractSnapshotVersioningFromBackendAudit } from "@/lib/calibration-v3-
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import { writeTimelineEntry } from "@/lib/timeline.service"
 import { TimelineEntryType } from "@prisma/client"
+import { assertExtractedPatientNameMatchesEvent } from '@/lib/clinical/patient-name-match'
 
 async function maybeCropEspirometrySourceAfterUpload(
   eventTestId: string,
@@ -1052,6 +1053,17 @@ export async function uploadEventTestFile(formData: FormData) {
           triggeredByUserId
         )
         if (xmlResponse.success && xmlResponse.payload) {
+          const nameCheck = await assertExtractedPatientNameMatchesEvent(
+            eventId,
+            xmlResponse.payload.extraction_snapshot.extracted_data,
+          )
+          if (!nameCheck.ok) {
+            return {
+              success: false,
+              error: nameCheck.error,
+              errorCode: nameCheck.errorCode,
+            }
+          }
           const persisted = await persistXmlDirectSnapshots({
             eventTestId,
             eventId,

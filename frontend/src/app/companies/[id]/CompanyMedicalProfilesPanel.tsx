@@ -436,7 +436,6 @@ function ProfileModal({
   const [newLabel, setNewLabel] = useState('')
   const [emailError, setEmailError] = useState<string | null>(null)
   const [notesCharCount, setNotesCharCount] = useState(initialSpecialNotes.length)
-  const [profileId] = useState<string | null>(null) // Para edición detectar ya guardados
   // FIX-FRANK-20260731-08: buscador embebido en el catálogo de pruebas del modal
   // "Nuevo Perfil Médico". Filtra por code (GEN-009, etc.) o nombre. La selección
   // se preserva aunque el término excluya al test (al limpiarse el filtro se ve de
@@ -519,18 +518,19 @@ function ProfileModal({
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setEmailError(null)
+    if (emails.length < 1) {
+      setEmailError('Agrega al menos un correo de envío de resultados.')
+      return
+    }
     const formData = new FormData(event.currentTarget)
     formData.set('companyId', companyId)
     formData.set('testIds', JSON.stringify(Array.from(selectedIds)))
-    // Emails temporales se persisten al guardar vía addProfileReportEmail
-    // (las filas ya persistidas se actualizan automáticamente — solo el formData va completo)
+    formData.set(
+      'reportEmails',
+      JSON.stringify(emails.map((em) => ({ email: em.email, label: em.label }))),
+    )
     onSubmit(formData)
-    // Persistir emails nuevos (temporales) usando addProfileReportEmail — requieren un profileId del modal
-    if (profileId) {
-      for (const em of emails.filter((e) => e.id.startsWith('temp-'))) {
-        void addProfileReportEmail(profileId, { email: em.email, label: em.label })
-      }
-    }
   }
 
   return (
@@ -697,6 +697,7 @@ function ProfileModal({
             <div>
               <p className="mb-1 text-sm font-medium text-slate-700">
                 Correos de envío de resultados{' '}
+                <span className="text-red-500">*</span>{' '}
                 <span className="text-amber-600 text-xs">({emails.length})</span>
               </p>
               {emails.length > 0 && (

@@ -30,6 +30,7 @@ import {
   resolveAiCalibrationForUpload,
 } from '@/lib/clinical/default-ai-calibration'
 import { getCanonicalAIStudyType, normalizeStudyTypeForBackend } from '@/lib/study-ai'
+import { assertExtractedPatientNameMatchesEvent } from '@/lib/clinical/patient-name-match'
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
@@ -451,6 +452,19 @@ export async function triggerStudyAIAnalysis(
         : {}),
     }
     const mergedPredxData = { ...predxData, audit: mergedPredxAudit }
+
+    const nameCheck = await assertExtractedPatientNameMatchesEvent(
+      eventId,
+      (mergedExtractionSnapshot as { extracted_data?: unknown }).extracted_data ??
+        result.extraction_snapshot?.extracted_data,
+    )
+    if (!nameCheck.ok) {
+      return {
+        success: false,
+        error: nameCheck.error,
+        errorCode: nameCheck.errorCode,
+      }
+    }
 
     // 3-6. Mantener histórico y desplazar la vigencia a la nueva corrida.
     const { extractionSnapshot, prediagnosisSnapshot } = await prisma.$transaction(async (tx) => {

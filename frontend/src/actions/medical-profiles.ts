@@ -97,6 +97,75 @@ function parseTestIds(formData: FormData): string[] {
   }
 }
 
+const ReportEmailInputSchema = z.object({
+  email: z.string().email('Formato de correo inválido'),
+  label: z.string().max(100).nullable().optional(),
+})
+
+function parseReportEmailsFromFormData(formData: FormData): z.infer<typeof ReportEmailInputSchema>[] {
+  const raw = formData.get('reportEmails')
+  if (typeof raw !== 'string' || !raw.trim()) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const out: z.infer<typeof ReportEmailInputSchema>[] = []
+    for (const item of parsed) {
+      const row = ReportEmailInputSchema.safeParse(item)
+      if (row.success) {
+        out.push({
+          email: row.data.email.toLowerCase().trim(),
+          label: row.data.label ?? null,
+        })
+      }
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+async function syncProfileReportEmails(
+  profileId: string,
+  desired: z.infer<typeof ReportEmailInputSchema>[],
+): Promise<ActionResult> {
+  if (desired.length < 1) {
+    return {
+      success: false,
+      error: 'Agrega al menos un correo de envío de resultados para guardar el perfil.',
+    }
+  }
+  if (desired.length > 10) {
+    return { success: false, error: 'Se permite un máximo de 10 correos por perfil.' }
+  }
+
+  const existing = await prisma.medicalProfileReportEmail.findMany({
+    where: { profileId },
+    select: { id: true, email: true },
+  })
+
+  const desiredEmails = new Set(desired.map((d) => d.email))
+  const toDelete = existing.filter((e) => !desiredEmails.has(e.email.toLowerCase()))
+  const existingEmails = new Set(existing.map((e) => e.email.toLowerCase()))
+  const toCreate = desired.filter((d) => !existingEmails.has(d.email))
+
+  await prisma.$transaction([
+    ...toDelete.map((row) =>
+      prisma.medicalProfileReportEmail.delete({ where: { id: row.id } }),
+    ),
+    ...toCreate.map((row) =>
+      prisma.medicalProfileReportEmail.create({
+        data: {
+          profileId,
+          email: row.email,
+          label: row.label ?? null,
+        },
+      }),
+    ),
+  ])
+
+  return { success: true }
+}
+
 function toPrismaJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
@@ -290,12 +359,26 @@ export async function createMedicalProfile(
     return { success: false, error: parsed.error.issues[0].message }
   }
 
+  const reportEmails = parseReportEmailsFromFormData(formData)
+  if (reportEmails.length < 1) {
+    return {
+      success: false,
+      error: 'Agrega al menos un correo de envío de resultados para guardar el perfil.',
+    }
+  }
+
   try {
     await prisma.medicalProfile.create({
       data: {
         name: parsed.data.name,
         companyId: parsed.data.companyId ?? null,
         specialNotes: parsed.data.specialNotes ?? null,
+        reportEmails: {
+          create: reportEmails.map((row) => ({
+            email: row.email,
+            label: row.label ?? null,
+          })),
+        },
         tests: {
           create: parsed.data.testIds.map((testId) => ({ testId })),
         },
@@ -403,6 +486,25 @@ export async function updateMedicalProfile(
 
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  const reportEmails = parseReportEmailsFromFormData(formData)
+  const emailSync =
+    formData.has('reportEmails')
+      ? await syncProfileReportEmails(id, reportEmails)
+      : await (async () => {
+          const count = await prisma.medicalProfileReportEmail.count({ where: { profileId: id } })
+          if (count < 1) {
+            return {
+              success: false,
+              error: 'Agrega al menos un correo de envío de resultados para guardar el perfil.',
+            } as ActionResult
+          }
+          return { success: true } as ActionResult
+        })()
+
+  if (!emailSync.success) {
+    return emailSync
   }
 
   try {
@@ -531,6 +633,16 @@ export async function removeProfileReportEmail(
     })
     if (!row) {
       return { success: false, error: 'Correo no encontrado' }
+    }
+
+    const emailCount = await prisma.medicalProfileReportEmail.count({
+      where: { profileId: row.profile.id },
+    })
+    if (emailCount <= 1) {
+      return {
+        success: false,
+        error: 'El perfil debe conservar al menos un correo de envío de resultados.',
+      }
     }
 
     await prisma.medicalProfileReportEmail.delete({ where: { id: emailId } })
