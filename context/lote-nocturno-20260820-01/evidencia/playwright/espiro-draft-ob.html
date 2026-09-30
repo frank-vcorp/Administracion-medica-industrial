@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LOTE-20260820-01 — Espiro draft (ESPIRO OB.png)</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 24px; color: #1e293b; }
+    h1 { font-size: 18px; margin: 0 0 4px; color: #0f172a; }
+    h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin: 16px 0 8px; font-weight: 700; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .pill-draft { background: #fef9c3; color: #854d0e; }
+    .pill-tested { background: #dcfce7; color: #166534; }
+    .pill-blocker { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+    .badge-version { font-family: monospace; font-size: 10px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f8; color: #475569; }
+    .card { background: #fff; border: 1px solid #e2e8f8; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap; }
+    .header-row .left { display: flex; align-items: center; gap: 8px; }
+    .header-row .right { display: flex; align-items: center; gap: 6px; }
+    .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+    .kv dt { font-size: 11px; color: #64748b; }
+    .kv dd { font-size: 11px; color: #1e293b; text-align: right; font-weight: 500; word-break: break-word; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    thead th { background: #f8fafc; padding: 6px 8px; text-align: left; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f8; white-space: nowrap; }
+    tbody td { padding: 4px 8px; color: #334155; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+    .null-cell { color: #94a3b8; font-style: italic; }
+    .section { padding-top: 12px; border-top: 1px solid #f1f5f9; }
+    .section:first-of-type { border-top: 0; padding-top: 0; }
+    .limit-banner { background: #fee2e2; border: 1px solid #fca5a5; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; color: #7f1d1d; font-size: 12px; font-weight: 600; }
+    .ai-flag { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #fee2e2; color: #991b1b; font-size: 11px; font-weight: 700; border: 1px solid #fca5a5; }
+  </style>
+</head>
+<body>
+
+<div data-testid="papeleta-header">
+  <h1>Espirometría — SIBELMED W20s (2026-04-20)</h1>
+  <p style="margin: 0; font-size: 12px; color: #475569;">Informe INFORME DE FVC — Límite DG-1: AMI entrega sólo PNG, no PDF</p>
+</div>
+
+<div class="limit-banner" data-testid="limit-banner">
+  ⚠ Limitación DG-1: insumo es PNG (ESPIRO OB.png); no hay PDF con tabla exhaustiva M1/M2/M3/REF/LLN. Calibración en <strong>draft</strong>; LLN no extraíble (no hay hoja de espirometría en <code>VALORES DE REFERENCIA.xlsx</code>).
+</div>
+
+<div id="extraction-clinical" class="card" data-testid="extraction-clinical" data-presentation-state="draft" data-version="lote-nocturno-20260820-01-espiro-v3-draft" data-status="draft">
+  <div class="header-row">
+    <div class="left">
+      <span aria-hidden="true">🩺</span>
+      <p style="margin: 0; font-size: 13px; font-weight: 700; color: #1e293b;">Extracción clínica</p>
+      <span class="pill pill-draft">Espirometria</span>
+      <span class="pill pill-draft">V3 draft</span>
+    </div>
+    <div class="right">
+      <span class="badge-version">v lote-nocturno-20260820-01-espiro-v3-draft</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Resumen principal</h2>
+    <dl class="kv">
+      <dt>fvc</dt><dd>3.68 L</dd>
+      <dt>fev1</dt><dd>3.09 L</dd>
+      <dt>fev1_fvc_ratio</dt><dd>83.93 %</dd>
+      <dt>fvc_percent_predicho</dt><dd>81 %</dd>
+      <dt>fev1_percent_predicho</dt><dd>73 %</dd>
+    </dl>
+  </div>
+
+  <div class="section">
+    <h2>Datos del estudio</h2>
+    <dl class="kv">
+      <dt>fecha_estudio</dt><dd>2026-04-20</dd>
+      <dt>tipo_reporte</dt><dd>INFORME DE FVC</dd>
+      <dt>equipo_modelo</dt><dd>SIBELMED W20s</dd>
+    </dl>
+  </div>
+
+  <div class="section">
+    <h2>Calidad técnica del estudio</h2>
+    <dl class="kv">
+      <dt>repetibilidad_ats_ers_fvc</dt><dd>0.03 L</dd>
+      <dt>repetibilidad_ats_ers_fev1</dt><dd>0.02 L</dd>
+      <dt>es_interpretable</dt><dd>Sí</dd>
+      <dt>completitud_documental</dt><dd><span class="pill pill-tested">suficiente</span></dd>
+    </dl>
+  </div>
+
+  <div class="section">
+    <h2>Parámetros espirométricos</h2>
+    <table aria-label="Tabla INFORME DE FVC SIBELMED W20s — M1/M2/M3/REF/LLN/%REF">
+      <thead>
+        <tr>
+          <th>Parámetro</th>
+          <th>Unidad</th>
+          <th>M1</th>
+          <th>M2</th>
+          <th>M3</th>
+          <th>REF</th>
+          <th>LLN</th>
+          <th>%REF M1</th>
+          <th>%REF M2</th>
+          <th>%REF M3</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>FVC</td><td>L</td><td>3.68</td><td>3.68</td><td>3.68</td><td>5.91</td><td class="null-cell">—</td><td>81</td><td>81</td><td>81</td></tr>
+        <tr><td>FEV1</td><td>L</td><td>3.09</td><td>3.09</td><td>3.09</td><td>4.20</td><td class="null-cell">—</td><td>73</td><td>73</td><td>73</td></tr>
+        <tr><td>FEV1/FVC</td><td>%</td><td>84.14</td><td>83.93</td><td class="null-cell">—</td><td class="null-cell">—</td><td class="null-cell">—</td><td>100</td><td>100</td><td class="null-cell">—</td></tr>
+        <tr><td>FEF25-75</td><td>L/s</td><td>3.30</td><td>3.29</td><td class="null-cell">—</td><td class="null-cell">—</td><td class="null-cell">—</td><td>69</td><td>69</td><td class="null-cell">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="gaps" data-testid="missing-fields">
+  <p style="font-size: 11px; font-weight: 700; color: #b45309; margin-bottom: 6px;">Campos no encontrados</p>
+  <span class="pill pill-blocker" data-testid="gap-lln">parametros[0].lln_value</span>
+  <span class="pill pill-blocker" data-testid="gap-lln">parametros[1].lln_value</span>
+  <span class="pill pill-blocker" data-testid="gap-lln">parametros[2].lln_value</span>
+  <span class="pill pill-blocker" data-testid="gap-lln">parametros[3].lln_value</span>
+  <span class="pill pill-blocker" data-testid="gap-paciente">paciente.nombre_completo</span>
+  <span class="pill pill-blocker" data-testid="gap-paciente">paciente.edad_anios</span>
+  <span class="pill pill-blocker" data-testid="gap-paciente">paciente.talla_cm</span>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,1719 @@
+{
+  "kind": "element",
+  "role": "body",
+  "depth": 0,
+  "children": [
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "papeleta-header",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "element",
+          "role": "h1",
+          "ownText": "Espirometría — Estado tested (escenario hipotético completo)",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "Espirometría — Estado tested (escenario hipotético completo)"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "p",
+          "ownText": "Ilustración del schema `presentation.schema` con todos los parámetros espirométricos típicos poblados (FEV1, FVC, FEV1/FVC, FEF25-75, PEF, FET, FEV6, FIVC). NO corresponde a un paciente real del AMI.",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "Ilustración del schema `presentation.schema` con todos los parámetros espirométricos típicos poblados (FEV1, FVC, FEV1/FVC, FEF25-75, PEF, FET, FEV6, FIVC). NO corresponde a un paciente real del AMI."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "scenario-banner",
+      "ownText": "⚠ Escenario hipotético generado por la SOFIA para verificar la cobertura del schema V3 (8 parámetros canónicos + tabla M1/M2/M3/REF/LLN/%REF completa). Limitación DG-1: el AMI no entrega PDF con esta tabla exhaustiva; este render es sólo para validar que el renderer soporta la tabla llena.",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "text",
+          "depth": 2,
+          "text": "⚠ Escenario hipotético generado por la SOFIA para verificar la cobertura del schema V3 (8 parámetros canónicos + tabla M1/M2/M3/REF/LLN/%REF completa). Limitación DG-1: el AMI no entrega PDF con esta tabla exhaustiva; este render es sólo para validar que el renderer soporta la tabla llena."
+        }
+      ]
+    },
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "extraction-clinical",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "element",
+          "role": "div",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "div",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "🩺",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "🩺"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "p",
+                  "ownText": "Extracción clínica",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "Extracción clínica"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "Espirometria",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "Espirometria"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "V3 tested (hipotético)",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "V3 tested (hipotético)"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "element",
+              "role": "div",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "v lote-nocturno-20260820-01-espiro-v3-draft",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "v lote-nocturno-20260820-01-espiro-v3-draft"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "div",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "h2",
+              "ownText": "Resumen principal",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "text",
+                  "depth": 4,
+                  "text": "Resumen principal"
+                }
+              ]
+            },
+            {
+              "kind": "element",
+              "role": "dl",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "fvc",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "fvc"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "ownText": "4.20 L",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "4.20 L"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "fev1",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "fev1"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "ownText": "3.45 L",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "3.45 L"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "fev1_fvc_ratio",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "fev1_fvc_ratio"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "ownText": "82.1 %",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "82.1 %"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "fvc_percent_predicho",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "fvc_percent_predicho"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "ownText": "92 %",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "92 %"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "fev1_percent_predicho",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "fev1_percent_predicho"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "ownText": "88 %",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "88 %"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "div",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "h2",
+              "ownText": "Calidad técnica del estudio",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "text",
+                  "depth": 4,
+                  "text": "Calidad técnica del estudio"
+                }
+              ]
+            },
+            {
+              "kind": "element",
+              "role": "dl",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "repetibilidad_ats_ers_fvc",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "repetibilidad_ats_ers_fvc"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "ownText": "0.08 L",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "0.08 L"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "repetibilidad_ats_ers_fev1",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "repetibilidad_ats_ers_fev1"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "ownText": "0.06 L",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "0.06 L"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "es_interpretable",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "es_interpretable"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "ownText": "Sí",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "Sí"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "completitud_documental",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "completitud_documental"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "element",
+                      "role": "span",
+                      "ownText": "suficiente",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "text",
+                          "depth": 6,
+                          "text": "suficiente"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "div",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "h2",
+              "ownText": "Parámetros espirométricos",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "text",
+                  "depth": 4,
+                  "text": "Parámetros espirométricos"
+                }
+              ]
+            },
+            {
+              "kind": "element",
+              "role": "table",
+              "label": "Tabla INFORME DE FVC SIBELMED W20s — M1/M2/M3/REF/LLN/%REF (escenario hipotético)",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "thead",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "Parámetro",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "Parámetro"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "Unidad",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "Unidad"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "M1",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "M1"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "M2",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "M2"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "M3",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "M3"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "REF",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "REF"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "LLN",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "LLN"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "%REF M1",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "%REF M1"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "%REF M2",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "%REF M2"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "%REF M3",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "%REF M3"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "tbody",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "FVC",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "FVC"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "L",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "L"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.20",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.20"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.18",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.18"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.10",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.10"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.55",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.55"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.41",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.41"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "92",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "92"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "92",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "92"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "90",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "90"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "FEV1",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "FEV1"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "L",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "L"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.45",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.45"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.42",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.42"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.38",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.38"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.91",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.91"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "2.94",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "2.94"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "88",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "88"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "87",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "87"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "86",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "86"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "FEV1/FVC",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "FEV1/FVC"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "%",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "%"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "82.1",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "82.1"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "81.8",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "81.8"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "82.4",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "82.4"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "85.9",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "85.9"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "73.5",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "73.5"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "96",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "96"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "95",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "95"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "96",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "96"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "FEF25-75",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "FEF25-75"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "L/s",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "L/s"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.65",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.65"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.55",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.55"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.40",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.40"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.85",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.85"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "2.05",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "2.05"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "95",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "95"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "92",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "92"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "88",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "88"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "PEF",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "PEF"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "L/s",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "L/s"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "8.10",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "8.10"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "8.05",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "8.05"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "7.95",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "7.95"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "8.75",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "8.75"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "6.45",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "6.45"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "93",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "93"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "92",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "92"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "91",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "91"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "FET",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "FET"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "s",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "s"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "6.2",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "6.2"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "6.4",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "6.4"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "6.1",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "6.1"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "FEV6",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "FEV6"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "L",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "L"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.05",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.05"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.00",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.00"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3.95",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3.95"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "FIVC",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "FIVC"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "L",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "L"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.15",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.15"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.10",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.10"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4.05",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4.05"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

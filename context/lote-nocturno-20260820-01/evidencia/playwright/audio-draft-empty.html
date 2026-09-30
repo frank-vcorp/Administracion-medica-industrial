@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LOTE-20260820-01 — Audio draft (sin extracción)</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 24px; color: #1e293b; }
+    h1 { font-size: 18px; margin: 0 0 4px; color: #0f172a; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .pill-draft { background: #fef9c3; color: #854d0e; }
+    .pill-tested { background: #dcfce7; color: #166534; }
+    .card { background: #fff; border: 1px solid #e2e8f8; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap; }
+    .header-row .left { display: flex; align-items: center; gap: 8px; }
+    .header-row .right { display: flex; align-items: center; gap: 6px; }
+    .badge-version { font-family: monospace; font-size: 10px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f8; color: #475569; }
+    .empty-state { text-align: center; padding: 32px 16px; color: #94a3b8; }
+    .empty-state p { font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<div data-testid="papeleta-header">
+  <h1>Audiometría — Estado draft (sin extracción aplicada)</h1>
+  <p style="margin: 0; font-size: 12px; color: #475569;">Calibración en draft; ninguna extracción cargada todavía.</p>
+</div>
+
+<div id="extraction-clinical" class="card" data-testid="extraction-clinical" data-presentation-state="draft" data-version="lote-nocturno-20260820-01-audio-v3-draft" data-status="draft">
+  <div class="header-row">
+    <div class="left">
+      <span aria-hidden="true">🩺</span>
+      <p style="margin: 0; font-size: 13px; font-weight: 700; color: #1e293b;">Extracción clínica</p>
+      <span class="pill pill-draft">Audiometria</span>
+      <span class="pill pill-draft">V3 draft</span>
+    </div>
+    <div class="right">
+      <span class="badge-version">v lote-nocturno-20260820-01-audio-v3-draft</span>
+    </div>
+  </div>
+  <div class="empty-state" data-testid="empty-state">
+    <p>Sin datos extraídos aún. Esperando primera ejecución de extracción IA.</p>
+  </div>
+</div>
+
+</body>
+</html>

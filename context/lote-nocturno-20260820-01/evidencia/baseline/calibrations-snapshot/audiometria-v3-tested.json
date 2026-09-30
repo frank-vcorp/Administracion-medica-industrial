@@ -1,0 +1,148 @@
+{
+  "_meta": {
+    "purpose": "Snapshot local de la calibración V3 para AUDIOMETRÍA propuesta por LOTE-20260820-01 Unidad 2",
+    "id": "snapshot-v3-audiometria-lote-20260820-01",
+    "schemaVersion": "V3",
+    "createdAt": "2026-08-20T23:59:59-06:00",
+    "testId": "lookup-by-code-AUDIOMETRIA",
+    "testName": "AUDIOMETRIA",
+    "operationMode": "clinical_interpretation",
+    "status": "tested",
+    "note": "Snapshot local — NO publicado. Equivalente a lo que se persistiría en MedicalTest.options.aiCalibration vía saveAICalibrationV3 (frontend/src/actions/calibration-v3.actions.ts)."
+  },
+  "options": {
+    "operationMode": "clinical_interpretation",
+    "canonicalStudyType": "Audiometria",
+    "aiCalibration": {
+      "schemaVersion": "V3",
+      "currentPublishedVersionId": null,
+      "familyTemplateId": null,
+      "draft": {
+        "status": "tested",
+        "label": "lote-nocturno-20260820-01-audio-v3-draft",
+        "enabled": true,
+        "canonicalStudyType": "Audiometria",
+        "extraction": {
+          "enabled": true,
+          "prompt": "INSTRUCCIÓN PARA AUDIOMETRÍA (8 frecuencias canónicas industriales: 250, 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz).\n\nPROTOCOLO OBLIGATORIO:\n1. Identifica el documento como AUDIOMETRÍA (no confundir con Espirometría u otro estudio).\n2. Extrae datos demográficos del paciente: nombre_completo, identificacion, sexo, edad_anios, fecha_nacimiento, empresa, puesto.\n3. Extrae metadatos del estudio: fecha_estudio, hora_estudio, tipo_reporte, equipo_modelo, transductor, ultima_calibracion, equipo_numero_serie, numero_serie_sistema.\n4. Extrae los umbrales audiométricos (vía aérea y vía ósea) como mapas de frecuencias:\n   - oido_derecho.va: { \"250\": <dB>, \"500\": <dB>, \"1000\": <dB>, \"2000\": <dB>, \"3000\": <dB>, \"4000\": <dB>, \"6000\": <dB>, \"8000\": <dB> }\n   - oido_derecho.vo: { (mismas claves, sólo si aplica vía ósea) }\n   - oido_izquierdo.va: { (mismas claves) }\n   - oido_izquierdo.vo: { (mismas claves) }\n   - Si una frecuencia no aparece en el documento, devuelve null en esa clave (NO omitir, NO inventar).\n5. Extrae campos fuente del formato (campos_fuente) según SPEC_ARCH-20260516-07:\n   - faringe, cad (Conducto Auditivo Derecho), cai (Conducto Auditivo Izquierdo), mtd (Membrana Timpánica Derecha), mti (Membrana Timpánica Izquierda).\n6. Extrae resumen técnico:\n   - notas_calidad: { descripcion: \"<texto del PDF>\" } (si hay texto adicional relevante, incluirlo).\n   - completitud_documental: derivar tú mismo a partir del conteo de celdas con valor no nulo (≥12 dB values para ambas oídos = suficiente; 6-11 = parcial; <6 = no_concluyente).\n7. Calcula pta_visible por oído como promedio de 500/1000/2000/3000 Hz si están disponibles; si falta alguna, no interpoles.\n8. NO emitas diagnóstico ni aptitud — sólo prelectura asistida y trazable.\n9. Si faltan parámetros mínimos audiométricos (alguno de los 8 campos canónicos por oído), marca calidad como no_concluyente y devuelve la lista de parámetros_faltantes en notas_calidad.\n\nREFERENCIAS NORMATIVAS:\n- OMS/NIOSH 1998 (criterios de hipoacusia ocupacional)\n- SPEC_ARCH-20260516-07 (campos fuente AMI)\n- SPEC_ARCH-20260513-01 (V1 audio base)",
+          "promptHash": null,
+          "version": "lote-20260820-01-audio-v1",
+          "schemaVersion": "V3",
+          "targetFields": [
+            "oido_derecho.va",
+            "oido_derecho.vo",
+            "oido_derecho.pta_visible",
+            "oido_izquierdo.va",
+            "oido_izquierdo.vo",
+            "oido_izquierdo.pta_visible",
+            "paciente_detalle",
+            "estudio",
+            "condiciones",
+            "campos_fuente",
+            "notas_calidad",
+            "completitud_documental"
+          ],
+          "provider": "gemini",
+          "model": null
+        },
+        "fieldDefinitions": [
+          { "key": "oido_derecho", "label": "Oído Derecho (OD)", "type": "unknown", "aliases": ["OD", "right_ear"], "required": true, "unit": "dB HL" },
+          { "key": "oido_izquierdo", "label": "Oído Izquierdo (OI)", "type": "unknown", "aliases": ["OI", "left_ear"], "required": true, "unit": "dB HL" },
+          { "key": "paciente_detalle", "label": "Paciente", "type": "unknown", "aliases": ["paciente"], "required": true },
+          { "key": "estudio", "label": "Estudio", "type": "unknown", "aliases": [], "required": true },
+          { "key": "condiciones", "label": "Condiciones", "type": "unknown", "aliases": [], "required": false },
+          { "key": "campos_fuente", "label": "Campos fuente del formato", "type": "unknown", "aliases": [], "required": true },
+          { "key": "notas_calidad", "label": "Notas de calidad", "type": "unknown", "aliases": ["calidad"], "required": false },
+          { "key": "completitud_documental", "label": "Completitud documental", "type": "unknown", "aliases": [], "required": true }
+        ],
+        "clinicalCriteria": {
+          "prediagnosisEnabled": true,
+          "requiredParams": [
+            "oido_derecho.va.500", "oido_derecho.va.1000", "oido_derecho.va.2000", "oido_derecho.va.3000",
+            "oido_izquierdo.va.500", "oido_izquierdo.va.1000", "oido_izquierdo.va.2000", "oido_izquierdo.va.3000"
+          ],
+          "confidenceThreshold": 0.6,
+          "prompt": "INTERPRETACIÓN AUDIOMÉTRICA — prelectura asistida y trazable.\n\n1. Calcula PTA (Promedio Tonal Puro) por oído: media de 500, 1000, 2000, 3000 Hz vía aérea. Si falta alguna frecuencia, el PTA es parcial.\n2. Clasifica el grado de hipoacusia por oído según OMS:\n   - Normal: PTA ≤ 25 dB HL\n   - Leve: PTA 26-40 dB HL\n   - Moderada: PTA 41-60 dB HL\n   - Severa: PTA 61-80 dB HL\n   - Profunda: PTA > 80 dB HL\n3. Identifica patrón audiométrico (descendente, ascendente, meseta, en pico, etc.).\n4. Si los datos son insuficientes (<4 frecuencias por oído o sin vía ósea), marca como IA_NON_CONCLUSIVE con razón parametros_minimos_faltantes.\n5. NO emitas aptitud laboral; sólo describe los hallazgos audiométricos observables.\n6. Referencia normativa: SPEC_ARCH-20260516-07 (Faringe/CAD/CAI/MTD/MTI) + OMS 1998.\n",
+          "promptHash": null,
+          "promptVersion": "lote-20260820-01-audio-clin-v1",
+          "supportingReferences": [
+            { "source_id": "OMS-NIOSH-1998", "title": "WHO/NIOSH 1998 — Criterios de hipoacusia ocupacional", "section": "Grados de hipoacusia" },
+            { "source_id": "SPEC_ARCH-20260516-07", "title": "Campos fuente audiométricos AMI", "section": "Faringe/CAD/CAI/MTD/MTI" },
+            { "source_id": "SPEC_ARCH-20260513-01", "title": "V1 Audio base" }
+          ]
+        },
+        "presentation": {
+          "enabled": true,
+          "schema": {
+            "studyType": "Audiometria",
+            "sections": [
+              {
+                "kind": "keyValue",
+                "title": "Paciente",
+                "sourceKey": "paciente_detalle",
+                "fields": ["nombre_completo", "identificacion", "sexo", "edad_anios", "fecha_nacimiento", "notas", "empresa", "puesto"]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Estudio",
+                "sourceKey": "estudio",
+                "fields": ["fecha_estudio", "hora_estudio", "tipo_reporte", "equipo_modelo", "transductor", "ultima_calibracion", "equipo_numero_serie", "numero_serie_sistema"]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Resumen técnico",
+                "fields": ["completitud_documental"]
+              },
+              {
+                "kind": "note",
+                "title": "Notas de calidad",
+                "source": "notas_calidad.descripcion"
+              },
+              {
+                "kind": "keyValue",
+                "title": "PTA Oído Derecho",
+                "sourceKey": "oido_derecho",
+                "fields": ["pta_visible"]
+              },
+              {
+                "kind": "keyValue",
+                "title": "PTA Oído Izquierdo",
+                "sourceKey": "oido_izquierdo",
+                "fields": ["pta_visible"]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Condiciones",
+                "sourceKey": "condiciones",
+                "fields": ["cabina", "equipo", "tecnico", "observaciones", "PTA_general"]
+              },
+              {
+                "kind": "bilateralFrequency",
+                "title": "Vía aérea por frecuencia",
+                "rightKey": "oido_derecho.va",
+                "leftKey": "oido_izquierdo.va",
+                "preferredOrder": [250, 500, 1000, 2000, 3000, 4000, 6000, 8000]
+              },
+              {
+                "kind": "bilateralFrequency",
+                "title": "Vía ósea por frecuencia",
+                "rightKey": "oido_derecho.vo",
+                "leftKey": "oido_izquierdo.vo",
+                "preferredOrder": [250, 500, 1000, 2000, 4000]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Campos fuente del formato",
+                "sourceKey": "campos_fuente",
+                "fields": ["faringe", "cad", "cai", "mtd", "mti"]
+              }
+            ]
+          }
+        },
+        "updatedAt": "2026-08-20T23:59:59-06:00"
+      },
+      "publishedVersions": [],
+      "legacyV1V2Snapshot": null
+    }
+  }
+}

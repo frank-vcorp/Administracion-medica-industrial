@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LOTE-20260820-01 — Espiro tested (escenario hipotético)</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 24px; color: #1e293b; }
+    h1 { font-size: 18px; margin: 0 0 4px; color: #0f172a; }
+    h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin: 16px 0 8px; font-weight: 700; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .pill-draft { background: #fef9c3; color: #854d0e; }
+    .pill-tested { background: #dcfce7; color: #166534; }
+    .pill-blocker { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+    .badge-version { font-family: monospace; font-size: 10px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f8; color: #475569; }
+    .card { background: #fff; border: 1px solid #e2e8f8; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap; }
+    .header-row .left { display: flex; align-items: center; gap: 8px; }
+    .header-row .right { display: flex; align-items: center; gap: 6px; }
+    .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+    .kv dt { font-size: 11px; color: #64748b; }
+    .kv dd { font-size: 11px; color: #1e293b; text-align: right; font-weight: 500; word-break: break-word; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    thead th { background: #f8fafc; padding: 6px 8px; text-align: left; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f8; white-space: nowrap; }
+    tbody td { padding: 4px 8px; color: #334155; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+    .null-cell { color: #94a3b8; font-style: italic; }
+    .section { padding-top: 12px; border-top: 1px solid #f1f5f9; }
+    .section:first-of-type { border-top: 0; padding-top: 0; }
+    .limit-banner { background: #fef3c7; border: 1px solid #fbbf24; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; color: #78350f; font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<div data-testid="papeleta-header">
+  <h1>Espirometría — Estado tested (escenario hipotético completo)</h1>
+  <p style="margin: 0; font-size: 12px; color: #475569;">Ilustración del schema `presentation.schema` con todos los parámetros espirométricos típicos poblados (FEV1, FVC, FEV1/FVC, FEF25-75, PEF, FET, FEV6, FIVC). NO corresponde a un paciente real del AMI.</p>
+</div>
+
+<div class="limit-banner" data-testid="scenario-banner">
+  ⚠ Escenario hipotético generado por la SOFIA para verificar la cobertura del schema V3 (8 parámetros canónicos + tabla M1/M2/M3/REF/LLN/%REF completa). Limitación DG-1: el AMI no entrega PDF con esta tabla exhaustiva; este render es sólo para validar que el renderer soporta la tabla llena.
+</div>
+
+<div id="extraction-clinical" class="card" data-testid="extraction-clinical" data-presentation-state="tested" data-version="lote-nocturno-20260820-01-espiro-v3-draft" data-status="tested" data-scenario="hipotetico">
+  <div class="header-row">
+    <div class="left">
+      <span aria-hidden="true">🩺</span>
+      <p style="margin: 0; font-size: 13px; font-weight: 700; color: #1e293b;">Extracción clínica</p>
+      <span class="pill pill-tested">Espirometria</span>
+      <span class="pill pill-tested">V3 tested (hipotético)</span>
+    </div>
+    <div class="right">
+      <span class="badge-version">v lote-nocturno-20260820-01-espiro-v3-draft</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Resumen principal</h2>
+    <dl class="kv">
+      <dt>fvc</dt><dd>4.20 L</dd>
+      <dt>fev1</dt><dd>3.45 L</dd>
+      <dt>fev1_fvc_ratio</dt><dd>82.1 %</dd>
+      <dt>fvc_percent_predicho</dt><dd>92 %</dd>
+      <dt>fev1_percent_predicho</dt><dd>88 %</dd>
+    </dl>
+  </div>
+
+  <div class="section">
+    <h2>Calidad técnica del estudio</h2>
+    <dl class="kv">
+      <dt>repetibilidad_ats_ers_fvc</dt><dd>0.08 L</dd>
+      <dt>repetibilidad_ats_ers_fev1</dt><dd>0.06 L</dd>
+      <dt>es_interpretable</dt><dd>Sí</dd>
+      <dt>completitud_documental</dt><dd><span class="pill pill-tested">suficiente</span></dd>
+    </dl>
+  </div>
+
+  <div class="section">
+    <h2>Parámetros espirométricos</h2>
+    <table aria-label="Tabla INFORME DE FVC SIBELMED W20s — M1/M2/M3/REF/LLN/%REF (escenario hipotético)">
+      <thead>
+        <tr>
+          <th>Parámetro</th><th>Unidad</th>
+          <th>M1</th><th>M2</th><th>M3</th>
+          <th>REF</th><th>LLN</th>
+          <th>%REF M1</th><th>%REF M2</th><th>%REF M3</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>FVC</td><td>L</td><td>4.20</td><td>4.18</td><td>4.10</td><td>4.55</td><td>3.41</td><td>92</td><td>92</td><td>90</td></tr>
+        <tr><td>FEV1</td><td>L</td><td>3.45</td><td>3.42</td><td>3.38</td><td>3.91</td><td>2.94</td><td>88</td><td>87</td><td>86</td></tr>
+        <tr><td>FEV1/FVC</td><td>%</td><td>82.1</td><td>81.8</td><td>82.4</td><td>85.9</td><td>73.5</td><td>96</td><td>95</td><td>96</td></tr>
+        <tr><td>FEF25-75</td><td>L/s</td><td>3.65</td><td>3.55</td><td>3.40</td><td>3.85</td><td>2.05</td><td>95</td><td>92</td><td>88</td></tr>
+        <tr><td>PEF</td><td>L/s</td><td>8.10</td><td>8.05</td><td>7.95</td><td>8.75</td><td>6.45</td><td>93</td><td>92</td><td>91</td></tr>
+        <tr><td>FET</td><td>s</td><td>6.2</td><td>6.4</td><td>6.1</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td>FEV6</td><td>L</td><td>4.05</td><td>4.00</td><td>3.95</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td>FIVC</td><td>L</td><td>4.15</td><td>4.10</td><td>4.05</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

@@ -233,9 +233,31 @@ export async function getSatisfactionReport(filters: SatisfactionReportFilters =
       turno: s.turno,
       overall: s.overall,
       recomienda: s.recomienda,
+      qTrato: s.qTrato,
+      qEscucha: s.qEscucha,
+      qResolucion: s.qResolucion,
+      qEspera: s.qEspera,
+      qLimpieza: s.qLimpieza,
+      qPrivacidad: s.qPrivacidad,
       channel: s.channel,
       comentario: s.comentario,
       submittedAt: s.submittedAt.toISOString(),
     })),
+  }
+}
+
+/** Resumen del mes en curso para dashboard (#15 minuta / SPEC §9 F7). */
+export async function getSatisfactionDashboardSummary() {
+  const now = new Date()
+  const from = new Date(now.getFullYear(), now.getMonth(), 1)
+  const to = now
+  const fromStr = from.toISOString().slice(0, 10)
+  const toStr = to.toISOString().slice(0, 10)
+  const report = await getSatisfactionReport({ from: fromStr, to: toStr })
+  return {
+    periodLabel: now.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }),
+    from: fromStr,
+    to: toStr,
+    kpis: report.kpis,
   }
 }

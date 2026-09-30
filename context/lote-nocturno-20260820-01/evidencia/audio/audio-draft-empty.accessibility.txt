@@ -1,0 +1,156 @@
+{
+  "kind": "element",
+  "role": "body",
+  "depth": 0,
+  "children": [
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "papeleta-header",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "element",
+          "role": "h1",
+          "ownText": "Audiometría — Estado draft (sin extracción aplicada)",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "Audiometría — Estado draft (sin extracción aplicada)"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "p",
+          "ownText": "Calibración en draft; ninguna extracción cargada todavía.",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "Calibración en draft; ninguna extracción cargada todavía."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "extraction-clinical",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "element",
+          "role": "div",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "div",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "🩺",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "🩺"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "p",
+                  "ownText": "Extracción clínica",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "Extracción clínica"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "Audiometria",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "Audiometria"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "V3 draft",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "V3 draft"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "element",
+              "role": "div",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "v lote-nocturno-20260820-01-audio-v3-draft",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "v lote-nocturno-20260820-01-audio-v3-draft"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "div",
+          "dataTestId": "empty-state",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "p",
+              "ownText": "Sin datos extraídos aún. Esperando primera ejecución de extracción IA.",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "text",
+                  "depth": 4,
+                  "text": "Sin datos extraídos aún. Esperando primera ejecución de extracción IA."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

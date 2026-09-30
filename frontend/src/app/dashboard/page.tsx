@@ -2,8 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Calendar, CircleCheck, Clock, FlaskConical, Users } from 'lucide-react'
+import { ArrowRight, Calendar, CircleCheck, Clock, FlaskConical, Smile, Users } from 'lucide-react'
 import { getDashboardKPIs } from '@/actions/dashboard.actions'
+import { getSatisfactionDashboardSummary } from '@/actions/satisfaction.actions'
 import {
     getPendingStudyPatientsForDay,
     type PendingStudyPatientRow,
@@ -37,6 +38,10 @@ export default function DashboardPage() {
     })
     const [pendingStudyRows, setPendingStudyRows] = useState<PendingStudyPatientRow[]>([])
     const [pendingModalOpen, setPendingModalOpen] = useState(false)
+    const [satisfactionSummary, setSatisfactionSummary] = useState<{
+        periodLabel: string
+        kpis: { count: number; avgOverall: number; recommendRate: number }
+    } | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
 
@@ -45,9 +50,10 @@ export default function DashboardPage() {
     useEffect(() => {
         async function loadKPIs() {
             try {
-                const [kpiResult, pendingResult] = await Promise.all([
+                const [kpiResult, pendingResult, satisfactionResult] = await Promise.all([
                     getDashboardKPIs(),
                     getPendingStudyPatientsForDay(todayStr),
+                    getSatisfactionDashboardSummary(),
                 ])
                 if (kpiResult.success) {
                     setKpis(kpiResult.kpis)
@@ -59,6 +65,16 @@ export default function DashboardPage() {
                 }
                 if (pendingResult.success) {
                     setPendingStudyRows(pendingResult.rows)
+                }
+                if (satisfactionResult?.kpis) {
+                    setSatisfactionSummary({
+                        periodLabel: satisfactionResult.periodLabel,
+                        kpis: {
+                            count: satisfactionResult.kpis.count,
+                            avgOverall: satisfactionResult.kpis.avgOverall,
+                            recommendRate: satisfactionResult.kpis.recommendRate,
+                        },
+                    })
                 }
             } catch {
                 setError('Error desconocido')
@@ -187,6 +203,41 @@ export default function DashboardPage() {
 
                 {/* Sidebar: Quick Actions */}
                 <div className="space-y-6">
+                    {satisfactionSummary && (
+                        <Link
+                            href="/reports/satisfaction"
+                            className="block bg-white p-6 rounded-3xl shadow-sm border border-ami-secondary/10 hover:border-violet-200 transition-colors"
+                        >
+                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
+                                <Smile className="h-4 w-4 text-violet-600" />
+                                Satisfacción del paciente
+                            </h3>
+                            <p className="text-xs text-slate-500 capitalize mb-4">
+                                {satisfactionSummary.periodLabel}
+                            </p>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                                <div>
+                                    <p className="text-lg font-black text-slate-900">
+                                        {satisfactionSummary.kpis.count}
+                                    </p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Respuestas</p>
+                                </div>
+                                <div>
+                                    <p className="text-lg font-black text-slate-900">
+                                        {satisfactionSummary.kpis.avgOverall.toFixed(1)}
+                                    </p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Promedio</p>
+                                </div>
+                                <div>
+                                    <p className="text-lg font-black text-slate-900">
+                                        {Math.round(satisfactionSummary.kpis.recommendRate)}%
+                                    </p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Recomienda</p>
+                                </div>
+                            </div>
+                            <p className="mt-4 text-xs font-semibold text-violet-700">Ver reporte y exportar Excel →</p>
+                        </Link>
+                    )}
                     <div className="bg-ami-secondary text-white p-8 rounded-3xl shadow-xl shadow-ami-secondary/20 overflow-hidden relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-ami-accent/20 rounded-full -mr-16 -mt-16 blur-3xl"></div>
                         <h3 className="text-lg font-bold mb-4 relative z-10">Acciones Rápidas</h3>

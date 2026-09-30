@@ -1,5 +1,14 @@
 # PROYECTO: Residente Digital
 
+## Estado vigente — 2026-08-25
+
+- **Espirometría:** `DONE`; verificada en producción con perfil médico, firma, revisión y PDF validado descargable.
+- **Navegación:** enlace de **Cuenta** a `/profile` publicado en `5fdccd3`.
+- **Siguiente incremento:** Audiometría, reutilizando el ciclo común de entrega con campos, criterios y documento propios.
+- **Persistencia documental:** diferida; en una fase posterior se conservarán juntos el PDF fuente y el PDF entregable (`DEC-20260825-01`, `BR-20260825-02`).
+- **E2E MedGemma/DR7:** no bloquea Espirometría; queda como validación futura del pipeline clínico. `MEDGEMMA_ENABLED` y los proveedores clínicos están configurados en Vercel; la credencial DR7 pertenece al backend y debe verificarse allí cuando se ejecute ese E2E.
+- **Pendientes heredados fuera de alcance:** publicación V3 de calibraciones y error histórico 422 de Examen Médico.
+
 **Estado:** IN_PROGRESS — FIX-20260821-01 (gate table-aware Espirometría + backfill determinista desde `parametros[]`): SPEC `context/SPECs/SPEC_FIX-20260821-01-GATE-TABLEAWARE-ESPIROMETRIA.md` v1.0 `READY` + handoff `context/interconsultas/HANDOFF_FIX-20260821-01_SOFIA-MINIMAX-ESPIRO.md` `READY_FOR_SOFIA`. Origen: dictamen DEBY L2 sobre hallazgo FND-20260821-03 (E2E real expediente `8af728bf-…`, provider efectivo `m3/MiniMax-M3`, gate corta por `fev1`/`fvc` raíz ausentes). Límites: no publicar V3, no migración, no resolver 422 Examen Médico, no cambiar `enabled` legacy, no reenviar `medical_test_id`. Contexto previo: ARCH-20260820-01 (Calibración como fuente única — Fase 1 DONE, Fase 2 DONE, Fase 3 DONE, Fase 4 DONE (verificado localmente, sin commit/push); Fase 5 READY). Fase 1: commit `22ba048`, GEMINI QA-20260820-02 APROBADO_CON_OBSERVACIONES (43/43 tests). Fase 2: commit `0cce88f`, GEMINI QA-20260820-03 PASS_WITH_WARNINGS (41 tests, P2 cerrados tras rework). Fase 3: árbol de trabajo (HEAD `0cce88f`, sin commit), GEMINI QA-20260820-04 PASS_WITH_WARNINGS (AC-3.1–3.4 PASS, 62/62 vitest, 43/43 pytest, 0 bloqueadores). Fase 4: árbol de trabajo (sin commit), IMPL-20260820-04 + fix F-1 `IMPL-20260820-05` (test AST multi-línea), GEMINI QA-20260820-05 PASS_WITH_WARNINGS (AC-4.1–4.5 PASS, 10/10 tests Fase 4, 43/43 resolver, typecheck 0, 0 regresión; F-1 P2 resuelto; F-2/F-3/F-4 P3 aceptados como riesgo). Frank autorizó encadenamiento autónomo Fases 1-7 (2026-08-20 14:20 CST) sin confirmación entre fases, con gates + GEMINI por fase. Previo: ARCH-20260819-02 (tarjetas por prueba, prototipo no persistente). Previo: IMPL-20260809-04 pusheado a `main` (commit `99dc46c`) — selector multi-proveedor de extracción IA (Gemini + MiniMax M3) operativo
 **Fase:** Fase operativa: estabilización productiva | IA clínica (MedGemma/DR7) intacta | IA extractiva multi-proveedor | Calibración como fuente única (Fase 1 DONE — resolver V3 + clasificador `operationMode`; Fase 2 DONE — contrato V3 + estados + publicación + editor condicional; Fase 3 DONE — gate `enabled` + routing por canonicalStudyType + cleanup F-3 auth endpoint; Fase 4 DONE — clinicalCriteria reemplaza hardcodeos backend; Fase 5 READY — snapshot versionado / migración Prisma aditiva) | NOVA absorción (Slices A,B-v2,C,D,E,F,G cerrados; H parcial; I en curso)
 **ID Actual:** FIX-20260821-01 (gate table-aware Espirometría + backfill determinista desde `parametros[]`): SPEC `context/SPECs/SPEC_FIX-20260821-01-GATE-TABLEAWARE-ESPIROMETRIA.md` v1.0 `READY`; handoff `context/interconsultas/HANDOFF_FIX-20260821-01_SOFIA-MINIMAX-ESPIRO.md` `READY_FOR_SOFIA`. Origen: DEBY dictamen L2 sobre FND-20260821-03 (E2E real expediente `8af728bf-…` confirma provider `m3/MiniMax-M3`, gate corta por `fev1`/`fvc` raíz ausentes aunque `parametros[]` tiene 10 filas). Contexto previo: ARCH-20260820-01 Fases 1-4 DONE (verificado localmente sin commit/push); Fase 5 READY; `LOTE-20260820-01` cerrado 2026-08-21 07:00.
@@ -226,7 +235,6 @@ Criterios aceptados con evidencia; gates aplicables aprobados (typecheck, vitest
 
 ## Autorizaciones autónomas vigentes
 - **Ninguna** (sesión interactiva con Frank presente). Modo nocturno no activado. Acciones estándar permitidas: edición local, validación local, tests/docs, delegación entre agentes. NO permitido sin OK explícito: commit, push, PR, deploy, producción, datos irreversibles, secretos.
-
 
 
 

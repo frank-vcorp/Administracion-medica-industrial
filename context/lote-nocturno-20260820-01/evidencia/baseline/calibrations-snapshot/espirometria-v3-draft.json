@@ -1,0 +1,151 @@
+{
+  "_meta": {
+    "purpose": "Snapshot local de la calibración V3 para ESPIROMETRÍA propuesta por LOTE-20260820-01 Unidad 3",
+    "id": "snapshot-v3-espirometria-lote-20260820-01",
+    "schemaVersion": "V3",
+    "createdAt": "2026-08-21T00:01:30-06:00",
+    "testId": "lookup-by-code-ESPIROMETRIA",
+    "testName": "ESPIROMETRIA",
+    "operationMode": "clinical_interpretation",
+    "status": "draft",
+    "note": "Snapshot local — NO publicado. DG-1: el AMI no entrega PDF de espirometría real; único insumo es ESPIRO OB.png (PNG). Por limitación del insumo, queda en `draft` con justificación. La estructura del schema está completa y validada."
+  },
+  "options": {
+    "operationMode": "clinical_interpretation",
+    "canonicalStudyType": "Espirometria",
+    "aiCalibration": {
+      "schemaVersion": "V3",
+      "currentPublishedVersionId": null,
+      "familyTemplateId": null,
+      "draft": {
+        "status": "draft",
+        "label": "lote-nocturno-20260820-01-espiro-v3-draft",
+        "enabled": true,
+        "canonicalStudyType": "Espirometria",
+        "extraction": {
+          "enabled": true,
+          "prompt": "INSTRUCCIÓN PARA ESPIROMETRÍA (tabla canónica FVC/FEV1/FEV1-FVC/FEF25-75 + 6 bloques canónicos).\n\nPROTOCOLO OBLIGATORIO:\n1. Identifica el documento como ESPIROMETRÍA (no confundir con Audiometría).\n2. Extrae datos demográficos (bloque paciente): nombre_completo, sexo, edad_anios, talla_cm, peso_kg, imc, motivo, procedencia, fuma.\n3. Extrae metadatos del estudio (bloque estudio): referencia, fecha_estudio, hora_estudio, tipo_reporte, equipo_modelo, version_software.\n4. Extrae condiciones técnicas (bloque condiciones): tecnico, transductor, temperatura_c, humedad_pct, presion_mmhg, referencia_ecuacion, factor_etnico, factor_btps.\n5. Extrae calidad técnica (bloque calidad): repetibilidad_ats_ers_fvc, repetibilidad_ats_ers_fev1, es_interpretable, completitud_documental, notas_calidad.\n6. Extrae la TABLA INFORME DE FVC como arreglo `parametros[]` con estructura:\n   - label: nombre del parámetro (FEV1, FVC, FEV1/FVC, FEF25-75, etc.)\n   - unit: unidad (L, L/s, %, etc.)\n   - key: clave canónica (fev1_l, fvc_l, fev1_fvc_pct, fef2575_l_s, etc.)\n   - m1_value, m2_value, m3_value: valores de cada maniobra aceptable (pueden ser null si la maniobra no se completó)\n   - ref_value: valor de referencia (calculado por la ecuación GLI-2012 o NHANES III según referencia_ecuacion)\n   - lln_value: lower limit of normal (LLN) calculado\n   - m1_pct_ref, m2_pct_ref, m3_pct_ref: % del valor predicho de referencia\n7. Extrae gráficas e indicadores (bloque graficas): curva_flujo_volumen_presente, curva_volumen_tiempo_presente, maniobras_graficadas, observaciones_grafica.\n8. Deriva `completitud_documental` tú mismo:\n   - ≥6 parámetros con valor de maniobra en al menos 1 maniobra → suficiente\n   - 3-5 parámetros → parcial\n   - <3 parámetros → no_concluyente\n9. Deriva `es_interpretable` (raíz): True sólo si hay `fev1_l` y `fvc_l` con al menos un valor de maniobra.\n10. NO emitas patrón espirométrico obstructivo/restrictivo/mixto definitivo; sólo prelectura descriptiva.\n11. Si faltan parámetros mínimos (fev1_l y fvc_l), marca calidad como no_concluyente y devuelve la lista de parámetros_faltantes.\n\nREFERENCIAS NORMATIVAS:\n- ATS/ERS 2019 (estándar de espirometría)\n- GLI-2012 (Global Lung Function Initiative) — ecuación de referencia y LLN\n- SPEC_ARCH-20260516-12 (extracción exhaustiva 6 bloques)\n- FIX-20260812-20 (guardrails backend para FVC/FEV1/M1/M2/M3/REF/LLN)",
+          "promptHash": null,
+          "version": "lote-20260820-01-espiro-v1",
+          "schemaVersion": "V3",
+          "targetFields": [
+            "fvc",
+            "fev1",
+            "fev1_fvc_ratio",
+            "fvc_percent_predicho",
+            "fev1_percent_predicho",
+            "paciente",
+            "estudio",
+            "condiciones",
+            "calidad",
+            "parametros[]",
+            "parametros[].label",
+            "parametros[].unit",
+            "parametros[].key",
+            "parametros[].m1_value",
+            "parametros[].m2_value",
+            "parametros[].m3_value",
+            "parametros[].ref_value",
+            "parametros[].lln_value",
+            "parametros[].m1_pct_ref",
+            "parametros[].m2_pct_ref",
+            "parametros[].m3_pct_ref",
+            "graficas"
+          ],
+          "provider": "gemini",
+          "model": null
+        },
+        "fieldDefinitions": [
+          { "key": "fvc", "label": "FVC", "type": "number", "aliases": ["fvc_l"], "required": true, "unit": "L" },
+          { "key": "fev1", "label": "FEV1", "type": "number", "aliases": ["fev1_l"], "required": true, "unit": "L" },
+          { "key": "fev1_fvc_ratio", "label": "FEV1/FVC", "type": "number", "aliases": ["fev1_fvc_pct"], "required": true, "unit": "%" },
+          { "key": "fvc_percent_predicho", "label": "FVC % predicho", "type": "number", "aliases": ["fvc_pct_ref"], "required": false, "unit": "%" },
+          { "key": "fev1_percent_predicho", "label": "FEV1 % predicho", "type": "number", "aliases": ["fev1_pct_ref"], "required": false, "unit": "%" },
+          { "key": "paciente", "label": "Paciente", "type": "unknown", "aliases": ["paciente_detalle"], "required": true },
+          { "key": "estudio", "label": "Estudio", "type": "unknown", "aliases": [], "required": true },
+          { "key": "condiciones", "label": "Condiciones técnicas", "type": "unknown", "aliases": [], "required": false },
+          { "key": "calidad", "label": "Calidad técnica", "type": "unknown", "aliases": ["calidad_tecnica"], "required": true },
+          { "key": "parametros", "label": "Parámetros espirométricos (M1/M2/M3/REF/LLN)", "type": "unknown", "aliases": [], "required": true },
+          { "key": "graficas", "label": "Gráficas e indicadores", "type": "unknown", "aliases": [], "required": false }
+        ],
+        "clinicalCriteria": {
+          "prediagnosisEnabled": true,
+          "requiredParams": ["fev1_l", "fvc_l", "fev1_fvc_pct"],
+          "confidenceThreshold": 0.7,
+          "prompt": "INTERPRETACIÓN ESPIROMÉTRICA — prelectura asistida y trazable.\n\n1. Calcula FEV1/FVC ratio observado vs LLN.\n2. Si FEV1/FVC < LLN → sugiere patrón obstructivo (NO diagnosticar; sólo describir).\n3. Si FVC < LLN con FEV1/FVC ≥ LLN → sugiere patrón restrictivo.\n4. Si FEV1 < LLN y FVC < LLN con FEV1/FVC ≥ LLN → sugiere patrón restrictivo.\n5. Compara FEV1 % del predicho con el grado de severidad ATS/ERS:\n   - Leve: 70-79%\n   - Moderada: 60-69%\n   - Moderadamente severa: 50-59%\n   - Severa: 35-49%\n   - Muy severa: <35%\n6. Si faltan parámetros mínimos (fev1_l o fvc_l), marca como IA_NON_CONCLUSIVE con razón parametros_minimos_faltantes.\n7. NO emitas patrón definitivo; sólo describe los hallazgos espirométricos observables.\n8. Referencia normativa: ATS/ERS 2019 + GLI-2012 (LLN) + SPEC_ARCH-20260516-12.\n",
+          "promptHash": null,
+          "promptVersion": "lote-20260820-01-espiro-clin-v1",
+          "supportingReferences": [
+            { "source_id": "ATS-ERS-2019", "title": "ATS/ERS 2019 — Standardization of Spirometry", "section": "Criterios de aceptabilidad y repetibilidad" },
+            { "source_id": "GLI-2012", "title": "Global Lung Function Initiative 2012 — Ecuaciones de referencia y LLN", "section": "FEV1, FVC, FEV1/FVC por etnia/edad/sexo/talla" },
+            { "source_id": "SPEC_ARCH-20260516-12", "title": "Extracción exhaustiva 6 bloques espirométricos", "section": "paciente/estudio/condiciones/calidad/parametros/graficas" },
+            { "source_id": "FIX-20260812-20", "title": "Guardrails backend extracción FVC/FEV1/M1/M2/M3/REF/LLN" }
+          ]
+        },
+        "presentation": {
+          "enabled": true,
+          "schema": {
+            "studyType": "Espirometria",
+            "sections": [
+              {
+                "kind": "keyValue",
+                "title": "Resumen principal",
+                "fields": ["fvc", "fev1", "fev1_fvc_ratio", "fvc_percent_predicho", "fev1_percent_predicho"]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Datos del paciente",
+                "sourceKey": "paciente",
+                "fields": ["nombre_completo", "sexo", "edad_anios", "talla_cm", "peso_kg", "imc", "motivo", "procedencia", "fuma"]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Datos del estudio",
+                "sourceKey": "estudio",
+                "fields": ["referencia", "fecha_estudio", "hora_estudio", "tipo_reporte", "equipo_modelo", "version_software"]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Condiciones técnicas",
+                "sourceKey": "condiciones",
+                "fields": ["tecnico", "transductor", "temperatura_c", "humedad_pct", "presion_mmhg", "referencia_ecuacion", "factor_etnico", "factor_btps"]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Calidad técnica del estudio",
+                "sourceKey": "calidad",
+                "fields": ["repetibilidad_ats_ers_fvc", "repetibilidad_ats_ers_fev1", "es_interpretable", "completitud_documental", "notas_calidad"]
+              },
+              {
+                "kind": "table",
+                "title": "Parámetros espirométricos",
+                "source": "parametros",
+                "columns": [
+                  { "key": "label", "label": "Parámetro" },
+                  { "key": "unit", "label": "Unidad" },
+                  { "key": "m1_value", "label": "M1" },
+                  { "key": "m2_value", "label": "M2" },
+                  { "key": "m3_value", "label": "M3" },
+                  { "key": "ref_value", "label": "REF" },
+                  { "key": "lln_value", "label": "LLN" },
+                  { "key": "m1_pct_ref", "label": "%REF M1" },
+                  { "key": "m2_pct_ref", "label": "%REF M2" },
+                  { "key": "m3_pct_ref", "label": "%REF M3" }
+                ]
+              },
+              {
+                "kind": "keyValue",
+                "title": "Gráficas e indicadores",
+                "sourceKey": "graficas",
+                "fields": ["curva_flujo_volumen_presente", "curva_volumen_tiempo_presente", "maniobras_graficadas", "observaciones_grafica"]
+              }
+            ]
+          }
+        },
+        "updatedAt": "2026-08-21T00:01:30-06:00"
+      },
+      "publishedVersions": [],
+      "legacyV1V2Snapshot": null
+    }
+  }
+}

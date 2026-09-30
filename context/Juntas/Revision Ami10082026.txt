@@ -1,0 +1,304 @@
+# Revision Ami
+
+  Meeting started: 10/8/2026, 12:54:37
+  Duration: 73 minutes
+  Participants: Alan, AMI Erika Rodriguez, Frank Saavedra, Jaqueline, leticia uribe
+
+  [View original transcript](https://app.tactiq.io/api/2/u/m/r/uNl4BmrGl1knDyZibjz6?o=txt)
+
+    
+
+  
+
+  
+    ## Highlights
+
+    > 10:01 leticia uribe: Realmente sería 100% con el link, porque el cliente tiene que llenar los datos Y con El vendedor, corremos el riesgo de que los datos sean errores.
+> 16:32 Frank Saavedra: Ya cuando están los datos se da enviar la solicitud.
+> 17:19 Frank Saavedra: Entonces aquí le pueden dar revisar y habilitar. aquí se lo tienen que asignar Algún asesor, no sé qué acceso lo asigna Aquí vamos a asignárselo a Lety Confirmamos
+> 19:00 Frank Saavedra: Estos permisos se van a asignar mediante roles cada cada personal que se dé de
+> 19:46 Frank Saavedra: Si me explico entonces aquí al dar de alta un nuevo usuario se le asigna un rol y ya cada rol tiene los permisos necesarios para realizar su trabajo dentro del sistema. Esto es hay que revisar los detenidamente. Volvemos Bueno aquí, ya está la empresa aparecen todos los datos pueden ver la documentación adjunta aquí se puede asignar la sucursal a la que va a tener permiso del acceso, ya sea sucursal con old, paso del Prado el marqués, no
+> 20:25 Frank Saavedra: vamos a dejar Paseo del Prado nada más. Se guarda y ya va a ser la que tenga pre asignada. Aquí se generan los perfiles médicos yo aquí desde aquí puedo generar el perfil médico. el nuevo perfil Aquí tengo No sé el perfil que se llama. recepción Y aquí en la recepción, puedo asignarle las pruebas que incluyen como es el examen médico. un aspiro y bueno Usemos esas nada más, no? Aquí ya está guardado el perfil. Este perfil ya se puede asignar a los puestos de trabajo.
+> 21:27 Frank Saavedra: A los diferentes puestos de trabajo o al mismo al que designen ustedes no sé
+> 21:32 Frank Saavedra: cómo se maneja exactamente, pero pueden crear aquí el puesto no puesto. recepción principal Y se da una descripción y se puede asignar el perfil. Y ahí ya se creó el puesto. Obviamente este este perfil médico lo pueden asignar a cualquier otro puesto o
+> 32:03 AMI Erika Rodriguez: Yo creo que podemos considerarlo por pacientes por hora, por ejemplo, si sabemos que en en pic tenemos dos personas, pues a la mejor van a ser dos pacientes cada cada hora no sé dependiendo del perfil dos tres pacientes, por ejemplo, en el en el ese va a Sergio un reto porque pues no, no es algo así como en el hospital, no que todo está súper agendado, es lo que les hemos dicho a nuestros equipos sabemos que tenemos ya una agenda de diez pacientes y resulta que llegan el doble, entonces Este sí vamos a tener que dejar Hasta cierto punto pues cierta flexibilidad en el sentido de que a veces, por ejemplo, una empresa que se llama airbus nos dicen, me recibes diez pacientes para mañana y la recepción nos dice, sabes qué? Sí te recibo cinco a las diez y cinco a las
+> 34:00 Frank Saavedra: Esto es por hora Esta es la capacidad por hora que tiene pueden atender dos por hora después sientes por hora o cinco por hora. Eso ustedes lo pueden asignar lo que podemos hacer adicional es que ustedes me digan cómo les funcionaría mejor o que otra característica le puedo poner aquí a la sucursal para tropicalizar.
+> 35:34 AMI Erika Rodriguez: en clínicas nos ha tocado casos donde nos dicen, sabes qué mañana te voy a mandar diez pacientes, ya tenemos una agenda previa de quince, entonces bueno es
+> 42:12 Frank Saavedra: También se me ocurre, podríamos dejar una capacidad base. y otra capacidad como de Como de sobre cupo y que dicho sobre cupo sea solamente bajo una autorización previa. Digamos se agendan se agendan los cupos disponibles y posteriormente cualquier otra persona que pueda agendar sea pueda agendarlos bajo previa autorización en el momento que se agendaron o que se están agendando que le mencione el cupo de la clínica está lleno si realmente es necesario que des de alta estos nuevos pacientes, necesitas previo autorización? Quieres que la enviemos y así le pueda Enviar no sé Tal vez un un correo de autorización a la persona indicada
+> 43:06 Frank Saavedra: para que autorice y se autoriza obviamente también significa que va a organizar toda esa parte. Pero esto también tiene que Tendría que haber con sus horarios para que ustedes les dé tiempo de organizar toda esa logística, entonces tendría que tener un límite de tiempo, por ejemplo, si hay un sobre cupo ya a las doce pm de hoy quieren quieren este organizar para el día de mañana a lo mejor ya no
+> 47:04 Frank Saavedra: Sucursales aquí se pueden ver las tres agendas. Aquí está la del Prado tiene hoy dos citas, no una fue a las ocho de la mañana ya está como completada Y ahorita la de Juan Carlos que es a las tres.
+> 47:20 Frank Saavedra: Que está como pendiente. Y aquí se puede ver su pase. Puedes actualizar y podemos volver a la gente? Esto es para lo que me mencionaba de si se puede ver el cupo O visualmente, cuál sucursal está saturado O cuál no? vamos a la agenda del Prado Y aquí está no Aquí está Juan Carlos A las tres ocupo un lugar de 15 disponibles. Su pase este es el pase de entrada, que ya les mencionaba que pueden llegar directamente. A recepción se podría escanear el código de barras y marcar. En el sistema como que ya llegó. Aquí se le puede enviar.
+> 48:31 Frank Saavedra: Al al paciente su enlace para que dé de alta sus datos personales los datos personales declarativos que habíamos visto Lety supuesto aquí se llena el
+> 50:04 Frank Saavedra: pero En unidades móviles normalmente cuando lo hacen en unidades móviles tengo entendido que les dicen cuánto Cuántos trabajadores les van a enviar previamente. Entonces con ese compilado que ustedes tienen de los trabajadores que se va a enviar previamente, podríamos enviarle este formulario para que lo llenen
+> 51:05 Frank Saavedra: Todo depende de en qué momento se le enviamos, pero para unidades móviles se los podemos enviar previamente.
+> 51:22 Alan: importante es que estas funcionalidades están bien, hay que dejarlas
+> 55:57 Frank Saavedra: Ya van a estar aquí en el proceso de atención. Aquí está como programado Aquí está Jorge Entonces aquí podemos ya entrar aquí. Esto ya es el segundo paso esto es ya lo que vería. La siguiente recepción que si mal no recuerdo. Es cuando empiezan a a tomar somatografía o cómo se dice somatometría? Entonces aquí le abre y aquí ya le aparece. Esto ya lo vería ahí en las personas que continúan todavía habría que asignar los roles y aquí ya entra No aquí está lo que llamamos comúnmente papeleta.
+> 56:53 Frank Saavedra: Y en el examen médico? Que se toma somatometría que viene aquí no el peso.
+> 01:08:49 Jaqueline: nosotros este descargamos o Bueno terminamos el examen médico Cuando nosotros tenemos el formato de reporte final en donde viene ya el dictamen. Jala como todo esto O sea si tiene enfermedades Y eso directamente lo podría jalar para ese para el resumen, vaya.
+> 01:09:06 Frank Saavedra: Sí claro. Sí, podríamos jalarlos directamente al resumen.
+
+  ## Transcript
+
+  00:00 leticia uribe: Hola buenas tardes
+00:02 Frank Saavedra: Buenas tardes, Cómo estás.
+00:04 leticia uribe: Bien, y tú?
+00:06 Frank Saavedra: Bien, bien, bien, bien, bien. Mucho trabajo o qué?
+00:13 leticia uribe: Sí un poco
+00:18 Frank Saavedra: Hola doctora, ya qué?
+01:07 Frank Saavedra: libre
+01:20 Jaqueline: Buenas tardes.
+01:24 Frank Saavedra: Hola hola, buenas tardes.
+02:22 leticia uribe: Hola
+02:35 Frank Saavedra: Hola, estoy transcribiendo esta llamada con mi extensión Tactiq AI. https://tactiq.io/r/transcribing
+02:36 leticia uribe: Hola, estoy transcribiendo esta llamada con mi extensión Tactiq AI. https://tactiq.io/r/transcribing
+02:48 leticia uribe: Sabes si la doctora Erika se va a conectar?
+02:55 Jaqueline: Que sí, pero no sé.
+02:58 leticia uribe: Se va a incorporar un poco más tarde, pero este. no sé si esperamos a la doctora Erika
+03:09 Jaqueline: Ah okay.
+04:45 leticia uribe: Pues yo creo que empezamos nodo porque si no nos dan no sé si se va a incorporar.
+04:58 Jaqueline: Y mejor vamos a iniciando ya si se incorpora, pues ya.
+05:04 leticia uribe: Adelante Fran te escuchamos?
+05:08 Frank Saavedra: chicas Pues creo que hoy algo atrasado ya estas semanas básicamente me las tomé de vacaciones pero Quería quiero que revisemos el Cómo va el sistema hasta ahora, la última vez platiqué con el licenciado Alan y me dijo que les van a llegar algunos proyectos este mes Supongo que ya los están abordando, entonces también me comentó que sería de gran ayuda que tal vez pudiéramos ya ir usando la herramienta en estos proyectos. A la par.
+05:46 Frank Saavedra: Del sinuno entonces este yo le dije que si podíamos hacerlo, pero necesitamos hacer primero una revisión previa del flujo hasta donde va. Para ir haciendo correcciones hoy y si no las necesita pues para ya dar el visto bueno y poder ya capturar datos. Entonces me gustaría ver si podemos hacer una revisión. Pasa por paso ir identificando detalles que hagan falta o detalles que no estén para ir corregirlo y terminar este flujo al menos el flujo de hasta donde se entrega el dictamen porque eso era un entregable que tenía yo que haber entregado hace ya. Algo de tiempo entonces quisiera que nos enfocáramos nada más en esa parte.
+06:37 Jaqueline: Sí claro adelante
+06:42 Frank Saavedra: Voy a ponerles, voy a compartirles mi pantalla y vamos generando desde el principio, no?
+06:58 leticia uribe: ok
+07:25 Frank Saavedra: mi pantalla
+07:29 leticia uribe: Sí me parece que sí se va a conectar, no sé si podamos esperarla un par de minutitos.
+07:36 Frank Saavedra: Creo que ya está.
+07:38 leticia uribe: Ya está Ah okay. Vale.
+07:46 AMI Erika Rodriguez: Buenas tardes, Ya estoy por aquí si gustan empezamos Buenas tardes a todos.
+07:48 Frank Saavedra: Hola Doctora buenas tardes
+07:51 Jaqueline: Buenas tardes.
+07:52 Frank Saavedra: Como le comentaba a las chicas este vamos a hacer un recorrido por el sistema. Porque el licenciado Alan me había comentado que llegan proyectos nuevos y quiere ver si ya podemos usarlo a la par para ir este vendo funcionalidades y que falta o que sobra Entonces vamos a hacer un recorrido desde cero. De acuerdo. Ya pueden ver todos mi pantalla.
+08:20 leticia uribe: sí
+08:22 Frank Saavedra: Okay.
+08:22 AMI Erika Rodriguez: No seas malita si me pueden
+08:34 Frank Saavedra: Bien, normalmente. Hoy escuchamos eco. Empezamos con creando la empresa no le doctora eso, eso es lo la parte inicial.
+08:53 leticia uribe: Así es correcto.
+08:55 Frank Saavedra: Okay.
+08:56 leticia uribe: En teoría la parte de la empresa este debería jalar a través de de la liga y si no, pues y Administración dar el visto bueno de de la información que subió el cliente a la liga, no?
+09:13 Frank Saavedra: Les voy a compartir entonces todas Les estaba compartiendo nada más la ventana, pero les voy a compartir toda la pantalla para que sea más fácil el momento. Ya la ven, verdad? Bien, hay dos maneras de dar de alta a una empresa y corríjanme si me equivoco en algún momento uno es que El vendedor diera de alta la venta la empresa aquí que es lo que habíamos discutido Lety y la otra es con el link de auto alta.
+10:01 leticia uribe: Realmente sería 100% con el link, porque el cliente tiene que llenar los datos Y con El vendedor, corremos el riesgo de que los datos sean errores.
+10:11 Frank Saavedra: Okay este sería el link de auto alta Lo voy a llenar de acuerdo Vamos a ponerle. médica industrial el giro de la empresa
+10:51 Frank Saavedra: Este link va a poder estar también en la página web. No es necesario que hagan otra cosa, ya va a estar linkeado. los datos bancarios Aquí así está bien o quieren que le ponga algunos algunos candados para que el número de cuentas sea de cierta cantidad de dígitos o no sé alguna otra cosa.
+11:31 leticia uribe: Esa parte este le mando el link administración y qué administración defina si bloqueamos o se queda así abierto.
+13:09 Frank Saavedra: Si alcanzan a ver todos los datos, verdad?
+13:45 Frank Saavedra: la referencia de crédito Está esta leyenda, sí, está correcta, verdad? Sí, debe ir ahí. Y bueno la documentación adjunta. Aquí vamos a Subir la constancia. la identificación el comprobante de domicilio la opinión positiva el acta constitutiva Y bueno ya iba algún otro documentación que sea necesario Aquí Lety en los términos y condiciones Solo dice que los términos estipulados en la presente vamos a poner algunos otros o solamente con lo que dice ahí el alta.
+15:02 leticia uribe: Pues actualmente así está validado por administración, pero como te comentaba en el punto anterior, si quieres mandarme Ya esa liga para que administración pueda validar, que los datos estén correctos y completos.
+15:16 Frank Saavedra: Desde mi punto de vista, yo creo que sí debe de llevar algo algunos términos más más específicos normalmente para que puedan tildarlo ahí porque si no como que se vuelve muy ambiguo al menos en los sistemas esta nota, que está aquí esta esta no estaba como términos y condiciones en formato que me compartieron, pero sí, estaba ahí cerca de los términos, pero decidí ponerla ahí Entonces yo creo que sí valdría la pena mejorar esos términos y condiciones.
+15:49 leticia uribe: Sí, lo reviso y ya los mejoramos.
+15:53 Frank Saavedra: Entonces ya quisiera
+15:55 AMI Erika Rodriguez: Lety esa parte A qué se refiere
+15:56 leticia uribe: Esta la parte que llena el cliente Para cuando es primera vez este administración válida, los datos de tanto de cuentas como de referencias comerciales y demás y a través de eso se autorizan los días de crédito que tiene el cliente y una vez que este se da de alta el cliente, pues ya nos aparece en el sistema, digamos que al equipo comercial para dar de alta los perfiles es lo primero que hace administración.
+16:29 AMI Erika Rodriguez: Ah Okay bien, Gracias
+16:32 Frank Saavedra: Ya cuando están los datos se da enviar la solicitud.
+16:37 Frank Saavedra: A esto le va a aparecer a a su cliente, hemos recibido la información y el medidor revisará los datos y lo contactará Entonces ya nos venimos para acá. Aquí si pueden ver, ya se dio de alta aquí medica Industrial del Bajío el estado está como pendiente. Ahorita está asignado a ningún vendedor? Cuando ya El vendedor lo va a revisar, va a revisar los datos le tiene que dar aquí en configurar. Y aquí ya viene No sí, Don la persona que está encargada.
+17:12 leticia uribe: administración
+17:19 Frank Saavedra: Entonces aquí le pueden dar revisar y habilitar. aquí se lo tienen que asignar Algún asesor, no sé qué acceso lo asigna Aquí vamos a asignárselo a Lety Confirmamos
+17:37 Frank Saavedra: Y aquí ya Leti podría revisar la información. Aquí si pueden Ver historial del vendedor, aquí pueden decirle a quien fue asignado en caso de que le cambien de vendedor, pueden darle aquí clic cambiar de vendedor y El vendedor, se cambiará, no es necesario generar otra alta de la empresa ni nada por el estilo los datos siguen siendo. Los mismos solo cambia El vendedor. Ahora aquí para editar los datos completos se le da click aquí en el botón morado y aquí ya están los datos aquí administración o la persona que corrobora los datos puede revisarlos y modificarlos. Aquí le damos guardar datos.
+18:27 AMI Erika Rodriguez: Aquí aquí Quién va a tener esta injerencia en modificar datos, o sea, para que no sean todos, no sé si va a haber un administrador.
+18:36 leticia uribe: Solamente actualmente quien está autorizado para esos movimientos es administración que en este caso es Lalo Natalia este el área comercial no modifica ni ni hace ningún movimiento en estos datos por justamente este tener Claridad y la información completa y correcta, no?
+19:00 Frank Saavedra: Estos permisos se van a asignar mediante roles cada cada personal que se dé de
+19:05 Frank Saavedra: alta en el sistema va a tener roles ahorita existen algunos roles que hay que verificar. Vamos a entrar rápidamente nada más para verlos de acuerdo, aquí deberíamos de regresar a la ficha. y aquí ya está la empresa, no, Y ahorita regresamos a la empresa, vamos a revisar rápidamente lo de Aquí está el personal de Ami Estos son datos de ejemplo y aquí hay diferentes roles que están ahorita clientes capturistas doctor validador doctor general recepcionista súper admin.
+19:46 Frank Saavedra: Si me explico entonces aquí al dar de alta un nuevo usuario se le asigna un rol y ya cada rol tiene los permisos necesarios para realizar su trabajo dentro del sistema. Esto es hay que revisar los detenidamente. Volvemos Bueno aquí, ya está la empresa aparecen todos los datos pueden ver la documentación adjunta aquí se puede asignar la sucursal a la que va a tener permiso del acceso, ya sea sucursal con old, paso del Prado el marqués, no
+20:25 Frank Saavedra: vamos a dejar Paseo del Prado nada más. Se guarda y ya va a ser la que tenga pre asignada. Aquí se generan los perfiles médicos yo aquí desde aquí puedo generar el perfil médico. el nuevo perfil Aquí tengo No sé el perfil que se llama. recepción Y aquí en la recepción, puedo asignarle las pruebas que incluyen como es el examen médico. un aspiro y bueno Usemos esas nada más, no? Aquí ya está guardado el perfil. Este perfil ya se puede asignar a los puestos de trabajo.
+21:27 Frank Saavedra: A los diferentes puestos de trabajo o al mismo al que designen ustedes no sé
+21:32 Frank Saavedra: cómo se maneja exactamente, pero pueden crear aquí el puesto no puesto. recepción principal Y se da una descripción y se puede asignar el perfil. Y ahí ya se creó el puesto. Obviamente este este perfil médico lo pueden asignar a cualquier otro puesto o
+22:03 Frank Saavedra: también va a estar disponible en el listado general para que lo usen en cualquier otra empresa. Pueden Aquí también duplicarlo y cambiarle el nombre. o pueden eliminar hasta ahí va bien el flujo Lety
+22:24 leticia uribe: Sí, solo no me queda muy claro. Qué razón tendría de ser el nombre del perfil si vamos a tener los puestos? No sé para ustedes, qué tan funcional sea el área clínica y unidades móviles tener un nombre y después los puestos doctora, yo creo que solamente con los puestos.
+22:58 Jaqueline: Pues sería más funcional eso.
+23:01 Frank Saavedra: Son los puestos de trabajo. Pero que lo que pasa es que yo no, no, como como yo lo vi en la documentación, había puestos de trabajo que tenía que tenían el mismo perfil. Por ejemplo, el perfil No sé por ejemplo, ese de recepción puede haber diferentes puestos de trabajo que que tengan el mismo perfil, digo yo le puse al perfil recepción Pero puede tener un nombre más general o más clínico que ustedes les sea más fácil Identificar y que sea asignable para el puesto de trabajo que necesitan si hay si hay tres puestos de trabajo que ocupan el mismo perfil clínico.
+23:43 Frank Saavedra: Pueden usarlo yo así lo vi en la documentación, pero estoy podemos Obviamente si quitamos uno o el otro Pues es mejor.
+23:52 leticia uribe: Ya que no sé si te acuerdas lo que platicamos con Elena de que ella decía que para ellos era funcional poner perfil uno perfil dos perfil tres este con las n pruebas, no sé si esto funcionaría para o no.
+24:12 Jaqueline: Sí de hecho lo que lo que tratábamos de era simplificarlo, no, porque después viene, por ejemplo, ni administrativo, ni este y aparte del administrativo vienen todas las pruebas, entonces lo que decíamos visto de que Tenemos muchos perfiles y que a lo mejor al último terminan teniendo algunos pruebas similares o las mismas pruebas Entonces era tratar de simplificar eso a que sí Exactamente solamente tuviera como lo que comentábamos ahorita el puesto creo que sería funcional tanto para unidades como para clínicas.
+24:50 AMI Erika Rodriguez: Pero ahí, ahí sí, yo yo difiero un poquito en el sentido de que por puesto va a ser mucho más complejo porque puede ser puesto de mantenimiento de operador de administrador. Entonces yo siento que es mejor considerarlo en perfiles como tú dices perfil uno perfil dos perfil tres, pero por puestos creo que nos podemos alargar mucho más.
+25:16 Jaqueline: Ahorita lo tiene Francisco como este puesto y perfil.
+25:22 leticia uribe: Sí que sería perfil, digamos el nombre.
+25:26 Jaqueline: Ajá es que te acuerdas Lady que te compartí como habían dicho los de unidades
+25:26 leticia uribe: y
+25:31 Jaqueline: creo que era, por ejemplo, umm y después o no sé por ejemplo ct. Y ya de ahí venía el perfil, no?
+25:41 leticia uribe: Como la unidad de donde se va a atender y el nombre del perfil, no?
+25:45 Jaqueline: Ajá Sí, No pues sí Entonces sería mejor por perfiles así perfil uno perfil dos y eso.
+25:54 leticia uribe: Entonces nada más con el nombre sin los sin los puestos
+25:54 Jaqueline: Y que decíamos que se nos dieron la opción A lo mejor de agregar una prueba, no, eso ya aparte para no hacer tantos perfil, okay, Sí mejor así.
+26:10 leticia uribe: porque incluso
+26:10 Frank Saavedra: Entonces nada más con el perfil quitamos los puestos de trabajo.
+26:14 leticia uribe: Sí porque incluso hay clientes que nos pueden decir, no sé de qué es un trabajador montacarguista en la para unidades móviles y llegamos a las pruebas y pues no resulta que fue montacarguista Hace cuatro meses y ahorita ya está en otro puesto, no Entonces le aplicarían otras pruebas.
+26:38 Frank Saavedra: Entonces el puesto no es relevante para ustedes O en qué sentido es relevante?
+26:44 leticia uribe: Podría quedarse como opcional?
+26:48 Jaqueline: No yo Considero que no porque por ejemplo al final hacemos examen médico, por ejemplo en el tema de unidades médicas cuando nosotros solicitamos los listados de personal ahí tenemos el puesto entonces para unidades Pues realmente relevante no sería y en cuanto a unidad de clínicas Perdón este, pues obviamente lo interrogamos en el examen médico Al momento de que estamos.
+27:14 AMI Erika Rodriguez: Y a veces ni siquiera saben a qué puesto van cuando son de clínicas.
+27:16 Jaqueline: Exactamente que era algo que hemos tenido mucho en nabot, que a veces no saben a qué puesto van ni nada de eso y pues ahí tenemos que poner nada más Como operador o algo.
+27:31 Frank Saavedra: El puesto de trabajo Se queda, pero no es decisivo pueden usarlo o no? Okay. Bueno A partir de aquí lo que lo que sigue es que les envían un trabajador no O tienen un proyecto o algo así Cierto o qué? Qué sigue aquí?
+27:55 leticia uribe: Pues sí la cita en clínicas o la atención en unidades móviles, una vez que tenemos los los puestos de trabajo de los colaboradores y la empresa de alta.
+28:07 Frank Saavedra: Seguiría entonces una cita. Bueno, Cómo ocurre, la cita les llaman a ustedes no O llegan ahí a recepción.
+28:17 Jaqueline: Normalmente el asesor es el que, o sea, el cliente le pregunta al asesor como de
+28:18 Frank Saavedra: Es correcto.
+28:21 Jaqueline: Oye voy a mandar tantos pacientes o puedo mandar tantos pacientes y ya el asesor, lo revisa con recepción, le dice Oye sabes que tenemos disponibilidad de horario y O sí, en tal clínica y ya revisan en la agenda y es cuando los agendamos, esa puede ser una otra en ocasiones, se mandan correo, o sea, el mismo cliente Manda correo al área de recepción y de ahí se hace la cita y otra, pues cuando son por ejemplo público en general de repente llega el paciente aquí a la clínica y es como de realizan tales pruebas o algo y ya se puede agendar en ese momento o en ese mismo momento se realiza la atención.
+28:59 Frank Saavedra: Lo que hacen primero es revisar la agenda. Revisan la agenda, por ejemplo la de paseo del Prado no. Ya la revise no había una cita a las ocho de la tienes disponible, tengo disponible desde las nueve hasta las cinco de la tarde es correcto. Y aquí ya Lolis agenda la cita no, Por ejemplo si le llaman y es una persona agenda la cita De qué empresa es le pregunto qué empresa eres de América Industrial cierto.
+29:36 Frank Saavedra: Selecciona un trabajador no había un trabajador Entonces tenemos que darlo de alta primero el trabajador que es lo primero que hace. Cuando llega alguien lo tienen que registrar es correcto.
+29:49 Jaqueline: Una duda, ahí este creo que Cuando recién nos presentaste el el SIM teníamos, no sé cómo va a ser ahorita que mencionas Lolis Ariana las citas o si tendría el acceso el cliente para realizar las citas directamente.
+30:04 AMI Erika Rodriguez: sí
+30:07 Jaqueline: o como lo vamos a
+30:07 Frank Saavedra: Vamos a revisar, vamos a revisar si el cliente va a tener acceso a realizar las citas, eso es cierto ahorita lo que quiero es que revisemos el flujo básico para ver que el flujo esté bien ya cuando el flujo básico esté correcto Entonces sí ya brincamos ya el que lo haga la empresa o el que le haga Lolis o lo hagan por teléfono, eso ya no va a importar. Ya no hay diferencia.
+30:31 leticia uribe: A mí nada más me gustaría validar este cómo está configurado el tema de la capacidad operativa esa la configuraríamos Nosotros semanalmente con la logística.
+30:46 Frank Saavedra: Hay una la capacidad, hay una básica que está aquí en la sucursales, me voy a pasar para allá. Que está aquí en la sucursales. Cabe sucursalla Puedes configurar y puedes ponerle una capacidad Aquí está No nombre crucial dirección y aquí está en la operación horarios y capacidad, no, En qué horarios está estado de la sucursal. Si está activa o si no está activa Y si la queremos eliminar también le van a aparecer aquí las empresas a las que puede atender Ajá y bueno, datos, marxistas, totales empresas permitidas y sucursal, si es predeterminada o no.
+31:29 leticia uribe: Okay aquí con esta parte de que sea horario de inicio cierre y la capacidad digamos que son 15 estamos hablando de diez horas es suficiente doctora o hay que ponerle un poquito más de detalle. Que más o menos Ahí se calcula. Que será este.
+32:03 AMI Erika Rodriguez: Yo creo que podemos considerarlo por pacientes por hora, por ejemplo, si sabemos que en en pic tenemos dos personas, pues a la mejor van a ser dos pacientes cada cada hora no sé dependiendo del perfil dos tres pacientes, por ejemplo, en el en el ese va a Sergio un reto porque pues no, no es algo así como en el hospital, no que todo está súper agendado, es lo que les hemos dicho a nuestros equipos sabemos que tenemos ya una agenda de diez pacientes y resulta que llegan el doble, entonces Este sí vamos a tener que dejar Hasta cierto punto pues cierta flexibilidad en el sentido de que a veces, por ejemplo, una empresa que se llama airbus nos dicen, me recibes diez pacientes para mañana y la recepción nos dice, sabes qué? Sí te recibo cinco a las diez y cinco a las
+32:58 AMI Erika Rodriguez: 11 Entonces de qué manera podemos tener. Esa flexibilidad como lo tenemos ahorita en un en un Excel burgo Excel pero que le permite la recepcionista ir acomodando los los pacientes.
+33:17 Frank Saavedra: en ese Bueno un comentario ahí doctora
+33:21 AMI Erika Rodriguez: Por eso, que cómo cómo lo podemos tropicalizar para que sí nos de nuestra
+33:24 Frank Saavedra: yo creo que de un Excel a un sistema Funciona muy muy diferente, yo creo que no
+33:38 AMI Erika Rodriguez: operación que estamos llevando actualmente no me puedo encajenar al sistema y decir. Ah, sabes qué los pacientes y no más entonces como sí lo podemos flexibilizar.
+33:48 Frank Saavedra: Vas Esas son las configuraciones, por ejemplo Aquí hay una configuración de oraría apertura y esta capacidad que está aquí es la capacidad por hora de las personas que pueden atender.
+33:59 AMI Erika Rodriguez: Eso es por ahora.
+34:00 Frank Saavedra: Esto es por hora Esta es la capacidad por hora que tiene pueden atender dos por hora después sientes por hora o cinco por hora. Eso ustedes lo pueden asignar lo que podemos hacer adicional es que ustedes me digan cómo les funcionaría mejor o que otra característica le puedo poner aquí a la sucursal para tropicalizar.
+34:24 Frank Saavedra: Esa información es decir que otra característica de la sucursal se le debería de poder agregar.
+34:32 AMI Erika Rodriguez: Pues a lo mejor si dejar algún algún espacio que diga paciente sin cita. Este como estos que te acabo de mencionar estos ejemplos y que y que en el momento este nuestra recepcionista lo llegue a capturar.
+34:51 Frank Saavedra: digo, al final físicamente la capacidad es limitada y Porque no, no sé, no sé de qué manera hacen ustedes cuando tienen más gente de la que realmente se puede atender Qué sucede.
+35:06 AMI Erika Rodriguez: Se manda equipo de apoyo, se manda a otros personal para que apoye al al médico que está en sitio, entonces aumentamos nuestra capacidad, pero eso es obviamente Cuando tenemos previa visibilidad de que va a haber un una Un aumento en la en la en el envío de pacientes.
+35:27 Frank Saavedra: Eso es cuando es, por ejemplo, un proyecto, no?
+35:30 AMI Erika Rodriguez: No necesariamente No necesariamente estamos hablando en clínicas Ajá hablando
+35:32 Frank Saavedra: No necesariamente
+35:34 AMI Erika Rodriguez: en clínicas nos ha tocado casos donde nos dicen, sabes qué mañana te voy a mandar diez pacientes, ya tenemos una agenda previa de quince, entonces bueno es
+35:45 AMI Erika Rodriguez: ahí donde buscamos ajustar y y mandar personal adicional para que se pueda atender a sus pacientes.
+35:54 Frank Saavedra: Ese personal adicional lo jalan de otras sucursal supongo. Y qué sucede con esa sucursal se queda sin capacidad operativa?
+36:03 AMI Erika Rodriguez: Sí, no no no no no, no, no, no es personal que tenemos disponible como parte de equipo de unidades móviles y se va y acude a apoyo. O sea no dejamos clínicas sin sin personal.
+36:22 Frank Saavedra: Y qué sucede cuando llegan cuando les hicieron cinco citas y en ese mismo día llegan en lugar de cinco llegan 10 en tiempo real que no les avisan a ver qué sucede ahí.
+36:32 AMI Erika Rodriguez: Se atienden hay un proceso de va a haber un proceso de tiempo de espera de los pacientes Pero al final del día se les da el servicio.
+36:43 Frank Saavedra: Ajá Eso lo entiendo pero aún así la capacidad de la clínica sigue siendo la misma.
+36:51 AMI Erika Rodriguez: No entiendo esa pregunta.
+36:52 Frank Saavedra: Y no solo tardan más en atenderlos, pero la clínica sigue entendiendo cinco
+36:55 AMI Erika Rodriguez: Sí exactamente.
+36:58 Frank Saavedra: cinco pacientes por hora.
+37:03 AMI Erika Rodriguez: Si no tenemos un personal de apoyo adicional si sigue teniendo la misma capacidad.
+37:10 Frank Saavedra: Sí o sea, la clínica los va a atender o no independientemente de la capacidad, que capturemos lo único que va a cambiar operativamente Es que va a haber más
+37:15 leticia uribe: ahora
+37:19 Frank Saavedra: papeletas al día, no?
+37:21 leticia uribe: Sí mi duda que sería si nosotros ponemos cinco pacientes por hora, no limita que podamos meter más pacientes en agenda o sí.
+37:34 Frank Saavedra: Es correcto únicamente les va se supone que la agenda ahorita muestra una
+37:36 leticia uribe: Okay.
+37:39 Frank Saavedra: disponibilidad de quince de cinco por hora o de 15 por hora que le asignan sin embargo, eso no limita que ustedes puedan seguir recibiendo o dando de alta pacientes en tiempo real.
+37:52 leticia uribe: Y si yo le pongo cinco pacientes por hora por poner un ejemplo y ya llené mi agenda del día me va a marcar, o sea, si lo estoy llenando un día previo vamos a suponer para la agenda del día martes. Yo tengo esa capacidad y ya llené mi agenda el día ahí. Sí ya no podría agendar adicionales o si podría seguir agendando adicionales. o podemos poner un candado para que es que ha ido, no sé si la agenda va a estar abierta para que agente Lolis agende los ejecutivos y agenda el cliente si fuese así quiero pensar que pudiéramos poner un candado para que La capacidad operativa son quince Trabajadores al día los ejecutivos y el cliente se topen a quince y solo Lolis o solo recepción de específicamente hablando del puesto tenga autorizado meter más.
+39:04 Frank Saavedra: técnicamente si hay un bloqueo al ponerle ahí la capacidad de la clínica, pero obviamente puedo quitarlo podemos quitarlo y que la capacidad de agenda sea totalmente independiente a la capacidad, que aparece ahí ahorita la sucursal que puedan agendar tantos tantos usuarios, como ustedes quieran pero Eso debe de tener forzosamente debe de tener un candado para ustedes. Como lo que mencionas ahorita, quién va a poder agendar y cuál va a ser el límite? Quién va a poder decidir si agenda 20 personas cuando la agenda ya está a tope el día siguiente.
+39:48 leticia uribe: Por eso yo decía que recepción porque recepción al final se puede acercar con la doctora ya que o la doctora Erika a validar, si podemos mandar apoyo y pues abrir otros espacios pero en el caso, por ejemplo del cliente o el asesor, pues se toparía, no de que ya está llena la agenda. Para mí ese sería el candado, no sé qué pienses loco.
+40:13 Jaqueline: También Considero que o sea si lo dejamos como completamente abierto pues no este porque a lo mejor como lo que hemos hemos visto ahorita que hay algunos pacientes que a lo mejor tienen un poco más de o se les da como una prioridad por x tema x razón Entonces yo creo que ahí por ejemplo ha pasado que de repente le comentan a Lolis y es como de Okay entonces sabes qué mejorcita a tus pacientes para tal Porque este este colaborador va a mandar tantos o podemos hacer ese tipo de ajustes si nosotros dejamos la agenda a que programe O bueno sí te este los el cliente o el asesor creo que va a ser un poco más O sea va a haber más problemas. Yo consideraría que mejor Ajá Entonces yo consideraría que mejor sí se considerara que la que la agenda solamente la maneje Lolis y ya en relación a eso pues obviamente.
+41:08 AMI Erika Rodriguez: O sea, cada recepcionista más bien, no?
+41:10 Jaqueline: Sí exactamente, o sea, cada cada recepcionista ellos obviamente ya tienen como que por ejemplo Montse ya sabe Qué capacidad tiene su clínica a excepción de que exactamente O sea desde el jueves que nosotros sacamos la logística desde ahí, a lo mejor prever para el día lunes Cuántos pacientes y se va a requerir algún colaborador y todo digo algún este personal del equipo de unidades para atender a los colaboradores. Yo consideraría que solamente tenga el acceso recepción.
+41:41 AMI Erika Rodriguez: Pues yo creo que sí digo al final es este sistema, lo vamos a tener que ir probando y haciendo ciertos ajustes en la marcha. Entonces Supongo que de primera instancia, pues puede funcionar y vamos revisando como Cómo se van generando este tema de las citas.
+42:00 leticia uribe: Se podría dejar este como abierto a futuro una vez ya aprobado con recepción que podamos tener esta otra trazabilidad, no?
+42:12 Frank Saavedra: También se me ocurre, podríamos dejar una capacidad base. y otra capacidad como de Como de sobre cupo y que dicho sobre cupo sea solamente bajo una autorización previa. Digamos se agendan se agendan los cupos disponibles y posteriormente cualquier otra persona que pueda agendar sea pueda agendarlos bajo previa autorización en el momento que se agendaron o que se están agendando que le mencione el cupo de la clínica está lleno si realmente es necesario que des de alta estos nuevos pacientes, necesitas previo autorización? Quieres que la enviemos y así le pueda Enviar no sé Tal vez un un correo de autorización a la persona indicada
+43:06 Frank Saavedra: para que autorice y se autoriza obviamente también significa que va a organizar toda esa parte. Pero esto también tiene que Tendría que haber con sus horarios para que ustedes les dé tiempo de organizar toda esa logística, entonces tendría que tener un límite de tiempo, por ejemplo, si hay un sobre cupo ya a las doce pm de hoy quieren quieren este organizar para el día de mañana a lo mejor ya no
+43:36 Frank Saavedra: les da tiempo, no de organizar toda la logística para ver Está disponible o no Entonces tal vez podría ser con un nueve de tiempo, no sé si esto les parezca bien o una buena idea.
+44:05 AMI Erika Rodriguez: Sí, como como menciono podemos dejarlo así como en esta versión uno punto cero y pues bueno, vamos, vamos revisando el el proceso, no, de esta de esta parte.
+44:21 Frank Saavedra: Entonces lo dejamos con la capacidad. paso estábamos en el listado de pacientes no Cuando hacen la cita, se tiene que dar de alta obviamente primero al trabajador que es cuando lo registra. registran su nombre su fecha de nacimiento El puesto bueno, en este en el puesto que habíamos dado de alta, pero ya no va a ser puesto, quedamos que ya va a ser el perfil, no? Ahí ya se guardó el paciente y se le da click aquí en agendar consulta. Ahí está ya la cita.
+45:26 Frank Saavedra: Se selecciona las cursarla en la que va se va a atender Aquí nada más le apareció la del Prado porque es la que tiene asignada la empresa que Industrial aquí le van a aparecer las otras para ver en cuál se le atiende. O se les puede atender Eso ya depende de sus contratos y mal no recuerdo.
+45:50 leticia uribe: De dónde se le puede atender?
+45:52 Frank Saavedra: Ajá Por ejemplo si
+45:54 leticia uribe: No realmente se le podría atender en cualquiera de las sucursales.
+46:00 Frank Saavedra: Va a okay.
+46:03 leticia uribe: Digo si hay clientes que habitualmente van a una sola sucursal Pero tenemos clientes que podrían ir a cualquiera de las tres según la dirección del paciente.
+46:14 Frank Saavedra: Pero nada más es, no hay ninguna limitante en otro sentido.
+46:19 leticia uribe: no
+46:22 Frank Saavedra: Okay el origen de la cita no se llamaron en sucursal por WhatsApp supongamos que fue una llamada hicieron la cita para el día de hoy a las 3 de la tarde
+47:04 Frank Saavedra: Sucursales aquí se pueden ver las tres agendas. Aquí está la del Prado tiene hoy dos citas, no una fue a las ocho de la mañana ya está como completada Y ahorita la de Juan Carlos que es a las tres.
+47:20 Frank Saavedra: Que está como pendiente. Y aquí se puede ver su pase. Puedes actualizar y podemos volver a la gente? Esto es para lo que me mencionaba de si se puede ver el cupo O visualmente, cuál sucursal está saturado O cuál no? vamos a la agenda del Prado Y aquí está no Aquí está Juan Carlos A las tres ocupo un lugar de 15 disponibles. Su pase este es el pase de entrada, que ya les mencionaba que pueden llegar directamente. A recepción se podría escanear el código de barras y marcar. En el sistema como que ya llegó. Aquí se le puede enviar.
+48:31 Frank Saavedra: Al al paciente su enlace para que dé de alta sus datos personales los datos personales declarativos que habíamos visto Lety supuesto aquí se llena el
+48:41 Frank Saavedra: puesto operador su departamento. Actualmente esto lo llena el médico no cuando está en su examen. Este es una opción para que el paciente o el trabajador pueda darlo de alta su información mientras está esperando a que lo pasen Entonces yo yo la vez que fui a hacer mi simulación da perfectamente tiempo de llenarlo y se puede compartir por WhatsApp o por correo o incluso Si tienen una tableta ahí disponible el trabajador podría irlo llenando. Esto les agiliza un poco esta información. También aquí viene su historia laboral. Y aquí vienen las antecedentes familia.
+49:51 Frank Saavedra: diabetes hipertensión padre madre
+49:55 AMI Erika Rodriguez: Este sería el mismo proceso en unidades móviles esto que estás haciendo ahorita.
+50:00 Frank Saavedra: Esto podrían hacerlo lo mismo en unidades móviles.
+50:04 AMI Erika Rodriguez: No, es que pregunto porque creo que ahí sí no les daría tiempo.
+50:04 Frank Saavedra: pero En unidades móviles normalmente cuando lo hacen en unidades móviles tengo entendido que les dicen cuánto Cuántos trabajadores les van a enviar previamente. Entonces con ese compilado que ustedes tienen de los trabajadores que se va a enviar previamente, podríamos enviarle este formulario para que lo llenen
+50:28 Frank Saavedra: previamente desde su casa cuando estén en fila, esperando a que los atiendan o antes de irse al trabajo, esto lo pueden en cuanto los den de alta en el sistema podrían llenarlo automáticamente sin necesidad de que cuando lleguen a la unidad móvil tengan que estarlo llenando porque ciertamente como usted dice doctora. Quita tiempo. Entonces el que el trabajador lo llene previo a su cita en la unidad móvil les agiliza a ustedes también les da más tiempo de atención o menos saturación.
+51:05 Frank Saavedra: Todo depende de en qué momento se le enviamos, pero para unidades móviles se los podemos enviar previamente.
+51:13 AMI Erika Rodriguez: OK Bueno pues ese sí va a ser un reto para Este ambas partes tanto para el cliente como nosotros.
+51:22 Alan: importante es que estas funcionalidades están bien, hay que dejarlas
+51:29 Alan: habilitadas, pero no deben de ser obligatorias para que entonces entremos en este proceso de adaptación y que los clientes que si quieran subirse a esta tecnología lo hagan los que no, pues tendrían que mantener el mismo proceso que venimos hasta el día de hoy, pero finalmente es mejor tenerla habilitada, pero no, no, este no obligatoria no, para que no nos vaya a atrasar en
+51:45 AMI Erika Rodriguez: a limitar el
+51:56 Frank Saavedra: Sí, sí, evidentemente no puede ser obligatorio, pero a lo que voy es que va a llegar un momento en que sí la van a poder usar los trabajadores, la van a poder usar y ya está habilitada la tiene lista. Aquí ya se da de alta el el trabajador. Y una vez que está dado de alta cuando ya está ahí verifican sus datos, no? aquí la recepcionista puede verificar los datos médica Industrial recepción principal hora de la cita su nombre Juan Carlos aquí puede dar de alta su su INE Pueden tomar una captura? Aquí la puede dar de alta.
+52:42 Frank Saavedra: yo aquí tenía otro trabajador, vamos a revisar el otro trabajador para que Esté aquí si yo doy de alta otro trabajador que ya que ya acudió anteriormente.
+53:22 Frank Saavedra: Jorge aquí está si yo si si el trabajador ya acudió previamente o ha ido otras veces así. Ta aquí pueden una vez más corroborar sus datos, pero si pueden ver ya está dado de alta su identificación. Y lo que pueden hacer es si quieren usar si está vencido si quieren capturar otra pueden capturar una nueva reutilizar o sin captura, no? Aquí si yo le doy reutilizar la última La jala y confirmo que esta evidencia sigue siendo válida para el ingreso de hoy. Y con esto se cierra un ciclo de validación de datos que antes no se hacía. Si no hay una confirmación no se deja pasar.
+54:08 Frank Saavedra: al paciente esto asegura que siempre tengan los datos válidos Y de que verifiquen que la identidad que el paciente nos está diciendo que es coincida al menos con un documento oficial
+54:27 leticia uribe: tengo una duda ahí, por ejemplo, tú pusiste si no mal recuerdo a validar a Jorge y subiste tu INE qué es lo que validas y tu nombre no es Jorge
+54:39 Frank Saavedra: esto lo valida la recepcionista Lety
+54:44 leticia uribe: Es que pensé que podría validaba los datos correctos
+54:49 Frank Saavedra: No sí, podríamos hacerlo, pero tendría que ser en un flujo posterior, pero sí se puede hacer lo que pasa es que son algunos permisos que se tienen, pero sí podríamos agregarlo más adelante. El Security si lo has visto no en otras plataformas como la de las bancarias. Entonces sí puede ser aquí en este caso aquí ni siquiera valida todavía. Ahí, pero ya almacenar los datos Lolis verifica y corrige. Digo Lolis porque es la que conozco las recepcionista que conozco. Entonces una vez que están estos datos. Se confirman.
+55:57 Frank Saavedra: Ya van a estar aquí en el proceso de atención. Aquí está como programado Aquí está Jorge Entonces aquí podemos ya entrar aquí. Esto ya es el segundo paso esto es ya lo que vería. La siguiente recepción que si mal no recuerdo. Es cuando empiezan a a tomar somatografía o cómo se dice somatometría? Entonces aquí le abre y aquí ya le aparece. Esto ya lo vería ahí en las personas que continúan todavía habría que asignar los roles y aquí ya entra No aquí está lo que llamamos comúnmente papeleta.
+56:53 Frank Saavedra: Y en el examen médico? Que se toma somatometría que viene aquí no el peso.
+57:02 Frank Saavedra: peso 75.5 talla 165 se toman los signos vitales Hay signos vitales? 120 80 frecuencia cardíaca 70 temperatura 35.8 frecuencia respiratoria 97 cintura no sé 80 cadera 85 Se completa y luego continúa agudeza visual. Visión lejana aplica no aplica aquí ahorita me ayudan con datos se suben algunos de memoria para ir lesionando. 2020 a 20 aquí 20 acá no?
+58:18 Jaqueline: No, o sea, es veinte diagonal veinte.
+58:21 Frank Saavedra: veinte
+58:24 Jaqueline: Hay veinte quince?
+58:27 Frank Saavedra: 20 15
+58:30 Jaqueline: Ahí en cercana, podría ser punto 75 Y en el otro igual punto 75.
+58:41 Frank Saavedra: lejana corregida
+58:42 Jaqueline: 2010 2010 Ahí, pues podríamos dejar lo mismo, o sea, punto 75 y punto 75. Hoy ahí no alcanzó a ver qué dice.
+59:06 Frank Saavedra: Deja le doy
+59:07 Jaqueline: Ah ahí sería por ejemplo, si no sé, podríamos poner na O sea, como de no aplica. normal
+59:28 AMI Erika Rodriguez: Que ahí en ese sentido ahorita sin que tenemos maneja, algunos combos de selección porque a veces tenemos errores de dedo de las personas que a veces capturan Entonces sí me gustaría en estos primero en estos de campo visual. Bueno, debería decir agudeza visual no campo visual agudeza, visual dejemos combos de selección y por ejemplo campimetría la mejor sí, dejarlo como Pues no sé, no se ha idoxy. Igual podamos poner un par de selección como campimetría normal o alterada o no aplica también para entre menos le dejemos datos de de captura menos errores, tenemos y eso ya lo está más que comprobado con el sin que que tenemos.
+01:00:15 Jaqueline: Sí de hecho yo creo que eso sí podría hacerlo, por ejemplo en la visión lejana exactamente como comenta la doctora, ya tenemos en donde seleccionas este y en la parte de abajo te aparecen y nada más los o sea cómo sea, como de opción.
+01:00:28 AMI Erika Rodriguez: Ajá se despliega las opciones y ya selecciona.
+01:00:31 Jaqueline: Ajá Igual también en chihara podremos dejar dos opciones que sea normal y anormal y ya nosotros obviamente cuando vemos eso ya ponemos en la interpretación Como discromatopia, por ejemplo. Este y en capimetría Sí exactamente, podríamos dejarla como normal, no aplica o ver estudio anexo, que es cuando viene dentro del perfil el estudio aparte de cambiometría. Pero sí Entonces igual con eso.
+01:00:59 AMI Erika Rodriguez: Habría que mandarle los las opciones si quieres.
+01:01:02 Frank Saavedra: entonces campos de selección múltiple
+01:01:05 Jaqueline: Sí que de hecho creo que sí lo se lo mandamos no Lety Te acuerdas cuando revisamos esta parte Punto por punto del examen médico.
+01:01:15 leticia uribe: Me parece que está en el Word
+01:01:17 Jaqueline: igual este lo reviso y ya este sino para complementar esta parte yo se lo comparto a a Francisco
+01:01:25 Frank Saavedra: Ok lo reviso Yo también ya si no es necesario que me los envíes te indico doctora Jackie
+01:01:32 Jaqueline: Sí porque creo que lo que sí no venía es lo de las opciones de capimetría y del tesla, pero sí lo revisas y ya me avisas porfis ya sino para mandártelo de todas maneras.
+01:01:44 Frank Saavedra: Ok el que el que quiero que me apoyen aquí muchos en examen médico Porque mira aquí viene, no? sin datos previos antecedentes historia laboral datos heredo familiares viene todo completo, lo llenamos o Porque si es algo largo Este es el de antecedentes, luego viene el módulo uno. Donde vienen inmunizaciones reportadas por el paciente. nota del médico si es femenino masculino la exploración física Y la impresión de actitud?
+01:02:45 AMI Erika Rodriguez: espacios esos espacios de exploración física Cuántos caracteres tenemos para ingresar
+01:02:54 Frank Saavedra: 60 caracteres son los que se asignaron? Necesitan más.
+01:03:08 AMI Erika Rodriguez: Pues ahí Supongo que está rellenado, no?
+01:03:12 Frank Saavedra: Sí hay algunos que se dijeron que eran negadas Y entonces están como negadas y otras como normales.
+01:03:20 Jaqueline: Es que esa parte de exploración física en El zinc, que tenemos ahorita, ya tiene como este preye llenado, es a lo que se refiere la doctora, por ejemplo, en oídos tiene este membrana timpánica íntegra cono luminoso Y permeable, por ejemplo Entonces eso, La verdad, sí nos disminuye más el tiempo a realizar.
+01:03:45 Frank Saavedra: Lo copia igual. Que el decir para copiarlo igualito.
+01:03:51 AMI Erika Rodriguez: Sí tal cual hay que copiarlo tal cual, por favor.
+01:03:53 Frank Saavedra: Okay.
+01:03:53 Jaqueline: Sí ya en la impresión y aptitud ahí, la verdad cuando ya tenemos el reporte final donde viene como el dictamen médico decía es apto No apto y eso ahí a mí sí, me gustaría que cuando ya pasemos a esa parte incrementar los caracteres porque sí está muy reducido, o sea, está muy limitado.
+01:04:13 Frank Saavedra: Ok los dejo todos como campo de texto
+01:04:13 Jaqueline: Pero ahorita en esta Sí sería, sí sí sí.
+01:04:20 Frank Saavedra: Muy bien, Entonces esto los los dejo como campo de texto estos también. y exploración física Exactamente igual que con
+01:04:46 Frank Saavedra: sí, es esto de los de los seres de familiares está bien así Esto es lo que llena el médico que podría llenar el paciente previamente
+01:05:04 Jaqueline: Sí realmente eso sí lo tenemos como para como abierto, o sea, si nosotros metemos la empresa el puesto la antigüedad y todo eso Entonces creo que eso sí.
+01:05:23 Frank Saavedra: Entonces, eso se queda así. Lo de impresión de actitud solamente hay que cambiar.
+01:05:28 AMI Erika Rodriguez: Nada más en Perdón en antecedentes patológicos podemos regresarnos un poquito antecedentes. A base abajo. Ahí entonces Si eso está previsto para que lo llene el paciente necesitamos, por ejemplo, si él pone diabetes, sí, necesitamos que se despliegue otro otro campito para que nos describa desde cuándo que toma para Qué tratamiento, Toma este. Para poderlo o nosotros doctora ya que corroboramos a me pusiste que sí tienes diabetes Qué tomas, pero eso dónde lo vamos a colocar en no patológicos.
+01:06:24 Jaqueline: Ahí tiene un apartado donde dice observaciones y comentarios. ahí observaciones adicionales Ahí sí sería, por ejemplo, diabetes Desde hace no sé quince años en tratamiento que de hecho tenemos un apartado en no patológicos de si toma algún medicamento, No vi esa parte a ver. Grupo y RH un poquito no De allá se brinca verdad?
+01:06:54 Frank Saavedra: ella se
+01:06:55 Jaqueline: Pues entonces lo que podremos considerar, sería eso doctor, o sea, solamente dejar ese ese apartado ahí en en No patológicos Y ahí Poner este directo, o sea, por ejemplo diabetes quince años de evolución en tratamiento con y ya metformina quinientos miligramos cada 24 horas, por ejemplo. Y que ya no haya un apartado como lo tenemos actualmente que dice tratamiento actual y luego aparte, este se pone la enfermedad, no? Pero sí, ni estaríamos poder, o sea, un buen espacio o de caracteres para poder este escribirlo describir todo también lo que estaba viendo en la parte de arriba.
+01:07:33 Jaqueline: Aquí donde dice heredo familiares, no sé si recuerdas que te habíamos comentado, que por ejemplo, seleccionamos Y tenemos unas opciones como opción múltiple, vaya en el sin que tenemos actualmente en donde dice, por ejemplo, Quién es el diabético, Ah pues abuelo materno abuelo paterno, padre madre u otros.
+01:07:56 Frank Saavedra: de acuerdo, agregó todo eso también del cine Tal cual
+01:08:00 Jaqueline: Sí, porque como comenta la doctora Erika o sea, sí, Tratamos de que escribir lo menos posible por el tema de faltas de ortografía o de que estamos rápido y pues para evitar todo eso no que haya errores.
+01:08:12 Frank Saavedra: De acuerdo, genial, Te iba a comentar doctora aquí en en lo que decían, por ejemplo diabetes o para cualquier enfermedad, Sí podría yo desglosar un campo adicional para que el tratamiento medicamento que se da la el tiempo que que tienen de no sé cómo sería de tener el padecimiento de saber que lo tienen, vaya ligado y ya no tienen que capturar aparte al menos no mencionar diabetes o
+01:08:43 Jaqueline: Okay, Y por ejemplo de aquí si lo pusiéramos de esa manera Al momento de que
+01:08:44 Frank Saavedra: la enfermedad.
+01:08:49 Jaqueline: nosotros este descargamos o Bueno terminamos el examen médico Cuando nosotros tenemos el formato de reporte final en donde viene ya el dictamen. Jala como todo esto O sea si tiene enfermedades Y eso directamente lo podría jalar para ese para el resumen, vaya.
+01:09:06 Frank Saavedra: Sí claro. Sí, podríamos jalarlos directamente al resumen.
+01:09:12 Jaqueline: Ah okay, pues sí, yo creo que sí estaría bien que dijeras si por ejemplo epilepsia sí, no? Y ya en caso de que sí, pues ya nada más poner como desde hace cuánto tiempo y tratamiento pero
+01:09:23 Frank Saavedra: Yo creo que para todos no se lo se lo a todos los los patológicos les hacemos
+01:09:29 Jaqueline: Nada más una duda no se va a ver nada más una duda, no se va a ver como mucho.
+01:09:30 Frank Saavedra: ese desplegado. No lo podemos hacer este que sea como acordeón que nada más cuando le pongas ver detalles, lo extienda y cuando no, pues no.
+01:09:43 Jaqueline: Ah okay, Porque por ejemplo en una fractura si podemos tener fracturas de tanto tiempo que requirió manejo quirúrgicos y hubo alguna si hay alguna limitación o hubo alguna complicación como infección de la herida todo eso Entonces sí es un poco más extenso lo que a veces escribimos que tratamos de resumirlo de todas maneras pero por eso era mi duda Pero si va a ser como este para como sí que se esconda y ya hasta el momento de que lo queramos este consultar ya seleccionemos está bien.
+01:10:15 Frank Saavedra: Incluso a lo mejor podríamos agruparlos o algo así posteriormente, no? Para que todos los que digan sí se agrupen en un solo apartado y todos los que digan no como son menos, no sé si los que dicen negados son menos relevantes que los que dicen que sí cierto.
+01:10:35 AMI Erika Rodriguez: Sí porque igual podemos dejar ese espacio que dejaste Francisco que hizo observaciones porque realmente es ahorita lo que estamos haciendo en el sí ponemos sí o negado negado negado y solo los lo que sí lo describimos e inclusive en un apartadito abajo, entonces podemos dejarlo y podemos dejarlo de esta manera, nada más que nos dé oportunidad de que el espacio Pues nos permita escribir varios caracteres, me explico.
+01:11:02 Jaqueline: Sí, sí, sí sí sí.
+01:11:08 Frank Saavedra: Entonces lo dejamos así como está.
+01:11:12 AMI Erika Rodriguez: Sí así quedaría nada más.
+01:11:19 Jaqueline: para Cuántos caracteres, tenemos adicional Bueno ahí en donde dice observaciones adicionales Cuántos caracteres, se puede poner
+01:11:27 Frank Saavedra: Casi son ilimitados puedo aumentarlos a los que tú me digas creo que ahorita Tiene mil quinientos.
+01:11:32 Jaqueline: Okay, Y al momento de que yo por ejemplo, descargo ese formato. El examen médico ya completo Sí me va a dar la opción de de leerlo O se va a cortar cuando yo lo imprima, por ejemplo, porque actualmente es el problema que tenemos que ya después de cierta cantidad O sea si te deja seguir escribiendo, pero al momento de Descargar el formato Y ya te vas a ese apartado se ve cortada las letras de que ya no ya no aparece en el formato impreso, no sé si me explica.
+01:12:01 Frank Saavedra: Ese no, no lo va a tener ningún problema.
+01:12:08 AMI Erika Rodriguez: Sí aquí, pues va a ser también saber Cuántas hojas, nos van a salir, verdad, ahorita son se imprimen en dos hojas y no mal recuerdo doc el examen médico.
+01:12:17 Jaqueline: Para las para los proyectos se imprimen en tres.
+01:12:21 AMI Erika Rodriguez: tres bueno
+01:12:22 Jaqueline: Sí, que ya al final viene lo del condicionado apto Y eso y las firmas.
+01:12:29 AMI Erika Rodriguez: Sí porque pues ese es el punto que comenta la doctora por la caída que tiene El zinc, aunque nos deje a escribir infinitamente, pero la impresión por la caída de impresión que tiene el sistema, pues ya se corta, no? Entonces esa es la pregunta de la doctora. Y lo ideal es que bueno, pues ahorita lo ideal ahorita es que dejemos máximo
+01:12:50 Frank Saavedra: O sea no tienen un limitante para que Se imprime tres o cuatro hojas.
+01:12:56 AMI Erika Rodriguez: tres hojas, que es lo que estamos manejando ahorita.
+01:12:57 Frank Saavedra: Ok que no se imprimen más de tres hojas que toda la información que hay
+01:13:02 AMI Erika Rodriguez: Y realmente sí.
+01:13:06 Frank Saavedra: Okay perfecto En tres hojas, verdad?
+01:13:35 Frank Saavedra: Muy bien, entonces continuamos. Otra pregunta a ver.
+  

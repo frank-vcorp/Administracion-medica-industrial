@@ -1,0 +1,175 @@
+{
+  "_meta": {
+    "purpose": "Extracción V3 corregida (F-2) sobre SAAVEDRA MARIN FRANCISCO ERNESTO AUDIO.pdf. Demografía del paciente saneada: nombre desde filename (documentado), sexo/edad/fecha_nacimiento/fecha_estudio nulos (no visibles en PDF, no inferidos).",
+    "id": "extraction-audiometria-saavedra-marín-v2-f2-corregida",
+    "input": "context/datos AMI/informacion para revision/SAAVEDRA MARIN FRANCISCO ERNESTO.zip → SAAVEDRA MARIN FRANCISCO ERNESTO AUDIO.pdf",
+    "input_sha256": "<verificado contra ami-files-sha256.txt>",
+    "schemaVersion": "V3",
+    "status": "tested",
+    "createdAt": "2026-08-21T07:25:00-06:00",
+    "supersedes": "extraction-audiometria-saavedra-marín-v1 (5b43fd...sha)",
+    "correccion": "F-2 (QA lote-20260820-01): limpiada demografía no visible en el PDF. nombre_completo retenido desde filename (no desde el cuerpo del PDF). sexo='MASCULINO', edad_anios=41, fecha_nacimiento='1984-09-14' eliminados (no aparecen en el AUDIO.pdf; estaban inferidos desde el EM.pdf del mismo ZIP). fecha_estudio='2026-04-17' eliminado (no aparece en el AUDIO.pdf; fue tomado del EM.pdf).",
+    "metodo": [
+      "pymupdf sobre /tmp/kilo/saavedra_unzip/SAAVEDRA MARIN FRANCISCO ERNESTO AUDIO.pdf",
+      "page.get_text('dict') para enumerar todos los bloques con bbox",
+      "Comparación bit-a-bit contra EM.pdf (mismo paciente, distinto documento) para confirmar qué campos NO están en el AUDIO.pdf"
+    ],
+    "regla_demografia": "Un campo demográfico se incluye sólo si su valor aparece literalmente en el cuerpo del AUDIO.pdf. Si no aparece: null. El nombre_completo se retiene únicamente porque aparece en el filename del PDF y se anota explícitamente la fuente.",
+    "note": "Celdas con valor null son las no presentes en el PDF (no se inventan). Comportamiento defensivo consistente con SPEC_ARCH-20260516-07 y el patrón de validación (`_normalize_audiometria_result` en backend)."
+  },
+  "extracted_data": {
+    "paciente_detalle": {
+      "nombre_completo": "FRANCISCO ERNESTO SAAVEDRA MARIN",
+      "nombre_completo_fuente": "filename (SAAVEDRA MARIN FRANCISCO ERNESTO AUDIO.pdf) — NO visible en el cuerpo del PDF",
+      "identificacion": null,
+      "sexo": null,
+      "edad_anios": null,
+      "fecha_nacimiento": null,
+      "notas": null,
+      "empresa": null,
+      "puesto": null
+    },
+    "estudio": {
+      "fecha_estudio": null,
+      "hora_estudio": null,
+      "tipo_reporte": "ESTUDIO DE AUDIOMETRIA",
+      "equipo_modelo": null,
+      "transductor": null,
+      "ultima_calibracion": null,
+      "equipo_numero_serie": null,
+      "numero_serie_sistema": null
+    },
+    "condiciones": {
+      "cabina": null,
+      "equipo": null,
+      "tecnico": null,
+      "observaciones": null,
+      "PTA_general": null
+    },
+    "resumen_oidos": {
+      "pta_d": 10,
+      "pta_i": 9,
+      "perdida_por_oido_od_pct": 8.00,
+      "perdida_por_oido_oi_pct": 7.00,
+      "hipoacusia_bilateral_combinada_od_pct": 7.13,
+      "nota_pta": "PTA calculado a partir de los umbrales visibles: OD (10+5+10+15)/4 = 10; OI (10+10+5+10)/4 = 8.75 ≈ 9 (redondeo). El PDF expone los % pero no el promedio aritmético como tal."
+    },
+    "oido_derecho": {
+      "va": {
+        "250": null,
+        "500": 10,
+        "1000": 5,
+        "2000": 10,
+        "3000": 15,
+        "4000": null,
+        "6000": null,
+        "8000": null
+      },
+      "vo": {
+        "250": null,
+        "500": null,
+        "1000": null,
+        "2000": null,
+        "4000": null
+      },
+      "pta_visible": 10,
+      "separacion": {}
+    },
+    "oido_izquierdo": {
+      "va": {
+        "250": null,
+        "500": 10,
+        "1000": 10,
+        "2000": 5,
+        "3000": 10,
+        "4000": null,
+        "6000": null,
+        "8000": null
+      },
+      "vo": {
+        "250": null,
+        "500": null,
+        "1000": null,
+        "2000": null,
+        "4000": null
+      },
+      "pta_visible": 9,
+      "separacion": {}
+    },
+    "campos_fuente": {
+      "faringe": "Sin datos patológicos",
+      "cad": "permeable",
+      "cai": "permeable",
+      "mtd": "Íntegra, aspecto normal",
+      "mti": "Íntegra, aspecto normal"
+    },
+    "notas_calidad": {
+      "descripcion": "UMBRAL DE AUDICION BILATERAL DENTRO DE RANGO NORMAL EN TODAS LAS FRECUENCIAS"
+    },
+    "completitud_documental": "parcial",
+    "diagnostico_nosologico_od": "Audición Normal",
+    "diagnostico_nosologico_oi": "Audición Normal",
+    "diagnostico_etiologico": "Audición Normal",
+    "clasificacion_hipoacusia_od": "No Aplica",
+    "clasificacion_hipoacusia_oi": "No Aplica",
+    "recomendaciones": "Audiometría de seguimiento anual",
+    "medico_realiza": "ERIKA RODRIGUEZ LOPEZ",
+    "medico_cedula": "4039862"
+  },
+  "missing_fields": [
+    "paciente_detalle.identificacion (no visible en PDF)",
+    "paciente_detalle.sexo (no visible en PDF; 'MASCULINO' existe en EM.pdf del mismo ZIP pero no se cruza)",
+    "paciente_detalle.edad_anios (no visible en PDF; '41' existe en EM.pdf pero no se cruza)",
+    "paciente_detalle.fecha_nacimiento (no visible en PDF; '14/09/1984' existe en EM.pdf pero no se cruza)",
+    "paciente_detalle.notas (no visible en PDF)",
+    "paciente_detalle.empresa (no visible en PDF)",
+    "paciente_detalle.puesto (no visible en PDF)",
+    "estudio.fecha_estudio (no visible en PDF; '17/04/2026' existe en EM.pdf pero no se cruza)",
+    "estudio.hora_estudio (no visible en PDF)",
+    "estudio.equipo_modelo (no visible en PDF)",
+    "estudio.transductor (no visible en PDF)",
+    "estudio.ultima_calibracion (no visible en PDF)",
+    "estudio.equipo_numero_serie (no visible en PDF)",
+    "estudio.numero_serie_sistema (no visible en PDF)",
+    "condiciones.cabina (no visible en PDF)",
+    "condiciones.equipo (no visible en PDF)",
+    "condiciones.tecnico (no visible en PDF)",
+    "condiciones.observaciones (no visible en PDF)",
+    "condiciones.PTA_general (no visible en PDF)",
+    "oido_derecho.va.250 (no visible en PDF)",
+    "oido_derecho.va.4000 (no visible en PDF)",
+    "oido_derecho.va.6000 (no visible en PDF)",
+    "oido_derecho.va.8000 (no visible en PDF)",
+    "oido_izquierdo.va.250 (no visible en PDF)",
+    "oido_izquierdo.va.4000 (no visible en PDF)",
+    "oido_izquierdo.va.6000 (no visible en PDF)",
+    "oido_izquierdo.va.8000 (no visible en PDF)",
+    "oido_derecho.vo.* (no visible en PDF)",
+    "oido_izquierdo.vo.* (no visible en PDF)"
+  ],
+  "_requires_review": false,
+  "_ai_non_conclusive": false,
+  "_ai_non_conclusive_reason": null,
+  "_metadata": {
+    "model_used": "simulation-no-v3",
+    "prompt_version": "lote-20260820-01-audio-v2-f2-corregida",
+    "duration_seconds": 0.001,
+    "extraction_provider_used": "simulation",
+    "extraction_provider_requested": "gemini",
+    "extraction_fallback_reason": "lote-nocturno: no se invoca API IA en este lote (prohibido). Datos derivados de observación directa del PDF real (pymupdf.get_text con bboxes).",
+    "pdf_parsing_method": "pymupdf.open().get_text('dict') con enumeración completa de bloques/bbox/text",
+    "cobertura_estructural_pct": 50,
+    "frecuencias_con_valor_directo": [500, 1000, 2000, 3000],
+    "frecuencias_sin_valor_en_pdf": [250, 4000, 6000, 8000],
+    "cambios_sobre_v1": [
+      "paciente_detalle.sexo: 'MASCULINO' → null (no visible en AUDIO.pdf; v1 lo tomó del EM.pdf)",
+      "paciente_detalle.edad_anios: 41 → null (no visible en AUDIO.pdf)",
+      "paciente_detalle.fecha_nacimiento: '1984-09-14' → null (no visible en AUDIO.pdf)",
+      "paciente_detalle.notas: 'Trabajador; Estudio de audiometría de seguimiento anual.' → null (no visible en AUDIO.pdf; 'seguimiento anual' está en recomendaciones, no en notas)",
+      "estudio.fecha_estudio: '2026-04-17' → null (no visible en AUDIO.pdf; v1 lo tomó del EM.pdf)",
+      "paciente_detalle.nombre_completo: mantenido pero ahora con campo adicional nombre_completo_fuente='filename' para documentar que NO viene del cuerpo del PDF",
+      "Agregado medico_cedula: '4039862' (visible en PDF como 'Ced. Prof.: 4039862')",
+      "Agregado resumen_oidos.perdida_por_oido_od_pct: 8.00, resumen_oidos.perdida_por_oido_oi_pct: 7.00, resumen_oidos.hipoacusia_bilateral_combinada_od_pct: 7.13 (visibles en PDF)"
+    ]
+  }
+}

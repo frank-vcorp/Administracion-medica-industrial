@@ -1,0 +1,747 @@
+{
+  "kind": "element",
+  "role": "body",
+  "depth": 0,
+  "children": [
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "papeleta-header",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "element",
+          "role": "h1",
+          "ownText": "Audiometría — Caso sin parámetros mínimos",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "Audiometría — Caso sin parámetros mínimos"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "p",
+          "ownText": "Inyección de extracción con menos de 4 frecuencias por oído → la UI debe mostrar AI_NON_CONCLUSIVE con razón parametros_minimos_faltantes.",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "Inyección de extracción con menos de 4 frecuencias por oído → la UI debe mostrar AI_NON_CONCLUSIVE con razón parametros_minimos_faltantes."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "ai-non-conclusive-banner",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "element",
+          "role": "span",
+          "label": "AI_NON_CONCLUSIVE",
+          "dataTestId": "ai-non-conclusive",
+          "ownText": "AI_NON_CONCLUSIVE",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "AI_NON_CONCLUSIVE"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "span",
+          "dataTestId": "ai-non-conclusive-reason",
+          "ownText": "parametros_minimos_faltantes",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "parametros_minimos_faltantes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "extraction-clinical",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "element",
+          "role": "div",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "div",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "🩺",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "🩺"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "p",
+                  "ownText": "Extracción clínica",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "Extracción clínica"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "Audiometria",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "Audiometria"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "AI_NON_CONCLUSIVE",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "AI_NON_CONCLUSIVE"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "element",
+              "role": "div",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "span",
+                  "ownText": "v lote-nocturno-20260820-01-audio-v3-draft",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "v lote-nocturno-20260820-01-audio-v3-draft"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "div",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "h2",
+              "ownText": "Resumen técnico",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "text",
+                  "depth": 4,
+                  "text": "Resumen técnico"
+                }
+              ]
+            },
+            {
+              "kind": "element",
+              "role": "dl",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "dt",
+                  "ownText": "completitud_documental",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "text",
+                      "depth": 5,
+                      "text": "completitud_documental"
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "dd",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "element",
+                      "role": "span",
+                      "ownText": "no_concluyente",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "text",
+                          "depth": 6,
+                          "text": "no_concluyente"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "div",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "element",
+              "role": "h2",
+              "ownText": "Vía aérea por frecuencia",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "text",
+                  "depth": 4,
+                  "text": "Vía aérea por frecuencia"
+                }
+              ]
+            },
+            {
+              "kind": "element",
+              "role": "table",
+              "label": "Tabla bilateral audiométrica vía aérea OD/OI",
+              "depth": 3,
+              "children": [
+                {
+                  "kind": "element",
+                  "role": "thead",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "Frecuencia (Hz)",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "Frecuencia (Hz)"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "Oído derecho",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "Oído derecho"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "th",
+                          "ownText": "Oído izquierdo",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "Oído izquierdo"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "kind": "element",
+                  "role": "tbody",
+                  "depth": 4,
+                  "children": [
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "500",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "10",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "10"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "1000",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "1000"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "2000",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "2000"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "5",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "5"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "3000",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "3000"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "4000",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "4000"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "6000",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "6000"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "element",
+                      "role": "tr",
+                      "depth": 5,
+                      "children": [
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "8000",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "8000"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "element",
+                          "role": "td",
+                          "ownText": "—",
+                          "depth": 6,
+                          "children": [
+                            {
+                              "kind": "text",
+                              "depth": 7,
+                              "text": "—"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "element",
+      "role": "div",
+      "dataTestId": "missing-fields",
+      "depth": 1,
+      "children": [
+        {
+          "kind": "element",
+          "role": "p",
+          "ownText": "Parámetros mínimos faltantes",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "Parámetros mínimos faltantes"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "span",
+          "dataTestId": "gap-min",
+          "ownText": "oido_izquierdo.va.500",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "oido_izquierdo.va.500"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "span",
+          "dataTestId": "gap-min",
+          "ownText": "oido_derecho.va.1000",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "oido_derecho.va.1000"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "span",
+          "dataTestId": "gap-min",
+          "ownText": "oido_izquierdo.va.1000",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "oido_izquierdo.va.1000"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "span",
+          "dataTestId": "gap-min",
+          "ownText": "oido_derecho.va.3000",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "oido_derecho.va.3000"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "span",
+          "dataTestId": "gap-min",
+          "ownText": "oido_izquierdo.va.3000",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "oido_izquierdo.va.3000"
+            }
+          ]
+        },
+        {
+          "kind": "element",
+          "role": "span",
+          "dataTestId": "gap-min",
+          "ownText": "oido_izquierdo.va.2000",
+          "depth": 2,
+          "children": [
+            {
+              "kind": "text",
+              "depth": 3,
+              "text": "oido_izquierdo.va.2000"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

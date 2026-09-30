@@ -1,0 +1,628 @@
+# Meeting Transcription
+
+  Meeting started: 23/9/2026, 12:43:39
+  Duration: 79 minutes
+  Participants: Frank Saavedra, leticia uribe
+
+  [View original transcript](https://app.tactiq.io/api/2/u/m/r/6dpE083lGFFqRiB4qKrb?o=txt)
+
+    ## Detailed summary
+
+## Overview
+Revisión funcional y validación del flujo de agendamiento y atención clínica en el sistema (examen médico, pruebas de laboratorio y módulos relacionados). Se definieron acciones pendientes, correcciones de interfaz y parámetros técnicos a ajustar antes de la próxima reunión del 2026-09-30.
+
+## Objetivos discutidos
+- Validar generación de citas y envío de confirmaciones (WhatsApp/SMS/correo) con especificaciones de preparación por prueba.
+- Revisar flujo de llenado y validación del examen médico (incluyendo somatometría, signos vitales y cuestionarios específicos como audiometría).
+- Definir reglas de envío de resultados (envío parcial para laboratorios vs. envío final agrupado) y generación del dictamen/diagnóstico final.
+- Ajustes de interfaz: visibilidad de datos relevantes para diagnóstico (área, tiempo en el puesto), botones de control (prueba realizada/no realizada, incidencias), y módulo de encuestas de satisfacción.
+
+## Temas principales y decisiones tomadas
+- Agendamiento y confirmaciones
+  - Probar envío de confirmación hasta el "check out" y hasta diagnósticos completos. Leticia y Frank acordaron probar el flujo completo (incluyendo envío de encuesta de satisfacción).
+  - Se acordó enviar especificaciones de preparación por prueba al agendar (WhatsApp/correo). Leticia enviará las especificaciones/trípticos por prueba.
+  - Soporte para usuarios sin WhatsApp: mantener también envío por SMS o correo; SMS recomendado para verificación de número (costo bajo, requiere proveedor).
+
+- Perfiles y validaciones
+  - No permitir guardar un perfil si no tiene correos para envío de resultados; esto fue señalado como requisito pendiente.
+  - Validación del nombre del paciente con la prueba: detectar discrepancias y bloquear subida si no coincide (pendiente de verificación que ya esté implementado en su totalidad).
+  - El perfil público general se utiliza para guardar información agnóstica a empresa (se abrió como empresa para almacenamiento).
+
+- Flujo de atención clínica y papeleta
+  - Al crear cita se debe poder asignar sucursales, perfiles médicos y generar papeleta con estudios preseleccionados.
+  - Lolis (personal de recepción) realiza check-in y asigna al paciente; luego pasa al consultorio según disponibilidad.
+  - El flujo usa estados numéricos (1 = pendiente, 2/3 = en proceso/terminado). Cuando todas las pruebas están en estado 3 se podrá generar el dictamen final.
+  - Debe existir botón para marcar "prueba realizada" y botón para marcar "prueba no realizada" con motivos; Frank mostró que ya existe gestión de incidencias en cronograma operativo.
+
+- Examen médico y pruebas específicas
+  - Somatometría y signos vitales (talla, peso, temperatura, frecuencia cardíaca, presión arterial) deben aparecer en todos los diagnósticos y formatos; ubicarlos en área visible fuera del PDF para facilitar la lectura del médico.
+  - Audiometría: existe cuestionario inicial; necesidad de incluir cálculo/parametrización para diagnóstico (PTA) según parámetros que la doctora Erika debe enviar; Frank tenía cálculos pero se discutió ajustar fórmulas.
+  - Espirometría y otros: discutir parametrizaciones específicas (p. ej. clasificación de agudeza visual y criterios de columna vertebral).
+  - Rayos y estudios de imagen: actualmente la interpretación se hacía en Word y se subía; ahora se integrará directamente en el sistema para generar documento final.
+
+- Envío de resultados y dictamen
+  - Se definió no forzar envíos parciales salvo para casos de laboratorio que lo requieran; posibilidad técnica de permitir envíos parciales pero no automático (el usuario debe seleccionar y enviar).
+  - Si todas las pruebas concluyen (estado 3) se habilita generación del dictamen final y un botón "Generar reporte final" junto a la opción de envío por WhatsApp.
+  - Control de envíos parciales: preocupación por múltiples correos al paciente si se envían por prueba; se propone permitir selección manual de pruebas a enviar en un solo correo.
+
+- Encuestas de satisfacción y métricas
+  - Implementar encuesta de satisfacción al momento del check-out (en tableta o enlace WhatsApp) y almacenamiento en módulo de satisfacción.
+  - Requerimiento de exportar encuestas a Excel y de tener dashboard con gráficas (Leticia pidió que se muestren gráficos específicos; Frank solicitó que Leticia envíe las gráficas deseadas).
+  - Guardar y poder descargar los resultados de satisfacción; incluir métricas para identificar quién indicó problemas.
+
+## Problemas e incidencias detectadas
+- Interfaz/visibilidad
+  - Campos y pruebas que deberían aparecer (p. ej. somatometría dentro de examen médico) no se muestran consistentemente; Frank identificó errores por versiones y dependencias (ej.: optometría ausente en algunos formularios).
+  - Botones y checks que parecen redundantes o sin validación automática (por ejemplo, el check "Te acepto que mis datos son correctos" se considera poco útil si no hay validación automática con identificación).
+  - Problemas de navegación entre pantallas (tiempos de guardado y cambios de pantalla) y casos en que formularios quedan bloqueados por campos preexistentes.
+
+- Validación de datos
+  - Riesgo de captura manual errónea del paciente (ej.: datos escritos por quien genera la cita); se requiere validación con identificación (INE) y/o comprobación antes de dar por válidos los datos.
+  - Falta de autovalidación entre identificación y datos del formulario (motivo por el cual se desea marcar notificación cuando no coinciden).
+
+- Funcionalidad pendiente o incompleta
+  - Botón de envío final que solo debe habilitarse cuando todos los estudios están en estado 3 aún no está implementado totalmente.
+  - Descarga/envío por partes: la lógica para envíos parciales y su relación con generación de diagnóstico requiere ajustes y reglas claras.
+  - Parametrizaciones clínicas (cálculos de audiometría, clasificación de agudeza visual, criterios de columna vertebral) pendientes de recibir por parte de la doctora Erika y otros especialistas.
+
+## Acciones acordadas y responsables
+- Leticia
+  - Enviar especificaciones/trípticos por prueba (recomendaciones de preparación).
+  - Enviar parámetros/gráficas que quiere ver en el dashboard.
+  - Confirmar parámetros clínicos pendientes (por ejemplo, clasificación de agudeza visual y criterios columna vertebral, si corresponde).
+
+- Frank
+  - Ajustar la interfaz: visibilidad de somatometría, signos vitales en todos los formatos, extracción del campo área/tiempo en la identificación para facilitar diagnóstico.
+  - Implementar reglas para no guardar perfiles sin correos, y la lógica de validación del nombre del paciente vs prueba.
+  - Revisar y corregir templates/versión de pruebas que provocan que algunas se oculten (ej.: optometría).
+  - Añadir campo de "recomendaciones" por prueba para generar dinámicamente las instrucciones de preparación (en lugar de recomendación genérica por evento).
+  - Integrar envío por WhatsApp y botón "Generar reporte final" junto a envío; evaluar soporte SMS para verificación de números.
+  - Implementar botón para marcar "prueba realizada" y "prueba no realizada" con motivos en cronograma operativo (o validar la funcionalidad ya presente).
+  - Revisar cálculos que tenía para audiometría y coordinar con la Dra. Erika para parametrización definitiva.
+
+- Común / Pendientes compartidos
+  - Acordar regla de envíos parciales: definir casos permitidos (principalmente laboratorios) y UX para evitar múltiples correos innecesarios.
+  - Definir texto de confirmación/consentimiento en lugar de "hacer check-in": redacción de botones ("Doy mi consentimiento", "Confirmo que mis datos son correctos") y decisión sobre mantener o eliminar checks redundantes.
+  - Planificar sesión específica para validación final del examen médico y pruebas (llenado, impresión clínica y cierre de dictamen).
+  - Preparar pruebas con pacientes de ejemplo para validar flujo completo (agendamiento -> check-in -> realización de pruebas -> subida de resultados -> generación de dictamen -> encuesta y check-out).
+
+## Pendientes priorizados (resumen)
+1. Recepción por parte de Leticia de trípticos/especificaciones por prueba (preparación) — necesario para envíos automáticos al agendar.
+2. Validar y fijar parametrizaciones clínicas (audiometría PTA, agudeza visual, criterios columna vertebral) — Frank coordina con Dra. Erika.
+3. Corregir visibilidad/orden de campos (somatometría, signos vitales, área/tiempo de exposición) en todos los formatos y en pantalla de diagnóstico.
+4. Implementar bloqueo para guardar perfil sin correo y validar coincidencia nombre-prueba.
+5. Finalizar lógica de envíos (parciales vs. finales) y añadir botón "Generar reporte final" con envío por WhatsApp/correo.
+6. Habilitar exportación de encuestas a Excel y crear dashboard con gráficas solicitadas (Leticia enviará especificaciones).
+7. Pruebas reales del flujo completo y corrección de errores detectados (optometría/formularios faltantes).
+
+## Próxima reunión
+- Fecha propuesta: 2026-09-30 (se propuso la misma hora; Leticia mencionó posible conflicto con evento STPS pero estimó que podría terminar antes). Confirmar asistencia y hora exacta.
+
+  
+
+  
+    ## Highlights
+
+    > 11:12 Frank Saavedra: Sí justamente A eso me refiero para que las recomendaciones que envíe las genere dinámicamente si solo es examen médico no tienen por qué enviar las
+> 14:07 Frank Saavedra: comprobación de número por qué? Porque si puede enviar la comprobación por
+> 14:45 Frank Saavedra: bueno Aquí está para regendar eso ya lo habíamos visto, vamos a reagendar para mañana a la misma hora está bien. No O sea ahorita ya sigamos o hacemos el primero.
+> 15:01 Frank Saavedra: Ahí se va a ver y ahorita lo regresamos si quieres. Si eso no pasa nada. Le puso el mismo día Ah esta ya es la del jueves. Me voy a reagendar ahí obviamente también tendría que enviar toda esa misma
+> 30:12 leticia uribe: a partir de esto pues
+> 30:17 Frank Saavedra: también lo que ayuda, entonces me tengo que retirar esta persona, pero yo me quedo con La de meterme a más cositas. También Nuestro objetivo era validación de pues meter en una prueba que ha
+> 34:13 Frank Saavedra: no, no O sea que todas las pruebas concluidas en pacientes. Eso es más complicado porque recuerda que para enviarlas todas necesito generar
+> 34:34 leticia uribe: Pero lo que sí le puedo poner es que puedan enviar independientemente.
+> 57:34 leticia uribe: esa parte Puedo yo creo que sí sería importante que dijera ahí el área.
+> 57:37 Frank Saavedra: Puedo yo creo que sí sería importante que dijera ahí el área.
+> 59:23 Frank Saavedra: Sí porque por ejemplo este en el examen médico ahí. Yo le pregunto si algún antecedente de accidente laboral o el factores de riesgo ahí.
+> 01:00:32 leticia uribe: Ok el siguiente punto era que tú le ibas a enviar los parámetros de avisar
+> 01:04:11 leticia uribe: De calificación del servicio y en lo mismo enviar encuesta de satisfacción, ya
+> 01:13:56 leticia uribe: enviar el cálculo para diagnosticar audiometría hasta la mandó la doctora Erika Se lo puedes mandar tú? el cálculo para diagnosticar la audiometría y quitar los pta
+
+  ## Transcript
+
+  00:00 Frank Saavedra: correo
+00:24 leticia uribe: listo
+00:25 Frank Saavedra: no sé
+00:30 leticia uribe: Yo este motivo y tú también no tu audio. Este listo entonces bueno. Entonces examen médico.
+00:50 Frank Saavedra: pruebas incluidas
+00:54 leticia uribe: Ya podremos probar laboratorios, no?
+01:01 Frank Saavedra: Ya podemos probar del laboratorios ya ni lo he tocado.
+01:09 leticia uribe: Espero que más Por todo solo podemos meter.
+01:16 Frank Saavedra: metría
+01:22 Frank Saavedra: Hola, estoy transcribiendo esta llamada con mi extensión Tactiq AI. https://tactiq.io/r/transcribing
+01:23 leticia uribe: Pues con eso
+01:24 leticia uribe: Hola, estoy transcribiendo esta llamada con mi extensión Tactiq AI. https://tactiq.io/r/transcribing
+01:31 Frank Saavedra: correo
+01:46 leticia uribe: sería María punto Martínez arroba TR tres cita punto mx
+01:49 Frank Saavedra: punto Martínez arroba Vamos a probar hasta el envío quiero que probemos hasta que nos de los de cada
+02:24 leticia uribe: vamos a probar hasta el envío quiero que podamos hasta diagnósticos completo,
+02:35 Frank Saavedra: uno porque todavía no perfeccionó el final el diagnóstico completo, pero
+02:40 leticia uribe: pero vamos a probar también la parte donde donde
+02:40 Frank Saavedra: vamos a probar también la parte donde se donde les envía la encuesta de satisfacción hacer check out entonces.
+02:49 leticia uribe: Entonces por nuestros correos mejor
+02:58 Frank Saavedra: Ahí ya se agregó el perfil. Estamos aquí dentro de la empresa. Aquí van los datos que se llenan del otro formulario las sucursales permitidas seleccionar todas.
+03:20 leticia uribe: Bueno, por ejemplo, eso sería una llave también que no podamos guardar un
+03:22 Frank Saavedra: Sí, los carros, pero es que no sé por qué no me aparecen aquí completos. No me deja. No debería dejarme así debería recorrer. Eso sería una llave también que no podamos guardar un perfil, si no tiene
+03:46 leticia uribe: perfil, si no tiene correos de envío.
+03:47 Frank Saavedra: correos. De prueba por fechas. Ahorita lo vamos a ver porque eso es nuevo de esta sesión toda la trazabilidad la volví a hacer. porque no teníamos todo por Porque no tenemos un
+04:20 leticia uribe: No teníamos todo porque no tenemos Bueno entonces vamos a la parte de generar
+04:24 Frank Saavedra: Checado Bueno entonces vamos a la parte de generar la cita, no Ajá nos vamos a
+04:29 leticia uribe: la cita No ahora examen médico.
+04:31 Frank Saavedra: irnos al médico. Entonces se supone que nos llaman o les llaman a Lolis ya debería de contestar
+04:47 leticia uribe: Ya debería contestar y debería.
+04:48 Frank Saavedra: y debería poder agendar una cita, no? Ella le da clic en Agendar cita.
+04:52 leticia uribe: del oxígeno
+04:55 Frank Saavedra: Le dicen De qué empresa es? Selecciona el trabajador no está dado de alta porque llegó directamente aquí
+04:59 leticia uribe: directamente
+05:03 Frank Saavedra: entonces aquí hay un alta rápido. Y aquí ya le puede poner.
+05:08 leticia uribe: Pero van a tener miedo, verdad? Este no se las voy a decir real.
+05:18 Frank Saavedra: Este grado de salud. 1980
+05:31 leticia uribe: sí
+05:34 Frank Saavedra: Bueno alimentado nada más
+05:36 leticia uribe: Pero es 31 de Julio no soy de septiembre.
+05:47 Frank Saavedra: Perfil médico aquí aparece perfil público general y los perfiles asignados a
+05:51 leticia uribe: y los perfiles asignados en público general es donde se pueden seleccionar las
+05:53 Frank Saavedra: esa empresa donde se pueden seleccionar.
+05:58 leticia uribe: pruebas Para que guardes información Leticia punto Uribe
+06:00 Frank Saavedra: Sí, recordemos que público en general tuvimos que abrirlo como si fuera una empresa para que guarde toda esa información.
+06:14 leticia uribe: arroba
+06:18 Frank Saavedra: Rápido tampoco estaba. Antes en la última sesión no estaba tuve que hacerlo ahora porque hice un
+06:22 leticia uribe: cuatro veintitrés 54 54 26, por ejemplo ese no cinco cuatro cinco cuatro
+06:27 Frank Saavedra: recorrido antes vi que era necesario. 26 y Guardar ahí, ya le asignó perfil médico porque es la primera no es la que le
+06:56 leticia uribe: Lo asignó en la sucursal del Prado porque digamos que estás logrado en el Prado o porque qué? Porque Tenemos la empresa.
+07:05 Frank Saavedra: puse predeterminadamente cuando generamos la empresa es la primera que se eligió nada.
+07:14 leticia uribe: Okay puede confundirnos.
+07:15 Frank Saavedra: La fecha hoy van a varias a varias.
+07:32 leticia uribe: qué es lo que le dijimos que Cuántos segundos tarda en hacer un cambio entre pantalla y otro en el guardar.
+07:43 Frank Saavedra: la cita Es como que inmediato.
+08:02 leticia uribe: es como
+08:05 Frank Saavedra: Por creo que no la puso.
+08:10 leticia uribe: Pero estás en la agenda de Me parece que había visto allá arriba.
+08:11 Frank Saavedra: pero
+08:18 leticia uribe: A mí me debería de llegar algo cuando agendas la cita o no.
+08:19 Frank Saavedra: Esto es un lío, creo que hay que poner una mejor forma. Aquí está Leticia Aquí está perfecto, eso no está planteado podría llegar de hecho. Sí les había comentado que si querían que llegara. Sí, quieren que sí, lo que lo que yo sugería que llegara es justamente Este
+08:45 leticia uribe: Sería como un WhatsApp no.
+08:50 Frank Saavedra: paso. Para que con eso hicieran.
+08:53 leticia uribe: para que con eso
+08:59 Frank Saavedra: Entonces me llegó la confirmación y decía que tenía tanto quisiera cambiar
+09:06 leticia uribe: Entonces me llegó la confirmación de cómo debes de ir preparado.
+09:12 Frank Saavedra: de día o de horario o algo así este que tenía ciertos ejemplos y venían las especificaciones. De recomendaciones pero son recomendaciones generales o base dependiendo del
+09:47 leticia uribe: recomendaciones generales no es por prueba es por prueba
+10:07 Frank Saavedra: perfil?
+10:12 leticia uribe: sí
+10:12 Frank Saavedra: Podemos poner las generales?
+10:17 leticia uribe: podemos poner las generales como en el tríptico y este para que se construya
+10:23 Frank Saavedra: No este lo mejor Sería para que se construya dinámicamente que cada una de las
+10:26 leticia uribe: dinámicamente que cada uno de
+10:28 Frank Saavedra: recomendaciones de cómo venir vaya en el en el en el perfil no en el evento en
+10:29 leticia uribe: Los vaya en el evento en el en la prueba Entonces voy a quitar un campo de
+10:33 Frank Saavedra: el en la prueba Entonces voy a agregar un campo de recomendaciones en cada
+10:37 leticia uribe: recomendaciones cada prueba que hagamos para que agreguen y esto lo va a generar
+10:38 Frank Saavedra: prueba que hagamos para que ahí les agreguen y esto la va a generar, eso se va
+10:41 leticia uribe: el laboratorio, o sea, por ejemplo, no sé, este no digo ya tengo una lista.
+10:43 Frank Saavedra: a generar dinámicamente A nivel operación, por ejemplo, tenemos un tríptico En donde ya viene. Yo creo que al momento.
+11:10 leticia uribe: especificaciones Entonces te mando las especificaciones por pruebas, no
+11:12 Frank Saavedra: Sí justamente A eso me refiero para que las recomendaciones que envíe las genere dinámicamente si solo es examen médico no tienen por qué enviar las
+11:20 leticia uribe: el médico
+11:22 Frank Saavedra: Ajá Y si vienen los dos que envía.
+11:26 leticia uribe: Ahorita les mando le mando solamente las tríptico, no?
+11:27 Frank Saavedra: Ahorita les mando les mando totalmente. creo que tengo que reconsiderarlo porque en el cambio de
+11:39 leticia uribe: Okay favor, les tengo yo me sirve.
+12:02 Frank Saavedra: seguimiento ya no considere el QR
+12:03 leticia uribe: el cuerpo Ahora digo, serán los menos, verdad, Pero quien no tenga WhatsApp este ahorita
+12:06 Frank Saavedra: Ahora pero que no tenga. ahorita quien no tenga WhatsApp
+12:13 leticia uribe: ya está gente que se anda quedando sin línea por no registrar las líneas, este quien no tenga WhatsApp puede ser electrónico para que se manden ambas
+12:26 Frank Saavedra: sí, no quita WhatsApp
+12:27 leticia uribe: vidas. Bueno pero también hay gente que no tiene este tipo de teléfonos si son los menos pero
+12:46 Frank Saavedra: No a mí me llegan todavía muchos CNS también, pero pero los usan para para
+13:03 leticia uribe: A mí me llegan todavía Sí de hecho, por ejemplo los bancos todas las notificaciones.
+13:10 Frank Saavedra: notificaciones pero desde el punto de vista. Del costo es muy bajo. Necesitaríamos contratar un servicio, son muy baratas. habilitarlo
+13:43 leticia uribe: maestro
+13:53 Frank Saavedra: Sí porque también. Es que eso se va a ocupar también si quieren se quiere verificar el ejemplo sería lo mejor funciona bien para para esos mensajes de verificación de
+14:03 leticia uribe: Sería lo mejor funciona bien para esos mensajes de verificación de
+14:07 Frank Saavedra: comprobación de número por qué? Porque si puede enviar la comprobación por
+14:07 leticia uribe: comprobación de número, por qué? Porque pueden ver la comprobación por
+14:11 Frank Saavedra: WhatsApp pero ocurre lo que justamente ahorita mencionaron te bloquea SMS y
+14:11 leticia uribe: WhatsApp pero ocurre lo que justamente llamadas pero no significa bloqueado.
+14:17 Frank Saavedra: bloquea llamadas pero WhatsApp no se queda bloqueado y no es suficiente para corroborar que la línea es auténtica entonces funciona ahí bien el SMS es muy potente Telegram
+14:45 leticia uribe: Bueno siguiente.
+14:45 Frank Saavedra: bueno Aquí está para regendar eso ya lo habíamos visto, vamos a reagendar para mañana a la misma hora está bien. No O sea ahorita ya sigamos o hacemos el primero.
+14:55 leticia uribe: No O sea ahorita ya sigamos o hacemos la prueba de reaccionar y lo podemos atender de todas maneras, aunque ese es un punto de la minuta anterior, verdad?
+15:01 Frank Saavedra: Ahí se va a ver y ahorita lo regresamos si quieres. Si eso no pasa nada. Le puso el mismo día Ah esta ya es la del jueves. Me voy a reagendar ahí obviamente también tendría que enviar toda esa misma
+15:30 Frank Saavedra: información. Aquí está ya todo eso Aquí está el enlace de rellenado.
+15:52 leticia uribe: Aquí está.
+15:56 Frank Saavedra: este no sé si lo recuerdan es para que llenen sus datos históricos, te lo
+15:57 leticia uribe: No recuerdo nosotros datos históricos.
+16:01 Frank Saavedra: puedo abrir en Ahí nada más para confirmar, va a llenar datos personales.
+16:09 leticia uribe: En que relacionamos ahorita o no? Y por ejemplo este directamente.
+16:13 Frank Saavedra: O sea, eso cualquier persona pudiera Aunque nosotros, vamos a confirmar esos pequeñas preguntas de todos modos están también en el examen médico. ahí ya se están registrando acá es lo mismo que le aparecería cuando
+16:52 leticia uribe: es lo mismo que le aparecería cuando
+16:55 Frank Saavedra: lo escanean
+16:56 leticia uribe: Aquí la persona que atiende.
+16:59 Frank Saavedra: Aquí ya lo revisa Lolis o la persona que atienda. Qué tipo de evidencia de identificación, pues es captura nueva o sin captura
+17:06 leticia uribe: Qué tipo sin captura cuando ya está capturada? Aquí vienen los motivos.
+17:12 Frank Saavedra: cuando ya está capturada antes aparece este botón habilitado que dice que no trajo la INE que no coincide con sus datos. Aquí vienen los motivos. Sin documento presente falla de cámara o dispositivo evidencian la legible. el alta
+17:44 leticia uribe: Ay ya se auto lleno ese era un punto de
+17:47 Frank Saavedra: Tienes tu alta?
+18:09 Frank Saavedra: A estar constantemente.
+18:16 leticia uribe: Qué?
+18:18 Frank Saavedra: Ahí está lleno.
+18:18 leticia uribe: excelente A ver espérame Espérame espérame.
+18:23 Frank Saavedra: Es que se generaba en PDF no te acuerdas Mostrar el PDF para que lo leyeran y después?
+18:27 leticia uribe: y tiene el botón de Te acepto, que mis datos son correctos.
+18:40 Frank Saavedra: Te acepto, que mis datos son correctas.
+18:45 leticia uribe: Entonces estaría pendiente Sí porque luego en la transcripción en ese sentido
+18:53 Frank Saavedra: La transcripción esto de la foto de la creencia Ajá todo esto lo harían Lolis de hecho en ese sentido no debería de existir ese check no sé porque como no
+19:02 leticia uribe: no deberían existir. No sé porque como no está autovalidando con la identificación, o sea,
+19:08 Frank Saavedra: es tanto validando. Identificación o sea, solamente lo escribe quien genera la cita ya serpiente si
+19:11 leticia uribe: solamente lo escribe quien genera la cita ya sea el cliente y si lo escriben mal
+19:18 Frank Saavedra: lo escriben más como en el caso de tu hermano, yo estoy asumiendo ya tiene que
+19:18 leticia uribe: como en el caso de tu hermano, yo estoy asumiendo que está bien escrito.
+19:23 Frank Saavedra: leerlo ahí tendría que leerlo completamente no? Como dos, No mi nombre está es correcto, es donde ya lo leí también.
+19:34 leticia uribe: Mi nombre está correcto. Estoy de acuerdo con mis sentimientos eso como que no agrega valor No sí,
+19:42 Frank Saavedra: Estoy de acuerdo con el consentimiento Eso de hacer check-in. Yo creo que lo podemos quitar porque eso como que no agrega valor acepto. Estoy de acuerdo doy
+19:52 leticia uribe: porque eso es lo que va a contabilizar si llega o no llega nada acepto, pues estoy de acuerdo doy mi consentimiento.
+20:06 Frank Saavedra: mi consentimiento.
+20:14 leticia uribe: Y confirmo que he leído y estoy de acuerdo confirmo que he leído el documento
+20:16 Frank Saavedra: Bueno le pongo aceptar Serían dos botones, el que estoy confirmando mi nombre
+20:21 leticia uribe: Bueno veo Cómo se redacta eso.
+20:29 Frank Saavedra: de manera correcta y estoy firmando.
+20:35 leticia uribe: el del de cómo se llama
+20:36 Frank Saavedra: Acepto que mis datos son correctos te acepto que mi nombre es correcto, ya lo
+20:44 leticia uribe: Te acepto, que mi nombre es correcto, ya lo tenemos en la minuta anterior
+20:46 Frank Saavedra: tenemos.
+20:48 leticia uribe: Entonces igual los los mando y estoy marcando en verde ahorita lo que ella se hizo.
+21:03 Frank Saavedra: Aquí ya está y ya entonces Empezamos el flujo de pacientes en tiempo real. Lo que hace inmediatamente Lolis es que lo pasa a sentarse a veces 40 minutos
+21:10 leticia uribe: inmediatamente Sigas llorando y luego.
+21:32 Frank Saavedra: Bueno aquí podemos acceder a la papeleta o podemos mandarlo al consultorio y la papeleta van a estar estos cuatro estudios. Está vacía. Pero obviamente, pues ya generó el aire de la papeleta todo eso no? Entonces aquí.
+22:00 leticia uribe: 58 19 de 4
+22:04 Frank Saavedra: la cita
+22:05 leticia uribe: No, el de arriba Entonces lo mandamos al consultorio.
+22:11 Frank Saavedra: Entonces como una hora le dice pase al consultorio Allá pasaca si hay más en espera, pues obviamente van a estar ahí informados.
+22:23 leticia uribe: Médico o el que le toque puede acceder.
+22:31 Frank Saavedra: Aquí tendría que entrar si el médico o el que le toque puede acceder a la papeleta.
+22:40 leticia uribe: Tendrías que llenar un examen médico para concluirlo Bueno pero sí hay que
+22:40 Frank Saavedra: Tendría Bueno pero sí, hay que llenarlo.
+22:45 leticia uribe: llenarlo porque había unos puntos de lo de femenino y eso no.
+22:52 Frank Saavedra: Por tiempo, o sea, Vámonos al flujo eso ya tendrá que ver una sesión muy específica de validación final ya del examen médico. Aquí hay unos puntos
+22:57 leticia uribe: validación final ya del examen médico
+23:03 Frank Saavedra: que no aparecían anteriormente.
+23:07 leticia uribe: estos puntos marquen el ritmo del seguimiento de la completa aquí es en el uno
+23:07 Frank Saavedra: El seguimiento de la papeleta aquí es en el uno es cuando bueno no se ha hecho
+23:13 leticia uribe: es cuando Bueno, no se ha hecho nada.
+23:16 Frank Saavedra: no se ha hecho nada, se ingresa. Vamos a entrar a otro, no para que lo vean o
+23:23 leticia uribe: para que lo vean
+23:27 Frank Saavedra: no
+23:29 leticia uribe: Un audiometría que cargas el documento no, que es más fácil primero
+23:29 Frank Saavedra: Un audio sí Bueno aquí tiene que completar el primero el cuestionario de
+23:37 leticia uribe: cuestionario.
+23:37 Frank Saavedra: audiometría. no
+23:51 leticia uribe: Ellos bien mareado.
+23:55 Frank Saavedra: Más normal normal. Igual el cuestionario. Y aquí yo le puedo dar iniciar proceso. Aquí es, por ejemplo que ya la hayan ya le haya pasado el audiómetro ya, ya le
+24:07 leticia uribe: Aún no ha registrado el resultado va a ocurrir en los demás.
+24:11 Frank Saavedra: hayan hecho la prueba, pero aún no han registrado el resultado todavía no lo sube, porque eso eso cambia las cosas Entonces esto mismo va a ocurrir en los demás.
+24:25 leticia uribe: Pero ahí siguen el uno, no? Si subimos la prueba, cambia el dos.
+24:27 Frank Saavedra: Si tuvimos la prueba cambiando, entonces aquí a ese también se tiene que llenar notría, te llenas, se llenan se llena. Aquí vamos a poner que estén presionados
+24:42 leticia uribe: estos
+24:48 Frank Saavedra: Que estén llenos en normales, no?
+24:55 leticia uribe: Que de hecho el formato que tenemos cuando es un examen que sí aparezca.
+24:59 Frank Saavedra: Entonces cuando yo meto otro número por ejemplo resultado
+25:40 Frank Saavedra: Quieren que dejemos uno alterado. No sé por si de alguien por alguna razón.
+25:55 leticia uribe: cardiometría siempre
+26:05 Frank Saavedra: Ahora pregunta estos números.
+26:05 leticia uribe: Ahora pregunta estos números pasa igual físicamente.
+26:16 Frank Saavedra: Porque tienes que tener una dimensión específica tanto en específico.
+26:23 leticia uribe: las hacemos nosotros, pero Este genuinamente. De lo que yo estoy le pregunté a lo que este están empresas con nosotros, pero
+26:32 Frank Saavedra: Por nosotros, pero están ubicadas Entonces le había dicho.
+26:38 leticia uribe: están en micadas en mi cara brillante Y eso afecta, pero ya le pedí que buscará mica mate y no encontramos entonces este le había dicho que sí. Es que o sea tendría que ser como tipo un laminado este como de tarjeta para
+26:55 Frank Saavedra: Tendría que ser como tipo lámina. Este como de tarjeta para que quede dice también queríamos la mate para las
+27:02 leticia uribe: que quede.
+27:08 Frank Saavedra: entonces aquí ya lo muestro el prediagnóstico. los campos normales
+27:14 leticia uribe: normal
+27:16 Frank Saavedra: Voy a cambiar uno.
+27:28 leticia uribe: si viene
+27:35 Frank Saavedra: o sea Así hizo la tarea.
+27:44 leticia uribe: A ver, ponle 70, a ver qué cambia arriba.
+27:52 Frank Saavedra: Aquí le voy a poner un 28 Creo que esto no debería funcionalizar.
+28:18 leticia uribe: toda la vida Bueno, Sí pero eso de acá no?
+28:56 Frank Saavedra: Qué? Aquí ya aparece esto ya puedes cambiar. No se da todavía recomendación.
+29:45 Frank Saavedra: Así está bien el formato bueno.
+30:07 Frank Saavedra: expertos en salud es que cambié los formatos Pero tengo una entrevista este lo pusieron y
+30:12 leticia uribe: a partir de esto pues
+30:17 Frank Saavedra: también lo que ayuda, entonces me tengo que retirar esta persona, pero yo me quedo con La de meterme a más cositas. También Nuestro objetivo era validación de pues meter en una prueba que ha
+30:54 Frank Saavedra: sido lo básico examen médico. que a partir de eso pues
+31:23 Frank Saavedra: Conoces esa necesidad de ácido de manera paralela y otros procesos tenemos que
+31:25 leticia uribe: De manera paralela y otros procesos tenemos que ir avanzando hablando.
+31:27 Frank Saavedra: ir avanzando hablando de laboratorios.
+31:45 leticia uribe: El equipo de rayos sí puedes jalar la imagen, no?
+31:45 Frank Saavedra: Es que se hace una interpretación de hecho fue la primera prueba que les
+31:56 leticia uribe: dijimos
+32:02 Frank Saavedra: mostré. pero fracturas
+32:05 leticia uribe: Pero fracturas, lo que sí, lo que sí va a cambiar es que actualmente
+32:11 Frank Saavedra: Lo que sí, lo que sí actualmente interpretan en un Word y ahorita es todo en
+32:16 leticia uribe: interpretan en un Word transcriben en el SIM suben el Word y ahorita es todo en el sistema y ya te genera el documento.
+32:23 Frank Saavedra: el sistema. Que por cierto, escuchaste a lo mejor no sabías pero bueno.
+32:34 leticia uribe: a ver Bueno entonces ahí ya generaste el documento tengo una duda ahí ya está
+32:43 Frank Saavedra: No podemos hacer un día y una de las clínicas.
+33:20 Frank Saavedra: Quién marcó al tres? Porque ya está generando.
+33:21 leticia uribe: realizado pero tengo una duda ahí donde puedo descargar yo el documento sé que
+33:25 Frank Saavedra: Dónde?
+33:27 leticia uribe: ya no va a ser necesario descargarlo porque va a haber un botón de envío
+33:30 Frank Saavedra: Puedo a ver un montón de frío?
+33:31 leticia uribe: Aunque
+33:34 Frank Saavedra: No puede tener un envío parcial, no habíamos hablado en vía parcial, pero sí
+33:37 leticia uribe: Y el envío Ese no va, no puede tener un envío parcial.
+33:45 Frank Saavedra: se lo puedo poner.
+33:50 leticia uribe: O sea, por ejemplo este manda cultivos y los cultivos se mandan hasta que
+33:50 Frank Saavedra: Quieren envíos parciales?
+33:55 leticia uribe: estén, pero parcialmente mándaselas en el médico.
+34:02 Frank Saavedra: Bueno, no parciales por por yo les llamo yo les llamo y ventas, por ejemplo, no
+34:03 leticia uribe: por pacientes con pruebas terminadas No, no, no, O sea que todas las pruebas concluidas de un paciente se manden.
+34:13 Frank Saavedra: no, no O sea que todas las pruebas concluidas en pacientes. Eso es más complicado porque recuerda que para enviarlas todas necesito generar
+34:26 leticia uribe: Eso es más complicado porque recuerda que para generar.
+34:28 Frank Saavedra: un diagnóstico. Digo, sí, se puede es mucho peor Pero lo que sí les puedo poner Es que aquí
+34:34 leticia uribe: Pero lo que sí le puedo poner es que puedan enviar independientemente.
+34:40 Frank Saavedra: le puedo poner, no, pero no es automático tiene que darle, no podríamos
+34:49 leticia uribe: seleccionar Qué pruebas envían de manera parcial
+34:49 Frank Saavedra: preseleccionarte pruebas de manera parcial. Yo no lo recomendaría, pero sí se puede hacer.
+34:57 leticia uribe: Para que se manden en un solo correo, yo creo porque por ejemplo cuando es
+35:00 Frank Saavedra: Yo creo que por ejemplo cuando es parcial se pueden mandar en pruebas y quedan
+35:03 leticia uribe: parcial se pueden mandar en pruebas y quedan independientes entonces.
+35:07 Frank Saavedra: independientes.
+35:21 leticia uribe: Pero si son más de tres pruebas, por ejemplo audio examen médico que lo tengas
+35:21 Frank Saavedra: Bueno aquí lo que quería que vieran es por el dos y por el tres. Obviamente
+35:26 leticia uribe: que mandar el mismo día si lo mandas si es parcialidad por prueba le van a llegar tres correos y nos van a mandar. Qué pasó? Qué pasó?
+35:48 Frank Saavedra: que que se llenan completamente que en el en ese en tiempo real son llenados los
+35:52 leticia uribe: completamente
+35:58 Frank Saavedra: que dependen de alguna impreso o en el 12 cuando ya cuando cuando ya se subió la prueba cuando Ya subiste, por ejemplo el electrocardiograma o ya se subieron las las gráficas de audiometría se ponen el dos. Se va del uno al tres, porque no hay dos Ajá porque no hay dos no hay espacio.
+36:30 leticia uribe: Por ejemplo, a mí me servía eso de unos.
+36:30 Frank Saavedra: Por ejemplo, a mí me serviría eso.
+36:36 leticia uribe: Iba a decir para que saber que ya están este tienes que revisar.
+36:36 Frank Saavedra: Aquí creo que me equivoqué en algo. examen médico o seleccione otro examen médico
+36:58 leticia uribe: Porque no está para el llenado.
+36:58 Frank Saavedra: Podemos abrir otro para continuar?
+38:03 leticia uribe: Examen me dijo a mí.
+38:14 Frank Saavedra: Creo que ese es de la primer versión que hice el que era dependiente de otras de otras. Otras lo voy a limpiar. No lo cambia como ya lo generó.
+38:48 leticia uribe: No sigue con la misma y si agregas la prueba.
+38:57 Frank Saavedra: Generar otra otro necesito generar Cómo se dice.
+38:59 leticia uribe: Y con otro paciente.
+39:04 Frank Saavedra: otra papeleta Aquí hay una cosa que ya no alcancé a corregir bueno.
+39:40 leticia uribe: Pero este es el módulo de llenado.
+39:43 Frank Saavedra: Sí es que se ve muy chiquito Aquí están los antecedentes. todo eso nada más que como la identidad del diagnóstico tenemos que
+39:52 leticia uribe: nada
+39:57 Frank Saavedra: De validar.
+39:59 leticia uribe: Porque antes no lo podemos separar para que o sea no sé por ejemplo aquí.
+39:59 Frank Saavedra: Porque antes no lo validaba nada más se llenaba y todo eso.
+40:09 leticia uribe: formulario
+40:11 Frank Saavedra: El formulario no es que el pretexto debería venir hasta acá. Debería venir abajo y de hecho ya en impresión clínica Sí porque la pantalla estoy completa. Si eso es un cambio.
+41:03 leticia uribe: Qué raro que no salón No si es la misma prueba.
+41:06 Frank Saavedra: No si hay algo mal
+41:10 leticia uribe: A ver, Regrésate al mío. Al que queremos de ahorita ahorita. O sea, el mío, amigo.
+41:32 Frank Saavedra: creo que
+41:32 leticia uribe: El proceso no pasa nada.
+41:35 Frank Saavedra: en los cambios Si te fijas no apareces en optometría, Si ves. Por eso lo pide allá.
+42:12 Frank Saavedra: sí por ahí cometí un error, que es una optometría por eso cuando Por eso lo marcas. aquí si ves Estos deberían de estar ahí mismo, no? No modifiqué ahí algo. malo de que lo saqué
+43:05 leticia uribe: Bueno y concluido el examen.
+43:05 Frank Saavedra: Bueno, concluido el examen.
+43:10 leticia uribe: Que seguiría.
+43:11 Frank Saavedra: Aquí mira, me voy a regresar al otro. Es esta parte de aquí se va a ir viendo en validación ya.
+43:17 leticia uribe: Esta parte de aquí.
+43:24 Frank Saavedra: Ajá cuando en el proceso de atención de atención clínica
+43:30 leticia uribe: Pues en el proceso de atención de atención clínica
+43:34 Frank Saavedra: Se acaba cuando por ejemplo todos los estudios están que ya pasaron.
+43:34 leticia uribe: Se acaba cuando por ejemplo todos los estudios están que ya pasaron.
+43:40 Frank Saavedra: Que ya Se realizaron y solo están pendientes que suban los resultados, eso va a
+43:40 leticia uribe: Que ya Se realizaron Pero y solo están pendientes que suban los resultados, eso va a marcar una un disparador para que puedas como aquí.
+43:45 Frank Saavedra: marcar una un disparador para que pueda hacer un chip out como aquí.
+43:54 leticia uribe: Cuando ya se supone que tiene que acudir con esta Loli no siempre a la salida.
+43:54 Frank Saavedra: Cuando ya todo están marcados así. Se supone que tiene que acudir con esta Lolis no siempre a su salida para marcar su salida. Entonces aquí le tienen que dar salido Y pasas todas esas cosas No uno ofrece la encuesta, ame antes de confirmar la salida la encuesta en la tableta.
+44:14 leticia uribe: A mí no me puedes dar salida ahorita.
+44:14 Frank Saavedra: No, no puedo darte salido porque no se ha concluido el examen médico.
+44:27 leticia uribe: Ese era uno de los puntos que traíamos de la minuta anterior que este.
+44:27 Frank Saavedra: Es que solo se necesita marcar manualmente el primero pero por ejemplo y poner
+44:44 leticia uribe: Solo hemos llegadometría, pero el examen que eso es lo de que hubiera un botón para señalizar que la prueba ya está realizada, no que sería como el uno al dos y el tres, pero por ejemplo, habíamos puesto que hubieron un botón de prueba, no realizada y poner los motivos.
+45:10 Frank Saavedra: los motivos, sí. Aquí en el cronograma operativo, puedes tú poner una incidencia.
+45:21 leticia uribe: Y si le pones no realizadas a las anteriores, o sea audios, pero examen médico y me da salida.
+45:27 Frank Saavedra: Entonces sí te va a permitir eso. Ah pero es que el problema es que no se lo puedo poner examen. Porque no lo abre. Sí, es súper requisito que puse ahí. Necesito cambiarlo Necesito cambiar eso.
+45:46 leticia uribe: Necesito cambiarlo Necesito cambiar. Oye pero no, no aparece el examen porque justo no llenamos la somatometría
+45:53 Frank Saavedra: Porque ni siquiera aparece son matometría Es que aquí debería aparecer.
+45:59 leticia uribe: cuando
+46:06 Frank Saavedra: Pero como no aparece.
+46:06 leticia uribe: Pero no fueron los datos que no llenamos al inicio.
+46:12 Frank Saavedra: Deberían aquí aparecer examen médico, porque somatometría está dentro de examen médico Pero si te fijas Incluso en el otro con el que yo estaba
+46:19 leticia uribe: mis pruebas
+46:20 Frank Saavedra: haciendo. Mis mis pruebas la quitó. Esta aquí debería estar.
+46:30 leticia uribe: Esto a lo que me refiero es que cuando das checking te aparecen todos los datos
+46:34 Frank Saavedra: Cuando te aparecen todos los datos de antecedentes no aparece.
+46:38 leticia uribe: de antecedentes y demás no que se supone que puede llenar el paciente si llenas eso no aparece.
+46:46 Frank Saavedra: No hay nada de pendiente de esos datos. Es aquí, mira aquí deberían antes de después de antecedentes debería estar
+46:52 leticia uribe: Okay entonces como les decía aquí.
+46:56 Frank Saavedra: sumatometría, no estaba antes era la primera línea. Entonces, por eso ni siquiera me deja. Esto es esto como no estaba checando en esto. Entonces como les decía aquí Aquí se van marcando, no? Cuando estén todos en verde se va a mover para acá.
+47:17 leticia uribe: aquí
+47:25 Frank Saavedra: Yo le puedo dar aquí salido.
+47:26 leticia uribe: Y aquí puedo hacer la encuesta en una tableta a ver ponle tableta.
+47:30 Frank Saavedra: Y aquí puedo yo o hacer la encuesta en una tableta que le proporcione se convierte en WhatsApp o copiarlo, no? en la tableta ella la Abre sí Y aquí ya lo puedes guardar.
+48:07 Frank Saavedra: Aquí le pongo selección múltiple.
+48:11 leticia uribe: Pues no, lo que pasa es que solo en el Marqués tenemos 24/7. Más bien. Y estas encuestas se van a guardar en el sistema.
+48:26 Frank Saavedra: Y estas encuestas? Estas encuestas debería estar. en el perfil de Alan Y también puse Aquí un módulo de satisfacción.
+48:43 leticia uribe: y se pueden descargar en Excel
+48:43 Frank Saavedra: No le he puesto que descarguen.
+48:47 leticia uribe: Y se puede tener un más este completa?
+49:00 Frank Saavedra: satisfacción Por si quieres ver quién te dijo que está mal. Lo hubiera llevado.
+49:15 leticia uribe: Este podemos tener gráficas.
+49:19 Frank Saavedra: Sí claro. En el de satisfacción Sí aquí puedo hacer todo lo que tú quieras. Siempre y cuando se usan esos datos que están ahí dentro de satisfacción. Si quieres más datos, pues tendríamos que agregarlos.
+49:40 leticia uribe: bueno
+49:41 Frank Saavedra: Bueno, Una vez que se da el check out.
+50:02 Frank Saavedra: Confirma la salida del paciente. Se elimina de aquí porque ya se fue y entonces pasa al tema de validación. Aquí ya está.
+50:20 leticia uribe: Pieza de WhatsApp para qué?
+50:30 Frank Saavedra: Cuando ya está El lector.
+50:36 leticia uribe: Y al paciente.
+50:38 Frank Saavedra: al paciente solamente
+50:42 leticia uribe: Solamente cuando son público general.
+50:46 Frank Saavedra: Cuando lo solicitantes son los menores y en revisar.
+50:48 leticia uribe: Pero si nos lo llegan a pedir en el consentimiento, la otra vez un paciente me mandó una captura de que me pide sus resultados y le dije contacta a la empresa
+51:25 leticia uribe: que solicitó otros estudios. Su información y te los tienen que dar entonces la doctora Erika dijo que cuando lo solicitaron que son los menores casos Este sí se les podían mandar. Después agregó Ese botón y en revisar.
+51:48 Frank Saavedra: En revisar Te mando a la papeleta. Para que vieras Cuáles son los que están incompletos.
+51:55 leticia uribe: Y dónde está el botón para el envío cuando ya está concluido, digamos.
+51:55 Frank Saavedra: eso todavía no está, que es hasta que están todos los
+52:04 leticia uribe: Y dónde está este el reporte final por si quieren ver los estudios
+52:09 Frank Saavedra: Reporte final Ese yo creo que lo voy a poner ahí mismo no a un lado del WhatsApp generar reporte final para que no tenga que entrar a la papeleta solo entra por si quieren ver los estudios. Individuales no se le han realizado, en qué número está aquí, por ejemplo
+52:22 leticia uribe: individuales?
+52:27 Frank Saavedra: todos Ya están realizados pendiente de interpretación este ya está realizado prueba interpretado pendiente prueba interpretada enmetría pendiente de interpretación. Eso es lo que marca el números y el 3 cuando todos estén en tres es cuando va a poder generar Entonces el dictamen final
+52:52 leticia uribe: Hasta ahí concluye digamos que el proceso de lo que ya realizaste tú Okay entonces, podríamos ver los puntos que estaban pendientes, a ver si esos ya
+52:58 Frank Saavedra: Podríamos ver los puntos que estaban pendientes.
+53:01 leticia uribe: están. Bueno Este no sé si lo vamos a poder ver por el tema del examen médico pero
+53:07 Frank Saavedra: Bueno este no lo vamos a poner la presión arterial
+53:10 leticia uribe: dice que la presión arterial siempre debe de ir en el diagnóstico.
+53:17 Frank Saavedra: Ah aquí lo podemos ver podemos ver los le puse lo puse en todos en todos los
+53:23 leticia uribe: Esos son suficientes, no?
+53:24 Frank Saavedra: formatos. si te fijas justamente me metí a ese que En todos. Puse una puerta hasta arriba. No, ahí está. agregué estos datos
+54:14 leticia uribe: No, lo que él se refiere es que en todas las pruebas este cuadrito va
+54:14 Frank Saavedra: En todas las pruebas este cuadrito va independientemente.
+54:20 leticia uribe: independientemente.
+54:28 Frank Saavedra: de audio
+54:32 leticia uribe: Que son para pruebas específicas. el área de trabajo
+54:55 Frank Saavedra: Porque bueno, obviamente eso.
+54:55 leticia uribe: Porque bueno, obviamente.
+55:01 Frank Saavedra: Debería venir aquí. Aquí está mi respeto de posición o porque entonces cuando lo captura.
+55:08 leticia uribe: ahí lo capturan, pero para el diagnóstico lo tienen que tener visible Entonces
+55:11 Frank Saavedra: N pero para el diagnóstico lo tienen que tener visible Entonces no tendría que
+55:15 leticia uribe: no tendría que
+55:19 Frank Saavedra: reír de aquí. Yo creo que Tendría que ir como por aquí afuera no y que lo
+55:19 leticia uribe: Yo creo que tendría aquí como por aquí. Afuera, o sea, que lo extraiga y que es donde a veces.
+55:24 Frank Saavedra: veas aquí. en el crudo tres años eso
+55:47 leticia uribe: de una pieza Lleva tres años seis en esa área, porque si está expuesto a ruido, pues está
+55:52 Frank Saavedra: Como podemos decir es el área. Es el área lleva tres años seis meses.
+56:03 leticia uribe: expuesto en este caso a vapores o a polvos estedometría polvos.
+56:14 Frank Saavedra: Y eso en qué momento lo capturan ahí en el cuestionario, pero eso es lo que
+56:16 leticia uribe: Lo capturan ahí en el cuestionario, pero eso es lo que te decía una vez capturadas en el cuestionario para que ella diagnostique lo tendría que ver aquí afuera.
+56:27 Frank Saavedra: Sí, En dónde está aquí en el este, es que eso no está en el cuestionario.
+56:30 leticia uribe: Yo lo veo para saber para el diagnóstico, pero no quieres que lo extraigan para
+56:41 Frank Saavedra: yo lo veo para saber para el diagnóstico, no necesito abrirlo Ahí está, o
+56:56 leticia uribe: que no estés abriendo el PDF no.
+57:01 Frank Saavedra: sea, ahí lo ves O sea para la impresión gráfica, la hace aquí el punto de
+57:04 leticia uribe: O sea la inversión tecnológica entonces así está bien. Bueno, entonces el punto de que el tea debe de en el diagnóstico está bien ya en el formato
+57:13 Frank Saavedra: Que en el diagnóstico está en todos los diagnósticos.
+57:19 leticia uribe: final. espeso talla temperatura este frecuencia cardíaca y presión arterial digo yo
+57:30 Frank Saavedra: digo yo creo que yo creo que
+57:30 leticia uribe: creo que yo creo que
+57:34 Frank Saavedra: Esa esa parte
+57:34 leticia uribe: esa parte Puedo yo creo que sí sería importante que dijera ahí el área.
+57:37 Frank Saavedra: Puedo yo creo que sí sería importante que dijera ahí el área.
+57:42 Frank Saavedra: Y el tiempo en esa área Pero eso creo que se captura en la ficha del
+57:42 leticia uribe: Y el tiempo en esa área Pero eso creo que se captura en la ficha del
+57:46 Frank Saavedra: trabajador, no?
+57:46 leticia uribe: trabajador, no?
+57:50 Frank Saavedra: A ver, déjame la fecha del trabajador.
+57:58 leticia uribe: Si es que los signos vitales, por ejemplo, talla y peso si me sirve en
+57:58 Frank Saavedra: Audiometría peso está bien que estén todos.
+58:01 leticia uribe: audiometría peso y tensión anterior. Mente o el otro médico quiere revisarlo o algo así tenga aquí presente que
+58:11 Frank Saavedra: Porque sí, sí, se lo puse en todos. solo quería saber si Si ponemos más específicamente lo del área en el en el perfil del usuario para que también lo pongan y aquí a lo mejor si en cualquier momento o el otro médico quiere revisarlo o algo así tenga aquí. presente basado en el área
+58:35 leticia uribe: esa crisis diagnóstico. Tú lo hiciste basado en el área y en el tiempo que lleva ahí. Pero solo sería para formato de espiro y audio.
+58:45 Frank Saavedra: Si lo capturamos siempre como perfil del paciente, yo lo puedo bajar ahí en
+58:46 leticia uribe: Si lo capturamos siempre como perfil del paciente, yo lo puedo dejar ahí en todos los formatos igual, pero no modifica.
+58:52 Frank Saavedra: todos los formatos, igual no te quita. Pero pues para mí es igual, o sea, nada más te va a aparecer ahí. No modifica. Me explico en este cuadrito en la identificación del paciente, al final es una parte de identificación.
+59:14 leticia uribe: Sí porque por ejemplo este en el examen médico.
+59:23 Frank Saavedra: Sí porque por ejemplo este en el examen médico ahí. Yo le pregunto si algún antecedente de accidente laboral o el factores de riesgo ahí.
+59:43 Frank Saavedra: Solo digo que me estorba Y es más fácil ponerlo general que que ponerle que
+59:46 leticia uribe: Ok entonces
+59:48 Frank Saavedra: para una empresa específica. Ese es el debate. No lo necesitas, pero te lo voy a poner aquí. Entonces Ah aprovechando ese audio está bien así.
+01:00:32 leticia uribe: Ok el siguiente punto era que tú le ibas a enviar los parámetros de avisar
+01:00:32 Frank Saavedra: el siguiente punto
+01:00:37 leticia uribe: para clasificar con base en el resultado
+01:00:42 Frank Saavedra: la recomendación Pero no recuerdo la recomendación, creo que nada más me no tengo yo unas que
+01:01:11 leticia uribe: no tengo yo unas que me hiciste en la última canción
+01:01:32 Frank Saavedra: me hiciste en la última sesión. que fueron las que consulté, pero creo que un papel como tal donde venga por un
+01:01:35 leticia uribe: creo que ese es el que está pendiente pero
+01:01:40 Frank Saavedra: tabulador, No creo que ese es el que está pendiente pero No, este deudometría.
+01:01:48 leticia uribe: no
+01:01:52 Frank Saavedra: A ver, déjame. es que
+01:02:33 Frank Saavedra: no, eso no lo tengo
+01:02:39 leticia uribe: De hecho estaba pendiente el de la parametrización de la agudeza visual.
+01:02:39 Frank Saavedra: De qué estaba pendiente visual? Eso en un Excel no.
+01:02:51 leticia uribe: Eso ya está clasificado, lo podemos ver. recomendaciones de aves y
+01:03:01 Frank Saavedra: Es de qué hago?
+01:03:35 leticia uribe: Lo de columna vertebral que digan crónicamente desviado cuando sea positivo.
+01:03:35 Frank Saavedra: cuando sea positivo
+01:04:00 leticia uribe: que la lateralidad Entonces el siguiente punto es
+01:04:07 Frank Saavedra: La consulta y el certificado no la consulta es solo para público general,
+01:04:11 leticia uribe: De calificación del servicio y en lo mismo enviar encuesta de satisfacción, ya
+01:04:17 leticia uribe: está las pruebas la campi Ya está ya la vimos el Electro está parcialmente la consulta y el certificado médico ya están.
+01:04:30 Frank Saavedra: verdad? consulta Esa esa Cómo es cómo funciona
+01:04:36 leticia uribe: Como es cómo funciona. Te sientes mal?
+01:04:40 Frank Saavedra: Te sientes mal y vas ahí y se genera también la papeleta. Ah okay, Entonces se le hace igual su papeleta pero nada más trae ese examen
+01:04:54 leticia uribe: Okay entonces el consulta de el formato de consulta y certificado son los
+01:04:55 Frank Saavedra: consulta médica sí, eso sí los tengo.
+01:05:01 leticia uribe: pendientes, no?
+01:05:02 Frank Saavedra: El certificado es el resultante de la consulta médica? Es cuando viene por un certificado.
+01:05:09 leticia uribe: El siguiente punto es la carga de los exámenes de Frozen la consulta médica
+01:05:13 Frank Saavedra: La consulta médica que es el formato que me diste igual el certificado nada
+01:05:21 leticia uribe: que es el formato y el certificado.
+01:05:24 Frank Saavedra: más y en el certificado. Pero sí, lo tengo Estoy seguro que ese sí lo tengo.
+01:06:02 leticia uribe: no
+01:06:15 Frank Saavedra: Si ese sí lo tengo.
+01:06:17 leticia uribe: inclinada
+01:06:19 Frank Saavedra: sí pero
+01:06:33 leticia uribe: Okay entonces pongo pendientes los exámenes médicos de Frozen
+01:06:35 Frank Saavedra: los exámenes médicos Pero sí, ya está como lo hacemos.
+01:06:47 leticia uribe: Tendríamos que dar darte un paciente.
+01:06:57 Frank Saavedra: Le doy ahí mismo en crisis mecánicos o las damas de alta selección.
+01:07:31 leticia uribe: Vamos a tener que realizarlo detenidamente.
+01:07:37 Frank Saavedra: Sí así ya no te van a aparecer ahorita predeterminadamente se seleccionan todas ya después cuando viene un paciente de su sexo viene directamente a la que ahí aparece puedes elegir. No vamos a tener que revisarlo. Ahí no es examen médico. un hombre de perfil examen médico
+01:08:16 leticia uribe: político diagonal
+01:08:18 Frank Saavedra: perfil uno y aquí está en México El único que hace es agregar otras dos.
+01:08:42 leticia uribe: Se ve mejor en tonos claros, no, el negro.
+01:08:46 Frank Saavedra: Se ve mejor.
+01:10:35 leticia uribe: Qué?
+01:11:20 Frank Saavedra: Mira p*** madre Ay perdón, que nos lleven.
+01:11:29 leticia uribe: Están pendientes bueno, lo de usuarios personalizados dijiste que hasta que en pacientes pendientes se le puede dar clic y que no llegue nos lleve al paciente que tiene la prueba pendiente.
+01:11:49 Frank Saavedra: aquí Aquí está.
+01:11:57 leticia uribe: La colorimetría que tiene no de que está pendiente la prueba. OK Bueno la presentación de lo de la capacitación ya me la mandaste me las
+01:12:10 Frank Saavedra: Bueno, la capacitación.
+01:12:17 leticia uribe: mandas para bueno de la primera minuta solo están pendientes uno dos tres
+01:12:18 Frank Saavedra: notificación
+01:12:31 leticia uribe: puntos de la segunda quitar luego de cibermer ya lo quitaste, no? Validar el nombre del paciente con el de la prueba y en caso de que no coincida que marque una notificación de que la prueba no corresponde al paciente esa validación ya la hace. Si no hay macho ortográfico al 100% que no permite subirlo y que pida valida el nombre del paciente, pues es el mismo punto del anterior en la firma del
+01:13:05 Frank Saavedra: general de recomendaciones generales
+01:13:06 leticia uribe: consentimiento que tengo un chip de aceptado, que mis datos son correctos. Eso está pendiente. Ya hay un reporte general de recomendaciones generales para pacientes y recomendaciones para el empleador.
+01:13:21 Frank Saavedra: Esos son los que algunos les falta No doctora.
+01:13:24 leticia uribe: usted está pendiente No Que hay un checado para el envío de encuesta, eso ya está. Que hay un botón para señalizar de que la prueba ya está realizada, Pues eso
+01:13:40 Frank Saavedra: Está realizada proceso.
+01:13:41 leticia uribe: ya está, que hay un botón en la prueba, no realizada y poner los motivos que es lo que nos mostraste ahorita, no?
+01:13:52 Frank Saavedra: en las residencias
+01:13:56 leticia uribe: enviar el cálculo para diagnosticar audiometría hasta la mandó la doctora Erika Se lo puedes mandar tú? el cálculo para diagnosticar la audiometría y quitar los pta
+01:14:15 Frank Saavedra: Eso sí los tenía el cálculo.
+01:14:20 leticia uribe: Sí porque de hecho ya lo hablamos otra vez.
+01:14:21 Frank Saavedra: Verdad que sí? hasta Se supone que ya iba a hacer varias cosas.
+01:14:43 leticia uribe: respiro
+01:14:45 Frank Saavedra: espiro Más bien, son los que me dijo que quitara porque aquí yo tenía los cálculos
+01:14:56 leticia uribe: Porque aquí los cálculos hechos Ajá pero lo calculaba con ella no lo estaba
+01:14:57 Frank Saavedra: hechos.
+01:15:02 leticia uribe: calculando.
+01:15:02 Frank Saavedra: No era una fórmula. Ah era una fórmula diferente, no? Es que me dijo que los quitara porque no no mostraba toda la información
+01:15:17 leticia uribe: Calibras en la calibración de la guía tenías que poner los parámetros de cálculo que tienen ellas y la doctora Erika te iba a mandar esos. pero le pongo Y de puntos de hoy se quedan pendientes este poner los campos para generar el
+01:15:53 Frank Saavedra: Pendiente este cuando se agenden y la confirmación con la preparación según
+01:15:56 leticia uribe: nombre de perfil que no se pueda guardar un perfil sin correos para envío de resultados que cuando se agende la cita que al paciente le llegue un WhatsApp o correo electrónico con posibilidad de icms y la confirmación con la preparación según las pruebas.
+01:16:14 Frank Saavedra: las pruebas.
+01:16:15 leticia uribe: Y con una leyenda que diga favor de mostrar el pase en Al momento de presentarse
+01:16:16 Frank Saavedra: especificaciones de preparación en lugar de
+01:16:20 leticia uribe: en la cita mandar especificaciones de preparación por pruebas hasta las mando yo en lugar de que diga hacer check-in que diga doy mi consentimiento y confirmo que he tenido chalala. Nos da algún otro número que son no son los números que vienen ahí que se
+01:16:43 Frank Saavedra: Que se marque en rojo parcial hasta abajo gráficas y que se agregue el área.
+01:16:43 leticia uribe: marquen rojo que puede existir un envío parcial del examen médico que el prediagnóstico vaya hasta abajo y que la pantalla se vea completa que se pueda descargar las encuestas en Excel y que tenga un dashboard con gráficas y que se agregue el área y el tiempo en la fecha de notificación.
+01:17:07 Frank Saavedra: Me mandas las gráficas que quieres que se vean?
+01:17:12 leticia uribe: Este Ah bueno y poner a un lado de WhatsApp para el envío del reporte final.
+01:17:12 Frank Saavedra: Este cuidado. Doctora los los envíos parciales solamente ocurren cuando hay un laboratorio,
+01:17:23 leticia uribe: cuando hay una
+01:17:24 Frank Saavedra: verdad?
+01:17:26 leticia uribe: batería
+01:17:27 Frank Saavedra: Nada más.
+01:17:29 leticia uribe: sí, Generalmente
+01:17:30 Frank Saavedra: Se traía una prueba de laboratorio que permita hacer el envío parcial.
+01:17:38 leticia uribe: Entonces este mando los puntos de la minuta y pues. Sí ya está, o sea, están en un minuto anterior, pero mando los puntos pendientes de las minutas anteriores Y esta. Bueno, dudas quejas a la próxima reunión este Para cuándo la ponemos?
+01:17:58 Frank Saavedra: Bueno A la próxima reunión
+01:18:05 leticia uribe: igual No misma misma hora. Ah No yo no puedo. O tal vez sí. Que tengo un buen vino ese día con la stps, pero también a las 12 según seguramente termina antes, no, Sí el mismo. Día okay, Entonces la siguiente reunión sería el 30 correcto.
+01:18:36 Frank Saavedra: sería el
+01:18:46 leticia uribe: Te falta la validación de cada uno de los campos Bueno entonces quejas nuevas
+01:18:56 Frank Saavedra: Hoy sí es cierto.
+01:19:00 leticia uribe: sugerencias algo más que fuerte, no?
+01:19:25 Frank Saavedra: Entonces la presentación a la doctora para ver si podemos.
+  

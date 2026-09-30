@@ -1,0 +1,106 @@
+# Revision Ami
+
+  Meeting started: 10/8/2026, 14:16:54
+  Duration: 11 minutes
+  Participants: AMI Erika Rodriguez, Frank Saavedra, Jaqueline, leticia uribe
+
+  [View original transcript](https://app.tactiq.io/api/2/u/m/r/NSvFoBiBfd6qKN90NFJj?o=txt)
+
+    
+
+  
+
+  
+    ## Highlights
+
+    > 05:48 Frank Saavedra: Aquí por ejemplo, podemos programar un mantenimiento preventivo correctivo de verificación limpieza la disponibilidad. Y el técnico no se le da programar. Y aquí ya va a aparecer programado así ustedes ya van a saber cuándo tiene cuándo una unidad está disponible sin embargo, si ustedes lo ocupan para un proyecto que es más importante que que el mantenimiento programado se puede
+> 08:32 AMI Erika Rodriguez: Sí sí es importante el calendario de calibraciones de equipos.
+> 09:25 Frank Saavedra: podemos tener mañana una minijunta ya que el doctora yaque o Lety
+> 10:59 leticia uribe: A qué hora sería mañana?
+> 11:02 Frank Saavedra: mañana les parece bien como
+
+  ## Transcript
+
+  00:00 leticia uribe: Perdimos, pero ya ya te escuchamos.
+00:02 Frank Saavedra: Ya me escuchan.
+00:07 Jaqueline: sí
+00:08 Frank Saavedra: Okay bueno Vamos a continuar en la parte de proyectos unidades móviles de Ti aquí en esta parte ya dice. Algo de las unidades móviles y ya está conectada con los proyectos, pero no sé qué otra información lleva. este catálogo Cuando doy de alta una nueva unidad no sé qué más información lleva actualmente, así se da de alta, si yo le doy configurar. Tengo estas opciones tengo aquí el próximo mantenimiento su historial.
+00:55 Frank Saavedra: Hola, estoy transcribiendo esta llamada con mi extensión Tactiq AI. https://tactiq.io/r/transcribing
+00:55 Frank Saavedra: Todo esto no puedo darle aquí editar. Y aparece.
+01:00 leticia uribe: No te estamos viendo nada más. Te estamos escuchando.
+01:04 Frank Saavedra: acá Les comparto la pantalla
+01:30 Frank Saavedra: Ahí ya la ven.
+01:34 leticia uribe: No ya
+01:45 Frank Saavedra: Ah te decía aquí en unidades móviles. Habilite ya el módulo para poder darlas de alta. Qué otra información Se necesitaba? Cuando cuando se dan de alta como tienen Qué información tienen del de las unidades móviles.
+02:09 leticia uribe: lo primero que se hace Es que se agenda en el calendario en el calendario se pone el número de pruebas que se van a realizar por tipo de estudio la ubicación de El cliente, la razón social del cliente, el asesor, las unidades que se van a mandar al proyecto y me parece que ya no Doc
+02:43 Frank Saavedra: Pero y una unidad, cómo las tienen como inventariadas? Desde desde ahí. Ya, por ejemplo, si yo doy de alta una nueva unidad, cómo las tiene tiene un nombre de la unidad por placas?
+02:58 leticia uribe: Sí, tenemos la unidad uno dos tres remolque uno dos nodo.
+03:05 Jaqueline: Sí, tenemos tres unidades y tenemos dos remolques el remolque uno y el remolque de rayos x entonces literal, pues tenemos así unidad uno unidad dos unidad tres y los remolques que comenté.
+03:18 Frank Saavedra: Okay y tienen registrado, qué es lo que es lo que tiene? Por ejemplo aquí.
+03:28 Jaqueline: O sea, por ejemplo, si tiene cabina de audiometría este consultorio médico y así.
+03:38 Frank Saavedra: Está equipamiento si tiene audiometro sg espirómetro. Si hay una imagen esto lo esto lo hacen o esto no lo hacen es necesario o no lo es?
+03:48 Jaqueline: No seas malito, puedes ampliar más?
+03:51 Frank Saavedra: Amplio la pantalla no se ve.
+03:52 Jaqueline: por sí O sea se ve muy pequeñita la letra y no alcanzó a ver porfa, Gracias
+03:58 leticia uribe: Cuál? La placa normalmente no la ponemos este bien, año número económico este
+04:08 Jaqueline: el baño
+04:12 leticia uribe: capacidad tampoco lo ponemos. O sea a lo mejor nada más el nombre de la primera parte y el equipamiento Pues sí podría ser este, cómo se llama útil Pero ese equipamiento no iría nodo, que eso se tendría que ajustar a lo que tenemos actualmente.
+04:37 Jaqueline: Sí de hecho a lo mejor como lo comentaba saber nada más que la unidad, uno es únicamente consultorio la unidad dos tiene área de digo tiene cabina de audiometría y aparte consultorio así O sea eso podríamos ponerlo, pero nada más en Sí sería este rayos x audiometro audiometría o cabina de audiometría y consultorio. O sea, esas tres opciones nada más.
+05:06 Frank Saavedra: Le puse Aquí también un calendario de mantenimiento. Para la unidad donde se puede calendarizar este este calendario de
+05:10 Jaqueline: Ajá
+05:16 Frank Saavedra: mantenimiento. va junto con el calendario de proyectos, por ejemplo un un mantenimiento no se puede poner por encima de un proyecto, pero un proyecto sí se puede poner por encima de un mantenimiento ya que los mantenimientos se pueden postergar o reagendar Si me explico.
+05:48 leticia uribe: sí
+05:48 Frank Saavedra: Aquí por ejemplo, podemos programar un mantenimiento preventivo correctivo de verificación limpieza la disponibilidad. Y el técnico no se le da programar. Y aquí ya va a aparecer programado así ustedes ya van a saber cuándo tiene cuándo una unidad está disponible sin embargo, si ustedes lo ocupan para un proyecto que es más importante que que el mantenimiento programado se puede
+06:29 Frank Saavedra: superponer. o se puede de reprogramar por ejemplo aquí si lo reprogramo para el día del Trece se reprograma Bueno creo que le puse el día 11 Pero se puede reprogramar?
+07:18 Frank Saavedra: Escolar no se cortó.
+07:21 leticia uribe: Sí sí te escuchamos.
+07:25 Frank Saavedra: la conexión Esta parte de unidades móviles ya nada más resta dar de alta a las otras también lo pueden ver en lista. Como ustedes más se acomoden. Creo que esta parte de la de las programaciones de mantenimiento creo que las lleva todavía la doctora Jackson su agenda, no?
+07:48 Jaqueline: Sí es correcto, lo llevo junto con Lolis que es de la que me ayuda como a las calibraciones.
+07:58 leticia uribe: Pero eso es mantenimiento de equipos, no de unidades móviles.
+07:59 AMI Erika Rodriguez: pero este calendario de equipos o de unidades
+08:05 Frank Saavedra: Este es de unidades también vamos a podemos poner también el calendario de
+08:06 Jaqueline: Sí, de mantenimiento.
+08:09 Frank Saavedra: equipos y que incluso Ajá podemos ponerlo incluso Dentro de este calendario
+08:11 leticia uribe: Serían los audios.
+08:15 Frank Saavedra: para no verlo de lo de mantenimientos de las unidades móviles como un mantenimiento y lo veamos como parte de su equipo de trabajo. Que creo que se me hace un poco más lógico.
+08:32 AMI Erika Rodriguez: Sí sí es importante el calendario de calibraciones de equipos.
+08:38 Frank Saavedra: Entonces ese esos equipos podríamos agregarlos aquí también.
+08:43 AMI Erika Rodriguez: Sí sí se tiene que
+08:46 leticia uribe: Entonces como pendientes si quieres te mandamos todos los equipos que se tienen y cómo están configuradas las unidades actualmente
+08:56 Frank Saavedra: Sí está bien.
+08:57 Jaqueline: Y de hecho si se va a agregar lo de calibraciones, yo ya te había compartido también un formato donde decía calibración de equipos En donde tenemos.
+09:04 Frank Saavedra: Sí ese formato ya lo tengo.
+09:06 Jaqueline: Ajá en donde puse todos los audiómetros que tenemos en existencia y también todos los espirómetros Entonces nada más sería como agregarlos aquí.
+09:14 Frank Saavedra: Okay los agrego entonces
+09:17 Jaqueline: Sí gracias.
+09:20 Frank Saavedra: se me acaba un poco el tiempo podemos este podemos realizar estos cambios hoy y
+09:22 AMI Erika Rodriguez: este
+09:25 Frank Saavedra: podemos tener mañana una minijunta ya que el doctora yaque o Lety
+09:34 Jaqueline: Sí claro.
+09:37 Frank Saavedra: Este para para ver estos avances ya Y sirve que subo de una vez esa lo de los audiómetros para continuar. Les parece bien.
+09:49 leticia uribe: sí Sí, por mí Está bien.
+09:53 AMI Erika Rodriguez: Sí aquí nada una duda nada más, Eh Francisco A lo mejor en una segunda etapa,
+09:54 Jaqueline: sí
+09:57 AMI Erika Rodriguez: No lo sé el sistema nos permitiría tener como un tipo este inventario de insumos y de equipos.
+10:10 Frank Saavedra: Sí claro, podemos poner ahí todos los equipos en insumos A qué se refiere doctora?
+10:15 AMI Erika Rodriguez: por ejemplo, todo lo que material que compramos para el laboratorio para un ambulancia para las clínicas y que se vaya ingresando ahí como para llevar registro Cuántos se entrega cuánto se gasta Cuánto se repone y así como llevar un
+10:32 Frank Saavedra: Sí por supuesto si podemos tenerlo dicho que somos tienen que ir ligados al equipo o No necesariamente.
+10:42 AMI Erika Rodriguez: al equipo de
+10:43 Frank Saavedra: que los consume
+10:46 AMI Erika Rodriguez: Tendrán que ligados a cada clínica sí, probablemente.
+10:48 Frank Saavedra: Ah cada cliente okay. Perfecto, Sí sí se puede.
+10:53 AMI Erika Rodriguez: Y ya después lo vemos Okay gracias, Muy bien, bueno.
+10:59 leticia uribe: A qué hora sería mañana?
+11:02 Frank Saavedra: mañana les parece bien como
+11:05 AMI Erika Rodriguez: Tengo una junta de una
+11:07 leticia uribe: Yo también a la una tengo
+11:10 Frank Saavedra: Podría ser después de esa junta o a las tres de la tarde, a qué hora les queda bien?
+11:20 AMI Erika Rodriguez: Pues en la tarde a las
+11:21 leticia uribe: Sí está bien.
+11:23 Frank Saavedra: A las cuatro está bien.
+11:27 AMI Erika Rodriguez: el cuatro a cinco
+11:29 Frank Saavedra: Perfecto entonces ahorita envío el
+11:32 leticia uribe: Vale, bueno. Gracias.
+11:36 Frank Saavedra: Muchas gracias
+11:38 Jaqueline: Gracias.
+  
