@@ -49,7 +49,7 @@ export default function WorkerInformedConsentCard({
       {hasConsents ? (
         <div className="space-y-3">
           <p className="text-xs text-slate-500">
-            Historial de consentimientos de {fullName}, uno por cada check-in.
+            Historial de consentimientos de {fullName}, uno por cada ingreso con firma.
           </p>
           <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {consents.map((item, index) => (
@@ -87,7 +87,7 @@ export default function WorkerInformedConsentCard({
             Sin consentimientos firmados
           </p>
           <p className="text-xs text-slate-400 mt-1">
-            Se captura y firma en el check-in de recepción.
+            Se captura y firma al dar consentimiento en recepción (gestión de citas).
           </p>
         </div>
       )}

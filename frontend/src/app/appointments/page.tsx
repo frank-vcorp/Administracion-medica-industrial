@@ -257,7 +257,7 @@ export default function AppointmentsPage() {
             setCorroborationData(res.appointment as Parameters<typeof CorroborationModal>[0]['appointment'])
             setSelectedApt(null)
         } else {
-            setCheckInError(res.error || 'No se pudo iniciar el check-in')
+            setCheckInError(res.error || 'No se pudo iniciar el consentimiento e ingreso')
         }
         setCheckingIn(null)
     }
@@ -680,10 +680,11 @@ function AgendaAppointmentRow({
                                     type="button"
                                     onClick={() => onCheckIn(apt.id)}
                                     disabled={checkingIn === apt.id}
-                                    className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-xs"
-                                    title="Check-in"
+                                    className="max-w-[5.5rem] px-1.5 py-1 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-[10px] leading-tight text-center"
+                                    title="Doy mi consentimiento (identidad + firma, mismo flujo de ingreso)"
+                                    aria-label="Doy mi consentimiento"
                                 >
-                                    {checkingIn === apt.id ? '...' : '▶'}
+                                    {checkingIn === apt.id ? '…' : 'Doy mi consentimiento'}
                                 </button>
                             </>
                         )}

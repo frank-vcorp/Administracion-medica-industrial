@@ -36,7 +36,7 @@ export default function QRScannerModal() {
             
             if (result.success) {
                 const workerName = result.medicalEvent?.worker?.firstName || 'Trabajador';
-                setStatus({ type: 'success', message: `¡Check-in exitoso! Bienvenido ${workerName}.` })
+                setStatus({ type: 'success', message: `¡Consentimiento e ingreso registrados! Bienvenido ${workerName}.` })
                 setQrCode('')
                 router.refresh()
                 
@@ -76,7 +76,7 @@ export default function QRScannerModal() {
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <div>
-                                <h3 className="text-xl font-black text-slate-800">Check-in por QR</h3>
+                                <h3 className="text-xl font-black text-slate-800">Consentimiento por QR</h3>
                                 <p className="text-xs text-slate-500 font-medium mt-1">Escanea el código del paciente</p>
                             </div>
                             <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-full shadow-sm">
@@ -90,7 +90,7 @@ export default function QRScannerModal() {
                                     <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-4xl mb-4">
                                         ✅
                                     </div>
-                                    <h4 className="text-xl font-black text-slate-800">Check-in Completado</h4>
+                                    <h4 className="text-xl font-black text-slate-800">Ingreso registrado</h4>
                                     <p className="text-emerald-600 font-bold mt-2">{status.message}</p>
                                 </div>
                             ) : (

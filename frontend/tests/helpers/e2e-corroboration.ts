@@ -29,7 +29,7 @@ export async function completeAppointmentCheckIn(
 
   const appointmentCard = page.locator('div.group').filter({ hasText: opts.workerFullName }).first()
   await expect(appointmentCard).toBeVisible({ timeout: 20000 })
-  await appointmentCard.locator('button[title="Check-in"]').click()
+  await appointmentCard.getByRole('button', { name: /doy mi consentimiento/i }).click()
 
   const modal = page
     .locator('div.fixed.inset-0')
