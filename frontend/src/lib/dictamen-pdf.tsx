@@ -238,6 +238,124 @@ export async function renderDictamenInputToMemory(
   )
 }
 
+/**
+ * PDF de resumen / dictamen de aptitud (`MedicalDictamenPDF`).
+ * Paridad con `context/RD2026/RESUMEN MEDICO.pdf` — distinto del
+ * entregable largo de examen médico (`ExamenMedicoValidatedPDF`).
+ */
+export async function renderDictamenGeneralPdfForEvent(
+  eventId: string,
+  prisma: import('@prisma/client').PrismaClient,
+): Promise<Buffer> {
+  const event = await prisma.medicalEvent.findUnique({
+    where: { id: eventId },
+    include: {
+      worker: {
+        select: {
+          firstName: true,
+          lastName: true,
+          universalId: true,
+          nationalId: true,
+          company: { select: { name: true } },
+        },
+      },
+      studies: {
+        select: { serviceName: true, extractedData: true },
+      },
+      labs: {
+        select: { serviceName: true, extractedData: true },
+      },
+      verdict: {
+        select: {
+          id: true,
+          finalDiagnosis: true,
+          recommendations: true,
+          signedAt: true,
+          validator: { select: { fullName: true } },
+        },
+      },
+    },
+  })
+
+  if (!event?.verdict?.validator?.fullName) {
+    throw new Error('Dictamen o médico firmante no disponible para el resumen.')
+  }
+
+  const { findSiblingEventsInAtencion } = await import('@/lib/event-atencion')
+  const atencionResolution = await findSiblingEventsInAtencion(event.id, prisma)
+  const siblingEventIds = atencionResolution.eventIds.filter((id) => id !== event.id)
+  const siblingEventsData =
+    siblingEventIds.length > 0
+      ? await prisma.medicalEvent.findMany({
+          where: { id: { in: siblingEventIds } },
+          select: {
+            id: true,
+            studies: { select: { serviceName: true, extractedData: true } },
+            labs: { select: { serviceName: true, extractedData: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+      : []
+
+  const consolidatedBlocks = [
+    {
+      eventId: event.id,
+      eventShortId: deriveEventShortId(event.id),
+      isCurrent: true,
+      studies: event.studies.map((st) => ({
+        serviceName: st.serviceName,
+        extractedData: st.extractedData,
+      })),
+      labs: event.labs.map((lb) => ({
+        serviceName: lb.serviceName,
+        extractedData: lb.extractedData,
+      })),
+    },
+    ...siblingEventsData.map((sib) => ({
+      eventId: sib.id,
+      eventShortId: deriveEventShortId(sib.id),
+      isCurrent: false,
+      studies: sib.studies.map((st) => ({
+        serviceName: st.serviceName,
+        extractedData: st.extractedData,
+      })),
+      labs: sib.labs.map((lb) => ({
+        serviceName: lb.serviceName,
+        extractedData: lb.extractedData,
+      })),
+    })),
+  ]
+
+  return renderDictamenInputToMemory({
+    payload: {
+      eventId: event.id,
+      verdictId: event.verdict.id,
+      signedAt: event.verdict.signedAt ?? new Date(),
+      worker: {
+        firstName: event.worker.firstName,
+        lastName: event.worker.lastName,
+        universalId: event.worker.universalId,
+        nationalId: event.worker.nationalId ?? null,
+      },
+      company: event.worker.company
+        ? { name: event.worker.company.name ?? 'Independiente' }
+        : null,
+      finalDiagnosis: event.verdict.finalDiagnosis,
+      recommendations: event.verdict.recommendations ?? null,
+      validator: { fullName: event.verdict.validator.fullName },
+      studies: event.studies.map((st) => ({
+        serviceName: st.serviceName,
+        extractedData: st.extractedData,
+      })),
+      labs: event.labs.map((lb) => ({
+        serviceName: lb.serviceName,
+        extractedData: lb.extractedData,
+      })),
+      consolidatedEvents: consolidatedBlocks,
+    },
+  })
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Helpers exportados para tests V1
 // ──────────────────────────────────────────────────────────────────────────

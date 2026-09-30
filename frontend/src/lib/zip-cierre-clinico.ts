@@ -2,15 +2,14 @@
  * @fileoverview Constructor del ZIP de cierre clínico por Event.
  *
  *   Ensambla un ZIP en memoria con:
- *     - `01_Dictamen_General/dictamen-general.pdf` ← ExamenMedicoValidatedPDF.
- *     - Una carpeta por estudio aplicable con:
- *         · `dictamen-<slug>.txt` ← texto estructurado (slot + IA + fuente).
- *         · `fuente-<basename>` ← archivo fuente original resuelto
- *           desde el backend oficial `/api/files/{key}` (Railway/S3).
- *     - `manifest.txt` con Event, archivos incluidos y fuentes ausentes.
+ *     - `01_Dictamen_General/dictamen-general.pdf` ← resumen/dictamen
+ *       (`MedicalDictamenPDF`), no el formulario largo de examen médico.
+ *     - Una carpeta por cada `EventTest` de la papeleta con su PDF validado
+ *       (o archivo de resultado en laboratorio/documentales).
+ *     - `manifest.txt` con Event, archivos incluidos y PDFs ausentes.
  *
- *   El dictamen general se reutiliza desde `generateExamenMedicoValidatedPdf`
- *   (FEATURE-20260825-03). Las fuentes se obtienen vía HTTP desde el
+ *   El examen médico largo va en su carpeta de papeleta vía
+ *   `resolveExamenMedicoEntregablePdfForEvent`. Las fuentes se obtienen vía HTTP desde el
  *   backend oficial (mismo path que el visor embebido), NO desde
  *   filesystem local — Vercel no comparte filesystem con Railway/S3.
  *
@@ -29,19 +28,19 @@
  */
 import prisma from '@/lib/prisma'
 import { buildZip, type ZipEntry } from '@/lib/zip-store'
+import { resolveExamenMedicoEntregablePdfForEvent } from '@/lib/examen-medico-pdf'
+import { renderDictamenGeneralPdfForEvent } from '@/lib/dictamen-pdf'
+import { findSiblingEventsInAtencion } from '@/lib/event-atencion'
+import { isExamenMedicoTestName } from '@/lib/clinical/examen-medico-variant'
 import {
-  buildExamenMedicoPdfDataAsync,
-  generateExamenMedicoValidatedPdf,
-} from '@/lib/examen-medico-pdf'
-import { dictamenBackendUrl } from '@/lib/dictamen-pdf'
-import {
-  findSiblingEventsInAtencion,
-  isEventInAtencion,
-} from '@/lib/event-atencion'
-import {
-  buildDictamenGeneralAmiConsolidado,
-  hasConsolidation,
-} from '@/lib/dictamen-general-ami'
+  type EventTestForZipPdf,
+  resolveEventTestPdfForZip,
+} from '@/lib/clinical/study-pdf-for-zip'
+
+export {
+  resolveBackendFileUrl,
+  tryReadSourceFromBackend,
+} from '@/lib/clinical/backend-file-read'
 
 /** Roles clínicos autorizados (SPEC §Reglas). */
 export const CLINICAL_ROLES = new Set<string>([
@@ -151,8 +150,8 @@ export function buildManifest(input: {
   studyEntries: ReadonlyArray<{
     folder: string
     serviceName: string
-    dictamenPath: string
-    sourcePath: string
+    pdfPath: string
+    eventTestId: string
   }>
   /** IDs de los Events del trabajador que pertenecen a la misma atención/cita. */
   atencionEventIds?: ReadonlyArray<string>
@@ -189,45 +188,14 @@ export function buildManifest(input: {
   lines.push(`  ${input.dictamenGeneralPath}`)
   for (const s of input.studyEntries) {
     lines.push(`  ${s.folder}/`)
-    lines.push(`    ${s.serviceName}`)
-    lines.push(`    - dictamen: ${s.dictamenPath}`)
-    lines.push(`    - fuente:   ${s.sourcePath}`)
+    lines.push(`    ${s.serviceName} (EventTest ${s.eventTestId})`)
+    lines.push(`    - pdf: ${s.pdfPath}`)
   }
   lines.push('  manifest.txt')
   lines.push('')
   lines.push('Leyenda:')
-  lines.push('  NO_DISPONIBLE = archivo fuente ausente (no se inventó).')
+  lines.push('  NO_DISPONIBLE = PDF del estudio no generado o no recuperable.')
   return lines.join('\n')
-}
-
-/** Resuelve los slots por nombre de servicio (case/acento-insensitive). */
-function pickSlot(
-  physicalExamData: Record<string, unknown>,
-  serviceName: string,
-): string | null {
-  const norm = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  const target = norm(serviceName)
-  const slots: Array<[string, string]> = [
-    ['audiometria', 'audiometria_texto'],
-    ['audiometry', 'audiometria_texto'],
-    ['espirometria', 'espirometria_texto'],
-    ['spirometry', 'espirometria_texto'],
-    ['laboratorio', 'laboratorios_texto'],
-    ['laboratorios', 'laboratorios_texto'],
-    ['lab', 'laboratorios_texto'],
-    ['radiografia', 'radiografia_texto'],
-    ['radiografía', 'radiografia_texto'],
-    ['rx', 'radiografia_texto'],
-    ['rayos x', 'radiografia_texto'],
-  ]
-  for (const [needle, key] of slots) {
-    if (target.includes(norm(needle))) {
-      const v = physicalExamData[key]
-      if (typeof v === 'string' && v.trim().length > 0) return v
-    }
-  }
-  return null
 }
 
 /** String seguro para manifest: null/undefined → ''. */
@@ -236,25 +204,64 @@ function s(v: unknown): string {
   return String(v).trim()
 }
 
-/** Número o '' si no. */
-function numOrStr(v: unknown): string {
-  if (v === null || v === undefined || v === '') return ''
-  const n = Number(v)
-  return Number.isFinite(n) ? String(n) : ''
+const eventTestsForZipSelect = {
+  id: true,
+  status: true,
+  testNameSnapshot: true,
+  fileUrl: true,
+  extractionSnapshots: {
+    where: { isSuperseded: false },
+    orderBy: { version: 'desc' as const },
+    take: 1,
+    select: {
+      aiPrediagnoses: {
+        where: { isSuperseded: false },
+        orderBy: { version: 'desc' as const },
+        take: 1,
+        select: {
+          doctorReviews: {
+            orderBy: { createdAt: 'desc' as const },
+            take: 1,
+            select: {
+              validatedPdfUrl: true,
+              validatedPdfError: true,
+            },
+          },
+        },
+      },
+    },
+  },
+} as const
+
+type RawEventTestForZip = {
+  id: string
+  status: string
+  testNameSnapshot: string | null
+  fileUrl: string | null
+  extractionSnapshots?: Array<{
+    aiPrediagnoses?: Array<{
+      doctorReviews?: Array<{
+        validatedPdfUrl: string | null
+        validatedPdfError: string | null
+      }>
+    }>
+  }>
 }
 
-/** Detecta el primer estudio por nombre normalizado. */
-function findIaByName<
-  T extends { serviceName: string; aiPrediction: string | null; extractedData: unknown; fileUrl?: string | null; validatorNotes?: string | null },
->(list: ReadonlyArray<T>, candidates: ReadonlyArray<string>): T | null {
-  if (!list || list.length === 0) return null
-  const norm = (str: string) =>
-    str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  for (const item of list) {
-    const t = norm(item.serviceName)
-    if (candidates.some((c) => t.includes(norm(c)))) return item
+function mapEventTestForZipPdf(test: RawEventTestForZip): EventTestForZipPdf {
+  const latestReview =
+    test.extractionSnapshots?.[0]?.aiPrediagnoses?.[0]?.doctorReviews?.[0]
+  const validatedPdfUrl =
+    latestReview?.validatedPdfUrl && !latestReview?.validatedPdfError
+      ? latestReview.validatedPdfUrl
+      : null
+  return {
+    id: test.id,
+    status: test.status,
+    testNameSnapshot: test.testNameSnapshot,
+    fileUrl: test.fileUrl,
+    validatedPdfUrl,
   }
-  return null
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -263,8 +270,7 @@ function findIaByName<
 
 /**
  * Construye el ZIP de cierre clínico en memoria. Lee el Event, renderiza
- * el dictamen general y agrega dictámenes por estudio + fuentes si
- * existen en disco.
+ * el dictamen general y agrega el PDF validado de cada EventTest.
  *
  * Lanza si el Event no existe o no tiene verdict firmado (esos casos
  * los maneja el caller con su propio código HTTP).
@@ -313,22 +319,9 @@ export async function buildCierreClinicoZip(
           },
         },
       },
-      studies: {
-        select: {
-          serviceName: true,
-          aiPrediction: true,
-          extractedData: true,
-          fileUrl: true,
-          validatorNotes: true,
-        },
-      },
-      labs: {
-        select: {
-          serviceName: true,
-          aiPrediction: true,
-          extractedData: true,
-          fileUrl: true,
-        },
+      eventTests: {
+        select: eventTestsForZipSelect,
+        orderBy: { createdAt: 'asc' },
       },
     },
   })
@@ -358,22 +351,9 @@ export async function buildCierreClinicoZip(
         where: { id: { in: siblingEventIds } },
         select: {
           id: true,
-          studies: {
-            select: {
-              serviceName: true,
-              aiPrediction: true,
-              extractedData: true,
-              fileUrl: true,
-              validatorNotes: true,
-            },
-          },
-          labs: {
-            select: {
-              serviceName: true,
-              aiPrediction: true,
-              extractedData: true,
-              fileUrl: true,
-            },
+          eventTests: {
+            select: eventTestsForZipSelect,
+            orderBy: { createdAt: 'asc' },
           },
         },
         orderBy: { createdAt: 'asc' },
@@ -388,63 +368,6 @@ export async function buildCierreClinicoZip(
     // SPEC §reglas: el dictamen requiere aptitud (paridad con P2-3).
     throw new CierreClinicoError('aptitud_missing', 409)
   }
-  const physicalExamData =
-    (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
-  const eyeAcuity =
-    (event.exam?.eyeAcuityData as Record<string, unknown> | null) ?? {}
-  const somatometry =
-    (event.exam?.somatometryData as Record<string, unknown> | null) ?? {}
-  const vitalSigns =
-    (event.exam?.vitalSignsData as Record<string, unknown> | null) ?? {}
-  const clinicalHistoryData =
-    (event.worker.clinicalHistory?.data as Record<string, unknown> | null) ?? {}
-  const dp =
-    (clinicalHistoryData.datos_personales as Record<string, unknown>) ?? {}
-  const _hl =
-    (clinicalHistoryData.historia_laboral as Record<string, unknown>) ?? {}
-  const ahf =
-    (clinicalHistoryData.heredo_familiares as Record<string, unknown>) ?? {}
-  const apnp =
-    (clinicalHistoryData.no_patologicos as Record<string, unknown>) ?? {}
-
-  const appParts: string[] = []
-  const slotsTexts = [
-    ['Examen médico', s(physicalExamData.examen_medico_texto)],
-    ['Audiometría', s(physicalExamData.audiometria_texto)],
-    ['Espirometría', s(physicalExamData.espirometria_texto)],
-    ['Laboratorios', s(physicalExamData.laboratorios_texto)],
-    ['Radiografía', s(physicalExamData.radiografia_texto)],
-  ] as const
-  for (const [label, val] of slotsTexts) {
-    if (val) appParts.push(`${label}: ${val}`)
-  }
-  const appTexto = appParts.length > 0
-    ? appParts.join('. ')
-    : s(physicalExamData.impresion_diagnostica)
-
-  const taSist = Number(somatometry.ta_sistolica ?? vitalSigns.ta_sistolica)
-  const taDiast = Number(somatometry.ta_diastolica ?? vitalSigns.ta_diastolica)
-  const ta =
-    Number.isFinite(taSist) && Number.isFinite(taDiast)
-      ? `${taSist}/${taDiast}`
-      : ''
-
-  const audioIa = findIaByName(event.studies, [
-    'audiometria',
-    'audiometry',
-  ])
-  const espiroIa = findIaByName(event.studies, [
-    'espirometria',
-    'spirometry',
-  ])
-  const _labsIa = event.labs?.[0] ?? null
-  const radioIa = findIaByName(event.studies, [
-    'radiografia',
-    'radiografía',
-    'rx',
-    'rayos x',
-  ])
-
   const validator = event.verdict.validator
   if (
     !validator ||
@@ -457,189 +380,91 @@ export async function buildCierreClinicoZip(
     throw new CierreClinicoError('validator_identity_incomplete', 410)
   }
 
-  // IMPL-20260826-08 (FND-20260826-03 / DEC-20260826-01): usamos el helper
-  // compartido `buildDictamenGeneralAmiConsolidado` para garantizar que
-  // el dictamen general del ZIP usa EXACTAMENTE la misma consolidación
-  // que la re-emisión del PDF (mismo renderer, misma helper, mismos
-  // Events hermanos). Antes: 165 líneas de mapeo inline.
-  const consolidado = await buildDictamenGeneralAmiConsolidado(event.id, prisma)
-  const data = consolidado.data
+  // Resumen / dictamen de aptitud (`MedicalDictamenPDF`), no el formulario
+  // largo de examen médico (`ExamenMedicoValidatedPDF`).
+  const dictamenGeneralBuffer = await renderDictamenGeneralPdfForEvent(
+    event.id,
+    prisma,
+  )
 
-  // IMPL-20260826-08: persistimos las recomendaciones normalizadas en el
-  // payload final (split por numeración ordinal) — mismo criterio que
-  // antes.
-  const recomendacionesPersisted = s(event.verdict.recommendations)
-  // IMPL-20260826-08: las recomendaciones viven en `ExamenMedicoPDFData`
-  // (output de `buildExamenMedicoPdfData`), NO en `BuildExamenMedicoPdfInput`.
-  // Por eso primero transformamos el payload y luego persistimos.
-  const dataFinal = await buildExamenMedicoPdfDataAsync(data)
-  if (recomendacionesPersisted) {
-    dataFinal.recomendaciones = recomendacionesPersisted
-      .split(/\s*\d+\.\-\s+/)
-      .map((r) => r.trim())
-      .filter((r) => r.length > 0)
+  const examenMedicoPdfByEvent = new Map<string, Uint8Array | null>()
+  async function examenMedicoPdfForEvent(evId: string): Promise<Uint8Array | null> {
+    if (!examenMedicoPdfByEvent.has(evId)) {
+      const bytes = await resolveExamenMedicoEntregablePdfForEvent(evId, prisma)
+      examenMedicoPdfByEvent.set(evId, bytes)
+    }
+    return examenMedicoPdfByEvent.get(evId) ?? null
   }
 
-  const result = await generateExamenMedicoValidatedPdf({
-    data: dataFinal,
-    eventId: event.id,
-  })
-
-  // ── 2) Carpetas por Event/estudio (IMPL-20260826-06) ─────────────────
-  //
-  // Estructura del ZIP:
-  //   01_Dictamen_General/dictamen-general.pdf
-  //   02_Event_<eventShort>/dictamen-<serviceSlug>.txt
-  //   02_Event_<eventShort>/fuente-<basename>.<ext>
-  //   03_Event_<eventShort>/... (si hay siblings)
-  //   manifest.txt
-  //
-  // Antes (rondas previas): una carpeta por estudio, mezclando studies +
-  // labs de un solo Event. Ahora: una carpeta por Event hermano de la
-  // cita, con sus estudios y labs adentro. Esto preserva la trazabilidad
-  // Event↔estudio que exige BR-20260826-01 y permite que el médico
-  // identifique a qué Event pertenece cada hallazgo.
-  // ────────────────────────────────────────────────────────────────────────
-  type Item = {
-    eventId: string
-    eventShortId: string
-    isCurrent: boolean
-    kind: 'STUDY' | 'LAB'
+  // ── 2) PDF por EventTest (papeleta) ───────────────────────────────────
+  type ZipTestRow = EventTestForZipPdf & {
     serviceName: string
-    aiPrediction: string | null
-    validatorNotes: string | null
-    fileUrl: string | null
-    slot: string | null
+    eventId: string
   }
 
-  // Construir la lista plana de items: primero el Event actual, luego
-  // los hermanos en orden cronológico. El slot (texto del examen físico)
-  // sólo aplica al Event actual (cada Event tiene su propio examen).
-  const items: Item[] = [
-    ...event.studies.map<Item>((st) => ({
+  const testRows: ZipTestRow[] = [
+    ...event.eventTests.map((et) => ({
+      ...mapEventTestForZipPdf(et),
+      serviceName: et.testNameSnapshot ?? 'Estudio',
       eventId: event.id,
-      eventShortId: atencionEventIds.length > 1
-        ? atencionEventIds.indexOf(event.id).toString().padStart(2, '0') +
-          '_' +
-          event.id.split('-')[0].toUpperCase()
-        : event.id.split('-')[0].toUpperCase(),
-      isCurrent: true,
-      kind: 'STUDY' as const,
-      serviceName: st.serviceName,
-      aiPrediction: st.aiPrediction,
-      validatorNotes: st.validatorNotes ?? null,
-      fileUrl: st.fileUrl ?? null,
-      slot: pickSlot(physicalExamData, st.serviceName),
     })),
-    ...event.labs.map<Item>((lb) => ({
-      eventId: event.id,
-      eventShortId: event.id.split('-')[0].toUpperCase(),
-      isCurrent: true,
-      kind: 'LAB' as const,
-      serviceName: lb.serviceName,
-      aiPrediction: lb.aiPrediction,
-      validatorNotes: null,
-      fileUrl: lb.fileUrl ?? null,
-      slot: pickSlot(physicalExamData, lb.serviceName),
-    })),
-    ...siblingEventsRaw.flatMap<Item>((sib, idx) => {
-      const sibEventShortId =
-        (idx + 2).toString().padStart(2, '0') +
-        '_' +
-        sib.id.split('-')[0].toUpperCase()
-      return [
-        ...sib.studies.map<Item>((st) => ({
-          eventId: sib.id,
-          eventShortId: sibEventShortId,
-          isCurrent: false,
-          kind: 'STUDY' as const,
-          serviceName: st.serviceName,
-          aiPrediction: st.aiPrediction,
-          validatorNotes: st.validatorNotes ?? null,
-          fileUrl: st.fileUrl ?? null,
-          slot: null, // slot sólo del Event actual; siblings no tienen
-        })),
-        ...sib.labs.map<Item>((lb) => ({
-          eventId: sib.id,
-          eventShortId: sibEventShortId,
-          isCurrent: false,
-          kind: 'LAB' as const,
-          serviceName: lb.serviceName,
-          aiPrediction: lb.aiPrediction,
-          validatorNotes: null,
-          fileUrl: lb.fileUrl ?? null,
-          slot: null,
-        })),
-      ]
-    }),
+    ...siblingEventsRaw.flatMap((sib) =>
+      sib.eventTests.map((et) => ({
+        ...mapEventTestForZipPdf(et),
+        serviceName: et.testNameSnapshot ?? 'Estudio',
+        eventId: sib.id,
+      })),
+    ),
   ]
 
   const entries: ZipEntry[] = []
   const manifestStudies: Array<{
     folder: string
     serviceName: string
-    dictamenPath: string
-    sourcePath: string
-    eventId: string
+    pdfPath: string
+    eventTestId: string
   }> = []
-  const folderMap = new Map<string, number>()
-  let studyIndex = 0
-  for (const it of items) {
-    studyIndex += 1
-    const slug = slugify(it.serviceName)
-    folderMap.set(slug, (folderMap.get(slug) ?? 0) + 1)
-    // IMPL-20260826-06: carpetas por Event. Si el Event actual coincide
-    // con la cita y no hay siblings, mantener `02_<serviceName>` para
-    // retrocompat con consumers legacy del ZIP.
-    const folder =
-      atencionEventIds.length > 1
-        ? `${studyIndex.toString().padStart(2, '0')}_Event_${it.eventShortId}`
-        : folderName(studyIndex, it.serviceName)
-    const dictamenPath = `${folder}/dictamen-${slug}.txt`
-    const dictamenText = buildStudyDictamenText({
-      serviceName: it.serviceName,
-      kind: it.kind,
-      slot: it.slot,
-      aiPrediction: it.aiPrediction,
-      validatorNotes: it.validatorNotes,
-    })
-    entries.push({
-      path: dictamenPath,
-      data: new TextEncoder().encode(dictamenText),
-    })
 
-    // Fuente original: intentar leer vía backend `/api/files/{key}`,
-    // si no → placeholder. IMPL-20260826-05 — sin filesystem Vercel.
-    const sourcePath = `${folder}/fuente-${slug}${sourceExt(it.fileUrl)}`
-    const sourceBytes = await tryReadSourceFromBackend(it.fileUrl)
-    if (sourceBytes) {
-      entries.push({ path: sourcePath, data: sourceBytes })
+  let studyIndex = 0
+  for (const row of testRows) {
+    if (row.status === 'CANCELLED') continue
+
+    studyIndex += 1
+    const folder = folderName(studyIndex, row.serviceName)
+    const pdfResolved = isExamenMedicoTestName(row.serviceName)
+      ? await (async () => {
+          const data = await examenMedicoPdfForEvent(row.eventId)
+          return data ? { filename: 'examen-medico.pdf', data } : null
+        })()
+      : await resolveEventTestPdfForZip(row)
+
+    if (pdfResolved) {
+      const pdfPath = `${folder}/${pdfResolved.filename}`
+      entries.push({ path: pdfPath, data: pdfResolved.data })
       manifestStudies.push({
         folder,
-        serviceName: it.serviceName,
-        dictamenPath,
-        sourcePath,
-        eventId: it.eventId,
+        serviceName: row.serviceName,
+        pdfPath,
+        eventTestId: row.id,
       })
     } else {
-      // NO inventar: dejar un placeholder textual legible.
-      const placeholder = `# Fuente original NO_DISPONIBLE\n\n` +
-        `Service: ${it.serviceName}\n` +
-        `Tipo:    ${it.kind === 'LAB' ? 'Laboratorio' : 'Estudio paraclínico'}\n` +
-        `Event:   ${it.eventId}\n` +
-        `Path en BD: ${it.fileUrl ?? '(sin fileUrl)'}\n` +
-        `Fecha de generación: ${new Date().toISOString()}\n\n` +
-        `Razón: el archivo no se encontró en disco o no se subió.\n`
+      const pdfPath = `${folder}/PDF_NO_DISPONIBLE.txt`
+      const note =
+        `# PDF del estudio NO_DISPONIBLE\n\n` +
+        `Estudio: ${row.serviceName}\n` +
+        `EventTest: ${row.id}\n` +
+        `Event: ${row.eventId}\n` +
+        `Generado: ${new Date().toISOString()}\n\n` +
+        `Revise que el estudio tenga PDF validado (revisión médica) o archivo cargado.\n`
       entries.push({
-        path: sourcePath,
-        data: new TextEncoder().encode(placeholder),
+        path: pdfPath,
+        data: new TextEncoder().encode(note),
       })
       manifestStudies.push({
         folder,
-        serviceName: it.serviceName,
-        dictamenPath,
-        sourcePath: `${folder}/fuente-${slug}.txt (NO_DISPONIBLE)`,
-        eventId: it.eventId,
+        serviceName: row.serviceName,
+        pdfPath: `${pdfPath} (NO_DISPONIBLE)`,
+        eventTestId: row.id,
       })
     }
   }
@@ -648,7 +473,7 @@ export async function buildCierreClinicoZip(
   const dictamenGeneralPath = '01_Dictamen_General/dictamen-general.pdf'
   entries.unshift({
     path: dictamenGeneralPath,
-    data: new Uint8Array(result.buffer),
+    data: new Uint8Array(dictamenGeneralBuffer),
   })
 
   // ── 4) Manifest ────────────────────────────────────────────────────────
@@ -676,135 +501,6 @@ export async function buildCierreClinicoZip(
     manifest,
     entries,
   }
-}
-
-/** Extensión probable basada en fileUrl. */
-function sourceExt(fileUrl: string | null | undefined): string {
-  if (!fileUrl) return '.bin'
-  const base = fileUrl.split('/').pop() ?? fileUrl
-  const dot = base.lastIndexOf('.')
-  if (dot <= 0 || dot >= base.length - 1) return '.bin'
-  const ext = base.slice(dot).toLowerCase()
-  // Whitelist conservadora: sólo extensiones esperadas para fuentes
-  // clínicas (PDF/imagen). Si no, marcar como .bin para evitar
-  // ambigüedad en el manifest.
-  if (['.pdf', '.png', '.jpg', '.jpeg', '.tif', '.tiff', '.xml'].includes(ext)) {
-    return ext
-  }
-  return '.bin'
-}
-
-/**
- * IMPL-20260826-05 (FIX ZIP cierre clínico):
- * Resuelve un `fileUrl` (lo que viene persistido en `eventTest.fileUrl`)
- * a una URL absoluta del backend oficial `/api/files/{key}`.
- *
- * Acepta y normaliza:
- *   - `"/api/files/foo.pdf"`         → "<base>/api/files/foo.pdf"
- *   - `"/uploads/foo.pdf"`           → "<base>/api/files/foo.pdf" (legacy)
- *   - `"foo.pdf"`                    → "<base>/api/files/foo.pdf"
- *   - `"subdir/foo.pdf"`             → "<base>/api/files/subdir/foo.pdf"
- *
- * Rechaza (devuelve `null`):
- *   - URLs con esquema (`http://`, `https://`, `s3://`, etc.) — defensa SSRF.
- *     Las presigned URLs ya consumidas no deben re-fetche-arse.
- *   - Paths con `..` (path traversal).
- *   - `null`/`undefined`/string vacío.
- *   - Otros paths absolutos que no reconocemos (defensa).
- *
- * @param fileUrl   Valor de `eventTest.fileUrl` (o equivalente).
- * @param baseUrl   URL base del backend (sin trailing slash). Por defecto
- *                 `dictamenBackendUrl()` (lee `NEXT_PUBLIC_API_URL`).
- * @returns URL absoluta segura para `fetch`, o `null` si es inválida.
- */
-export function resolveBackendFileUrl(
-  fileUrl: string | null | undefined,
-  baseUrl: string = dictamenBackendUrl(),
-): string | null {
-  if (!fileUrl || typeof fileUrl !== 'string') return null
-  const trimmed = fileUrl.trim()
-  if (trimmed.length === 0) return null
-
-  // Defensa SSRF: rechazar cualquier URL con esquema (incluye presigned
-  // S3 ya usadas — no se re-fetche-an). Sólo construimos paths relativos.
-  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return null
-  // Defensa path traversal.
-  if (trimmed.includes('..')) return null
-
-  // baseUrl puede traer trailing slash; normalizamos.
-  const base = baseUrl.replace(/\/+$/, '')
-
-  if (trimmed.startsWith('/api/files/')) {
-    return `${base}${trimmed}`
-  }
-  if (trimmed.startsWith('/uploads/')) {
-    const key = trimmed.slice('/uploads/'.length)
-    return `${base}/api/files/${key}`
-  }
-  if (trimmed.startsWith('/')) {
-    // Otro path absoluto no reconocido — rechazar defensa.
-    return null
-  }
-  // Path relativo: tratarlo como key.
-  return `${base}/api/files/${trimmed}`
-}
-
-/**
- * IMPL-20260826-05 (FIX ZIP cierre clínico):
- * Lee los bytes de una fuente desde el backend oficial `/api/files/{key}`
- * vía HTTP. Reemplaza la versión anterior que leía de filesystem
- * local (`<repo>/uploads/`), la cual falla en Vercel (no comparte
- * FS con Railway/S3).
- *
- * Devuelve `null` si:
- *   - `fileUrl` es inválido (`resolveBackendFileUrl` lo rechaza).
- *   - El backend responde 4xx/5xx (incluyendo 404 NoSuchKey).
- *   - La red falla o el body no se puede leer.
- *
- * NO loguea URLs presigned ni keys; sólo registra `null` en el manifest
- * para que el médico sepa que la fuente no se pudo recuperar.
- *
- * @param fileUrl   `eventTest.fileUrl`.
- * @param baseUrl   URL base del backend. Por defecto `dictamenBackendUrl()`.
- * @param fetchImpl Override para tests (inyección de dependencia). Por
- *                  defecto `globalThis.fetch` (runtime estándar).
- */
-export async function tryReadSourceFromBackend(
-  fileUrl: string | null | undefined,
-  baseUrl: string = dictamenBackendUrl(),
-  fetchImpl: typeof fetch = (...args) => globalThis.fetch(...args),
-): Promise<Uint8Array | null> {
-  const url = resolveBackendFileUrl(fileUrl, baseUrl)
-  if (!url) return null
-  try {
-    const res = await fetchImpl(url, { cache: 'no-store' })
-    if (!res.ok) return null
-    const buf = await res.arrayBuffer()
-    return new Uint8Array(buf)
-  } catch {
-    return null
-  }
-}
-
-/** Lee una key del `extractedData` IA. */
-function pickIaField(
-  ia:
-    | {
-        aiPrediction: string | null
-        extractedData: unknown
-      }
-    | null,
-  keys: ReadonlyArray<string>,
-): string | null {
-  if (!ia || !ia.extractedData || typeof ia.extractedData !== 'object') {
-    return null
-  }
-  const obj = ia.extractedData as Record<string, unknown>
-  for (const k of keys) {
-    const v = obj[k]
-    if (typeof v === 'string' && v.trim().length > 0) return v.trim()
-  }
-  return null
 }
 
 /** Error tipado para distinguir casos del SPEC. */

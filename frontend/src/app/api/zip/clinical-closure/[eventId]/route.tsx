@@ -3,11 +3,10 @@
  *   cierre clínico por `MedicalEvent`.
  *
  *   Estructura del ZIP:
- *     - `01_Dictamen_General/dictamen-general.pdf` ← ExamenMedicoValidatedPDF.
- *     - Una carpeta `NN_<serviceName>/` por estudio aplicable, con
- *       `dictamen-<slug>.txt` + `fuente-<slug>.<ext>` (placeholder si
- *       no hay archivo en disco).
- *     - `manifest.txt` con Event, archivos incluidos y fuentes ausentes.
+ *     - `01_Dictamen_General/dictamen-general.pdf` ← dictamen final.
+ *     - Una carpeta `NN_<serviceName>/` por cada EventTest con su PDF
+ *       validado (o nota NO_DISPONIBLE).
+ *     - `manifest.txt` con Event y listado de PDFs.
  *
  *   Reglas (SPEC §Reglas):
  *     - Sólo SUPERADMIN / DOCTOR_GENERAL / DOCTOR_VALIDATOR descargan el

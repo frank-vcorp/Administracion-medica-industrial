@@ -173,7 +173,7 @@ describe('IMPL-FEATURE-20260825-04: zip-cierre-clinico — buildManifest', () =>
     expect(out).toMatch(/01_Dictamen_General\/dictamen-general\.pdf/)
   })
 
-  it('lista studies con carpeta/dictamen/fuente', () => {
+  it('lista studies con carpeta y pdf', () => {
     const out = buildManifest({
       eventId: 'event-1',
       universalId: 'U-1',
@@ -182,16 +182,16 @@ describe('IMPL-FEATURE-20260825-04: zip-cierre-clinico — buildManifest', () =>
       dictamenGeneralPath: '01_Dictamen_General/dictamen-general.pdf',
       studyEntries: [
         {
-          folder: '02_Audiometria',
+          folder: '02_audiometria',
           serviceName: 'Audiometría',
-          dictamenPath: '02_Audiometria/dictamen-audiometria.txt',
-          sourcePath: '02_Audiometria/fuente-audiometria.pdf',
+          pdfPath: '02_audiometria/audiometria.pdf',
+          eventTestId: 'et-1',
         },
       ],
     })
-    expect(out).toMatch(/02_Audiometria\//)
-    expect(out).toMatch(/dictamen-audiometria\.txt/)
-    expect(out).toMatch(/fuente-audiometria\.pdf/)
+    expect(out).toMatch(/02_audiometria\//)
+    expect(out).toMatch(/audiometria\.pdf/)
+    expect(out).toMatch(/EventTest et-1/)
   })
 
   it('documenta la leyenda NO_DISPONIBLE', () => {
@@ -204,7 +204,7 @@ describe('IMPL-FEATURE-20260825-04: zip-cierre-clinico — buildManifest', () =>
       studyEntries: [],
     })
     expect(out).toMatch(/NO_DISPONIBLE/)
-    expect(out).toMatch(/no se inventó/)
+    expect(out).toMatch(/no generado o no recuperable/)
   })
 
   it('NO incluye PII distinta de nombre del paciente (sin firma, sin cédula)', () => {

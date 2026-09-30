@@ -49,7 +49,7 @@
  *     desde FND-20260825-18 / P1-2) y se mantiene para consumo del portal
  *     corporativo.
  */
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { renderToBuffer } from '@react-pdf/renderer'
@@ -71,6 +71,8 @@ import {
   resolvePatientIdentificationForPdf,
   type PatientIdentificationPdf,
 } from '@/lib/pdf/patient-identification'
+import { tryReadSourceFromBackend } from '@/lib/clinical/backend-file-read'
+import { buildDictamenGeneralAmiConsolidado } from '@/lib/dictamen-general-ami'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -681,6 +683,52 @@ export async function generateExamenMedicoValidatedPdf(
   }
 
   return { buffer, hash, url, absolutePath }
+}
+
+/**
+ * Entregable largo de examen médico (`ExamenMedicoValidatedPDF`).
+ * Paridad con `context/RD2026/EXAMEN MEDICO.pdf` — distinto del resumen
+ * de dictamen (`MedicalDictamenPDF`).
+ */
+export async function resolveExamenMedicoEntregablePdfForEvent(
+  eventId: string,
+  prisma: import('@prisma/client').PrismaClient,
+): Promise<Uint8Array | null> {
+  const rel = `examen-medico-pdfs/${eventId}.pdf`
+  try {
+    const buf = await readFile(path.join(REPO_UPLOAD_DIR, rel))
+    return new Uint8Array(buf)
+  } catch {
+    const viaBackend =
+      (await tryReadSourceFromBackend(`/uploads/${rel}`)) ??
+      (await tryReadSourceFromBackend(`/api/files/${rel}`))
+    if (viaBackend) return viaBackend
+  }
+
+  try {
+    const consolidado = await buildDictamenGeneralAmiConsolidado(eventId, prisma)
+    const event = await prisma.medicalEvent.findUnique({
+      where: { id: eventId },
+      select: { verdict: { select: { recommendations: true } } },
+    })
+
+    const dataFinal = await buildExamenMedicoPdfDataAsync(consolidado.data)
+    const recomendacionesPersisted = s(event?.verdict?.recommendations ?? '')
+    if (recomendacionesPersisted) {
+      dataFinal.recomendaciones = recomendacionesPersisted
+        .split(/\s*\d+\.\-\s+/)
+        .map((r) => r.trim())
+        .filter((r) => r.length > 0)
+    }
+
+    const result = await generateExamenMedicoValidatedPdf({
+      data: dataFinal,
+      eventId,
+    })
+    return new Uint8Array(result.buffer)
+  } catch {
+    return null
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
