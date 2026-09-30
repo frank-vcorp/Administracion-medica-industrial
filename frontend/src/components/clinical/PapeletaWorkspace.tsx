@@ -403,14 +403,11 @@ export default function PapeletaWorkspace({
     (['SAMPLE_TAKEN', 'RESULT_REGISTERED', 'COMPLETED'] as StudyStatus[]).includes(t.status)
   )
 
-  // ARCH-20260506-06: Somatometría y Agudeza Visual se ocultan del sidebar cuando
-  // existe un Examen Médico (ahora viven como pestañas dentro de él).
-  const hasExamenMedicoTest = localTests.some(t => isExamenMedico(t.testNameSnapshot))
   const somatometriaTest = localTests.find(t => isSomatometria(t.testNameSnapshot))
   const agudezaTest = localTests.find(t => isAgudezaVisual(t.testNameSnapshot))
-  const visibleTests = hasExamenMedicoTest
-    ? localTests.filter(t => !isSomatometria(t.testNameSnapshot) && !isAgudezaVisual(t.testNameSnapshot))
-    : localTests
+  // Con `papeletaLayout`, Examen Médico ya no muestra pestañas Somatometría/Agudeza
+  // internas: deben seguir en el menú lateral (y Campimetría como estudio propio).
+  const visibleTests = localTests
 
   /* eslint-disable react-hooks/set-state-in-effect -- sincroniza state local con prop eventTests (controlled state pattern). */
   useEffect(() => {
@@ -1535,7 +1532,7 @@ function StudyPanel({
             <div>
               <p className="text-sm font-bold text-blue-800">{test.testNameSnapshot} — Formulario Clínico</p>
               <p className="text-xs text-blue-600">
-                Antecedentes → Módulo 1 → Exploración física → Impresión clínica (somatometría y agudeza en el menú lateral)
+                Antecedentes → Módulo 1 → Exploración física → Impresión clínica. Somatometría, agudeza (campimetría) y demás estudios: menú lateral.
               </p>
             </div>
           </div>
