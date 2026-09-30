@@ -1532,7 +1532,7 @@ function StudyPanel({
             <div>
               <p className="text-sm font-bold text-blue-800">{test.testNameSnapshot} — Formulario Clínico</p>
               <p className="text-xs text-blue-600">
-                Antecedentes → Módulo 1 → Exploración física → Impresión clínica. Somatometría, agudeza (campimetría) y demás estudios: menú lateral.
+                Pestañas: Somatometría, Signos vitales, Agudeza (campimetría) y bloque clínico (Antecedentes → Impresión).
               </p>
             </div>
           </div>
