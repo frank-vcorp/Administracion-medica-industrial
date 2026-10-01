@@ -447,13 +447,17 @@ export function AntecedentesForm({
               <span className="text-gray-500">Al marcar <strong>SÍ</strong> aparecen 3 campos: desde cuándo, tratamiento y observaciones.</span>
             </p>
 
-            {([
-              ['endocrino',      'Enfermedades Endocrino-Metabólicas'],
-              ['cardiopulmonar', 'Sistema Cardiopulmonar'],
-              ['neurologico',    'Sistema Neurológico'],
-              ['digestivo',      'Sistema Digestivo y Genitourinario'],
-              ['otras',          'Otras Condiciones'],
-            ] as const).map(([group, title]) => (
+            {(
+              [
+                ['endocrino', 'Enfermedades Endocrino-Metabólicas'],
+                ['cardiopulmonar', 'Sistema Cardiopulmonar'],
+                ['infecciosas', 'Enfermedades Infecciosas'],
+                ['neurologico', 'Sistema Neurológico'],
+                ['digestivo', 'Sistema Digestivo y Genitourinario'],
+                ['musculoesqueletico', 'Cáncer, Traumatismos y Procedimientos'],
+                ['otras', 'Otras Condiciones'],
+              ] as const
+            ).map(([group, title]) => (
               <fieldset key={group} className="border border-gray-200 rounded-lg p-4">
                 <legend className="text-lg font-semibold text-gray-900 px-2">{title}</legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">

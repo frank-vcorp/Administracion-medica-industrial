@@ -34,15 +34,18 @@ export function buildHistoriaGinecoText(m1: Record<string, unknown>): string | n
   return joinFields(m1, [
     ['Menarca', m1.m1_gine_menarca],
     ['FUM', m1.m1_gine_fum],
+    ['I.V.S.', m1.m1_gine_ivs],
     ['Ritmo', m1.m1_gine_ritmo],
+    ['V.S.A.', m1.m1_gine_vsa],
     ['Gesta', m1.m1_gine_gesta],
     ['Aborto', m1.m1_gine_aborto],
     ['Parto', m1.m1_gine_parto],
     ['Cesárea', m1.m1_gine_cesarea],
     ['DOC', m1.m1_gine_doc],
     ['FUP/FUC', m1.m1_gine_fup_uc],
-    ['Exp. mamaria', m1.m1_gine_exp_mamaria],
     ['MPF', m1.m1_gine_mpf],
+    ['Autoexploración mensual', m1.m1_gine_autoexploracion],
+    ['Exp. mamaria', m1.m1_gine_exp_mamaria],
   ] as const)
 }
 

@@ -24,8 +24,10 @@ export interface CampoDescripcion {
 export interface GrupoPatologicos {
   endocrino: CampoDescripcion[]
   cardiopulmonar: CampoDescripcion[]
+  infecciosas: CampoDescripcion[]
   neurologico: CampoDescripcion[]
   digestivo: CampoDescripcion[]
+  musculoesqueletico: CampoDescripcion[]
   otras: CampoDescripcion[]
 }
 
@@ -183,13 +185,22 @@ export const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
     { field: 'cardiopatias', label: 'Cardiopatías',          help: 'Enfermedades del corazón (infarto, soplo, arritmia, insuficiencia).' },
     { field: 'bronquitis',   label: 'Bronquitis',            help: 'Bronquitis crónica o repetida (no la gripe común).' },
     { field: 'neumonias',    label: 'Neumonías',             help: 'Neumonía (infección pulmonar) que requirió tratamiento médico.' },
+    { field: 'tuberculosis', label: 'Tuberculosis',          help: 'Tuberculosis diagnosticada o tratada.' },
     { field: 'has',          label: 'Hipertensión Arterial', help: 'Presión arterial alta diagnosticada por un médico.' },
+  ],
+  infecciosas: [
+    { field: 'tifoidea',         label: 'Tifoidea',           help: 'Fiebre tifoidea u otra enteritis tifoide.' },
+    { field: 'hepatitis',        label: 'Hepatitis',          help: 'Hepatitis viral u otra hepatitis diagnosticada.' },
+    { field: 'exantematicas',    label: 'Exantemáticas',      help: 'Varicela, sarampión u otras exantemáticas.' },
+    { field: 'parotiditis',      label: 'Parotiditis',        help: 'Paperas u otra parotiditis.' },
+    { field: 'enf_trans_sexual', label: 'Enf. trans. sexual', help: 'Infecciones de transmisión sexual diagnosticadas.' },
   ],
   neurologico: [
     { field: 'epilepsia',              label: 'Epilepsia',              help: 'Convulsiones o epilepsia diagnosticada.' },
     { field: 'migrana',                label: 'Migraña',                help: 'Dolores de cabeza fuertes y repetidos (jaqueca/migraña).' },
+    { field: 'vertigo',                label: 'Vértigo',                help: 'Mareos o vértigo recurrente.' },
     { field: 'desmayos',               label: 'Desmayos',               help: 'Pérdidas de conocimiento o desmayos frecuentes.' },
-    { field: 'traumatismos_craneales', label: 'Traumatismos craneales', help: 'Golpes fuertes en la cabeza con pérdida de conocimiento o atención médica.' },
+    { field: 'traumatismos_craneales', label: 'Traumatismos',           help: 'Traumatismos con atención médica (incl. craneales).' },
   ],
   digestivo: [
     { field: 'gastritis',   label: 'Gastritis',           help: 'Inflamación del estómago con ardor frecuente, diagnosticada por un médico.' },
@@ -198,12 +209,20 @@ export const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
     { field: 'hernias',     label: 'Hernias',             help: 'Hernias inguinales, abdominales o discales (en la espalda) operadas o no.' },
     { field: 'renales',     label: 'Enfermedades renales',help: 'Cálculos (piedras) en riñón, infecciones urinarias repetidas o enfermedad renal.' },
   ],
+  musculoesqueletico: [
+    { field: 'cancer',           label: 'Cáncer',                 help: 'Cáncer de cualquier tipo diagnosticado o tratado.' },
+    { field: 'fracturas',        label: 'Fracturas',              help: 'Fracturas óseas previas.' },
+    { field: 'cirugias',         label: 'Cirugías',               help: 'Cirugías mayores previas.' },
+    { field: 'transfusiones',    label: 'Transfusiones',          help: 'Transfusiones sanguíneas previas.' },
+    { field: 'pat_c_vertebral',  label: 'Pat. columna vertebral', help: 'Patología de columna vertebral diagnosticada.' },
+  ],
   otras: [
     { field: 'alergias',      label: 'Alergias',       help: 'Alergias a medicamentos, alimentos, polen, polvo, etc.' },
     { field: 'varices',       label: 'Varices',        help: 'Venas varicosas en piernas (venas dilatadas visibles).' },
     { field: 'ginecologicos', label: 'Ginecológicos',  help: 'Enfermedades ginecológicas tratadas (embarazos, quistes, etc.).' },
     { field: 'dermatitis',    label: 'Dermatitis',     help: 'Enfermedades de piel crónicas (eccema, psoriasis, dermatitis atópica).' },
     { field: 'psiquiatricas', label: 'Psiquiátricas',  help: 'Trastornos mentales diagnosticados (depresión, ansiedad, esquizofrenia, etc.).' },
+    { field: 'otras',         label: 'Otras',          help: 'Otra enfermedad no listada — detalle en observaciones.' },
   ],
 }
 
@@ -296,13 +315,37 @@ export const NO_PATOLOGICOS_DESCRIPCIONES: NoPatologicoItem[] = [
  * cobertura de tests.
  */
 export function getPatologicosAllFields(): string[] {
+  const g = PATOLOGICOS_DESCRIPCIONES
   return [
-    ...PATOLOGICOS_DESCRIPCIONES.endocrino.map(c => c.field),
-    ...PATOLOGICOS_DESCRIPCIONES.cardiopulmonar.map(c => c.field),
-    ...PATOLOGICOS_DESCRIPCIONES.neurologico.map(c => c.field),
-    ...PATOLOGICOS_DESCRIPCIONES.digestivo.map(c => c.field),
-    ...PATOLOGICOS_DESCRIPCIONES.otras.map(c => c.field),
+    ...g.endocrino.map(c => c.field),
+    ...g.cardiopulmonar.map(c => c.field),
+    ...g.infecciosas.map(c => c.field),
+    ...g.neurologico.map(c => c.field),
+    ...g.digestivo.map(c => c.field),
+    ...g.musculoesqueletico.map(c => c.field),
+    ...g.otras.map(c => c.field),
   ]
+}
+
+/** Orden de grupos patológicos en UI (Examen Médico + Historial). */
+export const PATOLOGICOS_GROUP_ORDER: readonly (keyof GrupoPatologicos)[] = [
+  'endocrino',
+  'cardiopulmonar',
+  'infecciosas',
+  'neurologico',
+  'digestivo',
+  'musculoesqueletico',
+  'otras',
+] as const
+
+export const PATOLOGICOS_GROUP_TITLES: Record<keyof GrupoPatologicos, string> = {
+  endocrino: 'Enfermedades endocrino-metabólicas',
+  cardiopulmonar: 'Sistema cardiopulmonar',
+  infecciosas: 'Enfermedades infecciosas',
+  neurologico: 'Sistema neurológico',
+  digestivo: 'Sistema digestivo y genitourinario',
+  musculoesqueletico: 'Cáncer, traumatismos y procedimientos',
+  otras: 'Otras condiciones',
 }
 
 /** Lista plana de todos los `field` (incluye `key` y todos los `subs`) de No Patológicos. */

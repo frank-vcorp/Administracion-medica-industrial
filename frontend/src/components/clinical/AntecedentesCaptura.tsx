@@ -5,9 +5,9 @@
  * del paciente, usado como PRIMERA sub-pestaña dentro del estudio "Examen Médico"
  * (inner-tab `antecedentes` de `ExamenMedicoEstudio`).
  *
- * **Responsabilidad:** editar las 5 secciones declarativas del paciente
- * (`datos_personales`, `historia_laboral`, `heredo_familiares`, `no_patologicos`,
- * `patologicos`) y emitir cada cambio al padre (`ExamenMedicoEstudio`) vía
+ * **Responsabilidad:** editar las 5 secciones declarativas del paciente más
+ * gineco/reproductivos/inmunizaciones (ex Módulo 1, persistidos en `modulo1`).
+ * Emite cada cambio al padre (`ExamenMedicoEstudio`) vía
  * `onChange`. El padre acumula el estado y lo persiste junto con el resto del
  * examen vía `saveExamenMedicoPapeleta` (snapshot por cita en
  * `physicalExamData.antecedentes_captured`).
@@ -61,8 +61,17 @@ import {
   ALIMENTACION_OPTIONS,
   SI_NEGADO,
   getPatologicosAllFields,
+  PATOLOGICOS_GROUP_ORDER,
+  PATOLOGICOS_GROUP_TITLES,
 } from '@/lib/antecedentes-fields'
-import { hasDetalleContent } from '@/lib/patologicos-accordion'
+import {
+  GINE_FIELDS,
+  M1_SEX_OPTIONS,
+  REPRO_FIELDS,
+  VACUNAS_CAPTURE_LIST,
+  VAC_SI_NO_VALUES,
+  type Modulo1FieldDef,
+} from '@/lib/modulo1-capture-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
 import {
   HEREDOFAMILIARES_VALUES,
@@ -88,9 +97,16 @@ interface AntecedentesCapturaProps {
   workerId?: string
   /** Readonly cuando el evento está cerrado (currentStep > 3). */
   readonly?: boolean
-  /** Callback para navegar a la siguiente sub-pestaña ("Módulo 1") desde el pie.
-   *  IMPL-20260809-03 — affordance UX al pie de Antecedentes (SPEC v2 §6.9). */
+  /** Callback para navegar a Exploración Física desde el pie. */
   onContinue?: () => void
+  /** Gineco / reproductivos / vacunas (persisten en `physicalExamData.modulo1`). */
+  modulo1: Record<string, string>
+  onModulo1Change: (next: Record<string, string>) => void
+  /** Nota libre del médico sobre antecedentes. */
+  antecedentesMedico?: string
+  onAntecedentesMedicoChange?: (value: string) => void
+  /** Hint si hay datos del portal pre-cita. */
+  portalPrefillHint?: boolean
 }
 
 type SectionKey = 'datos_personales' | 'historia_laboral' | 'heredo_familiares' | 'no_patologicos' | 'patologicos'
@@ -203,7 +219,6 @@ function buildEmptySections(): {
   // captura ahora en `otras.detalle.observaciones`.
   const pt: Record<string, PatologiaEntry> = {}
   for (const f of getPatologicosAllFields()) pt[f] = emptyPatologia()
-  pt.otras = emptyPatologia()
   return {
     datos_personales: dp,
     historia_laboral: hl,
@@ -277,6 +292,84 @@ function sectionsFromValue(value: Record<string, unknown>): {
   return empty
 }
 
+function renderModulo1Fields(
+  fields: Modulo1FieldDef[],
+  modulo1: Record<string, string>,
+  setM1Field: (name: string, value: string) => void,
+  readonly: boolean,
+) {
+  const baseInputClass =
+    'w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60'
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {fields.map(field => {
+        const currentValue = modulo1[field.name] ?? ''
+        if (field.kind === 'select' && field.values) {
+          return (
+            <div key={field.name}>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <select
+                value={currentValue}
+                onChange={e => setM1Field(field.name, e.target.value)}
+                disabled={readonly}
+                className={baseInputClass}
+              >
+                <option value="">—</option>
+                {field.values.map(v => (
+                  <option key={String(v)} value={String(v)}>{String(v)}</option>
+                ))}
+              </select>
+            </div>
+          )
+        }
+        if (field.kind === 'number') {
+          return (
+            <div key={field.name}>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <input
+                type="number"
+                min={field.min}
+                max={field.max}
+                value={currentValue}
+                onChange={e => setM1Field(field.name, e.target.value)}
+                disabled={readonly}
+                className={baseInputClass}
+              />
+            </div>
+          )
+        }
+        if (field.kind === 'date') {
+          return (
+            <div key={field.name}>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <input
+                type="text"
+                value={currentValue}
+                onChange={e => setM1Field(field.name, e.target.value)}
+                disabled={readonly}
+                placeholder="DD/MM/AAAA o ISO"
+                className={baseInputClass}
+              />
+            </div>
+          )
+        }
+        return (
+          <div key={field.name} className={field.name.includes('doc_prost') ? 'col-span-full' : undefined}>
+            <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+            <input
+              type="text"
+              value={currentValue}
+              onChange={e => setM1Field(field.name, e.target.value)}
+              disabled={readonly}
+              className={baseInputClass}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function AntecedentesCaptura({
   value,
   onChange,
@@ -284,15 +377,18 @@ export function AntecedentesCaptura({
   workerId,
   readonly = false,
   onContinue,
+  modulo1,
+  onModulo1Change,
+  antecedentesMedico = '',
+  onAntecedentesMedicoChange,
+  portalPrefillHint = false,
 }: AntecedentesCapturaProps) {
-  // Estado local de edición — espejo del `value` controlado que pasa el padre.
   const [form, setForm] = useState(() => sectionsFromValue(value))
   const [modified, setModified] = useState<Set<string>>(new Set())
-  // IMPL-20260817-06 — field de la enfermedad patológica actualmente
-  // expandida para edición (acordeón). `null` = todas colapsadas (mostrar
-  // resumen cuando hay contenido, mostrar inputs cuando están vacíos).
-  // El colapso se decide por `hasDetalleContent` + `focusedField === field`.
-  const [focusedPatologiaField, setFocusedPatologiaField] = useState<string | null>(null)
+
+  function setM1Field(name: string, raw: string) {
+    onModulo1Change({ ...modulo1, [name]: raw })
+  }
 
   // IMPL-20260817-05 (fix bug acordeón Patologicos no colapsa al cambiar a NEGADO).
   // Frank reportó: al pasar de SÍ a NEGADO en una enfermedad, los 3 inputs
@@ -350,10 +446,6 @@ export function AntecedentesCaptura({
           : patch.detalle !== undefined
             ? patch.detalle
             : current.detalle,
-    }
-    // Sincronizar focus con el cambio de estado (IMPL-20260817-06).
-    if (patch.estado !== undefined) {
-      setFocusedPatologiaField(patch.estado === 'SI' ? field : null)
     }
     const nextForm = {
       ...form,
@@ -436,8 +528,13 @@ export function AntecedentesCaptura({
           <div>
             <p className="text-xs font-bold text-teal-800">Antecedentes — Captura por cita</p>
             <p className="text-[10px] text-teal-600 mt-0.5">
-              Snapshot local del paciente para esta cita. No modifica el historial maestro longitudinal.
+              Cuestionario del paciente + gineco/reproductivos e inmunizaciones para esta cita.
               Se guarda junto con el resto del Examen Médico.
+              {portalPrefillHint && (
+                <span className="ml-1 text-emerald-700 font-semibold">
+                  Snapshot del portal disponible.
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -765,41 +862,17 @@ export function AntecedentesCaptura({
           Patológicos
         </legend>
         <p className="text-[10px] text-slate-500 mt-1 mb-3">
-          Por defecto todos los campos están en NEGADO. Cambiar solo si aplica.
-          Al marcar <strong>SÍ</strong> aparecen 3 inputs: desde cuándo, tratamiento y observaciones.
+          Por defecto NEGADO. Si marca <strong>SÍ</strong>, complete desde cuándo, tratamiento y observaciones (sin acordeón).
         </p>
-        {([
-          ['endocrino',      'Enfermedades Endocrino-Metabólicas'],
-          ['cardiopulmonar', 'Sistema Cardiopulmonar'],
-          ['neurologico',    'Sistema Neurológico'],
-          ['digestivo',      'Sistema Digestivo y Genitourinario'],
-          ['otras',          'Otras Condiciones'],
-        ] as const).map(([group, title]) => (
+        {PATOLOGICOS_GROUP_ORDER.map(group => (
           <div key={group} className="mb-4 last:mb-0">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">{title}</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+              {PATOLOGICOS_GROUP_TITLES[group]}
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {PATOLOGICOS_DESCRIPCIONES[group].map(item => {
-                // IMPL-20260817-04 — acordeón Sí/Negado/No Aplica + 3 campos
-                // condicionales (desde_cuando / tratamiento / observaciones).
-                // El campo legacy `especifique` se eliminó: se captura ahora
-                // en `otras.detalle.observaciones`.
-                //
-                // IMPL-20260817-06 — variante UX aprobada por Frank en junta
-                // AMI 10/ago: acordeón colapsable con resumen.
-                //   - estado NEGADO / NO APLICA: card pequeño (solo select)
-                //   - estado SÍ + 3 campos vacíos: inputs desplegados
-                //   - estado SÍ + 3 campos con contenido: resumen colapsado
-                //     (click para editar — auto-focus)
-                //   - click en OTRA enfermedad: la actual colapsa
-                //     automáticamente (focusedPatologiaField cambia al nuevo)
                 const entry = form.patologicos[item.field] ?? emptyPatologia()
                 const detalle = entry.detalle ?? emptyDetalle()
-                const isFocused = focusedPatologiaField === item.field
-                // Mostrar inputs solo si: estado SÍ AND (focused OR vacío)
-                const showInputs = entry.estado === 'SI' && (isFocused || !hasDetalleContent(detalle))
-                // Mostrar resumen cuando estado SÍ pero NO mostramos inputs
-                // (tiene contenido y no está focused).
-                const showSummary = entry.estado === 'SI' && !showInputs
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
@@ -820,82 +893,41 @@ export function AntecedentesCaptura({
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
-                    {showSummary && (
-                      // IMPL-20260817-06 — resumen colapsado (estado SÍ con
-                      // contenido). Click expande para editar.
-                      <button
-                        type="button"
-                        onClick={() => setFocusedPatologiaField(item.field)}
-                        className="w-full text-left mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs hover:bg-emerald-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-1 font-medium text-emerald-800 mb-1">
-                          <span>✓</span>
-                          <span>{item.label}</span>
-                          <span className="text-emerald-600 ml-auto text-[10px]">click para editar</span>
-                        </div>
-                        <div className="text-slate-600 space-y-0.5">
-                          {detalle.desde_cuando && (
-                            <p><span className="font-medium">Desde:</span> {detalle.desde_cuando}</p>
-                          )}
-                          {detalle.tratamiento && (
-                            <p><span className="font-medium">Tratamiento:</span> {detalle.tratamiento}</p>
-                          )}
-                          {detalle.observaciones && (
-                            <p><span className="font-medium">Observaciones:</span> {detalle.observaciones}</p>
-                          )}
-                        </div>
-                      </button>
-                    )}
-                    {showInputs && (
+                    {entry.estado === 'SI' && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
-                        <div>
-                          <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
-                            Desde cuándo
-                          </label>
-                          <input
-                            type="text"
-                            value={detalle.desde_cuando}
-                            onChange={e => updatePatologia(item.field, {
-                              detalle: { ...detalle, desde_cuando: e.target.value },
-                            })}
-                            disabled={readonly}
-                            placeholder="ej: 15 años, 2019"
-                            maxLength={200}
-                            className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
-                            Tratamiento
-                          </label>
-                          <textarea
-                            value={detalle.tratamiento}
-                            onChange={e => updatePatologia(item.field, {
-                              detalle: { ...detalle, tratamiento: e.target.value },
-                            })}
-                            disabled={readonly}
-                            placeholder="ej: Metformina 500mg cada 24h"
-                            rows={2}
-                            maxLength={500}
-                            className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
-                            Observaciones
-                          </label>
-                          <textarea
-                            value={detalle.observaciones}
-                            onChange={e => updatePatologia(item.field, {
-                              detalle: { ...detalle, observaciones: e.target.value },
-                            })}
-                            disabled={readonly}
-                            placeholder="ej: HbA1c 6.5%, sin complicaciones"
-                            rows={3}
-                            maxLength={1500}
-                            className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
-                          />
-                        </div>
+                        <input
+                          type="text"
+                          value={detalle.desde_cuando}
+                          onChange={e => updatePatologia(item.field, {
+                            detalle: { ...detalle, desde_cuando: e.target.value },
+                          })}
+                          disabled={readonly}
+                          placeholder="Desde cuándo"
+                          maxLength={200}
+                          className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                        />
+                        <textarea
+                          value={detalle.tratamiento}
+                          onChange={e => updatePatologia(item.field, {
+                            detalle: { ...detalle, tratamiento: e.target.value },
+                          })}
+                          disabled={readonly}
+                          placeholder="Tratamiento"
+                          rows={2}
+                          maxLength={500}
+                          className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
+                        />
+                        <textarea
+                          value={detalle.observaciones}
+                          onChange={e => updatePatologia(item.field, {
+                            detalle: { ...detalle, observaciones: e.target.value },
+                          })}
+                          disabled={readonly}
+                          placeholder="Observaciones"
+                          rows={2}
+                          maxLength={1500}
+                          className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
+                        />
                       </div>
                     )}
                   </div>
@@ -906,6 +938,117 @@ export function AntecedentesCaptura({
         ))}
       </fieldset>
 
+      {/* ── Sexo (condicional gine / repro) ───────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4">
+        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Sexo</span>
+        <div className="flex gap-2">
+          {M1_SEX_OPTIONS.map(opt => (
+            <button
+              key={opt}
+              type="button"
+              disabled={readonly}
+              onClick={() => setM1Field('m1_sexo', opt)}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg border-2 transition-colors ${
+                modulo1.m1_sexo === opt
+                  ? 'bg-teal-100 border-teal-400 text-teal-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {modulo1.m1_sexo === 'Femenino' && (
+        <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
+          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+            Antecedentes ginecológicos
+          </legend>
+          <div className="mt-2">
+            {renderModulo1Fields(GINE_FIELDS, modulo1, setM1Field, readonly)}
+          </div>
+        </fieldset>
+      )}
+
+      {modulo1.m1_sexo === 'Masculino' && (
+        <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
+          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+            Antecedentes reproductivos — salud prostática
+          </legend>
+          <div className="mt-2">
+            {renderModulo1Fields(REPRO_FIELDS, modulo1, setM1Field, readonly)}
+          </div>
+        </fieldset>
+      )}
+
+      <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
+        <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          Inmunizaciones
+        </legend>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
+          {VACUNAS_CAPTURE_LIST.map(({ key, label }) => {
+            const estado = modulo1[key] ?? 'NEGADO'
+            const especifiqueKey = `${key}_especifique`
+            const especifique = modulo1[especifiqueKey] ?? ''
+            return (
+              <div key={key} className="border border-slate-100 rounded-lg p-2">
+                <label className="block text-[10px] font-bold text-slate-600 uppercase">{label}</label>
+                <select
+                  value={estado}
+                  onChange={e => setM1Field(key, e.target.value)}
+                  disabled={readonly}
+                  className="w-full text-xs px-2 py-1 border border-slate-200 rounded-lg mt-1 focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                >
+                  {VAC_SI_NO_VALUES.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                {estado === 'SI' && (
+                  <input
+                    type="text"
+                    value={especifique}
+                    onChange={e => setM1Field(especifiqueKey, e.target.value)}
+                    disabled={readonly}
+                    placeholder="Dosis / fecha / esquema"
+                    maxLength={200}
+                    className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded mt-2 focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-3">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">Próxima dosis / esquema completo</label>
+          <input
+            type="text"
+            value={modulo1.m1_vac_proxima_dosis ?? ''}
+            onChange={e => setM1Field('m1_vac_proxima_dosis', e.target.value)}
+            disabled={readonly}
+            className="w-full mt-1 text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+          />
+        </div>
+      </fieldset>
+
+      {onAntecedentesMedicoChange && (
+        <div className="bg-white border border-slate-200 rounded-xl p-3">
+          <label className="block">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Nota del médico — resumen de antecedentes
+            </span>
+            <textarea
+              rows={3}
+              value={antecedentesMedico}
+              onChange={e => onAntecedentesMedicoChange(e.target.value)}
+              disabled={readonly}
+              placeholder="Resumen de antecedentes relevantes para el expediente..."
+              className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+            />
+          </label>
+        </div>
+      )}
+
       {/* ── Footer: sin botón guardar propio — persistencia integrada ─── */}
       {readonly ? (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-400 text-center">
@@ -913,25 +1056,26 @@ export function AntecedentesCaptura({
         </div>
       ) : (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700">
-          💾 Los cambios se guardan junto con el Examen Médico (botón
-          &ldquo;Guardar borrador&rdquo; de Módulo 1, Exploración o Impresión/Aptitud).
+          💾 Los cambios se guardan con el botón &ldquo;Guardar borrador&rdquo; en Exploración o Impresión.
         </div>
       )}
 
       {/* ── Navegación a la siguiente sub-pestaña ────────────────────────
           IMPL-20260809-03 — affordance UX al pie de Antecedentes
           (SPEC ARCH-20260809-01 v2 §6.9). El botón salta a Módulo 1
-          (inner-tab 'declarativa'); se deshabilita en modo readonly. */}
-      <div className="flex justify-end pt-1">
-        <button
-          type="button"
-          onClick={onContinue}
-          disabled={readonly}
-          className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
-        >
-          Continuar → Módulo 1
-        </button>
-      </div>
+          se deshabilita en modo readonly. */}
+      {onContinue && (
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={onContinue}
+            disabled={readonly}
+            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+          >
+            Continuar → Exploración Física
+          </button>
+        </div>
+      )}
     </div>
   )
 }

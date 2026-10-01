@@ -2,7 +2,7 @@
  * @fileoverview Formulario real del estudio "Examen Médico" dentro de la Papeleta de Estudios.
  * Implementa 4 outer-tabs: Somatometría, Signos Vitales, Agudeza Visual y Examen Médico.
  * Las outer-tabs 1-3 son prerrequisito para acceder a la outer-tab 4 (Examen Médico),
- * que contiene 4 inner-tabs: Antecedentes, Módulo 1, Exploración Física e Impresión/Aptitud.
+ * que contiene inner-tabs: Antecedentes (incl. gineco/vacunas), Exploración Física e Impresión/Aptitud.
  * IMPL-20260809-02 (ARCH-20260809-01 v2): 'Antecedentes' es la PRIMERA inner-tab dentro
  * de "Examen Médico" (snapshot por cita en `physicalExamData.antecedentes_captured`,
  * persistido vía `saveExamenMedicoPapeleta`).
@@ -53,14 +53,6 @@ import {
   AGUDEZA_VISUAL_RESUMEN_VALUES,
   PRESION_ARTERIAL_RESUMEN_VALUES,
   applyExploracionFisicaDefaults,
-  // IMPL-20260817-07: catálogos ZIN para Módulo 1 (ginecológicos + vacunas).
-  // Ver SPEC §4.6.
-  AG_VSA_VALUES,
-  AG_GINE_MPF_VALUES,
-  AG_NUMERIC_0_11,
-  AG_ABORTO_VALUES,
-  AR_MPF_VALUES,
-  VAC_SI_NO_VALUES,
   COLUMNA_VERTEBRAL_DESVIADA,
   PLANTILLAS_EF,
 } from "@/schemas/clinical/exam.schema"
@@ -105,8 +97,7 @@ type ExamData = {
 type OuterTab = 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'examen_medico'
 /** Sub-pestañas del Examen Médico clínico (pestaña 4) — IMPL-20260809-02: 'antecedentes'
  *  se añade como PRIMERA inner-tab dentro de "Examen Médico" (sub-pestaña, no outer-tab). */
-type InnerTab = 'antecedentes' | 'declarativa' | 'exploracion' | 'extension' | 'impresion'
-type M1Tab = 'gine' | 'repro' | 'inmuno'
+type InnerTab = 'antecedentes' | 'exploracion' | 'extension' | 'impresion'
 
 const VISUAL_FIELDS_NAMES = [
   'vision_lejana_od', 'vision_lejana_oi',
@@ -249,168 +240,6 @@ const VISUAL_FIELDS: { name: string; label: string }[] = [
 ]
 
 const NO_APLICA = VISION_SNELLEN_NO_APLICA
-const SEX_OPTIONS = ['Femenino', 'Masculino'] as const
-const LONGITUDINAL_SECTIONS: [string, string][] = [
-  ['datos_personales', 'Datos Personales'],
-  ['historia_laboral', 'Historia Laboral'],
-  ['heredo_familiares', 'Heredo-Familiares'],
-  // IMPL-20260809-01 (ARCH-20260809-01): las 2 secciones que el loader antes
-  // omitía en `longitudinalData`. Ahora se exponen para que el `<details>`
-  // readonly del Módulo 1 muestre las 5 secciones declarativas completas.
-  ['no_patologicos', 'No Patológicos'],
-  ['patologicos', 'Patológicos'],
-]
-/**
- * IMPL-20260817-07 — Módulo 1 Ginecológicos → select con catálogo ZIN.
- * Cada campo declara su `kind` para el render correcto:
- *   - `select` → <select> con valores ZIN (8 campos).
- *   - `number` → <input type="number"> con min/max (menarca 0-30).
- *   - `date` → <input type="date"> (FUM, FUP/FUC — texto legacy, sigue
- *     siendo text para no romper fechas DD/MM/YYYY que ya había capturado).
- *   - `text` → input text (exp_mamaria = plantilla prellenada).
- * Mantenemos text para fechas para no invalidar fechas legacy.
- * Ver SPEC §4.6.
- */
-type M1FieldKind = 'select' | 'number' | 'date' | 'text'
-
-type M1FieldDef = {
-  name: string
-  label: string
-  kind: M1FieldKind
-  /** Catálogo ZIN cuando kind === 'select'. */
-  values?: readonly (string | number)[]
-  /** min/max para kind === 'number'. */
-  min?: number
-  max?: number
-}
-
-const GINE_FIELDS_TYPES: M1FieldDef[] = [
-  { name: 'm1_gine_menarca', label: 'Menarca', kind: 'number', min: 0, max: 30 },
-  { name: 'm1_gine_fum', label: 'FUM', kind: 'date' },
-  { name: 'm1_gine_ritmo', label: 'Ritmo', kind: 'select', values: AG_VSA_VALUES },
-  { name: 'm1_gine_gesta', label: 'Gesta', kind: 'select', values: AG_NUMERIC_0_11 },
-  { name: 'm1_gine_aborto', label: 'Aborto', kind: 'select', values: AG_ABORTO_VALUES },
-  { name: 'm1_gine_parto', label: 'Parto', kind: 'select', values: AG_NUMERIC_0_11 },
-  { name: 'm1_gine_cesarea', label: 'Cesárea', kind: 'select', values: AG_NUMERIC_0_11 },
-  { name: 'm1_gine_doc', label: 'DOC', kind: 'select', values: AG_VSA_VALUES },
-  { name: 'm1_gine_fup_uc', label: 'FUP/FUC', kind: 'date' },
-  { name: 'm1_gine_exp_mamaria', label: 'Exp. Mamaria', kind: 'text' },
-  { name: 'm1_gine_mpf', label: 'MPF', kind: 'select', values: AG_GINE_MPF_VALUES },
-]
-
-/** Módulo 1 — Antecedentes reproductivos masculinos (ZIN `PanelAtecedentesRepro`). */
-const REPRO_FIELDS_TYPES: M1FieldDef[] = [
-  { name: 'm1_repro_doc_prostata', label: 'D.O.C. Próstata (Salud prostática)', kind: 'text' },
-  { name: 'm1_repro_mpf', label: 'M.P.F', kind: 'select', values: AR_MPF_VALUES },
-]
-
-function renderModulo1FieldGrid(
-  fields: M1FieldDef[],
-  modulo1: Record<string, string>,
-  setM1Field: (name: string, value: string) => void,
-  readonly: boolean,
-) {
-  const baseInputClass =
-    'w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60'
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      {fields.map(field => {
-        const currentValue = modulo1[field.name] ?? ''
-        if (field.kind === 'select' && field.values) {
-          const isLegacy =
-            currentValue !== '' && !field.values.includes(currentValue as never)
-          return (
-            <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
-              <select
-                value={isLegacy ? '__legacy__' : currentValue}
-                onChange={e => {
-                  if (e.target.value === '__legacy__') return
-                  setM1Field(field.name, e.target.value)
-                }}
-                disabled={readonly}
-                className={baseInputClass}
-              >
-                <option value="">—</option>
-                {isLegacy && (
-                  <option value="__legacy__">{currentValue} (legacy)</option>
-                )}
-                {field.values.map(v => (
-                  <option key={String(v)} value={String(v)}>
-                    {String(v)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )
-        }
-        if (field.kind === 'number') {
-          return (
-            <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
-              <input
-                type="number"
-                min={field.min}
-                max={field.max}
-                value={currentValue}
-                onChange={e => setM1Field(field.name, e.target.value)}
-                disabled={readonly}
-                className={baseInputClass}
-              />
-            </div>
-          )
-        }
-        if (field.kind === 'date') {
-          return (
-            <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
-              <input
-                type="text"
-                value={currentValue}
-                onChange={e => setM1Field(field.name, e.target.value)}
-                disabled={readonly}
-                placeholder="DD/MM/AAAA"
-                className={baseInputClass}
-              />
-            </div>
-          )
-        }
-        return (
-          <div key={field.name} className={field.name.includes('doc_prost') ? 'col-span-full' : undefined}>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
-            <input
-              type="text"
-              value={currentValue}
-              onChange={e => setM1Field(field.name, e.target.value)}
-              disabled={readonly}
-              className={baseInputClass}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/**
- * IMPL-20260817-07 — Módulo 1 Vacunas → acordeón Sí/No + 'especifique'.
- * Mismo patrón que Patologicos (commit `80fa3ad`):
- *   - <select> con VAC_SI_NO_VALUES (NEGADO / SI / NO APLICA).
- *   - Si estado === 'SI' Y (focused OR sin especifique) → inputs desplegados.
- *   - Si estado === 'SI' Y tiene especifique Y no focused → resumen colapsado.
- *   - Click en resumen → expande para editar.
- * Ver SPEC §4.6.
- */
-const VACUNAS_LIST: { key: string; label: string }[] = [
-  { key: 'm1_vac_rubeola', label: 'Rubéola' },
-  { key: 'm1_vac_neumococo', label: 'Neumococo' },
-  { key: 'm1_vac_sarampion', label: 'Sarampión' },
-  { key: 'm1_vac_influenza', label: 'Influenza' },
-  { key: 'm1_vac_toxoide', label: 'Toxoide Tetánico' },
-  { key: 'm1_vac_hepatitisb', label: 'Hepatitis B' },
-  { key: 'm1_vac_otras', label: 'Otras' },
-]
 const RESUMEN_CLINICO_FIELDS: [string, string][] = [
   ['estado_nutricional', 'Estado Nutricional'],
   ['salud_bucal', 'Salud Bucal'],
@@ -575,12 +404,6 @@ export default function ExamenMedicoEstudio({
         : {}
     )
   })
-  const [m1Tab, setM1Tab] = useState<M1Tab>('inmuno')
-  // IMPL-20260817-07: acordeón Vacunas — campo enfocado (mismo patrón que
-  // `focusedPatologiaField` de AntecedentesCaptura). Si es null, todos los
-  // acordeones con contenido se muestran colapsados.
-  const [focusedVacuna, setFocusedVacuna] = useState<string | null>(null)
-
   // IMPL-20260809-02 (ARCH-20260809-01 v2): estado levantado de `antecedentes_captured`.
   // Mismo patrón que `modulo1`: se inicializa desde `physicalExamData.antecedentes_captured`
   // (snapshot persistido) con fallback a `{}` cuando aún no hay captura. Se incluye en
@@ -733,19 +556,13 @@ export default function ExamenMedicoEstudio({
     return typeof v === 'string' && v.toUpperCase().includes('POSITIVO')
   }) || normalizeQuisteEstado(form.presencia_quiste_sinovial) === 'POSITIVO'
 
-  const longitudinalReference = prefilledData ?? longitudinalData ?? null
-  const hasLongitudinalReference = !!longitudinalReference && Object.keys(longitudinalReference).length > 0
-  const longitudinalReferenceLabel = prefilledData
-    ? 'Snapshot del portal disponible abajo.'
-    : 'Resumen longitudinal maestro disponible abajo.'
-
   // IMPL-20260809-01 (ARCH-20260809-01): indicador de completitud para la
   // outer-tab "Antecedentes" — true si hay al menos un campo no vacío en
   // el snapshot `antecedentes_captured` previamente persistido.
   const capturedAntecedentes = physicalExamData.antecedentes_captured as
     | Record<string, unknown>
     | undefined
-  const hasAntecedentes = (() => {
+  const hasAntecedentesSnapshot = (() => {
     if (!capturedAntecedentes || typeof capturedAntecedentes !== 'object') return false
     const sections = [
       'datos_personales', 'historia_laboral', 'heredo_familiares',
@@ -761,6 +578,7 @@ export default function ExamenMedicoEstudio({
     }
     return false
   })()
+  const hasAntecedentes = hasAntecedentesSnapshot || hasM1
 
   // IMPL-20260809-02 (ARCH-20260809-01 v2): inner-tabs reordenadas — 'antecedentes' es
   // la PRIMERA sub-pestaña dentro de "Examen Médico", seguida de Módulo 1, Exploración
@@ -774,7 +592,6 @@ export default function ExamenMedicoEstudio({
 
   const innerTabs: { id: InnerTab; label: string; icon: string; done: boolean }[] = [
     { id: 'antecedentes', label: 'Antecedentes', icon: '🩺', done: hasAntecedentes },
-    { id: 'declarativa', label: 'Módulo 1', icon: '📋', done: hasM1 },
     { id: 'exploracion', label: 'Exploración Física', icon: '🩻', done: hasPhysicalExam },
     ...(examVariant !== 'AMI'
       ? [{
@@ -1115,16 +932,6 @@ export default function ExamenMedicoEstudio({
       locked: !canAccessExamen,
     },
   ]
-  const modulo1Tabs: [M1Tab, string, string][] = [
-    ...(modulo1['m1_sexo'] === 'Femenino'
-      ? [['gine', '♀️', 'Ginecológicos'] as [M1Tab, string, string]]
-      : []),
-    ...(modulo1['m1_sexo'] === 'Masculino'
-      ? [['repro', '♂️', 'Salud prostática'] as [M1Tab, string, string]]
-      : []),
-    ['inmuno', '💉', 'Inmunizaciones'],
-  ]
-
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const showExamenMedicoPanel = outerTab === 'examen_medico'
@@ -1605,258 +1412,16 @@ export default function ExamenMedicoEstudio({
               }
               workerId={workerId}
               readonly={readonly}
-              // IMPL-20260809-03 — affordance UX: saltar a Módulo 1
-              // (SPEC ARCH-20260809-01 v2 §6.9)
-              onContinue={() => setActiveInnerTab('declarativa')}
+              modulo1={modulo1}
+              onModulo1Change={setModulo1}
+              antecedentesMedico={form.antecedentes_medico ?? ''}
+              onAntecedentesMedicoChange={v => handleField('antecedentes_medico', v)}
+              portalPrefillHint={Boolean(prefilledData)}
+              onContinue={() => setActiveInnerTab('exploracion')}
             />
           )}
 
-          {/* ── Sub-tab 2: Módulo 1 — Cuestionario del Paciente ── */}
-          {activeInnerTab === 'declarativa' && (
-        <div className="space-y-3">
-          {/* Banner info */}
-          <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5 flex items-start gap-2">
-            <span className="text-teal-600 text-sm mt-0.5">📋</span>
-            <p className="text-xs text-teal-800">
-              <strong>Módulo 1 — Cuestionario del Paciente.</strong> Captura in-situ dentro del estudio, sin depender del portal público.
-              {prefilledData && (
-                <span className="ml-1 text-emerald-700 font-semibold">
-                  ✓ Snapshot del portal disponible — datos enviados por el trabajador antes de la cita.
-                </span>
-              )}
-            </p>
-          </div>
-
-          {/* Sexo — necesario para condicional ginecológicos */}
-          <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Sexo</span>
-            <div className="flex gap-2">
-                {SEX_OPTIONS.map(opt => (
-                <button
-                  key={opt}
-                  disabled={readonly}
-                  onClick={() => setM1Field('m1_sexo', opt)}
-                  className={`px-4 py-1.5 text-xs font-bold rounded-lg border-2 transition-colors ${
-                    modulo1['m1_sexo'] === opt
-                      ? 'bg-teal-100 border-teal-400 text-teal-800'
-                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
-                  }`}
-                >{opt}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* ARCH-20260326-06: Referencia al snapshot longitudinal + CTA al Historial Clínico maestro */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 flex items-center justify-between gap-3">
-              <div className="flex items-start gap-2">
-                <span className="text-blue-500 text-base mt-0.5">📋</span>
-                <div>
-                  <p className="text-xs font-bold text-blue-800">
-                    Datos longitudinales — ahora en Historial Clínico
-                  </p>
-                  <p className="text-[10px] text-blue-600 mt-0.5">
-                    Datos Personales, Historia Laboral, Heredo-Familiares, Patológicos y No Patológicos
-                    se editan desde el Historial Clínico del trabajador.
-                    {hasLongitudinalReference && <span className="font-semibold"> {longitudinalReferenceLabel}</span>}
-                  </p>
-                </div>
-              </div>
-              {workerId && (
-                <a
-                  href={`/history/${workerId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 px-3 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  Abrir Historial →
-                </a>
-              )}
-            </div>
-            {/* ARCH-20260326-10: Sin snapshot → mensaje de ausencia; con snapshot → panel único (no duplicado) */}
-            {!hasLongitudinalReference && (
-              <div className="px-4 pb-3 pt-1 border-t border-blue-100">
-                <p className="text-[10px] text-blue-500 italic">
-                  Sin referencia longitudinal embebida para esta cita. Consulta el Historial Clínico para ver los datos actualizados.
-                </p>
-              </div>
-            )}
-            {hasLongitudinalReference && (
-              <details className="border-t border-blue-200">
-                <summary className="px-4 py-2 cursor-pointer text-[10px] font-bold text-blue-700 select-none">
-                  {prefilledData
-                    ? 'Ver snapshot del portal (datos declarados por el trabajador antes de esta cita — sólo referencia)'
-                    : 'Ver resumen longitudinal maestro (datos persistentes del Historial Clínico)'}
-                </summary>
-                <div className="px-4 pb-3 pt-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {LONGITUDINAL_SECTIONS.map(([sKey, sLabel]) => {
-                    const section = longitudinalReference[sKey] as Record<string, unknown> | undefined
-                    if (!section || typeof section !== 'object') return null
-                    const entries = Object.entries(section).filter(([, v]) => v !== undefined && v !== '' && v !== null)
-                    if (!entries.length) return null
-                    return (
-                      <div key={sKey} className="col-span-full">
-                        <p className="text-[9px] font-bold text-blue-500 uppercase tracking-wider mb-1">{sLabel}</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-                          {entries.map(([k, v]) => (
-                            <div key={k} className="bg-white/70 rounded px-2 py-1">
-                              <p className="text-[9px] text-blue-400 uppercase">{k.replace(/_/g, ' ')}</p>
-                              <p className="text-[10px] text-blue-900 font-semibold">{String(v)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </details>
-            )}
-          </div>
-
-          {/* Sub-tabs de Módulo 1 — solo antecedentes clínicos de la cita */}
-          <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1">
-              {modulo1Tabs.map(([id, icon, lbl]) => (
-              <button
-                key={id}
-                  onClick={() => setM1Tab(id)}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors flex-1 justify-center ${
-                  m1Tab === id ? 'bg-white shadow text-teal-700' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <span>{icon}</span>
-                <span className="hidden sm:inline">{lbl}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* GINE: Ginecológicos (solo si m1_sexo === Femenino) */}
-          {m1Tab === 'gine' && modulo1['m1_sexo'] === 'Femenino' && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Antecedentes Ginecológicos</p>
-              {renderModulo1FieldGrid(GINE_FIELDS_TYPES, modulo1, setM1Field, readonly)}
-            </div>
-          )}
-
-          {m1Tab === 'repro' && modulo1['m1_sexo'] === 'Masculino' && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Antecedentes Reproductivos — Salud Prostática
-              </p>
-              <p className="text-[10px] text-slate-500">
-                Captura ZIN: D.O.C. próstata y método de planificación familiar (M.P.F.).
-              </p>
-              {renderModulo1FieldGrid(REPRO_FIELDS_TYPES, modulo1, setM1Field, readonly)}
-            </div>
-          )}
-
-          {/* INMUNO: Inmunizaciones */}
-          {m1Tab === 'inmuno' && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Inmunizaciones (reportadas por el paciente)</p>
-              {/* IMPL-20260817-07: acordeón Sí/No + 'especifique' para 7 vacunas.
-                  Mismo patrón que Patologicos (commit `80fa3ad`). Ver SPEC §4.6. */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {VACUNAS_LIST.map(({ key, label }) => {
-                  const estado = (modulo1[key] ?? 'NEGADO') as
-                    | (typeof VAC_SI_NO_VALUES)[number]
-                    | string
-                  const especifiqueKey = `${key}_especifique`
-                  const especifique = modulo1[especifiqueKey] ?? ''
-                  const isFocused = focusedVacuna === key
-                  const hasContent = Boolean(especifique.trim())
-                  const showInputs = estado === 'SI' && (isFocused || !hasContent)
-                  const showSummary = estado === 'SI' && !showInputs
-                  const baseInputClass = "w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                  return (
-                    <div key={key} className="border border-slate-100 rounded-lg p-2 bg-white">
-                      <label className="block text-[10px] font-bold text-slate-600 uppercase">{label}</label>
-                      <select
-                        value={estado}
-                        onChange={e => {
-                          setM1Field(key, e.target.value)
-                          if (e.target.value === 'SI') {
-                            setFocusedVacuna(key)
-                          } else if (focusedVacuna === key) {
-                            setFocusedVacuna(null)
-                          }
-                        }}
-                        disabled={readonly}
-                        className={`w-full text-xs px-2 py-1 border rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60 mt-1 ${
-                          estado === 'SI'
-                            ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                            : estado === 'NO APLICA'
-                              ? 'border-slate-200 bg-slate-50 text-slate-500'
-                              : 'border-slate-200 bg-white text-slate-700'
-                        }`}
-                      >
-                        {VAC_SI_NO_VALUES.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-                      {showSummary && (
-                        <button
-                          type="button"
-                          onClick={() => setFocusedVacuna(key)}
-                          className="w-full text-left mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs hover:bg-emerald-100 transition-colors"
-                        >
-                          <div className="flex items-center gap-1 font-medium text-emerald-800 mb-1">
-                            <span>✓</span>
-                            <span>{label}</span>
-                            <span className="text-emerald-600 ml-auto text-[10px]">click para editar</span>
-                          </div>
-                          <div className="text-slate-600">
-                            <p><span className="font-medium">Especificación:</span> {especifique || '—'}</p>
-                          </div>
-                        </button>
-                      )}
-                      {showInputs && (
-                        <div className="mt-2 space-y-1 p-2 bg-slate-50 rounded border border-slate-100">
-                          <label className="block text-[9px] font-medium text-slate-500 uppercase">
-                            Dosis / Fecha
-                          </label>
-                          <input
-                            type="text"
-                            value={especifique}
-                            onChange={e => setM1Field(especifiqueKey, e.target.value)}
-                            disabled={readonly}
-                            placeholder="ej: 2 dosis, 2023"
-                            maxLength={200}
-                            className={baseInputClass}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Próxima Dosis / Esquema Completo</label>
-                <input type="text" value={modulo1['m1_vac_proxima_dosis'] ?? ''} onChange={e => setM1Field('m1_vac_proxima_dosis', e.target.value)} disabled={readonly}
-                  className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none" />
-              </div>
-            </div>
-          )}
-
-          {/* Nota resumen del médico — siempre visible */}
-          <div className="bg-white border border-slate-200 rounded-xl p-3">
-            <label className="block">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nota del médico — resumen de antecedentes</span>
-              <textarea rows={3} value={form.antecedentes_medico ?? ''} onChange={e => handleField('antecedentes_medico', e.target.value)} disabled={readonly}
-                placeholder="Resumen de antecedentes relevantes para el expediente..."
-                className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60" />
-            </label>
-          </div>
-
-          <div className="flex gap-2">
-            <button onClick={() => setActiveInnerTab('exploracion')}
-              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors">
-              Continuar → Exploración
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Sub-tab 3: Exploración Física ──────────────────────────────── */}
+      {/* ── Sub-tab 2: Exploración Física ──────────────────────────────── */}
           {activeInnerTab === 'exploracion' && (
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -2111,7 +1676,7 @@ export default function ExamenMedicoEstudio({
 
           <div className="flex gap-2">
             <button
-              onClick={() => setActiveInnerTab('declarativa')}
+              onClick={() => setActiveInnerTab('antecedentes')}
               className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold py-2.5 rounded-xl transition-colors"
             >
               ← Antecedentes

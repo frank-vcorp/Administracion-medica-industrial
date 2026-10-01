@@ -502,7 +502,7 @@ test.describe('Flujo End-to-End Completo', () => {
     // Abrir Examen Médico. TC-08 ya habrá completado los prereqs (soma/vitales/
     // visual) en runs previos; este test funciona en cualquier caso siempre que
     // se llegue a la pestaña 4. Tras IMPL-20260809-02 la pestaña 4 expone 4
-    // sub-pestañas: Antecedentes | Módulo 1 | Exploración | Impresión.
+    // sub-pestañas: Antecedentes (incl. gine/vacunas) | Exploración | Impresión.
     await authenticatedPage.locator('button').filter({ hasText: /EXAMEN MEDICO/i }).first().click();
 
     // 1. La sub-pestaña "Antecedentes" es la PRIMERA de las 4 inner-tabs.
