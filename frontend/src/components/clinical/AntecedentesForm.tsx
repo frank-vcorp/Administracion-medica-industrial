@@ -43,6 +43,9 @@ import {
   TURNO_OPTIONS,
   ESTADO_CIVIL_OPTIONS,
   getPatologicosAllFields,
+  SUPLEMENTOS_COMPLEMENTOS_ESPECIFIQUE_PLACEHOLDER,
+  SUPLEMENTOS_COMPLEMENTOS_HELP,
+  SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
 import { hasDetalleContent } from '@/lib/patologicos-accordion'
 import {
@@ -688,8 +691,8 @@ export function AntecedentesForm({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tratamiento médico actual</label>
-                <p className="text-xs text-gray-500 mb-1">Medicamentos o terapias que toma actualmente de forma regular.</p>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{SUPLEMENTOS_COMPLEMENTOS_LABEL}</label>
+                <p className="text-xs text-gray-500 mb-1">{SUPLEMENTOS_COMPLEMENTOS_HELP}</p>
                 <div className="flex gap-2 mt-1">
                   {['NEGADO', 'SI'].map(opt => (
                     <button key={opt} type="button"
@@ -705,7 +708,7 @@ export function AntecedentesForm({
                       type="text"
                       value={noPatologicos.tratamiento_medico_actual_especifique ?? ''}
                       onChange={e => setNoPatologicos(p => ({ ...p, tratamiento_medico_actual_especifique: e.target.value }))}
-                      placeholder="ej: Metformina 850 mg, Losartán 50 mg"
+                      placeholder={SUPLEMENTOS_COMPLEMENTOS_ESPECIFIQUE_PLACEHOLDER}
                       maxLength={500}
                       className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                     />

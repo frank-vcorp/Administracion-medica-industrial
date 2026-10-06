@@ -248,7 +248,16 @@ export function readTatuajesDisplay(
   return readSiEspecifiqueDisplay(noPatologicos, 'tatuajes', 'tatuajes_especifique')
 }
 
-/** Tratamiento médico actual (no patológicos). */
+/** UI/PDF — campo `tratamiento_medico_actual` (clave legacy en BD). */
+export const SUPLEMENTOS_COMPLEMENTOS_LABEL = 'Suplementos y Complementos'
+
+export const SUPLEMENTOS_COMPLEMENTOS_HELP =
+  'Vitaminas, minerales, productos herbolarios u otros complementos que consuma de forma regular (no medicamentos recetados).'
+
+export const SUPLEMENTOS_COMPLEMENTOS_ESPECIFIQUE_PLACEHOLDER =
+  'ej: multivitamínico, vitamina D, omega-3, proteína'
+
+/** Tratamiento médico actual (no patológicos) — display/PDF. */
 export function readTratamientoMedicoActualDisplay(
   noPatologicos: Record<string, unknown> | null | undefined,
 ): string {

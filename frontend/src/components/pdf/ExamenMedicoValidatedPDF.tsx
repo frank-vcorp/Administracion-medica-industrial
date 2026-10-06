@@ -36,6 +36,7 @@ import { ExamenMedicoVariantAppendixPages } from '@/components/pdf/ExamenMedicoV
 import { examenMedicoVariantLabel } from '@/lib/clinical/examen-medico-variant'
 import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
+import { SUPLEMENTOS_COMPLEMENTOS_LABEL } from '@/lib/antecedentes-fields'
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
@@ -524,7 +525,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
               <Text style={styles.value}>{v(data.apnp.alimentacion)}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.label}>Tratamiento médico actual:</Text>
+              <Text style={styles.label}>{SUPLEMENTOS_COMPLEMENTOS_LABEL}:</Text>
               <Text style={styles.value}>{v(data.apnp.tratamientoMedicoActual)}</Text>
             </View>
             <View style={styles.row}>

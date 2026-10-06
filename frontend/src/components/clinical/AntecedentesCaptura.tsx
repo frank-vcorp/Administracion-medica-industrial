@@ -63,6 +63,9 @@ import {
   getPatologicosAllFields,
   PATOLOGICOS_GROUP_ORDER,
   PATOLOGICOS_GROUP_TITLES,
+  SUPLEMENTOS_COMPLEMENTOS_ESPECIFIQUE_PLACEHOLDER,
+  SUPLEMENTOS_COMPLEMENTOS_HELP,
+  SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
 import {
   GINE_FIELDS,
@@ -762,7 +765,7 @@ export function AntecedentesCaptura({
             )
           })}
         </div>
-        {/* Alimentación / Tratamiento médico / Grupo RH / Tatuajes */}
+        {/* Alimentación / Suplementos / Grupo RH / Tatuajes */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Alimentación</label>
@@ -776,8 +779,10 @@ export function AntecedentesCaptura({
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tratamiento médico actual</label>
-            <p className="text-[9px] text-slate-400 mb-1">Medicamentos o terapias que toma actualmente de forma regular.</p>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+              {SUPLEMENTOS_COMPLEMENTOS_LABEL}
+            </label>
+            <p className="text-[9px] text-slate-400 mb-1">{SUPLEMENTOS_COMPLEMENTOS_HELP}</p>
             <div className="flex gap-1">
               {SI_NEGADO.map(opt => (
                 <button key={opt} type="button" disabled={readonly}
@@ -800,7 +805,7 @@ export function AntecedentesCaptura({
                   value={form.no_patologicos.tratamiento_medico_actual_especifique ?? ''}
                   onChange={e => setField('no_patologicos', 'tratamiento_medico_actual_especifique', e.target.value)}
                   disabled={readonly}
-                  placeholder="ej: Metformina 850 mg, Losartán 50 mg"
+                  placeholder={SUPLEMENTOS_COMPLEMENTOS_ESPECIFIQUE_PLACEHOLDER}
                   maxLength={500}
                   className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                 />
