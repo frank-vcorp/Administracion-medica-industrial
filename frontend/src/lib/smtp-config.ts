@@ -38,7 +38,8 @@ async function dbTransport(options?: {
   const row = await prisma.sendGridSmtpConfig.findUnique({
     where: { id: SENDGRID_SMTP_ROW_ID },
   })
-  if (!row?.enabled && !options?.ignoreEnabled) return null
+  if (!row) return null
+  if (!row.enabled && !options?.ignoreEnabled) return null
   if (!row.apiKeyCiphertext || !row.apiKeyNonce || !row.apiKeyTag) return null
 
   let apiKey: string
