@@ -209,7 +209,10 @@ export async function buildDictamenGeneralAmiConsolidado(
   const derivedEventShortId = (id: string): string =>
     id.split('-')[0]?.toUpperCase() ?? ''
 
-  const mapStudiesLabs = (studies: typeof event.studies, labs: typeof event.labs) => ({
+  const mapStudiesLabs = (
+    studies: ReadonlyArray<{ serviceName: string; extractedData: unknown }>,
+    labs: ReadonlyArray<{ serviceName: string; extractedData: unknown }>,
+  ) => ({
     studies: (studies ?? []).map((s) => ({
       serviceName: s.serviceName,
       extractedData: s.extractedData ?? null,

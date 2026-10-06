@@ -323,7 +323,7 @@ export async function completePortalOnboarding(input: {
       mustChangePassword: user.mustChangePassword,
       portalLegalAcceptedAt: user.portalLegalAcceptedAt,
       portalLegalVersion: user.portalLegalVersion,
-    )
+    })
   ) {
     return { success: true }
   }

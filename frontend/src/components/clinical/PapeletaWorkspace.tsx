@@ -80,7 +80,10 @@ import { isAdminLike } from '@/lib/auth/roles'
 import ExtractedPatientIdentityBanner from '@/components/clinical/ExtractedPatientIdentityBanner'
 import PatientNameMismatchModal from '@/components/clinical/PatientNameMismatchModal'
 import DictamenGeneralLabToggle from '@/components/clinical/DictamenGeneralLabToggle'
-import { buildDictamenLabClinicalContext } from '@/lib/clinical/dictamen-lab-papeleta'
+import {
+  buildDictamenLabClinicalContext,
+  type DictamenLabClinicalContext,
+} from '@/lib/clinical/dictamen-lab-papeleta'
 import type { PatientNameWarning } from '@/lib/clinical/patient-name-match'
 
 // --- Tipos locales ---
@@ -158,6 +161,7 @@ type StudyTest = {
     | EspirometriaQuestionnairePayload
     | AudiometriaQuestionnairePayload
     | CampimetriaQuestionnairePayload
+    | DictamenLabClinicalContext
     | null
 }
 
