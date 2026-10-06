@@ -11,10 +11,16 @@
 import { getToken } from "next-auth/jwt"
 import { NextRequest, NextResponse } from "next/server"
 import { isAdminLike, isSellerLike } from "@/lib/auth/roles"
-import {
-  PORTAL_PREVIEW_COOKIE,
-  verifyPortalPreviewCookieValue,
-} from "@/lib/portal-preview"
+
+/** Debe coincidir con `PORTAL_PREVIEW_COOKIE` en portal-preview.ts (sin importar node:crypto aquí). */
+const PORTAL_PREVIEW_COOKIE = "ami_portal_preview"
+
+/** Gate de routing en Edge; la verificación HMAC completa ocurre en server actions. */
+function previewCompanyIdFromCookie(raw: string | undefined): string | null {
+  if (!raw) return null
+  const match = /^([0-9a-f-]{36})\.[0-9a-f]{24}$/i.exec(raw)
+  return match?.[1] ?? null
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -66,7 +72,7 @@ export async function middleware(request: NextRequest) {
   // Protección específica para /portal/*
   if (pathname.startsWith("/portal")) {
     const previewRaw = request.cookies.get(PORTAL_PREVIEW_COOKIE)?.value
-    const previewCompanyId = verifyPortalPreviewCookieValue(previewRaw)
+    const previewCompanyId = previewCompanyIdFromCookie(previewRaw)
     const isStaffPortalPreview =
       !!previewCompanyId &&
       (isAdminLike(token.role as string) || isSellerLike(token.role as string))
