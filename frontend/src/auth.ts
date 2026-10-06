@@ -14,6 +14,8 @@ import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import bcryptjs from "bcryptjs"
 import prisma from "@/lib/prisma"
+import { UserRole } from "@prisma/client"
+import { portalOnboardingRequired } from "@/lib/portal-legal"
 
 /**
  * Helper defensivo para comparar contraseñas con bcryptjs v3
@@ -64,12 +66,33 @@ export const authOptions: NextAuthOptions = {
               role: true,
               isActive: true,
               companyId: true,
+              mustChangePassword: true,
+              portalLegalAcceptedAt: true,
+              portalLegalVersion: true,
             },
           })
 
           if (!user || !user.isActive) {
             // FIX REFERENCE: FIX-20260225-02 - Mensaje genérico para evitar enumeración de usuarios
             throw new Error("Credenciales inválidas")
+          }
+
+          if (user.role === UserRole.COMPANY_CLIENT) {
+            if (!user.companyId) {
+              throw new Error("Credenciales inválidas")
+            }
+            const company = await prisma.company.findUnique({
+              where: { id: user.companyId },
+              select: { portalEnabled: true, estado: true },
+            })
+            if (
+              !company?.portalEnabled ||
+              company.estado !== "HABILITADO"
+            ) {
+              throw new Error(
+                "El portal no está habilitado para su empresa. Contacte a AMI.",
+              )
+            }
           }
 
           // FIX REFERENCE: FIX-20260303-01 - Usar safeCompare para interop bcryptjs v3
@@ -89,6 +112,8 @@ export const authOptions: NextAuthOptions = {
             name: user.fullName,
             role: user.role,
             companyId: user.companyId,
+            mustChangePassword: user.mustChangePassword,
+            portalOnboardingRequired: portalOnboardingRequired(user),
           }
         } catch (error: unknown) {
           // FIX REFERENCE: FIX-20260303-01 - Log detallado para diagnosticar 401 en producción
@@ -107,7 +132,39 @@ export const authOptions: NextAuthOptions = {
         token.name = user.name || ""
         token.role = user.role
         token.companyId = user.companyId
+        token.mustChangePassword = Boolean(
+          (user as { mustChangePassword?: boolean }).mustChangePassword,
+        )
+        token.portalOnboardingRequired = Boolean(
+          (user as { portalOnboardingRequired?: boolean }).portalOnboardingRequired,
+        )
       }
+
+      if (token.role === UserRole.COMPANY_CLIENT && token.id) {
+        const portalUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: {
+            isActive: true,
+            companyId: true,
+            mustChangePassword: true,
+            portalLegalAcceptedAt: true,
+            portalLegalVersion: true,
+          },
+        })
+        if (!portalUser?.isActive || !portalUser.companyId) {
+          token.portalBlocked = true
+        } else {
+          const company = await prisma.company.findUnique({
+            where: { id: portalUser.companyId },
+            select: { portalEnabled: true, estado: true },
+          })
+          token.portalBlocked =
+            !company?.portalEnabled || company.estado !== "HABILITADO"
+          token.mustChangePassword = portalUser.mustChangePassword
+          token.portalOnboardingRequired = portalOnboardingRequired(portalUser)
+        }
+      }
+
       return token
     },
     async session({ session, token }) {

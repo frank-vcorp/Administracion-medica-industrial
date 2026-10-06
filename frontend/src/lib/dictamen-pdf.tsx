@@ -297,33 +297,57 @@ export async function renderDictamenGeneralPdfForEvent(
         })
       : []
 
-  const consolidatedBlocks = [
+  const {
+    applyEventDictamenLabFilters,
+    groupEventTestsByEventId,
+  } = await import('@/lib/clinical/dictamen-lab-papeleta')
+  const eventTestsForDictamenFilter = await prisma.eventTest.findMany({
+    where: { eventId: { in: atencionResolution.eventIds } },
+    select: {
+      eventId: true,
+      testNameSnapshot: true,
+      clinicalContext: true,
+    },
+  })
+  const eventTestsByEventId = groupEventTestsByEventId(eventTestsForDictamenFilter)
+
+  const mapStudiesLabs = (
+    studies: typeof event.studies,
+    labs: typeof event.labs,
+  ) => ({
+    studies: studies.map((st) => ({
+      serviceName: st.serviceName,
+      extractedData: st.extractedData,
+    })),
+    labs: labs.map((lb) => ({
+      serviceName: lb.serviceName,
+      extractedData: lb.extractedData,
+    })),
+  })
+
+  const currentBlock = applyEventDictamenLabFilters(
     {
       eventId: event.id,
       eventShortId: deriveEventShortId(event.id),
       isCurrent: true,
-      studies: event.studies.map((st) => ({
-        serviceName: st.serviceName,
-        extractedData: st.extractedData,
-      })),
-      labs: event.labs.map((lb) => ({
-        serviceName: lb.serviceName,
-        extractedData: lb.extractedData,
-      })),
+      ...mapStudiesLabs(event.studies, event.labs),
     },
-    ...siblingEventsData.map((sib) => ({
-      eventId: sib.id,
-      eventShortId: deriveEventShortId(sib.id),
-      isCurrent: false,
-      studies: sib.studies.map((st) => ({
-        serviceName: st.serviceName,
-        extractedData: st.extractedData,
-      })),
-      labs: sib.labs.map((lb) => ({
-        serviceName: lb.serviceName,
-        extractedData: lb.extractedData,
-      })),
-    })),
+    eventTestsByEventId.get(event.id) ?? [],
+  )
+
+  const consolidatedBlocks = [
+    currentBlock,
+    ...siblingEventsData.map((sib) =>
+      applyEventDictamenLabFilters(
+        {
+          eventId: sib.id,
+          eventShortId: deriveEventShortId(sib.id),
+          isCurrent: false,
+          ...mapStudiesLabs(sib.studies, sib.labs),
+        },
+        eventTestsByEventId.get(sib.id) ?? [],
+      ),
+    ),
   ]
 
   return renderDictamenInputToMemory({
@@ -343,14 +367,8 @@ export async function renderDictamenGeneralPdfForEvent(
       finalDiagnosis: event.verdict.finalDiagnosis,
       recommendations: event.verdict.recommendations ?? null,
       validator: { fullName: event.verdict.validator.fullName },
-      studies: event.studies.map((st) => ({
-        serviceName: st.serviceName,
-        extractedData: st.extractedData,
-      })),
-      labs: event.labs.map((lb) => ({
-        serviceName: lb.serviceName,
-        extractedData: lb.extractedData,
-      })),
+      studies: currentBlock.studies,
+      labs: currentBlock.labs,
       consolidatedEvents: consolidatedBlocks,
     },
   })

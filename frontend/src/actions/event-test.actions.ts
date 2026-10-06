@@ -27,6 +27,10 @@ import { writeTimelineEntry } from "@/lib/timeline.service"
 import { TimelineEntryType } from "@prisma/client"
 import { evaluatePatientNameForEvent } from '@/lib/clinical/patient-name-match'
 import type { PatientNameWarning } from '@/lib/clinical/patient-name-match'
+import {
+  buildDictamenLabClinicalContext,
+  isDictamenOptionalLabTest,
+} from '@/lib/clinical/dictamen-lab-papeleta'
 
 async function maybeCropEspirometrySourceAfterUpload(
   eventTestId: string,
@@ -1582,6 +1586,52 @@ export async function regenerateStudyAI(
  * @id ARCH-20260518-04
  * @backup context/checkpoints/CHK_IMPL-20260518-04-DOBLE-FLUJO-ARCHIVO-IA.md
  */
+export async function updateEventTestDictamenLabInclusion(
+  eventTestId: string,
+  eventId: string,
+  includeInDictamenGeneral: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  if (!eventTestId || !eventId) {
+    return { success: false, error: 'Parámetros incompletos' }
+  }
+
+  const eventTest = await prisma.eventTest.findUnique({
+    where: { id: eventTestId },
+    select: { id: true, eventId: true, testNameSnapshot: true },
+  })
+  if (!eventTest) {
+    return { success: false, error: 'El estudio no existe.' }
+  }
+  if (eventTest.eventId !== eventId) {
+    return { success: false, error: 'El estudio no pertenece al evento indicado.' }
+  }
+  if (!isDictamenOptionalLabTest(eventTest.testNameSnapshot)) {
+    return {
+      success: false,
+      error: 'Este estudio no admite configuración de dictamen general.',
+    }
+  }
+
+  try {
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        clinicalContext: buildDictamenLabClinicalContext(
+          includeInDictamenGeneral,
+        ) as unknown as Prisma.InputJsonValue,
+      },
+    })
+    revalidatePath(`/events/${eventId}`)
+    return { success: true }
+  } catch (error) {
+    console.error('[dictamen-lab] updateEventTestDictamenLabInclusion failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al guardar preferencia',
+    }
+  }
+}
+
 export async function clearEventTestFile(
   eventTestId: string,
   eventId: string,

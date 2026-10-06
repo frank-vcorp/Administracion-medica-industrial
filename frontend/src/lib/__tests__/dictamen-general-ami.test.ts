@@ -27,12 +27,28 @@ const mockMedicalEventFindUnique = vi.fn()
 // `findMany` por defecto devuelve `[]` (cero siblings) — los tests que
 // necesitan siblings lo mockean específicamente con `mockResolvedValueOnce`.
 const mockMedicalEventFindMany = vi.fn().mockResolvedValue([])
+const mockEventTestFindMany = vi.fn().mockResolvedValue([])
+
+function testPrismaClient() {
+  return {
+    medicalEvent: {
+      findUnique: (...a: unknown[]) => mockMedicalEventFindUnique(...a),
+      findMany: (...a: unknown[]) => mockMedicalEventFindMany(...a),
+    },
+    eventTest: {
+      findMany: (...a: unknown[]) => mockEventTestFindMany(...a),
+    },
+  } as never
+}
 
 vi.mock('@/lib/prisma', () => ({
   default: {
     medicalEvent: {
       findUnique: (...a: unknown[]) => mockMedicalEventFindUnique(...a),
       findMany: (...a: unknown[]) => mockMedicalEventFindMany(...a),
+    },
+    eventTest: {
+      findMany: (...a: unknown[]) => mockEventTestFindMany(...a),
     },
   },
 }))
@@ -41,11 +57,13 @@ const { buildDictamenGeneralAmiConsolidado, hasConsolidation } =
   await import('@/lib/dictamen-general-ami')
 
 import { beforeEach } from 'vitest'
+import { buildDictamenLabClinicalContext } from '@/lib/clinical/dictamen-lab-papeleta'
 
 // Reset de mocks entre tests (Vitest no lo hace por defecto).
 beforeEach(() => {
   mockMedicalEventFindUnique.mockReset()
   mockMedicalEventFindMany.mockReset().mockResolvedValue([])
+  mockEventTestFindMany.mockReset().mockResolvedValue([])
   mockFindSiblingEventsInAtencion.mockReset()
 })
 
@@ -128,12 +146,7 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
     })
 
     await expect(
-      buildDictamenGeneralAmiConsolidado('evt-ghost', {
-        medicalEvent: {
-          findUnique: mockMedicalEventFindUnique,
-          findMany: mockMedicalEventFindMany,
-        },
-      } as never),
+      buildDictamenGeneralAmiConsolidado('evt-ghost', testPrismaClient()),
     ).rejects.toThrow(/Event no encontrado/i)
   })
 
@@ -142,12 +155,7 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
       buildEvent({ hasVerdict: false }) as never,
     )
     await expect(
-      buildDictamenGeneralAmiConsolidado('evt-current', {
-        medicalEvent: {
-          findUnique: mockMedicalEventFindUnique,
-          findMany: mockMedicalEventFindMany,
-        },
-      } as never),
+      buildDictamenGeneralAmiConsolidado('evt-current', testPrismaClient()),
     ).rejects.toThrow(/No hay dictamen/i)
   })
 
@@ -156,12 +164,7 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
       buildEvent({ validatorName: '' }) as never,
     )
     await expect(
-      buildDictamenGeneralAmiConsolidado('evt-current', {
-        medicalEvent: {
-          findUnique: mockMedicalEventFindUnique,
-          findMany: mockMedicalEventFindMany,
-        },
-      } as never),
+      buildDictamenGeneralAmiConsolidado('evt-current', testPrismaClient()),
     ).rejects.toThrow(/identidad/i)
   })
 
@@ -175,12 +178,7 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
       workerId: 'worker-1',
     })
 
-    const result = await buildDictamenGeneralAmiConsolidado('evt-current', {
-      medicalEvent: {
-        findUnique: mockMedicalEventFindUnique,
-        findMany: mockMedicalEventFindMany,
-      },
-    } as never)
+    const result = await buildDictamenGeneralAmiConsolidado('evt-current', testPrismaClient())
 
     expect(result.data.folio).toBe('verdict-1')
     expect(result.verdict?.id).toBe('verdict-1')
@@ -215,12 +213,7 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
       },
     ])
 
-    const result = await buildDictamenGeneralAmiConsolidado('evt-current', {
-      medicalEvent: {
-        findUnique: mockMedicalEventFindUnique,
-        findMany: mockMedicalEventFindMany,
-      },
-    } as never)
+    const result = await buildDictamenGeneralAmiConsolidado('evt-current', testPrismaClient())
 
     expect(result.data.consolidatedEvents).toHaveLength(3)
     expect(result.data.consolidatedEvents?.[0].isCurrent).toBe(true)
@@ -246,12 +239,7 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
       workerId: 'worker-1',
     })
 
-    const result = await buildDictamenGeneralAmiConsolidado('evt-current', {
-      medicalEvent: {
-        findUnique: mockMedicalEventFindUnique,
-        findMany: mockMedicalEventFindMany,
-      },
-    } as never)
+    const result = await buildDictamenGeneralAmiConsolidado('evt-current', testPrismaClient())
 
     expect(result.data.medico.fullName).toBe('Dr. Snapshot Original')
     expect(result.data.medico.professionalLicense).toBe('CED-1')
@@ -281,6 +269,9 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
         findUnique: mockMedicalEventFindUnique,
         findMany: mockFindMany,
       },
+      eventTest: {
+        findMany: (...a: unknown[]) => mockEventTestFindMany(...a),
+      },
     } as never)
 
     // Verificamos que el helper llama al resolver con el eventId
@@ -299,12 +290,7 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
       workerId: 'worker-1',
     })
 
-    const result = await buildDictamenGeneralAmiConsolidado('evt-current', {
-      medicalEvent: {
-        findUnique: mockMedicalEventFindUnique,
-        findMany: mockMedicalEventFindMany,
-      },
-    } as never)
+    const result = await buildDictamenGeneralAmiConsolidado('evt-current', testPrismaClient())
 
     // El `aptitud` del snapshot fluye al renderer.
     expect(result.data.aptitud).toBe('APTO')
@@ -313,6 +299,35 @@ describe('IMPL-20260826-08: buildDictamenGeneralAmiConsolidado', () => {
     // La `somatometria` tiene datos del snapshot.
     expect(result.data.somatometria.peso).toBe('75')
     expect(result.data.somatometria.talla).toBe('1.70')
+  })
+
+  it('omite PIE ORINA del consolidado cuando includeInDictamenGeneral es false', async () => {
+    mockMedicalEventFindUnique.mockResolvedValueOnce(
+      buildEvent({
+        labs: [
+          { serviceName: 'PIE ORINA', extractedData: { resultado: 'positivo' } },
+          { serviceName: 'Biometría', extractedData: null },
+        ],
+      }) as never,
+    )
+    mockFindSiblingEventsInAtencion.mockResolvedValue({
+      eventIds: ['evt-current'],
+      appointmentId: null,
+      hasAppointment: false,
+      workerId: 'worker-1',
+    })
+    mockEventTestFindMany.mockResolvedValueOnce([
+      {
+        eventId: 'evt-current',
+        testNameSnapshot: 'PIE ORINA',
+        clinicalContext: buildDictamenLabClinicalContext(false),
+      },
+    ])
+
+    const result = await buildDictamenGeneralAmiConsolidado('evt-current', testPrismaClient())
+
+    const labs = result.data.consolidatedEvents?.[0].labs ?? []
+    expect(labs.map((l) => l.serviceName)).toEqual(['Biometría'])
   })
 })
 

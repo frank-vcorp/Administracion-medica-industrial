@@ -38,6 +38,10 @@ import { findSiblingEventsInAtencion, type AtencionResolution } from '@/lib/even
 import { readHeredoFamiliaresDisplay, readTatuajesDisplay, readTratamientoMedicoActualDisplay } from '@/lib/antecedentes-fields'
 import { formatTestAdamDisplay, formatQuisteDisplay } from '@/schemas/clinical/exam.schema'
 import { buildExamenMedicoPdfData, type BuildExamenMedicoPdfInput } from '@/lib/examen-medico-pdf'
+import {
+  applyEventDictamenLabFilters,
+  groupEventTestsByEventId,
+} from '@/lib/clinical/dictamen-lab-papeleta'
 
 /**
  * IMPL-20260826-08: helper de extracción segura de strings. Devuelve
@@ -190,37 +194,53 @@ export async function buildDictamenGeneralAmiConsolidado(
         })
       : []
 
+  const allEventIdsForDictamenFilter = [event.id, ...siblingIds]
+  const eventTestsForDictamenFilter = await prisma.eventTest.findMany({
+    where: { eventId: { in: allEventIdsForDictamenFilter } },
+    select: {
+      eventId: true,
+      testNameSnapshot: true,
+      clinicalContext: true,
+    },
+  })
+  const eventTestsByEventId = groupEventTestsByEventId(eventTestsForDictamenFilter)
+
   // 4) Construir el consolidado (bloque para el renderer AMI).
   const derivedEventShortId = (id: string): string =>
     id.split('-')[0]?.toUpperCase() ?? ''
 
-  const consolidatedEvents: BuildExamenMedicoPdfInput['consolidatedEvents'] = [
-    {
-      eventId: event.id,
-      eventShortId: derivedEventShortId(event.id),
-      isCurrent: true,
-      studies: (event.studies ?? []).map((s) => ({
-        serviceName: s.serviceName,
-        extractedData: s.extractedData ?? null,
-      })),
-      labs: (event.labs ?? []).map((l) => ({
-        serviceName: l.serviceName,
-        extractedData: l.extractedData ?? null,
-      })),
-    },
-    ...siblingEventsRaw.map((sib) => ({
-      eventId: sib.id,
-      eventShortId: derivedEventShortId(sib.id),
-      isCurrent: false,
-      studies: (sib.studies ?? []).map((st) => ({
-        serviceName: st.serviceName,
-        extractedData: st.extractedData ?? null,
-      })),
-      labs: (sib.labs ?? []).map((lb) => ({
-        serviceName: lb.serviceName,
-        extractedData: lb.extractedData ?? null,
-      })),
+  const mapStudiesLabs = (studies: typeof event.studies, labs: typeof event.labs) => ({
+    studies: (studies ?? []).map((s) => ({
+      serviceName: s.serviceName,
+      extractedData: s.extractedData ?? null,
     })),
+    labs: (labs ?? []).map((l) => ({
+      serviceName: l.serviceName,
+      extractedData: l.extractedData ?? null,
+    })),
+  })
+
+  const consolidatedEvents: BuildExamenMedicoPdfInput['consolidatedEvents'] = [
+    applyEventDictamenLabFilters(
+      {
+        eventId: event.id,
+        eventShortId: derivedEventShortId(event.id),
+        isCurrent: true,
+        ...mapStudiesLabs(event.studies, event.labs),
+      },
+      eventTestsByEventId.get(event.id) ?? [],
+    ),
+    ...siblingEventsRaw.map((sib) =>
+      applyEventDictamenLabFilters(
+        {
+          eventId: sib.id,
+          eventShortId: derivedEventShortId(sib.id),
+          isCurrent: false,
+          ...mapStudiesLabs(sib.studies, sib.labs),
+        },
+        eventTestsByEventId.get(sib.id) ?? [],
+      ),
+    ),
   ]
 
   // 5) Extraer campos del `physicalExamData` (no se inventan defaults).

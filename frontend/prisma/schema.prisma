@@ -16,6 +16,10 @@ model User {
   role                      UserRole                  @default(DOCTOR_GENERAL)
   isActive                  Boolean                   @default(true)
   companyId                 String?
+  /// Portal B2B: obliga cambio de contraseña tras credencial temporal por correo.
+  mustChangePassword        Boolean                   @default(false)
+  portalLegalAcceptedAt     DateTime?
+  portalLegalVersion        String?
   createdAt                 DateTime                  @default(now())
   updatedAt                 DateTime                  @updatedAt
   auditLogs                 AuditLog[]
@@ -171,6 +175,8 @@ model Company {
   cuentasPagarData        Json?
   referenciasData         Json?
   terminosAceptados       Boolean?
+  /// Portal B2B: AMI habilita acceso usuario/contraseña para esta empresa.
+  portalEnabled           Boolean                   @default(false)
   documentosAdjuntos      Json?
   sellerHistory           CompanySellerHistory[]
   selfRegistrations       CompanySelfRegistration[]

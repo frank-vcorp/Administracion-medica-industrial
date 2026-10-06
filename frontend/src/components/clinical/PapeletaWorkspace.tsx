@@ -79,6 +79,8 @@ import { StudyStepChips } from '@/components/clinical/StudyStepChips'
 import { isAdminLike } from '@/lib/auth/roles'
 import ExtractedPatientIdentityBanner from '@/components/clinical/ExtractedPatientIdentityBanner'
 import PatientNameMismatchModal from '@/components/clinical/PatientNameMismatchModal'
+import DictamenGeneralLabToggle from '@/components/clinical/DictamenGeneralLabToggle'
+import { buildDictamenLabClinicalContext } from '@/lib/clinical/dictamen-lab-papeleta'
 import type { PatientNameWarning } from '@/lib/clinical/patient-name-match'
 
 // --- Tipos locales ---
@@ -867,6 +869,20 @@ export default function PapeletaWorkspace({
               // BR-20260825-20): gate del CTA PDF/ZIP dentro de
               // ExamenMedicoEstudio. Verdict emitido → CTA visible.
               hasMedicalVerdict={hasMedicalVerdict}
+              onDictamenLabInclusionSaved={(eventTestId, includeInDictamenGeneral) => {
+                setLocalTests((prev) =>
+                  prev.map((t) =>
+                    t.id === eventTestId
+                      ? {
+                          ...t,
+                          clinicalContext: buildDictamenLabClinicalContext(
+                            includeInDictamenGeneral,
+                          ),
+                        }
+                      : t,
+                  ),
+                )
+              }}
             />
           )}
         </div>
@@ -1286,6 +1302,7 @@ function StudyPanel({
   // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
   // gate del CTA PDF/ZIP dentro de ExamenMedicoEstudio.
   hasMedicalVerdict,
+  onDictamenLabInclusionSaved,
 }: {
   test: StudyTest
   eventId: string
@@ -1325,6 +1342,10 @@ function StudyPanel({
   onOpenQuestionnaire: () => void
   // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20).
   hasMedicalVerdict: boolean
+  onDictamenLabInclusionSaved?: (
+    eventTestId: string,
+    includeInDictamenGeneral: boolean,
+  ) => void
 }) {
   // ARCH-20260518-04: confirmación local antes de ejecutar la limpieza destructiva
   const [isClearConfirming, setIsClearConfirming] = useState(false)
@@ -1429,6 +1450,17 @@ function StudyPanel({
       </div>
 
       <hr className="border-slate-100" />
+
+      <DictamenGeneralLabToggle
+        eventId={eventId}
+        eventTestId={test.id}
+        testNameSnapshot={test.testNameSnapshot}
+        clinicalContext={test.clinicalContext}
+        readonly={readonly}
+        onSaved={(includeInDictamenGeneral) =>
+          onDictamenLabInclusionSaved?.(test.id, includeInDictamenGeneral)
+        }
+      />
 
       {/* IMPL-20260326-04: Ocultar Trazabilidad IA cuando ya existe aiSnapshot (el panel reemplaza este aviso) */}
       {test.resultNotes && !test.aiSnapshot && (

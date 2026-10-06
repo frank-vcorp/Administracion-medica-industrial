@@ -34,6 +34,9 @@ declare module "next-auth/jwt" {
     name: string
     role: UserRole
     companyId: string | null
+    mustChangePassword?: boolean
+    portalOnboardingRequired?: boolean
+    portalBlocked?: boolean
   }
 }
 

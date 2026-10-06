@@ -41,6 +41,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/auto-alta') ||
     pathname.startsWith('/solicitar-alta') ||
     pathname.startsWith('/feedback') ||
+    pathname.startsWith('/legal/') ||
     isStaticAsset
   if (isPublicRoute) {
     return NextResponse.next()
@@ -62,6 +63,19 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/portal")) {
     if (token.role !== "COMPANY_CLIENT") {
       return NextResponse.redirect(new URL("/", request.url))
+    }
+    if (token.portalBlocked) {
+      const url = new URL("/login", request.url)
+      url.searchParams.set("error", "portal_disabled")
+      return NextResponse.redirect(url)
+    }
+    const onboardingPath = "/portal/onboarding"
+    const onOnboarding = pathname.startsWith(onboardingPath)
+    if (token.portalOnboardingRequired && !onOnboarding) {
+      return NextResponse.redirect(new URL(onboardingPath, request.url))
+    }
+    if (!token.portalOnboardingRequired && onOnboarding) {
+      return NextResponse.redirect(new URL("/portal", request.url))
     }
   }
 

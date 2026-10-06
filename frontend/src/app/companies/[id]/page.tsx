@@ -25,6 +25,7 @@ import CompanySellerHistoryPanel from '@/components/companies/CompanySellerHisto
 import CompanyFullFormView from '@/components/companies/CompanyFullFormView'
 import CompanyActionsPanel, { type SellerOption } from '@/components/companies/CompanyActionsPanel'
 import GenerateCompletionLinkButton from '@/components/companies/GenerateCompletionLinkButton'
+import CompanyPortalAccessPanel from '@/components/companies/CompanyPortalAccessPanel'
 import { getCompanyOriginChannel } from '@/services/company.service'
 
 export const dynamic = 'force-dynamic'
@@ -143,6 +144,15 @@ export default async function CompanyDetailPage({ params }: PageProps) {
         estado={estado}
         currentSellerId={sellerId}
         sellers={sellers}
+        role={role}
+      />
+
+      <CompanyPortalAccessPanel
+        companyId={id}
+        companyName={company.name}
+        defaultEmail={company.email ?? null}
+        defaultContactName={company.contactName ?? null}
+        estado={estado}
         role={role}
       />
 
