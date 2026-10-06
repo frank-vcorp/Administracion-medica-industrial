@@ -4,6 +4,7 @@ import { authOptions } from '@/auth'
 import { isAdminLike, isSuperAdmin } from '@/lib/auth/roles'
 import BrandingLogoManager from '@/components/admin/BrandingLogoManager'
 import OperationalCleanupPanel from '@/components/admin/OperationalCleanupPanel'
+import SendGridSmtpSettingsPanel from '@/components/admin/SendGridSmtpSettingsPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,8 @@ export default async function AdminSettingsPage() {
       </header>
 
       <BrandingLogoManager />
+
+      <SendGridSmtpSettingsPanel />
 
       {showOperationalCleanup ? <OperationalCleanupPanel /> : null}
     </div>

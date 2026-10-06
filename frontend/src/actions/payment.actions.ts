@@ -321,74 +321,40 @@ async function dispatchReceiptEmail(args: {
   email: string
   pdfDataUrl?: string
 }): Promise<{ success: boolean; error?: string }> {
-  const smtpHost = process.env.SMTP_HOST
-  const smtpPort = process.env.SMTP_PORT
-  const smtpUser = process.env.SMTP_USER
-  const smtpPass = process.env.SMTP_PASS
-  const fromAddress = process.env.PAYMENT_RECEIPT_FROM ?? 'no-reply@ami.local'
+  const attachments: Array<{ filename: string; content: string; encoding: 'base64' }> = []
+  if (args.pdfDataUrl) {
+    const match = args.pdfDataUrl.match(/^data:application\/pdf;base64,(.+)$/)
+    if (match) {
+      attachments.push({
+        filename: `recibo-${args.paymentId}.pdf`,
+        content: match[1],
+        encoding: 'base64',
+      })
+    }
+  }
 
-  if (!smtpHost || !smtpPort) {
-    // Modo desarrollo / sin SMTP configurado: solo logueamos.
-    // El PDF queda persistido en receiptPdfUrl para descarga.
-    console.info(
-      `[RECEIPT] (sin SMTP) recibo ${args.paymentId} → ${args.email}`
-    )
+  const { sendSmtpMail } = await import('@/lib/smtp-mail')
+  const result = await sendSmtpMail({
+    purpose: 'receipts',
+    to: args.email,
+    subject: `Recibo de pago #${args.paymentId.slice(0, 8)} — AMI`,
+    text:
+      `Adjuntamos el comprobante de su pago reciente en Administración Médica Industrial.\n\n` +
+      `Folio de pago: ${args.paymentId}\n\n` +
+      `Este correo es generado automáticamente. Si requiere factura, responda a este mensaje.`,
+    attachments: attachments.length ? attachments : undefined,
+  })
+
+  if (result.skipped) {
+    console.info(`[RECEIPT] (sin SMTP) recibo ${args.paymentId} → ${args.email}`)
     return { success: true }
   }
 
-  try {
-    // Carga dinámica de nodemailer — opcional, el sistema funciona sin él.
-    // El nombre del paquete se pasa via variable para que webpack NO intente
-    // resolver estáticamente la dependencia (no está en package.json).
-    const nodemailerPkg = 'nodemailer'
-    const nodemailer = await import(/* webpackIgnore: true */ nodemailerPkg).catch(() => null)
-    if (!nodemailer) {
-      console.warn(
-        '[RECEIPT] SMTP_HOST configurado pero nodemailer no está instalado. Fallback a log.'
-      )
-      console.info(
-        `[RECEIPT] (sin transport) recibo ${args.paymentId} → ${args.email}`
-      )
-      return { success: true }
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: Number(smtpPort),
-      secure: Number(smtpPort) === 465,
-      auth: smtpUser && smtpPass ? { user: smtpUser, pass: smtpPass } : undefined,
-    })
-
-    const attachments: Array<{ filename: string; content: string; encoding: string }> = []
-    if (args.pdfDataUrl) {
-      const match = args.pdfDataUrl.match(/^data:application\/pdf;base64,(.+)$/)
-      if (match) {
-        attachments.push({
-          filename: `recibo-${args.paymentId}.pdf`,
-          content: match[1],
-          encoding: 'base64',
-        })
-      }
-    }
-
-    await transporter.sendMail({
-      from: fromAddress,
-      to: args.email,
-      subject: `Recibo de pago #${args.paymentId.slice(0, 8)} — AMI`,
-      text:
-        `Adjuntamos el comprobante de su pago reciente en Administración Médica Industrial.\n\n` +
-        `Folio de pago: ${args.paymentId}\n\n` +
-        `Este correo es generado automáticamente. Si requiere factura, responda a este mensaje.`,
-      attachments,
-    })
-
-    return { success: true }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Fallo SMTP',
-    }
+  if (!result.success) {
+    return { success: false, error: result.error ?? 'Fallo SMTP' }
   }
+
+  return { success: true }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

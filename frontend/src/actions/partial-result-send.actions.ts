@@ -274,60 +274,35 @@ async function dispatchPartialResultEmail(args: {
   recipientEmail: string
   attachments: Array<{ filename: string; content: Buffer }>
 }): Promise<{ success: boolean; error?: string }> {
-  const smtpHost = process.env.SMTP_HOST
-  const smtpPort = process.env.SMTP_PORT
-  const smtpUser = process.env.SMTP_USER
-  const smtpPass = process.env.SMTP_PASS
-  const fromAddress =
-    process.env.RESULTS_EMAIL_FROM ??
-    process.env.PAYMENT_RECEIPT_FROM ??
-    'no-reply@ami.local'
+  const { sendSmtpMail } = await import('@/lib/smtp-mail')
+  const result = await sendSmtpMail({
+    purpose: 'results',
+    to: args.recipientEmail,
+    subject: `Resultados parciales de laboratorio — ${args.patientName}`,
+    text:
+      `Adjuntamos resultados parciales de laboratorio correspondientes a la atención en ${args.companyName}.\n\n` +
+      `Paciente: ${args.patientName}\n` +
+      `Folio de expediente: ${args.eventId}\n\n` +
+      `Este envío no sustituye el dictamen final de aptitud. Recibirá el cierre clínico cuando todos los estudios estén completos.\n\n` +
+      `Administración Médica Industrial`,
+    attachments: args.attachments.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+    })),
+  })
 
-  if (!smtpHost || !smtpPort) {
+  if (result.skipped) {
     console.info(
       `[PARTIAL_SEND] (sin SMTP) evento ${args.eventId} → ${args.recipientEmail} (${args.attachments.length} adjuntos)`,
     )
     return { success: true }
   }
 
-  try {
-    const nodemailerPkg = 'nodemailer'
-    const nodemailer = await import(/* webpackIgnore: true */ nodemailerPkg).catch(() => null)
-    if (!nodemailer) {
-      console.warn('[PARTIAL_SEND] SMTP configurado pero nodemailer no disponible.')
-      return { success: false, error: 'Servicio de correo no disponible.' }
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: Number(smtpPort),
-      secure: Number(smtpPort) === 465,
-      auth: smtpUser && smtpPass ? { user: smtpUser, pass: smtpPass } : undefined,
-    })
-
-    await transporter.sendMail({
-      from: fromAddress,
-      to: args.recipientEmail,
-      subject: `Resultados parciales de laboratorio — ${args.patientName}`,
-      text:
-        `Adjuntamos resultados parciales de laboratorio correspondientes a la atención en ${args.companyName}.\n\n` +
-        `Paciente: ${args.patientName}\n` +
-        `Folio de expediente: ${args.eventId}\n\n` +
-        `Este envío no sustituye el dictamen final de aptitud. Recibirá el cierre clínico cuando todos los estudios estén completos.\n\n` +
-        `Administración Médica Industrial`,
-      attachments: args.attachments.map((a) => ({
-        filename: a.filename,
-        content: a.content,
-      })),
-    })
-
-    return { success: true }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Fallo al enviar correo',
-    }
+  if (!result.success) {
+    return { success: false, error: result.error ?? 'Fallo al enviar correo' }
   }
+
+  return { success: true }
 }
 
 export async function getPartialSendOffer(eventId: string): Promise<PartialSendOffer> {

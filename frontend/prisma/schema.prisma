@@ -81,6 +81,7 @@ model User {
   disabledBranches          Branch[]                  @relation("BranchDisabledBy")
   // IMPL-20260809-06: API keys IA gestionadas vía UI (ARCH-20260809-03). updatedBy FK opcional.
   updatedAIProviderKeys     AIProviderKey[]           @relation("AIProviderKeyUpdater")
+  updatedSendGridSmtp       SendGridSmtpConfig[]      @relation("SendGridSmtpUpdater")
   // ARCH-20260809-05: Configuración runtime editable por UI (extraction_default_provider, etc.).
   appConfigUpdated          AppConfig[]               @relation("AppConfigUpdater")
   // IMPL-FEATURE-20260825-01: perfil médico editable por Superadmin/Doctor.
@@ -618,6 +619,29 @@ model AIProviderKey {
   user          User?    @relation("AIProviderKeyUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@map("ai_provider_keys")
+}
+
+// SendGrid SMTP (relay oficial). API key cifrada AES-256-GCM; una fila por instalación.
+model SendGridSmtpConfig {
+  id                 String   @id @default("sendgrid")
+  host               String   @default("smtp.sendgrid.net")
+  port               Int      @default(465)
+  username           String   @default("apikey")
+  apiKeyCiphertext   Bytes?
+  apiKeyNonce        Bytes?
+  apiKeyTag          Bytes?
+  apiKeySuffix       String?
+  enabled            Boolean  @default(true)
+  fromAddress        String?
+  fromPortalAccess   String?
+  fromResults        String?
+  fromReceipts       String?
+  updatedBy          String?
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  user               User?    @relation("SendGridSmtpUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("sendgrid_smtp_config")
 }
 
 // ARCH-20260809-05: Configuración runtime editable por UI (sin redeploy).
