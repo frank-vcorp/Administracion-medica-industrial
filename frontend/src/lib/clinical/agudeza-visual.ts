@@ -39,7 +39,7 @@ export function visionFieldSelectOptions(
   fieldName: string,
   currentValue?: string | null,
 ): readonly string[] {
-  const base = isVisionCercanaField(fieldName)
+  const base: readonly string[] = isVisionCercanaField(fieldName)
     ? VISION_CERCANA_SELECT_OPTIONS
     : VISION_SNELLEN_SELECT_OPTIONS
   const v = String(currentValue ?? '').trim()
