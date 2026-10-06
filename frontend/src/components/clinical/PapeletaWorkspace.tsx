@@ -77,6 +77,9 @@ import { buildStudyInterpretationFromSnapshot, formatStudyStatusLine } from '@/l
 import { StudyStatusBadge } from '@/components/clinical/StudyStatusBadge'
 import { StudyStepChips } from '@/components/clinical/StudyStepChips'
 import { isAdminLike } from '@/lib/auth/roles'
+import ExtractedPatientIdentityBanner from '@/components/clinical/ExtractedPatientIdentityBanner'
+import PatientNameMismatchModal from '@/components/clinical/PatientNameMismatchModal'
+import type { PatientNameWarning } from '@/lib/clinical/patient-name-match'
 
 // --- Tipos locales ---
 
@@ -385,6 +388,7 @@ export default function PapeletaWorkspace({
   // inmutable del flujo de Espirometría.
   const [audiometriaQuestionnaireEventTestId, setAudiometriaQuestionnaireEventTestId] =
     useState<string | null>(null)
+  const [patientNameWarning, setPatientNameWarning] = useState<PatientNameWarning | null>(null)
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
   const completedCount = localTests.filter(t =>
@@ -541,6 +545,7 @@ export default function PapeletaWorkspace({
         message?: string | null
         selectedStudyType?: string | null
         detectedStudyType?: string | null
+        patientNameWarning?: PatientNameWarning | null
       }
       const res = (await uploadEventTestFile(formData)) as UploadActionResult
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
@@ -549,6 +554,7 @@ export default function PapeletaWorkspace({
         await new Promise<void>(r => setTimeout(r, 700))
         // ARCH-20260518-04: actualización optimista con snapshot si el action lo devuelve
         updateLocalFile(testId, res.fileUrl, res.extractionSnapshotData ?? null)
+        if (res.patientNameWarning) setPatientNameWarning(res.patientNameWarning)
         router.refresh()
       } else if (res.success && res.aiAnalysis) {
         // ARCH-20260820-01 Fase 3 (AC-3.1): IA no generada por gate
@@ -556,6 +562,7 @@ export default function PapeletaWorkspace({
         // no concluyente; no hay archivo pero hay resultado trazable. El
         // panel de prediagnóstico mostrará AI_NON_CONCLUSIVE tras refresh.
         setUploadStage(null)
+        if (res.patientNameWarning) setPatientNameWarning(res.patientNameWarning)
         router.refresh()
       } else if (res.errorCode === 'STUDY_TYPE_MISMATCH') {
         // SPEC-FIX-20260824-01: rechazo de modalidad estructurado.
@@ -611,12 +618,14 @@ export default function PapeletaWorkspace({
         message?: string | null
         selectedStudyType?: string | null
         detectedStudyType?: string | null
+        patientNameWarning?: PatientNameWarning | null
       }
       const res = (await regenerateStudyAI(testId, eventId, reviewerUserId)) as RegenActionResult
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
       if (res.success) {
         setRegenStage('saving')
         await new Promise<void>(r => setTimeout(r, 700))
+        if (res.patientNameWarning) setPatientNameWarning(res.patientNameWarning)
         router.refresh()
       } else if (res.errorCode === 'STUDY_TYPE_MISMATCH') {
         // SPEC-FIX-20260824-01: rechazo de modalidad estructurado en
@@ -927,6 +936,12 @@ export default function PapeletaWorkspace({
             }}
           />
         )}
+
+      <PatientNameMismatchModal
+        open={patientNameWarning !== null}
+        warning={patientNameWarning}
+        onClose={() => setPatientNameWarning(null)}
+      />
     </div>
   )
 }
@@ -1813,6 +1828,14 @@ function StudyPanel({
               no side-by-side.
             */}
             {test.extractionSnapshot && (
+              <div className="space-y-3">
+              <ExtractedPatientIdentityBanner
+                studyType={getCanonicalAIStudyType(test)}
+                workerFullName={workerInfo.name}
+                extractedData={
+                  test.extractionSnapshot.extractedData as Record<string, unknown> | null
+                }
+              />
               <ClinicalExtractionRenderer
                 extractedData={test.extractionSnapshot.extractedData as Record<string, unknown> | null}
                 missingFields={test.extractionSnapshot.missingFields as string[] | null}
@@ -1834,6 +1857,7 @@ function StudyPanel({
                 }
                 presentationSchema={getPersistedPresentationSchema(test)}
               />
+              </div>
             )}
 
             {/* Acciones de estado */}

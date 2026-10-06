@@ -1,9 +1,23 @@
 /**
  * Comparación de nombre del paciente (expediente) vs extracción de PDF/XML.
- * Minuta 8-Sep #2–#3: bloquear subida cuando el documento no corresponde al trabajador.
+ * Minuta 8-Sep #2–#3: aviso cuando el documento podría no corresponder al trabajador.
  */
 
 import prisma from '@/lib/prisma'
+import type { CanonicalAIStudyType } from '@/lib/study-ai'
+
+/** Estudios donde mostramos y contrastamos nombre extraído vs expediente. */
+export const PATIENT_NAME_VERIFICATION_STUDY_TYPES: readonly CanonicalAIStudyType[] = [
+  'Audiometria',
+  'Espirometria',
+] as const
+
+export function isPatientNameVerificationStudy(
+  studyType: string | null | undefined,
+): boolean {
+  if (!studyType) return false
+  return (PATIENT_NAME_VERIFICATION_STUDY_TYPES as readonly string[]).includes(studyType)
+}
 
 export function normalizePersonName(value: string): string {
   return value
@@ -78,22 +92,77 @@ export type PatientNameMismatchDetail = {
 export function buildPatientNameMismatchMessage(detail: PatientNameMismatchDetail): string {
   return (
     `El nombre en el documento («${detail.extractedName}») no coincide con el paciente del expediente ` +
-    `(«${detail.workerFullName}»). Verifique el archivo o los datos del trabajador antes de subir.`
+    `(«${detail.workerFullName}»). Verifique el archivo o los datos del trabajador.`
   )
 }
 
-export async function assertExtractedPatientNameMatchesEvent(
-  eventId: string,
+export type PatientNameWarning = PatientNameMismatchDetail & {
+  message: string
+}
+
+export type PatientNameEvaluation = {
+  /** Había nombre en la extracción y trabajador en el evento. */
+  evaluated: boolean
+  matches: boolean
+  workerFullName: string | null
+  extractedName: string | null
+  warning: PatientNameWarning | null
+}
+
+export function evaluatePatientNameMatch(
+  workerFullName: string,
   extractedData: unknown,
-): Promise<
-  | { ok: true }
-  | { ok: false; error: string; errorCode: 'PATIENT_NAME_MISMATCH' }
-> {
+): PatientNameEvaluation {
   const extractedName = extractPatientNameFromStructuredData(extractedData)
   if (!extractedName) {
-    return { ok: true }
+    return {
+      evaluated: false,
+      matches: true,
+      workerFullName: workerFullName.trim() || null,
+      extractedName: null,
+      warning: null,
+    }
   }
 
+  const worker = workerFullName.trim()
+  if (!worker) {
+    return {
+      evaluated: false,
+      matches: true,
+      workerFullName: null,
+      extractedName,
+      warning: null,
+    }
+  }
+
+  const matches = patientNamesMatch(worker, extractedName)
+  if (matches) {
+    return {
+      evaluated: true,
+      matches: true,
+      workerFullName: worker,
+      extractedName,
+      warning: null,
+    }
+  }
+
+  const detail = { workerFullName: worker, extractedName }
+  return {
+    evaluated: true,
+    matches: false,
+    workerFullName: worker,
+    extractedName,
+    warning: {
+      ...detail,
+      message: buildPatientNameMismatchMessage(detail),
+    },
+  }
+}
+
+export async function evaluatePatientNameForEvent(
+  eventId: string,
+  extractedData: unknown,
+): Promise<PatientNameEvaluation> {
   const event = await prisma.medicalEvent.findUnique({
     where: { id: eventId },
     select: {
@@ -101,17 +170,34 @@ export async function assertExtractedPatientNameMatchesEvent(
     },
   })
   if (!event?.worker) {
-    return { ok: true }
-  }
-
-  const workerFullName = `${event.worker.firstName} ${event.worker.lastName}`.trim()
-  if (!patientNamesMatch(workerFullName, extractedName)) {
     return {
-      ok: false,
-      errorCode: 'PATIENT_NAME_MISMATCH',
-      error: buildPatientNameMismatchMessage({ workerFullName, extractedName }),
+      evaluated: false,
+      matches: true,
+      workerFullName: null,
+      extractedName: extractPatientNameFromStructuredData(extractedData),
+      warning: null,
     }
   }
 
+  const workerFullName = `${event.worker.firstName} ${event.worker.lastName}`.trim()
+  return evaluatePatientNameMatch(workerFullName, extractedData)
+}
+
+/** @deprecated Usar evaluatePatientNameForEvent (aviso no bloqueante). */
+export async function assertExtractedPatientNameMatchesEvent(
+  eventId: string,
+  extractedData: unknown,
+): Promise<
+  | { ok: true }
+  | { ok: false; error: string; errorCode: 'PATIENT_NAME_MISMATCH' }
+> {
+  const evaluation = await evaluatePatientNameForEvent(eventId, extractedData)
+  if (evaluation.warning) {
+    return {
+      ok: false,
+      errorCode: 'PATIENT_NAME_MISMATCH',
+      error: evaluation.warning.message,
+    }
+  }
   return { ok: true }
 }

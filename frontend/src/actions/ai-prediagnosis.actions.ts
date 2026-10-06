@@ -30,7 +30,8 @@ import {
   resolveAiCalibrationForUpload,
 } from '@/lib/clinical/default-ai-calibration'
 import { getCanonicalAIStudyType, normalizeStudyTypeForBackend } from '@/lib/study-ai'
-import { assertExtractedPatientNameMatchesEvent } from '@/lib/clinical/patient-name-match'
+import { evaluatePatientNameForEvent } from '@/lib/clinical/patient-name-match'
+import type { PatientNameWarning } from '@/lib/clinical/patient-name-match'
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
@@ -104,6 +105,8 @@ export interface StudyAIAnalysisResult {
   message?: string
   selectedStudyType?: string | null
   detectedStudyType?: string | null
+  /** Aviso no bloqueante: nombre en documento vs expediente. */
+  patientNameWarning?: PatientNameWarning | null
 }
 
 export interface DoctorStudyReviewInput {
@@ -453,18 +456,11 @@ export async function triggerStudyAIAnalysis(
     }
     const mergedPredxData = { ...predxData, audit: mergedPredxAudit }
 
-    const nameCheck = await assertExtractedPatientNameMatchesEvent(
-      eventId,
+    const extractedForName =
       (mergedExtractionSnapshot as { extracted_data?: unknown }).extracted_data ??
-        result.extraction_snapshot?.extracted_data,
-    )
-    if (!nameCheck.ok) {
-      return {
-        success: false,
-        error: nameCheck.error,
-        errorCode: nameCheck.errorCode,
-      }
-    }
+      result.extraction_snapshot?.extracted_data
+    const nameEvaluation = await evaluatePatientNameForEvent(eventId, extractedForName)
+    const patientNameWarning = nameEvaluation.warning
 
     // 3-6. Mantener histórico y desplazar la vigencia a la nueva corrida.
     const { extractionSnapshot, prediagnosisSnapshot } = await prisma.$transaction(async (tx) => {
@@ -557,6 +553,7 @@ export async function triggerStudyAIAnalysis(
       extractedData: (result.extraction_snapshot?.extracted_data ?? null) as unknown,
       missingFields: (result.extraction_snapshot?.missing_fields ?? null) as unknown,
       rawPayload: (result.extraction_snapshot ?? null) as unknown,
+      patientNameWarning: patientNameWarning ?? null,
     }
   } catch (error) {
     console.error('[IMPL-20260326-16] Error en triggerStudyAIAnalysis:', error)

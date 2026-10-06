@@ -1,4 +1,5 @@
 import {
+  evaluatePatientNameMatch,
   extractPatientNameFromStructuredData,
   normalizePersonName,
   patientNamesMatch,
@@ -24,5 +25,18 @@ describe('patient-name-match', () => {
 
   it('rechaza cuando falta un apellido', () => {
     expect(patientNamesMatch('Juan Carlos Pérez', 'Juan Carlos Martínez')).toBe(false)
+  })
+
+  it('evaluatePatientNameMatch: sin nombre extraído no genera warning', () => {
+    const r = evaluatePatientNameMatch('Ana López', { fvc: 3.2 })
+    expect(r.evaluated).toBe(false)
+    expect(r.warning).toBeNull()
+  })
+
+  it('evaluatePatientNameMatch: mismatch genera warning', () => {
+    const r = evaluatePatientNameMatch('Ana López', { paciente: 'Pedro Ruiz' })
+    expect(r.evaluated).toBe(true)
+    expect(r.matches).toBe(false)
+    expect(r.warning?.extractedName).toBe('Pedro Ruiz')
   })
 })

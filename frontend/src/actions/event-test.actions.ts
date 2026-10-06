@@ -25,7 +25,8 @@ import { extractSnapshotVersioningFromBackendAudit } from "@/lib/calibration-v3-
 // IMPL-20260507-08: Cronograma operativo persistente (ARCH-20260507-08)
 import { writeTimelineEntry } from "@/lib/timeline.service"
 import { TimelineEntryType } from "@prisma/client"
-import { assertExtractedPatientNameMatchesEvent } from '@/lib/clinical/patient-name-match'
+import { evaluatePatientNameForEvent } from '@/lib/clinical/patient-name-match'
+import type { PatientNameWarning } from '@/lib/clinical/patient-name-match'
 
 async function maybeCropEspirometrySourceAfterUpload(
   eventTestId: string,
@@ -1053,17 +1054,6 @@ export async function uploadEventTestFile(formData: FormData) {
           triggeredByUserId
         )
         if (xmlResponse.success && xmlResponse.payload) {
-          const nameCheck = await assertExtractedPatientNameMatchesEvent(
-            eventId,
-            xmlResponse.payload.extraction_snapshot.extracted_data,
-          )
-          if (!nameCheck.ok) {
-            return {
-              success: false,
-              error: nameCheck.error,
-              errorCode: nameCheck.errorCode,
-            }
-          }
           const persisted = await persistXmlDirectSnapshots({
             eventTestId,
             eventId,
@@ -1089,6 +1079,10 @@ export async function uploadEventTestFile(formData: FormData) {
             missingFields: xmlResponse.payload.extraction_snapshot.missing_fields ?? null,
             rawPayload: xmlResponse.payload.extraction_snapshot,
           }
+          const nameEvaluation = await evaluatePatientNameForEvent(
+            eventId,
+            xmlResponse.payload.extraction_snapshot.extracted_data,
+          )
           return {
             success: true,
             fileUrl: persisted.fileUrl,
@@ -1100,6 +1094,7 @@ export async function uploadEventTestFile(formData: FormData) {
               summary: persisted.summary,
               confidence: persisted.confidence,
             },
+            patientNameWarning: nameEvaluation.warning ?? null,
           }
         }
         // Si el endpoint XML falló, NO caer a Gemini (causa original del gap).
@@ -1175,6 +1170,7 @@ export async function uploadEventTestFile(formData: FormData) {
             summary: v2Result.summary,
             confidence: v2Result.confidence,
           },
+          patientNameWarning: v2Result.patientNameWarning ?? null,
         }
       }
 
@@ -1309,6 +1305,7 @@ export async function regenerateStudyAI(
   message?: string | null
   selectedStudyType?: string | null
   detectedStudyType?: string | null
+  patientNameWarning?: PatientNameWarning | null
 }> {
   if (!eventTestId || !eventId) {
     return { success: false, error: 'Parámetros incompletos' }
@@ -1461,8 +1458,15 @@ export async function regenerateStudyAI(
             }),
           },
         })
+        const nameEvaluation = await evaluatePatientNameForEvent(
+          eventId,
+          xmlResponse.payload.extraction_snapshot.extracted_data,
+        )
         revalidatePath(`/events/${eventId}`)
-        return { success: true }
+        return {
+          success: true,
+          patientNameWarning: nameEvaluation.warning ?? null,
+        }
       }
       const xmlErr = xmlResponse.error || 'Parser XML directo no disponible.'
       await prisma.eventTest.update({
@@ -1544,7 +1548,11 @@ export async function regenerateStudyAI(
     })
 
     revalidatePath(`/events/${eventId}`)
-    return { success: aiResult.success, error: enrichedError ?? undefined }
+    return {
+      success: aiResult.success,
+      error: enrichedError ?? undefined,
+      patientNameWarning: aiResult.success ? (aiResult.patientNameWarning ?? null) : null,
+    }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Error interno al regenerar IA'
     console.error('[IMPL-20260326-03] Error en regenerateStudyAI:', error)
