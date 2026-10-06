@@ -61,9 +61,23 @@ export async function getSendGridSmtpSettings(): Promise<{
     return { success: false, error: 'Se requiere rol ADMIN o SUPERADMIN' }
   }
 
-  const row = await prisma.sendGridSmtpConfig.findUnique({
-    where: { id: SENDGRID_SMTP_ROW_ID },
-  })
+  let row: Awaited<ReturnType<typeof prisma.sendGridSmtpConfig.findUnique>>
+  try {
+    row = await prisma.sendGridSmtpConfig.findUnique({
+      where: { id: SENDGRID_SMTP_ROW_ID },
+    })
+  } catch (err) {
+    console.error('[SendGrid] get settings failed:', err)
+    const msg =
+      err && typeof err === 'object' && 'code' in err && err.code === 'P2021'
+        ? 'Falta aplicar la migración de base de datos (sendgrid_smtp_config). Ejecute migrate deploy en Railway.'
+        : 'No se pudo leer la configuración SendGrid. Revise logs del servidor.'
+    return {
+      success: true,
+      settings: emptyPublic(),
+      error: msg,
+    }
+  }
 
   const envActive = Boolean(process.env.SMTP_HOST?.trim() && process.env.SMTP_PORT?.trim())
 

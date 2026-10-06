@@ -29,19 +29,25 @@ export default function SendGridSmtpSettingsPanel() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const res = await getSendGridSmtpSettings()
-    if (res.success && res.settings) {
-      setSettings(res.settings)
-      setPort(res.settings.port)
-      setEnabled(res.settings.enabled)
-      setFromAddress(res.settings.fromAddress)
-      setFromPortalAccess(res.settings.fromPortalAccess)
-      setFromResults(res.settings.fromResults)
-      setFromReceipts(res.settings.fromReceipts)
-    } else {
-      setError(res.error || 'No se pudo cargar SendGrid')
+    try {
+      const res = await getSendGridSmtpSettings()
+      if (res.success && res.settings) {
+        setSettings(res.settings)
+        setPort(res.settings.port)
+        setEnabled(res.settings.enabled)
+        setFromAddress(res.settings.fromAddress)
+        setFromPortalAccess(res.settings.fromPortalAccess)
+        setFromResults(res.settings.fromResults)
+        setFromReceipts(res.settings.fromReceipts)
+        if (res.error) setError(res.error)
+      } else {
+        setError(res.error || 'No se pudo cargar SendGrid')
+      }
+    } catch {
+      setError('Error de red al cargar SendGrid. Recargue la página.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   useEffect(() => {
