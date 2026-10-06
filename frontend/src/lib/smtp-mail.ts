@@ -9,6 +9,8 @@ export type SendSmtpMailArgs = {
     | { filename: string; content: Buffer }
     | { filename: string; content: string; encoding: 'base64' }
   >
+  /** Prueba admin: remitente guardado aunque SendGrid esté desactivado en producción. */
+  forProbe?: boolean
 }
 
 export async function sendSmtpMail(

@@ -31,11 +31,14 @@ function envTransport(): ResolvedSmtpTransport | null {
   }
 }
 
-async function dbTransport(): Promise<ResolvedSmtpTransport | null> {
+async function dbTransport(options?: {
+  /** Prueba de conexión: usa credenciales guardadas aunque el toggle esté apagado. */
+  ignoreEnabled?: boolean
+}): Promise<ResolvedSmtpTransport | null> {
   const row = await prisma.sendGridSmtpConfig.findUnique({
     where: { id: SENDGRID_SMTP_ROW_ID },
   })
-  if (!row?.enabled) return null
+  if (!row?.enabled && !options?.ignoreEnabled) return null
   if (!row.apiKeyCiphertext || !row.apiKeyNonce || !row.apiKeyTag) return null
 
   let apiKey: string
@@ -63,20 +66,42 @@ async function dbTransport(): Promise<ResolvedSmtpTransport | null> {
 }
 
 /** BD SendGrid (si está habilitada) gana sobre variables SMTP_* de entorno. */
-export async function resolveSmtpTransport(): Promise<ResolvedSmtpTransport | null> {
-  const fromDb = await dbTransport()
+export async function resolveSmtpTransport(options?: {
+  forProbe?: boolean
+}): Promise<ResolvedSmtpTransport | null> {
+  const fromDb = await dbTransport({ ignoreEnabled: options?.forProbe })
   if (fromDb) return fromDb
   return envTransport()
 }
 
-export async function resolveSmtpFromAddress(purpose: SmtpMailPurpose): Promise<string> {
+export async function describeSmtpTransportBlockReason(): Promise<string | null> {
+  const row = await prisma.sendGridSmtpConfig.findUnique({
+    where: { id: SENDGRID_SMTP_ROW_ID },
+  })
+  const hasKey = Boolean(row?.apiKeyCiphertext && row.apiKeyNonce && row.apiKeyTag)
+  if (hasKey && row && !row.enabled) {
+    return 'SendGrid está guardado pero desactivado. Marque «Usar SendGrid configurado aquí (activo)» y pulse Guardar.'
+  }
+  if (!hasKey && !envTransport()) {
+    return 'SMTP no configurado. Guarde la API key de SendGrid o configure SMTP_HOST en el servidor.'
+  }
+  if (hasKey && row?.enabled) {
+    return 'No se pudo usar SendGrid (revise que NEXTAUTH_SECRET no haya cambiado tras guardar la API key).'
+  }
+  return null
+}
+
+export async function resolveSmtpFromAddress(
+  purpose: SmtpMailPurpose,
+  options?: { ignoreEnabled?: boolean },
+): Promise<string> {
   const row = await prisma.sendGridSmtpConfig.findUnique({
     where: { id: SENDGRID_SMTP_ROW_ID },
   })
 
   const pick = (v: string | null | undefined) => (v?.trim() ? v.trim() : null)
 
-  if (row?.enabled) {
+  if (row && (row.enabled || options?.ignoreEnabled)) {
     if (purpose === 'portal' && pick(row.fromPortalAccess)) return row.fromPortalAccess!.trim()
     if (purpose === 'results' && pick(row.fromResults)) return row.fromResults!.trim()
     if (purpose === 'receipts' && pick(row.fromReceipts)) return row.fromReceipts!.trim()

@@ -9,7 +9,7 @@ import {
   canEncryptAppSecrets,
   encryptAppSecret,
 } from '@/lib/app-secret-crypto'
-import { resolveSmtpTransport } from '@/lib/smtp-config'
+import { describeSmtpTransportBlockReason, resolveSmtpTransport } from '@/lib/smtp-config'
 import { sendSmtpMail } from '@/lib/smtp-mail'
 import { SENDGRID_SMTP_ROW_ID, SendGridSmtpSaveSchema } from '@/schemas/sendgrid-smtp.schema'
 
@@ -220,11 +220,14 @@ export async function probeSendGridSmtpConnection(testRecipient?: string): Promi
     return { success: false, error: 'Se requiere rol ADMIN o SUPERADMIN' }
   }
 
-  const transport = await resolveSmtpTransport()
+  const transport = await resolveSmtpTransport({ forProbe: true })
   if (!transport) {
+    const hint = await describeSmtpTransportBlockReason()
     return {
       success: false,
-      error: 'SMTP no configurado. Guarde la API key o configure SMTP_HOST en el servidor.',
+      error:
+        hint ??
+        'SMTP no configurado. Guarde la API key o configure SMTP_HOST en el servidor.',
     }
   }
 
@@ -238,6 +241,7 @@ export async function probeSendGridSmtpConnection(testRecipient?: string): Promi
 
   const result = await sendSmtpMail({
     purpose: 'default',
+    forProbe: true,
     to,
     subject: 'Prueba SendGrid — Administración Médica Industrial',
     text:

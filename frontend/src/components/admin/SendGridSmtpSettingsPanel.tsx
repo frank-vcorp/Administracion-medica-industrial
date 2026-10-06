@@ -157,6 +157,10 @@ export default function SendGridSmtpSettingsPanel() {
           />
           Usar SendGrid configurado aquí (activo)
         </label>
+        <p className="text-xs text-slate-500 -mt-2">
+          Debe estar activo para envíos reales (portal, recibos, resultados). La prueba de conexión
+          puede usar la API key guardada aunque el toggle esté apagado.
+        </p>
 
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
