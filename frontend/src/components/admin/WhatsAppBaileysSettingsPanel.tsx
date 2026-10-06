@@ -12,9 +12,9 @@ import {
 } from '@/actions/whatsapp-baileys.actions'
 
 const STATUS_LABEL: Record<string, string> = {
-  disconnected: 'Desconectado',
-  qr_pending: 'Esperando escaneo de QR',
-  connected: 'Conectado',
+  disconnected: 'Sin vincular',
+  qr_pending: 'Escanee el QR con su teléfono',
+  connected: 'Vinculado',
   error: 'Error',
 }
 
@@ -25,9 +25,9 @@ export default function WhatsAppBaileysSettingsPanel() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [enabled, setEnabled] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [gatewayUrl, setGatewayUrl] = useState('')
   const [gatewaySecret, setGatewaySecret] = useState('')
-  const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
@@ -37,6 +37,7 @@ export default function WhatsAppBaileysSettingsPanel() {
         setSettings(res.settings)
         setEnabled(res.settings.enabled)
         setGatewayUrl(res.settings.gatewayUrl)
+        if (!res.settings.gatewayConfigured) setShowAdvanced(true)
         if (res.error) setError(res.error)
       } else {
         setError(res.error || 'No se pudo cargar WhatsApp')
@@ -63,7 +64,6 @@ export default function WhatsAppBaileysSettingsPanel() {
     setBusy(true)
     setMessage(null)
     setError(null)
-    setOneTimeSecret(null)
     const res = await saveWhatsAppGatewaySettings({
       gatewayUrl,
       gatewaySecret: gatewaySecret.trim() || undefined,
@@ -71,16 +71,10 @@ export default function WhatsAppBaileysSettingsPanel() {
     if (res.success && res.settings) {
       setSettings(res.settings)
       setGatewaySecret('')
-      if (res.oneTimeSecretForRailway) {
-        setOneTimeSecret(res.oneTimeSecretForRailway)
-        setMessage(
-          'Gateway guardado. Copie el secret mostrado abajo a WHATSAPP_GATEWAY_SECRET en el servicio Railway del gateway.',
-        )
-      } else {
-        setMessage('Conexión al gateway guardada.')
-      }
+      setMessage('Servidor de WhatsApp actualizado.')
+      setShowAdvanced(false)
     } else {
-      setError(res.error || 'Error al guardar gateway')
+      setError(res.error || 'Error al guardar')
     }
     setBusy(false)
   }
@@ -106,7 +100,9 @@ export default function WhatsAppBaileysSettingsPanel() {
     const res = await startWhatsAppBaileysPairing()
     if (res.success && res.settings) {
       setSettings(res.settings)
-      setMessage('Escanee el QR con WhatsApp → Dispositivos vinculados.')
+      setMessage(
+        'Abra WhatsApp en su celular → Configuración → Dispositivos vinculados → Vincular dispositivo → escanee el código.',
+      )
     } else {
       setError(res.error || 'No se pudo generar el QR')
     }
@@ -114,129 +110,57 @@ export default function WhatsAppBaileysSettingsPanel() {
   }
 
   async function handleDisconnect() {
-    if (!confirm('¿Cerrar sesión de WhatsApp en el servidor?')) return
+    if (!confirm('¿Desvincular esta línea de WhatsApp del sistema?')) return
     setBusy(true)
     setMessage(null)
     setError(null)
     const res = await disconnectWhatsAppBaileys()
     if (res.success && res.settings) {
       setSettings(res.settings)
-      setMessage('Sesión WhatsApp cerrada.')
+      setMessage('Línea desvinculada.')
     } else {
-      setError(res.error || 'Error al desconectar')
+      setError(res.error || 'Error al desvincular')
     }
     setBusy(false)
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Cargando WhatsApp (Baileys)…</p>
+    return <p className="text-sm text-slate-500">Cargando WhatsApp…</p>
   }
 
   const statusKey = settings?.status ?? 'disconnected'
   const gatewayReady = settings?.gatewayConfigured && settings.gatewayReachable
+  const needsInfra = !settings?.gatewayConfigured
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-6 shadow-sm">
       <div>
-        <h2 className="text-lg font-bold text-slate-900">WhatsApp (Baileys)</h2>
+        <h2 className="text-lg font-bold text-slate-900">WhatsApp</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Gateway Node en Railway (carpeta <code className="text-xs">whatsapp-gateway</code>) + volumen{' '}
-          <code className="text-xs">/data/wa-auth</code>. La URL y el secret se guardan aquí (cifrado).
+          Vincule la línea con la que enviará mensajes (como WhatsApp Web).{' '}
+          <strong>No escribe su número aquí</strong>: use el teléfono donde tiene WhatsApp para escanear el QR.
         </p>
       </div>
 
-      <form onSubmit={(e) => void handleSaveGateway(e)} className="space-y-3 border border-slate-100 rounded-xl p-4">
-        <p className="text-sm font-semibold text-slate-800">Conexión al gateway</p>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">URL pública del gateway</label>
-          <input
-            type="url"
-            required
-            value={gatewayUrl}
-            onChange={(e) => setGatewayUrl(e.target.value)}
-            placeholder="https://ami-whatsapp-gateway-production.up.railway.app"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Secret del gateway (Bearer)</label>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={gatewaySecret}
-            onChange={(e) => setGatewaySecret(e.target.value)}
-            placeholder={
-              settings?.gatewaySecretSuffix
-                ? `Dejar vacío para mantener …${settings.gatewaySecretSuffix}`
-                : 'Se genera uno si lo deja vacío'
-            }
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono"
-          />
-          <p className="text-xs text-slate-400 mt-1">
-            Debe coincidir con <code className="text-xs">WHATSAPP_GATEWAY_SECRET</code> en el servicio Railway
-            del gateway.
-          </p>
-        </div>
-        <button
-          type="submit"
-          disabled={busy || !settings?.canStoreSecrets}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-sm"
-        >
-          {busy ? 'Guardando…' : 'Guardar gateway'}
-        </button>
-        {oneTimeSecret ? (
-          <p className="text-xs font-mono break-all bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-900">
-            Secret (cópielo en Railway): {oneTimeSecret}
+      <div className="rounded-xl bg-slate-50 border border-slate-100 p-4 text-sm text-slate-700 space-y-1">
+        <p>
+          Estado: <strong>{STATUS_LABEL[statusKey] ?? statusKey}</strong>
+        </p>
+        {settings?.linkedPhone ? (
+          <p>
+            Línea vinculada: <span className="font-mono font-semibold">{settings.linkedPhone}</span>
           </p>
         ) : null}
-      </form>
-
-      <div className="rounded-xl bg-slate-50 border border-slate-100 p-4 text-sm text-slate-600 space-y-1">
-        <p>
-          WhatsApp: <strong>{STATUS_LABEL[statusKey] ?? statusKey}</strong>
-          {settings?.linkedPhone ? (
-            <>
-              {' '}
-              · <span className="font-mono">{settings.linkedPhone}</span>
-            </>
-          ) : null}
-        </p>
-        <p className="text-xs">
-          Gateway:{' '}
-          {settings?.gatewayConfigured ? (
-            settings.gatewayReachable ? (
-              <span className="text-emerald-700 font-semibold">en línea</span>
-            ) : (
-              <span className="text-amber-800">configurado pero no responde /health</span>
-            )
-          ) : (
-            <span className="text-amber-800">sin URL/secret</span>
-          )}
-        </p>
+        {needsInfra ? (
+          <p className="text-xs text-amber-800">Falta configurar el servidor (solo una vez, soporte).</p>
+        ) : !settings?.gatewayReachable ? (
+          <p className="text-xs text-amber-800">El servidor WhatsApp no responde; intente de nuevo en unos minutos.</p>
+        ) : null}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-          className="rounded border-slate-300"
-        />
-        Usar envíos automáticos por WhatsApp cuando el gateway esté conectado
-      </label>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void handleSaveEnabled()}
-        className="bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-800 font-bold px-4 py-2 rounded-xl text-sm"
-      >
-        Guardar preferencia
-      </button>
-
-      <div className="border-t border-slate-100 pt-4 space-y-4">
-        <p className="text-sm font-semibold text-slate-800">Alta / QR</p>
+      <div className="space-y-4">
         {settings?.qrDataUrl ? (
-          <div className="flex flex-col items-center gap-3 p-4 bg-white border border-slate-200 rounded-xl">
+          <div className="flex flex-col items-center gap-3 p-4 bg-white border-2 border-green-100 rounded-xl">
             <Image
               src={settings.qrDataUrl}
               alt="Código QR WhatsApp"
@@ -245,48 +169,101 @@ export default function WhatsAppBaileysSettingsPanel() {
               unoptimized
               className="rounded-lg"
             />
-            <p className="text-xs text-slate-500 text-center max-w-xs">
-              WhatsApp → Dispositivos vinculados → Vincular dispositivo
+            <p className="text-sm text-slate-600 text-center max-w-sm">
+              En su <strong>celular</strong>, abra WhatsApp y escanee este código (Dispositivos vinculados).
             </p>
           </div>
         ) : statusKey === 'connected' ? (
-          <p className="text-sm text-emerald-700">Línea vinculada.</p>
+          <p className="text-sm text-emerald-700 font-medium">La línea ya está vinculada y lista para envíos.</p>
         ) : (
-          <p className="text-sm text-slate-500">Pulse «Mostrar QR» tras guardar el gateway en línea.</p>
+          <p className="text-sm text-slate-500">
+            Pulse el botón verde para mostrar el QR. Tenga a mano el teléfono con la app WhatsApp de la línea
+            institucional.
+          </p>
         )}
 
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={busy || !gatewayReady}
+            disabled={busy || needsInfra || !gatewayReady}
             onClick={() => void handleStartQr()}
-            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-sm"
+            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-xl text-base"
           >
-            {busy ? 'Procesando…' : statusKey === 'qr_pending' ? 'Regenerar QR' : 'Mostrar QR'}
+            {busy ? 'Generando…' : statusKey === 'qr_pending' ? 'Actualizar QR' : 'Mostrar QR'}
           </button>
-          <button
-            type="button"
-            disabled={busy || !gatewayReady || statusKey === 'disconnected'}
-            onClick={() => void handleDisconnect()}
-            className="bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-800 font-bold px-5 py-2.5 rounded-xl text-sm"
-          >
-            Desvincular
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setLoading(true)
-              void load()
-            }}
-            className="text-slate-600 underline text-sm px-2 py-2"
-          >
-            Actualizar estado
-          </button>
+          {statusKey === 'connected' || statusKey === 'qr_pending' ? (
+            <button
+              type="button"
+              disabled={busy || !gatewayReady}
+              onClick={() => void handleDisconnect()}
+              className="bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-800 font-bold px-5 py-3 rounded-xl text-sm"
+            >
+              Desvincular
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {settings?.lastError ? (
+      <div className="border-t border-slate-100 pt-4 space-y-3">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="rounded border-slate-300"
+          />
+          Permitir envíos automáticos por WhatsApp desde el sistema
+        </label>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void handleSaveEnabled()}
+          className="text-sm text-blue-600 font-semibold hover:underline disabled:opacity-50"
+        >
+          Guardar preferencia de envíos
+        </button>
+      </div>
+
+      <details
+        open={showAdvanced}
+        onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
+        className="border border-slate-100 rounded-xl p-4 text-sm"
+      >
+        <summary className="cursor-pointer font-semibold text-slate-700">
+          Configuración técnica del servidor (normalmente ya está lista)
+        </summary>
+        <form onSubmit={(e) => void handleSaveGateway(e)} className="mt-4 space-y-3">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">URL del gateway</label>
+            <input
+              type="url"
+              value={gatewayUrl}
+              onChange={(e) => setGatewayUrl(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Secret (opcional al cambiar)</label>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={gatewaySecret}
+              onChange={(e) => setGatewaySecret(e.target.value)}
+              placeholder={settings?.gatewaySecretSuffix ? `…${settings.gatewaySecretSuffix}` : ''}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={busy || !settings?.canStoreSecrets}
+            className="bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-bold px-4 py-2 rounded-lg text-sm"
+          >
+            Guardar servidor
+          </button>
+        </form>
+      </details>
+
+      {settings?.lastError && !error ? (
         <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           {settings.lastError}
         </p>
