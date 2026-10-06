@@ -20,6 +20,7 @@
     "lucide-react": "^1.43.0",
     "next": "16.1.6",
     "next-auth": "^4.24.13",
+    "nodemailer": "^7.0.7",
     "pdf-lib": "^1.17.1",
     "pngjs": "^7.0.0",
     "qrcode": "^1.5.4",
