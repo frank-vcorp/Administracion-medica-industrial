@@ -1,3 +1,5 @@
+import { resolveWhatsAppGateway } from '@/lib/whatsapp-gateway-config'
+
 type GatewayJson = {
   ok?: boolean
   error?: string
@@ -7,20 +9,9 @@ type GatewayJson = {
   lastError?: string | null
 }
 
-function gatewayBase(): string {
-  return (
-    process.env.WHATSAPP_GATEWAY_URL?.trim() ||
-    process.env.NEXT_PUBLIC_WHATSAPP_GATEWAY_URL?.trim() ||
-    ''
-  )
-}
-
-function gatewaySecret(): string {
-  return process.env.WHATSAPP_GATEWAY_SECRET?.trim() || ''
-}
-
-export function isWhatsAppGatewayConfigured(): boolean {
-  return Boolean(gatewayBase() && gatewaySecret())
+export async function isWhatsAppGatewayConfigured(): Promise<boolean> {
+  const gw = await resolveWhatsAppGateway()
+  return Boolean(gw)
 }
 
 export async function callWhatsAppGateway(args: {
@@ -29,21 +20,20 @@ export async function callWhatsAppGateway(args: {
   role: string
   userId: string
 }): Promise<{ ok: boolean; data?: GatewayJson; error?: string }> {
-  const base = gatewayBase()
-  const secret = gatewaySecret()
-  if (!base || !secret) {
+  const gw = await resolveWhatsAppGateway()
+  if (!gw) {
     return {
       ok: false,
       error:
-        'Gateway WhatsApp no configurado. Defina WHATSAPP_GATEWAY_URL y WHATSAPP_GATEWAY_SECRET en el servidor.',
+        'Indique la URL del gateway WhatsApp y el secret en esta pantalla (o variables WHATSAPP_GATEWAY_* en el servidor).',
     }
   }
 
   try {
-    const res = await fetch(`${base.replace(/\/$/, '')}${args.path}`, {
+    const res = await fetch(`${gw.baseUrl}${args.path}`, {
       method: args.method,
       headers: {
-        Authorization: `Bearer ${secret}`,
+        Authorization: `Bearer ${gw.secret}`,
         'x-ami-role': args.role,
         'x-ami-userid': args.userId,
       },
@@ -61,6 +51,28 @@ export async function callWhatsAppGateway(args: {
     return {
       ok: false,
       error: err instanceof Error ? err.message : 'Error de red con el gateway WhatsApp',
+    }
+  }
+}
+
+export async function probeWhatsAppGatewayHealth(): Promise<{
+  ok: boolean
+  error?: string
+}> {
+  const gw = await resolveWhatsAppGateway()
+  if (!gw) {
+    return { ok: false, error: 'Gateway no configurado' }
+  }
+  try {
+    const res = await fetch(`${gw.baseUrl}/health`, { cache: 'no-store' })
+    if (!res.ok) {
+      return { ok: false, error: `Health ${res.status}` }
+    }
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'No se alcanza el gateway',
     }
   }
 }

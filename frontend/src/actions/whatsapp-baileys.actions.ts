@@ -1,24 +1,47 @@
 'use server'
 
+import { randomBytes } from 'node:crypto'
 import { getServerSession } from 'next-auth/next'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/auth'
 import { isAdminLike } from '@/lib/auth/roles'
 import prisma from '@/lib/prisma'
+import { canEncryptAppSecrets, encryptAppSecret } from '@/lib/app-secret-crypto'
 import {
   callWhatsAppGateway,
   isWhatsAppGatewayConfigured,
+  probeWhatsAppGatewayHealth,
 } from '@/lib/whatsapp-gateway-client'
 
 const ROW_ID = 'default'
 
 export type WhatsAppBaileysPublicSettings = {
   gatewayConfigured: boolean
+  gatewayUrl: string
+  gatewaySecretSuffix: string | null
+  gatewayReachable: boolean
+  canStoreSecrets: boolean
   enabled: boolean
   status: string
   linkedPhone: string | null
   qrDataUrl: string | null
   lastError: string | null
+}
+
+function emptySettings(partial?: Partial<WhatsAppBaileysPublicSettings>): WhatsAppBaileysPublicSettings {
+  return {
+    gatewayConfigured: false,
+    gatewayUrl: '',
+    gatewaySecretSuffix: null,
+    gatewayReachable: false,
+    canStoreSecrets: canEncryptAppSecrets(),
+    enabled: false,
+    status: 'disconnected',
+    linkedPhone: null,
+    qrDataUrl: null,
+    lastError: null,
+    ...partial,
+  }
 }
 
 async function upsertRowFromGateway(args: {
@@ -46,6 +69,30 @@ async function upsertRowFromGateway(args: {
   })
 }
 
+async function buildSettingsFromRow(
+  row: Awaited<ReturnType<typeof prisma.whatsAppBaileysConfig.findUnique>>,
+  live?: {
+    status?: string
+    linkedPhone?: string | null
+    qrDataUrl?: string | null
+    lastError?: string | null
+  },
+): Promise<WhatsAppBaileysPublicSettings> {
+  const configured = await isWhatsAppGatewayConfigured()
+  const health = configured ? await probeWhatsAppGatewayHealth() : { ok: false }
+  return emptySettings({
+    gatewayConfigured: configured,
+    gatewayUrl: row?.gatewayUrl ?? '',
+    gatewaySecretSuffix: row?.gatewaySecretSuffix ?? null,
+    gatewayReachable: health.ok,
+    enabled: row?.enabled ?? false,
+    status: live?.status ?? row?.status ?? 'disconnected',
+    linkedPhone: live?.linkedPhone ?? row?.linkedPhone ?? null,
+    qrDataUrl: live?.qrDataUrl ?? null,
+    lastError: live?.lastError ?? row?.lastError ?? null,
+  })
+}
+
 export async function getWhatsAppBaileysSettings(): Promise<{
   success: boolean
   settings?: WhatsAppBaileysPublicSettings
@@ -64,24 +111,23 @@ export async function getWhatsAppBaileysSettings(): Promise<{
     console.error('[WhatsApp] get settings DB failed:', err)
     return {
       success: false,
-      error:
-        'Falta la migración whatsapp_baileys_config. Ejecute prisma migrate deploy en Railway.',
+      error: 'Falta migración whatsapp_baileys_config. Ejecute prisma migrate deploy.',
     }
   }
 
-  if (!isWhatsAppGatewayConfigured()) {
+  if (!(await isWhatsAppGatewayConfigured())) {
     return {
       success: true,
-      settings: {
-        gatewayConfigured: false,
+      settings: emptySettings({
+        gatewayUrl: row?.gatewayUrl ?? '',
+        gatewaySecretSuffix: row?.gatewaySecretSuffix ?? null,
         enabled: row?.enabled ?? false,
         status: row?.status ?? 'disconnected',
         linkedPhone: row?.linkedPhone ?? null,
-        qrDataUrl: null,
         lastError:
           row?.lastError ??
-          'Configure WHATSAPP_GATEWAY_URL y WHATSAPP_GATEWAY_SECRET (servicio Baileys en Railway).',
-      },
+          'Indique la URL del gateway y el secret en la sección «Conexión al gateway».',
+      }),
     }
   }
 
@@ -95,14 +141,9 @@ export async function getWhatsAppBaileysSettings(): Promise<{
   if (!live.ok || !live.data) {
     return {
       success: true,
-      settings: {
-        gatewayConfigured: true,
-        enabled: row?.enabled ?? false,
-        status: row?.status ?? 'disconnected',
-        linkedPhone: row?.linkedPhone ?? null,
-        qrDataUrl: null,
+      settings: await buildSettingsFromRow(row, {
         lastError: live.error ?? 'No se pudo contactar el gateway WhatsApp',
-      },
+      }),
       error: live.error,
     }
   }
@@ -117,15 +158,98 @@ export async function getWhatsAppBaileysSettings(): Promise<{
 
   return {
     success: true,
-    settings: {
-      gatewayConfigured: true,
-      enabled: row?.enabled ?? false,
-      status: d.status ?? 'disconnected',
-      linkedPhone: d.linkedPhone ?? null,
-      qrDataUrl: d.qrDataUrl ?? null,
-      lastError: d.lastError ?? null,
-    },
+    settings: await buildSettingsFromRow(row, {
+      status: d.status,
+      linkedPhone: d.linkedPhone,
+      qrDataUrl: d.qrDataUrl,
+      lastError: d.lastError,
+    }),
   }
+}
+
+export async function saveWhatsAppGatewaySettings(input: {
+  gatewayUrl: string
+  gatewaySecret?: string
+}): Promise<{
+  success: boolean
+  settings?: WhatsAppBaileysPublicSettings
+  error?: string
+  oneTimeSecretForRailway?: string
+}> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return { success: false, error: 'No autenticado' }
+  if (!isAdminLike(session.user.role)) {
+    return { success: false, error: 'Se requiere rol ADMIN o SUPERADMIN' }
+  }
+  if (!canEncryptAppSecrets()) {
+    return { success: false, error: 'Falta NEXTAUTH_SECRET para cifrar el secret del gateway.' }
+  }
+
+  const url = input.gatewayUrl.trim().replace(/\/$/, '')
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return { success: false, error: 'URL del gateway inválida (use https://...)' }
+  }
+
+  const existing = await prisma.whatsAppBaileysConfig.findUnique({ where: { id: ROW_ID } })
+  let secret = input.gatewaySecret?.trim() ?? ''
+  let oneTimeSecretForRailway: string | undefined
+
+  if (!secret) {
+    if (existing?.gatewaySecretCiphertext) {
+      // mantener secret previo
+    } else {
+      secret = randomBytes(24).toString('hex')
+      oneTimeSecretForRailway = secret
+    }
+  }
+
+  let cipher: ReturnType<typeof encryptAppSecret> | undefined
+  let suffix = existing?.gatewaySecretSuffix ?? null
+  if (secret) {
+    cipher = encryptAppSecret(secret)
+    suffix = secret.slice(-4)
+  }
+
+  await prisma.whatsAppBaileysConfig.upsert({
+    where: { id: ROW_ID },
+    create: {
+      id: ROW_ID,
+      gatewayUrl: url,
+      gatewaySecretCiphertext: cipher?.ciphertext,
+      gatewaySecretNonce: cipher?.nonce,
+      gatewaySecretTag: cipher?.tag,
+      gatewaySecretSuffix: suffix,
+      status: 'disconnected',
+      enabled: false,
+      updatedBy: session.user.id,
+    },
+    update: {
+      gatewayUrl: url,
+      ...(cipher
+        ? {
+            gatewaySecretCiphertext: cipher.ciphertext,
+            gatewaySecretNonce: cipher.nonce,
+            gatewaySecretTag: cipher.tag,
+            gatewaySecretSuffix: suffix,
+          }
+        : {}),
+      updatedBy: session.user.id,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: 'WHATSAPP_GATEWAY_CONFIG_UPDATE',
+      entity: 'WhatsAppBaileysConfig',
+      entityId: ROW_ID,
+      details: { gatewayUrl: url, secretRotated: Boolean(input.gatewaySecret?.trim()) },
+    },
+  })
+
+  revalidatePath('/admin/settings')
+  const refreshed = await getWhatsAppBaileysSettings()
+  return { ...refreshed, oneTimeSecretForRailway }
 }
 
 export async function saveWhatsAppBaileysEnabled(enabled: boolean): Promise<{

@@ -647,15 +647,20 @@ model SendGridSmtpConfig {
 
 // WhatsApp Web vía Baileys (gateway Node en Railway). Estado de enlace + toggle operativo.
 model WhatsAppBaileysConfig {
-  id          String   @id @default("default")
-  enabled     Boolean  @default(false)
-  linkedPhone String?
-  status      String   @default("disconnected")
-  lastError   String?
-  updatedBy   String?
-  updatedAt   DateTime @updatedAt
-  createdAt   DateTime @default(now())
-  user        User?    @relation("WhatsAppBaileysUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+  id                     String   @id @default("default")
+  enabled                Boolean  @default(false)
+  gatewayUrl             String?
+  gatewaySecretCiphertext Bytes?
+  gatewaySecretNonce     Bytes?
+  gatewaySecretTag       Bytes?
+  gatewaySecretSuffix    String?
+  linkedPhone            String?
+  status                 String   @default("disconnected")
+  lastError              String?
+  updatedBy              String?
+  updatedAt              DateTime @updatedAt
+  createdAt              DateTime @default(now())
+  user                   User?    @relation("WhatsAppBaileysUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@map("whatsapp_baileys_config")
 }
