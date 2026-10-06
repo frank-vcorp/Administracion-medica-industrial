@@ -115,18 +115,24 @@ export async function getWhatsAppBaileysSettings(): Promise<{
     }
   }
 
-  if (!(await isWhatsAppGatewayConfigured())) {
+  const configured = await isWhatsAppGatewayConfigured()
+  const hasStored =
+    Boolean(row?.gatewayUrl?.trim()) &&
+    Boolean(row?.gatewaySecretCiphertext && row.gatewaySecretNonce && row.gatewaySecretTag)
+
+  if (!configured) {
     return {
       success: true,
       settings: emptySettings({
         gatewayUrl: row?.gatewayUrl ?? '',
         gatewaySecretSuffix: row?.gatewaySecretSuffix ?? null,
+        gatewayConfigured: hasStored,
         enabled: row?.enabled ?? false,
         status: row?.status ?? 'disconnected',
         linkedPhone: row?.linkedPhone ?? null,
-        lastError:
-          row?.lastError ??
-          'Indique la URL del gateway y el secret en la sección «Conexión al gateway».',
+        lastError: hasStored
+          ? 'Servidor registrado pero el secret no se pudo usar en este entorno. Soporte puede sincronizar WHATSAPP_GATEWAY_* en Vercel o pulse Guardar servidor.'
+          : 'Pulse «Guardar servidor» una vez (URL ya precargada) o contacte soporte.',
       }),
     }
   }

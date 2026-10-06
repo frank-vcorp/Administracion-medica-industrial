@@ -129,8 +129,9 @@ export default function WhatsAppBaileysSettingsPanel() {
   }
 
   const statusKey = settings?.status ?? 'disconnected'
+  const hasServer = Boolean(settings?.gatewayUrl?.trim())
   const gatewayReady = settings?.gatewayConfigured && settings.gatewayReachable
-  const needsInfra = !settings?.gatewayConfigured
+  const needsInfra = !hasServer && !settings?.gatewayConfigured
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-6 shadow-sm">
