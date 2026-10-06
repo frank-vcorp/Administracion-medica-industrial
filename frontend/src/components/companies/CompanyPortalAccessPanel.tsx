@@ -10,6 +10,7 @@ import {
   type CompanyPortalAccessState,
 } from '@/actions/company-portal.actions'
 import { isAdminLike, isSellerLike } from '@/lib/auth/roles'
+import { startPortalPreview } from '@/actions/portal-preview.actions'
 
 type Props = {
   companyId: string
@@ -177,6 +178,20 @@ export default function CompanyPortalAccessPanel({
           </p>
         </div>
       )}
+
+      <div className="border-t border-slate-100 pt-4">
+        <form action={startPortalPreview.bind(null, companyId)}>
+          <button
+            type="submit"
+            className="text-sm font-bold text-violet-700 hover:text-violet-900 underline"
+          >
+            Ver portal como esta empresa →
+          </button>
+        </form>
+        <p className="text-xs text-slate-500 mt-1">
+          Solo staff (admin/vendedor). No reemplaza el usuario portal real ni comparte su contraseña.
+        </p>
+      </div>
 
       {portalOn && estado === 'HABILITADO' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-4">

@@ -10,7 +10,11 @@
 
 import { getToken } from "next-auth/jwt"
 import { NextRequest, NextResponse } from "next/server"
-import { isAdminLike } from "@/lib/auth/roles"
+import { isAdminLike, isSellerLike } from "@/lib/auth/roles"
+import {
+  PORTAL_PREVIEW_COOKIE,
+  verifyPortalPreviewCookieValue,
+} from "@/lib/portal-preview"
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -61,9 +65,24 @@ export async function middleware(request: NextRequest) {
 
   // Protección específica para /portal/*
   if (pathname.startsWith("/portal")) {
-    if (token.role !== "COMPANY_CLIENT") {
+    const previewRaw = request.cookies.get(PORTAL_PREVIEW_COOKIE)?.value
+    const previewCompanyId = verifyPortalPreviewCookieValue(previewRaw)
+    const isStaffPortalPreview =
+      !!previewCompanyId &&
+      (isAdminLike(token.role as string) || isSellerLike(token.role as string))
+
+    if (token.role !== "COMPANY_CLIENT" && !isStaffPortalPreview) {
       return NextResponse.redirect(new URL("/", request.url))
     }
+
+    if (isStaffPortalPreview) {
+      const onboardingPath = "/portal/onboarding"
+      if (pathname.startsWith(onboardingPath)) {
+        return NextResponse.redirect(new URL("/portal", request.url))
+      }
+      return NextResponse.next()
+    }
+
     if (token.portalBlocked) {
       const url = new URL("/login", request.url)
       url.searchParams.set("error", "portal_disabled")

@@ -1,35 +1,12 @@
 'use server'
 
 import prisma from '@/lib/prisma'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/auth'
 // IMPL-20260817-08-C4 (ARCH-20260817-02 DA-1): heurística `includes('no apto')`
 // migra a `isNoCumple(aptitud)` estructurada con fallback legacy. El literal
 // canónico "NO CUMPLE CON LOS CRITERIOS..." NO contiene "no apto", por lo
 // que la heurística histórica clasificaba erróneamente como APTO.
 import { isNoCumple } from '@/lib/clinical/aptitud.helper'
-
-/**
- * Obtiene la sesión segura del servidor + valida que el usuario sea COMPANY_CLIENT
- * @id IMPL-20260225-01
- */
-async function getSessionOrThrow() {
-  const session = await getServerSession(authOptions)
-  
-  if (!session?.user) {
-    throw new Error('No autorizado: sesión no encontrada')
-  }
-  
-  if (session.user.role !== 'COMPANY_CLIENT') {
-    throw new Error('No autorizado: solo usuarios CLIENT pueden acceder a portal')
-  }
-  
-  if (!session.user.companyId) {
-    throw new Error('No autorizado: usuario CLIENT sin empresa asignada')
-  }
-  
-  return session
-}
+import { resolvePortalCompanyAccess } from '@/lib/portal-access'
 
 /**
  * Obtiene las métricas generales de una empresa para el Dashboard B2B
@@ -38,8 +15,7 @@ async function getSessionOrThrow() {
  */
 export async function getCompanyDashboardStats() {
   try {
-    const session = await getSessionOrThrow()
-    const companyId = session.user.companyId!
+    const { companyId } = await resolvePortalCompanyAccess()
 
     const workersCount = await prisma.worker.count({
       where: { companyId }
@@ -118,8 +94,7 @@ export async function getCompanyDashboardStats() {
  */
 export async function getCompanyWorkersWithStatus() {
   try {
-    const session = await getSessionOrThrow()
-    const companyId = session.user.companyId!
+    const { companyId } = await resolvePortalCompanyAccess()
 
     const workers = await prisma.worker.findMany({
       where: { companyId },
@@ -172,8 +147,7 @@ export async function getCompanyWorkersWithStatus() {
  */
 export async function getCompanyEventsHistory() {
   try {
-    const session = await getSessionOrThrow()
-    const companyId = session.user.companyId!
+    const { companyId } = await resolvePortalCompanyAccess()
 
     const events = await prisma.medicalEvent.findMany({
       where: { worker: { companyId } },
