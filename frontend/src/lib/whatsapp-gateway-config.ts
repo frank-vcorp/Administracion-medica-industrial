@@ -20,7 +20,8 @@ export async function resolveWhatsAppGateway(): Promise<ResolvedWhatsAppGateway 
   }
 
   const row = await prisma.whatsAppBaileysConfig.findUnique({ where: { id: ROW_ID } })
-  const url = row?.gatewayUrl?.trim()
+  if (!row) return null
+  const url = row.gatewayUrl?.trim()
   if (!url) return null
   if (!row.gatewaySecretCiphertext || !row.gatewaySecretNonce || !row.gatewaySecretTag) {
     return null
