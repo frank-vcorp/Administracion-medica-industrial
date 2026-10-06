@@ -26,6 +26,7 @@ import {
   ImpresiónAptitudSchema,
   AntecedentesCapturaSchema,
   AgudezaVisualSchema,
+  VISION_CERCANA_VALUES,
   VISION_SNELLEN_VALUES,
   REFLEJOS_VALUES,
   CAMPIMETRIA_VALUES,
@@ -281,12 +282,12 @@ describe('AgudezaVisualSchema IMPL-20260817-01-C1 (ZIN combos tolerancia legacy)
     const payload = {
       vision_lejana_od: '20/200',
       vision_lejana_oi: '20/100',
-      vision_cercana_od: '20/70',
-      vision_cercana_oi: '20/50',
+      vision_cercana_od: '.75',
+      vision_cercana_oi: '1.0',
       lejana_corregida_od: '20/40',
       lejana_corregida_oi: '20/30',
-      cercana_corregida_od: '20/25',
-      cercana_corregida_oi: '20/20',
+      cercana_corregida_od: '0.5',
+      cercana_corregida_oi: '2',
       reflejos: 'PRESENTES Y NORMOREFLECTICOS',
       test_ishihara: 'NORMAL (LEE 12, 8, 6, 29, 57, 45)',
       campimetria: 'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES',
@@ -327,8 +328,22 @@ describe('AgudezaVisualSchema IMPL-20260817-01-C1 (ZIN combos tolerancia legacy)
     expect(parsed.campimetria).toBe('CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES')
   })
 
-  it('14. expone constantes VISION_SNELLEN_VALUES (11) + REFLEJOS_VALUES (4) + CAMPIMETRIA_VALUES (4) + TEST_ISHIHARA_VALUES (3)', () => {
+  it('14a. acepta catálogo decimal AMI en campos de visión cercana', () => {
+    for (const val of VISION_CERCANA_VALUES) {
+      const parsed = AgudezaVisualSchema.parse({
+        vision_cercana_od: val,
+        vision_cercana_oi: val,
+        cercana_corregida_od: val,
+        cercana_corregida_oi: val,
+      })
+      expect(parsed.vision_cercana_od).toBe(val)
+    }
+  })
+
+  it('14. expone constantes VISION_SNELLEN_VALUES (11) + VISION_CERCANA_VALUES (7) + REFLEJOS_VALUES (4) + CAMPIMETRIA_VALUES (4) + TEST_ISHIHARA_VALUES (3)', () => {
     expect(VISION_SNELLEN_VALUES).toHaveLength(11)
+    expect(VISION_CERCANA_VALUES).toHaveLength(7)
+    expect(VISION_CERCANA_VALUES).toContain('.75')
     expect(VISION_SNELLEN_VALUES[0]).toBe('20/200')
     expect(VISION_SNELLEN_VALUES[9]).toBe('20/13')
     expect(VISION_SNELLEN_VALUES[10]).toBe('20/10')

@@ -1,9 +1,13 @@
 /**
  * Parámetros y clasificación de agudeza visual (R-08 / CAMPIMETRÍA.xlsx + ZIN).
  * Fuente única para examen médico, estudio Agudeza Visual y herencia campimetría.
+ * Visión cercana: escala decimal legacy AMI (Abbott / RD2026).
  */
 
-import { VISION_SNELLEN_VALUES } from '@/schemas/clinical/exam.schema'
+import {
+  VISION_CERCANA_VALUES,
+  VISION_SNELLEN_VALUES,
+} from '@/schemas/clinical/exam.schema'
 
 export const VISION_SNELLEN_NO_APLICA = 'NO APLICA' as const
 
@@ -12,6 +16,38 @@ export const VISION_SNELLEN_SELECT_OPTIONS = [
   VISION_SNELLEN_NO_APLICA,
   ...VISION_SNELLEN_VALUES,
 ] as const
+
+/** Opciones visión cercana (sin corregir y corregida) — legacy AMI. */
+export const VISION_CERCANA_SELECT_OPTIONS = [
+  VISION_SNELLEN_NO_APLICA,
+  ...VISION_CERCANA_VALUES,
+] as const
+
+const VISION_CERCANA_FIELD_NAMES = new Set([
+  'vision_cercana_od',
+  'vision_cercana_oi',
+  'cercana_corregida_od',
+  'cercana_corregida_oi',
+])
+
+export function isVisionCercanaField(fieldName: string): boolean {
+  return VISION_CERCANA_FIELD_NAMES.has(fieldName)
+}
+
+/** Opciones del `<select>` según tipo de campo (lejana Snellen vs cercana decimal). */
+export function visionFieldSelectOptions(
+  fieldName: string,
+  currentValue?: string | null,
+): readonly string[] {
+  const base = isVisionCercanaField(fieldName)
+    ? VISION_CERCANA_SELECT_OPTIONS
+    : VISION_SNELLEN_SELECT_OPTIONS
+  const v = String(currentValue ?? '').trim()
+  if (v && v !== VISION_SNELLEN_NO_APLICA && !base.includes(v)) {
+    return [...base, v]
+  }
+  return base
+}
 
 export function parseSnellenDenominator(
   value: string | null | undefined,

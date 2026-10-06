@@ -65,7 +65,7 @@ import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
 import {
   deriveAgudezaVisualResumen,
   VISION_SNELLEN_NO_APLICA,
-  VISION_SNELLEN_SELECT_OPTIONS,
+  visionFieldSelectOptions,
 } from "@/lib/clinical/agudeza-visual"
 import { FlowserveExtension } from "@/components/clinical/examen-medico/FlowserveExtension"
 import { SodexoExtension } from "@/components/clinical/examen-medico/SodexoExtension"
@@ -1246,7 +1246,7 @@ export default function ExamenMedicoEstudio({
             <p className="text-xs font-bold text-indigo-800">Agudeza Visual — Campo Visual y Pruebas Complementarias</p>
           </div>
 
-          {/* Campo Visual — escala Snellen ZIN (R-08 / CAMPIMETRÍA.xlsx) */}
+          {/* Campo Visual — lejana Snellen; cercana decimal legacy AMI */}
           <div>
             <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Campo Visual</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1259,7 +1259,7 @@ export default function ExamenMedicoEstudio({
                     disabled={readonly}
                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-sm disabled:opacity-60"
                   >
-                    {VISION_SNELLEN_SELECT_OPTIONS.map(v => (
+                    {visionFieldSelectOptions(f.name, agudezaForm[f.name]).map(v => (
                       <option key={v} value={v}>{v}</option>
                     ))}
                   </select>

@@ -31,6 +31,19 @@ export const VISION_SNELLEN_VALUES = [
 
 export type VisionSnellenValue = (typeof VISION_SNELLEN_VALUES)[number]
 
+/** Visión cercana / cercana corregida — escala decimal legacy AMI (Abbott). */
+export const VISION_CERCANA_VALUES = [
+  '0.5',
+  '.75',
+  '1.0',
+  '1.25',
+  '1.5',
+  '1.75',
+  '2',
+] as const
+
+export type VisionCercanaValue = (typeof VISION_CERCANA_VALUES)[number]
+
 /** Reflejos pupilares — 4 opciones (default `PRESENTES Y NORMOREFLECTICOS`). */
 export const REFLEJOS_VALUES = [
   'PRESENTES Y NORMOREFLECTICOS',
@@ -584,18 +597,18 @@ export const SomatometriaVitalesSchema = z.object({
 // ----------------------------------------------------------------------
 // 8. AGUDEZA VISUAL (Imagen 7)
 // IMPL-20260817-01-C1: 11 campos con catálogo ZIN + refine tolerante (DA-1).
-// 8 visión (Snellen 11 valores) + reflejos (4) + test_ishihara (3) +
+// 4 lejana (Snellen) + 4 cercana (decimal AMI) + reflejos (4) + test_ishihara (3) +
 // campimetria (4). UI usa <select>; schema preserva registros legacy.
 // ----------------------------------------------------------------------
 export const AgudezaVisualSchema = z.object({
   vision_lejana_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
   vision_lejana_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
-  vision_cercana_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
-  vision_cercana_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  vision_cercana_od: tolerantZinEnum(VISION_CERCANA_VALUES).default('NO APLICA'),
+  vision_cercana_oi: tolerantZinEnum(VISION_CERCANA_VALUES).default('NO APLICA'),
   lejana_corregida_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
   lejana_corregida_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
-  cercana_corregida_od: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
-  cercana_corregida_oi: tolerantZinEnum(VISION_SNELLEN_VALUES).default('NO APLICA'),
+  cercana_corregida_od: tolerantZinEnum(VISION_CERCANA_VALUES).default('NO APLICA'),
+  cercana_corregida_oi: tolerantZinEnum(VISION_CERCANA_VALUES).default('NO APLICA'),
   reflejos: tolerantZinEnum(REFLEJOS_VALUES).default('PRESENTES Y NORMOREFLECTICOS'),
   test_ishihara: tolerantZinEnum(TEST_ISHIHARA_VALUES).default(
     'NORMAL (LEE 12, 8, 6, 29, 57, 45)',

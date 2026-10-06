@@ -22,7 +22,7 @@ import {
 import {
   deriveAgudezaVisualResumen,
   VISION_SNELLEN_NO_APLICA,
-  VISION_SNELLEN_SELECT_OPTIONS,
+  visionFieldSelectOptions,
 } from "@/lib/clinical/agudeza-visual"
 
 const VISUAL_FIELDS = [
@@ -123,7 +123,7 @@ export default function AgudezaVisualStudy({
                 disabled={readonly}
                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:opacity-60"
               >
-                {VISION_SNELLEN_SELECT_OPTIONS.map(v => (
+                {visionFieldSelectOptions(f.name, formData[f.name]).map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
