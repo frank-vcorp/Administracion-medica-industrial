@@ -82,6 +82,7 @@ model User {
   // IMPL-20260809-06: API keys IA gestionadas vía UI (ARCH-20260809-03). updatedBy FK opcional.
   updatedAIProviderKeys     AIProviderKey[]           @relation("AIProviderKeyUpdater")
   updatedSendGridSmtp       SendGridSmtpConfig[]      @relation("SendGridSmtpUpdater")
+  updatedWhatsAppBaileys    WhatsAppBaileysConfig[]   @relation("WhatsAppBaileysUpdater")
   // ARCH-20260809-05: Configuración runtime editable por UI (extraction_default_provider, etc.).
   appConfigUpdated          AppConfig[]               @relation("AppConfigUpdater")
   // IMPL-FEATURE-20260825-01: perfil médico editable por Superadmin/Doctor.
@@ -642,6 +643,21 @@ model SendGridSmtpConfig {
   user               User?    @relation("SendGridSmtpUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@map("sendgrid_smtp_config")
+}
+
+// WhatsApp Web vía Baileys (gateway Node en Railway). Estado de enlace + toggle operativo.
+model WhatsAppBaileysConfig {
+  id          String   @id @default("default")
+  enabled     Boolean  @default(false)
+  linkedPhone String?
+  status      String   @default("disconnected")
+  lastError   String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  user        User?    @relation("WhatsAppBaileysUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("whatsapp_baileys_config")
 }
 
 // ARCH-20260809-05: Configuración runtime editable por UI (sin redeploy).
