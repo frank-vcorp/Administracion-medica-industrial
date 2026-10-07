@@ -7,7 +7,9 @@ import {
   getPortalAppointmentBookingContext,
 } from '@/actions/portal-appointment.actions'
 import PortalAppointmentDateCalendar from '@/components/portal/PortalAppointmentDateCalendar'
+import PortalQuickWorkerRegister from '@/components/portal/PortalQuickWorkerRegister'
 import PortalSpecialRequestPanel from '@/components/portal/PortalSpecialRequestPanel'
+import type { PortalWorkerListItem } from '@/actions/portal-worker.actions'
 import { formatAgendaDayHeading } from '@/lib/appointment-scheduling'
 
 type BookingContext = Extract<
@@ -19,7 +21,27 @@ type Props = {
   context: BookingContext
 }
 
+type WorkerOption = BookingContext['workers'][number]
+
+function mergeWorkers(existing: WorkerOption[], incoming: PortalWorkerListItem[]): WorkerOption[] {
+  const map = new Map(existing.map((w) => [w.id, w]))
+  for (const w of incoming) {
+    map.set(w.id, {
+      id: w.id,
+      firstName: w.firstName,
+      lastName: w.lastName,
+      phone: w.phone,
+      medicalProfileId: w.medicalProfileId,
+      medicalProfile: w.medicalProfile,
+    })
+  }
+  return [...map.values()].sort((a, b) =>
+    `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'es'),
+  )
+}
+
 export default function PortalAppointmentForm({ context }: Props) {
+  const [workers, setWorkers] = useState(context.workers)
   const [workerId, setWorkerId] = useState(context.workers[0]?.id ?? '')
   const [branchId, setBranchId] = useState(
     context.defaultBranchId ?? context.branches[0]?.id ?? '',
@@ -174,7 +196,7 @@ export default function PortalAppointmentForm({ context }: Props) {
               onChange={(e) => setWorkerId(e.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
             >
-              {context.workers.map((w) => (
+              {workers.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.lastName}, {w.firstName}
                 </option>
@@ -198,6 +220,25 @@ export default function PortalAppointmentForm({ context }: Props) {
               ))}
             </select>
           </label>
+
+          <div className="sm:col-span-2">
+            <PortalQuickWorkerRegister
+              branchId={branchId}
+              date={date}
+              time={time}
+              slots={slots}
+              readOnly={readOnly}
+              defaultOpen={workers.length === 0}
+              onSelectTime={setTime}
+              onWorkersCreated={(created, firstId) => {
+                setWorkers((prev) => mergeWorkers(prev, created))
+                if (firstId) setWorkerId(firstId)
+                void getPortalBranchHourAvailability({ branchId, date }).then((res) => {
+                  if (res.success) setSlots(res.slots)
+                })
+              }}
+            />
+          </div>
 
           <label className="block text-sm sm:col-span-2">
             <span className="text-xs font-bold uppercase text-slate-500">Perfil de exámenes (opcional)</span>
@@ -231,14 +272,16 @@ export default function PortalAppointmentForm({ context }: Props) {
 
         <button
           type="submit"
-          disabled={readOnly || pending || context.workers.length === 0}
+          disabled={readOnly || pending || workers.length === 0}
           className="w-full sm:w-auto rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {readOnly ? 'Solo lectura (vista previa)' : pending ? 'Agendando…' : 'Confirmar cita'}
         </button>
 
-        {context.workers.length === 0 && (
-          <p className="text-sm text-slate-500">No hay trabajadores registrados para agendar.</p>
+        {workers.length === 0 && (
+          <p className="text-sm text-slate-500">
+            Registre trabajadores arriba (según cupo del horario) para poder confirmar la cita.
+          </p>
         )}
 
         {!showSpecialRequest && (
