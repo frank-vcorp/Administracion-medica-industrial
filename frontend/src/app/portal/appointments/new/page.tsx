@@ -32,7 +32,7 @@ export default async function PortalNewAppointmentPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
       <Link href="/portal/events" className="text-sm text-blue-600 font-medium hover:underline">
         ← Expedientes
       </Link>

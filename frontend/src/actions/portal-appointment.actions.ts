@@ -223,6 +223,58 @@ export async function getPortalBranchMonthAvailability(input: {
   return { success: true as const, month: input.month, days, hourlyCapacity: capacity }
 }
 
+export async function getPortalBranchWeekAvailability(input: {
+  branchId: string
+  weekStart: string
+}) {
+  const gate = await resolvePortalBookingViewAccess()
+  if (!gate.ok) return { success: false as const, error: gate.error }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.weekStart)) {
+    return { success: false as const, error: 'Semana inválida' }
+  }
+  if (!(await isBranchAllowedForCompany(gate.companyId, input.branchId))) {
+    return { success: false as const, error: 'Sucursal no autorizada' }
+  }
+
+  const branch = await prisma.branch.findUnique({
+    where: { id: input.branchId },
+    select: {
+      name: true,
+      hourlyCapacity: true,
+      openingTime: true,
+      closingTime: true,
+      isActive: true,
+    },
+  })
+  if (!branch?.isActive) {
+    return { success: false as const, error: 'Sucursal no disponible' }
+  }
+
+  const weekStart = getAgendaWeekStartMonday(input.weekStart)
+  const dateStrings = Array.from({ length: 7 }, (_, i) => addAgendaDays(weekStart, i))
+  const capacity = branch.hourlyCapacity ?? 15
+  const days = await computeBranchDayAvailabilityForDates(
+    prisma,
+    input.branchId,
+    dateStrings,
+    {
+      hourlyCapacity: capacity,
+      openingTime: branch.openingTime,
+      closingTime: branch.closingTime,
+    },
+    todayAgendaDateString(),
+  )
+
+  return {
+    success: true as const,
+    weekStart,
+    days,
+    branchName: branch.name,
+    hourlyCapacity: capacity,
+  }
+}
+
 export async function createPortalClientAppointment(input: {
   workerId: string
   branchId: string

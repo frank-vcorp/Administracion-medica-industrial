@@ -8,6 +8,7 @@ import {
 } from '@/actions/portal-appointment.actions'
 import PortalAppointmentDateCalendar from '@/components/portal/PortalAppointmentDateCalendar'
 import PortalSpecialRequestPanel from '@/components/portal/PortalSpecialRequestPanel'
+import { formatAgendaDayHeading } from '@/lib/appointment-scheduling'
 
 type BookingContext = Extract<
   Awaited<ReturnType<typeof getPortalAppointmentBookingContext>>,
@@ -126,9 +127,42 @@ export default function PortalAppointmentForm({ context }: Props) {
           citas ni solicitudes hasta que un usuario cliente real envíe desde su sesión.
         </p>
       )}
+      <div className="space-y-4">
+        <label className="block text-sm max-w-md">
+          <span className="text-xs font-bold uppercase text-slate-500">Sucursal</span>
+          <select
+            required
+            value={branchId}
+            onChange={(e) => setBranchId(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm"
+          >
+            {context.branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <PortalAppointmentDateCalendar
+          branchId={branchId}
+          branchName={context.branches.find((b) => b.id === branchId)?.name}
+          selectedDate={date}
+          onSelectDate={setDate}
+          todayStr={context.suggestedDate}
+        />
+      </div>
+
       <form onSubmit={onSubmit} className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
         <p className="text-sm text-slate-600">
-          Agende una cita por trabajador, fecha y hora para <strong>{context.companyName}</strong>.
+          Complete la cita para <strong>{context.companyName}</strong>
+          {date ? (
+            <>
+              {' '}
+              · <strong className="text-slate-800 capitalize">{formatAgendaDayHeading(date)}</strong>
+            </>
+          ) : null}
+          .
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -147,34 +181,6 @@ export default function PortalAppointmentForm({ context }: Props) {
               ))}
             </select>
           </label>
-
-          <label className="block text-sm">
-            <span className="text-xs font-bold uppercase text-slate-500">Sucursal</span>
-            <select
-              required
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-            >
-              {context.branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="block text-sm sm:col-span-2">
-            <span className="text-xs font-bold uppercase text-slate-500">Fecha (disponibilidad en sucursal)</span>
-            <div className="mt-1">
-              <PortalAppointmentDateCalendar
-                branchId={branchId}
-                selectedDate={date}
-                onSelectDate={setDate}
-                todayStr={context.suggestedDate}
-              />
-            </div>
-          </div>
 
           <label className="block text-sm">
             <span className="text-xs font-bold uppercase text-slate-500">Hora</span>
