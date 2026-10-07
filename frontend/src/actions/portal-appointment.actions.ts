@@ -89,7 +89,6 @@ export async function getPortalAppointmentBookingContext() {
           closingTime: true,
         },
       },
-      seller: { select: { id: true, fullName: true, phone: true, email: true } },
     },
   })
   if (!company) return { success: false as const, error: 'Empresa no encontrada' }
@@ -123,7 +122,6 @@ export async function getPortalAppointmentBookingContext() {
     branches,
     workers,
     profiles,
-    seller: company.seller,
     suggestedDate: todayAgendaDateString(),
     isPreview: gate.isPreview,
   }

@@ -3,7 +3,22 @@ import PortalAppointmentForm from '@/components/portal/PortalAppointmentForm'
 import Link from 'next/link'
 
 export default async function PortalNewAppointmentPage() {
-  const ctx = await getPortalAppointmentBookingContext()
+  let ctx: Awaited<ReturnType<typeof getPortalAppointmentBookingContext>>
+  try {
+    ctx = await getPortalAppointmentBookingContext()
+  } catch (err) {
+    console.error('[portal/appointments/new]', err)
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center space-y-3">
+        <p className="text-red-700">
+          No se pudo cargar el formulario de citas. Si el problema continúa, contacte a soporte AMI.
+        </p>
+        <Link href="/portal/events" className="text-blue-600 text-sm font-medium">
+          ← Volver a expedientes
+        </Link>
+      </div>
+    )
+  }
 
   if (!ctx.success) {
     return (
