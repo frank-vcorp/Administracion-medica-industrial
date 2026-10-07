@@ -5,6 +5,7 @@ import { MedicalDictamenPDF } from "@/components/pdf/MedicalDictamenPDF"
 import { resolveSmeLogoDataUrl } from "@/lib/ami-brand"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/auth"
+import { canAccessPortalCompanyData } from "@/lib/portal-event-access"
 
 /**
  * @fileoverview Endpoint autenticado para descargar el PDF de dictamen
@@ -56,7 +57,6 @@ export async function GET(
             return new NextResponse('No autenticado', { status: 401 })
         }
         const role = session.user.role
-        const userCompanyId = session.user.companyId ?? null
 
         const { eventId } = await params
         if (!eventId) {
@@ -67,15 +67,6 @@ export async function GET(
             role === 'SUPERADMIN' ||
             role === 'DOCTOR_GENERAL' ||
             role === 'DOCTOR_VALIDATOR'
-        const isCompanyClient = role === 'COMPANY_CLIENT'
-
-        // Cualquier rol que NO sea clínico ni COMPANY_CLIENT queda fuera.
-        if (!isClinical && !isCompanyClient) {
-            return new NextResponse(
-                'Sin permisos para descargar el PDF del dictamen.',
-                { status: 403 }
-            )
-        }
 
         // Fetch verdict and fully linked entities (worker, company, validator)
         const verdict = await prisma.medicalVerdict.findUnique({
@@ -96,13 +87,10 @@ export async function GET(
             return new NextResponse("El dictamen aún no ha sido emitido.", { status: 404 })
         }
 
-        // COMPANY_CLIENT: el portal corporativo sólo recibe el dictamen de
-        // eventos cuyo trabajador pertenece a SU propia empresa (gate de
-        // privacidad portal, paridad con `getMedicalDictamPDF`). Si la
-        // empresa no coincide → 403 y NO se filtran datos.
-        if (isCompanyClient) {
-            const workerCompanyId = verdict.event.worker.companyId ?? null
-            if (workerCompanyId !== userCompanyId) {
+        const workerCompanyId = verdict.event.worker.companyId ?? null
+        if (!isClinical) {
+            const portalOk = await canAccessPortalCompanyData(workerCompanyId)
+            if (!portalOk) {
                 return new NextResponse(
                     'Sin permisos para descargar este dictamen.',
                     { status: 403 }

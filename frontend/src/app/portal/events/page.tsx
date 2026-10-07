@@ -1,112 +1,126 @@
 import { getCompanyEventsHistory } from '@/actions/portal.actions'
+import PortalEventsFilterBar from '@/components/portal/PortalEventsFilterBar'
+import PortalEventDownloads from '@/components/portal/PortalEventDownloads'
 import { getPortalPageCompany } from '@/lib/portal-access'
+import { portalEventResolution } from '@/lib/portal-event-display'
 import Link from 'next/link'
-import { EventRowButtons } from '@/components/EventRowButtons'
-// IMPL-20260817-08-C5 (ARCH-20260817-02 DA-1): clasificar dictamen vía campo
-// estructurado `aptitud` (5 valores PDF) + fallback legacy `includes('no apto')`.
-import { isNoCumple } from '@/lib/clinical/aptitud.helper'
 
-/**
- * @id IMPL-20260225-03
- * Historial de eventos médicos del portal B2B - Obtiene datos seguros de la sesión
- * Integración de Firma Digital y Reportes Masivos
- */
-export default async function PortalEventsPage() {
-    let currentCompany
-    try {
-        ;({ company: currentCompany } = await getPortalPageCompany())
-    } catch {
-        return <div className="p-8 text-red-600">Error: No hay sesión válida.</div>
-    }
+function normalizeDateParam(raw: string | undefined): string {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return ''
+  return raw
+}
 
-    const result = await getCompanyEventsHistory()
-    const events = result.success ? result.events : []
+export default async function PortalEventsPage(props: {
+  searchParams: Promise<{ from?: string; to?: string; q?: string }>
+}) {
+  const searchParams = await props.searchParams
+  const dateFrom = normalizeDateParam(searchParams.from)
+  const dateTo = normalizeDateParam(searchParams.to)
+  const workerQuery = (searchParams.q ?? '').trim().slice(0, 80)
 
-    return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Historial Clínico / Dictámenes</h1>
-                    <p className="text-sm text-slate-500">Registro histórico de expedientes validados</p>
-                </div>
-                <Link href="/portal" className="text-sm text-blue-600 hover:underline font-medium">
-                    ← Volver al Dashboard
-                </Link>
-            </div>
+  let companyName: string
+  try {
+    ;({ company: { name: companyName } } = await getPortalPageCompany())
+  } catch {
+    return <div className="p-8 text-red-600">Error: No hay sesión válida.</div>
+  }
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
-                        <tr>
-                            <th className="px-6 py-4">Fecha</th>
-                            <th className="px-6 py-4">Trabajador</th>
-                            <th className="px-6 py-4">Folio Cita</th>
-                            <th className="px-6 py-4">Resolución</th>
-                            <th className="px-6 py-4 text-right">Documento</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {events?.map((event) => {
-                            const isCompleted = event.status === 'COMPLETED'
-                            const hasVerdict = !!event.verdict
-                            // IMPL-20260817-08-C5 (ARCH-20260817-02 DA-1): clasificar
-                            // desde `aptitud` estructurada del `physicalExamData` si
-                            // está disponible; fallback a `finalDiagnosis.includes('no apto')`.
-                            // El literal canónico "NO CUMPLE CON LOS CRITERIOS..."
-                            // NO contiene "no apto", por lo que la heurística histórica
-                            // lo clasificaba erróneamente como APTO.
-                            const aptitud = (event.verdict?.event?.exam?.physicalExamData as
-                              | { aptitud?: string | null } | null)?.aptitud ?? null
-                            const isApto = aptitud
-                              ? !isNoCumple(aptitud)
-                              : !(event.verdict?.finalDiagnosis?.toLowerCase().includes('no apto') ?? false)
+  const result = await getCompanyEventsHistory({
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    workerQuery: workerQuery || undefined,
+  })
+  const events = result.success ? (result.events ?? []) : []
+  const filtersActive = Boolean(dateFrom || dateTo || workerQuery)
 
-                            return (
-                                <tr key={event.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900">
-                                        {new Date(event.createdAt).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {event.worker.lastName}, {event.worker.firstName}
-                                    </td>
-                                    <td className="px-6 py-4 text-slate-400 font-mono text-xs">
-                                        #{event.id.slice(0, 8)}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {!isCompleted ? (
-                                            <span className="text-blue-600 font-medium text-xs">En tránsito...</span>
-                                        ) : hasVerdict ? (
-                                            <span className={`font-bold ${isApto ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                {isApto ? 'APTO' : 'NO APTO'}
-                                            </span>
-                                        ) : (
-                                            <span className="text-amber-500 font-medium text-xs">Pendiente de Firma</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <EventRowButtons
-                                            eventId={event.id}
-                                            isCompleted={isCompleted}
-                                            hasVerdict={hasVerdict}
-                                        />
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                        {events?.length === 0 && (
-                            <tr>
-                                <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
-                                    Aún no hay expedientes registrados.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            <p className="text-xs text-slate-400 text-center mt-4">
-                * Por cumplimiento de privacidad y normativas de salud, los archivos puros (RX, Laboratorios) no son accesibles desde este portal corporativo. Solo se expiden dictámenes de aptitud laboral.
-            </p>
+  return (
+    <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Expedientes y dictámenes</h1>
+          <p className="text-sm text-slate-500">
+            {companyName} — folio de papeleta, perfil aplicado y descargas disponibles.
+          </p>
         </div>
-    )
+      </div>
+
+      <PortalEventsFilterBar initialFrom={dateFrom} initialTo={dateTo} initialQuery={workerQuery} />
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-600 min-w-[880px]">
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+            <tr>
+              <th className="px-4 py-3">Fecha</th>
+              <th className="px-4 py-3">Folio papeleta</th>
+              <th className="px-4 py-3">Trabajador</th>
+              <th className="px-4 py-3">Perfil exámenes</th>
+              <th className="px-4 py-3">Resolución</th>
+              <th className="px-4 py-3 text-right">Descargas</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {events.map((event) => {
+              const hasVerdict = Boolean(event.verdict)
+              const aptitud =
+                (event.verdict?.event?.exam?.physicalExamData as { aptitud?: string | null } | null)
+                  ?.aptitud ?? null
+              const resolution = portalEventResolution({
+                status: event.status,
+                hasVerdict,
+                aptitud,
+                finalDiagnosis: event.verdict?.finalDiagnosis ?? null,
+              })
+              const expedientId =
+                event.appointment?.expedientId ?? event.worker.universalId ?? event.id.slice(0, 8)
+              const profileName =
+                event.appointment?.serviceProfile?.name ?? '—'
+
+              return (
+                <tr key={event.id} className="hover:bg-slate-50 transition-colors align-top">
+                  <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
+                    {new Date(event.createdAt).toLocaleDateString('es-MX')}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-700">{expedientId}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/portal/workers/${event.worker.id}`}
+                      className="font-semibold text-blue-700 hover:underline"
+                    >
+                      {event.worker.lastName}, {event.worker.firstName}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-700 max-w-[160px]">{profileName}</td>
+                  <td className="px-4 py-3">
+                    <span className={resolution.className}>{resolution.label}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <PortalEventDownloads
+                      eventId={event.id}
+                      eventTests={event.eventTests}
+                      hasVerdict={hasVerdict}
+                      dictamenReady={Boolean(event.verdict?.signedAt)}
+                    />
+                  </td>
+                </tr>
+              )
+            })}
+            {events.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-6 py-10 text-center text-slate-400">
+                  {filtersActive
+                    ? 'No hay expedientes con los filtros seleccionados.'
+                    : 'Aún no hay expedientes registrados.'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-xs text-slate-400 text-center">
+        Solo se muestran entregables autorizados para su empresa. Los iconos en gris indican estudios aún
+        en proceso.
+      </p>
+    </div>
+  )
 }

@@ -145,16 +145,74 @@ export async function getCompanyWorkersWithStatus() {
  * Solo retorna datos de la empresa del usuario logueado
  * @fix IMPL-20260225-01 - Elimina vulnerabilidad Broken Access Control
  */
-export async function getCompanyEventsHistory() {
+function parsePortalDateBound(isoDate: string, endOfDay: boolean): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null
+  const [y, m, d] = isoDate.split('-').map(Number)
+  if (endOfDay) return new Date(y, m - 1, d, 23, 59, 59, 999)
+  return new Date(y, m - 1, d, 0, 0, 0, 0)
+}
+
+export type PortalEventsHistoryFilters = {
+  workerQuery?: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export async function getCompanyEventsHistory(filters?: PortalEventsHistoryFilters) {
   try {
     const { companyId } = await resolvePortalCompanyAccess()
 
+    const workerNameTerms = (filters?.workerQuery ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length >= 2)
+    const dateFrom = filters?.dateFrom ? parsePortalDateBound(filters.dateFrom, false) : null
+    const dateTo = filters?.dateTo ? parsePortalDateBound(filters.dateTo, true) : null
+
     const events = await prisma.medicalEvent.findMany({
-      where: { worker: { companyId } },
+      where: {
+        worker: {
+          companyId,
+          ...(workerNameTerms.length > 0
+            ? {
+                AND: workerNameTerms.map((term) => ({
+                  OR: [
+                    { firstName: { contains: term, mode: 'insensitive' as const } },
+                    { lastName: { contains: term, mode: 'insensitive' as const } },
+                  ],
+                })),
+              }
+            : {}),
+        },
+        ...(dateFrom || dateTo
+          ? {
+              createdAt: {
+                ...(dateFrom ? { gte: dateFrom } : {}),
+                ...(dateTo ? { lte: dateTo } : {}),
+              },
+            }
+          : {}),
+      },
       select: {
         id: true,
         status: true,
         createdAt: true,
+        appointment: {
+          select: {
+            id: true,
+            expedientId: true,
+            serviceProfile: { select: { name: true } },
+          },
+        },
+        eventTests: {
+          select: {
+            id: true,
+            testNameSnapshot: true,
+            status: true,
+            fileUrl: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
         worker: {
           select: {
             id: true,
@@ -193,6 +251,61 @@ export async function getCompanyEventsHistory() {
   } catch (error) {
     console.error("Error fetching events history for portal:", error)
     return { success: false, error: 'Hubo un error al cargar el historial.' }
+  }
+}
+
+export async function getPortalWorkerDetail(workerId: string) {
+  try {
+    const { companyId } = await resolvePortalCompanyAccess()
+
+    const worker = await prisma.worker.findFirst({
+      where: { id: workerId, companyId },
+      select: {
+        id: true,
+        universalId: true,
+        firstName: true,
+        lastName: true,
+        nationalId: true,
+        dob: true,
+        email: true,
+        phone: true,
+        lastIdentityFrontFileUrl: true,
+        lastIdentityBackFileUrl: true,
+        lastIdentityVerifiedAt: true,
+        lastInformedConsentPdfUrl: true,
+        lastInformedConsentSignedAt: true,
+        medicalProfile: { select: { id: true, name: true } },
+        appointments: {
+          where: { companyId },
+          orderBy: { scheduledAt: 'desc' },
+          take: 24,
+          select: {
+            id: true,
+            expedientId: true,
+            scheduledAt: true,
+            status: true,
+            identityFrontFileUrl: true,
+            identityBackFileUrl: true,
+            informedConsentPdfUrl: true,
+            informedConsentSignedAt: true,
+            serviceProfile: { select: { name: true } },
+            medicalEvents: {
+              select: { id: true, status: true, createdAt: true },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
+      },
+    })
+
+    if (!worker) {
+      return { success: false as const, error: 'Trabajador no encontrado' }
+    }
+
+    return { success: true as const, worker }
+  } catch (error) {
+    console.error('Error fetching portal worker:', error instanceof Error ? error.message : error)
+    return { success: false as const, error: 'No se pudo cargar la ficha' }
   }
 }
 

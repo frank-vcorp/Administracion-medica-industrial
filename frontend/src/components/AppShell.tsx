@@ -219,7 +219,7 @@ function ShellNavigation({
       {showPortalItems && (
         <>
           <NavSection label="B2B Cliente" collapsed={collapsed} />
-          <NavItem href="/portal" icon={Globe} label="Portal de Empresas" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/portal/events" icon={Globe} label="Expedientes B2B" collapsed={collapsed} onNavigate={onNavigate} />
         </>
       )}
     </>
