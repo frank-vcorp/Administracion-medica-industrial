@@ -6,6 +6,7 @@ import {
   getPortalBranchHourAvailability,
   getPortalAppointmentBookingContext,
 } from '@/actions/portal-appointment.actions'
+import PortalAppointmentDateCalendar from '@/components/portal/PortalAppointmentDateCalendar'
 import PortalSpecialRequestPanel from '@/components/portal/PortalSpecialRequestPanel'
 
 type BookingContext = Extract<
@@ -31,9 +32,11 @@ export default function PortalAppointmentForm({ context }: Props) {
   >([])
   const [error, setError] = useState<string | null>(null)
   const [showCapacityHelp, setShowCapacityHelp] = useState(false)
+  const [showBulkRequest, setShowBulkRequest] = useState(false)
   const [successFolio, setSuccessFolio] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const readOnly = context.isPreview
+  const showSpecialRequest = showCapacityHelp || showBulkRequest
 
   useEffect(() => {
     if (!branchId || !date) return
@@ -125,8 +128,7 @@ export default function PortalAppointmentForm({ context }: Props) {
       )}
       <form onSubmit={onSubmit} className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
         <p className="text-sm text-slate-600">
-          Agende citas puntuales para trabajadores de <strong>{context.companyName}</strong>. Para
-          varias citas o horarios especiales use la solicitud personalizada abajo.
+          Agende una cita por trabajador, fecha y hora para <strong>{context.companyName}</strong>.
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -162,16 +164,17 @@ export default function PortalAppointmentForm({ context }: Props) {
             </select>
           </label>
 
-          <label className="block text-sm">
-            <span className="text-xs font-bold uppercase text-slate-500">Fecha</span>
-            <input
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-            />
-          </label>
+          <div className="block text-sm sm:col-span-2">
+            <span className="text-xs font-bold uppercase text-slate-500">Fecha (disponibilidad en sucursal)</span>
+            <div className="mt-1">
+              <PortalAppointmentDateCalendar
+                branchId={branchId}
+                selectedDate={date}
+                onSelectDate={setDate}
+                todayStr={context.suggestedDate}
+              />
+            </div>
+          </div>
 
           <label className="block text-sm">
             <span className="text-xs font-bold uppercase text-slate-500">Hora</span>
@@ -231,20 +234,35 @@ export default function PortalAppointmentForm({ context }: Props) {
         {context.workers.length === 0 && (
           <p className="text-sm text-slate-500">No hay trabajadores registrados para agendar.</p>
         )}
+
+        {!showSpecialRequest && (
+          <p className="text-sm text-slate-600 pt-1">
+            ¿Necesita agendar muchas citas o coordinar un horario especial?{' '}
+            <button
+              type="button"
+              className="font-medium text-violet-700 underline hover:text-violet-900"
+              onClick={() => setShowBulkRequest(true)}
+            >
+              Solicitar atención personalizada
+            </button>
+          </p>
+        )}
       </form>
 
-      <PortalSpecialRequestPanel
-        branchId={branchId}
-        date={date}
-        time={time}
-        reason={showCapacityHelp ? 'capacity_full' : 'custom'}
-        readOnly={readOnly}
-        description={
-          showCapacityHelp
-            ? 'Este horario no tiene cupo. Envíe una solicitud personalizada con la cantidad de citas que necesita.'
-            : 'Para paquetes de citas o atención fuera de agenda, envíe una solicitud de contacto.'
-        }
-      />
+      {showSpecialRequest && (
+        <PortalSpecialRequestPanel
+          branchId={branchId}
+          date={date}
+          time={time}
+          reason={showCapacityHelp ? 'capacity_full' : 'custom'}
+          readOnly={readOnly}
+          description={
+            showCapacityHelp
+              ? 'Este horario ya no tiene cupo. Indique cuántas citas necesita y un teléfono; nuestro equipo le contactará.'
+              : 'Indique cuántas citas necesita y un teléfono de contacto. Nos comunicaremos con usted para coordinar.'
+          }
+        />
+      )}
     </div>
   )
 }

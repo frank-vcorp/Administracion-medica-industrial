@@ -6,10 +6,13 @@ import { getAssignableMedicalProfilesForCompany } from '@/actions/medical-profil
 import {
   branchOperatingHours,
   checkBranchHourCapacity,
-  countAppointmentsInBranchHour,
+  computeBranchDayAvailabilityForDates,
+  countAppointmentsByHourForDay,
 } from '@/lib/appointment-capacity'
 import {
+  addAgendaDays,
   formatAppointmentAgendaTime,
+  getAgendaWeekStartMonday,
   parseAppointmentLocalDateTime,
   todayAgendaDateString,
 } from '@/lib/appointment-scheduling'
@@ -156,20 +159,68 @@ export async function getPortalBranchHourAvailability(input: {
 
   const capacity = branch.hourlyCapacity ?? 15
   const hours = branchOperatingHours(branch.openingTime, branch.closingTime)
-  const slots = await Promise.all(
-    hours.map(async (hour) => {
-      const at = parseAppointmentLocalDateTime(input.date, `${hour.toString().padStart(2, '0')}:00`)
-      const count = await countAppointmentsInBranchHour(prisma, input.branchId, at)
-      return {
-        hour,
-        count,
-        capacity,
-        full: count >= capacity,
-      }
-    }),
-  )
+  const byHour = await countAppointmentsByHourForDay(prisma, input.branchId, input.date)
+  const slots = hours.map((hour) => {
+    const count = byHour.get(hour) ?? 0
+    return {
+      hour,
+      count,
+      capacity,
+      full: count >= capacity,
+    }
+  })
 
   return { success: true as const, slots }
+}
+
+export async function getPortalBranchMonthAvailability(input: {
+  branchId: string
+  month: string
+}) {
+  const gate = await resolvePortalBookingViewAccess()
+  if (!gate.ok) return { success: false as const, error: gate.error }
+
+  if (!/^\d{4}-\d{2}$/.test(input.month)) {
+    return { success: false as const, error: 'Mes inválido' }
+  }
+  if (!(await isBranchAllowedForCompany(gate.companyId, input.branchId))) {
+    return { success: false as const, error: 'Sucursal no autorizada' }
+  }
+
+  const branch = await prisma.branch.findUnique({
+    where: { id: input.branchId },
+    select: {
+      hourlyCapacity: true,
+      openingTime: true,
+      closingTime: true,
+      isActive: true,
+    },
+  })
+  if (!branch?.isActive) {
+    return { success: false as const, error: 'Sucursal no disponible' }
+  }
+
+  const firstOfMonth = `${input.month}-01`
+  const gridStart = getAgendaWeekStartMonday(firstOfMonth)
+  const dateStrings: string[] = []
+  for (let i = 0; i < 42; i++) {
+    dateStrings.push(addAgendaDays(gridStart, i))
+  }
+
+  const capacity = branch.hourlyCapacity ?? 15
+  const days = await computeBranchDayAvailabilityForDates(
+    prisma,
+    input.branchId,
+    dateStrings,
+    {
+      hourlyCapacity: capacity,
+      openingTime: branch.openingTime,
+      closingTime: branch.closingTime,
+    },
+    todayAgendaDateString(),
+  )
+
+  return { success: true as const, month: input.month, days, hourlyCapacity: capacity }
 }
 
 export async function createPortalClientAppointment(input: {
