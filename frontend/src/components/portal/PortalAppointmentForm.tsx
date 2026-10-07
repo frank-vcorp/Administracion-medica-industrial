@@ -49,7 +49,6 @@ export default function PortalAppointmentForm({ context }: Props) {
   const [date, setDate] = useState(context.suggestedDate)
   const [time, setTime] = useState('09:00')
   const [serviceProfileId, setServiceProfileId] = useState('')
-  const [notes, setNotes] = useState('')
   const [slots, setSlots] = useState<
     Array<{ hour: number; count: number; capacity: number; full: boolean }>
   >([])
@@ -105,7 +104,6 @@ export default function PortalAppointmentForm({ context }: Props) {
         date,
         time,
         serviceProfileId: serviceProfileId || null,
-        notes,
       })
       if (res.success) {
         setSuccessFolio(res.appointment?.expedientId ?? '—')
@@ -256,16 +254,6 @@ export default function PortalAppointmentForm({ context }: Props) {
             </select>
           </label>
 
-          <label className="block text-sm sm:col-span-2">
-            <span className="text-xs font-bold uppercase text-slate-500">Notas internas AMI (opcional)</span>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-              placeholder="Solo para la cita en sistema; no se envía por WhatsApp"
-            />
-          </label>
         </div>
 
         {error && <p className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
