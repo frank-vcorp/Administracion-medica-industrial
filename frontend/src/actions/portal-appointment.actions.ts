@@ -22,10 +22,23 @@ import { authOptions } from '@/auth'
 import { resolvePortalCompanyAccess } from '@/lib/portal-access'
 import prisma from '@/lib/prisma'
 
+/** Lectura del panel (cliente o staff en vista previa). */
+async function resolvePortalBookingViewAccess() {
+  const access = await resolvePortalCompanyAccess()
+  if (access.isPreview) {
+    return { ok: true as const, companyId: access.companyId, isPreview: true as const }
+  }
+  if (access.actorRole !== UserRole.COMPANY_CLIENT) {
+    return { ok: false as const, error: 'Solo usuarios del portal cliente pueden ver esta sección.' }
+  }
+  return { ok: true as const, companyId: access.companyId, isPreview: false as const }
+}
+
+/** Escritura: solo usuario portal real (no vista previa staff). */
 async function assertPortalClientCanBook() {
   const access = await resolvePortalCompanyAccess()
   if (access.isPreview) {
-    return { ok: false as const, error: 'En vista previa no se pueden agendar citas.' }
+    return { ok: false as const, error: 'En vista previa no se guardan citas ni solicitudes.' }
   }
   if (access.actorRole !== UserRole.COMPANY_CLIENT) {
     return { ok: false as const, error: 'Solo usuarios del portal cliente pueden agendar aquí.' }
@@ -49,7 +62,7 @@ async function isBranchAllowedForCompany(companyId: string, branchId: string): P
 }
 
 export async function getPortalAppointmentBookingContext() {
-  const gate = await assertPortalClientCanBook()
+  const gate = await resolvePortalBookingViewAccess()
   if (!gate.ok) return { success: false as const, error: gate.error }
 
   const company = await prisma.company.findUnique({
@@ -112,6 +125,7 @@ export async function getPortalAppointmentBookingContext() {
     profiles,
     seller: company.seller,
     suggestedDate: todayAgendaDateString(),
+    isPreview: gate.isPreview,
   }
 }
 
@@ -119,7 +133,7 @@ export async function getPortalBranchHourAvailability(input: {
   branchId: string
   date: string
 }) {
-  const gate = await assertPortalClientCanBook()
+  const gate = await resolvePortalBookingViewAccess()
   if (!gate.ok) return { success: false as const, error: gate.error }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {

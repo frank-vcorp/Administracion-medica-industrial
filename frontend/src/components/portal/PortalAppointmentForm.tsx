@@ -33,6 +33,7 @@ export default function PortalAppointmentForm({ context }: Props) {
   const [showCapacityHelp, setShowCapacityHelp] = useState(false)
   const [successFolio, setSuccessFolio] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const readOnly = context.isPreview
 
   useEffect(() => {
     if (!branchId || !date) return
@@ -68,6 +69,7 @@ export default function PortalAppointmentForm({ context }: Props) {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (readOnly) return
     setError(null)
     setShowCapacityHelp(false)
     startTransition(async () => {
@@ -115,6 +117,12 @@ export default function PortalAppointmentForm({ context }: Props) {
 
   return (
     <div className="space-y-6">
+      {readOnly && (
+        <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          Vista previa del portal: puede revisar este formulario como la empresa, pero no se crearán
+          citas ni solicitudes hasta que un usuario cliente real envíe desde su sesión.
+        </p>
+      )}
       <form onSubmit={onSubmit} className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
         <p className="text-sm text-slate-600">
           Agende citas puntuales para trabajadores de <strong>{context.companyName}</strong>. Para
@@ -214,10 +222,10 @@ export default function PortalAppointmentForm({ context }: Props) {
 
         <button
           type="submit"
-          disabled={pending || context.workers.length === 0}
+          disabled={readOnly || pending || context.workers.length === 0}
           className="w-full sm:w-auto rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {pending ? 'Agendando…' : 'Confirmar cita'}
+          {readOnly ? 'Solo lectura (vista previa)' : pending ? 'Agendando…' : 'Confirmar cita'}
         </button>
 
         {context.workers.length === 0 && (
@@ -230,6 +238,7 @@ export default function PortalAppointmentForm({ context }: Props) {
         date={date}
         time={time}
         reason={showCapacityHelp ? 'capacity_full' : 'custom'}
+        readOnly={readOnly}
         description={
           showCapacityHelp
             ? 'Este horario no tiene cupo. Envíe una solicitud personalizada con la cantidad de citas que necesita.'

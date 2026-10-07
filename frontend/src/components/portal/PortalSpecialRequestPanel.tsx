@@ -8,6 +8,7 @@ type Props = {
   date: string
   time: string
   reason: 'capacity_full' | 'custom'
+  readOnly?: boolean
   title?: string
   description?: string
 }
@@ -17,6 +18,7 @@ export default function PortalSpecialRequestPanel({
   date,
   time,
   reason,
+  readOnly = false,
   title = 'Solicitud de atención personalizada',
   description = 'Complete el formulario para solicitar citas fuera de agenda o en volumen. Nos comunicaremos con usted.',
 }: Props) {
@@ -29,6 +31,7 @@ export default function PortalSpecialRequestPanel({
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (readOnly) return
     setError(null)
     setSuccess(null)
     startTransition(async () => {
@@ -101,10 +104,10 @@ export default function PortalSpecialRequestPanel({
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={readOnly || pending}
         className="inline-flex justify-center rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-800 disabled:opacity-50"
       >
-        {pending ? 'Enviando…' : 'Enviar solicitud'}
+        {readOnly ? 'Solo lectura (vista previa)' : pending ? 'Enviando…' : 'Enviar solicitud'}
       </button>
 
       {success && (
