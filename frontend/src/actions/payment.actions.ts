@@ -357,6 +357,31 @@ async function dispatchReceiptEmail(args: {
   return { success: true }
 }
 
+export async function markPaymentWhatsAppSent(
+  paymentId: string,
+  phone: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return { success: false, error: 'No autenticado.' }
+
+    await prisma.paymentRecord.update({
+      where: { id: paymentId },
+      data: {
+        receiptWhatsAppSent: true,
+        receiptWhatsAppPhone: phone.replace(/\D/g, '').slice(-15),
+        receiptWhatsAppAt: new Date(),
+      },
+    })
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al registrar envío WhatsApp',
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. getPaymentHistory — listado de pagos por evento
 // ─────────────────────────────────────────────────────────────────────────────

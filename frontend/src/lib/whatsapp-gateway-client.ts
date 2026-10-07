@@ -19,6 +19,7 @@ export async function callWhatsAppGateway(args: {
   method: 'GET' | 'POST'
   role: string
   userId: string
+  body?: Record<string, unknown>
 }): Promise<{ ok: boolean; data?: GatewayJson; error?: string }> {
   const gw = await resolveWhatsAppGateway()
   if (!gw) {
@@ -36,7 +37,9 @@ export async function callWhatsAppGateway(args: {
         Authorization: `Bearer ${gw.secret}`,
         'x-ami-role': args.role,
         'x-ami-userid': args.userId,
+        ...(args.body ? { 'Content-Type': 'application/json' } : {}),
       },
+      body: args.body ? JSON.stringify(args.body) : undefined,
       cache: 'no-store',
     })
     const json = (await res.json().catch(() => ({}))) as GatewayJson

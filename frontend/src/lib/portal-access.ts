@@ -74,3 +74,24 @@ export async function resolvePortalCompanyAccess(): Promise<PortalAccessContext>
 
   throw new Error('No autorizado: solo usuarios del portal o vista previa staff')
 }
+
+/** Datos de empresa para páginas `/portal/*` (cliente real o vista previa staff). */
+export async function getPortalPageCompany(): Promise<{
+  company: { id: string; name: string }
+  isPreview: boolean
+  viewerLabel: string
+}> {
+  const access = await resolvePortalCompanyAccess()
+  const session = await getServerSession(authOptions)
+  const company = await prisma.company.findUnique({
+    where: { id: access.companyId },
+    select: { id: true, name: true },
+  })
+  if (!company) {
+    throw new Error('Empresa no encontrada')
+  }
+  const viewerLabel = access.isPreview
+    ? `Vista previa (${session?.user?.fullName ?? 'staff'})`
+    : (session?.user?.fullName ?? 'Usuario portal')
+  return { company, isPreview: access.isPreview, viewerLabel }
+}

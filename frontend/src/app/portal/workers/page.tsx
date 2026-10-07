@@ -1,7 +1,5 @@
 import { getCompanyWorkersWithStatus } from '@/actions/portal.actions'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/auth'
-import prisma from '@/lib/prisma'
+import { getPortalPageCompany } from '@/lib/portal-access'
 import Link from 'next/link'
 // IMPL-20260817-08-C6 (ARCH-20260817-02 DA-1): clasificar dictamen vía campo
 // estructurado `aptitud` (5 valores PDF) + fallback legacy `includes('no apto')`.
@@ -12,17 +10,12 @@ import { isNoCumple } from '@/lib/clinical/aptitud.helper'
  * Listado de trabajadores del portal B2B - Obtiene datos seguros de la sesión
  */
 export default async function PortalWorkersPage() {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.companyId) {
+    let currentCompany
+    try {
+        ;({ company: currentCompany } = await getPortalPageCompany())
+    } catch {
         return <div className="p-8 text-red-600">Error: No hay sesión válida.</div>
     }
-
-    const currentCompany = await prisma.company.findUnique({
-        where: { id: session.user.companyId }
-    })
-    
-    if (!currentCompany) return <div className="p-8 text-red-600">Error: Empresa no encontrada.</div>
 
     const result = await getCompanyWorkersWithStatus()
     const workers = result.success ? result.workers : []

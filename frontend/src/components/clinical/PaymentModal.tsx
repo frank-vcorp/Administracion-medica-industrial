@@ -13,9 +13,8 @@
 import { useState, useTransition, useMemo, useCallback } from 'react'
 import { pdf } from '@react-pdf/renderer'
 import { PaymentReceiptPDF, type ReceiptPDFData } from '@/components/pdf/PaymentReceiptPDF'
-import {
-  createPaymentRecord,
-} from '@/actions/payment.actions'
+import { createPaymentRecord, markPaymentWhatsAppSent } from '@/actions/payment.actions'
+import { sendWhatsAppTextMessage } from '@/actions/whatsapp-send.actions'
 import {
   getPaymentMethodLabel,
   PAYMENT_METHODS,
@@ -84,6 +83,7 @@ export default function PaymentModal({
   const [successInfo, setSuccessInfo] = useState<{
     paymentId: string
     whatsAppUrl: string | null
+    whatsAppSent: boolean
     receiptSent: boolean
   } | null>(null)
 
@@ -194,24 +194,35 @@ export default function PaymentModal({
         return
       }
 
-      // 2. Construir URL de WhatsApp client-side (si el usuario marcó WhatsApp)
-      const whatsAppUrl = sendWhatsApp
-        ? buildWhatsAppShareUrl(
-            whatsAppPhone.trim(),
-            buildDefaultReceiptMessage({
-              amount: formatCurrency(amount),
-              methodLabel: getPaymentMethodLabel(method),
-              paymentId: result.paymentId,
-              workerName,
-              downloadUrl: null,
-            })
-          )
-        : null
+      let whatsAppUrl: string | null = null
+      let whatsAppSent = false
+      if (sendWhatsApp) {
+        const waMessage = buildDefaultReceiptMessage({
+          amount: formatCurrency(amount),
+          methodLabel: getPaymentMethodLabel(method),
+          paymentId: result.paymentId,
+          workerName,
+          downloadUrl: null,
+        })
+        const waRes = await sendWhatsAppTextMessage({
+          phone: whatsAppPhone.trim(),
+          text: waMessage,
+          auditContext: 'payment_receipt',
+          entityId: result.paymentId,
+        })
+        if (waRes.sent) {
+          whatsAppSent = true
+          await markPaymentWhatsAppSent(result.paymentId, whatsAppPhone.trim())
+        } else {
+          whatsAppUrl =
+            waRes.fallbackWaUrl ?? buildWhatsAppShareUrl(whatsAppPhone.trim(), waMessage)
+        }
+      }
 
-      // 3. Mostrar pantalla de éxito con el botón de WhatsApp (si aplica)
       setSuccessInfo({
         paymentId: result.paymentId,
         whatsAppUrl,
+        whatsAppSent,
         receiptSent: !!result.receiptSent,
       })
 
@@ -287,16 +298,20 @@ export default function PaymentModal({
             </section>
 
             {/* Botón WhatsApp (patrón AppointmentFormModal) */}
-            {successInfo.whatsAppUrl && (
+            {successInfo.whatsAppSent ? (
+              <p className="text-sm text-emerald-700 font-medium text-center">
+                📱 Recibo enviado por WhatsApp (línea institucional)
+              </p>
+            ) : successInfo.whatsAppUrl ? (
               <a
                 href={successInfo.whatsAppUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
               >
-                <span>📱</span> Enviar Recibo por WhatsApp
+                <span>📱</span> Abrir WhatsApp manualmente (respaldo)
               </a>
-            )}
+            ) : null}
 
             {/* Botón cerrar */}
             <button
@@ -515,7 +530,7 @@ export default function PaymentModal({
                   </p>
                 )}
                 <p className="text-[10px] text-emerald-700">
-                  Después de registrar el pago, verás un botón verde para abrir WhatsApp Web con el mensaje prellenado.
+                  Si está activo en Configuración, el recibo se envía automáticamente desde la línea institucional.
                 </p>
               </div>
             )}

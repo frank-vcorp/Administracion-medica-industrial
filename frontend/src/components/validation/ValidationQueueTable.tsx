@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import type { ValidationStage } from '@/lib/clinical/validation-stage'
 
 import PartialResultSendModal from '@/components/validation/PartialResultSendModal'
+import WhatsAppAutoSendButton from '@/components/shared/WhatsAppAutoSendButton'
 
 export type ValidationQueueRow = {
   eventId: string
@@ -179,13 +180,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
             </tr>
           )}
           {filteredRows.map((row) => {
-            const waLink = row.phone
-              ? `https://wa.me/${row.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
-                  `Hola ${row.patientName}, su dictamen de ${row.companyName} está listo. Descárguelo aquí: https://ami.com/d/${row.eventId}`,
-                )}`
-              : `https://wa.me/?text=${encodeURIComponent(
-                  `Hola ${row.patientName}, su dictamen de ${row.companyName} está listo. Descárguelo aquí: https://ami.com/d/${row.eventId}`,
-                )}`
+            const waText = `Hola ${row.patientName}, su dictamen de ${row.companyName} está listo. Descárguelo aquí: https://ami.com/d/${row.eventId}`
 
             return (
               <tr key={row.eventId} className="hover:bg-slate-50 transition-colors">
@@ -284,15 +279,24 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                         Reporte pendiente
                       </span>
                     )}
-                    <a
-                      href={waLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold hover:underline"
-                      title="Enviar aviso por WhatsApp"
-                    >
-                      WhatsApp
-                    </a>
+                    {row.phone ? (
+                      <WhatsAppAutoSendButton
+                        phone={row.phone}
+                        text={waText}
+                        auditContext="validation_verdict_ready"
+                        entityId={row.eventId}
+                        className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold hover:underline disabled:opacity-50"
+                      >
+                        WhatsApp
+                      </WhatsAppAutoSendButton>
+                    ) : (
+                      <span
+                        className="text-[10px] font-medium text-slate-400"
+                        title="Sin teléfono del paciente"
+                      >
+                        Sin tel.
+                      </span>
+                    )}
                   </div>
                 </td>
               </tr>

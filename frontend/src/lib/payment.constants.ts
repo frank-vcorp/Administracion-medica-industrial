@@ -1,3 +1,7 @@
+import { buildWhatsAppWebUrl, normalizeWhatsAppPhone } from '@/lib/whatsapp-phone'
+
+export { normalizeWhatsAppPhone }
+
 /**
  * @fileoverview Constantes y tipos compartidos del módulo de pagos (ARCH-20260630-01)
  * @description Separado de payment.actions.ts porque los archivos 'use server'
@@ -38,26 +42,13 @@ export function getPaymentMethodLabel(method: string): string {
  * Normaliza un teléfono a formato E.164 sin signos para wa.me.
  * Acepta formatos: +5215512345678, 5215512345678, 15512345678, etc.
  */
-export function normalizeWhatsAppPhone(raw: string): string {
-  const digits = raw.replace(/\D/g, '')
-  // Si no trae código de país (52 por defecto México), prefijar.
-  if (digits.length === 10) return `52${digits}`
-  if (digits.length === 12 && digits.startsWith('52')) return digits
-  return digits
-}
-
 /**
  * Construye URL de WhatsApp Web con mensaje prellenado y link al PDF.
  * No adjunta archivo directamente — WhatsApp Web no lo soporta por URL scheme,
  * por eso pasamos el link de descarga temporal del PDF en el mensaje.
  */
-export function buildWhatsAppShareUrl(
-  phone: string,
-  message: string
-): string {
-  const normalizedPhone = normalizeWhatsAppPhone(phone)
-  const encodedMessage = encodeURIComponent(message)
-  return `https://wa.me/${normalizedPhone}?text=${encodedMessage}`
+export function buildWhatsAppShareUrl(phone: string, message: string): string {
+  return buildWhatsAppWebUrl(phone, message)
 }
 
 /**

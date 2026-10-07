@@ -1,7 +1,5 @@
 import { getCompanyEventsHistory } from '@/actions/portal.actions'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/auth'
-import prisma from '@/lib/prisma'
+import { getPortalPageCompany } from '@/lib/portal-access'
 import Link from 'next/link'
 import { EventRowButtons } from '@/components/EventRowButtons'
 // IMPL-20260817-08-C5 (ARCH-20260817-02 DA-1): clasificar dictamen vía campo
@@ -14,17 +12,12 @@ import { isNoCumple } from '@/lib/clinical/aptitud.helper'
  * Integración de Firma Digital y Reportes Masivos
  */
 export default async function PortalEventsPage() {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user?.companyId) {
+    let currentCompany
+    try {
+        ;({ company: currentCompany } = await getPortalPageCompany())
+    } catch {
         return <div className="p-8 text-red-600">Error: No hay sesión válida.</div>
     }
-
-    const currentCompany = await prisma.company.findUnique({
-        where: { id: session.user.companyId }
-    })
-
-    if (!currentCompany) return <div className="p-8 text-red-600">Error: Empresa no encontrada.</div>
 
     const result = await getCompanyEventsHistory()
     const events = result.success ? result.events : []

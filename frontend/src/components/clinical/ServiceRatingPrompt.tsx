@@ -2,11 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import {
-  buildServiceRatingMessage,
-  buildWhatsAppRatingLink,
-  getSatisfactionSurveyUrl,
-} from '@/lib/patient-feedback.config'
+import { buildServiceRatingMessage, getSatisfactionSurveyUrl } from '@/lib/patient-feedback.config'
+import WhatsAppAutoSendButton from '@/components/shared/WhatsAppAutoSendButton'
 
 export function ServiceRatingPrompt({
   patientFirstName,
@@ -22,13 +19,19 @@ export function ServiceRatingPrompt({
     () => buildServiceRatingMessage(patientFirstName),
     [patientFirstName],
   )
-  const whatsappHref = patientPhone
-    ? buildWhatsAppRatingLink(patientPhone, patientFirstName)
-    : null
   const surveyUrl = useMemo(() => {
     if (typeof window === 'undefined') return getSatisfactionSurveyUrl()
     return getSatisfactionSurveyUrl(window.location.origin)
   }, [])
+  const surveyShareUrl = useMemo(() => {
+    const base = surveyUrl
+    const q = base.includes('?') ? '&' : '?'
+    return `${base}${q}event=${eventId}&channel=WHATSAPP_LINK`
+  }, [surveyUrl, eventId])
+  const whatsappText = useMemo(
+    () => buildServiceRatingMessage(patientFirstName, surveyShareUrl),
+    [patientFirstName, surveyShareUrl],
+  )
 
   const copyMessage = async () => {
     try {
@@ -59,15 +62,16 @@ export function ServiceRatingPrompt({
           {copied ? '✓ Copiado' : '📋 Copiar mensaje'}
         </button>
 
-        {whatsappHref ? (
-          <a
-            href={whatsappHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-xl bg-emerald-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-emerald-700"
+        {patientPhone ? (
+          <WhatsAppAutoSendButton
+            phone={patientPhone}
+            text={whatsappText}
+            auditContext="satisfaction_survey"
+            entityId={eventId}
+            className="rounded-xl bg-emerald-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-70"
           >
             💬 Enviar por WhatsApp
-          </a>
+          </WhatsAppAutoSendButton>
         ) : (
           <span className="rounded-xl border border-dashed border-amber-200 px-4 py-2.5 text-xs text-amber-800">
             Sin teléfono del paciente — usa copiar mensaje

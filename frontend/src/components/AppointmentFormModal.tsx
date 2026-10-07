@@ -11,6 +11,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import WorkerFormModal, { type WorkerCreatedPayload } from '@/components/WorkerFormModal'
 import { parseAppointmentLocalDateTime, todayAgendaDateString } from '@/lib/appointment-scheduling'
+import AppointmentWhatsAppSuccess from '@/components/AppointmentWhatsAppSuccess'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
@@ -328,7 +329,6 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         const hasValidPhone = cleanPhone.length >= 10;
         
         const message = `Hola ${apt.worker?.firstName}, tu cita médica en AMI está confirmada para el ${new Date(apt.scheduledAt).toLocaleDateString('es-ES')} a las ${new Date(apt.scheduledAt).toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'})}. Tu número de expediente es: ${apt.expedientId}. Por favor presenta este mensaje en recepción.`;
-        const whatsappUrl = hasValidPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}` : '#';
 
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
@@ -363,14 +363,11 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                     </div>
                     <div className="space-y-3 pt-2">
                         {hasValidPhone ? (
-                            <a
-                                href={whatsappUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
-                            >
-                                <span>📱</span> Enviar Pase por WhatsApp
-                            </a>
+                            <AppointmentWhatsAppSuccess
+                                phone={rawPhone}
+                                message={message}
+                                appointmentId={apt.id}
+                            />
                         ) : (
                             <div className="bg-slate-100 text-slate-500 py-3 rounded-xl font-medium text-xs px-4">
                                 ⚠️ El trabajador no tiene número de celular registrado.

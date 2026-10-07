@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { dischargePatientFromReception } from '@/actions/event.actions'
-import { buildWhatsAppRatingLink, getSatisfactionSurveyUrl } from '@/lib/patient-feedback.config'
+import { buildServiceRatingMessage, getSatisfactionSurveyUrl } from '@/lib/patient-feedback.config'
+import WhatsAppAutoSendButton from '@/components/shared/WhatsAppAutoSendButton'
 
 export type ReceptionCheckoutPatient = {
   eventId: string
@@ -26,9 +27,7 @@ export default function ReceptionCheckoutModal({ patient, onClose }: Props) {
 
   const surveyKioskUrl = `${getSatisfactionSurveyUrl(typeof window !== 'undefined' ? window.location.origin : undefined)}?event=${patient.eventId}&mode=kiosk&channel=TABLET`
   const surveyShareUrl = `${getSatisfactionSurveyUrl(typeof window !== 'undefined' ? window.location.origin : undefined)}?event=${patient.eventId}&channel=WHATSAPP_LINK`
-  const whatsappHref = patient.patientPhone
-    ? buildWhatsAppRatingLink(patient.patientPhone, patient.patientFirstName, surveyShareUrl)
-    : null
+  const whatsappText = buildServiceRatingMessage(patient.patientFirstName, surveyShareUrl)
 
   const copySurveyLink = async () => {
     try {
@@ -84,16 +83,17 @@ export default function ReceptionCheckoutModal({ patient, onClose }: Props) {
             📱 Encuesta en esta tableta
           </Link>
 
-          {whatsappHref ? (
-            <a
-              href={whatsappHref}
-              target="_blank"
-              rel="noopener noreferrer"
+          {patient.patientPhone ? (
+            <WhatsAppAutoSendButton
+              phone={patient.patientPhone}
+              text={whatsappText}
+              auditContext="satisfaction_survey"
+              entityId={patient.eventId}
               data-testid="reception-checkout-whatsapp"
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-70"
             >
               💬 Enviar por WhatsApp
-            </a>
+            </WhatsAppAutoSendButton>
           ) : (
             <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
               Sin teléfono del paciente — copia el enlace de encuesta y compártelo manualmente.
