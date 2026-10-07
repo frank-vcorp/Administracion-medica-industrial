@@ -55,6 +55,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                             <option value="">Selecciona un Rol</option>
                             {roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
                         </select>
+                        <input name="phone" placeholder="WhatsApp / teléfono (vendedor)" className="w-full border p-2 rounded" />
 
                         <div className="flex justify-end pt-4">
                             <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 font-medium">
@@ -80,6 +81,12 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                             <select name="role" className="w-full border p-2 rounded" required defaultValue={editingUser.role}>
                                 {roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
                             </select>
+                            <input
+                              name="phone"
+                              defaultValue={editingUser.phone ?? ''}
+                              placeholder="WhatsApp / teléfono"
+                              className="w-full border p-2 rounded"
+                            />
                             <label className="flex items-center gap-2 text-sm text-slate-700">
                                 <input type="checkbox" name="isActive" value="true" defaultChecked={editingUser.isActive} className="h-4 w-4 rounded border-slate-300" />
                                 Usuario activo

@@ -42,6 +42,7 @@ import {
   formatAppointmentAgendaTime,
   parseAppointmentLocalDateTime,
 } from '@/lib/appointment-scheduling'
+import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -80,6 +81,15 @@ export async function createAppointment(data: {
     const scheduledDate = typeof data.scheduledAt === 'string'
       ? new Date(data.scheduledAt)
       : data.scheduledAt
+
+    const capacityCheck = await checkBranchHourCapacity(prisma, data.branchId, scheduledDate)
+    if (!capacityCheck.ok) {
+      return {
+        success: false,
+        error: 'BRANCH_HOUR_FULL',
+        capacity: capacityCheck,
+      }
+    }
 
     // Generar ID de Papeleta automático (EXP-YYYYNNN)
     const expedientId = await generateExpedientId(prisma)

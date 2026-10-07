@@ -13,6 +13,8 @@ model User {
   email                     String                    @unique
   hashedPassword            String
   fullName                  String
+  /// WhatsApp / teléfono de contacto (vendedores, portal B2B).
+  phone                     String?
   role                      UserRole                  @default(DOCTOR_GENERAL)
   isActive                  Boolean                   @default(true)
   companyId                 String?

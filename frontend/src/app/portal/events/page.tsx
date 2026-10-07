@@ -42,6 +42,12 @@ export default async function PortalEventsPage(props: {
             {companyName} — folio de papeleta, perfil aplicado y descargas disponibles.
           </p>
         </div>
+        <Link
+          href="/portal/appointments/new"
+          className="inline-flex justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+        >
+          + Agendar cita
+        </Link>
       </div>
 
       <PortalEventsFilterBar initialFrom={dateFrom} initialTo={dateTo} initialQuery={workerQuery} />

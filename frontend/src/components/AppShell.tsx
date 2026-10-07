@@ -220,6 +220,7 @@ function ShellNavigation({
         <>
           <NavSection label="B2B Cliente" collapsed={collapsed} />
           <NavItem href="/portal/events" icon={Globe} label="Expedientes B2B" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/portal/appointments/new" icon={Calendar} label="Agendar cita" collapsed={collapsed} onNavigate={onNavigate} />
         </>
       )}
     </>

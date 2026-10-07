@@ -6,7 +6,7 @@ import { UserRole, Prisma } from "@prisma/client"
 import type { User } from "@prisma/client"
 import bcrypt from 'bcryptjs'
 
-export type UserListItem = Pick<User, 'id' | 'email' | 'fullName' | 'role' | 'isActive'>
+export type UserListItem = Pick<User, 'id' | 'email' | 'fullName' | 'role' | 'isActive' | 'phone'>
 
 export async function getUsers(): Promise<UserListItem[]> {
     return await prisma.user.findMany({
@@ -15,7 +15,8 @@ export async function getUsers(): Promise<UserListItem[]> {
             email: true,
             fullName: true,
             role: true,
-            isActive: true
+            isActive: true,
+            phone: true,
         },
         orderBy: { createdAt: 'desc' }
     })
@@ -26,6 +27,7 @@ export async function createUser(formData: FormData) {
     const email = formData.get('email') as string
     const password = formData.get('password') as string
     const role = formData.get('role') as UserRole
+    const phone = (formData.get('phone') as string)?.trim() || null
 
     // Hash the password before saving
     const hashedPassword = await bcrypt.hash(password, 10)
@@ -35,7 +37,8 @@ export async function createUser(formData: FormData) {
             fullName,
             email,
             hashedPassword,
-            role
+            role,
+            phone,
         }
     })
 
@@ -49,12 +52,14 @@ export async function updateUser(formData: FormData) {
     const password = formData.get('password') as string | null
     const role = formData.get('role') as UserRole
     const isActive = formData.getAll('isActive').includes('true')
+    const phone = (formData.get('phone') as string)?.trim() || null
 
     const data: Prisma.UserUpdateInput = {
         fullName,
         email,
         role,
-        isActive
+        isActive,
+        phone,
     }
 
     if (password && password.length > 0) {
