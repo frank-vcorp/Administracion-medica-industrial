@@ -35,6 +35,8 @@ import type { StudyPresentationSchema } from "@/types/calibration"
 import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
+import ConsultaMedicaEstudio from "@/components/clinical/ConsultaMedicaEstudio"
+import { isConsultaMedicaTestName } from "@/lib/clinical/consulta-medica"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
 import CampimetriaStudy from "@/components/clinical/studies/CampimetriaStudy"
@@ -255,6 +257,17 @@ function isSomatometria(name: string) {
     lower.includes('somatometria') ||
     lower.includes('signos vitales')
   )
+}
+
+function isConsultaMedica(name: string) {
+  return isConsultaMedicaTestName(name)
+}
+
+function studyPanelKindLabel(testName: string): string {
+  if (isExamenMedico(testName) || isConsultaMedica(testName)) {
+    return 'Formulario clínico'
+  }
+  return 'Estudio documental'
 }
 
 /**
@@ -737,7 +750,7 @@ export default function PapeletaWorkspace({
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {test.test?.category?.name ||
-                          (isExamenMedico(test.testNameSnapshot) ? 'Formulario clínico' : 'Estudio documental')}
+                          studyPanelKindLabel(test.testNameSnapshot)}
                         {test.test?.code && ` · ${test.test.code}`}
                       </p>
                     </div>
@@ -1369,6 +1382,7 @@ function StudyPanel({
   const router = useRouter()
 
   const isMedico = isExamenMedico(test.testNameSnapshot)
+  const isConsulta = isConsultaMedica(test.testNameSnapshot)
   const isSomato = isSomatometria(test.testNameSnapshot)
   const isAgudeza = isAgudezaVisual(test.testNameSnapshot)
   const isCampi = getCanonicalAIStudyType(test) === 'Campimetria'
@@ -1663,10 +1677,21 @@ function StudyPanel({
         </div>
       )}
 
+      {isConsulta && workerId && (
+        <ConsultaMedicaEstudio
+          eventId={eventId}
+          eventTestId={test.id}
+          workerId={workerId}
+          initialClinicalContext={test.clinicalContext}
+          longitudinalData={longitudinalData ?? null}
+          readonly={readonly}
+        />
+      )}
+
       {/* ARCH-20260327-01: Estudios documentales — layout bifurcado de 2 columnas en desktop.
           Izquierda: dropzone, trazabilidad, extracción legible, prediagnóstico IA, acciones.
           Derecha: archivo vinculado, visor embebido, raw de extracción. */}
-      {!isMedico && !isSomato && !isAgudeza && !isCampi && (
+      {!isMedico && !isConsulta && !isSomato && !isAgudeza && !isCampi && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
           {/* ===== COLUMNA IZQUIERDA: OPERACIÓN CLÍNICA ===== */}

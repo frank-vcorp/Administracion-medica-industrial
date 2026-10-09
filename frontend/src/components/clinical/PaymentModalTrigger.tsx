@@ -8,10 +8,14 @@
  * @spec context/SPECs/SPEC_ARCH-20260630-01-MODAL-PAGO-RECIBO-PAPELETA.md
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PaymentModal from '@/components/clinical/PaymentModal'
-import { getPaymentHistory } from '@/actions/payment.actions'
+import {
+  getPaymentHistory,
+  getSuggestedPaymentForEvent,
+  type SuggestedPaymentForEvent,
+} from '@/actions/payment.actions'
 
 interface PaymentModalTriggerProps {
   eventId: string
@@ -39,6 +43,10 @@ export default function PaymentModalTrigger({
 }: PaymentModalTriggerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [hasPayments, setHasPayments] = useState<boolean | null>(null)
+  const [suggestedCatalog, setSuggestedCatalog] = useState<SuggestedPaymentForEvent | null>(
+    null,
+  )
+  const [catalogLoading, setCatalogLoading] = useState(false)
   const router = useRouter()
 
   if (!canRegisterPayments) {
@@ -47,17 +55,41 @@ export default function PaymentModalTrigger({
 
   const fullName = `${workerFirstName} ${workerLastName}`.trim()
 
-  // Cargar historial en background (silencioso, para badge futuro).
-  // No bloquea la apertura del modal.
-  void (async () => {
+  useEffect(() => {
     if (hasPayments !== null) return
-    const res = await getPaymentHistory(eventId)
-    if (res.success && res.payments && res.payments.length > 0) {
-      setHasPayments(true)
-    } else {
-      setHasPayments(false)
+    let cancelled = false
+    void getPaymentHistory(eventId).then((res) => {
+      if (cancelled) return
+      if (res.success && res.payments && res.payments.length > 0) {
+        setHasPayments(true)
+      } else {
+        setHasPayments(false)
+      }
+    })
+    return () => {
+      cancelled = true
     }
-  })()
+  }, [eventId, hasPayments])
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSuggestedCatalog(null)
+      setCatalogLoading(false)
+      return
+    }
+    let cancelled = false
+    setCatalogLoading(true)
+    void getSuggestedPaymentForEvent(eventId).then((res) => {
+      if (cancelled) return
+      setCatalogLoading(false)
+      if (res.success && res.data) {
+        setSuggestedCatalog(res.data)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen, eventId])
 
   return (
     <>
@@ -89,6 +121,8 @@ export default function PaymentModalTrigger({
         companyName={companyName}
         branchName={branchName}
         receivedBy={receivedBy}
+        suggestedCatalog={suggestedCatalog}
+        catalogLoading={catalogLoading}
       />
     </>
   )

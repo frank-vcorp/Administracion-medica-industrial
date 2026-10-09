@@ -19,6 +19,18 @@ import {
   type PaymentMethod,
   type PaymentHistoryItem,
 } from '@/lib/payment.constants'
+import { readCatalogPriceFromOptions } from '@/lib/medical-test-catalog-price'
+
+export type SuggestedPaymentLine = {
+  testName: string
+  code: string | null
+  unitPrice: number
+}
+
+export type SuggestedPaymentForEvent = {
+  suggestedTotal: number
+  lines: SuggestedPaymentLine[]
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schemas Zod
@@ -378,6 +390,65 @@ export async function markPaymentWhatsAppSent(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Error al registrar envío WhatsApp',
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2b. getSuggestedPaymentForEvent — tarifa sugerida desde catálogo (EventTests)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Suma precios de `MedicalTest.options.price|basePrice` para pruebas de la papeleta.
+ * Monto editable en UI; no persiste hasta createPaymentRecord.
+ */
+export async function getSuggestedPaymentForEvent(
+  eventId: string,
+): Promise<{
+  success: boolean
+  data?: SuggestedPaymentForEvent
+  error?: string
+}> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return { success: false, error: 'No autenticado.' }
+    }
+    if (!eventId) {
+      return { success: false, error: 'eventId requerido.' }
+    }
+
+    const tests = await prisma.eventTest.findMany({
+      where: { eventId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        testNameSnapshot: true,
+        test: { select: { code: true, options: true } },
+      },
+    })
+
+    const lines: SuggestedPaymentLine[] = tests.map((row) => ({
+      testName: row.testNameSnapshot,
+      code: row.test?.code ?? null,
+      unitPrice: readCatalogPriceFromOptions(row.test?.options),
+    }))
+
+    const suggestedTotal = Number(
+      lines.reduce((sum, line) => sum + line.unitPrice, 0).toFixed(2),
+    )
+
+    return {
+      success: true,
+      data: { suggestedTotal, lines },
+    }
+  } catch (error) {
+    console.error('[GET SUGGESTED PAYMENT ERROR]:', error)
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Error al calcular tarifa sugerida.',
     }
   }
 }

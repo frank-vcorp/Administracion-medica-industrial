@@ -242,12 +242,21 @@ async function seedMedicalTests(): Promise<void> {
 
   console.log("🏥 Insertando servicios GENERALES...");
   const generalCategoryId = categoryMap.get("GENERALES")!;
+  const seedConsultaPrice = Number(process.env.SEED_CONSULTA_MEDICA_PRICE ?? "");
   for (let i = 0; i < GENERAL_TESTS.length; i++) {
+    const name = GENERAL_TESTS[i];
+    const options =
+      name === "CONSULTA MÉDICA" &&
+      Number.isFinite(seedConsultaPrice) &&
+      seedConsultaPrice > 0
+        ? { price: seedConsultaPrice }
+        : undefined;
     await prisma.medicalTest.create({
       data: {
         code: generateCode("GEN", i + 1),
-        name: GENERAL_TESTS[i],
+        name,
         categoryId: generalCategoryId,
+        ...(options ? { options } : {}),
       },
     });
   }

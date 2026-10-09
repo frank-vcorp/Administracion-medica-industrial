@@ -70,6 +70,8 @@ export interface ReceiptPDFData {
   company: { name: string } | null
   branch?: { name: string } | null
   receivedBy: string
+  /** Conceptos de la papeleta (tarifa catálogo), opcional. */
+  concepts?: string[]
 }
 
 export const PaymentReceiptPDF = ({ data }: { data: ReceiptPDFData }) => {
@@ -135,6 +137,16 @@ export const PaymentReceiptPDF = ({ data }: { data: ReceiptPDFData }) => {
 
         <View style={{ marginBottom: 14 }}>
           <Text style={styles.sectionTitle}>DETALLE DEL PAGO</Text>
+          {data.concepts && data.concepts.length > 0 && (
+            <View style={{ marginBottom: 8 }}>
+              <Text style={styles.label}>Concepto(s):</Text>
+              {data.concepts.map((line, i) => (
+                <Text key={i} style={[styles.value, { marginTop: 4 }]}>
+                  {line}
+                </Text>
+              ))}
+            </View>
+          )}
           <View style={styles.row}>
             <Text style={styles.label}>Método de pago:</Text>
             <Text style={styles.value}>{data.method}</Text>

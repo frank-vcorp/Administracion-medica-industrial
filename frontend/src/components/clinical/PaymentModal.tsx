@@ -10,7 +10,8 @@
  * @spec context/SPECs/SPEC_ARCH-20260630-02-WHATSAPP-RECIBO.md
  */
 
-import { useState, useTransition, useMemo, useCallback } from 'react'
+import { useState, useTransition, useMemo, useCallback, useEffect, useRef } from 'react'
+import type { SuggestedPaymentForEvent } from '@/actions/payment.actions'
 import { pdf } from '@react-pdf/renderer'
 import { PaymentReceiptPDF, type ReceiptPDFData } from '@/components/pdf/PaymentReceiptPDF'
 import { createPaymentRecord, markPaymentWhatsAppSent } from '@/actions/payment.actions'
@@ -37,6 +38,9 @@ interface PaymentModalProps {
   companyName: string
   branchName?: string | null
   receivedBy: string
+  /** Tarifa sugerida desde catálogo (EventTests + MedicalTest.options.price). */
+  suggestedCatalog?: SuggestedPaymentForEvent | null
+  catalogLoading?: boolean
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,6 +58,16 @@ function parseAmount(input: string): number {
   return Number(normalized)
 }
 
+function receiptConceptLines(catalog: SuggestedPaymentForEvent | null | undefined): string[] {
+  if (!catalog?.lines?.length) return []
+  return catalog.lines
+    .filter((line) => line.unitPrice > 0)
+    .map(
+      (line) =>
+        `${line.testName}${line.code ? ` (${line.code})` : ''} — $${line.unitPrice.toFixed(2)} MXN`,
+    )
+}
+
 // ── Componente ───────────────────────────────────────────────────────────────
 export default function PaymentModal({
   isOpen,
@@ -66,9 +80,12 @@ export default function PaymentModal({
   companyName,
   branchName,
   receivedBy,
+  suggestedCatalog = null,
+  catalogLoading = false,
   }: PaymentModalProps) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const catalogPrefillApplied = useRef(false)
 
   const [method, setMethod] = useState<PaymentMethod>('EFECTIVO')
   const [amountStr, setAmountStr] = useState('')
@@ -112,7 +129,17 @@ export default function PaymentModal({
     setWhatsAppPhone('')
     setSuccessInfo(null)
     setError(null)
+    catalogPrefillApplied.current = false
   }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+    if (catalogPrefillApplied.current) return
+    if (catalogLoading) return
+    if (!suggestedCatalog || suggestedCatalog.suggestedTotal <= 0) return
+    setAmountStr(suggestedCatalog.suggestedTotal.toFixed(2))
+    catalogPrefillApplied.current = true
+  }, [isOpen, catalogLoading, suggestedCatalog])
 
   const handleClose = useCallback(() => {
     if (isPending) return
@@ -133,6 +160,7 @@ export default function PaymentModal({
         company: companyName ? { name: companyName } : null,
         branch: branchName ? { name: branchName } : null,
         receivedBy,
+        concepts: receiptConceptLines(suggestedCatalog),
       }
       const blob = await pdf(<PaymentReceiptPDF data={payload} />).toBlob()
       return await new Promise<string>((resolve, reject) => {
@@ -145,7 +173,18 @@ export default function PaymentModal({
       console.warn('[PaymentModal] No se pudo generar el PDF, continuando sin adjunto.', err)
       return undefined
     }
-  }, [amount, method, reference, eventId, workerName, universalId, companyName, branchName, receivedBy])
+  }, [
+    amount,
+    method,
+    reference,
+    eventId,
+    workerName,
+    universalId,
+    companyName,
+    branchName,
+    receivedBy,
+    suggestedCatalog,
+  ])
 
   const handleSubmit = useCallback(() => {
     setError(null)
@@ -410,6 +449,44 @@ export default function PaymentModal({
               ))}
             </select>
           </section>
+
+          {/* Tarifa catálogo (EventTests) */}
+          {(catalogLoading || (suggestedCatalog && suggestedCatalog.lines.length > 0)) && (
+            <section className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+                Tarifa sugerida (catálogo)
+              </p>
+              {catalogLoading ? (
+                <p className="text-xs text-slate-500">Calculando…</p>
+              ) : (
+                <>
+                  <ul className="text-xs text-slate-700 space-y-1">
+                    {suggestedCatalog!.lines.map((line) => (
+                      <li key={`${line.code ?? line.testName}`} className="flex justify-between gap-2">
+                        <span className="truncate">{line.testName}</span>
+                        <span className="font-mono shrink-0">
+                          {line.unitPrice > 0
+                            ? `$${formatCurrency(line.unitPrice)}`
+                            : '—'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {suggestedCatalog!.suggestedTotal > 0 ? (
+                    <p className="text-[10px] text-amber-800 font-medium pt-1 border-t border-slate-200">
+                      Total sugerido: ${formatCurrency(suggestedCatalog!.suggestedTotal)} MXN
+                      (editable abajo)
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">
+                      Sin precio en catálogo. Captura el monto manualmente o actualiza la tarifa de la
+                      prueba en base de datos.
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+          )}
 
           {/* Monto */}
           <section className="space-y-3">
