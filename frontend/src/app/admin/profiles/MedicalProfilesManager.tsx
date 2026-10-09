@@ -659,7 +659,7 @@ function ProfileModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-      <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white p-6 shadow-2xl">
         {/* Encabezado modal */}
         <div className="flex justify-between items-center mb-4 shrink-0">
           <h3 className="text-lg font-bold text-slate-800">{title}</h3>
@@ -672,7 +672,8 @@ function ProfileModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 overflow-hidden">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {initialCompanyId && (
             <input type="hidden" name="companyId" value={initialCompanyId} />
           )}
@@ -692,12 +693,12 @@ function ProfileModal({
           )}
 
           {/* Selección de pruebas */}
-          <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex flex-col">
             <p className="text-sm font-semibold text-slate-700 mb-2 shrink-0">
               Pruebas incluidas{' '}
               <span className="text-blue-600 font-bold">({selectedIds.size} seleccionadas)</span>
             </p>
-            <div className="border border-slate-200 rounded-lg overflow-y-auto flex-1 divide-y divide-slate-100 max-h-40">
+            <div className="max-h-[30vh] divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
               {Object.entries(byCategory).map(([category, tests]) => (
                 <div key={category}>
                   <div className="px-3 py-1.5 bg-slate-50 text-xs uppercase text-slate-400 font-semibold sticky top-0">
@@ -806,9 +807,10 @@ function ProfileModal({
             )}
             {emailError && <p className="text-xs text-red-600 mt-1">{emailError}</p>}
           </div>
+          </div>
 
           {/* Botones */}
-          <div className="flex justify-end gap-2 pt-2 shrink-0">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-slate-100 pt-4">
             <button
               type="button"
               onClick={onClose}

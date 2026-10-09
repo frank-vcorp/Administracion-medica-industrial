@@ -557,7 +557,7 @@ function ProfileModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h3 className="text-lg font-bold text-slate-800">{title}</h3>
             <p className="mt-1 text-sm text-slate-500">
@@ -573,10 +573,10 @@ function ProfileModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden px-6 py-5">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-5">
           <input type="hidden" name="companyId" value={companyId} />
 
-          <div className="space-y-4 overflow-hidden">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <MedicalProfileNameBuilderFields
               companyLegalName={companyLegalName}
               initialFullName={initialName}
@@ -761,7 +761,7 @@ function ProfileModal({
             </div>
           </div>
 
-          <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <div className="mt-5 flex shrink-0 justify-end gap-2 border-t border-slate-100 pt-4">
             <button
               type="button"
               onClick={onClose}
