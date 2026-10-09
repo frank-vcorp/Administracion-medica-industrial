@@ -36,7 +36,9 @@ import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEve
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import ConsultaMedicaEstudio from "@/components/clinical/ConsultaMedicaEstudio"
+import CertificadoMedicoEstudio from "@/components/clinical/CertificadoMedicoEstudio"
 import { isConsultaMedicaTestName } from "@/lib/clinical/consulta-medica"
+import { isCertificadoMedicoTestName } from "@/lib/clinical/certificado-medico"
 import SomatometriaStudy from "@/components/clinical/studies/SomatometriaStudy"
 import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy"
 import CampimetriaStudy from "@/components/clinical/studies/CampimetriaStudy"
@@ -263,8 +265,12 @@ function isConsultaMedica(name: string) {
   return isConsultaMedicaTestName(name)
 }
 
+function isCertificadoMedico(name: string) {
+  return isCertificadoMedicoTestName(name)
+}
+
 function studyPanelKindLabel(testName: string): string {
-  if (isExamenMedico(testName) || isConsultaMedica(testName)) {
+  if (isExamenMedico(testName) || isConsultaMedica(testName) || isCertificadoMedico(testName)) {
     return 'Formulario clínico'
   }
   return 'Estudio documental'
@@ -1383,6 +1389,7 @@ function StudyPanel({
 
   const isMedico = isExamenMedico(test.testNameSnapshot)
   const isConsulta = isConsultaMedica(test.testNameSnapshot)
+  const isCertificado = isCertificadoMedico(test.testNameSnapshot)
   const isSomato = isSomatometria(test.testNameSnapshot)
   const isAgudeza = isAgudezaVisual(test.testNameSnapshot)
   const isCampi = getCanonicalAIStudyType(test) === 'Campimetria'
@@ -1444,7 +1451,8 @@ function StudyPanel({
               <span className="text-xs font-mono text-slate-500">{test.test.code}</span>
             )}
             <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-              isMedico ? 'bg-blue-50 text-blue-600' :
+              isMedico || isCertificado ? 'bg-blue-50 text-blue-600' :
+              isConsulta ? 'bg-teal-50 text-teal-700' :
               isSomato ? 'bg-teal-50 text-teal-700' :
               isAgudeza ? 'bg-indigo-50 text-indigo-700' :
               isCampi ? 'bg-violet-50 text-violet-700' :
@@ -1452,7 +1460,7 @@ function StudyPanel({
               isAIEligible ? 'bg-teal-50 text-teal-700' :
               'bg-slate-50 text-slate-600'
             }`}>
-              {isMedico ? '📋 Formulario' :
+              {isMedico || isConsulta || isCertificado ? '📋 Formulario' :
                isSomato ? '⚖️ Somatometría' :
                isAgudeza ? '👁️ Agudeza Visual' :
                isCampi ? '🗺️ Captura manual' :
@@ -1688,10 +1696,21 @@ function StudyPanel({
         />
       )}
 
+      {isCertificado && workerId && (
+        <CertificadoMedicoEstudio
+          eventId={eventId}
+          eventTestId={test.id}
+          workerId={workerId}
+          initialClinicalContext={test.clinicalContext}
+          longitudinalData={longitudinalData ?? null}
+          readonly={readonly}
+        />
+      )}
+
       {/* ARCH-20260327-01: Estudios documentales — layout bifurcado de 2 columnas en desktop.
           Izquierda: dropzone, trazabilidad, extracción legible, prediagnóstico IA, acciones.
           Derecha: archivo vinculado, visor embebido, raw de extracción. */}
-      {!isMedico && !isConsulta && !isSomato && !isAgudeza && !isCampi && (
+      {!isMedico && !isConsulta && !isCertificado && !isSomato && !isAgudeza && !isCampi && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
           {/* ===== COLUMNA IZQUIERDA: OPERACIÓN CLÍNICA ===== */}

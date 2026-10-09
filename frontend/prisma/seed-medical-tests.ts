@@ -243,14 +243,23 @@ async function seedMedicalTests(): Promise<void> {
   console.log("🏥 Insertando servicios GENERALES...");
   const generalCategoryId = categoryMap.get("GENERALES")!;
   const seedConsultaPrice = Number(process.env.SEED_CONSULTA_MEDICA_PRICE ?? "");
+  const seedCertificadoPrice = Number(process.env.SEED_CERTIFICADO_MEDICO_PRICE ?? "");
   for (let i = 0; i < GENERAL_TESTS.length; i++) {
     const name = GENERAL_TESTS[i];
-    const options =
+    let options: { price: number } | undefined;
+    if (
       name === "CONSULTA MÉDICA" &&
       Number.isFinite(seedConsultaPrice) &&
       seedConsultaPrice > 0
-        ? { price: seedConsultaPrice }
-        : undefined;
+    ) {
+      options = { price: seedConsultaPrice };
+    } else if (
+      name === "CERTIFICADO MEDICO" &&
+      Number.isFinite(seedCertificadoPrice) &&
+      seedCertificadoPrice > 0
+    ) {
+      options = { price: seedCertificadoPrice };
+    }
     await prisma.medicalTest.create({
       data: {
         code: generateCode("GEN", i + 1),
