@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import QRCode from 'qrcode'
 import makeWASocket, {
   Browsers,
@@ -53,15 +53,49 @@ class BaileysManager {
     return dir
   }
 
-  /** Elimina credenciales en disco para forzar un QR nuevo (p. ej. tras desvincular). */
-  private clearAuthDir(): void {
+  /**
+   * Borra archivos de sesión dentro del directorio de auth.
+   * En Railway el volumen monta `/data/wa-auth`: no se puede `rmdir` el punto de montaje (EBUSY).
+   */
+  private async clearAuthStorage(): Promise<void> {
     const dir = this.authDir()
-    try {
-      rmSync(dir, { recursive: true, force: true })
-      mkdirSync(dir, { recursive: true })
-    } catch (err) {
-      logger.warn({ err }, 'No se pudo limpiar el directorio de sesión WhatsApp')
+    const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        for (const name of readdirSync(dir)) {
+          const full = path.join(dir, name)
+          const st = statSync(full)
+          if (st.isDirectory()) {
+            rmSync(full, { recursive: true, force: true })
+          } else {
+            unlinkSync(full)
+          }
+        }
+        return
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code
+        if (code === 'ENOENT') return
+        if ((code === 'EBUSY' || code === 'EPERM') && attempt < 5) {
+          await pause(200 * (attempt + 1))
+          continue
+        }
+        logger.warn({ err, attempt }, 'No se pudo limpiar credenciales WhatsApp')
+        return
+      }
     }
+  }
+
+  private async destroySocket(): Promise<void> {
+    const sock = this.sock
+    this.sock = null
+    if (!sock) return
+    try {
+      sock.end(undefined)
+    } catch {
+      /* ignore */
+    }
+    await new Promise((r) => setTimeout(r, 250))
   }
 
   private clearReconnectTimer(): void {
@@ -122,15 +156,13 @@ class BaileysManager {
     await syncWhatsAppRow({ status: 'qr_pending', lastError: null })
 
     if (options?.resetSession) {
-      if (this.sock) {
-        try {
-          this.sock.end(undefined)
-        } catch {
-          /* ignore */
-        }
-        this.sock = null
+      await this.destroySocket()
+      await this.clearAuthStorage()
+      const { state: cleared } = await useMultiFileAuthState(this.authDir())
+      if (cleared.creds?.registered) {
+        logger.warn('Credenciales aún registradas tras limpiar; segundo intento')
+        await this.clearAuthStorage()
       }
-      this.clearAuthDir()
     }
 
     try {
@@ -150,16 +182,14 @@ class BaileysManager {
   }
 
   private async openSocket(): Promise<void> {
-    if (this.sock) {
-      try {
-        this.sock.end(undefined)
-      } catch {
-        /* ignore */
-      }
-      this.sock = null
-    }
+    await this.destroySocket()
 
-    const { state, saveCreds } = await useMultiFileAuthState(this.authDir())
+    let { state, saveCreds } = await useMultiFileAuthState(this.authDir())
+    if (this.pairingActive && state.creds?.registered) {
+      logger.warn('Sesión registrada durante emparejamiento; limpiando credenciales')
+      await this.clearAuthStorage()
+      ;({ state, saveCreds } = await useMultiFileAuthState(this.authDir()))
+    }
     const { version } = await fetchLatestBaileysVersion()
 
     const sock = makeWASocket({
@@ -227,28 +257,47 @@ class BaileysManager {
         this.sock = null
 
         if (loggedOut || forbidden) {
-          this.pairingActive = false
-          this.status = 'disconnected'
           this.qrDataUrl = null
           this.qrRaw = null
           if (loggedOut) {
             this.linkedPhone = null
             await clearLinkedPhone()
-            this.clearAuthDir()
+            await this.clearAuthStorage()
           }
-          this.lastError = forbidden
-            ? 'WhatsApp rechazó la sesión (403). Desvincule y vuelva a escanear el QR.'
-            : null
+          if (forbidden) {
+            this.pairingActive = false
+            this.status = 'disconnected'
+            this.lastError =
+              'WhatsApp rechazó la sesión (403). Desvincule y vuelva a escanear el QR.'
+            await syncWhatsAppRow({
+              status: this.status,
+              linkedPhone: this.linkedPhone,
+              lastError: this.lastError,
+            })
+            return
+          }
+
+          if (this.pairingActive) {
+            this.status = 'qr_pending'
+            this.lastError = null
+            await syncWhatsAppRow({ status: 'qr_pending', lastError: null })
+            this.scheduleReconnect({ resetSession: true }, 800)
+            return
+          }
+
+          this.pairingActive = false
+          this.status = 'disconnected'
+          this.lastError = null
           await syncWhatsAppRow({
             status: this.status,
-            linkedPhone: loggedOut ? null : this.linkedPhone,
-            lastError: this.lastError,
+            linkedPhone: null,
+            lastError: null,
           })
           return
         }
 
         if (badSession) {
-          this.clearAuthDir()
+          await this.clearAuthStorage()
           this.status = 'qr_pending'
           this.scheduleReconnect({ resetSession: true }, 1500)
           return
@@ -283,14 +332,10 @@ class BaileysManager {
       try {
         await this.sock.logout()
       } catch {
-        try {
-          this.sock.end(undefined)
-        } catch {
-          /* ignore */
-        }
+        /* ignore */
       }
-      this.sock = null
     }
+    await this.destroySocket()
     this.status = 'disconnected'
     this.linkedPhone = null
     this.qrDataUrl = null
@@ -302,7 +347,7 @@ class BaileysManager {
       lastError: null,
     })
     await clearLinkedPhone()
-    this.clearAuthDir()
+    await this.clearAuthStorage()
     return this.getSnapshot()
   }
 
