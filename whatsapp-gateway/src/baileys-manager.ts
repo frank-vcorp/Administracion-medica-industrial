@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, rmSync } from 'node:fs'
 import QRCode from 'qrcode'
 import makeWASocket, {
   DisconnectReason,
@@ -43,13 +43,24 @@ class BaileysManager {
     return dir
   }
 
+  /** Elimina credenciales en disco para forzar un QR nuevo (p. ej. tras desvincular). */
+  private clearAuthDir(): void {
+    const dir = this.authDir()
+    try {
+      rmSync(dir, { recursive: true, force: true })
+      mkdirSync(dir, { recursive: true })
+    } catch (err) {
+      logger.warn({ err }, 'No se pudo limpiar el directorio de sesión WhatsApp')
+    }
+  }
+
   private formatPhone(jid: string | undefined): string | null {
     if (!jid) return null
     const num = jid.split(':')[0]?.split('@')[0]
     return num ? `+${num.replace(/\D/g, '')}` : null
   }
 
-  async startPairing(): Promise<GatewayRuntimeStatus> {
+  async startPairing(options?: { resetSession?: boolean }): Promise<GatewayRuntimeStatus> {
     if (this.status === 'connected' && this.sock) {
       return this.getSnapshot()
     }
@@ -62,6 +73,18 @@ class BaileysManager {
     this.qrDataUrl = null
     this.status = 'qr_pending'
     await syncWhatsAppRow({ status: 'qr_pending', lastError: null })
+
+    if (options?.resetSession) {
+      if (this.sock) {
+        try {
+          this.sock.end(undefined)
+        } catch {
+          /* ignore */
+        }
+        this.sock = null
+      }
+      this.clearAuthDir()
+    }
 
     try {
       await this.openSocket()
@@ -134,6 +157,7 @@ class BaileysManager {
         if (loggedOut) {
           this.linkedPhone = null
           await clearLinkedPhone()
+          this.clearAuthDir()
         }
         this.lastError = loggedOut
           ? null
@@ -178,6 +202,7 @@ class BaileysManager {
       lastError: null,
     })
     await clearLinkedPhone()
+    this.clearAuthDir()
     return this.getSnapshot()
   }
 

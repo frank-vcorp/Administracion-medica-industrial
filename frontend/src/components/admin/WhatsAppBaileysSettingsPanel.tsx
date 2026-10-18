@@ -176,6 +176,10 @@ export default function WhatsAppBaileysSettingsPanel() {
           </div>
         ) : statusKey === 'connected' ? (
           <p className="text-sm text-emerald-700 font-medium">La línea ya está vinculada y lista para envíos.</p>
+        ) : statusKey === 'qr_pending' ? (
+          <p className="text-sm text-slate-600">
+            Generando código QR… Si no aparece en unos segundos, pulse <strong>Actualizar QR</strong>.
+          </p>
         ) : (
           <p className="text-sm text-slate-500">
             Pulse el botón verde para mostrar el QR. Tenga a mano el teléfono con la app WhatsApp de la línea

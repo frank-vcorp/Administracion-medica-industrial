@@ -43,7 +43,7 @@ app.post('/v1/messages/send', async (req, res) => {
 app.post('/v1/admin/connect', async (req, res) => {
   if (!requireBearer(req, res)) return
   try {
-    const snapshot = await baileysManager.startPairing()
+    const snapshot = await baileysManager.startPairing({ resetSession: true })
     res.json({ ok: true, ...snapshot })
   } catch (err) {
     res.status(500).json({
