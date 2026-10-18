@@ -2,6 +2,7 @@ import path from 'node:path'
 import { mkdirSync, rmSync } from 'node:fs'
 import QRCode from 'qrcode'
 import makeWASocket, {
+  Browsers,
   DisconnectReason,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
@@ -19,9 +20,18 @@ export type GatewayRuntimeStatus = {
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
+const RECOVERABLE_DISCONNECT = new Set<number>([
+  DisconnectReason.connectionClosed,
+  DisconnectReason.connectionLost,
+  DisconnectReason.timedOut,
+  DisconnectReason.restartRequired,
+])
+
 class BaileysManager {
   private sock: WASocket | null = null
   private starting = false
+  private pairingActive = false
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private qrRaw: string | null = null
   private qrDataUrl: string | null = null
   private status: WaDbStatus = 'disconnected'
@@ -54,10 +64,41 @@ class BaileysManager {
     }
   }
 
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+  }
+
+  private scheduleReconnect(options?: { resetSession?: boolean }, delayMs = 2000): void {
+    this.clearReconnectTimer()
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      void this.startPairing(options)
+    }, delayMs)
+  }
+
   private formatPhone(jid: string | undefined): string | null {
     if (!jid) return null
     const num = jid.split(':')[0]?.split('@')[0]
     return num ? `+${num.replace(/\D/g, '')}` : null
+  }
+
+  private async waitForQr(timeoutMs: number): Promise<void> {
+    if (this.qrDataUrl) return
+    const started = Date.now()
+    while (Date.now() - started < timeoutMs) {
+      if (this.qrDataUrl) return
+      if (this.status === 'connected') return
+      if (this.status === 'error' && this.lastError) return
+      if (this.status === 'disconnected' && !this.pairingActive) return
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    if (!this.qrDataUrl && this.status !== 'connected') {
+      this.lastError = 'No se recibió QR de WhatsApp. Pulse Actualizar QR o revise los logs del gateway.'
+      await syncWhatsAppRow({ status: 'qr_pending', lastError: this.lastError })
+    }
   }
 
   async startPairing(options?: { resetSession?: boolean }): Promise<GatewayRuntimeStatus> {
@@ -65,9 +106,15 @@ class BaileysManager {
       return this.getSnapshot()
     }
     if (this.starting) {
+      if (options?.resetSession) {
+        await this.waitForQr(30_000)
+      }
       return this.getSnapshot()
     }
+
+    this.clearReconnectTimer()
     this.starting = true
+    this.pairingActive = true
     this.lastError = null
     this.qrRaw = null
     this.qrDataUrl = null
@@ -88,9 +135,13 @@ class BaileysManager {
 
     try {
       await this.openSocket()
+      if (options?.resetSession) {
+        await this.waitForQr(35_000)
+      }
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err)
       this.status = 'error'
+      this.pairingActive = false
       await syncWhatsAppRow({ status: 'error', lastError: this.lastError })
     } finally {
       this.starting = false
@@ -115,25 +166,40 @@ class BaileysManager {
       version,
       auth: state,
       logger,
+      browser: Browsers.windows('Chrome'),
       printQRInTerminal: false,
       syncFullHistory: false,
       markOnlineOnConnect: false,
+      connectTimeoutMs: 60_000,
+      defaultQueryTimeoutMs: 60_000,
     })
     this.sock = sock
 
     sock.ev.on('creds.update', saveCreds)
 
     sock.ev.on('connection.update', async (update) => {
+      if (this.sock !== sock) {
+        return
+      }
+
       const { connection, lastDisconnect, qr } = update
 
       if (qr) {
         this.qrRaw = qr
-        this.qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 280 })
+        try {
+          this.qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 280 })
+        } catch (err) {
+          logger.error({ err }, 'No se pudo renderizar QR')
+          this.lastError = 'Error al generar imagen del QR'
+        }
         this.status = 'qr_pending'
-        await syncWhatsAppRow({ status: 'qr_pending' })
+        this.lastError = null
+        await syncWhatsAppRow({ status: 'qr_pending', lastError: null })
+        logger.info('QR WhatsApp listo para escanear')
       }
 
       if (connection === 'open') {
+        this.pairingActive = false
         this.qrRaw = null
         this.qrDataUrl = null
         this.status = 'connected'
@@ -144,6 +210,7 @@ class BaileysManager {
           linkedPhone: this.linkedPhone,
           lastError: null,
         })
+        logger.info({ phone: this.linkedPhone }, 'WhatsApp conectado')
       }
 
       if (connection === 'close') {
@@ -151,34 +218,67 @@ class BaileysManager {
           lastDisconnect?.error as { output?: { statusCode?: number } } | undefined
         )?.output?.statusCode
         const loggedOut = code === DisconnectReason.loggedOut
-        this.status = loggedOut ? 'disconnected' : 'error'
-        this.qrDataUrl = null
-        this.qrRaw = null
-        if (loggedOut) {
-          this.linkedPhone = null
-          await clearLinkedPhone()
-          this.clearAuthDir()
-        }
-        this.lastError = loggedOut
-          ? null
-          : `Conexión cerrada (${code ?? 'desconocido'})`
-        await syncWhatsAppRow({
-          status: this.status,
-          linkedPhone: loggedOut ? null : this.linkedPhone,
-          lastError: this.lastError,
-        })
+        const forbidden = code === DisconnectReason.forbidden
+        const badSession = code === DisconnectReason.badSession
+        const recoverable = code !== undefined && RECOVERABLE_DISCONNECT.has(code)
+
+        logger.warn({ code, recoverable, pairingActive: this.pairingActive }, 'WhatsApp connection closed')
+
         this.sock = null
 
-        if (!loggedOut && code !== DisconnectReason.loggedOut) {
-          setTimeout(() => {
-            void this.startPairing()
-          }, 3000)
+        if (loggedOut || forbidden) {
+          this.pairingActive = false
+          this.status = 'disconnected'
+          this.qrDataUrl = null
+          this.qrRaw = null
+          if (loggedOut) {
+            this.linkedPhone = null
+            await clearLinkedPhone()
+            this.clearAuthDir()
+          }
+          this.lastError = forbidden
+            ? 'WhatsApp rechazó la sesión (403). Desvincule y vuelva a escanear el QR.'
+            : null
+          await syncWhatsAppRow({
+            status: this.status,
+            linkedPhone: loggedOut ? null : this.linkedPhone,
+            lastError: this.lastError,
+          })
+          return
         }
+
+        if (badSession) {
+          this.clearAuthDir()
+          this.status = 'qr_pending'
+          this.scheduleReconnect({ resetSession: true }, 1500)
+          return
+        }
+
+        if (recoverable) {
+          if (this.pairingActive || this.status === 'qr_pending') {
+            this.status = 'qr_pending'
+          }
+          this.scheduleReconnect(undefined, code === DisconnectReason.restartRequired ? 500 : 2000)
+          return
+        }
+
+        this.pairingActive = false
+        this.status = 'error'
+        this.qrDataUrl = null
+        this.qrRaw = null
+        this.lastError = `Conexión cerrada (${code ?? 'desconocido'})`
+        await syncWhatsAppRow({
+          status: this.status,
+          linkedPhone: this.linkedPhone,
+          lastError: this.lastError,
+        })
       }
     })
   }
 
   async disconnect(): Promise<GatewayRuntimeStatus> {
+    this.clearReconnectTimer()
+    this.pairingActive = false
     if (this.sock) {
       try {
         await this.sock.logout()
@@ -224,9 +324,9 @@ class BaileysManager {
 
   /** Restaura sesión existente al arrancar el gateway (sin QR). */
   async warmExistingSession(): Promise<void> {
+    if (this.starting || this.pairingActive || this.sock) return
     const { state } = await useMultiFileAuthState(this.authDir())
     if (!state.creds?.registered) return
-    if (this.sock) return
     await this.openSocket()
   }
 }

@@ -160,6 +160,11 @@ export default function WhatsAppBaileysSettingsPanel() {
       </div>
 
       <div className="space-y-4">
+        {settings?.lastError && statusKey === 'qr_pending' && !settings.qrDataUrl ? (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            {settings.lastError}
+          </p>
+        ) : null}
         {settings?.qrDataUrl ? (
           <div className="flex flex-col items-center gap-3 p-4 bg-white border-2 border-green-100 rounded-xl">
             <Image

@@ -316,8 +316,21 @@ export async function startWhatsAppBaileysPairing(): Promise<{
     return { success: false, error: live.error ?? 'No se pudo iniciar el QR' }
   }
 
+  if (!live.data?.qrDataUrl && live.data?.status === 'qr_pending') {
+    await new Promise((r) => setTimeout(r, 1500))
+  }
+
   revalidatePath('/admin/settings')
-  return getWhatsAppBaileysSettings()
+  const refreshed = await getWhatsAppBaileysSettings()
+  if (
+    refreshed.success &&
+    refreshed.settings?.status === 'qr_pending' &&
+    !refreshed.settings.qrDataUrl &&
+    refreshed.settings.lastError
+  ) {
+    return { success: false, error: refreshed.settings.lastError, settings: refreshed.settings }
+  }
+  return refreshed
 }
 
 export async function disconnectWhatsAppBaileys(): Promise<{
