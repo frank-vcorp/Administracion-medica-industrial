@@ -150,6 +150,12 @@ export function eyeAcuitySummary(eye: Record<string, unknown>): { label: string;
     .filter((r) => r.value)
 }
 
+/** Puesto actual en Antecedentes → datos personales (`puesto_actual`). */
+export function puestoActualFromAntecedentes(antecedentes: Record<string, unknown>): string {
+  const dp = sectionRecord(antecedentes, 'datos_personales')
+  return str(dp.puesto_actual)
+}
+
 export function identificacionAmiRows(input: SodexoAmiMirrorInput): { label: string; value: string }[] {
   const dp = sectionRecord(input.antecedentesCaptured, 'datos_personales')
   const rows = flattenAmiSectionForDisplay(dp, 16)

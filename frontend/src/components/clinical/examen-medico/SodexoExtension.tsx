@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import Link from 'next/link'
 import { type SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import {
@@ -16,6 +16,7 @@ import {
   flattenAmiSectionForDisplay,
   historiaOcupacionalAmiNarrative,
   identificacionAmiRows,
+  puestoActualFromAntecedentes,
   isSodexoFemalePatient,
   resolvePatientSexo,
   sectionRecord,
@@ -271,6 +272,13 @@ export function SodexoExtension({
   const showGineco = isSodexoFemalePatient(patientSexo)
   const showActividades = sodexoNeedsActividadesBlock(value.tipo_examen)
 
+  useEffect(() => {
+    if (readonly) return
+    const fromAmi = puestoActualFromAntecedentes(amiCtx.antecedentesCaptured)
+    if (!fromAmi || value.actividades_cargo?.trim()) return
+    onChange({ ...value, actividades_cargo: fromAmi })
+  }, [amiCtx.antecedentesCaptured, value.actividades_cargo, readonly, onChange, value])
+
   return (
     <div className="space-y-6">
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
@@ -450,7 +458,7 @@ export function SodexoExtension({
                 value={value.actividades_cargo ?? ''}
                 onChange={(v) => set('actividades_cargo', v)}
                 readonly={readonly}
-                placeholder="Puesto actual (también en Antecedentes)"
+                placeholder="Se llena desde Antecedentes → Puesto actual si está vacío"
               />
               <Field
                 label="Fecha de ingreso"
