@@ -25,26 +25,113 @@ type MatrizNivel = (typeof MATRIZ_LIKERT)[number]
 type HoFila = NonNullable<SodexoExtensionData['historia_ocupacional_filas']>[number]
 const HO_EMPTY_ROW: HoFila = { empresa: '', ocupacion: '', tiempo: '', agentes_riesgo: '' }
 
-function RegSection({
+/** Índice alineado al REG-SO-01 (mismo orden que el formato ejemplo Sodexo). */
+const SODEXO_BLOCK_NAV: { id: string; label: string }[] = [
+  { id: '1', label: '§1 Identificación' },
+  { id: '2-3', label: '§2–3 HO y riesgos' },
+  { id: '4', label: '§4 Heredo-familiares' },
+  { id: '5', label: '§5 Patológicos' },
+  { id: '6', label: '§6 Inmunizaciones' },
+  { id: '7', label: '§7 Gineco-obstétricos' },
+  { id: '8', label: '§8 Estilos de vida' },
+  { id: '9', label: '§9 Examen físico' },
+  { id: '10-12', label: '§10–12 Cierre' },
+]
+
+function SodexoBlock({
+  blockId,
   section,
   title,
-  hint,
+  subtitle,
+  mode = 'extension',
   children,
 }: {
+  blockId: string
   section: string
   title: string
-  hint?: string
-  children: ReactNode
+  subtitle?: string
+  mode?: 'extension' | 'ami'
+  children?: ReactNode
 }) {
+  const isAmi = mode === 'ami'
   return (
-    <section className="border border-slate-200 rounded-xl overflow-hidden">
-      <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">{section}</p>
-        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
-        {hint ? <p className="text-[11px] text-slate-500 mt-0.5">{hint}</p> : null}
+    <section
+      id={`sodexo-block-${blockId}`}
+      className={`rounded-xl overflow-hidden scroll-mt-4 ${
+        isAmi
+          ? 'border border-dashed border-slate-300 bg-slate-50/90'
+          : 'border-2 border-emerald-200 bg-white shadow-sm'
+      }`}
+    >
+      <div
+        className={`flex gap-3 px-4 py-3 border-b ${
+          isAmi ? 'border-slate-200 bg-slate-100/80' : 'border-emerald-100 bg-emerald-50/60'
+        }`}
+      >
+        <span
+          className={`flex h-10 min-w-10 shrink-0 items-center justify-center rounded-lg px-2 text-xs font-bold ${
+            isAmi ? 'bg-slate-500 text-white' : 'bg-emerald-700 text-white'
+          }`}
+        >
+          {section}
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-slate-900 leading-snug">{title}</h2>
+          {subtitle ? <p className="text-[11px] text-slate-600 mt-0.5">{subtitle}</p> : null}
+          {isAmi ? (
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mt-1">
+              Solo papeleta AMI — no se captura aquí
+            </p>
+          ) : (
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800 mt-1">
+              Extensión Sodexo REG-SO-01
+            </p>
+          )}
+        </div>
       </div>
-      <div className="p-4 space-y-3">{children}</div>
+      {children ? <div className="p-4 space-y-5">{children}</div> : null}
     </section>
+  )
+}
+
+function BlockSubsection({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600 border-b border-slate-100 pb-1">
+        {title}
+      </h3>
+      {hint ? <p className="text-[11px] text-slate-500">{hint}</p> : null}
+      {children}
+    </div>
+  )
+}
+
+function AmiCaptureNote({ where, detail }: { where: string; detail?: string }) {
+  return (
+    <p className="text-sm text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2.5 leading-relaxed">
+      <span className="font-bold text-slate-900">Captura en papeleta estándar:</span>{' '}
+      <span className="text-emerald-900 font-medium">{where}</span>
+      {detail ? <span className="text-slate-600"> — {detail}</span> : null}
+    </p>
+  )
+}
+
+function SodexoBlockNav() {
+  return (
+    <nav
+      className="flex flex-wrap gap-1.5 text-[11px]"
+      aria-label="Secciones REG-SO-01"
+    >
+      {SODEXO_BLOCK_NAV.map((item) => (
+        <a
+          key={item.id}
+          href={`#sodexo-block-${item.id}`}
+          className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 font-semibold text-emerald-900 hover:bg-emerald-50 transition-colors"
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
   )
 }
 
@@ -171,11 +258,13 @@ export function SodexoExtension({
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
         <p className="text-sm font-bold text-emerald-900">Formato Sodexo — campos adicionales</p>
         <p className="text-xs text-emerald-700 mt-1">
-          Solo campos del REG-SO-01 que <strong>no</strong> están en la papeleta clínica estándar. Antecedentes,
-          exploración, módulo 1 y aptitud salen del examen estándar; aquí capturas identificación
-          Sodexo, matriz, HO tabular, funciones y encabezado de examen físico. El PDF no inventa
-          datos: lo no capturado queda vacío en el impreso.
+          Mismo orden que el <strong>formato ejemplo REG-SO-01</strong>: cada bloque numerado coincide con
+          una sección del impreso. Los bloques punteados grises se llenan en la papeleta AMI; los verdes,
+          solo aquí. El PDF Sodexo no inventa datos.
         </p>
+        <div className="mt-3">
+          <SodexoBlockNav />
+        </div>
       </div>
 
       {showSodexoPdfDownload && sodexoPdfUrl ? (
@@ -219,11 +308,17 @@ export function SodexoExtension({
         </div>
       ) : null}
 
-      <RegSection
+      <SodexoBlock
+        blockId="1"
         section="§1"
         title="Identificación y datos generales"
-        hint="Complementa lo que ya capturas en la papeleta estándar (nombre, domicilio, escolaridad…)."
+        subtitle="Equivalente a la primera hoja del formato ejemplo: datos del trabajador, funciones, EPP y actividades."
       >
+        <AmiCaptureNote
+          where="Ficha del trabajador + papeleta (nombre, edad, sexo, domicilio, escolaridad, estado civil)"
+          detail="La extensión solo pide los campos extra del impreso Sodexo."
+        />
+        <BlockSubsection title="Tipo de examen y datos de contacto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-1">Tipo de examen Sodexo</label>
@@ -315,9 +410,9 @@ export function SodexoExtension({
           </select>
         </div>
         </div>
-      </RegSection>
+        </BlockSubsection>
 
-      <RegSection section="§1.2" title="Funciones principales">
+        <BlockSubsection title="Funciones principales del puesto">
         <div className="flex flex-wrap gap-3">
           {FUNCIONES_ITEMS.map(({ key, label }) => (
             <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
@@ -337,9 +432,9 @@ export function SodexoExtension({
             </label>
           ))}
         </div>
-      </RegSection>
+        </BlockSubsection>
 
-      <RegSection section="§1" title="EPP declarado">
+        <BlockSubsection title="Equipo de protección personal (EPP)">
         <div className="mb-3">
           <label className="block text-xs font-bold text-slate-500 mb-1">Uso de EPP (PDF)</label>
           <select
@@ -370,13 +465,12 @@ export function SodexoExtension({
             </label>
           ))}
         </div>
-      </RegSection>
+        </BlockSubsection>
 
-      <RegSection
-        section="§1"
-        title="Actividades laborales (periódicos / retiro)"
-        hint="Cargo, antigüedad y tipo de actividad en el formato Sodexo."
-      >
+        <BlockSubsection
+          title="Identificación de actividades (exámenes periódicos o de retiro)"
+          hint="Cargo, antigüedad y tipo de actividad según el REG-SO-01."
+        >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Cargo" value={value.actividades_cargo ?? ''} onChange={(v) => set('actividades_cargo', v)} readonly={readonly} />
           <Field label="Fecha de ingreso" value={value.fecha_ingreso_actividades ?? ''} onChange={(v) => set('fecha_ingreso_actividades', v)} readonly={readonly} />
@@ -389,19 +483,34 @@ export function SodexoExtension({
             placeholder="Administrativa, mantenimiento, conducción…"
           />
         </div>
-      </RegSection>
+        </BlockSubsection>
+      </SodexoBlock>
 
-      <RegSection
+      <SodexoBlock
+        blockId="2-3"
         section="§2–3"
-        title="Historia ocupacional (tabla)"
-        hint="Una fila para empezar; agrega hasta 4. Si capturas aquí, sustituye el volcado desde la narrativa clínica estándar."
+        title="Historia ocupacional, matriz de riesgos y consentimiento"
+        subtitle="Antecedentes laborales, identificación de factores de riesgo y declaraciones del formato."
       >
-        <HoTabla value={value} onChange={onChange} readonly={readonly} />
-      </RegSection>
+        <AmiCaptureNote
+          where="Examen Médico → Antecedentes → Historia ocupacional (narrativa)"
+          detail="Si no usas la tabla de abajo, el PDF puede volcar esa narrativa."
+        />
+        <BlockSubsection
+          title="Antecedentes laborales (tabla)"
+          hint="Una fila para empezar; agrega hasta 4. Al capturar aquí, sustituye el volcado automático desde la narrativa."
+        >
+          <HoTabla value={value} onChange={onChange} readonly={readonly} />
+        </BlockSubsection>
 
-      <MatrizLikertSection value={value} onChange={onChange} readonly={readonly} />
+        <BlockSubsection
+          title="Matriz de identificación de factores de riesgo"
+          hint="Nivel 1–5 o A por factor, en columnas como el impreso."
+        >
+          <MatrizLikertTable value={value} onChange={onChange} readonly={readonly} />
+        </BlockSubsection>
 
-      <RegSection section="§2–3" title="Consentimiento y declaración">
+        <BlockSubsection title="Consentimiento informado y declaración bajo protesta">
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -436,32 +545,106 @@ export function SodexoExtension({
           onChange={(v) => set('declaracion_protesta_nombre', v)}
           readonly={readonly}
         />
-      </RegSection>
+        </BlockSubsection>
+      </SodexoBlock>
 
-      <PatologicosSodexoSection value={value} onChange={onChange} readonly={readonly} />
+      <SodexoBlock
+        blockId="4"
+        section="§4"
+        title="Antecedentes heredo-familiares"
+        subtitle="Rejilla Niega / Sí y parentesco del REG-SO-01."
+        mode="ami"
+      >
+        <AmiCaptureNote
+          where="Examen Médico → Antecedentes → Heredo-familiares"
+          detail="El PDF Sodexo proyecta lo capturado en la papeleta estándar."
+        />
+      </SodexoBlock>
 
-      <RegSection section="§5" title="Aclaración historia personal (opcional)">
+      <SodexoBlock
+        blockId="5"
+        section="§5"
+        title="Antecedentes personales patológicos"
+        subtitle="Listado de enfermedades y aclaraciones del impreso."
+      >
+        <AmiCaptureNote
+          where="Examen Médico → Antecedentes → Patológicos y no patológicos"
+          detail="La mayoría de filas del §5 salen de la captura clínica estándar."
+        />
+        <BlockSubsection
+          title="Ajuste exclusivo Sodexo (opcional)"
+          hint="Solo si el PDF debe reflejar un estado distinto en filas sin mapeo directo."
+        >
+          <PatologicosSodexoTable value={value} onChange={onChange} readonly={readonly} />
+        </BlockSubsection>
+        <BlockSubsection title="Aclaración de historia personal en el impreso (opcional)">
         <textarea
           disabled={readonly}
           rows={3}
           value={value.aclaracion_historia_personal ?? ''}
           onChange={(e) => set('aclaracion_historia_personal', e.target.value)}
           className="w-full border border-slate-200 rounded-lg p-2 text-sm"
-          placeholder="Solo si necesitas texto adicional en el impreso REG-SO-01…"
+          placeholder="Texto adicional en el REG-SO-01…"
         />
-      </RegSection>
+        </BlockSubsection>
+      </SodexoBlock>
 
-      <InmunComplementariasSection value={value} onChange={onChange} readonly={readonly} />
-
-      <GinecoSodexoSection value={value} onChange={onChange} readonly={readonly} />
-
-      <EstilosVidaSodexoSection value={value} onChange={onChange} readonly={readonly} />
-
-      <RegSection
-        section="§9"
-        title="Examen físico — encabezado, visión y hallazgos"
-        hint="Snellen en la papeleta estándar; aquí van las casillas y textos del REG-SO-01."
+      <SodexoBlock
+        blockId="6"
+        section="§6"
+        title="Inmunizaciones"
+        subtitle="Esquema de vacunación en el formato Sodexo."
       >
+        <AmiCaptureNote
+          where="Examen Médico → Antecedentes → Módulo 1 (vacunas)"
+          detail="Vacunas básicas y fechas IMSS/SSA desde la papeleta estándar."
+        />
+        <BlockSubsection title="Vacunas complementarias (solo extensión Sodexo)">
+          <InmunComplementariasTable value={value} onChange={onChange} readonly={readonly} />
+        </BlockSubsection>
+      </SodexoBlock>
+
+      <SodexoBlock
+        blockId="7"
+        section="§7"
+        title="Antecedentes gineco-obstétricos"
+        subtitle="FUM, gesta, MPF y rejillas del REG-SO-01."
+      >
+        <AmiCaptureNote
+          where="Examen Médico → Antecedentes → Ginecológicos y Módulo 1"
+          detail="Datos narrativos y de citología desde la papeleta estándar."
+        />
+        <BlockSubsection title="Rejilla Sodexo (dismenorrea y tóxicos / medicamentos)">
+          <GinecoSodexoTable value={value} onChange={onChange} readonly={readonly} />
+        </BlockSubsection>
+      </SodexoBlock>
+
+      <SodexoBlock
+        blockId="8"
+        section="§8"
+        title="Estilos de vida"
+        subtitle="Tabaco, alcohol y drogas en el formato Sodexo."
+      >
+        <AmiCaptureNote
+          where="Examen Médico → Antecedentes → No patológicos (APNP)"
+          detail="Niega / Sí e hábitos base desde la papeleta estándar."
+        />
+        <BlockSubsection title="Casillas finas del impreso (intensidad tabaco, años, alcohol)">
+          <EstilosVidaSodexoFields value={value} onChange={onChange} readonly={readonly} />
+        </BlockSubsection>
+      </SodexoBlock>
+
+      <SodexoBlock
+        blockId="9"
+        section="§9"
+        title="Examen físico"
+        subtitle="Exploración por sistemas, somatometría y agudeza visual."
+      >
+        <AmiCaptureNote
+          where="Somatometría, Signos vitales, Agudeza visual y Examen Médico → Exploración física"
+          detail="Texto por sistema, medidas y Snellen en la papeleta estándar."
+        />
+        <BlockSubsection title="Encabezado Sodexo (estado general / mental, mano dominante)">
         <div className="flex flex-wrap gap-4 items-center">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -511,8 +694,9 @@ export function SodexoExtension({
             </select>
           </div>
         </div>
+        </BlockSubsection>
 
-        <p className="text-xs font-bold text-slate-600 pt-2 border-t border-slate-100">Agudeza visual — casillas</p>
+        <BlockSubsection title="Agudeza visual — casillas del REG-SO-01">
         <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
           <thead className="bg-slate-50">
             <tr>
@@ -550,8 +734,9 @@ export function SodexoExtension({
             ))}
           </tbody>
         </table>
+        </BlockSubsection>
 
-        <p className="text-xs font-bold text-slate-600 pt-2 border-t border-slate-100">Hallazgos anormales — «Cuál»</p>
+        <BlockSubsection title="Hallazgos anormales — texto «Cuál»">
         <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
           <thead className="bg-slate-50">
             <tr>
@@ -577,20 +762,34 @@ export function SodexoExtension({
             ))}
           </tbody>
         </table>
-      </RegSection>
+        </BlockSubsection>
+      </SodexoBlock>
 
-      <Field
-        label="Título sección cierre PDF (opcional)"
-        value={value.titulo_seccion_sodexo ?? ''}
-        onChange={(v) => set('titulo_seccion_sodexo', v)}
-        readonly={readonly}
-        placeholder="SALUD OCUPACIONAL SODEXO MÉXICO"
-      />
+      <SodexoBlock
+        blockId="10-12"
+        section="§10–12"
+        title="Diagnóstico, restricciones, observaciones y aptitud"
+        subtitle="Impresión diagnóstica, recomendaciones y firma médica del REG-SO-01."
+      >
+        <AmiCaptureNote
+          where="Examen Médico → Impresión / Aptitud y dictamen"
+          detail="Aptitud, restricciones, estudios complementarios y firma del médico."
+        />
+        <BlockSubsection title="Encabezado de cierre en el PDF (opcional)">
+          <Field
+            label="Título sección"
+            value={value.titulo_seccion_sodexo ?? ''}
+            onChange={(v) => set('titulo_seccion_sodexo', v)}
+            readonly={readonly}
+            placeholder="SALUD OCUPACIONAL SODEXO MÉXICO"
+          />
+        </BlockSubsection>
+      </SodexoBlock>
     </div>
   )
 }
 
-function MatrizLikertSection({
+function MatrizLikertTable({
   value,
   onChange,
   readonly,
@@ -607,11 +806,7 @@ function MatrizLikertSection({
   }
 
   return (
-    <RegSection
-      section="§2–3"
-      title="Matriz de factores de riesgo"
-      hint="Un nivel por fila (1–5 o A), en columnas como el formato impreso."
-    >
+    <>
       <div className="max-h-96 overflow-auto border border-slate-200 rounded-lg">
         <table className="w-full text-[11px] border-collapse min-w-[32rem]">
           <thead className="bg-slate-50 sticky top-0 z-10">
@@ -660,11 +855,11 @@ function MatrizLikertSection({
         className="w-full border border-slate-200 rounded-lg p-2 text-sm"
         placeholder="Notas libres adicionales…"
       />
-    </RegSection>
+    </>
   )
 }
 
-function InmunComplementariasSection({
+function InmunComplementariasTable({
   value,
   onChange,
   readonly,
@@ -691,7 +886,7 @@ function InmunComplementariasSection({
   }
 
   return (
-    <RegSection section="§6" title="Inmunizaciones complementarias">
+    <>
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
@@ -758,11 +953,11 @@ function InmunComplementariasSection({
           ))}
         </tbody>
       </table>
-    </RegSection>
+    </>
   )
 }
 
-function GinecoSodexoSection({
+function GinecoSodexoTable({
   value,
   onChange,
   readonly,
@@ -782,7 +977,7 @@ function GinecoSodexoSection({
     setG({ toxicos_medicamentos: Object.keys(tox).length ? tox : null })
   }
   return (
-    <RegSection section="§7" title="Antecedentes gineco-obstétricos (rejilla Sodexo)">
+    <>
       <div className="flex flex-wrap gap-4 mb-3">
         <div>
           <label className="text-xs text-slate-500">Dismenorrea</label>
@@ -832,11 +1027,11 @@ function GinecoSodexoSection({
           </tbody>
         </table>
       </div>
-    </RegSection>
+    </>
   )
 }
 
-function PatologicosSodexoSection({
+function PatologicosSodexoTable({
   value,
   onChange,
   readonly,
@@ -846,11 +1041,6 @@ function PatologicosSodexoSection({
   readonly?: boolean
 }) {
   return (
-    <RegSection
-      section="§5"
-      title="Patológicos — ajuste impreso (opcional)"
-      hint="La captura principal sigue en Antecedentes estándar; usa la tabla solo si el PDF Sodexo debe diferir en filas sin mapeo directo."
-    >
       <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
         <table className="w-full text-xs">
           <thead className="bg-slate-50 sticky top-0">
@@ -906,11 +1096,10 @@ function PatologicosSodexoSection({
           </tbody>
         </table>
       </div>
-    </RegSection>
   )
 }
 
-function EstilosVidaSodexoSection({
+function EstilosVidaSodexoFields({
   value,
   onChange,
   readonly,
@@ -924,11 +1113,6 @@ function EstilosVidaSodexoSection({
     onChange({ ...value, estilos_vida_sodexo: { ...ev, ...p } })
   }
   return (
-    <RegSection
-      section="§8"
-      title="Estilos de vida — casillas finas"
-      hint="Tabaco y alcohol base vienen de APNP en la papeleta estándar."
-    >
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
           <label className="text-xs text-slate-500">Intensidad tabaco</label>
@@ -986,7 +1170,6 @@ function EstilosVidaSodexoSection({
           </select>
         </div>
       </div>
-    </RegSection>
   )
 }
 
