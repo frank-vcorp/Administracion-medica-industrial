@@ -206,6 +206,7 @@ const FUNCIONES_ITEMS: { key: keyof NonNullable<SodexoExtensionData['funciones_p
   { key: 'tecnica', label: 'Técnica' },
   { key: 'telefono', label: 'Atención telefónica' },
   { key: 'conduccion', label: 'Conducción' },
+  { key: 'otro', label: 'Otro' },
 ]
 
 const TIPO_EXAMEN_OPTS = [
@@ -461,6 +462,15 @@ export function SodexoExtension({
                 </label>
               ))}
             </div>
+            <div className="mt-3 max-w-xl">
+              <Field
+                label="Cuál (otro)"
+                value={value.tipo_actividad ?? ''}
+                onChange={(v) => set('tipo_actividad', v)}
+                readonly={readonly}
+                placeholder="Especificar si marcó Otro u otra función no listada"
+              />
+            </div>
           </div>
 
           {showActividades ? (
@@ -468,13 +478,6 @@ export function SodexoExtension({
               <Field label="Cargo" value={value.actividades_cargo ?? ''} onChange={(v) => set('actividades_cargo', v)} readonly={readonly} />
               <Field label="Fecha de ingreso" value={value.fecha_ingreso_actividades ?? ''} onChange={(v) => set('fecha_ingreso_actividades', v)} readonly={readonly} />
               <Field label="Antigüedad" value={value.antiguedad_actividades ?? ''} onChange={(v) => set('antiguedad_actividades', v)} readonly={readonly} />
-              <Field
-                label="Tipo de actividad"
-                value={value.tipo_actividad ?? ''}
-                onChange={(v) => set('tipo_actividad', v)}
-                readonly={readonly}
-                placeholder="Administrativa, mantenimiento, conducción…"
-              />
             </div>
           ) : (
             <p className="text-xs text-slate-500 border-t border-emerald-100 pt-2">

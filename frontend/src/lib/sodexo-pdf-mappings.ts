@@ -54,6 +54,9 @@ export const SODEXO_FUNCIONES_CHECKBOXES = {
   conduccion: 'Check Box71',
 } as const
 
+/** §1.2 — especificación cuando la función no es una de las casillas estándar. */
+export const SODEXO_FUNCIONES_OTRO_TEXT = 'Cual'
+
 /** Escolaridad (página 1, bloque identificación). */
 export const SODEXO_ESCOLARIDAD_CHECKS = {
   basica: 'Check Box14',

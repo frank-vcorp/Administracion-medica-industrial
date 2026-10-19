@@ -4,7 +4,10 @@
 import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'
 import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
-import { SODEXO_FUNCIONES_CHECKBOXES } from '@/lib/sodexo-pdf-mappings'
+import {
+  SODEXO_FUNCIONES_CHECKBOXES,
+  SODEXO_FUNCIONES_OTRO_TEXT,
+} from '@/lib/sodexo-pdf-mappings'
 
 const LEE_ESCRIBE_SI = 'Check Box26'
 
@@ -36,6 +39,9 @@ export function fillSodexoPdfFromExtension(form: PdfForm, ext: SodexoExtensionDa
     if (fn.tecnica) sodexoSetCheck(form, SODEXO_FUNCIONES_CHECKBOXES.tecnica, true)
     if (fn.telefono) sodexoSetCheck(form, SODEXO_FUNCIONES_CHECKBOXES.telefono, true)
     if (fn.conduccion) sodexoSetCheck(form, SODEXO_FUNCIONES_CHECKBOXES.conduccion, true)
+  }
+  if (ext.tipo_actividad?.trim()) {
+    sodexoSetText(form, SODEXO_FUNCIONES_OTRO_TEXT, ext.tipo_actividad)
   }
 
   const enc = ext.examen_encabezado

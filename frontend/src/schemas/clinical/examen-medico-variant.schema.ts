@@ -96,6 +96,7 @@ const sodexoFuncionesSchema = z
     tecnica: z.boolean().optional(),
     telefono: z.boolean().optional(),
     conduccion: z.boolean().optional(),
+    otro: z.boolean().optional(),
   })
   .optional()
   .nullable()
