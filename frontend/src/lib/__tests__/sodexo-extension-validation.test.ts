@@ -21,16 +21,4 @@ describe('sodexo-extension-validation', () => {
     expect(validateSodexoExtensionForClinicalClose(ext).ok).toBe(true)
   })
 
-  it('exige Cuál (otro) si se marca Otro en funciones', () => {
-    const ext = {
-      ...emptySodexoExtension(),
-      tipo_examen: 'PREINGRESO' as const,
-      contacto_emergencia: 'Juan',
-      telefono_emergencia: '4420000000',
-      funciones_principales: { otro: true },
-    }
-    const r = validateSodexoExtensionForClinicalClose(ext)
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.errors.some((e) => e.includes('Cuál'))).toBe(true)
-  })
 })

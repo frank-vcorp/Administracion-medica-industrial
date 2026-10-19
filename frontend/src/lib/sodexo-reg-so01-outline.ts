@@ -21,7 +21,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '1.2',
     section: '1.2',
     title: 'Identificación de actividades',
-    subtitle: 'Funciones del puesto (incl. Otro / Cuál); cargo y antigüedad en periódicos, retiro o reingreso.',
+    subtitle: 'Cargo, ingreso y antigüedad (solo periódica/retiro/reingreso); funciones principales y Otro (¿Cuál?).',
   },
   {
     id: '3',

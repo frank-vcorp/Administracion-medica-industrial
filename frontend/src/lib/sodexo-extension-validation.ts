@@ -43,10 +43,6 @@ export function validateSodexoExtensionForClinicalClose(
     }
   }
 
-  if (ext.funciones_principales?.otro && !ext.tipo_actividad?.trim()) {
-    errors.push('Funciones del puesto: especificar «Cuál (otro)».')
-  }
-
   if (errors.length > 0) return { ok: false, errors }
   return { ok: true }
 }

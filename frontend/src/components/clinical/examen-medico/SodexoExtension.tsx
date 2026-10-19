@@ -199,14 +199,18 @@ function NegadoSiRadios({
     </div>
   )
 }
-const FUNCIONES_ITEMS: { key: keyof NonNullable<SodexoExtensionData['funciones_principales']>; label: string }[] = [
+type FuncionesCheckboxKey = Exclude<
+  keyof NonNullable<SodexoExtensionData['funciones_principales']>,
+  'otro'
+>
+
+const FUNCIONES_ITEMS: { key: FuncionesCheckboxKey; label: string }[] = [
   { key: 'administrativa', label: 'Administrativa' },
-  { key: 'ayudante', label: 'Ayudante' },
+  { key: 'ayudante', label: 'Ayudante general' },
   { key: 'mantenimiento', label: 'Mantenimiento' },
   { key: 'tecnica', label: 'Técnica' },
   { key: 'telefono', label: 'Atención telefónica' },
-  { key: 'conduccion', label: 'Conducción' },
-  { key: 'otro', label: 'Otro' },
+  { key: 'conduccion', label: 'Conducción de vehículos' },
 ]
 
 const TIPO_EXAMEN_OPTS = [
@@ -419,7 +423,7 @@ export function SodexoExtension({
         blockId="1.2"
         section="1.2"
         title="Identificación de actividades"
-        subtitle="Tipo de examen, funciones del puesto y (si aplica) cargo y antigüedad."
+        subtitle="Como el impreso §1.2: cargo/ingreso/antigüedad (periódica, retiro o reingreso), funciones principales y Otro (¿Cuál?)."
       >
         <div className="space-y-4 rounded-lg border border-emerald-100 bg-emerald-50/30 p-4">
           <div className="max-w-md">
@@ -439,9 +443,38 @@ export function SodexoExtension({
             </select>
           </div>
 
-          <div>
+          {showActividades ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Field
+                label="Cargo"
+                value={value.actividades_cargo ?? ''}
+                onChange={(v) => set('actividades_cargo', v)}
+                readonly={readonly}
+                placeholder="Puesto actual (también en Antecedentes)"
+              />
+              <Field
+                label="Fecha de ingreso"
+                value={value.fecha_ingreso_actividades ?? ''}
+                onChange={(v) => set('fecha_ingreso_actividades', v)}
+                readonly={readonly}
+              />
+              <Field
+                label="Antigüedad (años)"
+                value={value.antiguedad_actividades ?? ''}
+                onChange={(v) => set('antiguedad_actividades', v)}
+                readonly={readonly}
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">
+              Cargo, fecha de ingreso y antigüedad del impreso aplican solo en{' '}
+              <strong>periódica, retiro o reingreso</strong> (elige el tipo arriba).
+            </p>
+          )}
+
+          <div className="pt-2 border-t border-emerald-100">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-600 mb-2">
-              Funciones principales del puesto
+              Funciones principales
             </p>
             <div className="flex flex-wrap gap-3">
               {FUNCIONES_ITEMS.map(({ key, label }) => (
@@ -462,28 +495,16 @@ export function SodexoExtension({
                 </label>
               ))}
             </div>
-            <div className="mt-3 max-w-xl">
+            <div className="mt-3">
               <Field
-                label="Cuál (otro)"
+                label="Otro (¿Cuál?)"
                 value={value.tipo_actividad ?? ''}
                 onChange={(v) => set('tipo_actividad', v)}
                 readonly={readonly}
-                placeholder="Especificar si marcó Otro u otra función no listada"
+                placeholder="Función no listada en las casillas"
               />
             </div>
           </div>
-
-          {showActividades ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-emerald-100">
-              <Field label="Cargo" value={value.actividades_cargo ?? ''} onChange={(v) => set('actividades_cargo', v)} readonly={readonly} />
-              <Field label="Fecha de ingreso" value={value.fecha_ingreso_actividades ?? ''} onChange={(v) => set('fecha_ingreso_actividades', v)} readonly={readonly} />
-              <Field label="Antigüedad" value={value.antiguedad_actividades ?? ''} onChange={(v) => set('antiguedad_actividades', v)} readonly={readonly} />
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500 border-t border-emerald-100 pt-2">
-              Selecciona periódica, retiro o reingreso arriba para capturar cargo, fecha de ingreso y antigüedad.
-            </p>
-          )}
         </div>
       </SodexoBlock>
 
