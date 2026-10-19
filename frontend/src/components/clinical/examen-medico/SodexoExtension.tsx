@@ -9,6 +9,15 @@ import {
 import { SODEXO_GINECO_TOXICO_EXTENSION_ROWS } from '@/lib/sodexo-gineco-extension-rows'
 import { SODEXO_PATOLOGICOS_EXTRA_KEYS } from '@/lib/sodexo-pdf-patologicos'
 
+type ManoDominante = NonNullable<
+  NonNullable<SodexoExtensionData['examen_encabezado']>['mano_dominante']
+>
+type TabacoIntensidad = NonNullable<
+  NonNullable<SodexoExtensionData['estilos_vida_sodexo']>['tabaco_intensidad']
+>
+type TabacoAnios = NonNullable<NonNullable<SodexoExtensionData['estilos_vida_sodexo']>['tabaco_anios']>
+type AlcoholModo = NonNullable<NonNullable<SodexoExtensionData['estilos_vida_sodexo']>['alcohol_modo']>
+
 const MATRIZ_NIVELES = ['', '1', '2', '3', '4', '5', 'A'] as const
 const FUNCIONES_ITEMS: { key: keyof NonNullable<SodexoExtensionData['funciones_principales']>; label: string }[] = [
   { key: 'administrativa', label: 'Administrativa' },
@@ -376,7 +385,7 @@ export function SodexoExtension({
               onChange={(e) =>
                 set('examen_encabezado', {
                   ...(value.examen_encabezado ?? {}),
-                  mano_dominante: (e.target.value || null) as SodexoExtensionData['examen_encabezado']?.['mano_dominante'],
+                  mano_dominante: (e.target.value || null) as ManoDominante | null,
                 })
               }
               className="border border-slate-200 rounded-lg p-2 text-sm"
@@ -748,7 +757,7 @@ function EstilosVidaSodexoSection({
             value={ev.tabaco_intensidad ?? ''}
             onChange={(e) =>
               patch({
-                tabaco_intensidad: (e.target.value || null) as SodexoExtensionData['estilos_vida_sodexo']?.['tabaco_intensidad'],
+                tabaco_intensidad: (e.target.value || null) as TabacoIntensidad | null,
               })
             }
             className="w-full border border-slate-200 rounded p-2 text-sm mt-1"
@@ -767,7 +776,7 @@ function EstilosVidaSodexoSection({
             value={ev.tabaco_anios ?? ''}
             onChange={(e) =>
               patch({
-                tabaco_anios: (e.target.value || null) as SodexoExtensionData['estilos_vida_sodexo']?.['tabaco_anios'],
+                tabaco_anios: (e.target.value || null) as TabacoAnios | null,
               })
             }
             className="w-full border border-slate-200 rounded p-2 text-sm mt-1"
@@ -786,7 +795,7 @@ function EstilosVidaSodexoSection({
             value={ev.alcohol_modo ?? ''}
             onChange={(e) =>
               patch({
-                alcohol_modo: (e.target.value || null) as SodexoExtensionData['estilos_vida_sodexo']?.['alcohol_modo'],
+                alcohol_modo: (e.target.value || null) as AlcoholModo | null,
               })
             }
             className="w-full border border-slate-200 rounded p-2 text-sm mt-1"
