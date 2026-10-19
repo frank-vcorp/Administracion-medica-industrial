@@ -9,6 +9,22 @@ import {
 } from '@/lib/sodexo-matriz-factor-labels'
 import { SODEXO_GINECO_TOXICO_EXTENSION_ROWS } from '@/lib/sodexo-gineco-extension-rows'
 import { SODEXO_PATOLOGICOS_EXTRA_KEYS } from '@/lib/sodexo-pdf-patologicos'
+import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
+import {
+  amiExploracionValue,
+  eyeAcuitySummary,
+  flattenAmiSectionForDisplay,
+  historiaOcupacionalAmiNarrative,
+  identificacionAmiRows,
+  isSodexoFemalePatient,
+  resolvePatientSexo,
+  sectionRecord,
+  sodexoNeedsActividadesBlock,
+  SODEXO_EF_SUBSECTIONS,
+  somatometrySummary,
+  type SodexoAmiMirrorInput,
+} from '@/lib/sodexo-ami-mirror'
+import { AmiMirrorBanner, AmiMirrorTable, AmiMirrorTextBlock } from '@/components/clinical/examen-medico/SodexoAmiPreview'
 
 type ManoDominante = NonNullable<
   NonNullable<SodexoExtensionData['examen_encabezado']>['mano_dominante']
@@ -25,18 +41,6 @@ type MatrizNivel = (typeof MATRIZ_LIKERT)[number]
 type HoFila = NonNullable<SodexoExtensionData['historia_ocupacional_filas']>[number]
 const HO_EMPTY_ROW: HoFila = { empresa: '', ocupacion: '', tiempo: '', agentes_riesgo: '' }
 
-/** Índice alineado al REG-SO-01 (mismo orden que el formato ejemplo Sodexo). */
-const SODEXO_BLOCK_NAV: { id: string; label: string }[] = [
-  { id: '1', label: '§1 Identificación' },
-  { id: '2-3', label: '§2–3 HO y riesgos' },
-  { id: '4', label: '§4 Heredo-familiares' },
-  { id: '5', label: '§5 Patológicos' },
-  { id: '6', label: '§6 Inmunizaciones' },
-  { id: '7', label: '§7 Gineco-obstétricos' },
-  { id: '8', label: '§8 Estilos de vida' },
-  { id: '9', label: '§9 Examen físico' },
-  { id: '10-12', label: '§10–12 Cierre' },
-]
 
 function SodexoBlock({
   blockId,
@@ -106,29 +110,19 @@ function BlockSubsection({ title, hint, children }: { title: string; hint?: stri
   )
 }
 
-function AmiCaptureNote({ where, detail }: { where: string; detail?: string }) {
-  return (
-    <p className="text-sm text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2.5 leading-relaxed">
-      <span className="font-bold text-slate-900">Captura en papeleta estándar:</span>{' '}
-      <span className="text-emerald-900 font-medium">{where}</span>
-      {detail ? <span className="text-slate-600"> — {detail}</span> : null}
-    </p>
-  )
-}
-
-function SodexoBlockNav() {
+function SodexoBlockNav({ showGineco }: { showGineco: boolean }) {
   return (
     <nav
       className="flex flex-wrap gap-1.5 text-[11px]"
       aria-label="Secciones REG-SO-01"
     >
-      {SODEXO_BLOCK_NAV.map((item) => (
+      {SODEXO_REG_SO01_BLOCKS.filter((b) => !b.femaleOnly || showGineco).map((item) => (
         <a
           key={item.id}
           href={`#sodexo-block-${item.id}`}
           className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 font-semibold text-emerald-900 hover:bg-emerald-50 transition-colors"
         >
-          {item.label}
+          {item.section}. {item.title}
         </a>
       ))}
     </nav>
@@ -238,6 +232,10 @@ type Props = {
   showSodexoPdfDownload?: boolean
   sodexoPdfPending?: boolean
   validatingViewHref?: string
+  /** Datos AMI ya capturados (se muestran en espejo en cada bloque). */
+  ami?: SodexoAmiMirrorInput
+  /** Consentimiento informado firmado en recepción / ingreso. */
+  informedConsentSignedAt?: string | null
 }
 
 export function SodexoExtension({
@@ -248,9 +246,42 @@ export function SodexoExtension({
   showSodexoPdfDownload = false,
   sodexoPdfPending = false,
   validatingViewHref,
+  ami,
+  informedConsentSignedAt,
 }: Props) {
   const set = <K extends keyof SodexoExtensionData>(key: K, v: SodexoExtensionData[K]) => {
     onChange({ ...value, [key]: v })
+  }
+
+  const amiCtx: SodexoAmiMirrorInput = ami ?? {
+    examForm: {},
+    antecedentesCaptured: {},
+    modulo1: {},
+    somatometry: {},
+    vitalSigns: {},
+    eyeAcuity: {},
+  }
+  const patientSexo = resolvePatientSexo(
+    amiCtx.examForm,
+    amiCtx.modulo1,
+    amiCtx.antecedentesCaptured,
+  )
+  const showGineco = isSodexoFemalePatient(patientSexo)
+  const showActividades = sodexoNeedsActividadesBlock(value.tipo_examen)
+
+  const applyIngresoConsent = () => {
+    onChange({
+      ...value,
+      consentimiento_ho: {
+        ...(value.consentimiento_ho ?? {}),
+        informacion_verdadera: true,
+        acepta_aviso_privacidad: true,
+      },
+      declaracion_protesta_nombre:
+        value.declaracion_protesta_nombre?.trim() ||
+        identificacionAmiRows(amiCtx).find((r) => /nombre/i.test(r.label))?.value ||
+        '',
+    })
   }
 
   return (
@@ -263,7 +294,7 @@ export function SodexoExtension({
           solo aquí. El PDF Sodexo no inventa datos.
         </p>
         <div className="mt-3">
-          <SodexoBlockNav />
+          <SodexoBlockNav showGineco={showGineco} />
         </div>
       </div>
 
@@ -310,15 +341,17 @@ export function SodexoExtension({
 
       <SodexoBlock
         blockId="1"
-        section="§1"
-        title="Identificación y datos generales"
-        subtitle="Equivalente a la primera hoja del formato ejemplo: datos del trabajador, funciones, EPP y actividades."
+        section="1"
+        title="Identificación"
+        subtitle="Datos del trabajador en el impreso y campos exclusivos Sodexo."
       >
-        <AmiCaptureNote
-          where="Ficha del trabajador + papeleta (nombre, edad, sexo, domicilio, escolaridad, estado civil)"
-          detail="La extensión solo pide los campos extra del impreso Sodexo."
-        />
-        <BlockSubsection title="Tipo de examen y datos de contacto">
+        <BlockSubsection title="Datos ya capturados (papeleta AMI)">
+          <AmiMirrorTable
+            rows={identificacionAmiRows(amiCtx)}
+            emptyHint="Completa datos personales en Examen Médico → Antecedentes o ficha del trabajador."
+          />
+        </BlockSubsection>
+        <BlockSubsection title="Campos adicionales Sodexo — tipo de examen y contacto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-1">Tipo de examen Sodexo</label>
@@ -466,51 +499,68 @@ export function SodexoExtension({
           ))}
         </div>
         </BlockSubsection>
-
-        <BlockSubsection
-          title="Identificación de actividades (exámenes periódicos o de retiro)"
-          hint="Cargo, antigüedad y tipo de actividad según el REG-SO-01."
-        >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Cargo" value={value.actividades_cargo ?? ''} onChange={(v) => set('actividades_cargo', v)} readonly={readonly} />
-          <Field label="Fecha de ingreso" value={value.fecha_ingreso_actividades ?? ''} onChange={(v) => set('fecha_ingreso_actividades', v)} readonly={readonly} />
-          <Field label="Antigüedad" value={value.antiguedad_actividades ?? ''} onChange={(v) => set('antiguedad_actividades', v)} readonly={readonly} />
-          <Field
-            label="Tipo de actividad"
-            value={value.tipo_actividad ?? ''}
-            onChange={(v) => set('tipo_actividad', v)}
-            readonly={readonly}
-            placeholder="Administrativa, mantenimiento, conducción…"
-          />
-        </div>
-        </BlockSubsection>
       </SodexoBlock>
 
+      {showActividades ? (
+        <SodexoBlock
+          blockId="1.2"
+          section="1.2"
+          title="Identificación de actividades"
+          subtitle="Periódicos, retiro o reingreso."
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Cargo" value={value.actividades_cargo ?? ''} onChange={(v) => set('actividades_cargo', v)} readonly={readonly} />
+            <Field label="Fecha de ingreso" value={value.fecha_ingreso_actividades ?? ''} onChange={(v) => set('fecha_ingreso_actividades', v)} readonly={readonly} />
+            <Field label="Antigüedad" value={value.antiguedad_actividades ?? ''} onChange={(v) => set('antiguedad_actividades', v)} readonly={readonly} />
+            <Field
+              label="Tipo de actividad"
+              value={value.tipo_actividad ?? ''}
+              onChange={(v) => set('tipo_actividad', v)}
+              readonly={readonly}
+              placeholder="Administrativa, mantenimiento, conducción…"
+            />
+          </div>
+        </SodexoBlock>
+      ) : null}
+
       <SodexoBlock
-        blockId="2-3"
-        section="§2–3"
-        title="Historia ocupacional, matriz de riesgos y consentimiento"
-        subtitle="Antecedentes laborales, identificación de factores de riesgo y declaraciones del formato."
+        blockId="3"
+        section="3"
+        title="Historia ocupacional"
+        subtitle="Narrativa AMI, tabla Sodexo, matriz y declaraciones."
       >
-        <AmiCaptureNote
-          where="Examen Médico → Antecedentes → Historia ocupacional (narrativa)"
-          detail="Si no usas la tabla de abajo, el PDF puede volcar esa narrativa."
-        />
+        <BlockSubsection title="Narrativa (papeleta AMI)">
+          <AmiMirrorTextBlock
+            title="Historia laboral estándar"
+            text={historiaOcupacionalAmiNarrative(amiCtx.antecedentesCaptured)}
+            emptyHint="Captura en Examen Médico → Antecedentes → Historia laboral."
+          />
+        </BlockSubsection>
         <BlockSubsection
-          title="Antecedentes laborales (tabla)"
-          hint="Una fila para empezar; agrega hasta 4. Al capturar aquí, sustituye el volcado automático desde la narrativa."
+          title="Tabla REG-SO-01 (extensión)"
+          hint="Hasta 4 filas; sustituye el volcado automático si está completa."
         >
           <HoTabla value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
-
-        <BlockSubsection
-          title="Matriz de identificación de factores de riesgo"
-          hint="Nivel 1–5 o A por factor, en columnas como el impreso."
-        >
+        <BlockSubsection title="Matriz de factores de riesgo">
           <MatrizLikertTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
-
-        <BlockSubsection title="Consentimiento informado y declaración bajo protesta">
+        <BlockSubsection title="Consentimiento y declaración (REG-SO-01)">
+        {informedConsentSignedAt ? (
+          <AmiMirrorBanner>
+            Consentimiento de ingreso firmado el{' '}
+            {new Date(informedConsentSignedAt).toLocaleString('es-MX')}. Puedes alinear las casillas Sodexo con ese acto.
+          </AmiMirrorBanner>
+        ) : null}
+        {!readonly ? (
+          <button
+            type="button"
+            onClick={applyIngresoConsent}
+            className="text-xs font-bold text-emerald-800 underline"
+          >
+            Marcar casillas Sodexo según consentimiento de ingreso
+          </button>
+        ) : null}
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -550,27 +600,29 @@ export function SodexoExtension({
 
       <SodexoBlock
         blockId="4"
-        section="§4"
+        section="4"
         title="Antecedentes heredo-familiares"
-        subtitle="Rejilla Niega / Sí y parentesco del REG-SO-01."
+        subtitle="Proyección al PDF desde la papeleta AMI."
         mode="ami"
       >
-        <AmiCaptureNote
-          where="Examen Médico → Antecedentes → Heredo-familiares"
-          detail="El PDF Sodexo proyecta lo capturado en la papeleta estándar."
+        <AmiMirrorTable
+          rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'heredo_familiares'))}
+          emptyHint="Captura en Examen Médico → Antecedentes → Heredo-familiares."
         />
       </SodexoBlock>
 
       <SodexoBlock
         blockId="5"
-        section="§5"
+        section="5"
         title="Antecedentes personales patológicos"
-        subtitle="Listado de enfermedades y aclaraciones del impreso."
+        subtitle="Listado del impreso + ajustes opcionales Sodexo."
       >
-        <AmiCaptureNote
-          where="Examen Médico → Antecedentes → Patológicos y no patológicos"
-          detail="La mayoría de filas del §5 salen de la captura clínica estándar."
-        />
+        <BlockSubsection title="Captura clínica (AMI)">
+          <AmiMirrorTable
+            rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'patologicos'), 32)}
+            emptyHint="Captura en Examen Médico → Antecedentes → Patológicos."
+          />
+        </BlockSubsection>
         <BlockSubsection
           title="Ajuste exclusivo Sodexo (opcional)"
           hint="Solo si el PDF debe reflejar un estado distinto en filas sin mapeo directo."
@@ -591,60 +643,99 @@ export function SodexoExtension({
 
       <SodexoBlock
         blockId="6"
-        section="§6"
+        section="6"
         title="Inmunizaciones"
-        subtitle="Esquema de vacunación en el formato Sodexo."
+        subtitle="Módulo 1 (AMI) + complementarias Sodexo."
       >
-        <AmiCaptureNote
-          where="Examen Médico → Antecedentes → Módulo 1 (vacunas)"
-          detail="Vacunas básicas y fechas IMSS/SSA desde la papeleta estándar."
-        />
-        <BlockSubsection title="Vacunas complementarias (solo extensión Sodexo)">
+        <BlockSubsection title="Vacunas (Módulo 1 — AMI)">
+          <AmiMirrorTable
+            rows={flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 20).filter((r) =>
+              /vac|inmun|hepat|covid|tetano/i.test(r.label),
+            )}
+            emptyHint="Captura vacunas en Examen Médico → Antecedentes → Módulo 1."
+          />
+        </BlockSubsection>
+        <BlockSubsection title="Complementarias (extensión Sodexo)">
           <InmunComplementariasTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
       </SodexoBlock>
 
+      {showGineco ? (
       <SodexoBlock
         blockId="7"
-        section="§7"
-        title="Antecedentes gineco-obstétricos"
-        subtitle="FUM, gesta, MPF y rejillas del REG-SO-01."
+        section="7"
+        title="Historia gineco-obstétrica"
+        subtitle="Solo paciente mujer."
       >
-        <AmiCaptureNote
-          where="Examen Médico → Antecedentes → Ginecológicos y Módulo 1"
-          detail="Datos narrativos y de citología desde la papeleta estándar."
-        />
-        <BlockSubsection title="Rejilla Sodexo (dismenorrea y tóxicos / medicamentos)">
+        <BlockSubsection title="Datos ginecológicos (AMI)">
+          <AmiMirrorTable
+            rows={[
+              ...flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'patologicos'), 8).filter(
+                (r) => /gine|menstr|gesta|fum/i.test(r.label),
+              ),
+              ...flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 12).filter((r) =>
+                /gine|menstr|gesta|fum|citolog/i.test(r.label),
+              ),
+            ]}
+            emptyHint="Captura en Antecedentes / Módulo 1 (gineco)."
+          />
+        </BlockSubsection>
+        <BlockSubsection title="Rejilla Sodexo">
           <GinecoSodexoTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
       </SodexoBlock>
+      ) : null}
 
       <SodexoBlock
         blockId="8"
-        section="§8"
+        section="8"
         title="Estilos de vida"
-        subtitle="Tabaco, alcohol y drogas en el formato Sodexo."
+        subtitle="APNP (AMI) + casillas finas Sodexo."
       >
-        <AmiCaptureNote
-          where="Examen Médico → Antecedentes → No patológicos (APNP)"
-          detail="Niega / Sí e hábitos base desde la papeleta estándar."
-        />
-        <BlockSubsection title="Casillas finas del impreso (intensidad tabaco, años, alcohol)">
+        <BlockSubsection title="Hábitos (AMI — no patológicos)">
+          <AmiMirrorTable
+            rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'no_patologicos'))}
+            emptyHint="Captura en Examen Médico → Antecedentes → No patológicos."
+          />
+        </BlockSubsection>
+        <BlockSubsection title="Casillas finas Sodexo">
           <EstilosVidaSodexoFields value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
       </SodexoBlock>
 
       <SodexoBlock
         blockId="9"
-        section="§9"
+        section="9"
         title="Examen físico"
-        subtitle="Exploración por sistemas, somatometría y agudeza visual."
+        subtitle="Somatometría, signos vitales, exploración por regiones."
       >
-        <AmiCaptureNote
-          where="Somatometría, Signos vitales, Agudeza visual y Examen Médico → Exploración física"
-          detail="Texto por sistema, medidas y Snellen en la papeleta estándar."
-        />
-        <BlockSubsection title="Encabezado Sodexo (estado general / mental, mano dominante)">
+        <BlockSubsection title="Somatometría y signos vitales (AMI)">
+          <AmiMirrorTable
+            rows={[
+              ...somatometrySummary(amiCtx.somatometry, amiCtx.vitalSigns),
+              ...eyeAcuitySummary(amiCtx.eyeAcuity),
+            ]}
+            emptyHint="Completa pestañas Somatometría, Signos vitales y Agudeza visual."
+          />
+        </BlockSubsection>
+        {SODEXO_EF_SUBSECTIONS.map((sub) => {
+          const rows = sub.fieldKeys
+            .map((key) => {
+              const label = sub.labels?.[key] ?? key.replace(/_/g, ' ')
+              const val = amiExploracionValue(amiCtx.examForm, key)
+              return val ? { label, value: val } : null
+            })
+            .filter(Boolean) as { label: string; value: string }[]
+          return (
+            <BlockSubsection key={sub.num} title={`${sub.num} ${sub.title}`}>
+              <AmiMirrorTable
+                rows={rows}
+                emptyHint={`Captura en Examen Médico → Exploración física (${sub.title}).`}
+              />
+            </BlockSubsection>
+          )
+        })}
+        <BlockSubsection title="Encabezado y casillas exclusivas Sodexo">
         <div className="flex flex-wrap gap-4 items-center">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -765,25 +856,64 @@ export function SodexoExtension({
         </BlockSubsection>
       </SodexoBlock>
 
-      <SodexoBlock
-        blockId="10-12"
-        section="§10–12"
-        title="Diagnóstico, restricciones, observaciones y aptitud"
-        subtitle="Impresión diagnóstica, recomendaciones y firma médica del REG-SO-01."
-      >
-        <AmiCaptureNote
-          where="Examen Médico → Impresión / Aptitud y dictamen"
-          detail="Aptitud, restricciones, estudios complementarios y firma del médico."
+      <SodexoBlock blockId="10" section="10" title="Diagnósticos" mode="ami">
+        <AmiMirrorTextBlock
+          title="Impresión diagnóstica"
+          text={
+            [
+              amiCtx.examForm.examen_medico_texto,
+              amiCtx.examForm.impresion_diagnostica,
+              amiCtx.examForm.audiometria_texto,
+              amiCtx.examForm.espirometria_texto,
+              amiCtx.examForm.laboratorios_texto,
+              amiCtx.examForm.radiografia_texto,
+            ]
+              .filter((t) => t?.trim())
+              .join('\n\n') || ''
+          }
+          emptyHint="Captura en Examen Médico → Impresión / Aptitud."
         />
-        <BlockSubsection title="Encabezado de cierre en el PDF (opcional)">
+      </SodexoBlock>
+
+      <SodexoBlock blockId="11" section="11" title="Recomendaciones" mode="ami">
+        <AmiMirrorTextBlock
+          title="Recomendaciones clínicas"
+          text={amiCtx.examForm.recomendaciones_clinicas ?? ''}
+          emptyHint="Edita recomendaciones en la pestaña Impresión / Aptitud."
+        />
+      </SodexoBlock>
+
+      <SodexoBlock blockId="12" section="12" title="Restricciones" mode="ami">
+        <AmiMirrorTextBlock
+          title="Restricciones"
+          text={amiCtx.examForm.restricciones ?? ''}
+          emptyHint="Captura restricciones en Impresión / Aptitud."
+        />
+      </SodexoBlock>
+
+      <SodexoBlock
+        blockId="13"
+        section="13"
+        title="Observaciones generales y de seguimiento"
+        subtitle="SALUD OCUPACIONAL SODEXO MÉXICO"
+      >
+        <AmiMirrorTextBlock
+          title="Observaciones (AMI)"
+          text={amiCtx.examForm.observaciones_finales ?? ''}
+          emptyHint="Captura observaciones en Impresión / Aptitud."
+        />
+        <BlockSubsection title="Encabezado de cierre en PDF (opcional)">
           <Field
-            label="Título sección"
+            label="Título impreso"
             value={value.titulo_seccion_sodexo ?? ''}
             onChange={(v) => set('titulo_seccion_sodexo', v)}
             readonly={readonly}
             placeholder="SALUD OCUPACIONAL SODEXO MÉXICO"
           />
         </BlockSubsection>
+        {amiCtx.examForm.aptitud ? (
+          <AmiMirrorBanner>Aptitud registrada: {amiCtx.examForm.aptitud}</AmiMirrorBanner>
+        ) : null}
       </SodexoBlock>
     </div>
   )

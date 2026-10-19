@@ -229,6 +229,8 @@ interface ExamenMedicoEstudioProps {
   papeletaLayout?: boolean
   /** Papeleta: pestaña visible (outer o inner) para sincronizar UI del workspace. */
   onPapeletaActiveSectionChange?: (section: OuterTab | InnerTab) => void
+  /** Consentimiento informado firmado en recepción (ISO). */
+  informedConsentSignedAt?: string | null
 }
 
 // ─── Constantes de formularios ────────────────────────────────────────────────
@@ -339,6 +341,7 @@ export default function ExamenMedicoEstudio({
   testNameSnapshot = 'Examen Médico AMI',
   papeletaLayout = false,
   onPapeletaActiveSectionChange,
+  informedConsentSignedAt = null,
 }: ExamenMedicoEstudioProps) {
   const router = useRouter()
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
@@ -1727,6 +1730,21 @@ export default function ExamenMedicoEstudio({
             showSodexoPdfDownload={shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)}
             sodexoPdfPending={Boolean(aptitud) && hasMedicalVerdict !== true}
             validatingViewHref={navigateToValidatingView(eventId)}
+            informedConsentSignedAt={informedConsentSignedAt}
+            ami={{
+              examForm: {
+                ...form,
+                recomendaciones_clinicas: recomendaciones,
+                aptitud,
+              },
+              antecedentesCaptured,
+              modulo1,
+              somatometry: { ...initSomatometryData, ...somaForm },
+              vitalSigns: { ...vitalsForm },
+              eyeAcuity: initEyeAcuityData,
+              prefilledData,
+              longitudinalData,
+            }}
           />
           <div className="flex gap-2">
             <button
@@ -1999,7 +2017,7 @@ export default function ExamenMedicoEstudio({
                   Documentos clínicos disponibles
                 </p>
                 <p className="text-xs text-slate-600 mt-1">
-                  Descarga el PDF consolidado AMI (4 secciones) o el ZIP
+                  Descarga el PDF consolidado (4 secciones) o el ZIP
                   de cierre clínico (dictamen general + carpetas por
                   estudio + fuentes + manifest).
                 </p>

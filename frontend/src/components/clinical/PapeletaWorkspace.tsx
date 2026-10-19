@@ -180,6 +180,7 @@ type WorkerInfo = {
   tenureLabel?: string | null
   occupationalLine?: string | null
   visitDurationLabel?: string | null
+  informedConsentSignedAt?: string | null
 }
 
 type MedicalExamData = {
@@ -1642,6 +1643,7 @@ function StudyPanel({
               hasMedicalVerdict={hasMedicalVerdict}
               papeletaLayout
               onPapeletaActiveSectionChange={setExamenMedicoActiveSection}
+              informedConsentSignedAt={workerInfo.informedConsentSignedAt ?? null}
             />
             {showExamenMedicoPrediagnosis && (
             <div className="space-y-3 lg:sticky lg:top-4 self-start">
