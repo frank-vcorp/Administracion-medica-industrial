@@ -351,22 +351,8 @@ export function SodexoExtension({
             emptyHint="Completa datos personales en Examen Médico → Antecedentes o ficha del trabajador."
           />
         </BlockSubsection>
-        <BlockSubsection title="Campos adicionales Sodexo — tipo de examen y contacto">
+        <BlockSubsection title="Campos adicionales Sodexo — contacto y domicilio">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-bold text-slate-500 mb-1">Tipo de examen Sodexo</label>
-          <select
-            disabled={readonly}
-            value={value.tipo_examen ?? ''}
-            onChange={(e) => set('tipo_examen', (e.target.value || null) as SodexoExtensionData['tipo_examen'])}
-            className="w-full border border-slate-200 rounded-lg p-2 text-sm"
-          >
-            <option value="">—</option>
-            {TIPO_EXAMEN_OPTS.map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
-        </div>
         <Field
           label="Contacto de emergencia"
           value={value.contacto_emergencia ?? ''}
@@ -483,36 +469,53 @@ export function SodexoExtension({
         blockId="1.2"
         section="1.2"
         title="Identificación de actividades"
-        subtitle="Funciones del puesto (todos los tipos de examen); datos de cargo en periódicos, retiro o reingreso."
+        subtitle="Tipo de examen, funciones del puesto y (si aplica) cargo y antigüedad."
       >
-        <BlockSubsection title="Funciones principales del puesto">
-          <div className="flex flex-wrap gap-3">
-            {FUNCIONES_ITEMS.map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  disabled={readonly}
-                  checked={Boolean(value.funciones_principales?.[key])}
-                  onChange={(e) =>
-                    set('funciones_principales', {
-                      ...(value.funciones_principales ?? {}),
-                      [key]: e.target.checked,
-                    })
-                  }
-                  className="rounded border-slate-300"
-                />
-                {label}
-              </label>
-            ))}
+        <div className="space-y-4 rounded-lg border border-emerald-100 bg-emerald-50/30 p-4">
+          <div className="max-w-md">
+            <label className="block text-xs font-bold text-slate-500 mb-1">Tipo de examen Sodexo</label>
+            <select
+              disabled={readonly}
+              value={value.tipo_examen ?? ''}
+              onChange={(e) =>
+                set('tipo_examen', (e.target.value || null) as SodexoExtensionData['tipo_examen'])
+              }
+              className="w-full border border-slate-200 rounded-lg p-2 text-sm bg-white"
+            >
+              <option value="">—</option>
+              {TIPO_EXAMEN_OPTS.map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
           </div>
-        </BlockSubsection>
 
-        {showActividades ? (
-          <BlockSubsection
-            title="Cargo y antigüedad en la empresa"
-            hint="Obligatorio en exámenes periódicos, de retiro o de reingreso."
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-600 mb-2">
+              Funciones principales del puesto
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {FUNCIONES_ITEMS.map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 text-sm text-slate-700 bg-white rounded-lg px-2 py-1 border border-slate-100">
+                  <input
+                    type="checkbox"
+                    disabled={readonly}
+                    checked={Boolean(value.funciones_principales?.[key])}
+                    onChange={(e) =>
+                      set('funciones_principales', {
+                        ...(value.funciones_principales ?? {}),
+                        [key]: e.target.checked,
+                      })
+                    }
+                    className="rounded border-slate-300"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {showActividades ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-emerald-100">
               <Field label="Cargo" value={value.actividades_cargo ?? ''} onChange={(v) => set('actividades_cargo', v)} readonly={readonly} />
               <Field label="Fecha de ingreso" value={value.fecha_ingreso_actividades ?? ''} onChange={(v) => set('fecha_ingreso_actividades', v)} readonly={readonly} />
               <Field label="Antigüedad" value={value.antiguedad_actividades ?? ''} onChange={(v) => set('antiguedad_actividades', v)} readonly={readonly} />
@@ -524,13 +527,12 @@ export function SodexoExtension({
                 placeholder="Administrativa, mantenimiento, conducción…"
               />
             </div>
-          </BlockSubsection>
-        ) : (
-          <p className="text-xs text-slate-500">
-            Cargo, fecha de ingreso y antigüedad se capturan cuando el tipo de examen Sodexo es periódico, retiro o
-            reingreso.
-          </p>
-        )}
+          ) : (
+            <p className="text-xs text-slate-500 border-t border-emerald-100 pt-2">
+              Selecciona periódica, retiro o reingreso arriba para capturar cargo, fecha de ingreso y antigüedad.
+            </p>
+          )}
+        </div>
       </SodexoBlock>
 
       <SodexoBlock
