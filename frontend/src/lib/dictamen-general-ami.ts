@@ -116,6 +116,9 @@ export async function buildDictamenGeneralAmiConsolidado(
           dob: true,
           nationalId: true,
           company: { select: { name: true } },
+          clinicalHistory: {
+            select: { data: true },
+          },
         },
       },
       branch: {
