@@ -1,5 +1,10 @@
+/** Razón social / marca principal en UI, PDFs y correos. */
+export const SME_LEGAL_NAME = 'Soluciones Medico Empresariales'
+
 /** Marca clínica — minuta AMI-SR F-017 #1. */
-export const SME_BRAND_LINE = 'Soluciones Médico Empresariales / Medicina Laboral'
+export const SME_BRAND_LINE = `${SME_LEGAL_NAME} / Medicina Laboral`
+
+export const SME_PDF_FOOTER = `${SME_LEGAL_NAME} — Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro — (442) 225-52-67 — www.medicaindustrial.com`
 
 export const SME_LOGO_FALLBACK_TEXT = 'SME'
 

@@ -1,5 +1,5 @@
 /**
- * §1 EPP — casillas de la plantilla (además de texto auxiliar).
+ * Historia ocupacional — EPP (casillas AcroForm; captura en extensión §3).
  */
 import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'

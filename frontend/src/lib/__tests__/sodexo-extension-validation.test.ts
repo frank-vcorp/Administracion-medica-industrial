@@ -15,10 +15,8 @@ describe('sodexo-extension-validation', () => {
       tipo_examen: 'PERIODICA' as const,
       contacto_emergencia: 'Juan',
       telefono_emergencia: '4420000000',
-      declaracion_protesta_nombre: 'María',
       actividades_cargo: 'Operador',
       fecha_ingreso_actividades: '01/01/2020',
-      consentimiento_ho: { informacion_verdadera: true },
     }
     expect(validateSodexoExtensionForClinicalClose(ext).ok).toBe(true)
   })

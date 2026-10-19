@@ -229,8 +229,6 @@ interface ExamenMedicoEstudioProps {
   papeletaLayout?: boolean
   /** Papeleta: pestaña visible (outer o inner) para sincronizar UI del workspace. */
   onPapeletaActiveSectionChange?: (section: OuterTab | InnerTab) => void
-  /** Consentimiento informado firmado en recepción (ISO). */
-  informedConsentSignedAt?: string | null
 }
 
 // ─── Constantes de formularios ────────────────────────────────────────────────
@@ -341,7 +339,6 @@ export default function ExamenMedicoEstudio({
   testNameSnapshot = 'Examen Médico AMI',
   papeletaLayout = false,
   onPapeletaActiveSectionChange,
-  informedConsentSignedAt = null,
 }: ExamenMedicoEstudioProps) {
   const router = useRouter()
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
@@ -1730,7 +1727,6 @@ export default function ExamenMedicoEstudio({
             showSodexoPdfDownload={shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)}
             sodexoPdfPending={Boolean(aptitud) && hasMedicalVerdict !== true}
             validatingViewHref={navigateToValidatingView(eventId)}
-            informedConsentSignedAt={informedConsentSignedAt}
             ami={{
               examForm: {
                 ...form,

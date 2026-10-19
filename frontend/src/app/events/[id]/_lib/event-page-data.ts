@@ -82,7 +82,6 @@ export type EventPageData = {
     tenureLabel: string | null
     occupationalLine: string | null
     visitDurationLabel: string | null
-    informedConsentSignedAt: string | null
   }
   review: string
   userRole: string | null
@@ -298,14 +297,6 @@ export async function fetchEventPageData(input: {
     tenureLabel: occupational.tenureLabel,
     occupationalLine: formatOccupationalIdentificationLine(occupational),
     visitDurationLabel: formatVisitDuration(event.checkInDate),
-    informedConsentSignedAt:
-      (
-        event as typeof event & {
-          appointment?: { informedConsentSignedAt?: Date | null } | null
-        }
-      ).appointment?.informedConsentSignedAt?.toISOString() ??
-      event.worker.lastInformedConsentSignedAt?.toISOString() ??
-      null,
   }
 
   type EventTestWithExtras = (typeof event.eventTests)[0] & {

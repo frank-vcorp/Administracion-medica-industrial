@@ -12,18 +12,34 @@ import {
 
 const CONSENT_INFO_VERDADERA = 'Check Box76'
 const CONSENT_AVISO_PRIVACIDAD = 'Check Box77'
+const DECLARACION_PROTESTA_NOMBRE_1 = 'Texto26'
+const DECLARACION_PROTESTA_NOMBRE_2 = 'Texto27'
 
 const DISMENORREA_NO = 'Check Box416'
 const DISMENORREA_SI = 'Check Box417'
 const DISMENORREA_INCAP_NO = 'Check Box368'
 const DISMENORREA_INCAP_SI = 'Check Box369'
 
+/** Casillas y nombre de declaración §3 desde consentimiento de check-in. */
+export function fillSodexoConsentFromCheckIn(
+  form: PdfForm,
+  opts: {
+    signedAt: Date | string | null | undefined
+    patientFullName: string
+  },
+) {
+  if (!opts.signedAt) return
+  sodexoSetCheck(form, CONSENT_INFO_VERDADERA, true)
+  sodexoSetCheck(form, CONSENT_AVISO_PRIVACIDAD, true)
+  const name = opts.patientFullName.trim()
+  if (name && name !== '—') {
+    sodexoSetText(form, DECLARACION_PROTESTA_NOMBRE_1, name)
+    sodexoSetText(form, DECLARACION_PROTESTA_NOMBRE_2, name)
+  }
+}
+
 export function fillSodexoExtensionBlocks(form: PdfForm, ext: SodexoExtensionData | null) {
   if (!ext) return
-
-  const c = ext.consentimiento_ho
-  if (c?.informacion_verdadera) sodexoSetCheck(form, CONSENT_INFO_VERDADERA, true)
-  if (c?.acepta_aviso_privacidad) sodexoSetCheck(form, CONSENT_AVISO_PRIVACIDAD, true)
 
   const cual = ext.examen_anormal_cual
   if (cual) {

@@ -29,9 +29,6 @@ export function validateSodexoExtensionForClinicalClose(
   if (!ext.telefono_emergencia?.trim()) {
     errors.push('Teléfono de emergencia.')
   }
-  if (!ext.declaracion_protesta_nombre?.trim()) {
-    errors.push('Declaración bajo protesta (nombre).')
-  }
 
   const needsActividades =
     ext.tipo_examen === 'PERIODICA' ||
@@ -46,10 +43,21 @@ export function validateSodexoExtensionForClinicalClose(
     }
   }
 
-  if (!ext.consentimiento_ho?.informacion_verdadera) {
-    errors.push('Consentimiento HO: confirmar que la información es verídica.')
-  }
-
   if (errors.length > 0) return { ok: false, errors }
+  return { ok: true }
+}
+
+/** Consentimiento firmado en check-in (recepción), no en la extensión Sodexo. */
+export function validateSodexoCheckInConsent(
+  signedAt: Date | string | null | undefined,
+): SodexoValidationResult {
+  if (!signedAt) {
+    return {
+      ok: false,
+      errors: [
+        'Consentimiento informado de check-in (recepción) requerido para el PDF REG-SO-01.',
+      ],
+    }
+  }
   return { ok: true }
 }

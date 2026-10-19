@@ -39,7 +39,10 @@ import path from 'node:path'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
-import { validateSodexoExtensionForClinicalClose } from '@/lib/sodexo-extension-validation'
+import {
+  validateSodexoCheckInConsent,
+  validateSodexoExtensionForClinicalClose,
+} from '@/lib/sodexo-extension-validation'
 import {
   generateExamenMedicoValidatedPdf,
   generateSodexoRegSo01Pdf,
@@ -111,11 +114,15 @@ export async function deliverExamenMedicoPdf(
           universalId: true,
           dob: true,
           companyId: true,
+          lastInformedConsentSignedAt: true,
           company: { select: { name: true } },
           clinicalHistory: {
             select: { data: true },
           },
         },
+      },
+      appointment: {
+        select: { informedConsentSignedAt: true },
       },
       exam: {
         select: {
@@ -534,12 +541,28 @@ export async function deliverExamenMedicoPdf(
     }
 
     if (deliverable === 'sodexo') {
+      const informedConsentSignedAt =
+        event.appointment?.informedConsentSignedAt ??
+        event.worker.lastInformedConsentSignedAt ??
+        null
+      data.informedConsentSignedAt = informedConsentSignedAt
+
       const sodexoCheck = validateSodexoExtensionForClinicalClose(variantExtensions.SODEXO)
       if (!sodexoCheck.ok) {
         return NextResponse.json(
           {
             error: 'Extensión Sodexo incompleta para generar REG-SO-01.',
             details: sodexoCheck.errors,
+          },
+          { status: 409 },
+        )
+      }
+      const consentCheck = validateSodexoCheckInConsent(informedConsentSignedAt)
+      if (!consentCheck.ok) {
+        return NextResponse.json(
+          {
+            error: 'Consentimiento de check-in requerido para REG-SO-01.',
+            details: consentCheck.errors,
           },
           { status: 409 },
         )

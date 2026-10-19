@@ -15,7 +15,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '1',
     section: '1',
     title: 'Identificación',
-    subtitle: 'Datos generales del trabajador y contactos del impreso.',
+    subtitle: 'Datos personales desde Antecedentes; contacto de emergencia y domicilio complementario (sin EPP).',
   },
   {
     id: '1.2',
@@ -27,7 +27,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '3',
     section: '3',
     title: 'Historia ocupacional',
-    subtitle: 'Antecedentes laborales y matriz de factores de riesgo.',
+    subtitle: 'Tabla HO, matriz de riesgo y equipo de protección personal (EPP).',
   },
   {
     id: '4',

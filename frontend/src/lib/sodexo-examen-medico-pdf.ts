@@ -19,7 +19,10 @@ import { fillSodexoHistoriaOcupacionalTabla } from '@/lib/sodexo-pdf-ho'
 import { fillSodexoEstilosVida } from '@/lib/sodexo-pdf-estilos-vida'
 import { fillSodexoGineco } from '@/lib/sodexo-pdf-gineco'
 import { fillSodexoPdfFromExtension } from '@/lib/sodexo-pdf-extension'
-import { fillSodexoExtensionBlocks } from '@/lib/sodexo-pdf-extension-blocks'
+import {
+  fillSodexoConsentFromCheckIn,
+  fillSodexoExtensionBlocks,
+} from '@/lib/sodexo-pdf-extension-blocks'
 import { fillSodexoVisiometriaFromExtension } from '@/lib/sodexo-pdf-visiometria-extension'
 import {
   SODEXO_AHF_LEFT,
@@ -362,10 +365,13 @@ export async function renderSodexoExamenMedicoPdf(
     setText(form, 'Fecha de ingreso', ext.fecha_ingreso_actividades)
     setText(form, 'Antigüedad', ext.antiguedad_actividades)
     setText(form, 'Cual', ext.tipo_actividad)
-    setText(form, 'Texto26', ext.declaracion_protesta_nombre)
-    setText(form, 'Texto27', ext.declaracion_protesta_nombre)
     setText(form, 'Texto28', ext.matriz_riesgos_observaciones)
   }
+
+  fillSodexoConsentFromCheckIn(form, {
+    signedAt: data.informedConsentSignedAt,
+    patientFullName: p.nombreCompleto,
+  })
 
   fillSodexoMatrizRiesgos(form, ext, p.riesgosTrabajo)
   fillSodexoPdfFromExtension(form, ext)

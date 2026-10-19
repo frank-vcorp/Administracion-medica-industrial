@@ -9,6 +9,7 @@ function minimalSodexoData(): ExamenMedicoPDFData {
   return {
     folio: 'test-folio',
     signedAt: new Date('2026-05-16T12:00:00.000Z'),
+    informedConsentSignedAt: new Date('2026-05-15T10:00:00.000Z'),
     status: 'SIGNED',
     patientIdentification: {
       fullName: 'Marin Ernesto',
@@ -105,7 +106,6 @@ function minimalSodexoData(): ExamenMedicoPDFData {
         matriz_riesgos_observaciones: 'Ruido, calor',
         epp_casco: true,
         epp_lentes: true,
-        declaracion_protesta_nombre: 'Marin Ernesto',
       },
     },
   }
@@ -126,6 +126,9 @@ describe('sodexo-examen-medico-pdf', () => {
     expect(form.getCheckBox('Check Box332').isChecked()).toBe(true)
     expect(form.getCheckBox('Check Box334').isChecked()).toBe(false)
     expect(form.getCheckBox('Check Box335').isChecked()).toBe(true)
+    expect(form.getCheckBox('Check Box76').isChecked()).toBe(true)
+    expect(form.getCheckBox('Check Box77').isChecked()).toBe(true)
+    expect(form.getTextField('Texto26').getText()).toContain('Marin')
     },
     15_000,
   )

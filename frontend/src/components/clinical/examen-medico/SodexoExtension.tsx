@@ -234,8 +234,6 @@ type Props = {
   validatingViewHref?: string
   /** Datos AMI ya capturados (se muestran en espejo en cada bloque). */
   ami?: SodexoAmiMirrorInput
-  /** Consentimiento informado firmado en recepción / ingreso. */
-  informedConsentSignedAt?: string | null
 }
 
 export function SodexoExtension({
@@ -247,7 +245,6 @@ export function SodexoExtension({
   sodexoPdfPending = false,
   validatingViewHref,
   ami,
-  informedConsentSignedAt,
 }: Props) {
   const set = <K extends keyof SodexoExtensionData>(key: K, v: SodexoExtensionData[K]) => {
     onChange({ ...value, [key]: v })
@@ -268,21 +265,6 @@ export function SodexoExtension({
   )
   const showGineco = isSodexoFemalePatient(patientSexo)
   const showActividades = sodexoNeedsActividadesBlock(value.tipo_examen)
-
-  const applyIngresoConsent = () => {
-    onChange({
-      ...value,
-      consentimiento_ho: {
-        ...(value.consentimiento_ho ?? {}),
-        informacion_verdadera: true,
-        acepta_aviso_privacidad: true,
-      },
-      declaracion_protesta_nombre:
-        value.declaracion_protesta_nombre?.trim() ||
-        identificacionAmiRows(amiCtx).find((r) => /nombre/i.test(r.label))?.value ||
-        '',
-    })
-  }
 
   return (
     <div className="space-y-6">
@@ -343,12 +325,12 @@ export function SodexoExtension({
         blockId="1"
         section="1"
         title="Identificación"
-        subtitle="Datos del trabajador en el impreso y campos exclusivos Sodexo."
+        subtitle="§1 del impreso: nombre, domicilio y datos personales desde Antecedentes; aquí solo contacto de emergencia y complementos Sodexo (sin EPP)."
       >
         <BlockSubsection title="Datos ya capturados (papeleta AMI)">
           <AmiMirrorTable
             rows={identificacionAmiRows(amiCtx)}
-            emptyHint="Completa datos personales en Examen Médico → Antecedentes o ficha del trabajador."
+            emptyHint="Completa datos personales en Examen Médico → Antecedentes (nombre, fecha de nacimiento, sexo, escolaridad, domicilio, puesto, etc.)."
           />
         </BlockSubsection>
         <BlockSubsection title="Campos adicionales Sodexo — contacto y domicilio">
@@ -430,39 +412,6 @@ export function SodexoExtension({
         </div>
         </div>
         </BlockSubsection>
-
-        <BlockSubsection title="Equipo de protección personal (EPP)">
-        <div className="mb-3">
-          <label className="block text-xs font-bold text-slate-500 mb-1">Uso de EPP (PDF)</label>
-          <select
-            disabled={readonly}
-            value={value.epp_uso ?? ''}
-            onChange={(e) =>
-              set('epp_uso', (e.target.value || null) as SodexoExtensionData['epp_uso'])
-            }
-            className="w-full max-w-xs border border-slate-200 rounded-lg p-2 text-sm"
-          >
-            <option value="">—</option>
-            <option value="SI">Sí</option>
-            <option value="NO">No</option>
-            <option value="OCASIONAL">Ocasional</option>
-          </select>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          {EPP_ITEMS.map(({ key, label }) => (
-            <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                disabled={readonly}
-                checked={Boolean(value[key])}
-                onChange={(e) => set(key, e.target.checked)}
-                className="rounded border-slate-300"
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-        </BlockSubsection>
       </SodexoBlock>
 
       <SodexoBlock
@@ -539,7 +488,7 @@ export function SodexoExtension({
         blockId="3"
         section="3"
         title="Historia ocupacional"
-        subtitle="Narrativa AMI, tabla Sodexo, matriz y declaraciones."
+        subtitle="Narrativa AMI, tabla Sodexo, matriz de riesgo y EPP."
       >
         <BlockSubsection title="Narrativa (papeleta AMI)">
           <AmiMirrorTextBlock
@@ -557,56 +506,37 @@ export function SodexoExtension({
         <BlockSubsection title="Matriz de factores de riesgo">
           <MatrizLikertTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
-        <BlockSubsection title="Consentimiento y declaración (REG-SO-01)">
-        {informedConsentSignedAt ? (
-          <AmiMirrorBanner>
-            Consentimiento de ingreso firmado el{' '}
-            {new Date(informedConsentSignedAt).toLocaleString('es-MX')}. Puedes alinear las casillas Sodexo con ese acto.
-          </AmiMirrorBanner>
-        ) : null}
-        {!readonly ? (
-          <button
-            type="button"
-            onClick={applyIngresoConsent}
-            className="text-xs font-bold text-emerald-800 underline"
-          >
-            Marcar casillas Sodexo según consentimiento de ingreso
-          </button>
-        ) : null}
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            disabled={readonly}
-            checked={Boolean(value.consentimiento_ho?.informacion_verdadera)}
-            onChange={(e) =>
-              set('consentimiento_ho', {
-                ...(value.consentimiento_ho ?? {}),
-                informacion_verdadera: e.target.checked,
-              })
-            }
-          />
-          Declaro que la información proporcionada es verídica
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            disabled={readonly}
-            checked={Boolean(value.consentimiento_ho?.acepta_aviso_privacidad)}
-            onChange={(e) =>
-              set('consentimiento_ho', {
-                ...(value.consentimiento_ho ?? {}),
-                acepta_aviso_privacidad: e.target.checked,
-              })
-            }
-          />
-          Acepto aviso de privacidad
-        </label>
-        <Field
-          label="Declaración bajo protesta — nombre"
-          value={value.declaracion_protesta_nombre ?? ''}
-          onChange={(v) => set('declaracion_protesta_nombre', v)}
-          readonly={readonly}
-        />
+        <BlockSubsection title="Equipo de protección personal (EPP)">
+          <div className="mb-3">
+            <label className="block text-xs font-bold text-slate-500 mb-1">Uso de EPP (PDF)</label>
+            <select
+              disabled={readonly}
+              value={value.epp_uso ?? ''}
+              onChange={(e) =>
+                set('epp_uso', (e.target.value || null) as SodexoExtensionData['epp_uso'])
+              }
+              className="w-full max-w-xs border border-slate-200 rounded-lg p-2 text-sm"
+            >
+              <option value="">—</option>
+              <option value="SI">Sí</option>
+              <option value="NO">No</option>
+              <option value="OCASIONAL">Ocasional</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {EPP_ITEMS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  disabled={readonly}
+                  checked={Boolean(value[key])}
+                  onChange={(e) => set(key, e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
         </BlockSubsection>
       </SodexoBlock>
 

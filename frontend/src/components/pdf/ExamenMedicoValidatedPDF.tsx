@@ -37,6 +37,7 @@ import { examenMedicoVariantLabel } from '@/lib/clinical/examen-medico-variant'
 import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 import { SUPLEMENTOS_COMPLEMENTOS_LABEL } from '@/lib/antecedentes-fields'
+import { SME_LEGAL_NAME, SME_PDF_FOOTER } from '@/lib/brand-constants'
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
@@ -162,6 +163,8 @@ export interface ExamenMedicoPDFData {
   folio: string
   /** Fecha/hora de emisión del PDF */
   signedAt: string | Date
+  /** Consentimiento informado firmado en check-in (recepción). */
+  informedConsentSignedAt?: string | Date | null
   /** Estado de la revisión que origina este PDF (REVIEWED_ACCEPTED o
    *  REVIEWED_EDITED) o 'SIGNED' si viene del `MedicalVerdict.signedAt`. */
   status: 'SIGNED' | 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
@@ -361,7 +364,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
       {/* MEMBRETE SUPERIOR */}
       <View style={styles.header} fixed>
         <View style={styles.headerLeft}>
-          <Text style={styles.brand}>Administración Médica Industrial</Text>
+          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
           <Text style={styles.brandSub}>
             Evaluaciones médicas · Outsourcing · Capacitación
           </Text>
@@ -542,7 +545,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
 
       {/* PIE */}
       <Text style={styles.footer} fixed>
-        Administración Médica Industrial — Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro — (442) 225-52-67 — www.medicaindustrial.com
+        {SME_PDF_FOOTER}
         {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
         {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
       </Text>
@@ -554,7 +557,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
     <Page size="A4" style={styles.page}>
       <View style={styles.header} fixed>
         <View style={styles.headerLeft}>
-          <Text style={styles.brand}>Administración Médica Industrial</Text>
+          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
           <Text style={styles.brandSub}>II. Antecedentes y mediciones</Text>
         </View>
         <View style={styles.headerRight}>
@@ -693,7 +696,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
       </View>
 
       <Text style={styles.footer} fixed>
-        Administración Médica Industrial — Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro — (442) 225-52-67 — www.medicaindustrial.com
+        {SME_PDF_FOOTER}
         {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
       </Text>
     </Page>
@@ -704,7 +707,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
     <Page size="A4" style={styles.page}>
       <View style={styles.header} fixed>
         <View style={styles.headerLeft}>
-          <Text style={styles.brand}>Administración Médica Industrial</Text>
+          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
           <Text style={styles.brandSub}>III. Exploración física</Text>
         </View>
         <View style={styles.headerRight}>
@@ -891,7 +894,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
       </View>
 
       <Text style={styles.footer} fixed>
-        Administración Médica Industrial — Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro — (442) 225-52-67 — www.medicaindustrial.com
+        {SME_PDF_FOOTER}
         {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
       </Text>
     </Page>
@@ -902,7 +905,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
     <Page size="A4" style={styles.page}>
       <View style={styles.header} fixed>
         <View style={styles.headerLeft}>
-          <Text style={styles.brand}>Administración Médica Industrial</Text>
+          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
           <Text style={styles.brandSub}>IV. Dictamen de aptitud laboral</Text>
         </View>
         <View style={styles.headerRight}>
@@ -1136,7 +1139,7 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
       </View>
 
       <Text style={styles.footer} fixed>
-        Administración Médica Industrial — Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro — (442) 225-52-67 — www.medicaindustrial.com
+        {SME_PDF_FOOTER}
         {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
         {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
       </Text>
