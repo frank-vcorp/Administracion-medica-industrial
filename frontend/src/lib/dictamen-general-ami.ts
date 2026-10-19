@@ -259,6 +259,12 @@ export async function buildDictamenGeneralAmiConsolidado(
     (physicalExamData.antecedentes_captured as Record<string, unknown> | null) ?? {}
   const apnpForNoPatologicos =
     (captured.no_patologicos as Record<string, unknown> | undefined) ?? apnp
+  const clinicalHistoryData =
+    (event.worker.clinicalHistory?.data as Record<string, unknown> | null) ?? {}
+  const patologicosMaster =
+    (clinicalHistoryData.patologicos as Record<string, unknown> | undefined) ?? {}
+  const patologicosCaptured =
+    (captured.patologicos as Record<string, unknown> | undefined) ?? patologicosMaster
 
   const aptitud = s(physicalExamData.aptitud)
   const ta = s(physicalExamData.ta ?? vitalSigns.ta) ?? s(physicalExamData.tension_arterial ?? vitalSigns.tension_arterial)
@@ -322,6 +328,8 @@ export async function buildDictamenGeneralAmiConsolidado(
       epp: null,
     },
     app: { texto: appTexto },
+    patologicos: patologicosCaptured,
+    modulo1: physicalExamData,
     historiaGineco: null,
     inmunizaciones: null,
     somatometria: {

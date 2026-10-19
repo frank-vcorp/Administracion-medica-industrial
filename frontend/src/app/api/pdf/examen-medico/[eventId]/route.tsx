@@ -39,8 +39,10 @@ import path from 'node:path'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
+import { validateSodexoExtensionForClinicalClose } from '@/lib/sodexo-extension-validation'
 import {
   generateExamenMedicoValidatedPdf,
+  generateSodexoRegSo01Pdf,
   buildExamenMedicoPdfDataAsync,
   resolveAmiLogoDataUrl,
 } from '@/lib/examen-medico-pdf'
@@ -63,41 +65,38 @@ const CLINICAL_ROLES = new Set<string>([
   'DOCTOR_VALIDATOR',
 ])
 
+export type ExamenMedicoPdfDeliverable = 'clinical' | 'sodexo'
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> },
 ) {
-  // AC-9 / ADR-R7 / FND-20260825-18: sesión obligatoria + scope por objeto.
-  // El PDF consolidado de Examen Médico (4 secciones AMI con historial
-  // clínico completo: AHF, APNP toxicomanías, APP, GO, exploración,
-  // firma, recomendaciones) es PII clínica y NO debe exponerse al portal
-  // corporativo. `COMPANY_CLIENT` se queda en el dictamen reducido que ya
-  // sirve la ruta `/api/pdf/[eventId]` (legacy, ahora también
-  // autenticada — ver fix P1-2). El check se hace ANTES del lookup para
-  // no enumerar Eventos a roles no autorizados (paridad con
-  // QA-20260825-01 P2-C).
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return new NextResponse('No autenticado', { status: 401 })
   }
   const role = session.user.role
-  const isSuperAdmin = role === 'SUPERADMIN'
-  const isClinical = CLINICAL_ROLES.has(role)
-
+  if (!CLINICAL_ROLES.has(role)) {
+    return new NextResponse(
+      'Sin permisos para descargar el PDF clínico del examen médico.',
+      { status: 403 },
+    )
+  }
   const { eventId } = await params
   if (!eventId) {
     return new NextResponse('eventId requerido', { status: 400 })
   }
+  return deliverExamenMedicoPdf(eventId, 'clinical')
+}
 
-  // AC-10 (FND-20260825-18, P1-1): el portal corporativo NO recibe
-  // historia clínica. Sólo roles clínicos (SUPERADMIN/DOCTOR_*).
-  if (!isClinical) {
-    return new NextResponse(
-      'Sin permisos para descargar el PDF clínico del examen médico.',
-      { status: 403 }
-    )
-  }
-
+/**
+ * Genera o sirve el PDF de examen médico (clínico AMI o plantilla Sodexo).
+ * Usado por `/api/pdf/examen-medico-sodexo/[eventId]` para REG-SO-01.
+ */
+export async function deliverExamenMedicoPdf(
+  eventId: string,
+  deliverable: ExamenMedicoPdfDeliverable,
+): Promise<NextResponse> {
   // ── Resolver Event + Verdict + Exam + perfil del paciente ───────────────
   const event = await prisma.medicalEvent.findUnique({
     where: { id: eventId },
@@ -190,11 +189,36 @@ export async function GET(
     )
   }
 
-  // Fast-path: si el PDF fue persistido en disco, servir desde ahí.
-  const filename = `ExamenMedico-${event.worker.universalId}.pdf`
-  if (event.verdict.pdfUrl) {
+  const examMedicoTestEarly = (event.eventTests ?? []).find((t) =>
+    isExamenMedicoTestName(t.testNameSnapshot),
+  )
+  const physicalExamEarly =
+    (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
+  const examVariantEarly = resolveExamenMedicoVariant(
+    examMedicoTestEarly?.testNameSnapshot,
+    str(physicalExamEarly.exam_variant) || null,
+  )
+
+  if (deliverable === 'sodexo' && examVariantEarly !== 'SODEXO') {
+    return new NextResponse(
+      'Este evento no es un examen médico Sodexo.',
+      { status: 404 },
+    )
+  }
+
+  const filename =
+    deliverable === 'sodexo'
+      ? `ExamenMedicoSodexo-${event.worker.universalId}.pdf`
+      : `ExamenMedico-${event.worker.universalId}.pdf`
+
+  const fastPathRel =
+    deliverable === 'sodexo'
+      ? `examen-medico-sodexo-pdfs/${event.id}.pdf`
+      : event.verdict.pdfUrl
+
+  if (fastPathRel) {
     try {
-      const filePath = path.join(REPO_UPLOAD_DIR, event.verdict.pdfUrl)
+      const filePath = path.join(REPO_UPLOAD_DIR, fastPathRel)
       const buffer = await readFile(filePath)
       return new NextResponse(new Uint8Array(buffer), {
         status: 200,
@@ -217,7 +241,7 @@ export async function GET(
   try {
     const physicalExamData =
       (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
-    const examMedicoTest = event.eventTests.find((t) =>
+    const examMedicoTest = (event.eventTests ?? []).find((t) =>
       isExamenMedicoTestName(t.testNameSnapshot),
     )
     const examVariant = resolveExamenMedicoVariant(
@@ -248,6 +272,10 @@ export async function GET(
       (physicalExamData.antecedentes_captured as Record<string, unknown> | null) ?? {}
     const apnpForNoPatologicos =
       (captured.no_patologicos as Record<string, unknown> | undefined) ?? apnp
+    const patologicosMaster =
+      (clinicalHistoryData.patologicos as Record<string, unknown> | undefined) ?? {}
+    const patologicosCaptured =
+      (captured.patologicos as Record<string, unknown> | undefined) ?? patologicosMaster
 
     // APP: texto consolidado de los slots por prueba (mismo fallback que
     // `buildVerdictFromExam`).
@@ -384,6 +412,8 @@ export async function GET(
       app: {
         texto: appTexto,
       },
+      patologicos: patologicosCaptured,
+      modulo1: physicalExamData as Record<string, unknown>,
       historiaGineco: buildHistoriaReproductivaModulo1Text(physicalExamData),
       inmunizaciones: buildInmunizacionesFromPhysicalExam(physicalExamData),
       somatometria: {
@@ -503,16 +533,27 @@ export async function GET(
       data.recomendaciones = finalRecomendaciones
     }
 
-    const result = await generateExamenMedicoValidatedPdf({
-      data,
-      eventId: event.id,
-    })
+    if (deliverable === 'sodexo') {
+      const sodexoCheck = validateSodexoExtensionForClinicalClose(variantExtensions.SODEXO)
+      if (!sodexoCheck.ok) {
+        return NextResponse.json(
+          {
+            error: 'Extensión Sodexo incompleta para generar REG-SO-01.',
+            details: sodexoCheck.errors,
+          },
+          { status: 409 },
+        )
+      }
+    }
 
-    // P3-1 (QA-20260825-03): cablear el fast-path. Si la persistencia en
-    // disco fue exitosa y `verdict.pdfUrl` aún está vacío, lo escribimos
-    // para que la próxima descarga use el fast-path. Paridad con la ruta
-    // `/api/pdf/espirometry/[reviewId]` (QA-20260825-01 P3-E).
-    if (result.url && !event.verdict.pdfUrl) {
+    const result =
+      deliverable === 'sodexo'
+        ? await generateSodexoRegSo01Pdf({ data, eventId: event.id })
+        : await generateExamenMedicoValidatedPdf({ data, eventId: event.id })
+
+    // P3-1 (QA-20260825-03): cablear el fast-path clínico en MedicalVerdict.
+    // El PDF Sodexo usa carpeta propia (`examen-medico-sodexo-pdfs/`).
+    if (deliverable === 'clinical' && result.url && !event.verdict.pdfUrl) {
       try {
         await prisma.medicalVerdict.update({
           where: { eventId: event.id },

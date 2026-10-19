@@ -2,6 +2,7 @@
  * Cierre de captura del Examen Médico (formulario multi-fase) vs checkout en recepción.
  */
 import { isExamenMedicoTestName } from '@/lib/clinical/examen-medico-variant'
+import { validateSodexoExtensionForClinicalClose } from '@/lib/sodexo-extension-validation'
 
 export const EXAMEN_CAPTURE_CLOSED_KEY = 'examen_capture_closed'
 
@@ -67,5 +68,16 @@ export function assertExamenMedicoReadyToClose(input: {
   if (!recomendaciones) {
     return 'Ingresa recomendaciones antes de cerrar la captura.'
   }
+
+  const variant = String(input.physicalExamData.exam_variant ?? '').toUpperCase()
+  if (variant === 'SODEXO') {
+    const ext = (input.physicalExamData.variant_extensions as Record<string, unknown> | undefined)
+      ?.SODEXO
+    const sodexo = validateSodexoExtensionForClinicalClose(ext)
+    if (!sodexo.ok) {
+      return `Extensión Sodexo incompleta: ${sodexo.errors.join(' ')}`
+    }
+  }
+
   return null
 }

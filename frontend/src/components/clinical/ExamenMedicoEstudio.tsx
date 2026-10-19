@@ -116,6 +116,11 @@ export function examenMedicoPdfUrl(eventId: string): string {
   return `/api/pdf/examen-medico/${eventId}`
 }
 
+/** PDF oficial Sodexo REG-SO-01 (solo variante Sodexo; no es el AMI clínico). */
+export function examenMedicoSodexoPdfUrl(eventId: string): string {
+  return `/api/pdf/examen-medico-sodexo/${eventId}`
+}
+
 /**
  * IMPL-FEATURE-20260825-03 ronda 6 (FND-20260825-23):
  * URL del expediente orientada a la vista de Validación (paso donde
@@ -1714,7 +1719,15 @@ export default function ExamenMedicoEstudio({
 
       {activeInnerTab === 'extension' && examVariant === 'SODEXO' && (
         <div className="space-y-4">
-          <SodexoExtension value={sodexoExt} onChange={setSodexoExt} readonly={readonly} />
+          <SodexoExtension
+            value={sodexoExt}
+            onChange={setSodexoExt}
+            readonly={readonly}
+            sodexoPdfUrl={examenMedicoSodexoPdfUrl(eventId)}
+            showSodexoPdfDownload={shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)}
+            sodexoPdfPending={Boolean(aptitud) && hasMedicalVerdict !== true}
+            validatingViewHref={navigateToValidatingView(eventId)}
+          />
           <div className="flex gap-2">
             <button
               onClick={() => setActiveInnerTab('exploracion')}

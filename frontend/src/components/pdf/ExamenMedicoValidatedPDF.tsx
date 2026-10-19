@@ -213,6 +213,10 @@ export interface ExamenMedicoPDFData {
 
   // II. Antecedentes y mediciones
   app: string
+  /** Snapshot estructurado APP (PatologicosSchema) para PDF Sodexo §5. */
+  patologicos?: Record<string, unknown> | null
+  /** Módulo 1 / vacunas para proyección PDF Sodexo §6 (solo lectura). */
+  modulo1?: Record<string, unknown> | null
   /** Historia gineco-obstétrica cuando aplique (concatenación). */
   historiaGineco?: string | null
   /** Inmunizaciones (concatenación). */

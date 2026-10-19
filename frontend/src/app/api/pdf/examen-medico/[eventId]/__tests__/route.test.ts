@@ -41,6 +41,7 @@ const mockMedicalVerdictUpdate = vi.fn()
 const mockGetServerSession = vi.fn()
 const mockReadFile = vi.fn()
 const mockGenerateExamenMedicoValidatedPdf = vi.fn()
+const mockBuildExamenMedicoPdfDataAsync = vi.fn()
 const mockResolveAmiLogoDataUrl = vi.fn()
 
 vi.mock('next-auth', () => ({
@@ -70,6 +71,8 @@ vi.mock('@/lib/examen-medico-pdf', async () => {
     ...actual,
     generateExamenMedicoValidatedPdf: (...a: unknown[]) =>
       mockGenerateExamenMedicoValidatedPdf(...a),
+    buildExamenMedicoPdfDataAsync: (...a: unknown[]) =>
+      mockBuildExamenMedicoPdfDataAsync(...a),
     resolveAmiLogoDataUrl: (...a: unknown[]) => mockResolveAmiLogoDataUrl(...a),
   }
 })
@@ -145,12 +148,26 @@ const EVENT_BASE = {
   labs: [],
 }
 
+const PDF_DATA_STUB = {
+  folio: 'verdict-1',
+  signedAt: new Date('2026-08-25T12:00:00.000Z'),
+  status: 'SIGNED' as const,
+  paciente: { nombreCompleto: 'Juan Pérez' },
+  medico: {
+    fullName: 'Dra. María González',
+    professionalLicense: '12345678',
+    signatureImageUrl: 'data:image/png;base64,SIG',
+  },
+  aptitud: 'APTO',
+}
+
 beforeEach(() => {
   mockMedicalEventFindUnique.mockReset()
   mockMedicalVerdictUpdate.mockReset().mockResolvedValue({})
   mockGetServerSession.mockReset()
   mockReadFile.mockReset()
   mockGenerateExamenMedicoValidatedPdf.mockReset()
+  mockBuildExamenMedicoPdfDataAsync.mockReset().mockResolvedValue(PDF_DATA_STUB)
   mockResolveAmiLogoDataUrl.mockReset().mockResolvedValue(null)
 })
 

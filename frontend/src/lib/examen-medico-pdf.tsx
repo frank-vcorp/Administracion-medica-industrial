@@ -73,6 +73,7 @@ import {
 } from '@/lib/pdf/patient-identification'
 import { tryReadSourceFromBackend } from '@/lib/clinical/backend-file-read'
 import { buildDictamenGeneralAmiConsolidado } from '@/lib/dictamen-general-ami'
+import { renderSodexoExamenMedicoPdf } from '@/lib/sodexo-examen-medico-pdf'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -217,6 +218,10 @@ export interface BuildExamenMedicoPdfInput {
   }
   historiaOcupacional: BuildExamenMedicoPdfHistoriaOcupacionalInput
   app: BuildExamenMedicoPdfAppInput
+  /** Patológicos estructurados (papeleta / antecedentes_captured). */
+  patologicos?: Record<string, unknown> | null
+  /** Snapshot Módulo 1 para PDF Sodexo (inmunizaciones / gineco). */
+  modulo1?: Record<string, unknown> | null
   historiaGineco?: string | null
   inmunizaciones?: string | null
   somatometria: {
@@ -477,6 +482,8 @@ export function buildExamenMedicoPdfData(
       tatuajes: s(input.apnp.tatuajes) || null,
     },
     app: s(input.app?.texto) || '',
+    patologicos: input.patologicos ?? null,
+    modulo1: input.modulo1 ?? null,
     historiaGineco: s(input.historiaGineco) || null,
     inmunizaciones: s(input.inmunizaciones) || null,
     somatometria: {
@@ -662,9 +669,9 @@ export async function generateExamenMedicoValidatedPdf(
 ): Promise<GenerateExamenMedicoPdfResult> {
   const logoUrl = input.data.logoUrl || (await resolveSmeLogoDataUrl()) || ''
   const data = { ...input.data, logoUrl }
-  const buffer = await renderToBuffer(
-    <ExamenMedicoValidatedPDF data={data} />
-  )
+  // Entregable clínico AMI (4 secciones + anexo de variante). El formato
+  // REG-SO-01 Sodexo es otro PDF — ver `generateSodexoRegSo01Pdf`.
+  const buffer = await renderToBuffer(<ExamenMedicoValidatedPDF data={data} />)
   const hash = `sha256:${createHash('sha256').update(buffer).digest('hex')}`
 
   let url: string | null = null
@@ -679,6 +686,34 @@ export async function generateExamenMedicoValidatedPdf(
     console.warn(
       '[IMPL-FEATURE-20260825-03] No se pudo persistir PDF validado de examen médico en disco:',
       err instanceof Error ? err.message : err
+    )
+  }
+
+  return { buffer, hash, url, absolutePath }
+}
+
+/**
+ * PDF oficial Sodexo REG-SO-01 (plantilla AcroForm). Independiente del
+ * entregable clínico AMI (`generateExamenMedicoValidatedPdf`).
+ */
+export async function generateSodexoRegSo01Pdf(
+  input: GenerateExamenMedicoPdfInput,
+): Promise<GenerateExamenMedicoPdfResult> {
+  const buffer = await renderSodexoExamenMedicoPdf(input.data)
+  const hash = `sha256:${createHash('sha256').update(buffer).digest('hex')}`
+
+  let url: string | null = null
+  let absolutePath: string | null = null
+  try {
+    const dir = path.join(REPO_UPLOAD_DIR, 'examen-medico-sodexo-pdfs')
+    await mkdir(dir, { recursive: true })
+    absolutePath = path.join(dir, `${input.eventId}.pdf`)
+    await writeFile(absolutePath, buffer)
+    url = `examen-medico-sodexo-pdfs/${input.eventId}.pdf`
+  } catch (err) {
+    console.warn(
+      '[SODEXO-REG-SO-01] No se pudo persistir PDF Sodexo en disco:',
+      err instanceof Error ? err.message : err,
     )
   }
 
