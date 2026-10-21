@@ -4,8 +4,10 @@ import { useEffect, type ReactNode } from 'react'
 import Link from 'next/link'
 import { type SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import {
-  SODEXO_MATRIZ_FACTOR_IDS,
   SODEXO_MATRIZ_FACTOR_LABELS,
+  SODEXO_MATRIZ_SECTIONS,
+  type SodexoMatrizSection,
+  type SodexoMatrizSectionBlock,
 } from '@/lib/sodexo-matriz-factor-labels'
 import { SODEXO_GINECO_TOXICO_EXTENSION_ROWS } from '@/lib/sodexo-gineco-extension-rows'
 import { SODEXO_PATOLOGICOS_EXTRA_KEYS } from '@/lib/sodexo-pdf-patologicos'
@@ -869,6 +871,93 @@ export function SodexoExtension({
   )
 }
 
+function MatrizVerticalLabel({
+  children,
+  tone = 'main',
+}: {
+  children: string
+  tone?: 'main' | 'sub'
+}) {
+  const skin =
+    tone === 'main'
+      ? 'w-9 bg-slate-800 text-white'
+      : 'w-7 bg-slate-200 text-slate-700 border-r border-slate-300'
+  return (
+    <div className={`flex items-center justify-center px-0.5 shrink-0 self-stretch ${skin}`}>
+      <span className="text-[9px] font-bold uppercase [writing-mode:vertical-rl] rotate-180 leading-tight text-center">
+        {children}
+      </span>
+    </div>
+  )
+}
+
+function matrizFactorRowCells(
+  factorIds: string[],
+  columns: ReturnType<typeof matrizColumnHeaders>,
+  matriz: SodexoExtensionData['matriz_factores'],
+  readonly: boolean | undefined,
+  toggle: (factorId: string, col: SodexoMatrizColumn, checked: boolean) => void,
+) {
+  return factorIds.map((id) => (
+    <tr key={id} className="border-t border-slate-100 odd:bg-white even:bg-slate-50/40">
+      <td className="p-1 pl-1.5 text-slate-700 align-middle text-[10px] leading-tight">
+        {SODEXO_MATRIZ_FACTOR_LABELS[id] ?? id}
+      </td>
+      {columns.map((col) => {
+        const selected = matrizFactorColumns(matriz, id).includes(col.key)
+        return (
+          <td key={col.key} className="p-0.5 text-center align-middle">
+            <input
+              type="checkbox"
+              disabled={readonly || !col.active}
+              checked={selected}
+              onChange={(e) => toggle(id, col.key, e.target.checked)}
+              className="accent-emerald-700 scale-90"
+              aria-label={`${SODEXO_MATRIZ_FACTOR_LABELS[id] ?? id} empleo ${col.title}`}
+            />
+          </td>
+        )
+      })}
+    </tr>
+  ))
+}
+
+function MatrizSectionPanel({
+  section,
+  columns,
+  matriz,
+  readonly,
+  toggle,
+}: {
+  section: SodexoMatrizSection
+  columns: ReturnType<typeof matrizColumnHeaders>
+  matriz: SodexoExtensionData['matriz_factores']
+  readonly?: boolean
+  toggle: (factorId: string, col: SodexoMatrizColumn, checked: boolean) => void
+}) {
+  const renderTable = (factorIds: string[], block?: SodexoMatrizSectionBlock) => (
+    <div key={block?.label ?? section.id} className="flex flex-1 min-w-0 border-t border-slate-200 first:border-t-0">
+      {block ? <MatrizVerticalLabel tone="sub">{block.label}</MatrizVerticalLabel> : null}
+      <table className="w-full text-[10px] border-collapse">
+        <tbody>
+          {matrizFactorRowCells(factorIds, columns, matriz, readonly, toggle)}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  return (
+    <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white min-h-[10rem]">
+      <MatrizVerticalLabel>{section.title}</MatrizVerticalLabel>
+      <div className="flex flex-col flex-1 min-w-0">
+        {section.blocks?.length
+          ? section.blocks.map((block) => renderTable(block.factorIds, block))
+          : renderTable(section.factorIds ?? [])}
+      </div>
+    </div>
+  )
+}
+
 function MatrizFactoresTable({
   value,
   onChange,
@@ -890,52 +979,43 @@ function MatrizFactoresTable({
 
   return (
     <>
-      <div className="max-h-96 overflow-auto border border-slate-200 rounded-lg">
-        <table className="w-full text-[11px] border-collapse min-w-[40rem]">
-          <thead className="bg-slate-50 sticky top-0 z-10">
-            <tr>
-              <th className="text-left p-2 border-b border-slate-200 font-semibold text-slate-600">
-                Factor
-              </th>
+      <div className="overflow-x-auto space-y-2">
+        <div className="min-w-[52rem] rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+            Empresa (columnas = filas del historial · A = actual)
+          </p>
+          <div className="flex">
+            <div className="w-9 shrink-0" />
+            <div
+              className="grid flex-1 gap-0.5 text-center text-[10px] font-bold text-slate-600"
+              style={{ gridTemplateColumns: `minmax(5.5rem,1.4fr) repeat(${columns.length}, minmax(2rem,1fr))` }}
+            >
+              <div className="text-left pl-1 text-slate-500 font-semibold">Factor</div>
               {columns.map((col) => (
-                <th
+                <div
                   key={col.key}
-                  className={`p-1 border-b border-slate-200 font-bold text-slate-600 w-14 text-center ${
-                    col.active ? '' : 'opacity-40'
-                  }`}
+                  className={col.active ? '' : 'opacity-40'}
                   title={col.subtitle}
                 >
                   <div>{col.title}</div>
-                  <div className="text-[9px] font-normal truncate max-w-[3.5rem] mx-auto">
-                    {col.subtitle}
-                  </div>
-                </th>
+                  <div className="text-[8px] font-normal truncate">{col.subtitle}</div>
+                </div>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {SODEXO_MATRIZ_FACTOR_IDS.map((id) => (
-              <tr key={id} className="border-t border-slate-100 odd:bg-white even:bg-slate-50/50">
-                <td className="p-2 text-slate-700 align-top">{SODEXO_MATRIZ_FACTOR_LABELS[id] ?? id}</td>
-                {columns.map((col) => {
-                  const selected = matrizFactorColumns(value.matriz_factores, id).includes(col.key)
-                  return (
-                    <td key={col.key} className="p-1 text-center align-middle">
-                      <input
-                        type="checkbox"
-                        disabled={readonly || !col.active}
-                        checked={selected}
-                        onChange={(e) => toggle(id, col.key, e.target.checked)}
-                        className="accent-emerald-700"
-                        aria-label={`${SODEXO_MATRIZ_FACTOR_LABELS[id] ?? id} empleo ${col.title}`}
-                      />
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-3 min-w-[52rem] max-h-[28rem] overflow-y-auto pr-1">
+          {SODEXO_MATRIZ_SECTIONS.map((section) => (
+            <MatrizSectionPanel
+              key={section.id}
+              section={section}
+              columns={columns}
+              matriz={value.matriz_factores}
+              readonly={readonly}
+              toggle={toggle}
+            />
+          ))}
+        </div>
       </div>
       <label className="block text-xs font-bold text-slate-500 mb-1 mt-3">Observaciones matriz</label>
       <textarea
