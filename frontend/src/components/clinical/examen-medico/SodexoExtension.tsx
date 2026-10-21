@@ -29,7 +29,8 @@ import {
   ginecoObstetricaSodexoIsEmpty,
   prefillGinecoSodexoFromModulo1,
 } from '@/lib/sodexo-gineco-prefill'
-import { estilosVidaSodexoIsEmpty, prefillEstilosVidaSodexoFromApnp } from '@/lib/sodexo-estilos-vida-prefill'
+import { estilosVidaSodexoIsEmpty } from '@/lib/sodexo-estilos-vida-catalog'
+import { prefillEstilosVidaSodexoFromApnp } from '@/lib/sodexo-estilos-vida-prefill'
 import {
   examenFisicoSodexoIsEmpty,
   SODEXO_EXAMEN_FISICO_CATALOG,
