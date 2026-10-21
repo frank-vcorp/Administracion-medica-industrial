@@ -35,8 +35,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '4',
     section: '4',
     title: 'Antecedentes heredo-familiares',
-    amiOnly: true,
-    hideInExtension: true,
+    subtitle: 'Rejilla REG-SO-01 (No / Sí + parentesco). Referencia opcional en Antecedentes AMI.',
   },
   {
     id: '5',

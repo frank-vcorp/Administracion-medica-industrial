@@ -27,21 +27,21 @@ export const SODEXO_AHF_RIGHT: SodexoHfRowMap[] = [
   { text: 'Texto539', checkNo: 'Check Box350', checkSi: 'Check Box351' }, // Otros
 ]
 
-/** Claves `ahf` en orden de filas izquierdas / derechas del PDF. */
+/** Claves §4 extensión Sodexo (orden = filas izq. / der. del PDF). */
 export const SODEXO_AHF_LEFT_KEYS = [
   'diabetes',
-  'hipertension',
+  'cardiovascular',
   'cancer',
-  'asma',
-  '_tbc',
+  'respiratorios',
+  'tbc',
 ] as const
 
 export const SODEXO_AHF_RIGHT_KEYS = [
-  '_reuma',
-  'epilepsia',
+  'reumatologicos',
+  'neurologicos',
   'mentales',
-  '_digestivos',
-  'otras',
+  'digestivos',
+  'otros',
 ] as const
 
 /** 1.2 Funciones principales (checkboxes en página 1). */

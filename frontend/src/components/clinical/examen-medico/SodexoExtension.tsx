@@ -36,6 +36,13 @@ import {
   type SodexoHoFila,
   type SodexoMatrizColumn,
 } from '@/lib/sodexo-ho-table'
+import {
+  heredofamiliarSodexoIsEmpty,
+  prefillHeredofamiliarFromAmi,
+  SODEXO_HEREDOFAMILIAR_LEFT,
+  SODEXO_HEREDOFAMILIAR_RIGHT,
+  type SodexoHeredofamiliarKey,
+} from '@/lib/sodexo-heredofamiliar'
 import { AmiMirrorBanner, AmiMirrorTable, AmiMirrorTextBlock } from '@/components/clinical/examen-medico/SodexoAmiPreview'
 
 type ManoDominante = NonNullable<
@@ -254,14 +261,22 @@ export function SodexoExtension({
     onChange({ ...value, actividades_cargo: fromAmi })
   }, [amiCtx.antecedentesCaptured, value.actividades_cargo, readonly, onChange, value])
 
+  useEffect(() => {
+    if (readonly) return
+    if (!heredofamiliarSodexoIsEmpty(value.heredofamiliar_sodexo)) return
+    const suggested = prefillHeredofamiliarFromAmi(amiCtx.antecedentesCaptured)
+    if (heredofamiliarSodexoIsEmpty(suggested)) return
+    onChange({ ...value, heredofamiliar_sodexo: suggested })
+  }, [amiCtx.antecedentesCaptured, value.heredofamiliar_sodexo, readonly, onChange, value])
+
   return (
     <div className="space-y-6">
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
         <p className="text-sm font-bold text-emerald-900">Formato Sodexo — campos adicionales</p>
         <p className="text-xs text-emerald-700 mt-1">
           Mismo orden que el <strong>formato ejemplo REG-SO-01</strong>: cada bloque numerado coincide con
-          una sección del impreso.           Los bloques grises o de solo lectura se llenan en la papeleta AMI (p. ej. §4
-          heredo-familiares); los verdes, solo aquí. El PDF Sodexo no inventa datos.
+          una sección del impreso.           Los bloques grises son solo lectura desde la papeleta AMI; los verdes (incl. §4
+          heredo-familiar) se capturan aquí. El PDF Sodexo no inventa datos.
         </p>
         <div className="mt-3">
           <SodexoBlockNav showGineco={showGineco} />
@@ -548,6 +563,26 @@ export function SodexoExtension({
               </label>
             ))}
           </div>
+        </BlockSubsection>
+      </SodexoBlock>
+
+      <SodexoBlock
+        blockId="4"
+        section="4"
+        title="Antecedentes heredo-familiares"
+        subtitle="Cuestionario §4 HEREDOFAMILIAR del impreso Sodexo."
+      >
+        <BlockSubsection
+          title="Referencia AMI (opcional)"
+          hint="Antecedentes → Heredo-familiares. Al abrir la extensión se sugiere prellenado si esta rejilla está vacía."
+        >
+          <AmiMirrorTable
+            rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'heredo_familiares'))}
+            emptyHint="Sin datos en Antecedentes → Heredo-familiares."
+          />
+        </BlockSubsection>
+        <BlockSubsection title="Captura REG-SO-01">
+          <HeredofamiliarSodexoTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
       </SodexoBlock>
 
@@ -1200,6 +1235,92 @@ function GinecoSodexoTable({
         </table>
       </div>
     </>
+  )
+}
+
+function HeredofamiliarSodexoTable({
+  value,
+  onChange,
+  readonly,
+}: {
+  value: SodexoExtensionData
+  onChange: (next: SodexoExtensionData) => void
+  readonly?: boolean
+}) {
+  const patchRow = (key: SodexoHeredofamiliarKey, patch: Partial<{ respuesta: 'NO' | 'SI' | null; parentesco: string }>) => {
+    const map = { ...(value.heredofamiliar_sodexo ?? {}) }
+    const prev = map[key] ?? {}
+    const next = { ...prev, ...patch }
+    if (!next.respuesta && !next.parentesco?.trim()) delete map[key]
+    else map[key] = next
+    onChange({
+      ...value,
+      heredofamiliar_sodexo: Object.keys(map).length ? map : null,
+    })
+  }
+
+  const renderColumn = (rows: { key: SodexoHeredofamiliarKey; label: string }[]) => (
+    <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+      <thead className="bg-slate-50">
+        <tr>
+          <th className="text-left p-2 font-semibold text-slate-600 italic">Patología</th>
+          <th className="p-2 font-semibold text-slate-600 w-14 text-center italic">No</th>
+          <th className="p-2 font-semibold text-slate-600 w-14 text-center italic">Sí</th>
+          <th className="text-left p-2 font-semibold text-slate-600 italic">Parentesco</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({ key, label }) => {
+          const row = value.heredofamiliar_sodexo?.[key]
+          const isSi = row?.respuesta === 'SI'
+          const isNo = row?.respuesta === 'NO'
+          return (
+            <tr key={key} className="border-t border-slate-100">
+              <td className="p-2 text-slate-800 font-medium">{label}</td>
+              <td className="p-2 text-center">
+                <input
+                  type="radio"
+                  name={`hf-sodexo-${key}`}
+                  disabled={readonly}
+                  checked={isNo}
+                  onChange={() => patchRow(key, { respuesta: 'NO', parentesco: '' })}
+                  className="border-slate-300"
+                  aria-label={`${label} — No`}
+                />
+              </td>
+              <td className="p-2 text-center">
+                <input
+                  type="radio"
+                  name={`hf-sodexo-${key}`}
+                  disabled={readonly}
+                  checked={isSi}
+                  onChange={() => patchRow(key, { respuesta: 'SI', parentesco: row?.parentesco ?? '' })}
+                  className="border-slate-300"
+                  aria-label={`${label} — Sí`}
+                />
+              </td>
+              <td className="p-2">
+                <input
+                  type="text"
+                  disabled={readonly || !isSi}
+                  value={row?.parentesco ?? ''}
+                  onChange={(e) => patchRow(key, { parentesco: e.target.value })}
+                  placeholder={isSi ? 'Ej. padre, hermana…' : '—'}
+                  className="w-full border border-slate-200 rounded p-1.5 disabled:bg-slate-50 disabled:text-slate-400"
+                />
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {renderColumn(SODEXO_HEREDOFAMILIAR_LEFT)}
+      {renderColumn(SODEXO_HEREDOFAMILIAR_RIGHT)}
+    </div>
   )
 }
 

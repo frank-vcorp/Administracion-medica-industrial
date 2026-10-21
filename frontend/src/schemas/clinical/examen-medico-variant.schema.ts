@@ -145,6 +145,11 @@ const sodexoInmunFilaSchema = z.object({
   observaciones: cleanString,
 })
 
+const sodexoHeredofamiliarFilaSchema = z.object({
+  respuesta: z.enum(['NO', 'SI']).optional().nullable(),
+  parentesco: cleanString,
+})
+
 export const SodexoExtensionSchema = z.object({
   tipo_examen: z
     .enum(['PREINGRESO', 'PERIODICA', 'RETIRO', 'REINGRESO'])
@@ -161,6 +166,11 @@ export const SodexoExtensionSchema = z.object({
   matriz_factores: z.record(z.string(), sodexoMatrizFactorValue).optional().nullable(),
   /** Describir accidente, lesiones y/o secuelas (pie §3). */
   historia_ocupacional_accidentes: cleanString,
+  /** §4 HEREDOFAMILIAR — rejilla exacta REG-SO-01 (No / Sí + parentesco). */
+  heredofamiliar_sodexo: z
+    .record(z.string(), sodexoHeredofamiliarFilaSchema)
+    .optional()
+    .nullable(),
   lugar_nacimiento: cleanString,
   telefono_casa: cleanString,
   telefono_movil: cleanString,
@@ -327,6 +337,7 @@ export function emptySodexoExtension(): SodexoExtensionData {
     funciones_principales: null,
     historia_ocupacional_filas: null,
     historia_ocupacional_accidentes: '',
+    heredofamiliar_sodexo: null,
     examen_encabezado: null,
     epp_uso: null,
     epp_casco: false,

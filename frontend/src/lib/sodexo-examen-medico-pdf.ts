@@ -25,6 +25,10 @@ import {
 } from '@/lib/sodexo-pdf-extension-blocks'
 import { fillSodexoVisiometriaFromExtension } from '@/lib/sodexo-pdf-visiometria-extension'
 import {
+  resolveHeredofamiliarPdfDisplay,
+  type SodexoHeredofamiliarKey,
+} from '@/lib/sodexo-heredofamiliar'
+import {
   SODEXO_AHF_LEFT,
   SODEXO_AHF_LEFT_KEYS,
   SODEXO_AHF_RIGHT,
@@ -262,30 +266,19 @@ async function embedSignature(
   }
 }
 
-function ahfValue(
+function fillHeredofamiliar(
+  form: PdfForm,
   data: ExamenMedicoPDFData,
-  key: string,
-): string | null | undefined {
-  const ahf = data.ahf
-  if (key === '_tbc') return 'NEGADOS'
-  if (key === '_reuma') return ahf.renales ?? 'NEGADOS'
-  if (key === '_digestivos') return 'NEGADOS'
-  if (key === 'hipertension') {
-    const parts = [ahf.hipertension, ahf.cardiopatia].filter((x) => s(x) && !parseHf(x).negado)
-    if (parts.length === 0) return ahf.hipertension ?? ahf.cardiopatia
-    return parts.join('; ')
-  }
-  return (ahf as Record<string, string | null | undefined>)[key]
-}
-
-function fillHeredofamiliar(form: PdfForm, data: ExamenMedicoPDFData) {
+  ext: SodexoExtensionData | null,
+) {
+  const hfExt = ext?.heredofamiliar_sodexo
   SODEXO_AHF_LEFT.forEach((row, i) => {
-    const key = SODEXO_AHF_LEFT_KEYS[i]
-    applyHfRow(form, row, ahfValue(data, key))
+    const key = SODEXO_AHF_LEFT_KEYS[i] as SodexoHeredofamiliarKey
+    applyHfRow(form, row, resolveHeredofamiliarPdfDisplay(hfExt?.[key], data, key))
   })
   SODEXO_AHF_RIGHT.forEach((row, i) => {
-    const key = SODEXO_AHF_RIGHT_KEYS[i]
-    applyHfRow(form, row, ahfValue(data, key))
+    const key = SODEXO_AHF_RIGHT_KEYS[i] as SodexoHeredofamiliarKey
+    applyHfRow(form, row, resolveHeredofamiliarPdfDisplay(hfExt?.[key], data, key))
   })
 }
 
@@ -388,7 +381,7 @@ export async function renderSodexoExamenMedicoPdf(
     riesgos: p.riesgosTrabajo,
   })
 
-  fillHeredofamiliar(form, data)
+  fillHeredofamiliar(form, data, ext)
 
   const patoExtras = fillSodexoPatologicos(form, data.patologicos)
   const aclaracion = [
