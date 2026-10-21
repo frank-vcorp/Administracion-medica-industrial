@@ -42,19 +42,4 @@ export function fillSodexoExtensionBlocks(form: PdfForm, ext: SodexoExtensionDat
     sodexoSetText(form, 'SALUD OCUPACIONAL SODEXO MÉXICO', ext.titulo_seccion_sodexo)
   }
 
-  fillEstilosVidaExtension(form, ext)
-}
-
-function fillEstilosVidaExtension(form: PdfForm, ext: SodexoExtensionData) {
-  const ev = ext.estilos_vida_sodexo
-  if (!ev) return
-  if (ev.tabaco_intensidad === 'EVENTUAL') sodexoSetCheck(form, 'Check Box547', true)
-  if (ev.tabaco_intensidad === 'HABITUAL') sodexoSetCheck(form, 'Check Box548', true)
-  if (ev.tabaco_intensidad === 'COMPULSIVO') sodexoSetCheck(form, 'Check Box549', true)
-  if (ev.tabaco_intensidad === 'EXFUMADOR') sodexoSetCheck(form, 'Check Box342', true)
-  if (ev.tabaco_anios === '1_5') sodexoSetCheck(form, 'Check Box340', true)
-  if (ev.tabaco_anios === '6_10') sodexoSetCheck(form, 'Check Box338', true)
-  if (ev.tabaco_anios === '11_20') sodexoSetCheck(form, 'Check Box336', true)
-  if (ev.tabaco_anios === 'MAS_20') sodexoSetCheck(form, 'Check Box334', true)
-  if (ev.alcohol_modo === 'OCASIONAL') sodexoSetCheck(form, 'Check Box559', true)
 }

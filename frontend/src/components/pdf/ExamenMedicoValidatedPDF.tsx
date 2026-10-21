@@ -213,6 +213,8 @@ export interface ExamenMedicoPDFData {
     tratamientoMedicoActual?: string | null
     tatuajes?: string | null
   }
+  /** Snapshot no patológicos (prefill §8 Sodexo). */
+  noPatologicos?: Record<string, unknown> | null
 
   // II. Antecedentes y mediciones
   app: string

@@ -392,6 +392,7 @@ export async function deliverExamenMedicoPdf(
         tratamientoMedicoActual: readTratamientoMedicoActualDisplay(apnpForNoPatologicos) || null,
         tatuajes: readTatuajesDisplay(apnpForNoPatologicos) || null,
       },
+      noPatologicos: apnpForNoPatologicos,
       historiaOcupacional: {
         empresa: event.worker.company?.name ?? null,
         puesto: str(dp.puesto_actual),

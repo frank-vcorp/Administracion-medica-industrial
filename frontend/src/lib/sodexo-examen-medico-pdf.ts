@@ -282,20 +282,6 @@ function fillHeredofamiliar(
   })
 }
 
-function fillApnpTabaquismo(form: PdfForm, data: ExamenMedicoPDFData) {
-  const tab = mapApnpNegadoSi(data.apnp.tabaco)
-  if (tab === 'no') {
-    setCheck(form, 'Check Box545', true)
-  } else if (tab === 'si') {
-    setCheck(form, 'Check Box546', true)
-  }
-  const alc = mapApnpNegadoSi(data.apnp.alcohol)
-  if (alc === 'no') setCheck(form, 'Check Box550', true)
-  else if (alc === 'si') setCheck(form, 'Check Box551', true)
-  setText(form, 'Tipo de droga', data.apnp.drogas)
-  setText(form, 'Ocasional', data.apnp.ejercicio)
-}
-
 /**
  * Genera el buffer PDF Sodexo a partir de la plantilla oficial y los datos
  * del examen médico ya consolidados en `ExamenMedicoPDFData`.
@@ -410,8 +396,12 @@ export async function renderSodexoExamenMedicoPdf(
     setText(form, 'Ultima Citología', data.historiaGineco)
   }
 
-  fillApnpTabaquismo(form, data)
-  fillSodexoEstilosVida(form, data.apnp, ext?.estilos_vida_sodexo)
+  fillSodexoEstilosVida(
+    form,
+    data.apnp,
+    ext?.estilos_vida_sodexo ?? null,
+    data.noPatologicos ?? null,
+  )
 
   const som = data.somatometria
   setText(form, 'Peso', som.peso)

@@ -60,7 +60,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '8',
     section: '8',
     title: 'Estilos de vida',
-    subtitle: 'Tabaco, alcohol y drogas.',
+    subtitle: '§8 ESTILOS DE VIDA — tabaquismo, licor y drogadicción (extensión Sodexo).',
   },
   {
     id: '9',

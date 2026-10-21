@@ -29,6 +29,7 @@ import {
   ginecoObstetricaSodexoIsEmpty,
   prefillGinecoSodexoFromModulo1,
 } from '@/lib/sodexo-gineco-prefill'
+import { estilosVidaSodexoIsEmpty, prefillEstilosVidaSodexoFromApnp } from '@/lib/sodexo-estilos-vida-prefill'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
   amiExploracionValue,
@@ -67,12 +68,6 @@ import { AmiMirrorBanner, AmiMirrorTable, AmiMirrorTextBlock } from '@/component
 type ManoDominante = NonNullable<
   NonNullable<SodexoExtensionData['examen_encabezado']>['mano_dominante']
 >
-type TabacoIntensidad = NonNullable<
-  NonNullable<SodexoExtensionData['estilos_vida_sodexo']>['tabaco_intensidad']
->
-type TabacoAnios = NonNullable<NonNullable<SodexoExtensionData['estilos_vida_sodexo']>['tabaco_anios']>
-type AlcoholModo = NonNullable<NonNullable<SodexoExtensionData['estilos_vida_sodexo']>['alcohol_modo']>
-
 function SodexoBlock({
   blockId,
   section,
@@ -305,6 +300,16 @@ export function SodexoExtension({
     if (ginecoObstetricaSodexoIsEmpty(suggested)) return
     onChange({ ...value, gineco_sodexo: suggested })
   }, [amiCtx.modulo1, showGineco, value.gineco_sodexo, readonly, onChange, value])
+
+  useEffect(() => {
+    if (readonly) return
+    if (!estilosVidaSodexoIsEmpty(value.estilos_vida_sodexo)) return
+    const suggested = prefillEstilosVidaSodexoFromApnp(
+      sectionRecord(amiCtx.antecedentesCaptured, 'no_patologicos'),
+    )
+    if (estilosVidaSodexoIsEmpty(suggested)) return
+    onChange({ ...value, estilos_vida_sodexo: suggested })
+  }, [amiCtx.antecedentesCaptured, value.estilos_vida_sodexo, readonly, onChange, value])
 
   useEffect(() => {
     if (readonly) return
@@ -719,16 +724,19 @@ export function SodexoExtension({
         blockId="8"
         section="8"
         title="Estilos de vida"
-        subtitle="APNP (AMI) + casillas finas Sodexo."
+        subtitle="§8 ESTILOS DE VIDA — tabaquismo, licor y drogadicción (REG-SO-01)."
       >
-        <BlockSubsection title="Hábitos (AMI — no patológicos)">
+        <BlockSubsection
+          title="Referencia AMI (opcional)"
+          hint="Antecedentes → No patológicos. Prellenado sugerido si §8 Sodexo está vacío."
+        >
           <AmiMirrorTable
             rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'no_patologicos'))}
             emptyHint="Captura en Examen Médico → Antecedentes → No patológicos."
           />
         </BlockSubsection>
-        <BlockSubsection title="Casillas finas Sodexo">
-          <EstilosVidaSodexoFields value={value} onChange={onChange} readonly={readonly} />
+        <BlockSubsection title="Captura REG-SO-01">
+          <EstilosVidaSodexoTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
       </SodexoBlock>
 
@@ -1626,7 +1634,7 @@ function PatologicosSodexoTable({
   )
 }
 
-function EstilosVidaSodexoFields({
+function EstilosVidaSodexoTable({
   value,
   onChange,
   readonly,
@@ -1637,66 +1645,144 @@ function EstilosVidaSodexoFields({
 }) {
   const ev = value.estilos_vida_sodexo ?? {}
   const patch = (p: Partial<NonNullable<SodexoExtensionData['estilos_vida_sodexo']>>) => {
-    onChange({ ...value, estilos_vida_sodexo: { ...ev, ...p } })
+    const next = { ...ev, ...p }
+    onChange({
+      ...value,
+      estilos_vida_sodexo: estilosVidaSodexoIsEmpty(next) ? null : next,
+    })
   }
+
+  const tabacoOpciones = [
+    { v: 'NO', label: 'No' },
+    { v: 'SI', label: 'Sí' },
+    { v: 'EVENTUAL', label: 'Eventual a <5' },
+    { v: 'HABITUAL', label: 'Habitual (6–10)' },
+    { v: 'COMPULSIVO', label: 'Compulsivo (11 o más)' },
+  ] as const
+
   return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div>
-          <label className="text-xs text-slate-500">Intensidad tabaco</label>
-          <select
-            disabled={readonly}
-            value={ev.tabaco_intensidad ?? ''}
-            onChange={(e) =>
-              patch({
-                tabaco_intensidad: (e.target.value || null) as TabacoIntensidad | null,
-              })
-            }
-            className="w-full border border-slate-200 rounded p-2 text-sm mt-1"
-          >
-            <option value="">—</option>
-            <option value="EVENTUAL">Eventual</option>
-            <option value="HABITUAL">Habitual</option>
-            <option value="COMPULSIVO">Compulsivo</option>
-            <option value="EXFUMADOR">Exfumador</option>
-          </select>
+    <div className="space-y-4 text-xs">
+      <div className="border border-slate-200 rounded-lg p-3 space-y-3">
+        <p className="text-[10px] font-bold uppercase text-slate-600">8.1 Tabaquismo</p>
+        <div className="flex flex-wrap gap-3">
+          {tabacoOpciones.map(({ v, label }) => (
+            <label key={v} className="inline-flex items-center gap-1">
+              <input
+                type="radio"
+                name="ev-tabaco-opcion"
+                disabled={readonly}
+                checked={ev.tabaco_opcion === v}
+                onChange={() => patch({ tabaco_opcion: v })}
+              />
+              {label}
+            </label>
+          ))}
         </div>
-        <div>
-          <label className="text-xs text-slate-500">Años de hábito</label>
-          <select
-            disabled={readonly}
-            value={ev.tabaco_anios ?? ''}
-            onChange={(e) =>
-              patch({
-                tabaco_anios: (e.target.value || null) as TabacoAnios | null,
-              })
-            }
-            className="w-full border border-slate-200 rounded p-2 text-sm mt-1"
-          >
-            <option value="">—</option>
-            <option value="1_5">1–5</option>
-            <option value="6_10">6–10</option>
-            <option value="11_20">11–20</option>
-            <option value="MAS_20">&gt;20</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-slate-500">Alcohol</label>
-          <select
-            disabled={readonly}
-            value={ev.alcohol_modo ?? ''}
-            onChange={(e) =>
-              patch({
-                alcohol_modo: (e.target.value || null) as AlcoholModo | null,
-              })
-            }
-            className="w-full border border-slate-200 rounded p-2 text-sm mt-1"
-          >
-            <option value="">—</option>
-            <option value="OCASIONAL">Ocasional</option>
-            <option value="FRECUENTE">Frecuente</option>
-          </select>
+        <div className="flex flex-wrap gap-4 items-end">
+          <div>
+            <p className="text-[10px] font-semibold text-slate-500 mb-1">Años de hábito</p>
+            <div className="flex flex-wrap gap-2">
+              {(['1_5', '6_10', '11_20', 'MAS_20'] as const).map((k) => (
+                <label key={k} className="inline-flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="ev-tabaco-anios"
+                    disabled={readonly}
+                    checked={(ev.tabaco_anios_habito ?? ev.tabaco_anios) === k}
+                    onChange={() => patch({ tabaco_anios_habito: k, tabaco_anios: k })}
+                  />
+                  {k === 'MAS_20' ? '>20' : k.replace('_', '–')}
+                </label>
+              ))}
+            </div>
+          </div>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              disabled={readonly}
+              checked={Boolean(ev.tabaco_exfumador)}
+              onChange={(e) => patch({ tabaco_exfumador: e.target.checked })}
+            />
+            Exfumador
+          </label>
+          <div>
+            <p className="text-[10px] font-semibold text-slate-500 mb-1">Dejó de fumar (hace)</p>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ['MENOS_1', '<1 año'],
+                  ['1_5', '1–5'],
+                  ['6_10', '6–10'],
+                  ['MAS_10', '>10 años'],
+                ] as const
+              ).map(([k, label]) => (
+                <label key={k} className="inline-flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="ev-tabaco-dejo"
+                    disabled={readonly}
+                    checked={ev.tabaco_dejo_hace === k}
+                    onChange={() => patch({ tabaco_dejo_hace: k })}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+          <p className="text-[10px] font-bold uppercase text-slate-600">8.2 Licor</p>
+          <div className="flex gap-4">
+            {(['NO', 'SI'] as const).map((v) => (
+              <label key={v} className="inline-flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="ev-alcohol"
+                  disabled={readonly}
+                  checked={ev.alcohol === v}
+                  onChange={() => patch({ alcohol: v })}
+                />
+                {v === 'NO' ? 'No' : 'Sí'}
+              </label>
+            ))}
+          </div>
+          <input
+            disabled={readonly || ev.alcohol !== 'SI'}
+            placeholder="Ocasional (detalle)"
+            value={ev.alcohol_ocasional ?? ''}
+            onChange={(e) => patch({ alcohol_ocasional: e.target.value, alcohol_modo: 'OCASIONAL' })}
+            className="w-full border border-slate-200 rounded p-2 text-sm disabled:bg-slate-50"
+          />
+        </div>
+        <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+          <p className="text-[10px] font-bold uppercase text-slate-600">8.3 Drogadicción</p>
+          <div className="flex gap-4">
+            {(['NO', 'SI'] as const).map((v) => (
+              <label key={v} className="inline-flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="ev-drogas"
+                  disabled={readonly}
+                  checked={ev.drogas === v}
+                  onChange={() => patch({ drogas: v })}
+                />
+                {v === 'NO' ? 'No' : 'Sí'}
+              </label>
+            ))}
+          </div>
+          <input
+            disabled={readonly || ev.drogas !== 'SI'}
+            placeholder="Tipo de droga"
+            value={ev.drogas_tipo ?? ''}
+            onChange={(e) => patch({ drogas_tipo: e.target.value })}
+            className="w-full border border-slate-200 rounded p-2 text-sm disabled:bg-slate-50"
+          />
+        </div>
+      </div>
+    </div>
   )
 }
 

@@ -285,14 +285,26 @@ export const SodexoExtensionSchema = z.object({
     )
     .optional()
     .nullable(),
+  /** §8 ESTILOS DE VIDA — tabaquismo, licor y drogadicción (REG-SO-01). */
   estilos_vida_sodexo: z
     .object({
+      tabaco_opcion: z
+        .enum(['NO', 'SI', 'EVENTUAL', 'HABITUAL', 'COMPULSIVO'])
+        .optional()
+        .nullable(),
+      tabaco_anios_habito: z.enum(['1_5', '6_10', '11_20', 'MAS_20']).optional().nullable(),
+      tabaco_exfumador: z.boolean().optional().nullable(),
+      tabaco_dejo_hace: z.enum(['MENOS_1', '1_5', '6_10', 'MAS_10']).optional().nullable(),
       tabaco_intensidad: z
         .enum(['EVENTUAL', 'HABITUAL', 'COMPULSIVO', 'EXFUMADOR'])
         .optional()
         .nullable(),
       tabaco_anios: z.enum(['1_5', '6_10', '11_20', 'MAS_20']).optional().nullable(),
+      alcohol: z.enum(['NO', 'SI']).optional().nullable(),
+      alcohol_ocasional: cleanString,
       alcohol_modo: z.enum(['OCASIONAL', 'FRECUENTE']).optional().nullable(),
+      drogas: z.enum(['NO', 'SI']).optional().nullable(),
+      drogas_tipo: cleanString,
     })
     .optional()
     .nullable(),
