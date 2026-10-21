@@ -241,6 +241,7 @@ export const SodexoExtensionSchema = z.object({
     })
     .optional()
     .nullable(),
+  /** §5 PERSONAL PATOLÓGICO — claves de `sodexo-patologicos-catalog`. */
   patologicos_sodexo: z
     .record(
       z.string(),

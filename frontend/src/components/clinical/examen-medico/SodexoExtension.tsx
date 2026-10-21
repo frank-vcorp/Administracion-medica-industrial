@@ -9,7 +9,13 @@ import {
   type SodexoMatrizSection,
 } from '@/lib/sodexo-matriz-factor-labels'
 import { SODEXO_GINECO_TOXICO_EXTENSION_ROWS } from '@/lib/sodexo-gineco-extension-rows'
-import { SODEXO_PATOLOGICOS_EXTRA_KEYS } from '@/lib/sodexo-pdf-patologicos'
+import {
+  patologicosSodexoIsEmpty,
+  SODEXO_PATOLOGICOS_GROUPS_LEFT,
+  SODEXO_PATOLOGICOS_GROUPS_RIGHT,
+  sodexoPatologicosCatalogByColumn,
+} from '@/lib/sodexo-patologicos-catalog'
+import { prefillPatologicosSodexoFromAmi } from '@/lib/sodexo-patologicos-prefill'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
   amiExploracionValue,
@@ -268,6 +274,16 @@ export function SodexoExtension({
     if (heredofamiliarSodexoIsEmpty(suggested)) return
     onChange({ ...value, heredofamiliar_sodexo: suggested })
   }, [amiCtx.antecedentesCaptured, value.heredofamiliar_sodexo, readonly, onChange, value])
+
+  useEffect(() => {
+    if (readonly) return
+    if (!patologicosSodexoIsEmpty(value.patologicos_sodexo)) return
+    const suggested = prefillPatologicosSodexoFromAmi(
+      sectionRecord(amiCtx.antecedentesCaptured, 'patologicos'),
+    )
+    if (patologicosSodexoIsEmpty(suggested)) return
+    onChange({ ...value, patologicos_sodexo: suggested })
+  }, [amiCtx.antecedentesCaptured, value.patologicos_sodexo, readonly, onChange, value])
 
   return (
     <div className="space-y-6">
@@ -590,18 +606,18 @@ export function SodexoExtension({
         blockId="5"
         section="5"
         title="Antecedentes personales patológicos"
-        subtitle="Listado del impreso + ajustes opcionales Sodexo."
+        subtitle="§5 PERSONAL PATOLÓGICO — rejilla Niega / Sí + describir."
       >
-        <BlockSubsection title="Captura clínica (AMI)">
+        <BlockSubsection
+          title="Referencia AMI (opcional)"
+          hint="Antecedentes → Patológicos. Prellenado sugerido si la rejilla Sodexo está vacía."
+        >
           <AmiMirrorTable
             rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'patologicos'), 32)}
             emptyHint="Captura en Examen Médico → Antecedentes → Patológicos."
           />
         </BlockSubsection>
-        <BlockSubsection
-          title="Ajuste exclusivo Sodexo (opcional)"
-          hint="Solo si el PDF debe reflejar un estado distinto en filas sin mapeo directo."
-        >
+        <BlockSubsection title="Captura REG-SO-01">
           <PatologicosSodexoTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
         <BlockSubsection title="Aclaración de historia personal en el impreso (opcional)">
@@ -1324,6 +1340,106 @@ function HeredofamiliarSodexoTable({
   )
 }
 
+function PatologicosSodexoColumn({
+  column,
+  groups,
+  value,
+  onChange,
+  readonly,
+}: {
+  column: 'left' | 'right'
+  groups: readonly string[]
+  value: SodexoExtensionData
+  onChange: (next: SodexoExtensionData) => void
+  readonly?: boolean
+}) {
+  const rows = sodexoPatologicosCatalogByColumn(column)
+  const descHeader =
+    rows.find((r) => r.descHeader)?.descHeader ?? 'Describir'
+
+  const patchRow = (key: string, patch: { estado?: 'NEGADO' | 'SI' | null; descripcion?: string }) => {
+    const map = { ...(value.patologicos_sodexo ?? {}) }
+    const prev = map[key] ?? {}
+    const next = { ...prev, ...patch }
+    if (!next.estado && !next.descripcion?.trim()) delete map[key]
+    else map[key] = next
+    onChange({
+      ...value,
+      patologicos_sodexo: Object.keys(map).length ? map : null,
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map((group) => {
+        const groupRows = rows.filter((r) => r.group === group)
+        if (groupRows.length === 0) return null
+        return (
+          <div key={group} className="border border-slate-200 rounded-lg overflow-hidden">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+              {group}
+            </p>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-white border-b border-slate-100">
+                  <th className="text-left p-1.5 font-semibold text-slate-600 italic">Patología</th>
+                  <th className="p-1.5 w-10 text-center font-semibold text-slate-600 italic">Niega</th>
+                  <th className="p-1.5 w-10 text-center font-semibold text-slate-600 italic">Sí</th>
+                  <th className="text-left p-1.5 font-semibold text-slate-600 italic">{descHeader}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupRows.map((entry) => {
+                  const row = value.patologicos_sodexo?.[entry.key]
+                  const isSi = row?.estado === 'SI'
+                  const isNeg = row?.estado === 'NEGADO'
+                  return (
+                    <tr key={entry.key} className="border-t border-slate-50">
+                      <td className="p-1.5 text-slate-800">{entry.label}</td>
+                      <td className="p-1.5 text-center">
+                        <input
+                          type="radio"
+                          name={`pat-sodexo-${entry.key}`}
+                          disabled={readonly}
+                          checked={isNeg}
+                          onChange={() => patchRow(entry.key, { estado: 'NEGADO', descripcion: '' })}
+                          aria-label={`${entry.label} — Niega`}
+                        />
+                      </td>
+                      <td className="p-1.5 text-center">
+                        <input
+                          type="radio"
+                          name={`pat-sodexo-${entry.key}`}
+                          disabled={readonly}
+                          checked={isSi}
+                          onChange={() =>
+                            patchRow(entry.key, { estado: 'SI', descripcion: row?.descripcion ?? '' })
+                          }
+                          aria-label={`${entry.label} — Sí`}
+                        />
+                      </td>
+                      <td className="p-1.5">
+                        <input
+                          type="text"
+                          disabled={readonly || !isSi}
+                          value={row?.descripcion ?? ''}
+                          onChange={(e) => patchRow(entry.key, { descripcion: e.target.value })}
+                          placeholder={isSi ? 'Detalle…' : '—'}
+                          className="w-full border border-slate-200 rounded p-1 disabled:bg-slate-50 text-[11px]"
+                        />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function PatologicosSodexoTable({
   value,
   onChange,
@@ -1334,61 +1450,22 @@ function PatologicosSodexoTable({
   readonly?: boolean
 }) {
   return (
-      <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
-        <table className="w-full text-xs">
-          <thead className="bg-slate-50 sticky top-0">
-            <tr>
-              <th className="text-left p-2 font-semibold text-slate-600">Enfermedad</th>
-              <th className="p-2 font-semibold text-slate-600 w-32 text-center">Negado / Sí</th>
-              <th className="text-left p-2 font-semibold text-slate-600">Detalle PDF</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SODEXO_PATOLOGICOS_EXTRA_KEYS.map((key) => {
-              const row = value.patologicos_sodexo?.[key]
-              return (
-                <tr key={key} className="border-t border-slate-100">
-                  <td className="p-2 text-slate-700 capitalize">{key.replace(/_/g, ' ')}</td>
-                  <td className="p-2">
-                    <NegadoSiRadios
-                      name={`pat-sodexo-${key}`}
-                      value={row?.estado ?? undefined}
-                      readonly={readonly}
-                      onChange={(estado) => {
-                        const map = { ...(value.patologicos_sodexo ?? {}) }
-                        if (!estado) delete map[key]
-                        else
-                          map[key] = {
-                            ...map[key],
-                            estado,
-                            descripcion: map[key]?.descripcion ?? '',
-                          }
-                        onChange({
-                          ...value,
-                          patologicos_sodexo: Object.keys(map).length ? map : null,
-                        })
-                      }}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      disabled={readonly}
-                      placeholder="Detalle"
-                      value={row?.descripcion ?? ''}
-                      onChange={(e) => {
-                        const map = { ...(value.patologicos_sodexo ?? {}) }
-                        map[key] = { estado: map[key]?.estado ?? null, descripcion: e.target.value }
-                        onChange({ ...value, patologicos_sodexo: map })
-                      }}
-                      className="w-full border border-slate-200 rounded p-1.5"
-                    />
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <PatologicosSodexoColumn
+        column="left"
+        groups={SODEXO_PATOLOGICOS_GROUPS_LEFT}
+        value={value}
+        onChange={onChange}
+        readonly={readonly}
+      />
+      <PatologicosSodexoColumn
+        column="right"
+        groups={SODEXO_PATOLOGICOS_GROUPS_RIGHT}
+        value={value}
+        onChange={onChange}
+        readonly={readonly}
+      />
+    </div>
   )
 }
 

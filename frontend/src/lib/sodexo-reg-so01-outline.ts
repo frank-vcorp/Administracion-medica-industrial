@@ -41,7 +41,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '5',
     section: '5',
     title: 'Antecedentes personales patológicos',
-    subtitle: 'Captura clínica estándar + ajustes opcionales Sodexo.',
+    subtitle: '§5 PERSONAL PATOLÓGICO — rejilla Niega / Sí + describir (extensión Sodexo).',
   },
   {
     id: '6',

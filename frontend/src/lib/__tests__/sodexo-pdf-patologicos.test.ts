@@ -28,9 +28,9 @@ describe('sodexo-pdf-patologicos', () => {
       },
       asma: { estado: 'NEGADO' },
     })
-    expect(form.getCheckBox('Check Box434').isChecked()).toBe(true)
-    expect(form.getCheckBox('Check Box395').isChecked()).toBe(false)
-    expect(form.getCheckBox('Check Box398').isChecked()).toBe(true)
-    expect(form.getTextField('Texto485').getText()).toContain('tipo II')
+    expect(form.getCheckBox('Check Box400').isChecked()).toBe(true)
+    expect(form.getCheckBox('Check Box364').isChecked()).toBe(false)
+    expect(form.getCheckBox('Check Box360').isChecked()).toBe(true)
+    expect(form.getTextField('Texto502').getText()).toContain('tipo II')
   })
 })

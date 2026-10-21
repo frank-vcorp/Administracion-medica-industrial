@@ -5,10 +5,6 @@ import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-varia
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'
 import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
 import { SODEXO_GINECO_TOXICO_EXTENSION_ROWS } from '@/lib/sodexo-gineco-extension-rows'
-import {
-  SODEXO_PATOLOGICOS_LEFT,
-  SODEXO_PATOLOGICOS_RIGHT,
-} from '@/lib/sodexo-pdf-patologicos'
 
 const CONSENT_INFO_VERDADERA = 'Check Box76'
 const CONSENT_AVISO_PRIVACIDAD = 'Check Box77'
@@ -53,25 +49,9 @@ export function fillSodexoExtensionBlocks(form: PdfForm, ext: SodexoExtensionDat
     sodexoSetText(form, 'SALUD OCUPACIONAL SODEXO MÉXICO', ext.titulo_seccion_sodexo)
   }
 
-  fillPatologicosExtension(form, ext)
   fillGinecoExtension(form, ext)
   fillEstilosVidaExtension(form, ext)
   fillInmunComplementarias(form, ext)
-}
-
-function fillPatologicosExtension(form: PdfForm, ext: SodexoExtensionData) {
-  const map = ext.patologicos_sodexo
-  if (!map) return
-  const rows = [...SODEXO_PATOLOGICOS_LEFT, ...SODEXO_PATOLOGICOS_RIGHT]
-  for (const row of rows) {
-    const entry = map[row.amiKey]
-    if (!entry?.estado) continue
-    if (entry.estado === 'NEGADO') sodexoSetCheck(form, row.checkNo, true)
-    else if (entry.estado === 'SI') {
-      sodexoSetCheck(form, row.checkSi, true)
-      sodexoSetText(form, row.descField, entry.descripcion ?? '')
-    }
-  }
 }
 
 function fillGinecoExtension(form: PdfForm, ext: SodexoExtensionData) {

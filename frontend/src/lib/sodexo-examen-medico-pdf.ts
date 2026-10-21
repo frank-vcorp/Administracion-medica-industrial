@@ -383,7 +383,7 @@ export async function renderSodexoExamenMedicoPdf(
 
   fillHeredofamiliar(form, data, ext)
 
-  const patoExtras = fillSodexoPatologicos(form, data.patologicos)
+  const patoExtras = fillSodexoPatologicos(form, data.patologicos, ext?.patologicos_sodexo ?? null)
   const aclaracion = [
     ext?.aclaracion_historia_personal,
     data.app,
