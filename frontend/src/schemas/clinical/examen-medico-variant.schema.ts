@@ -285,6 +285,20 @@ export const SodexoExtensionSchema = z.object({
     )
     .optional()
     .nullable(),
+  /** §9 EXAMEN FÍSICO — rejilla 9.1–9.8 (`sodexo-examen-fisico-catalog`). */
+  examen_fisico_sodexo: z
+    .record(
+      z.string(),
+      z.object({
+        resultado: z
+          .enum(['NORMAL', 'ANORMAL', 'NEG', 'POS'])
+          .optional()
+          .nullable(),
+        desc: cleanString,
+      }),
+    )
+    .optional()
+    .nullable(),
   /** §8 ESTILOS DE VIDA — tabaquismo, licor y drogadicción (REG-SO-01). */
   estilos_vida_sodexo: z
     .object({
@@ -402,6 +416,7 @@ export function emptySodexoExtension(): SodexoExtensionData {
     gineco_sodexo: null,
     patologicos_sodexo: null,
     estilos_vida_sodexo: null,
+    examen_fisico_sodexo: null,
     titulo_seccion_sodexo: '',
   }
 }

@@ -42,24 +42,8 @@ export function sodexoNeedsActividadesBlock(tipo: string | null | undefined): bo
   return tipo === 'PERIODICA' || tipo === 'RETIRO' || tipo === 'REINGRESO'
 }
 
-/** Subsecciones 9.x alineadas al impreso (texto desde exploración AMI). */
-export const SODEXO_EF_SUBSECTIONS: {
-  num: string
-  title: string
-  fieldKeys: (keyof typeof SODEXO_EXPLORACION_TEXT | string)[]
-  labels?: Record<string, string>
-}[] = [
-  { num: '9.1', title: 'Cabeza y cuello', fieldKeys: ['cabeza', 'cuello'] },
-  { num: '9.2', title: 'Neurológico', fieldKeys: ['neurologico'] },
-  { num: '9.3', title: 'Ojos', fieldKeys: ['ojos'] },
-  { num: '9.4', title: 'Oídos', fieldKeys: ['oidos_cad', 'oidos_cai'], labels: { oidos_cad: 'CAD', oidos_cai: 'CAI' } },
-  { num: '9.5', title: 'Nariz y boca / faringe', fieldKeys: ['nariz', 'boca_faringe'] },
-  { num: '9.6', title: 'Tórax y cardiopulmonar', fieldKeys: ['torax', 'corazon_pulmones'] },
-  { num: '9.7', title: 'Abdomen', fieldKeys: ['abdomen'] },
-  { num: '9.8', title: 'Piel y faneras', fieldKeys: ['piel_y_faneras'] },
-  { num: '9.9', title: 'Genitourinario', fieldKeys: ['genitourinario'] },
-  { num: '9.10', title: 'Columna y extremidades', fieldKeys: ['columna_vertebral', 'ms_superiores', 'ms_inferiores'] },
-]
+/** Subsecciones §9 REG-SO-01 (9.1–9.8). */
+export { SODEXO_EXAMEN_FISICO_SECTIONS as SODEXO_EF_SUBSECTIONS } from '@/lib/sodexo-examen-fisico-catalog'
 
 function str(v: unknown): string {
   if (v == null) return ''

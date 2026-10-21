@@ -30,6 +30,14 @@ import {
   prefillGinecoSodexoFromModulo1,
 } from '@/lib/sodexo-gineco-prefill'
 import { estilosVidaSodexoIsEmpty, prefillEstilosVidaSodexoFromApnp } from '@/lib/sodexo-estilos-vida-prefill'
+import {
+  examenFisicoSodexoIsEmpty,
+  SODEXO_EXAMEN_FISICO_CATALOG,
+  SODEXO_EXAMEN_FISICO_SECTIONS,
+  sodexoExamenFisicoCatalogBySection,
+} from '@/lib/sodexo-examen-fisico-catalog'
+import { prefillExamenFisicoSodexoFromAmi } from '@/lib/sodexo-examen-fisico-prefill'
+import type { SodexoEfCatalogEntry } from '@/lib/sodexo-examen-fisico-types'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
   amiExploracionValue,
@@ -42,7 +50,6 @@ import {
   resolvePatientSexo,
   sectionRecord,
   sodexoNeedsActividadesBlock,
-  SODEXO_EF_SUBSECTIONS,
   somatometrySummary,
   type SodexoAmiMirrorInput,
 } from '@/lib/sodexo-ami-mirror'
@@ -326,6 +333,14 @@ export function SodexoExtension({
     onChange,
     value,
   ])
+
+  useEffect(() => {
+    if (readonly) return
+    if (!examenFisicoSodexoIsEmpty(value.examen_fisico_sodexo)) return
+    const suggested = prefillExamenFisicoSodexoFromAmi(amiCtx.examForm)
+    if (examenFisicoSodexoIsEmpty(suggested)) return
+    onChange({ ...value, examen_fisico_sodexo: suggested })
+  }, [amiCtx.examForm, value.examen_fisico_sodexo, readonly, onChange, value])
 
   return (
     <div className="space-y-6">
@@ -744,7 +759,7 @@ export function SodexoExtension({
         blockId="9"
         section="9"
         title="Examen físico"
-        subtitle="Somatometría, signos vitales, exploración por regiones."
+        subtitle="§9.1–9.8 REG-SO-01; somatometría, signos vitales y agudeza desde AMI."
       >
         <BlockSubsection title="Somatometría y signos vitales (AMI)">
           <AmiMirrorTable
@@ -755,23 +770,23 @@ export function SodexoExtension({
             emptyHint="Completa pestañas Somatometría, Signos vitales y Agudeza visual."
           />
         </BlockSubsection>
-        {SODEXO_EF_SUBSECTIONS.map((sub) => {
-          const rows = sub.fieldKeys
-            .map((key) => {
-              const label = sub.labels?.[key] ?? key.replace(/_/g, ' ')
-              const val = amiExploracionValue(amiCtx.examForm, key)
-              return val ? { label, value: val } : null
-            })
-            .filter(Boolean) as { label: string; value: string }[]
-          return (
-            <BlockSubsection key={sub.num} title={`${sub.num} ${sub.title}`}>
-              <AmiMirrorTable
-                rows={rows}
-                emptyHint={`Captura en Examen Médico → Exploración física (${sub.title}).`}
-              />
-            </BlockSubsection>
-          )
-        })}
+        <BlockSubsection
+          title="Referencia AMI (opcional)"
+          hint="Exploración física AMI. Prellenado sugerido si §9 Sodexo está vacío."
+        >
+          <AmiMirrorTable
+            rows={SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.amiKey)
+              .map((e) => {
+                const val = amiExploracionValue(amiCtx.examForm, e.amiKey!)
+                return val ? { label: e.label, value: val } : null
+              })
+              .filter(Boolean) as { label: string; value: string }[]}
+            emptyHint="Captura en Examen Médico → Exploración física."
+          />
+        </BlockSubsection>
+        <BlockSubsection title="Captura REG-SO-01 (9.1 – 9.8)">
+          <ExamenFisicoSodexoTable value={value} onChange={onChange} readonly={readonly} />
+        </BlockSubsection>
         <BlockSubsection title="Encabezado y casillas exclusivas Sodexo">
         <div className="flex flex-wrap gap-4 items-center">
           <label className="flex items-center gap-2 text-sm">
@@ -1630,6 +1645,180 @@ function PatologicosSodexoTable({
         onChange={onChange}
         readonly={readonly}
       />
+    </div>
+  )
+}
+
+function ExamenFisicoSodexoRow({
+  entry,
+  row,
+  readonly,
+  onPatch,
+}: {
+  entry: SodexoEfCatalogEntry
+  row?: { resultado?: string | null; desc?: string | null }
+  readonly?: boolean
+  onPatch: (patch: { resultado?: string | null; desc?: string }) => void
+}) {
+  if (entry.kind === 'texto') {
+    return (
+      <tr className="border-t border-slate-50">
+        <td className="p-1.5 text-slate-800" colSpan={4}>
+          <span className="font-medium">{entry.label}</span>
+          <input
+            type="text"
+            disabled={readonly}
+            value={row?.desc ?? ''}
+            onChange={(e) => onPatch({ desc: e.target.value })}
+            className="mt-1 w-full border border-slate-200 rounded p-1 text-[11px]"
+            placeholder="Describir…"
+          />
+        </td>
+      </tr>
+    )
+  }
+  if (entry.kind === 'signo') {
+    const neg = row?.resultado === 'NEG'
+    const pos = row?.resultado === 'POS'
+    return (
+      <tr className="border-t border-slate-50">
+        <td className="p-1.5 text-slate-800">{entry.label}</td>
+        <td className="p-1.5 text-center">
+          <input
+            type="radio"
+            name={`ef-${entry.key}`}
+            disabled={readonly}
+            checked={neg}
+            onChange={() => onPatch({ resultado: 'NEG' })}
+            aria-label={`${entry.label} — negativo`}
+          />
+        </td>
+        <td className="p-1.5 text-center">
+          <input
+            type="radio"
+            name={`ef-${entry.key}`}
+            disabled={readonly}
+            checked={pos}
+            onChange={() => onPatch({ resultado: 'POS' })}
+            aria-label={`${entry.label} — positivo`}
+          />
+        </td>
+        <td className="p-1.5 text-slate-400 text-[10px]">(−) / (+)</td>
+      </tr>
+    )
+  }
+  const isNormal = row?.resultado === 'NORMAL'
+  const isAnormal = row?.resultado === 'ANORMAL'
+  return (
+    <tr className="border-t border-slate-50">
+      <td className="p-1.5 text-slate-800">{entry.label}</td>
+      <td className="p-1.5 text-center">
+        <input
+          type="radio"
+          name={`ef-${entry.key}`}
+          disabled={readonly}
+          checked={isNormal}
+          onChange={() => onPatch({ resultado: 'NORMAL', desc: '' })}
+          aria-label={`${entry.label} — normal`}
+        />
+      </td>
+      <td className="p-1.5 text-center">
+        <input
+          type="radio"
+          name={`ef-${entry.key}`}
+          disabled={readonly}
+          checked={isAnormal}
+          onChange={() => onPatch({ resultado: 'ANORMAL', desc: row?.desc ?? '' })}
+          aria-label={`${entry.label} — anormal`}
+        />
+      </td>
+      <td className="p-1.5">
+        <input
+          type="text"
+          disabled={readonly || !isAnormal}
+          value={row?.desc ?? ''}
+          onChange={(e) => onPatch({ desc: e.target.value })}
+          placeholder={isAnormal ? 'Describir…' : '—'}
+          className="w-full border border-slate-200 rounded p-1 disabled:bg-slate-50 text-[11px]"
+        />
+      </td>
+    </tr>
+  )
+}
+
+function ExamenFisicoSodexoTable({
+  value,
+  onChange,
+  readonly,
+}: {
+  value: SodexoExtensionData
+  onChange: (next: SodexoExtensionData) => void
+  readonly?: boolean
+}) {
+  const map = value.examen_fisico_sodexo ?? {}
+
+  const patchRow = (key: string, patch: { resultado?: string | null; desc?: string }) => {
+    const prev = map[key] ?? {}
+    const next = { ...prev, ...patch }
+    const cleaned = { ...map }
+    const empty =
+      !next.resultado && !(next.desc ?? '').trim()
+    if (empty) delete cleaned[key]
+    else cleaned[key] = next
+    onChange({
+      ...value,
+      examen_fisico_sodexo: examenFisicoSodexoIsEmpty(cleaned) ? null : cleaned,
+    })
+  }
+
+  return (
+    <div className="space-y-6">
+      {SODEXO_EXAMEN_FISICO_SECTIONS.map((sec) => (
+        <div key={sec.id} className="border border-slate-200 rounded-lg overflow-hidden">
+          <p className="text-xs font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200">
+            {sec.id} {sec.title}
+          </p>
+          <div className="p-2 space-y-3">
+            {sec.groups.map((group) => {
+              const entries = sodexoExamenFisicoCatalogBySection(sec.id).filter((e) => e.group === group)
+              if (entries.length === 0) return null
+              const headerSigno = entries.some((e) => e.kind === 'signo')
+              return (
+                <div key={group} className="border border-slate-100 rounded-md overflow-hidden">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+                    {group}
+                  </p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-white border-b border-slate-100">
+                        <th className="text-left p-1.5 font-semibold text-slate-600 italic">Hallazgo</th>
+                        <th className="p-1.5 w-12 text-center font-semibold text-slate-600 italic">
+                          {headerSigno ? '(−)' : 'Normal'}
+                        </th>
+                        <th className="p-1.5 w-12 text-center font-semibold text-slate-600 italic">
+                          {headerSigno ? '(+)' : 'Anormal'}
+                        </th>
+                        <th className="text-left p-1.5 font-semibold text-slate-600 italic">Describir</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map((entry) => (
+                        <ExamenFisicoSodexoRow
+                          key={entry.key}
+                          entry={entry}
+                          row={map[entry.key]}
+                          readonly={readonly}
+                          onPatch={(p) => patchRow(entry.key, p)}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

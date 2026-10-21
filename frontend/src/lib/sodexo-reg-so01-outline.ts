@@ -66,7 +66,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '9',
     section: '9',
     title: 'Examen físico',
-    subtitle: 'Exploración por regiones y datos de somatometría / signos vitales.',
+    subtitle: '§9.1–9.8 REG-SO-01 — captura por categorías; somatometría y signos desde AMI.',
   },
   {
     id: '10',

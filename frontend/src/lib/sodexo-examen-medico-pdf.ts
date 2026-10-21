@@ -15,6 +15,7 @@ import { fillSodexoInmunizaciones } from '@/lib/sodexo-pdf-inmunizaciones'
 import { fillSodexoEpp } from '@/lib/sodexo-pdf-epp'
 import { fillSodexoMatrizRiesgos } from '@/lib/sodexo-pdf-matriz'
 import { fillSodexoExamenFisicoNormals } from '@/lib/sodexo-pdf-examen-fisico-checks'
+import { fillSodexoExamenFisicoFromExtension } from '@/lib/sodexo-pdf-examen-fisico-extension'
 import { fillSodexoHistoriaOcupacionalTabla } from '@/lib/sodexo-pdf-ho'
 import { fillSodexoEstilosVida } from '@/lib/sodexo-pdf-estilos-vida'
 import { fillSodexoGineco } from '@/lib/sodexo-pdf-gineco'
@@ -426,7 +427,12 @@ export async function renderSodexoExamenMedicoPdf(
   setText(form, SODEXO_VISIOMETRIA_TEXT.observaciones, av.campimetria ?? av.ishihara)
   fillSodexoVisiometriaFromExtension(form, ext)
 
+  fillSodexoExamenFisicoFromExtension(form, ext?.examen_fisico_sodexo ?? null)
+
   const ex = data.exploracion
+  const efExt = ext?.examen_fisico_sodexo
+  const skipAmiExploracion = Boolean(efExt && Object.keys(efExt).length > 0)
+  if (!skipAmiExploracion) {
   setText(form, SODEXO_EXPLORACION_TEXT.neurologico, ex.neurologico)
   setText(form, SODEXO_EXPLORACION_TEXT.cabeza, ex.cabeza)
   setText(form, SODEXO_EXPLORACION_TEXT.piel_y_faneras, ex.piel_y_faneras)
@@ -452,8 +458,11 @@ export async function renderSodexoExamenMedicoPdf(
   setText(form, SODEXO_EXPLORACION_TEXT.ms_inferiores, ex.ms_inferiores)
   setText(form, SODEXO_EXPLORACION_TEXT.ms_superiores, ex.ms_superiores)
   setText(form, SODEXO_EXPLORACION_TEXT.salud_bucal, data.summary?.salud_bucal)
+  }
 
-  fillSodexoExamenFisicoNormals(form, ex as Record<string, string | null | undefined>)
+  if (!skipAmiExploracion) {
+    fillSodexoExamenFisicoNormals(form, ex as Record<string, string | null | undefined>)
+  }
 
   const dxLines = splitLines(data.impresionDiagnostica, SODEXO_DIAGNOSTICOS_TEXT.length)
   SODEXO_DIAGNOSTICOS_TEXT.forEach((field, i) => setText(form, field, dxLines[i]))
