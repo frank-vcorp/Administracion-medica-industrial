@@ -25,6 +25,16 @@ import {
   somatometrySummary,
   type SodexoAmiMirrorInput,
 } from '@/lib/sodexo-ami-mirror'
+import {
+  commitHoTable,
+  hoTableForUi,
+  HO_EMPTY_ROW,
+  matrizColumnHeaders,
+  matrizFactorColumns,
+  toggleMatrizFactorColumn,
+  type SodexoHoFila,
+  type SodexoMatrizColumn,
+} from '@/lib/sodexo-ho-table'
 import { AmiMirrorBanner, AmiMirrorTable, AmiMirrorTextBlock } from '@/components/clinical/examen-medico/SodexoAmiPreview'
 
 type ManoDominante = NonNullable<
@@ -35,13 +45,6 @@ type TabacoIntensidad = NonNullable<
 >
 type TabacoAnios = NonNullable<NonNullable<SodexoExtensionData['estilos_vida_sodexo']>['tabaco_anios']>
 type AlcoholModo = NonNullable<NonNullable<SodexoExtensionData['estilos_vida_sodexo']>['alcohol_modo']>
-
-const MATRIZ_LIKERT = ['1', '2', '3', '4', '5', 'A'] as const
-type MatrizNivel = (typeof MATRIZ_LIKERT)[number]
-
-type HoFila = NonNullable<SodexoExtensionData['historia_ocupacional_filas']>[number]
-const HO_EMPTY_ROW: HoFila = { empresa: '', ocupacion: '', tiempo: '', agentes_riesgo: '' }
-
 
 function SodexoBlock({
   blockId,
@@ -128,37 +131,6 @@ function SodexoBlockNav({ showGineco }: { showGineco: boolean }) {
       ))}
     </nav>
   )
-}
-
-function hoRowHasContent(row: HoFila | undefined) {
-  if (!row) return false
-  return Boolean(
-    row.empresa?.trim() ||
-      row.ocupacion?.trim() ||
-      row.tiempo?.trim() ||
-      row.agentes_riesgo?.trim(),
-  )
-}
-
-function hoFilasForUi(value: SodexoExtensionData) {
-  const stored = value.historia_ocupacional_filas
-  if (!stored?.length) return [{ ...HO_EMPTY_ROW }]
-  if (stored.every((r) => !hoRowHasContent(r))) {
-    if (stored.length <= 1) return [{ ...HO_EMPTY_ROW, ...stored[0] }]
-    return stored.slice(0, Math.min(4, stored.length)).map((r) => ({ ...HO_EMPTY_ROW, ...r }))
-  }
-  const lastIdx = stored.findLastIndex(hoRowHasContent)
-  const count = Math.min(4, Math.max(stored.length, lastIdx + 1))
-  const out = stored.slice(0, count).map((r) => ({ ...HO_EMPTY_ROW, ...r }))
-  while (out.length < count) out.push({ ...HO_EMPTY_ROW })
-  return out
-}
-
-function commitHoFilas(value: SodexoExtensionData, filas: HoFila[]) {
-  if (filas.length === 1 && !hoRowHasContent(filas[0])) {
-    return { ...value, historia_ocupacional_filas: null }
-  }
-  return { ...value, historia_ocupacional_filas: filas.slice(0, 4) }
 }
 
 function NegadoSiRadios({
@@ -530,13 +502,17 @@ export function SodexoExtension({
           />
         </BlockSubsection>
         <BlockSubsection
-          title="Tabla REG-SO-01 (extensión)"
-          hint="Hasta 4 filas; sustituye el volcado automático si está completa."
+          title="Historial de empleos (REG-SO-01)"
+          hint="Filas 1–5 y Actual; las columnas de la matriz toman el número de fila y A = empleo actual."
         >
           <HoTabla value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
         <BlockSubsection title="Matriz de factores de riesgo">
-          <MatrizLikertTable value={value} onChange={onChange} readonly={readonly} />
+          <p className="text-xs text-slate-600 mb-2">
+            Marca en qué empleo (columnas 1–5 y <strong>A</strong> = actual) aplica cada factor. Puedes
+            marcar varias columnas por fila.
+          </p>
+          <MatrizFactoresTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
         <BlockSubsection title="Equipo de protección personal (EPP)">
           <div className="mb-3">
@@ -893,7 +869,7 @@ export function SodexoExtension({
   )
 }
 
-function MatrizLikertTable({
+function MatrizFactoresTable({
   value,
   onChange,
   readonly,
@@ -902,28 +878,37 @@ function MatrizLikertTable({
   onChange: (next: SodexoExtensionData) => void
   readonly?: boolean
 }) {
-  const setNivel = (id: string, nivel: MatrizNivel | null) => {
-    const next = { ...(value.matriz_factores ?? {}) }
-    if (!nivel) delete next[id]
-    else next[id] = nivel
-    onChange({ ...value, matriz_factores: Object.keys(next).length ? next : null })
+  const ho = hoTableForUi(value)
+  const columns = matrizColumnHeaders(ho)
+
+  const toggle = (factorId: string, col: SodexoMatrizColumn, checked: boolean) => {
+    onChange({
+      ...value,
+      matriz_factores: toggleMatrizFactorColumn(value.matriz_factores, factorId, col, checked),
+    })
   }
 
   return (
     <>
       <div className="max-h-96 overflow-auto border border-slate-200 rounded-lg">
-        <table className="w-full text-[11px] border-collapse min-w-[32rem]">
+        <table className="w-full text-[11px] border-collapse min-w-[40rem]">
           <thead className="bg-slate-50 sticky top-0 z-10">
             <tr>
               <th className="text-left p-2 border-b border-slate-200 font-semibold text-slate-600">
                 Factor
               </th>
-              {MATRIZ_LIKERT.map((n) => (
+              {columns.map((col) => (
                 <th
-                  key={n}
-                  className="p-1 border-b border-slate-200 font-bold text-slate-600 w-9 text-center"
+                  key={col.key}
+                  className={`p-1 border-b border-slate-200 font-bold text-slate-600 w-14 text-center ${
+                    col.active ? '' : 'opacity-40'
+                  }`}
+                  title={col.subtitle}
                 >
-                  {n}
+                  <div>{col.title}</div>
+                  <div className="text-[9px] font-normal truncate max-w-[3.5rem] mx-auto">
+                    {col.subtitle}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -932,25 +917,27 @@ function MatrizLikertTable({
             {SODEXO_MATRIZ_FACTOR_IDS.map((id) => (
               <tr key={id} className="border-t border-slate-100 odd:bg-white even:bg-slate-50/50">
                 <td className="p-2 text-slate-700 align-top">{SODEXO_MATRIZ_FACTOR_LABELS[id] ?? id}</td>
-                {MATRIZ_LIKERT.map((n) => (
-                  <td key={n} className="p-1 text-center align-middle">
-                    <input
-                      type="radio"
-                      name={`sodexo-matriz-${id}`}
-                      disabled={readonly}
-                      checked={value.matriz_factores?.[id] === n}
-                      onChange={() => setNivel(id, n)}
-                      className="accent-emerald-700"
-                      aria-label={`${SODEXO_MATRIZ_FACTOR_LABELS[id] ?? id} nivel ${n}`}
-                    />
-                  </td>
-                ))}
+                {columns.map((col) => {
+                  const selected = matrizFactorColumns(value.matriz_factores, id).includes(col.key)
+                  return (
+                    <td key={col.key} className="p-1 text-center align-middle">
+                      <input
+                        type="checkbox"
+                        disabled={readonly || !col.active}
+                        checked={selected}
+                        onChange={(e) => toggle(id, col.key, e.target.checked)}
+                        className="accent-emerald-700"
+                        aria-label={`${SODEXO_MATRIZ_FACTOR_LABELS[id] ?? id} empleo ${col.title}`}
+                      />
+                    </td>
+                  )
+                })}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <label className="block text-xs font-bold text-slate-500 mb-1">Observaciones matriz</label>
+      <label className="block text-xs font-bold text-slate-500 mb-1 mt-3">Observaciones matriz</label>
       <textarea
         disabled={readonly}
         rows={3}
@@ -1277,6 +1264,39 @@ function EstilosVidaSodexoFields({
   )
 }
 
+function HoExamenChecks({
+  row,
+  readonly,
+  onPatch,
+}: {
+  row: SodexoHoFila
+  readonly?: boolean
+  onPatch: (patch: Partial<SodexoHoFila>) => void
+}) {
+  const items = [
+    { key: 'examen_ingreso' as const, label: 'Ing.' },
+    { key: 'examen_periodico' as const, label: 'Peri.' },
+    { key: 'examen_retiro' as const, label: 'Ret.' },
+    { key: 'examen_no' as const, label: 'No' },
+  ]
+  return (
+    <div className="flex flex-wrap gap-2 justify-center">
+      {items.map(({ key, label }) => (
+        <label key={key} className="inline-flex items-center gap-1 text-[10px] text-slate-600">
+          <input
+            type="checkbox"
+            disabled={readonly}
+            checked={Boolean(row[key])}
+            onChange={(e) => onPatch({ [key]: e.target.checked })}
+            className="rounded border-slate-300"
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
 function HoTabla({
   value,
   onChange,
@@ -1286,100 +1306,169 @@ function HoTabla({
   onChange: (next: SodexoExtensionData) => void
   readonly?: boolean
 }) {
-  const filas = hoFilasForUi(value)
+  const ui = hoTableForUi(value)
 
-  const patchRow = (index: number, patch: Partial<(typeof filas)[0]>) => {
-    const next = filas.map((r, i) => (i === index ? { ...r, ...patch } : r))
-    onChange(commitHoFilas(value, next))
+  const patchHistorico = (index: number, patch: Partial<SodexoHoFila>) => {
+    const historico = ui.historico.map((r, i) => (i === index ? { ...r, ...patch, es_actual: false } : r))
+    onChange(commitHoTable(value, { ...ui, historico }))
   }
 
-  const addRow = () => {
-    if (filas.length >= 4) return
-    onChange(commitHoFilas(value, [...filas, { ...HO_EMPTY_ROW }]))
+  const patchActual = (patch: Partial<SodexoHoFila>) => {
+    onChange(commitHoTable(value, { ...ui, actual: { ...ui.actual, ...patch, es_actual: true } }))
   }
 
-  const removeRow = (index: number) => {
-    if (filas.length <= 1) return
-    const next = filas.filter((_, i) => i !== index)
-    onChange(commitHoFilas(value, next))
+  const addHistorico = () => {
+    if (ui.historico.length >= 5) return
+    onChange(commitHoTable(value, { ...ui, historico: [...ui.historico, { ...HO_EMPTY_ROW }] }))
   }
+
+  const removeHistorico = (index: number) => {
+    if (ui.historico.length <= 1) return
+    onChange(
+      commitHoTable(value, {
+        ...ui,
+        historico: ui.historico.filter((_, i) => i !== index),
+      }),
+    )
+  }
+
+  const renderRow = (
+    rowLabel: string,
+    row: SodexoHoFila,
+    onPatch: (patch: Partial<SodexoHoFila>) => void,
+    onRemove?: () => void,
+  ) => (
+    <tr className="border-t border-slate-100 align-top">
+      <td className="p-2 font-semibold text-slate-500 whitespace-nowrap">{rowLabel}</td>
+      <td className="p-2">
+        <input
+          disabled={readonly}
+          placeholder="Empresa / área"
+          value={row.empresa_area ?? row.empresa ?? ''}
+          onChange={(e) => onPatch({ empresa_area: e.target.value, empresa: e.target.value })}
+          className="w-full min-w-[8rem] border border-slate-200 rounded p-1.5 text-sm"
+        />
+      </td>
+      <td className="p-2">
+        <input
+          disabled={readonly}
+          placeholder="Ocupación / oficio"
+          value={row.ocupacion ?? ''}
+          onChange={(e) => onPatch({ ocupacion: e.target.value })}
+          className="w-full min-w-[8rem] border border-slate-200 rounded p-1.5 text-sm"
+        />
+      </td>
+      <td className="p-2">
+        <div className="flex gap-1">
+          <input
+            disabled={readonly}
+            placeholder="Años"
+            value={row.anios ?? ''}
+            onChange={(e) => onPatch({ anios: e.target.value })}
+            className="w-14 border border-slate-200 rounded p-1.5 text-sm"
+          />
+          <input
+            disabled={readonly}
+            placeholder="Meses"
+            value={row.meses ?? ''}
+            onChange={(e) => onPatch({ meses: e.target.value })}
+            className="w-14 border border-slate-200 rounded p-1.5 text-sm"
+          />
+        </div>
+      </td>
+      <td className="p-2">
+        <HoExamenChecks row={row} readonly={readonly} onPatch={onPatch} />
+      </td>
+      <td className="p-2">
+        <NegadoSiRadios
+          name={`ho-rt-${rowLabel}`}
+          value={row.rt}
+          readonly={readonly}
+          onChange={(v) => onPatch({ rt: v })}
+        />
+        <p className="text-[9px] text-slate-400 text-center mt-0.5">RT*</p>
+      </td>
+      <td className="p-2">
+        <NegadoSiRadios
+          name={`ho-sec-${rowLabel}`}
+          value={row.secuelas}
+          readonly={readonly}
+          onChange={(v) => onPatch({ secuelas: v })}
+        />
+      </td>
+      <td className="p-2">
+        <NegadoSiRadios
+          name={`ho-ind-${rowLabel}`}
+          value={row.indemnizado}
+          readonly={readonly}
+          onChange={(v) => onPatch({ indemnizado: v })}
+        />
+        <input
+          disabled={readonly}
+          placeholder="Fecha"
+          value={row.indemnizado_fecha ?? ''}
+          onChange={(e) => onPatch({ indemnizado_fecha: e.target.value })}
+          className="mt-1 w-full border border-slate-200 rounded p-1 text-[10px]"
+        />
+      </td>
+      <td className="p-2 text-center">
+        {onRemove && !readonly ? (
+          <button type="button" onClick={onRemove} className="text-[10px] text-red-600 hover:underline">
+            Quitar
+          </button>
+        ) : null}
+      </td>
+    </tr>
+  )
 
   return (
     <div className="space-y-3">
-      <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="text-left p-2 font-semibold text-slate-600">Empresa / área</th>
-            <th className="text-left p-2 font-semibold text-slate-600">Ocupación</th>
-            <th className="text-left p-2 font-semibold text-slate-600 w-28">Tiempo</th>
-            <th className="text-left p-2 font-semibold text-slate-600">Agentes de riesgo</th>
-            <th className="p-2 w-16" />
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((row, i) => (
-            <tr key={i} className="border-t border-slate-100">
-              <td className="p-2">
-                <input
-                  disabled={readonly}
-                  placeholder="Empresa"
-                  value={row.empresa ?? ''}
-                  onChange={(e) => patchRow(i, { empresa: e.target.value })}
-                  className="w-full border border-slate-200 rounded p-1.5 text-sm"
-                />
-              </td>
-              <td className="p-2">
-                <input
-                  disabled={readonly}
-                  placeholder="Ocupación"
-                  value={row.ocupacion ?? ''}
-                  onChange={(e) => patchRow(i, { ocupacion: e.target.value })}
-                  className="w-full border border-slate-200 rounded p-1.5 text-sm"
-                />
-              </td>
-              <td className="p-2">
-                <input
-                  disabled={readonly}
-                  placeholder="Tiempo"
-                  value={row.tiempo ?? ''}
-                  onChange={(e) => patchRow(i, { tiempo: e.target.value })}
-                  className="w-full border border-slate-200 rounded p-1.5 text-sm"
-                />
-              </td>
-              <td className="p-2">
-                <input
-                  disabled={readonly}
-                  placeholder="Agentes"
-                  value={row.agentes_riesgo ?? ''}
-                  onChange={(e) => patchRow(i, { agentes_riesgo: e.target.value })}
-                  className="w-full border border-slate-200 rounded p-1.5 text-sm"
-                />
-              </td>
-              <td className="p-2 text-center align-middle">
-                {filas.length > 1 && !readonly ? (
-                  <button
-                    type="button"
-                    onClick={() => removeRow(i)}
-                    className="text-[10px] text-red-600 hover:underline"
-                    title="Quitar fila"
-                  >
-                    Quitar
-                  </button>
-                ) : null}
-              </td>
+      <div className="overflow-x-auto border border-slate-200 rounded-lg">
+        <table className="w-full text-xs border-collapse min-w-[56rem]">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="p-2" />
+              <th className="text-left p-2 font-semibold text-slate-600">Empresa / área</th>
+              <th className="text-left p-2 font-semibold text-slate-600">Ocupación</th>
+              <th className="p-2 font-semibold text-slate-600">Tiempo</th>
+              <th className="p-2 font-semibold text-slate-600">Exámenes</th>
+              <th className="p-2 font-semibold text-slate-600">RT</th>
+              <th className="p-2 font-semibold text-slate-600">Secuelas</th>
+              <th className="p-2 font-semibold text-slate-600">Indemnizado</th>
+              <th className="p-2 w-12" />
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {!readonly && filas.length < 4 ? (
+          </thead>
+          <tbody>
+            {ui.historico.map((row, i) =>
+              renderRow(String(i + 1), row, (p) => patchHistorico(i, p), () => removeHistorico(i)),
+            )}
+            {renderRow('Actual', ui.actual, patchActual)}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-slate-500">
+        * RT = Riesgo de trabajo o enfermedad de trabajo calificada.
+      </p>
+      {!readonly && ui.historico.length < 5 ? (
         <button
           type="button"
-          onClick={addRow}
+          onClick={addHistorico}
           className="text-sm font-semibold text-emerald-800 hover:text-emerald-900"
         >
-          + Agregar antecedente laboral ({filas.length}/4)
+          + Agregar empleo histórico ({ui.historico.length}/5)
         </button>
       ) : null}
+      <label className="block text-xs font-bold text-slate-500 mb-1">
+        Accidentes, lesiones y/o secuelas (pie §3)
+      </label>
+      <textarea
+        disabled={readonly}
+        rows={3}
+        value={value.historia_ocupacional_accidentes ?? ''}
+        onChange={(e) => onChange({ ...value, historia_ocupacional_accidentes: e.target.value })}
+        className="w-full border border-slate-200 rounded-lg p-2 text-sm"
+        placeholder="Describir tipo de accidente, lesiones y/o secuelas…"
+      />
     </div>
   )
 }

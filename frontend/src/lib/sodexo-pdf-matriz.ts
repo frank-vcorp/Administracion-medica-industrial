@@ -1,19 +1,23 @@
 /**
- * §3 Matriz de riesgos — casillas 1–5 + A desde extensión o texto libre.
+ * §3 Matriz de riesgos — columnas 1–5 (empleos HO) y A (actual); varias por factor.
  */
 import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'
 import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
 import {
+  normalizeMatrizFactorValue,
+  type SodexoMatrizColumn,
+} from '@/lib/sodexo-ho-table'
+import {
   SODEXO_MATRIZ_FACTOR_LEVELS,
   SODEXO_MATRIZ_KEYWORD_ALIASES,
 } from '@/lib/sodexo-pdf-matriz-map'
 
-export type MatrizNivel = '1' | '2' | '3' | '4' | '5' | 'A'
+export type MatrizNivel = SodexoMatrizColumn
 
-function nivelIndex(n: MatrizNivel): number {
-  if (n === 'A') return 5
-  return Math.min(4, Math.max(0, Number(n) - 1))
+function columnIndex(col: SodexoMatrizColumn): number {
+  if (col === 'A') return 5
+  return Math.min(4, Math.max(0, Number(col) - 1))
 }
 
 function resolveFactorId(token: string): string | null {
@@ -26,23 +30,19 @@ function resolveFactorId(token: string): string | null {
   return null
 }
 
-/** `ruido:3; calor:2` o líneas `ruido 3` en textarea de extensión. */
-export function parseMatrizFromText(text: string | null | undefined): Record<string, MatrizNivel> {
-  const out: Record<string, MatrizNivel> = {}
+/** Legacy: `ruido:3; calor:2` en observaciones. */
+export function parseMatrizFromText(text: string | null | undefined): Record<string, SodexoMatrizColumn[]> {
+  const out: Record<string, SodexoMatrizColumn[]> = {}
   const raw = (text ?? '').trim()
   if (!raw) return out
 
   const chunks = raw.split(/[\n;,]+/).map((x) => x.trim()).filter(Boolean)
   for (const chunk of chunks) {
     const m = chunk.match(/^(.+?)\s*[:=]\s*([1-5aA])$/i) ?? chunk.match(/^(.+?)\s+([1-5aA])$/i)
-    if (!m) {
-      const id = resolveFactorId(chunk)
-      if (id) out[id] = '2'
-      continue
-    }
+    if (!m) continue
     const id = resolveFactorId(m[1])
-    const lvl = m[2].toUpperCase() as MatrizNivel
-    if (id && /^[1-5A]$/.test(lvl)) out[id] = lvl
+    const lvl = m[2].toUpperCase() as SodexoMatrizColumn
+    if (id && /^[1-5A]$/.test(lvl)) out[id] = [lvl]
   }
   return out
 }
@@ -52,21 +52,24 @@ export function fillSodexoMatrizRiesgos(
   ext: SodexoExtensionData | null,
   riesgosTrabajoText: string | null | undefined,
 ) {
-  const structured = (ext?.matriz_factores ?? {}) as Record<string, MatrizNivel | string>
-  const fromText = parseMatrizFromText(ext?.matriz_riesgos_observaciones)
-  const fromRiesgos = parseMatrizFromText(riesgosTrabajoText)
-
-  const merged: Record<string, MatrizNivel> = { ...fromRiesgos, ...fromText }
-  for (const [k, v] of Object.entries(structured)) {
-    const lvl = String(v).toUpperCase() as MatrizNivel
-    if (/^[1-5A]$/.test(lvl)) merged[k] = lvl
+  const merged: Record<string, SodexoMatrizColumn[]> = {
+    ...parseMatrizFromText(riesgosTrabajoText),
+    ...parseMatrizFromText(ext?.matriz_riesgos_observaciones),
   }
 
-  for (const [factorId, nivel] of Object.entries(merged)) {
+  const structured = ext?.matriz_factores ?? {}
+  for (const [k, v] of Object.entries(structured)) {
+    const cols = normalizeMatrizFactorValue(v)
+    if (cols.length) merged[k] = cols
+  }
+
+  for (const [factorId, columnas] of Object.entries(merged)) {
     const boxes = SODEXO_MATRIZ_FACTOR_LEVELS[factorId]
     if (!boxes || boxes.length < 6) continue
-    const idx = nivelIndex(nivel)
-    sodexoSetCheck(form, boxes[idx], true)
+    for (const col of columnas) {
+      const idx = columnIndex(col)
+      sodexoSetCheck(form, boxes[idx], true)
+    }
   }
 
   if (ext?.matriz_riesgos_observaciones) {

@@ -87,6 +87,11 @@ export const FlowserveExtensionSchema = z.object({
 })
 
 const sodexoMatrizNivel = z.enum(['1', '2', '3', '4', '5', 'A'])
+const sodexoMatrizColumn = sodexoMatrizNivel
+const sodexoMatrizFactorValue = z.union([
+  sodexoMatrizNivel,
+  z.array(sodexoMatrizColumn),
+])
 
 const sodexoFuncionesSchema = z
   .object({
@@ -101,10 +106,25 @@ const sodexoFuncionesSchema = z
   .optional()
   .nullable()
 
+const sodexoNiegaSi = z.enum(['NEGADO', 'SI']).optional().nullable()
+
 const sodexoHoFilaSchema = z.object({
+  empresa_area: cleanString,
   empresa: cleanString,
   ocupacion: cleanString,
+  anios: cleanString,
+  meses: cleanString,
   tiempo: cleanString,
+  examen_ingreso: z.boolean().optional().nullable(),
+  examen_periodico: z.boolean().optional().nullable(),
+  examen_retiro: z.boolean().optional().nullable(),
+  examen_no: z.boolean().optional().nullable(),
+  rt: sodexoNiegaSi,
+  secuelas: sodexoNiegaSi,
+  indemnizado: sodexoNiegaSi,
+  indemnizado_fecha: cleanString,
+  es_actual: z.boolean().optional().nullable(),
+  /** Legacy — ya no va al PDF; usar matriz de factores. */
   agentes_riesgo: cleanString,
 })
 
@@ -116,8 +136,6 @@ const sodexoExamenEncabezadoSchema = z
   })
   .optional()
   .nullable()
-
-const sodexoNiegaSi = z.enum(['NEGADO', 'SI']).optional().nullable()
 
 const sodexoInmunFilaSchema = z.object({
   estado: sodexoNiegaSi,
@@ -139,8 +157,10 @@ export const SodexoExtensionSchema = z.object({
   antiguedad_actividades: cleanString,
   tipo_actividad: cleanString,
   matriz_riesgos_observaciones: cleanString,
-  /** Matriz REG-SO-01: factor → nivel 1–5 o A (captura en extensión Sodexo). */
-  matriz_factores: z.record(z.string(), sodexoMatrizNivel).optional().nullable(),
+  /** Matriz REG-SO-01: factor → columnas 1–5 (empleos) y/o A (actual); varias por factor. */
+  matriz_factores: z.record(z.string(), sodexoMatrizFactorValue).optional().nullable(),
+  /** Describir accidente, lesiones y/o secuelas (pie §3). */
+  historia_ocupacional_accidentes: cleanString,
   lugar_nacimiento: cleanString,
   telefono_casa: cleanString,
   telefono_movil: cleanString,
@@ -151,8 +171,8 @@ export const SodexoExtensionSchema = z.object({
   profesion: cleanString,
   lee_y_escribe: z.enum(['SI', 'NO']).optional().nullable(),
   funciones_principales: sodexoFuncionesSchema,
-  /** Hasta 4 filas de la tabla §3 (además de narrativa AMI si aplica). */
-  historia_ocupacional_filas: z.array(sodexoHoFilaSchema).max(4).optional().nullable(),
+  /** Hasta 5 empleos históricos + fila Actual (`es_actual`). */
+  historia_ocupacional_filas: z.array(sodexoHoFilaSchema).max(6).optional().nullable(),
   examen_encabezado: sodexoExamenEncabezadoSchema,
   epp_uso: z.enum(['SI', 'NO', 'OCASIONAL']).optional().nullable(),
   epp_casco: z.boolean().optional().nullable(),
@@ -306,6 +326,7 @@ export function emptySodexoExtension(): SodexoExtensionData {
     lee_y_escribe: null,
     funciones_principales: null,
     historia_ocupacional_filas: null,
+    historia_ocupacional_accidentes: '',
     examen_encabezado: null,
     epp_uso: null,
     epp_casco: false,

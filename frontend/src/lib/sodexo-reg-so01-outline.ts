@@ -27,7 +27,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '3',
     section: '3',
     title: 'Historia ocupacional',
-    subtitle: 'Tabla HO, matriz de riesgo y equipo de protección personal (EPP).',
+    subtitle: 'Historial de empleos, matriz por empresa (1–5 y A) y EPP.',
   },
   {
     id: '4',

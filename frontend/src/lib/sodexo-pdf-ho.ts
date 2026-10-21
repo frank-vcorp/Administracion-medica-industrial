@@ -1,23 +1,48 @@
 /**
- * §3 Historia ocupacional — tabla 4 filas (texto en rejilla AcroForm).
+ * §3 Historia ocupacional — tabla AcroForm (filas 1, 2, 3, Actual).
  */
 import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'
-import { sodexoSetText } from '@/lib/sodexo-pdf-acroform'
-
-/** Campos por fila (empresa/área, ocupación, tiempos auxiliares en plantilla). */
-const HO_ROW_FIELDS = [
-  { empresa: 'Texto75', ocupacion: 'Texto119', tiempo: 'Texto123' },
-  { empresa: 'Texto126', ocupacion: 'Texto118', tiempo: 'Texto122' },
-  { empresa: 'Texto117', ocupacion: 'Texto125', tiempo: 'Texto121' },
-  { empresa: 'Texto29', ocupacion: 'Texto32', tiempo: 'Texto31' },
-] as const
+import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
+import { normalizeHoFila, type SodexoHoFila } from '@/lib/sodexo-ho-table'
+import { SODEXO_HO_ACCIDENTES_TEXT, SODEXO_HO_PDF_ROWS } from '@/lib/sodexo-pdf-ho-rows'
 
 function splitHoLines(text: string | null | undefined): string[] {
   return (text ?? '')
     .split(/\n+/)
     .map((l) => l.trim())
     .filter(Boolean)
+}
+
+function formatTiempo(row: SodexoHoFila): string {
+  const a = row.anios?.trim()
+  const m = row.meses?.trim()
+  if (a && m) return `${a} años ${m} meses`
+  if (a) return `${a} años`
+  if (m) return `${m} meses`
+  return row.tiempo?.trim() ?? ''
+}
+
+function setNegadoSiCheck(form: PdfForm, noBox: string, siBox: string, value: 'NEGADO' | 'SI' | null | undefined) {
+  if (value === 'NEGADO') sodexoSetCheck(form, noBox, true)
+  else if (value === 'SI') sodexoSetCheck(form, siBox, true)
+}
+
+function fillHoPdfRow(form: PdfForm, pdfRowIndex: number, row: SodexoHoFila) {
+  const pdf = SODEXO_HO_PDF_ROWS[pdfRowIndex]
+  if (!pdf) return
+  const empresa = row.empresa_area?.trim() || row.empresa?.trim()
+  sodexoSetText(form, pdf.empresa, empresa)
+  sodexoSetText(form, pdf.ocupacion, row.ocupacion)
+  sodexoSetText(form, pdf.tiempo, formatTiempo(row))
+  sodexoSetText(form, pdf.indemn_fecha, row.indemnizado_fecha)
+  if (row.examen_ingreso) sodexoSetCheck(form, pdf.examen[0], true)
+  if (row.examen_periodico) sodexoSetCheck(form, pdf.examen[1], true)
+  if (row.examen_retiro) sodexoSetCheck(form, pdf.examen[2], true)
+  if (row.examen_no) sodexoSetCheck(form, pdf.examen[3], true)
+  setNegadoSiCheck(form, pdf.rt[0], pdf.rt[1], row.rt)
+  setNegadoSiCheck(form, pdf.secuelas[0], pdf.secuelas[1], row.secuelas)
+  setNegadoSiCheck(form, pdf.indemnizado[0], pdf.indemnizado[1], row.indemnizado)
 }
 
 export function fillSodexoHistoriaOcupacionalTabla(
@@ -31,31 +56,50 @@ export function fillSodexoHistoriaOcupacionalTabla(
     riesgos?: string | null
   },
 ) {
-  const filas = opts.ext?.historia_ocupacional_filas?.filter(
-    (f) => f.empresa?.trim() || f.ocupacion?.trim() || f.tiempo?.trim() || f.agentes_riesgo?.trim(),
+  const ext = opts.ext
+  const stored = ext?.historia_ocupacional_filas?.map(normalizeHoFila) ?? []
+  const historico = stored.filter((f) => !f.es_actual)
+  const actual = stored.find((f) => f.es_actual)
+
+  const actualRow = normalizeHoFila(
+    actual ??
+      ({
+        empresa_area: opts.empresaActual ?? '',
+        empresa: opts.empresaActual ?? '',
+        ocupacion: opts.puestoActual ?? '',
+        anios: '',
+        meses: opts.areaActual ?? '',
+        es_actual: true,
+      } as SodexoHoFila),
   )
-  if (filas?.length) {
-    for (let i = 0; i < Math.min(4, filas.length); i++) {
-      const row = filas[i]
-      const fields = HO_ROW_FIELDS[i]
-      sodexoSetText(form, fields.empresa, row.empresa ?? '')
-      sodexoSetText(form, fields.ocupacion, row.ocupacion ?? '')
-      sodexoSetText(form, fields.tiempo, row.tiempo ?? '')
-      if (row.agentes_riesgo?.trim()) {
-        sodexoSetText(form, i === 3 ? 'Texto30' : 'Texto33', row.agentes_riesgo)
-      }
+  const pdfRows: SodexoHoFila[] = [
+    historico[0] ? normalizeHoFila(historico[0]) : normalizeHoFila({}),
+    historico[1] ? normalizeHoFila(historico[1]) : normalizeHoFila({}),
+    historico[2] ? normalizeHoFila(historico[2]) : normalizeHoFila({}),
+    actualRow,
+  ]
+
+  const anyStructured = pdfRows.some(
+    (r) => r.empresa_area?.trim() || r.empresa?.trim() || r.ocupacion?.trim(),
+  )
+  if (anyStructured) {
+    for (let i = 0; i < 4; i++) {
+      fillHoPdfRow(form, i, pdfRows[i])
+    }
+    if (ext?.historia_ocupacional_accidentes?.trim()) {
+      sodexoSetText(form, SODEXO_HO_ACCIDENTES_TEXT, ext.historia_ocupacional_accidentes)
     }
     return
   }
 
   const lines = splitHoLines(opts.narrativa)
   if (opts.empresaActual || opts.puestoActual) {
-    sodexoSetText(form, HO_ROW_FIELDS[3].empresa, opts.empresaActual ?? '')
-    sodexoSetText(form, HO_ROW_FIELDS[3].ocupacion, opts.puestoActual ?? '')
-    sodexoSetText(form, HO_ROW_FIELDS[3].tiempo, opts.areaActual ?? '')
+    sodexoSetText(form, SODEXO_HO_PDF_ROWS[3].empresa, opts.empresaActual ?? '')
+    sodexoSetText(form, SODEXO_HO_PDF_ROWS[3].ocupacion, opts.puestoActual ?? '')
+    sodexoSetText(form, SODEXO_HO_PDF_ROWS[3].tiempo, opts.areaActual ?? '')
   }
   for (let i = 0; i < Math.min(3, lines.length); i++) {
-    sodexoSetText(form, HO_ROW_FIELDS[i].empresa, lines[i])
+    sodexoSetText(form, SODEXO_HO_PDF_ROWS[i].empresa, lines[i])
   }
   if (opts.riesgos) {
     sodexoSetText(form, 'Texto30', opts.riesgos)
