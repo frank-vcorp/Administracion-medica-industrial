@@ -403,6 +403,7 @@ export async function renderSodexoExamenMedicoPdf(
     data.modulo1 ?? {},
     p.sexo,
     (data.patologicos as Record<string, unknown> | undefined)?.ginecologicos,
+    ext?.gineco_sodexo ?? null,
   )
   if (data.historiaGineco) {
     setText(form, 'Método de planificación', data.historiaGineco)

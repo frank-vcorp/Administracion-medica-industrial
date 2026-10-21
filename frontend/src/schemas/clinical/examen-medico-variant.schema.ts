@@ -255,10 +255,21 @@ export const SodexoExtensionSchema = z.object({
     })
     .optional()
     .nullable(),
+  /** §7 Historia gineco-obstétrica (solo mujer en UI). */
   gineco_sodexo: z
     .object({
-      dismenorrea: sodexoNiegaSi,
+      ciclos: cleanString,
+      fum: cleanString,
+      gesta: cleanString,
+      parto: cleanString,
+      cesarea: cleanString,
+      aborto: cleanString,
+      vivos: cleanString,
+      fup: cleanString,
+      dismenorrea: z.enum(['NO', 'SI', 'INCAPACITANTE', 'NEGADO']).optional().nullable(),
       dismenorrea_incapacitante: z.boolean().optional(),
+      metodo_planificacion: cleanString,
+      ultima_citologia: cleanString,
       toxicos_medicamentos: z.record(z.string(), sodexoNiegaSi).optional().nullable(),
     })
     .optional()

@@ -25,6 +25,10 @@ import {
   mergeLegacyInmunComplementarias,
   prefillInmunizacionesSodexoFromModulo1,
 } from '@/lib/sodexo-inmunizaciones-prefill'
+import {
+  ginecoObstetricaSodexoIsEmpty,
+  prefillGinecoSodexoFromModulo1,
+} from '@/lib/sodexo-gineco-prefill'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
   amiExploracionValue,
@@ -293,6 +297,14 @@ export function SodexoExtension({
     if (patologicosSodexoIsEmpty(suggested)) return
     onChange({ ...value, patologicos_sodexo: suggested })
   }, [amiCtx.antecedentesCaptured, value.patologicos_sodexo, readonly, onChange, value])
+
+  useEffect(() => {
+    if (readonly || !showGineco) return
+    if (!ginecoObstetricaSodexoIsEmpty(value.gineco_sodexo)) return
+    const suggested = prefillGinecoSodexoFromModulo1(amiCtx.modulo1 as Record<string, unknown>)
+    if (ginecoObstetricaSodexoIsEmpty(suggested)) return
+    onChange({ ...value, gineco_sodexo: suggested })
+  }, [amiCtx.modulo1, showGineco, value.gineco_sodexo, readonly, onChange, value])
 
   useEffect(() => {
     if (readonly) return
@@ -684,22 +696,20 @@ export function SodexoExtension({
         blockId="7"
         section="7"
         title="Historia gineco-obstétrica"
-        subtitle="Solo paciente mujer."
+        subtitle="§7 REG-SO-01 — solo paciente mujer (sexo en Módulo 1 / Antecedentes)."
       >
-        <BlockSubsection title="Datos ginecológicos (AMI)">
+        <BlockSubsection
+          title="Referencia AMI (opcional)"
+          hint="Antecedentes → Módulo 1. Prellenado sugerido si §7 Sodexo está vacío."
+        >
           <AmiMirrorTable
-            rows={[
-              ...flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'patologicos'), 8).filter(
-                (r) => /gine|menstr|gesta|fum/i.test(r.label),
-              ),
-              ...flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 12).filter((r) =>
-                /gine|menstr|gesta|fum|citolog/i.test(r.label),
-              ),
-            ]}
-            emptyHint="Captura en Antecedentes / Módulo 1 (gineco)."
+            rows={flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 16).filter((r) =>
+              /gine|menstr|gesta|fum|citolog|menarca|ritmo|mpf/i.test(r.label),
+            )}
+            emptyHint="Captura gineco en Antecedentes → Módulo 1."
           />
         </BlockSubsection>
-        <BlockSubsection title="Rejilla Sodexo">
+        <BlockSubsection title="Captura REG-SO-01">
           <GinecoSodexoTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
       </SodexoBlock>
@@ -1294,32 +1304,84 @@ function GinecoSodexoTable({
     else tox[id] = estado as 'NEGADO' | 'SI'
     setG({ toxicos_medicamentos: Object.keys(tox).length ? tox : null })
   }
+
+  const dismValue =
+    g.dismenorrea === 'NEGADO'
+      ? 'NO'
+      : g.dismenorrea === 'SI' && g.dismenorrea_incapacitante
+        ? 'INCAPACITANTE'
+        : g.dismenorrea ?? ''
+
+  const obstetricFields: { key: keyof NonNullable<SodexoExtensionData['gineco_sodexo']>; label: string; placeholder?: string }[] = [
+    { key: 'ciclos', label: 'Ciclos', placeholder: 'ej. 28 / 30' },
+    { key: 'fum', label: 'FUM' },
+    { key: 'gesta', label: 'G' },
+    { key: 'parto', label: 'P' },
+    { key: 'cesarea', label: 'C' },
+    { key: 'aborto', label: 'A' },
+    { key: 'vivos', label: 'Vivos' },
+    { key: 'fup', label: 'FUP' },
+  ]
+
   return (
     <>
-      <div className="flex flex-wrap gap-4 mb-3">
-        <div>
-          <label className="text-xs text-slate-500">Dismenorrea</label>
-          <select
-            disabled={readonly}
-            value={g.dismenorrea ?? ''}
-            onChange={(e) => setG({ dismenorrea: (e.target.value || null) as 'NEGADO' | 'SI' | null })}
-            className="border border-slate-200 rounded p-2 text-sm block mt-1"
-          >
-            <option value="">—</option>
-            <option value="NEGADO">Negado</option>
-            <option value="SI">Sí</option>
-          </select>
-        </div>
-        <label className="flex items-center gap-2 text-sm mt-5">
-          <input
-            type="checkbox"
-            disabled={readonly}
-            checked={Boolean(g.dismenorrea_incapacitante)}
-            onChange={(e) => setG({ dismenorrea_incapacitante: e.target.checked })}
-          />
-          Incapacitante
-        </label>
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
+        {obstetricFields.map(({ key, label, placeholder }) => (
+          <div key={key}>
+            <label className="text-[10px] font-semibold text-slate-600">{label}</label>
+            <input
+              disabled={readonly}
+              value={String(g[key] ?? '')}
+              onChange={(e) => setG({ [key]: e.target.value })}
+              placeholder={placeholder}
+              className="mt-0.5 w-full border border-slate-200 rounded p-1.5 text-xs"
+            />
+          </div>
+        ))}
       </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-4 border border-slate-100 rounded-lg p-3 bg-slate-50/50">
+        <div>
+          <p className="text-[10px] font-bold text-slate-600 mb-1">Dismenorrea</p>
+          <div className="flex flex-wrap gap-3 text-xs">
+            {(['NO', 'SI', 'INCAPACITANTE'] as const).map((opt) => (
+              <label key={opt} className="inline-flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="gineco-dismenorrea"
+                  disabled={readonly}
+                  checked={dismValue === opt}
+                  onChange={() =>
+                    setG({
+                      dismenorrea: opt,
+                      dismenorrea_incapacitante: opt === 'INCAPACITANTE' ? true : false,
+                    })
+                  }
+                />
+                {opt === 'NO' ? 'No' : opt === 'SI' ? 'Sí' : 'Incapacitante'}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold text-slate-600">Método de planificación</label>
+          <input
+            disabled={readonly}
+            value={g.metodo_planificacion ?? ''}
+            onChange={(e) => setG({ metodo_planificacion: e.target.value })}
+            className="mt-0.5 w-full border border-slate-200 rounded p-1.5 text-xs bg-white"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold text-slate-600">Última citología</label>
+          <input
+            disabled={readonly}
+            value={g.ultima_citologia ?? ''}
+            onChange={(e) => setG({ ultima_citologia: e.target.value })}
+            className="mt-0.5 w-full border border-slate-200 rounded p-1.5 text-xs bg-white"
+          />
+        </div>
+      </div>
+      <p className="text-[10px] font-bold uppercase text-slate-500 mb-2">Tóxicos / medicamentos (rejilla impreso)</p>
       <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg">
         <table className="w-full text-xs">
           <thead className="bg-slate-50 sticky top-0">

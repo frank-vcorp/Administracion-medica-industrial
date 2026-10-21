@@ -53,7 +53,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '7',
     section: '7',
     title: 'Historia gineco-obstétrica',
-    subtitle: 'Solo aplica en paciente mujer.',
+    subtitle: '§7 REG-SO-01 — solo mujer; ciclos, obstétricos, dismenorrea y citología.',
     femaleOnly: true,
   },
   {

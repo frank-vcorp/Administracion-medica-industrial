@@ -4,17 +4,10 @@
 import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'
 import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
-import { SODEXO_GINECO_TOXICO_EXTENSION_ROWS } from '@/lib/sodexo-gineco-extension-rows'
-
 const CONSENT_INFO_VERDADERA = 'Check Box76'
 const CONSENT_AVISO_PRIVACIDAD = 'Check Box77'
 const DECLARACION_PROTESTA_NOMBRE_1 = 'Texto26'
 const DECLARACION_PROTESTA_NOMBRE_2 = 'Texto27'
-
-const DISMENORREA_NO = 'Check Box416'
-const DISMENORREA_SI = 'Check Box417'
-const DISMENORREA_INCAP_NO = 'Check Box368'
-const DISMENORREA_INCAP_SI = 'Check Box369'
 
 /** Casillas y nombre de declaración §3 desde consentimiento de check-in. */
 export function fillSodexoConsentFromCheckIn(
@@ -49,27 +42,7 @@ export function fillSodexoExtensionBlocks(form: PdfForm, ext: SodexoExtensionDat
     sodexoSetText(form, 'SALUD OCUPACIONAL SODEXO MÉXICO', ext.titulo_seccion_sodexo)
   }
 
-  fillGinecoExtension(form, ext)
   fillEstilosVidaExtension(form, ext)
-}
-
-function fillGinecoExtension(form: PdfForm, ext: SodexoExtensionData) {
-  const g = ext.gineco_sodexo
-  if (!g) return
-  if (g.dismenorrea === 'NEGADO') sodexoSetCheck(form, DISMENORREA_NO, true)
-  else if (g.dismenorrea === 'SI') {
-    sodexoSetCheck(form, DISMENORREA_SI, true)
-    if (g.dismenorrea_incapacitante) sodexoSetCheck(form, DISMENORREA_INCAP_SI, true)
-    else if (g.dismenorrea_incapacitante === false) {
-      sodexoSetCheck(form, DISMENORREA_INCAP_NO, true)
-    }
-  }
-  const tox = g.toxicos_medicamentos ?? {}
-  for (const row of SODEXO_GINECO_TOXICO_EXTENSION_ROWS) {
-    const st = tox[row.id]
-    if (st === 'NEGADO') sodexoSetCheck(form, row.no, true)
-    else if (st === 'SI') sodexoSetCheck(form, row.si, true)
-  }
 }
 
 function fillEstilosVidaExtension(form: PdfForm, ext: SodexoExtensionData) {
