@@ -396,6 +396,7 @@ export async function renderSodexoExamenMedicoPdf(
     form,
     data.modulo1 ?? {},
     data.inmunizaciones,
+    ext?.inmunizaciones_sodexo ?? null,
   )
   fillSodexoGineco(
     form,

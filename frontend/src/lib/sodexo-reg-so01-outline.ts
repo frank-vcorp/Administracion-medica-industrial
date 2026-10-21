@@ -47,7 +47,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     id: '6',
     section: '6',
     title: 'Inmunizaciones',
-    subtitle: 'Esquema de vacunación.',
+    subtitle: '§6 INMUNIZACIONES — básica y complementaria (extensión Sodexo).',
   },
   {
     id: '7',

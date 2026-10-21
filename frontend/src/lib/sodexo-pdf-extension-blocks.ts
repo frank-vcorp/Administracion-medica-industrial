@@ -51,7 +51,6 @@ export function fillSodexoExtensionBlocks(form: PdfForm, ext: SodexoExtensionDat
 
   fillGinecoExtension(form, ext)
   fillEstilosVidaExtension(form, ext)
-  fillInmunComplementarias(form, ext)
 }
 
 function fillGinecoExtension(form: PdfForm, ext: SodexoExtensionData) {
@@ -85,17 +84,4 @@ function fillEstilosVidaExtension(form: PdfForm, ext: SodexoExtensionData) {
   if (ev.tabaco_anios === '11_20') sodexoSetCheck(form, 'Check Box336', true)
   if (ev.tabaco_anios === 'MAS_20') sodexoSetCheck(form, 'Check Box334', true)
   if (ev.alcohol_modo === 'OCASIONAL') sodexoSetCheck(form, 'Check Box559', true)
-}
-
-function fillInmunComplementarias(form: PdfForm, ext: SodexoExtensionData) {
-  const ic = ext.inmunizaciones_complementarias
-  if (!ic) return
-  if (ic.niega) {
-    sodexoSetCheck(form, 'Check Box557', true)
-    return
-  }
-  if (ic.covid?.estado === 'SI') sodexoSetCheck(form, 'Check Box557', true)
-  if (ic.hepatitis_ab?.estado === 'SI') sodexoSetCheck(form, 'Check Box558', true)
-  if (ic.otras?.estado === 'SI') sodexoSetCheck(form, 'Check Box556', true)
-  if (ic.otras?.observaciones) sodexoSetText(form, 'Texto541', ic.otras.observaciones)
 }

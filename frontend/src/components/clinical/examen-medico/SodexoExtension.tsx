@@ -16,6 +16,15 @@ import {
   sodexoPatologicosCatalogByColumn,
 } from '@/lib/sodexo-patologicos-catalog'
 import { prefillPatologicosSodexoFromAmi } from '@/lib/sodexo-patologicos-prefill'
+import {
+  inmunizacionesSodexoIsEmpty,
+  SODEXO_INMUNIZACIONES_CATALOG,
+  type SodexoInmunizacionKey,
+} from '@/lib/sodexo-inmunizaciones-catalog'
+import {
+  mergeLegacyInmunComplementarias,
+  prefillInmunizacionesSodexoFromModulo1,
+} from '@/lib/sodexo-inmunizaciones-prefill'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
   amiExploracionValue,
@@ -284,6 +293,22 @@ export function SodexoExtension({
     if (patologicosSodexoIsEmpty(suggested)) return
     onChange({ ...value, patologicos_sodexo: suggested })
   }, [amiCtx.antecedentesCaptured, value.patologicos_sodexo, readonly, onChange, value])
+
+  useEffect(() => {
+    if (readonly) return
+    if (!inmunizacionesSodexoIsEmpty(value.inmunizaciones_sodexo)) return
+    let suggested = prefillInmunizacionesSodexoFromModulo1(amiCtx.modulo1 as Record<string, unknown>)
+    suggested = mergeLegacyInmunComplementarias(suggested, value.inmunizaciones_complementarias)
+    if (inmunizacionesSodexoIsEmpty(suggested)) return
+    onChange({ ...value, inmunizaciones_sodexo: suggested })
+  }, [
+    amiCtx.modulo1,
+    value.inmunizaciones_complementarias,
+    value.inmunizaciones_sodexo,
+    readonly,
+    onChange,
+    value,
+  ])
 
   return (
     <div className="space-y-6">
@@ -636,18 +661,21 @@ export function SodexoExtension({
         blockId="6"
         section="6"
         title="Inmunizaciones"
-        subtitle="Módulo 1 (AMI) + complementarias Sodexo."
+        subtitle="§6 INMUNIZACIONES — básica y complementaria del impreso Sodexo."
       >
-        <BlockSubsection title="Vacunas (Módulo 1 — AMI)">
+        <BlockSubsection
+          title="Referencia AMI (opcional)"
+          hint="Antecedentes → Módulo 1 (vacunas). Prellenado sugerido si la rejilla Sodexo está vacía."
+        >
           <AmiMirrorTable
             rows={flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 20).filter((r) =>
-              /vac|inmun|hepat|covid|tetano/i.test(r.label),
+              /vac|inmun|hepat|covid|tetano|neumoc/i.test(r.label),
             )}
             emptyHint="Captura vacunas en Examen Médico → Antecedentes → Módulo 1."
           />
         </BlockSubsection>
-        <BlockSubsection title="Complementarias (extensión Sodexo)">
-          <InmunComplementariasTable value={value} onChange={onChange} readonly={readonly} />
+        <BlockSubsection title="Captura REG-SO-01">
+          <InmunizacionesSodexoTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
       </SodexoBlock>
 
@@ -1082,7 +1110,7 @@ function MatrizFactoresTable({
   )
 }
 
-function InmunComplementariasTable({
+function InmunizacionesSodexoTable({
   value,
   onChange,
   readonly,
@@ -1091,92 +1119,159 @@ function InmunComplementariasTable({
   onChange: (next: SodexoExtensionData) => void
   readonly?: boolean
 }) {
-  const ic = value.inmunizaciones_complementarias ?? {}
-  const patch = (next: Partial<NonNullable<SodexoExtensionData['inmunizaciones_complementarias']>>) => {
-    onChange({ ...value, inmunizaciones_complementarias: { ...ic, ...next } })
+  const data = value.inmunizaciones_sodexo ?? { filas: {}, observaciones: '' }
+  const filas = data.filas ?? {}
+
+  const setRoot = (patch: Partial<NonNullable<SodexoExtensionData['inmunizaciones_sodexo']>>) => {
+    const next = { ...data, ...patch }
+    const empty =
+      !(next.observaciones ?? '').trim() &&
+      !SODEXO_INMUNIZACIONES_CATALOG.some((r) => {
+        const f = next.filas?.[r.key]
+        return f?.estado === 'NEGADO' || f?.estado === 'SI'
+      })
+    onChange({ ...value, inmunizaciones_sodexo: empty ? null : next })
   }
-  const patchVac = (
-    key: 'covid' | 'hepatitis_ab' | 'otras',
-    field: string,
-    val: string,
-  ) => {
-    const row = { ...(ic[key] ?? {}), [field]: val }
-    patch({ [key]: row })
+
+  const patchFila = (key: SodexoInmunizacionKey, patch: Record<string, string | null | undefined>) => {
+    const prev = filas[key] ?? {}
+    const merged = { ...prev, ...patch }
+    const map = { ...filas, [key]: merged }
+    if (!merged.estado && !Object.values(merged).some((v) => typeof v === 'string' && v.trim())) {
+      delete map[key]
+    }
+    setRoot({ filas: map })
   }
-  const vacLabels: Record<'covid' | 'hepatitis_ab', string> = {
-    covid: 'COVID-19',
-    hepatitis_ab: 'Hepatitis A/B',
+
+  const renderSection = (section: 'basica' | 'complementaria', title: string) => {
+    const rows = SODEXO_INMUNIZACIONES_CATALOG.filter((r) => r.section === section)
+    const descHeader = section === 'basica' ? 'Describir' : 'Describir'
+    return (
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+          {title}
+        </p>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-slate-100">
+              <th className="text-left p-1.5 font-semibold text-slate-600 italic">Vacuna</th>
+              <th className="p-1.5 w-10 text-center font-semibold text-slate-600 italic">Niega</th>
+              <th className="p-1.5 w-10 text-center font-semibold text-slate-600 italic">Sí</th>
+              <th className="p-1.5 font-semibold text-slate-600 italic">Fecha</th>
+              <th className="p-1.5 font-semibold text-slate-600 italic">IMSS</th>
+              <th className="p-1.5 font-semibold text-slate-600 italic">SSA</th>
+              <th className="p-1.5 font-semibold text-slate-600 italic">Otros</th>
+              {section === 'complementaria' ? (
+                <th className="p-1.5 font-semibold text-slate-600 italic">Marca</th>
+              ) : null}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((entry) => {
+              const row = filas[entry.key]
+              const isSi = row?.estado === 'SI'
+              const isNeg = row?.estado === 'NEGADO'
+              return (
+                <tr key={entry.key} className="border-t border-slate-50">
+                  <td className="p-1.5 text-slate-800 font-medium">{entry.label}</td>
+                  <td className="p-1.5 text-center">
+                    <input
+                      type="radio"
+                      name={`inmun-${entry.key}`}
+                      disabled={readonly}
+                      checked={isNeg}
+                      onChange={() => patchFila(entry.key, { estado: 'NEGADO', fecha: '', imss: '', ssa: '', otros: '', marca: '' })}
+                      aria-label={`${entry.label} — Niega`}
+                    />
+                  </td>
+                  <td className="p-1.5 text-center">
+                    <input
+                      type="radio"
+                      name={`inmun-${entry.key}`}
+                      disabled={readonly}
+                      checked={isSi}
+                      onChange={() => patchFila(entry.key, { estado: 'SI' })}
+                      aria-label={`${entry.label} — Sí`}
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <input
+                      disabled={readonly || !isSi}
+                      value={row?.fecha ?? ''}
+                      onChange={(e) => patchFila(entry.key, { fecha: e.target.value })}
+                      className="w-full min-w-[4.5rem] border border-slate-200 rounded p-1 text-[11px] disabled:bg-slate-50"
+                      placeholder="—"
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <input
+                      disabled={readonly || !isSi}
+                      value={row?.imss ?? ''}
+                      onChange={(e) => patchFila(entry.key, { imss: e.target.value })}
+                      className="w-full min-w-[3rem] border border-slate-200 rounded p-1 text-[11px] disabled:bg-slate-50"
+                      placeholder="—"
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <input
+                      disabled={readonly || !isSi}
+                      value={row?.ssa ?? ''}
+                      onChange={(e) => patchFila(entry.key, { ssa: e.target.value })}
+                      className="w-full min-w-[3rem] border border-slate-200 rounded p-1 text-[11px] disabled:bg-slate-50"
+                      placeholder="—"
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <input
+                      disabled={readonly || !isSi}
+                      value={row?.otros ?? ''}
+                      onChange={(e) => patchFila(entry.key, { otros: e.target.value })}
+                      className="w-full min-w-[3rem] border border-slate-200 rounded p-1 text-[11px] disabled:bg-slate-50"
+                      placeholder={descHeader}
+                    />
+                  </td>
+                  {section === 'complementaria' ? (
+                    <td className="p-1.5">
+                      {entry.marca ? (
+                        <input
+                          disabled={readonly || !isSi}
+                          value={row?.marca ?? ''}
+                          onChange={(e) => patchFila(entry.key, { marca: e.target.value })}
+                          className="w-full min-w-[4rem] border border-slate-200 rounded p-1 text-[11px] disabled:bg-slate-50"
+                          placeholder="Marca"
+                        />
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                  ) : null}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
   }
 
   return (
-    <>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        {renderSection('basica', 'Básica')}
+        {renderSection('complementaria', 'Complementaria')}
+      </div>
+      <div>
+        <label className="block text-xs font-bold text-slate-600 mb-1">Observaciones</label>
+        <textarea
           disabled={readonly}
-          checked={Boolean(ic.niega)}
-          onChange={(e) => patch({ niega: e.target.checked })}
+          rows={2}
+          value={data.observaciones ?? ''}
+          onChange={(e) => setRoot({ observaciones: e.target.value })}
+          className="w-full border border-slate-200 rounded-lg p-2 text-sm"
+          placeholder="Aclaraciones de inmunizaciones…"
         />
-        Niega complementarias
-      </label>
-      <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="text-left p-2 font-semibold text-slate-600">Vacuna</th>
-            <th className="p-2 font-semibold text-slate-600 w-28">Estado</th>
-            <th className="p-2 font-semibold text-slate-600">Fecha</th>
-            <th className="p-2 font-semibold text-slate-600">IMSS</th>
-            <th className="p-2 font-semibold text-slate-600">SSA</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(['covid', 'hepatitis_ab'] as const).map((vac) => (
-            <tr key={vac} className="border-t border-slate-100">
-              <td className="p-2 text-slate-700 font-medium">{vacLabels[vac]}</td>
-              <td className="p-2">
-                <select
-                  disabled={readonly}
-                  value={ic[vac]?.estado ?? ''}
-                  onChange={(e) => patchVac(vac, 'estado', e.target.value)}
-                  className="w-full border border-slate-200 rounded p-1.5"
-                >
-                  <option value="">—</option>
-                  <option value="NEGADO">Negado</option>
-                  <option value="SI">Sí</option>
-                </select>
-              </td>
-              <td className="p-2">
-                <input
-                  disabled={readonly}
-                  placeholder="Fecha"
-                  value={ic[vac]?.fecha ?? ''}
-                  onChange={(e) => patchVac(vac, 'fecha', e.target.value)}
-                  className="w-full border border-slate-200 rounded p-1.5"
-                />
-              </td>
-              <td className="p-2">
-                <input
-                  disabled={readonly}
-                  placeholder="IMSS"
-                  value={ic[vac]?.imss ?? ''}
-                  onChange={(e) => patchVac(vac, 'imss', e.target.value)}
-                  className="w-full border border-slate-200 rounded p-1.5"
-                />
-              </td>
-              <td className="p-2">
-                <input
-                  disabled={readonly}
-                  placeholder="SSA"
-                  value={ic[vac]?.ssa ?? ''}
-                  onChange={(e) => patchVac(vac, 'ssa', e.target.value)}
-                  className="w-full border border-slate-200 rounded p-1.5"
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
+      </div>
+    </div>
   )
 }
 

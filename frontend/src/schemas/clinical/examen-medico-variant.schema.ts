@@ -215,6 +215,28 @@ export const SodexoExtensionSchema = z.object({
     })
     .optional()
     .nullable(),
+  /** §6 INMUNIZACIONES — rejilla básica + complementaria (REG-SO-01). */
+  inmunizaciones_sodexo: z
+    .object({
+      observaciones: cleanString,
+      filas: z
+        .record(
+          z.string(),
+          z.object({
+            estado: sodexoNiegaSi,
+            fecha: cleanString,
+            imss: cleanString,
+            ssa: cleanString,
+            otros: cleanString,
+            marca: cleanString,
+          }),
+        )
+        .optional()
+        .nullable(),
+    })
+    .optional()
+    .nullable(),
+  /** @deprecated Usar `inmunizaciones_sodexo`. */
   inmunizaciones_complementarias: z
     .object({
       niega: z.boolean().optional(),
@@ -351,6 +373,7 @@ export function emptySodexoExtension(): SodexoExtensionData {
     aclaracion_historia_personal: '',
     consentimiento_ho: null,
     visiometria_casillas: null,
+    inmunizaciones_sodexo: null,
     inmunizaciones_complementarias: null,
     examen_anormal_cual: null,
     gineco_sodexo: null,
