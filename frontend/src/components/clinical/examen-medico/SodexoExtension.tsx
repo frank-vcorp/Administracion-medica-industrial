@@ -7,7 +7,6 @@ import {
   SODEXO_MATRIZ_FACTOR_LABELS,
   SODEXO_MATRIZ_SECTIONS,
   type SodexoMatrizSection,
-  type SodexoMatrizSectionBlock,
 } from '@/lib/sodexo-matriz-factor-labels'
 import { SODEXO_GINECO_TOXICO_EXTENSION_ROWS } from '@/lib/sodexo-gineco-extension-rows'
 import { SODEXO_PATOLOGICOS_EXTRA_KEYS } from '@/lib/sodexo-pdf-patologicos'
@@ -511,8 +510,8 @@ export function SodexoExtension({
         </BlockSubsection>
         <BlockSubsection title="Matriz de factores de riesgo">
           <p className="text-xs text-slate-600 mb-2">
-            Marca en qué empleo (columnas 1–5 y <strong>A</strong> = actual) aplica cada factor. Puedes
-            marcar varias columnas por fila.
+            Columnas <strong>1–5</strong> = filas del historial arriba; <strong>A</strong> = actual. Varias
+            casillas por factor.
           </p>
           <MatrizFactoresTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
@@ -922,6 +921,36 @@ function matrizFactorRowCells(
   ))
 }
 
+function MatrizEmpresaHead({
+  columns,
+}: {
+  columns: ReturnType<typeof matrizColumnHeaders>
+}) {
+  return (
+    <thead className="bg-slate-50 border-b border-slate-200">
+      <tr>
+        <th className="text-left p-1 pl-1.5 text-[9px] font-semibold text-slate-500 w-[38%]">
+          Factor
+        </th>
+        {columns.map((col) => (
+          <th
+            key={col.key}
+            className={`p-0.5 text-center align-bottom ${col.active ? 'text-slate-800' : 'text-slate-400'}`}
+            title={col.active ? col.subtitle : `Empleo ${col.title} (sin capturar en historial)`}
+          >
+            <div className="text-[11px] font-bold leading-none">{col.title}</div>
+            {col.active ? (
+              <div className="text-[7px] font-normal leading-tight truncate max-w-[2.75rem] mx-auto mt-0.5">
+                {col.subtitle}
+              </div>
+            ) : null}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  )
+}
+
 function MatrizSectionPanel({
   section,
   columns,
@@ -935,25 +964,32 @@ function MatrizSectionPanel({
   readonly?: boolean
   toggle: (factorId: string, col: SodexoMatrizColumn, checked: boolean) => void
 }) {
-  const renderTable = (factorIds: string[], block?: SodexoMatrizSectionBlock) => (
-    <div key={block?.label ?? section.id} className="flex flex-1 min-w-0 border-t border-slate-200 first:border-t-0">
-      {block ? <MatrizVerticalLabel tone="sub">{block.label}</MatrizVerticalLabel> : null}
-      <table className="w-full text-[10px] border-collapse">
-        <tbody>
-          {matrizFactorRowCells(factorIds, columns, matriz, readonly, toggle)}
-        </tbody>
-      </table>
-    </div>
-  )
+  const groups: { label?: string; factorIds: string[] }[] = section.blocks?.length
+    ? section.blocks.map((b) => ({ label: b.label, factorIds: b.factorIds }))
+    : [{ factorIds: section.factorIds ?? [] }]
+
+  const colSpan = columns.length + 1
 
   return (
     <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white min-h-[10rem]">
       <MatrizVerticalLabel>{section.title}</MatrizVerticalLabel>
-      <div className="flex flex-col flex-1 min-w-0">
-        {section.blocks?.length
-          ? section.blocks.map((block) => renderTable(block.factorIds, block))
-          : renderTable(section.factorIds ?? [])}
-      </div>
+      <table className="w-full min-w-[11rem] text-[10px] border-collapse flex-1">
+        <MatrizEmpresaHead columns={columns} />
+        <tbody>
+          {groups.flatMap((group, gi) => {
+            const rows = matrizFactorRowCells(group.factorIds, columns, matriz, readonly, toggle)
+            if (!group.label) return rows
+            return [
+              <tr key={`${section.id}-sep-${gi}`} className="bg-slate-100/90">
+                <td colSpan={colSpan} className="px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                  {group.label}
+                </td>
+              </tr>,
+              ...rows,
+            ]
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -979,32 +1015,8 @@ function MatrizFactoresTable({
 
   return (
     <>
-      <div className="overflow-x-auto space-y-2">
-        <div className="min-w-[52rem] rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
-          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-            Empresa (columnas = filas del historial · A = actual)
-          </p>
-          <div className="flex">
-            <div className="w-9 shrink-0" />
-            <div
-              className="grid flex-1 gap-0.5 text-center text-[10px] font-bold text-slate-600"
-              style={{ gridTemplateColumns: `minmax(5.5rem,1.4fr) repeat(${columns.length}, minmax(2rem,1fr))` }}
-            >
-              <div className="text-left pl-1 text-slate-500 font-semibold">Factor</div>
-              {columns.map((col) => (
-                <div
-                  key={col.key}
-                  className={col.active ? '' : 'opacity-40'}
-                  title={col.subtitle}
-                >
-                  <div>{col.title}</div>
-                  <div className="text-[8px] font-normal truncate">{col.subtitle}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-3 min-w-[52rem] max-h-[28rem] overflow-y-auto pr-1">
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-3 min-w-0 max-h-[32rem] overflow-y-auto pr-1">
           {SODEXO_MATRIZ_SECTIONS.map((section) => (
             <MatrizSectionPanel
               key={section.id}
