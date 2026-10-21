@@ -1650,6 +1650,10 @@ function PatologicosSodexoTable({
   )
 }
 
+type SodexoEfExtensionRow = NonNullable<
+  NonNullable<SodexoExtensionData['examen_fisico_sodexo']>[string]
+>
+
 function ExamenFisicoSodexoRow({
   entry,
   row,
@@ -1657,9 +1661,9 @@ function ExamenFisicoSodexoRow({
   onPatch,
 }: {
   entry: SodexoEfCatalogEntry
-  row?: { resultado?: string | null; desc?: string | null }
+  row?: SodexoEfExtensionRow
   readonly?: boolean
-  onPatch: (patch: { resultado?: string | null; desc?: string }) => void
+  onPatch: (patch: Partial<SodexoEfExtensionRow>) => void
 }) {
   if (entry.kind === 'texto') {
     return (
@@ -1758,9 +1762,9 @@ function ExamenFisicoSodexoTable({
 }) {
   const map = value.examen_fisico_sodexo ?? {}
 
-  const patchRow = (key: string, patch: { resultado?: string | null; desc?: string }) => {
+  const patchRow = (key: string, patch: Partial<SodexoEfExtensionRow>) => {
     const prev = map[key] ?? {}
-    const next = { ...prev, ...patch }
+    const next: SodexoEfExtensionRow = { ...prev, ...patch }
     const cleaned = { ...map }
     const empty =
       !next.resultado && !(next.desc ?? '').trim()

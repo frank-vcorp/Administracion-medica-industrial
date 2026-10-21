@@ -216,6 +216,8 @@ export interface BuildExamenMedicoPdfInput {
     tratamientoMedicoActual?: string | null
     tatuajes?: string | null
   }
+  /** Snapshot no patológicos (prefill §8 Sodexo / PDF). */
+  noPatologicos?: Record<string, unknown> | null
   historiaOcupacional: BuildExamenMedicoPdfHistoriaOcupacionalInput
   app: BuildExamenMedicoPdfAppInput
   /** Patológicos estructurados (papeleta / antecedentes_captured). */
@@ -481,6 +483,7 @@ export function buildExamenMedicoPdfData(
       tratamientoMedicoActual: s(input.apnp.tratamientoMedicoActual) || null,
       tatuajes: s(input.apnp.tatuajes) || null,
     },
+    noPatologicos: input.noPatologicos ?? null,
     app: s(input.app?.texto) || '',
     patologicos: input.patologicos ?? null,
     modulo1: input.modulo1 ?? null,
