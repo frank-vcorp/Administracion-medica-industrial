@@ -121,7 +121,9 @@ function SodexoBlockNav({ showGineco }: { showGineco: boolean }) {
       className="flex flex-wrap gap-1.5 text-[11px]"
       aria-label="Secciones REG-SO-01"
     >
-      {SODEXO_REG_SO01_BLOCKS.filter((b) => !b.femaleOnly || showGineco).map((item) => (
+      {SODEXO_REG_SO01_BLOCKS.filter(
+        (b) => !b.hideInExtension && (!b.femaleOnly || showGineco),
+      ).map((item) => (
         <a
           key={item.id}
           href={`#sodexo-block-${item.id}`}
@@ -258,8 +260,8 @@ export function SodexoExtension({
         <p className="text-sm font-bold text-emerald-900">Formato Sodexo — campos adicionales</p>
         <p className="text-xs text-emerald-700 mt-1">
           Mismo orden que el <strong>formato ejemplo REG-SO-01</strong>: cada bloque numerado coincide con
-          una sección del impreso. Los bloques punteados grises se llenan en la papeleta AMI; los verdes,
-          solo aquí. El PDF Sodexo no inventa datos.
+          una sección del impreso.           Los bloques grises o de solo lectura se llenan en la papeleta AMI (p. ej. §4
+          heredo-familiares); los verdes, solo aquí. El PDF Sodexo no inventa datos.
         </p>
         <div className="mt-3">
           <SodexoBlockNav showGineco={showGineco} />
@@ -547,19 +549,6 @@ export function SodexoExtension({
             ))}
           </div>
         </BlockSubsection>
-      </SodexoBlock>
-
-      <SodexoBlock
-        blockId="4"
-        section="4"
-        title="Antecedentes heredo-familiares"
-        subtitle="Proyección al PDF desde la papeleta AMI."
-        mode="ami"
-      >
-        <AmiMirrorTable
-          rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'heredo_familiares'))}
-          emptyHint="Captura en Examen Médico → Antecedentes → Heredo-familiares."
-        />
       </SodexoBlock>
 
       <SodexoBlock

@@ -6,6 +6,8 @@ export type SodexoRegBlockDef = {
   subtitle?: string
   /** Solo lectura desde papeleta AMI (sin captura en extensión). */
   amiOnly?: boolean
+  /** No mostrar en pestaña Extensión Sodexo (solo PDF / Antecedentes AMI). */
+  hideInExtension?: boolean
   /** Ocultar si el paciente no es mujer (§7). */
   femaleOnly?: boolean
 }
@@ -34,6 +36,7 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
     section: '4',
     title: 'Antecedentes heredo-familiares',
     amiOnly: true,
+    hideInExtension: true,
   },
   {
     id: '5',
