@@ -24,8 +24,14 @@ export function ginecoObstetricaSodexoIsEmpty(
     'ultima_citologia',
   ] as const
   if (keys.some((k) => s(g[k]))) return false
-  if (g.dismenorrea === 'NO' || g.dismenorrea === 'SI' || g.dismenorrea === 'INCAPACITANTE') return false
-  if (g.dismenorrea === 'NEGADO' || g.dismenorrea === 'SI') return false
+  if (
+    g.dismenorrea === 'NO' ||
+    g.dismenorrea === 'SI' ||
+    g.dismenorrea === 'INCAPACITANTE' ||
+    g.dismenorrea === 'NEGADO'
+  ) {
+    return false
+  }
   if (g.dismenorrea_incapacitante) return false
   if (g.toxicos_medicamentos && Object.keys(g.toxicos_medicamentos).length > 0) return false
   return true

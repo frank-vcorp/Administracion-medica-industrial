@@ -25,7 +25,7 @@ function pick(
 
 function resolveGinecoExt(
   ext: SodexoExtensionData['gineco_sodexo'],
-  m1: Record<string, string>,
+  m1: Record<string, unknown>,
 ): NonNullable<SodexoExtensionData['gineco_sodexo']> {
   const base = prefillGinecoSodexoFromModulo1(m1)
   const g = ext ?? {}
