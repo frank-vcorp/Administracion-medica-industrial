@@ -39,7 +39,7 @@ import {
 } from '@/lib/sodexo-examen-fisico-catalog'
 import type { SodexoEfCatalogEntry } from '@/lib/sodexo-examen-fisico-types'
 import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibility'
-import { SODEXO_ARCOS_LIMBS } from '@/lib/sodexo-examen-fisico-arcos'
+import { SODEXO_ARCOS_MI, SODEXO_ARCOS_MS } from '@/lib/sodexo-examen-fisico-arcos'
 import { SodexoArcosMovimientoGrid } from '@/components/clinical/examen-medico/SodexoArcosMovimientoGrid'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
@@ -1743,6 +1743,97 @@ function ExamenFisicoSodexoRow({
   )
 }
 
+function ExamenFisicoSodexoEntriesTable({
+  entries,
+  map,
+  readonly,
+  patchRow,
+}: {
+  entries: SodexoEfCatalogEntry[]
+  map: Record<string, SodexoEfExtensionRow>
+  readonly?: boolean
+  patchRow: (key: string, patch: Partial<SodexoEfExtensionRow>) => void
+}) {
+  if (entries.length === 0) return null
+  const signEntries = entries.filter((e) => e.kind === 'signo')
+  const otherEntries = entries.filter((e) => e.kind !== 'signo')
+  const renderBlock = (block: SodexoEfCatalogEntry[], headerSigno: boolean) => (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="bg-white border-b border-slate-100">
+          <th className="text-left p-1.5 font-semibold text-slate-600 italic">Hallazgo</th>
+          <th className="p-1.5 w-12 text-center font-semibold text-slate-600 italic">
+            {headerSigno ? '(−)' : 'Normal'}
+          </th>
+          <th className="p-1.5 w-12 text-center font-semibold text-slate-600 italic">
+            {headerSigno ? '(+)' : 'Anormal'}
+          </th>
+          <th className="text-left p-1.5 font-semibold text-slate-600 italic">Describir</th>
+        </tr>
+      </thead>
+      <tbody>
+        {block.map((entry) => (
+          <ExamenFisicoSodexoRow
+            key={entry.key}
+            entry={entry}
+            row={map[entry.key]}
+            readonly={readonly}
+            onPatch={(p) => patchRow(entry.key, p)}
+          />
+        ))}
+      </tbody>
+    </table>
+  )
+  return (
+    <div className="space-y-2">
+      {signEntries.length > 0 ? renderBlock(signEntries, true) : null}
+      {otherEntries.length > 0 ? renderBlock(otherEntries, false) : null}
+    </div>
+  )
+}
+
+function ExamenFisicoOsteoLimbSection({
+  title,
+  arcosDef,
+  catalogEntries,
+  arcosValue,
+  onArcosChange,
+  map,
+  readonly,
+  patchRow,
+}: {
+  title: string
+  arcosDef: typeof SODEXO_ARCOS_MS
+  catalogEntries: SodexoEfCatalogEntry[]
+  arcosValue: SodexoExtensionData['examen_fisico_arcos_sodexo']
+  onArcosChange: (next: SodexoExtensionData['examen_fisico_arcos_sodexo']) => void
+  map: Record<string, SodexoEfExtensionRow>
+  readonly?: boolean
+  patchRow: (key: string, patch: Partial<SodexoEfExtensionRow>) => void
+}) {
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <p className="text-[11px] font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200">
+        {title}
+      </p>
+      <div className="p-2 space-y-3">
+        <SodexoArcosMovimientoGrid
+          def={arcosDef}
+          value={arcosValue}
+          readonly={readonly}
+          onChange={onArcosChange}
+        />
+        <ExamenFisicoSodexoEntriesTable
+          entries={catalogEntries}
+          map={map}
+          readonly={readonly}
+          patchRow={patchRow}
+        />
+      </div>
+    </div>
+  )
+}
+
 function ExamenFisicoSodexoTable({
   value,
   onChange,
@@ -1829,29 +1920,63 @@ function ExamenFisicoSodexoTable({
           ) : null}
           <div className="p-2 space-y-3">
             {sec.id === '9.5' ? (
-              <div className="space-y-3">
-                {SODEXO_ARCOS_LIMBS.map((arcosDef) => (
-                  <SodexoArcosMovimientoGrid
-                    key={arcosDef.limb}
-                    def={arcosDef}
-                    value={value.examen_fisico_arcos_sodexo}
-                    readonly={readonly}
-                    onChange={(next) =>
-                      onChange({
-                        ...value,
-                        examen_fisico_arcos_sodexo: next,
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            ) : null}
-            {sec.groups.map((group) => {
+              <>
+                <ExamenFisicoOsteoLimbSection
+                  title="Miembros superiores"
+                  arcosDef={SODEXO_ARCOS_MS}
+                  catalogEntries={sodexoExamenFisicoCatalogBySection('9.5')
+                    .filter((e) => e.group === 'Miembros superiores')
+                    .filter((e) => sodexoEfEntryVisibleForSex(e, patientSexo))}
+                  arcosValue={value.examen_fisico_arcos_sodexo}
+                  onArcosChange={(next) =>
+                    onChange({ ...value, examen_fisico_arcos_sodexo: next })
+                  }
+                  map={map}
+                  readonly={readonly}
+                  patchRow={patchRow}
+                />
+                <ExamenFisicoOsteoLimbSection
+                  title="Miembros inferiores"
+                  arcosDef={SODEXO_ARCOS_MI}
+                  catalogEntries={sodexoExamenFisicoCatalogBySection('9.5')
+                    .filter((e) => e.group === 'Miembros inferiores')
+                    .filter((e) => sodexoEfEntryVisibleForSex(e, patientSexo))}
+                  arcosValue={value.examen_fisico_arcos_sodexo}
+                  onArcosChange={(next) =>
+                    onChange({ ...value, examen_fisico_arcos_sodexo: next })
+                  }
+                  map={map}
+                  readonly={readonly}
+                  patchRow={patchRow}
+                />
+                {(() => {
+                  const lesiones = sodexoExamenFisicoCatalogBySection('9.5').filter(
+                    (e) => e.group === 'Lesiones repetitivas',
+                  )
+                  if (lesiones.length === 0) return null
+                  return (
+                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                      <p className="text-[11px] font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200">
+                        Lesiones repetitivas
+                      </p>
+                      <div className="p-2">
+                        <ExamenFisicoSodexoEntriesTable
+                          entries={lesiones}
+                          map={map}
+                          readonly={readonly}
+                          patchRow={patchRow}
+                        />
+                      </div>
+                    </div>
+                  )
+                })()}
+              </>
+            ) : (
+            sec.groups.map((group) => {
               const entries = sodexoExamenFisicoCatalogBySection(sec.id)
                 .filter((e) => e.group === group)
                 .filter((e) => sodexoEfEntryVisibleForSex(e, patientSexo))
               if (entries.length === 0) return null
-              const headerSigno = entries.some((e) => e.kind === 'signo')
               const showGroupTitle = sec.groups.length > 1 && group !== sec.title
               return (
                 <div key={group} className="border border-slate-100 rounded-md overflow-hidden">
@@ -1860,34 +1985,18 @@ function ExamenFisicoSodexoTable({
                       {group}
                     </p>
                   ) : null}
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-white border-b border-slate-100">
-                        <th className="text-left p-1.5 font-semibold text-slate-600 italic">Hallazgo</th>
-                        <th className="p-1.5 w-12 text-center font-semibold text-slate-600 italic">
-                          {headerSigno ? '(−)' : 'Normal'}
-                        </th>
-                        <th className="p-1.5 w-12 text-center font-semibold text-slate-600 italic">
-                          {headerSigno ? '(+)' : 'Anormal'}
-                        </th>
-                        <th className="text-left p-1.5 font-semibold text-slate-600 italic">Describir</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {entries.map((entry) => (
-                        <ExamenFisicoSodexoRow
-                          key={entry.key}
-                          entry={entry}
-                          row={map[entry.key]}
-                          readonly={readonly}
-                          onPatch={(p) => patchRow(entry.key, p)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="p-1">
+                    <ExamenFisicoSodexoEntriesTable
+                      entries={entries}
+                      map={map}
+                      readonly={readonly}
+                      patchRow={patchRow}
+                    />
+                  </div>
                 </div>
               )
-            })}
+            })
+            )}
           </div>
         </div>
         )

@@ -111,10 +111,10 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   na('94_anamnesis', '9.4', 'Genitourinario', 'A la anamnesis', 907, 908),
 
   // —— 9.5 Osteomuscular (impreso: MS/MI + rejillas de arcos en PDF; no filas N/A por articulación) ——
-  sign('95_phalen_d', '9.5', 'Miembros superiores — PHALEN / TINNEL', 'PHALEN — D', 893, 894),
-  sign('95_phalen_i', '9.5', 'Miembros superiores — PHALEN / TINNEL', 'PHALEN — I', 895, 896),
-  sign('95_tinnel_d', '9.5', 'Miembros superiores — PHALEN / TINNEL', 'TINNEL — D', 897, 898),
-  sign('95_tinnel_i', '9.5', 'Miembros superiores — PHALEN / TINNEL', 'TINNEL — I', 899, 900),
+  sign('95_phalen_d', '9.5', 'Miembros superiores', 'PHALEN — D', 893, 894),
+  sign('95_phalen_i', '9.5', 'Miembros superiores', 'PHALEN — I', 895, 896),
+  sign('95_tinnel_d', '9.5', 'Miembros superiores', 'TINNEL — D', 897, 898),
+  sign('95_tinnel_i', '9.5', 'Miembros superiores', 'TINNEL — I', 899, 900),
   na('95_ms_atrofia', '9.5', 'Miembros superiores', 'Atrofia', 821, 822),
   na('95_ms_hipertrofia', '9.5', 'Miembros superiores', 'Hipertrofia', 823, 824),
   na('95_ms_palpacion', '9.5', 'Miembros superiores', 'Palpación', 825, 826),

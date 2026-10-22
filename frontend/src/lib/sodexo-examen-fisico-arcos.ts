@@ -110,7 +110,7 @@ function miApplies(mov: string, joint: string): boolean {
 
 export const SODEXO_ARCOS_MS: SodexoArcosLimbDef = {
   limb: 'ms',
-  title: 'Miembros superiores — arcos de movimiento (anormalidad)',
+  title: 'Arcos de movimiento (anormalidad)',
   movements: MS_MOVEMENTS,
   joints: MS_JOINTS,
   applies: msApplies,
@@ -118,7 +118,7 @@ export const SODEXO_ARCOS_MS: SodexoArcosLimbDef = {
 
 export const SODEXO_ARCOS_MI: SodexoArcosLimbDef = {
   limb: 'mi',
-  title: 'Miembros inferiores — arcos de movimiento (anormalidad)',
+  title: 'Arcos de movimiento (anormalidad)',
   movements: MI_MOVEMENTS,
   joints: MI_JOINTS,
   applies: miApplies,

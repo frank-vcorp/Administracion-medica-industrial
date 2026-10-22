@@ -83,16 +83,12 @@ describe('sodexo-examen-fisico-catalog', () => {
     expect(keys).not.toContain('95_hombro_d')
     expect(keys).not.toContain('95_codo_d')
     const groups = [...new Set(rows.map((r) => r.group))]
-    expect(groups).toEqual([
-      'Miembros superiores — PHALEN / TINNEL',
-      'Miembros superiores',
-      'Miembros inferiores',
-      'Lesiones repetitivas',
-    ])
-    expect(
-      rows.filter((r) => r.group === 'Miembros superiores — PHALEN / TINNEL').map((r) => r.label),
-    ).toEqual(['PHALEN — D', 'PHALEN — I', 'TINNEL — D', 'TINNEL — I'])
+    expect(groups).toEqual(['Miembros superiores', 'Miembros inferiores', 'Lesiones repetitivas'])
     expect(rows.filter((r) => r.group === 'Miembros superiores').map((r) => r.label)).toEqual([
+      'PHALEN — D',
+      'PHALEN — I',
+      'TINNEL — D',
+      'TINNEL — I',
       'Atrofia',
       'Hipertrofia',
       'Palpación',
