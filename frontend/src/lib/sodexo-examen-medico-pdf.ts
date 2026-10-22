@@ -432,6 +432,7 @@ export async function renderSodexoExamenMedicoPdf(
     ext?.examen_fisico_sodexo ?? null,
     p.sexo,
     ext?.examen_fisico_arcos_sodexo ?? null,
+    ext?.examen_fisico_columna_sodexo ?? null,
   )
 
   const ex = data.exploracion

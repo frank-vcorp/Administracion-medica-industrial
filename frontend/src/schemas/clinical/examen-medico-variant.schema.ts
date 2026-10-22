@@ -309,6 +309,21 @@ export const SodexoExtensionSchema = z.object({
     )
     .optional()
     .nullable(),
+  /** §9.6 Columna vertebral — rejillas curva N/A/D, arcos, escoliosis, dolor/espasmo. */
+  examen_fisico_columna_sodexo: z
+    .object({
+      curvas: z.record(z.string(), z.enum(['N', 'A', 'D'])).optional().nullable(),
+      escoliosis: z.enum(['DERECHA', 'IZQUIERDA']).optional().nullable(),
+      arcos: z
+        .record(z.string(), z.enum(['NORMAL', 'ANORMAL']))
+        .optional()
+        .nullable(),
+      dolor: z.enum(['SI', 'NO']).optional().nullable(),
+      espasmo: z.enum(['SI', 'NO']).optional().nullable(),
+      observaciones: cleanString,
+    })
+    .optional()
+    .nullable(),
   /** §8 ESTILOS DE VIDA — tabaquismo, licor y drogadicción (REG-SO-01). */
   estilos_vida_sodexo: z
     .object({
@@ -428,6 +443,7 @@ export function emptySodexoExtension(): SodexoExtensionData {
     estilos_vida_sodexo: null,
     examen_fisico_sodexo: null,
     examen_fisico_arcos_sodexo: null,
+    examen_fisico_columna_sodexo: null,
     titulo_seccion_sodexo: '',
   }
 }

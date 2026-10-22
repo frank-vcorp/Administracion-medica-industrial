@@ -134,19 +134,7 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
     'Texto911',
   ),
 
-  // —— 9.6 Columna vertebral (rejilla del impreso; casillas N/A/D) ——
-  na('96_curva_cervical', '9.6', 'Curva', 'Cervical', 777, 778),
-  na('96_curva_dorsal', '9.6', 'Curva', 'Dorsal', 781, 784),
-  na('96_curva_lumbar', '9.6', 'Curva', 'Lumbar', 782, 785),
-  na('96_escoliosis', '9.6', 'Curva', 'Escoliosis', 783, 786),
-  na('96_cifosis', '9.6', 'Curva', 'Cifosis', 740, 741),
-  na('96_lordosis', '9.6', 'Curva', 'Lordosis', 742, 743),
-  na('96_arco_cervical', '9.6', 'Arcos de movimiento', 'Cervical', 744, 745),
-  na('96_arco_dorsal', '9.6', 'Arcos de movimiento', 'Dorsal', 746, 747),
-  na('96_arco_lumbar', '9.6', 'Arcos de movimiento', 'Lumbar', 748, 749),
-  na('96_dolor', '9.6', 'Columna vertebral', 'Dolor', 750, 751),
-  na('96_espasmo', '9.6', 'Columna vertebral', 'Espasmo', 752, 753),
-  txt('96_observaciones', '9.6', 'Columna vertebral', 'Observaciones', 'Texto913'),
+  // —— 9.6 Columna vertebral → `examen_fisico_columna_sodexo` (rejillas N/A/D, arcos, etc.) ——
 
   // —— 9.7 Vascular periférico ——
   na('97_pulsos', '9.7', 'Vascular periférico', 'Pulsos periféricos', 805, 806),

@@ -41,6 +41,7 @@ import type { SodexoEfCatalogEntry } from '@/lib/sodexo-examen-fisico-types'
 import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibility'
 import { SODEXO_ARCOS_MI, SODEXO_ARCOS_MS } from '@/lib/sodexo-examen-fisico-arcos'
 import { SodexoArcosMovimientoGrid } from '@/components/clinical/examen-medico/SodexoArcosMovimientoGrid'
+import { SodexoColumnaVertebralSection } from '@/components/clinical/examen-medico/SodexoColumnaVertebralSection'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
   eyeAcuitySummary,
@@ -1865,6 +1866,18 @@ function ExamenFisicoSodexoTable({
       '95_muneca_i',
       '95_dedos_d',
       '95_dedos_i',
+      '96_curva_cervical',
+      '96_curva_dorsal',
+      '96_curva_lumbar',
+      '96_escoliosis',
+      '96_cifosis',
+      '96_lordosis',
+      '96_arco_cervical',
+      '96_arco_dorsal',
+      '96_arco_lumbar',
+      '96_dolor',
+      '96_espasmo',
+      '96_observaciones',
     ]) {
       if (legacy in cleaned) {
         delete cleaned[legacy]
@@ -1905,7 +1918,7 @@ function ExamenFisicoSodexoTable({
         const sectionVisible = sodexoExamenFisicoCatalogBySection(sec.id).filter((e) =>
           sodexoEfEntryVisibleForSex(e, patientSexo),
         )
-        if (sectionVisible.length === 0) return null
+        if (sectionVisible.length === 0 && sec.id !== '9.6') return null
         const genitoSexHint =
           sec.id === '9.4' && !isSodexoMalePatient(patientSexo) && !isSodexoFemalePatient(patientSexo)
         return (
@@ -1971,6 +1984,14 @@ function ExamenFisicoSodexoTable({
                   )
                 })()}
               </>
+            ) : sec.id === '9.6' ? (
+              <SodexoColumnaVertebralSection
+                value={value.examen_fisico_columna_sodexo}
+                readonly={readonly}
+                onChange={(next) =>
+                  onChange({ ...value, examen_fisico_columna_sodexo: next })
+                }
+              />
             ) : (
             sec.groups.map((group) => {
               const entries = sodexoExamenFisicoCatalogBySection(sec.id)

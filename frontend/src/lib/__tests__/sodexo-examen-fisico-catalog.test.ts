@@ -30,8 +30,12 @@ describe('sodexo-examen-fisico-catalog', () => {
     const keys = SODEXO_EXAMEN_FISICO_CATALOG.map((e) => e.key)
     expect(new Set(keys).size).toBe(keys.length)
     for (const sec of SODEXO_EXAMEN_FISICO_SECTIONS) {
-      expect(sec.groups.length).toBeGreaterThan(0)
       const inSection = SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.section === sec.id)
+      if (sec.id === '9.6') {
+        expect(inSection.length).toBe(0)
+        continue
+      }
+      expect(sec.groups.length).toBeGreaterThan(0)
       expect(inSection.length).toBeGreaterThan(0)
       for (const g of sec.groups) {
         expect(inSection.some((e) => e.group === g)).toBe(true)

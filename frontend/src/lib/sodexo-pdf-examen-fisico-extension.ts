@@ -3,6 +3,8 @@ import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibilit
 import type { SodexoEfRowValue } from '@/lib/sodexo-examen-fisico-types'
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'
 import { fillSodexoArcosFromExtension } from '@/lib/sodexo-pdf-arcos-fill'
+import { fillSodexoColumnaFromExtension } from '@/lib/sodexo-pdf-columna-fill'
+import type { SodexoColumnaExtension } from '@/lib/sodexo-examen-fisico-columna'
 import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
 
 const PIEL_KEYS = ['98_cicatrices', '98_tatuajes', '98_nevus', '98_unas', '98_dermatosis'] as const
@@ -38,8 +40,10 @@ export function fillSodexoExamenFisicoFromExtension(
   map: Record<string, SodexoEfRowValue> | null | undefined,
   patientSexo?: string | null,
   arcosMap?: Record<string, { anormal?: boolean | null }> | null,
+  columna?: SodexoColumnaExtension | null,
 ) {
   fillSodexoArcosFromExtension(form, arcosMap)
+  fillSodexoColumnaFromExtension(form, columna)
   if (!map) return
 
   const pielParts: string[] = []
