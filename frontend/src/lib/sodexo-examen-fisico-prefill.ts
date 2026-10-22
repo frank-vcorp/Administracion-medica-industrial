@@ -16,9 +16,9 @@ function inferResultado(text: string): SodexoEfRowValue | null {
     u.includes('MASA')
   if (anormal) return { resultado: 'ANORMAL', desc: t }
   if (u.includes('NORMAL') || u.includes('ÍNTEGRO') || u.includes('INTEGRO')) {
-    return { resultado: 'NORMAL', desc: t }
+    return { resultado: 'NORMAL' }
   }
-  return { desc: t }
+  return null
 }
 
 /** Sugiere captura §9 desde exploración AMI cuando la extensión está vacía. */

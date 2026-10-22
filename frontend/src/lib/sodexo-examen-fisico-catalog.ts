@@ -91,23 +91,22 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   sign('91_adeno_inf', '9.1', 'Cuello', 'Adenopatías — inferior', 625, 626),
   txt('91_protesis', '9.1', 'Orofaringe', 'Prótesis', 'Texto912'),
 
-  // —— 9.2 Tórax ——
-  na('92_inspeccion', '9.2', 'Tórax', 'Inspección', 695, 696, undefined, 'torax'),
-  na('92_pulmonar_inspeccion', '9.2', 'Pulmonar', 'Inspección', 697, 698, undefined, 'campos_pulmonares'),
-  na('92_pulmonar_percusion', '9.2', 'Pulmonar', 'Percusión', 699, 700),
-  na('92_corazon_ritmo', '9.2', 'Corazón', 'Ritmo', 701, 702, undefined, 'corazon'),
-  na('92_corazon_palpacion', '9.2', 'Corazón', 'Palpación', 703, 704),
+  // —— 9.2 Tórax (pares N/A ~x142; sin fila suelta «Inspección» — no es ítem del REG-SO-01) ——
+  na('92_pulmonar_inspeccion', '9.2', 'Pulmonar', 'Inspección', 707, 708),
+  na('92_pulmonar_percusion', '9.2', 'Pulmonar', 'Percusión', 713, 714),
+  na('92_corazon_ritmo', '9.2', 'Corazón', 'Ritmo', 701, 702),
+  na('92_corazon_palpacion', '9.2', 'Corazón', 'Palpación', 721, 722),
 
   // —— 9.3 Abdomen ——
-  na('93_ruidos', '9.3', 'Abdomen', 'Ruidos intestinales', 705, 706, undefined, 'abdomen'),
-  na('93_inspeccion', '9.3', 'Abdomen', 'Inspección', 707, 708),
+  na('93_ruidos', '9.3', 'Abdomen', 'Ruidos intestinales', 723, 724),
+  na('93_inspeccion', '9.3', 'Abdomen', 'Inspección', 705, 706),
   na('93_palpacion_megalias', '9.3', 'Abdomen', 'Palpación (megalias)', 709, 710),
   na('93_percusion', '9.3', 'Abdomen', 'Percusión', 711, 712),
-  na('93_auscultacion', '9.3', 'Abdomen', 'Auscultación', 713, 714),
+  na('93_auscultacion', '9.3', 'Abdomen', 'Auscultación', 715, 716),
   na('93_hernias', '9.3', 'Abdomen', 'Hernias', 871, 872),
 
   // —— 9.4 Genitourinario ——
-  na('94_testiculos', '9.4', 'Genitourinario', 'Testículos (hombre)', 901, 902, undefined, 'genitourinario'),
+  na('94_testiculos', '9.4', 'Genitourinario', 'Testículos (hombre)', 901, 902),
   na('94_mujer', '9.4', 'Genitourinario', 'Mujer', 903, 904),
   na('94_tr', '9.4', 'Genitourinario', 'TR (si aplica)', 905, 906),
   na('94_anamnesis', '9.4', 'Genitourinario', 'A la anamnesis', 907, 908),
@@ -126,12 +125,12 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   na('95_muneca_i', '9.5', 'Arcos de movimiento (MS)', 'Muñeca — I', 731, 732),
   na('95_dedos_d', '9.5', 'Arcos de movimiento (MS)', 'Dedos — D', 733, 734),
   na('95_dedos_i', '9.5', 'Arcos de movimiento (MS)', 'Dedos — I', 735, 736),
-  na('95_ms_inspeccion', '9.5', 'Miembros superiores', 'Inspección', 819, 820, undefined, 'ms_superiores'),
+  na('95_ms_inspeccion', '9.5', 'Miembros superiores', 'Inspección', 819, 820),
   na('95_ms_atrofia', '9.5', 'Miembros superiores', 'Atrofia', 821, 822),
   na('95_ms_hipertrofia', '9.5', 'Miembros superiores', 'Hipertrofia', 823, 824),
   na('95_ms_palpacion', '9.5', 'Miembros superiores', 'Palpación', 825, 826),
   na('95_ms_sensibilidad', '9.5', 'Miembros superiores', 'Sensibilidad', 845, 846),
-  na('95_mi_inspeccion', '9.5', 'Miembros inferiores', 'Inspección', 827, 828, undefined, 'ms_inferiores'),
+  na('95_mi_inspeccion', '9.5', 'Miembros inferiores', 'Inspección', 827, 828),
   na('95_mi_atrofia', '9.5', 'Miembros inferiores', 'Atrofia', 829, 830),
   na('95_mi_hipertrofia', '9.5', 'Miembros inferiores', 'Hipertrofia', 831, 832),
   na('95_mi_palpacion', '9.5', 'Miembros inferiores', 'Palpación', 833, 834),
@@ -142,7 +141,7 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   txt('95_lesiones_repetitivas', '9.5', 'Lesiones repetitivas', 'Estructuras anormales / LER', 'Texto911'),
 
   // —— 9.6 Columna vertebral ——
-  na('96_cervical_curva', '9.6', 'Curvas', 'Cervical', 777, 778, undefined, 'columna_vertebral'),
+  na('96_cervical_curva', '9.6', 'Curvas', 'Cervical', 777, 778),
   na('96_dorsal_curva', '9.6', 'Curvas', 'Dorsal', 781, 784),
   na('96_lumbar_curva', '9.6', 'Curvas', 'Lumbar', 782, 785),
   na('96_escoliosis', '9.6', 'Curvas', 'Escoliosis', 783, 786),
@@ -153,7 +152,7 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   na('96_lumbar_arco', '9.6', 'Arcos de movimiento', 'Lumbar — normal', 748, 749),
   na('96_dolor', '9.6', 'Observaciones', 'Dolor', 750, 751),
   na('96_espasmo', '9.6', 'Observaciones', 'Espasmo', 752, 753),
-  txt('96_observaciones', '9.6', 'Observaciones', 'Observaciones', 'Texto913', 'columna_vertebral'),
+  txt('96_observaciones', '9.6', 'Observaciones', 'Observaciones', 'Texto913'),
 
   // —— 9.7 Vascular periférico ——
   na('97_pulsos', '9.7', 'Vascular periférico', 'Pulsos periféricos', 805, 806),
