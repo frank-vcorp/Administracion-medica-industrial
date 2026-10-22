@@ -39,6 +39,8 @@ import {
 } from '@/lib/sodexo-examen-fisico-catalog'
 import type { SodexoEfCatalogEntry } from '@/lib/sodexo-examen-fisico-types'
 import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibility'
+import { SODEXO_ARCOS_LIMBS } from '@/lib/sodexo-examen-fisico-arcos'
+import { SodexoArcosMovimientoGrid } from '@/components/clinical/examen-medico/SodexoArcosMovimientoGrid'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
   eyeAcuitySummary,
@@ -1815,23 +1817,35 @@ function ExamenFisicoSodexoTable({
         if (sectionVisible.length === 0) return null
         const genitoSexHint =
           sec.id === '9.4' && !isSodexoMalePatient(patientSexo) && !isSodexoFemalePatient(patientSexo)
-        const osteoArcosHint = sec.id === '9.5'
         return (
         <div key={sec.id} className="border border-slate-200 rounded-lg overflow-hidden">
           <p className="text-xs font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200">
             {sec.id} {sec.title}
           </p>
-          {osteoArcosHint ? (
-            <p className="text-[10px] text-slate-600 bg-slate-50 px-3 py-1.5 border-b border-slate-100">
-              Las rejillas de arcos de movimiento (MS/MI) van en el PDF impreso; aquí solo PHALEN/TINNEL, inspección por palpación/sensibilidad, marcha y lesiones repetitivas.
-            </p>
-          ) : null}
           {genitoSexHint ? (
             <p className="text-[10px] text-amber-800 bg-amber-50 px-3 py-1.5 border-b border-amber-100">
               Captura el sexo del paciente en Examen Médico → Antecedentes (bloque Sexo) para mostrar Testículos o Mujer; TR y anamnesis aplican a todos.
             </p>
           ) : null}
           <div className="p-2 space-y-3">
+            {sec.id === '9.5' ? (
+              <div className="space-y-3">
+                {SODEXO_ARCOS_LIMBS.map((arcosDef) => (
+                  <SodexoArcosMovimientoGrid
+                    key={arcosDef.limb}
+                    def={arcosDef}
+                    value={value.examen_fisico_arcos_sodexo}
+                    readonly={readonly}
+                    onChange={(next) =>
+                      onChange({
+                        ...value,
+                        examen_fisico_arcos_sodexo: next,
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            ) : null}
             {sec.groups.map((group) => {
               const entries = sodexoExamenFisicoCatalogBySection(sec.id)
                 .filter((e) => e.group === group)

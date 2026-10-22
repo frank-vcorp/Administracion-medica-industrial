@@ -299,6 +299,16 @@ export const SodexoExtensionSchema = z.object({
     )
     .optional()
     .nullable(),
+  /** §9.5 rejillas arcos MS/MI — clave `ms|mi:movimiento:articulación:D|I`. */
+  examen_fisico_arcos_sodexo: z
+    .record(
+      z.string(),
+      z.object({
+        anormal: z.boolean().optional().nullable(),
+      }),
+    )
+    .optional()
+    .nullable(),
   /** §8 ESTILOS DE VIDA — tabaquismo, licor y drogadicción (REG-SO-01). */
   estilos_vida_sodexo: z
     .object({
@@ -417,6 +427,7 @@ export function emptySodexoExtension(): SodexoExtensionData {
     patologicos_sodexo: null,
     estilos_vida_sodexo: null,
     examen_fisico_sodexo: null,
+    examen_fisico_arcos_sodexo: null,
     titulo_seccion_sodexo: '',
   }
 }

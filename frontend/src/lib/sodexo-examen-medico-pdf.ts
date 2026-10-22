@@ -427,7 +427,12 @@ export async function renderSodexoExamenMedicoPdf(
   setText(form, SODEXO_VISIOMETRIA_TEXT.observaciones, av.campimetria ?? av.ishihara)
   fillSodexoVisiometriaFromExtension(form, ext)
 
-  fillSodexoExamenFisicoFromExtension(form, ext?.examen_fisico_sodexo ?? null, p.sexo)
+  fillSodexoExamenFisicoFromExtension(
+    form,
+    ext?.examen_fisico_sodexo ?? null,
+    p.sexo,
+    ext?.examen_fisico_arcos_sodexo ?? null,
+  )
 
   const ex = data.exploracion
   const efExt = ext?.examen_fisico_sodexo
