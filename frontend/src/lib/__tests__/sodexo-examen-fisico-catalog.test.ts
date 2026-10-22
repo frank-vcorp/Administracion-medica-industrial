@@ -77,6 +77,38 @@ describe('sodexo-examen-fisico-catalog', () => {
     expect(isSodexoMalePatient('Mujer')).toBe(false)
   })
 
+  it('§9.5 Osteomuscular — grupos del impreso (sin arcos inventados)', () => {
+    const rows = SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.section === '9.5')
+    const keys = rows.map((r) => r.key)
+    expect(keys).not.toContain('95_hombro_d')
+    expect(keys).not.toContain('95_codo_d')
+    const groups = [...new Set(rows.map((r) => r.group))]
+    expect(groups).toEqual([
+      'Miembros superiores — PHALEN / TINNEL',
+      'Miembros superiores',
+      'Miembros inferiores',
+      'Lesiones repetitivas',
+    ])
+    expect(
+      rows.filter((r) => r.group === 'Miembros superiores — PHALEN / TINNEL').map((r) => r.label),
+    ).toEqual(['PHALEN — D', 'PHALEN — I', 'TINNEL — D', 'TINNEL — I'])
+    expect(rows.filter((r) => r.group === 'Miembros superiores').map((r) => r.label)).toEqual([
+      'Atrofia',
+      'Hipertrofia',
+      'Palpación',
+      'Sensibilidad',
+    ])
+    expect(rows.filter((r) => r.group === 'Miembros inferiores').map((r) => r.label)).toEqual([
+      'Atrofia',
+      'Hipertrofia',
+      'Palpación',
+      'Sensibilidad',
+      'MARCHA',
+      'Claudicación',
+      'Ayudas',
+    ])
+  })
+
   it('§9.4 genitourinario según sexo', () => {
     const byKey = (k: string) => SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === k)!
     expect(sodexoEfEntryVisibleForSex(byKey('94_testiculos'), 'Masculino')).toBe(true)

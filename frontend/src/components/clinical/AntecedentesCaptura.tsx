@@ -943,8 +943,12 @@ export function AntecedentesCaptura({
         ))}
       </fieldset>
 
-      {/* ── Sexo (condicional gine / repro) ───────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4">
+      {/* ── Sexo, gineco/repro e inmunizaciones (antes “Módulo 1”) ─────── */}
+      <fieldset className="border border-teal-200 rounded-xl p-3 bg-teal-50/30">
+        <legend className="text-xs font-bold text-teal-800 uppercase tracking-wider px-1">
+          Sexo, antecedentes ginecológicos/reproductivos e inmunizaciones
+        </legend>
+      <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4 mt-2">
         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Sexo</span>
         <div className="flex gap-2">
           {M1_SEX_OPTIONS.map(opt => (
@@ -1034,6 +1038,7 @@ export function AntecedentesCaptura({
             className="w-full mt-1 text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
           />
         </div>
+      </fieldset>
       </fieldset>
 
       {onAntecedentesMedicoChange && (

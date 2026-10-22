@@ -400,7 +400,7 @@ export function SodexoExtension({
         <BlockSubsection title="Datos ya capturados (papeleta AMI)">
           <AmiMirrorTable
             rows={identificacionAmiRows(amiCtx)}
-            emptyHint="Completa datos personales en Examen Médico → Antecedentes (nombre, fecha de nacimiento, sexo, escolaridad, domicilio, puesto, etc.)."
+            emptyHint="Completa Examen Médico → Antecedentes (datos personales arriba; sexo al final de la misma pestaña)."
           />
         </BlockSubsection>
         <BlockSubsection title="Campos adicionales Sodexo — contacto y domicilio">
@@ -691,13 +691,13 @@ export function SodexoExtension({
       >
         <BlockSubsection
           title="Referencia AMI (opcional)"
-          hint="Antecedentes → Módulo 1 (vacunas). Prellenado sugerido si la rejilla Sodexo está vacía."
+          hint="Antecedentes → bloque Inmunizaciones (final de la pestaña). Prellenado sugerido si la rejilla Sodexo está vacía."
         >
           <AmiMirrorTable
             rows={flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 20).filter((r) =>
               /vac|inmun|hepat|covid|tetano|neumoc/i.test(r.label),
             )}
-            emptyHint="Captura vacunas en Examen Médico → Antecedentes → Módulo 1."
+            emptyHint="Captura vacunas en Examen Médico → Antecedentes → Inmunizaciones."
           />
         </BlockSubsection>
         <BlockSubsection title="Captura REG-SO-01">
@@ -710,17 +710,17 @@ export function SodexoExtension({
         blockId="7"
         section="7"
         title="Historia gineco-obstétrica"
-        subtitle="§7 REG-SO-01 — solo si el paciente es mujer (sexo en Módulo 1 / Antecedentes; no depende del médico)."
+        subtitle="§7 REG-SO-01 — solo si el paciente es mujer (sexo en Antecedentes; no depende del médico examinador)."
       >
         <BlockSubsection
           title="Referencia AMI (opcional)"
-          hint="Antecedentes → Módulo 1. Prellenado sugerido si §7 Sodexo está vacío."
+          hint="Antecedentes → Sexo y antecedentes ginecológicos. Prellenado sugerido si §7 Sodexo está vacío."
         >
           <AmiMirrorTable
             rows={flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 16).filter((r) =>
               /gine|menstr|gesta|fum|citolog|menarca|ritmo|mpf/i.test(r.label),
             )}
-            emptyHint="Captura gineco en Antecedentes → Módulo 1."
+            emptyHint="Captura gineco en Examen Médico → Antecedentes (tras elegir sexo Femenino)."
           />
         </BlockSubsection>
         <BlockSubsection title="Captura REG-SO-01">
@@ -1727,7 +1727,13 @@ function ExamenFisicoSodexoRow({
           disabled={readonly || !isAnormal}
           value={row?.desc ?? ''}
           onChange={(e) => onPatch({ desc: e.target.value })}
-          placeholder={isAnormal ? 'Describir…' : '—'}
+          placeholder={
+            isAnormal
+              ? /atrofia|hipertrofia/i.test(entry.label)
+                ? '¿Cuál?…'
+                : 'Describir…'
+              : '—'
+          }
           className="w-full border border-slate-200 rounded p-1 disabled:bg-slate-50 text-[11px]"
         />
       </td>
@@ -1756,6 +1762,21 @@ function ExamenFisicoSodexoTable({
       cleaned['93_auscultacion'] = cleaned['93_ruidos']
       delete cleaned['93_ruidos']
       touched = true
+    }
+    for (const legacy of [
+      '95_hombro_d',
+      '95_hombro_i',
+      '95_codo_d',
+      '95_codo_i',
+      '95_muneca_d',
+      '95_muneca_i',
+      '95_dedos_d',
+      '95_dedos_i',
+    ]) {
+      if (legacy in cleaned) {
+        delete cleaned[legacy]
+        touched = true
+      }
     }
     for (const key of Object.keys(cleaned)) {
       const entry = SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === key)
@@ -1794,14 +1815,20 @@ function ExamenFisicoSodexoTable({
         if (sectionVisible.length === 0) return null
         const genitoSexHint =
           sec.id === '9.4' && !isSodexoMalePatient(patientSexo) && !isSodexoFemalePatient(patientSexo)
+        const osteoArcosHint = sec.id === '9.5'
         return (
         <div key={sec.id} className="border border-slate-200 rounded-lg overflow-hidden">
           <p className="text-xs font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200">
             {sec.id} {sec.title}
           </p>
+          {osteoArcosHint ? (
+            <p className="text-[10px] text-slate-600 bg-slate-50 px-3 py-1.5 border-b border-slate-100">
+              Las rejillas de arcos de movimiento (MS/MI) van en el PDF impreso; aquí solo PHALEN/TINNEL, inspección por palpación/sensibilidad, marcha y lesiones repetitivas.
+            </p>
+          ) : null}
           {genitoSexHint ? (
             <p className="text-[10px] text-amber-800 bg-amber-50 px-3 py-1.5 border-b border-amber-100">
-              Captura el sexo del paciente en Módulo 1 para mostrar Testículos o Mujer; TR y anamnesis aplican a todos.
+              Captura el sexo del paciente en Examen Médico → Antecedentes (bloque Sexo) para mostrar Testículos o Mujer; TR y anamnesis aplican a todos.
             </p>
           ) : null}
           <div className="p-2 space-y-3">
