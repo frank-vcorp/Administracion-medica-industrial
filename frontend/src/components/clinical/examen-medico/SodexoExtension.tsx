@@ -867,33 +867,6 @@ export function SodexoExtension({
         </table>
         </BlockSubsection>
 
-        <BlockSubsection title="Hallazgos anormales — texto «Cuál»">
-        <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="text-left p-2 font-semibold text-slate-600 w-24">Campo</th>
-              <th className="text-left p-2 font-semibold text-slate-600">Descripción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(['cual_1', 'cual_2', 'cual_3', 'cual_4'] as const).map((k, i) => (
-              <tr key={k} className="border-t border-slate-100">
-                <td className="p-2 text-slate-600 font-medium">Cuál {i + 1}</td>
-                <td className="p-2">
-                  <input
-                    disabled={readonly}
-                    value={value.examen_anormal_cual?.[k] ?? ''}
-                    onChange={(e) =>
-                      set('examen_anormal_cual', { ...(value.examen_anormal_cual ?? {}), [k]: e.target.value })
-                    }
-                    className="w-full border border-slate-200 rounded p-1.5 text-sm"
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </BlockSubsection>
       </SodexoBlock>
 
       <SodexoBlock blockId="10" section="10" title="Diagnósticos" mode="ami">

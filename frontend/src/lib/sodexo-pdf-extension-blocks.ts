@@ -30,13 +30,12 @@ export function fillSodexoConsentFromCheckIn(
 export function fillSodexoExtensionBlocks(form: PdfForm, ext: SodexoExtensionData | null) {
   if (!ext) return
 
+  /** Capturas antiguas (antes de mapear «Cuál*» a filas §9.4 / §9.5). */
   const cual = ext.examen_anormal_cual
-  if (cual) {
-    sodexoSetText(form, 'Cuál', cual.cual_1)
-    sodexoSetText(form, 'Cuál_2', cual.cual_2)
-    sodexoSetText(form, 'Cuál_3', cual.cual_3)
-    sodexoSetText(form, 'Cuál_4', cual.cual_4)
-  }
+  if (cual?.cual_1?.trim()) sodexoSetText(form, 'Cuál', cual.cual_1)
+  if (cual?.cual_2?.trim()) sodexoSetText(form, 'Cuál_2', cual.cual_2)
+  if (cual?.cual_3?.trim()) sodexoSetText(form, 'Cuál_3', cual.cual_3)
+  if (cual?.cual_4?.trim()) sodexoSetText(form, 'Cuál_4', cual.cual_4)
 
   if (ext.titulo_seccion_sodexo?.trim()) {
     sodexoSetText(form, 'SALUD OCUPACIONAL SODEXO MÉXICO', ext.titulo_seccion_sodexo)

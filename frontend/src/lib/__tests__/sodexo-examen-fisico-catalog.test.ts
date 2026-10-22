@@ -109,6 +109,18 @@ describe('sodexo-examen-fisico-catalog', () => {
     ])
   })
 
+  it('§9.4/9.5 — campos PDF «Cuál» en fila Anormal + Describir', () => {
+    const testiculos = SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === '94_testiculos')!
+    const mujer = SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === '94_mujer')!
+    const msAtrofia = SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === '95_ms_atrofia')!
+    expect(testiculos.pdf?.desc).toBe('Cuál')
+    expect(mujer.pdf?.desc).toBe('Cuál_2')
+    expect(msAtrofia.pdf?.desc).toBe('Cuál_3')
+    expect(
+      SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === '95_ms_hipertrofia')!.pdf?.desc,
+    ).toBe('Cuál_4')
+  })
+
   it('§9.8 Piel y faneras — Normal / Anormal / Describir por ítem', () => {
     const rows = SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.section === '9.8')
     expect(rows.map((r) => r.label)).toEqual([

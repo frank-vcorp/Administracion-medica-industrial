@@ -105,8 +105,9 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   na('93_hernias', '9.3', 'Abdomen', 'Hernias', 871, 872),
 
   // —— 9.4 Genitourinario ——
-  na('94_testiculos', '9.4', 'Genitourinario', 'Testículos', 901, 902, undefined, 'male'),
-  na('94_mujer', '9.4', 'Genitourinario', 'Mujer', 903, 904, undefined, 'female'),
+  /** «Cuál» del AcroForm junto a la rejilla §9.4 (no es un bloque aparte en el impreso). */
+  na('94_testiculos', '9.4', 'Genitourinario', 'Testículos', 901, 902, 'Cuál', 'male'),
+  na('94_mujer', '9.4', 'Genitourinario', 'Mujer', 903, 904, 'Cuál_2', 'female'),
   na('94_tr', '9.4', 'Genitourinario', 'TR (si aplica)', 905, 906),
   na('94_anamnesis', '9.4', 'Genitourinario', 'A la anamnesis', 907, 908),
 
@@ -115,8 +116,8 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   sign('95_phalen_i', '9.5', 'Miembros superiores', 'PHALEN — I', 895, 896),
   sign('95_tinnel_d', '9.5', 'Miembros superiores', 'TINNEL — D', 897, 898),
   sign('95_tinnel_i', '9.5', 'Miembros superiores', 'TINNEL — I', 899, 900),
-  na('95_ms_atrofia', '9.5', 'Miembros superiores', 'Atrofia', 821, 822),
-  na('95_ms_hipertrofia', '9.5', 'Miembros superiores', 'Hipertrofia', 823, 824),
+  na('95_ms_atrofia', '9.5', 'Miembros superiores', 'Atrofia', 821, 822, 'Cuál_3'),
+  na('95_ms_hipertrofia', '9.5', 'Miembros superiores', 'Hipertrofia', 823, 824, 'Cuál_4'),
   na('95_ms_palpacion', '9.5', 'Miembros superiores', 'Palpación', 825, 826),
   na('95_ms_sensibilidad', '9.5', 'Miembros superiores', 'Sensibilidad', 845, 846),
   na('95_mi_atrofia', '9.5', 'Miembros inferiores', 'Atrofia', 829, 830),

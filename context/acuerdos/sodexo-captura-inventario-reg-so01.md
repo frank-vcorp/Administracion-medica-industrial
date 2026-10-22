@@ -90,7 +90,7 @@ Referencias: `SodexoExtensionSchema`, `SodexoExtension.tsx`, `sodexo-examen-medi
 | Encabezado (estado general/mental, mano dominante) | **Extensión Sodexo** `examen_encabezado` | UI ✅ (P0) |
 | Casillas Normal/Anormal por región | **AMI** exploración + **Ext.** futuro | Parcial; sin default masivo |
 | Casillas visión (checkbox) | **Extensión Sodexo** `visiometria_casillas` | UI + PDF ✅ |
-| Campos `Cuál` / `Cuál_2`… | **Extensión Sodexo** `examen_anormal_cual` | UI + PDF ✅ |
+| Campos `Cuál` / `Cuál_2`… | **§9.4** Testículos/Mujer y **§9.5** Atrofia/Hipertrofia MS (`examen_fisico_sodexo` → Describir) | PDF ✅; sin bloque suelto en UI |
 
 ---
 
