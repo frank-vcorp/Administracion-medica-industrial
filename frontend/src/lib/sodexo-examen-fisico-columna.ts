@@ -51,12 +51,13 @@ export function sodexoColumnaArcoKey(mov: string, region: string): string {
   return `arco:${mov}:${region}`
 }
 
+/** Alineado con `SodexoExtensionSchema.examen_fisico_columna_sodexo`. */
 export type SodexoColumnaExtension = {
   /** `curva:cifosis|cervical` → N | A | D */
-  curvas?: Record<string, SodexoColumnaNad | null | undefined> | null
+  curvas?: Record<string, SodexoColumnaNad> | null
   escoliosis?: 'DERECHA' | 'IZQUIERDA' | null
   /** `arco:flexion:cervical` → NORMAL | ANORMAL */
-  arcos?: Record<string, 'NORMAL' | 'ANORMAL' | null | undefined> | null
+  arcos?: Record<string, 'NORMAL' | 'ANORMAL'> | null
   dolor?: 'SI' | 'NO' | null
   espasmo?: 'SI' | 'NO' | null
   observaciones?: string | null

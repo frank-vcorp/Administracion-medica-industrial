@@ -1,10 +1,8 @@
 'use client'
 
 import { Fragment } from 'react'
-import type {
-  SodexoColumnaExtension,
-  SodexoColumnaNad,
-} from '@/lib/sodexo-examen-fisico-columna'
+import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
+import type { SodexoColumnaNad } from '@/lib/sodexo-examen-fisico-columna'
 import {
   SODEXO_COLUMNA_ARCO_MOVIMIENTOS,
   SODEXO_COLUMNA_CURVAS,
@@ -17,16 +15,15 @@ import {
 
 const NAD_OPTS: SodexoColumnaNad[] = ['N', 'A', 'D']
 
+type ColumnaValue = SodexoExtensionData['examen_fisico_columna_sodexo']
+
 type Props = {
-  value: SodexoColumnaExtension | null | undefined
-  onChange: (next: SodexoColumnaExtension | null) => void
+  value: ColumnaValue
+  onChange: (next: ColumnaValue) => void
   readonly?: boolean
 }
 
-function patch(
-  prev: SodexoColumnaExtension | null | undefined,
-  p: Partial<SodexoColumnaExtension>,
-): SodexoColumnaExtension {
+function patch(prev: ColumnaValue, p: Partial<NonNullable<ColumnaValue>>): NonNullable<ColumnaValue> {
   return { ...(prev ?? {}), ...p }
 }
 
@@ -34,7 +31,7 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
   const curvas = value?.curvas ?? {}
   const arcos = value?.arcos ?? {}
 
-  const commit = (next: SodexoColumnaExtension) => {
+  const commit = (next: NonNullable<ColumnaValue>) => {
     onChange(sodexoColumnaIsEmpty(next) ? null : next)
   }
 
