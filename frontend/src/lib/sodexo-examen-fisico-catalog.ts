@@ -140,12 +140,12 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   na('97_pulsos', '9.7', 'Vascular periférico', 'Pulsos periféricos', 805, 806),
   na('97_varices', '9.7', 'Vascular periférico', 'Várices', 807, 808),
 
-  // —— 9.8 Piel y faneras ——
-  txt('98_cicatrices', '9.8', 'Piel y faneras', 'Cicatrices', 'Texto882'),
-  txt('98_tatuajes', '9.8', 'Piel y faneras', 'Tatuajes', 'Texto882'),
-  txt('98_nevus', '9.8', 'Piel y faneras', 'Nevus', 'Texto882'),
-  txt('98_unas', '9.8', 'Piel y faneras', 'Uñas', 'Texto882'),
-  txt('98_dermatosis', '9.8', 'Piel y faneras', 'Dermatosis / otras', 'Texto882'),
+  // —— 9.8 Piel y faneras — Normal / Anormal / Describir (AcroForm p.3, y≈654→607) ——
+  na('98_cicatrices', '9.8', 'Piel y faneras', 'Cicatrices', 658, 659, 'Texto890'),
+  na('98_tatuajes', '9.8', 'Piel y faneras', 'Tatuajes', 660, 661, 'Texto891'),
+  na('98_nevus', '9.8', 'Piel y faneras', 'Nevus', 662, 663, 'Texto892'),
+  na('98_unas', '9.8', 'Piel y faneras', 'Uñas', 664, 665, 'Texto889'),
+  na('98_dermatosis', '9.8', 'Piel y faneras', 'Dermatosis / otras', 666, 667, 'Texto888'),
 ]
 
 export function sodexoExamenFisicoCatalogBySection(section: SodexoEfSectionId): SodexoEfCatalogEntry[] {

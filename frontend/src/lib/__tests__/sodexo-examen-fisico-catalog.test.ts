@@ -109,6 +109,29 @@ describe('sodexo-examen-fisico-catalog', () => {
     ])
   })
 
+  it('§9.8 Piel y faneras — Normal / Anormal / Describir por ítem', () => {
+    const rows = SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.section === '9.8')
+    expect(rows.map((r) => r.label)).toEqual([
+      'Cicatrices',
+      'Tatuajes',
+      'Nevus',
+      'Uñas',
+      'Dermatosis / otras',
+    ])
+    for (const row of rows) {
+      expect(row.kind).toBe('normal_anormal')
+      expect(row.pdf?.normal).toBeTruthy()
+      expect(row.pdf?.abnormal).toBeTruthy()
+      expect(row.pdf?.desc).toBeTruthy()
+    }
+    const cicatrices = rows.find((r) => r.key === '98_cicatrices')!
+    expect(cicatrices.pdf).toEqual({
+      normal: 'Check Box658',
+      abnormal: 'Check Box659',
+      desc: 'Texto890',
+    })
+  })
+
   it('§9.4 genitourinario según sexo', () => {
     const byKey = (k: string) => SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === k)!
     expect(sodexoEfEntryVisibleForSex(byKey('94_testiculos'), 'Masculino')).toBe(true)

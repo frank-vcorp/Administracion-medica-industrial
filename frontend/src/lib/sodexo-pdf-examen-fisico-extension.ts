@@ -7,8 +7,6 @@ import { fillSodexoColumnaFromExtension } from '@/lib/sodexo-pdf-columna-fill'
 import type { SodexoColumnaExtension } from '@/lib/sodexo-examen-fisico-columna'
 import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
 
-const PIEL_KEYS = ['98_cicatrices', '98_tatuajes', '98_nevus', '98_unas', '98_dermatosis'] as const
-
 function applyRow(form: PdfForm, entry: (typeof SODEXO_EXAMEN_FISICO_CATALOG)[number], row: SodexoEfRowValue) {
   if (entry.kind === 'normal_anormal' && entry.pdf) {
     if (row.resultado === 'NORMAL') sodexoSetCheck(form, entry.pdf.normal, true)
@@ -46,19 +44,10 @@ export function fillSodexoExamenFisicoFromExtension(
   fillSodexoColumnaFromExtension(form, columna)
   if (!map) return
 
-  const pielParts: string[] = []
   for (const entry of SODEXO_EXAMEN_FISICO_CATALOG) {
     if (!sodexoEfEntryVisibleForSex(entry, patientSexo)) continue
     const row = rowFromMap(map, entry.key)
     if (!row) continue
-    if (PIEL_KEYS.includes(entry.key as (typeof PIEL_KEYS)[number])) {
-      const line = row.desc?.trim()
-      if (line) pielParts.push(`${entry.label}: ${line}`)
-      continue
-    }
     applyRow(form, entry, row)
-  }
-  if (pielParts.length) {
-    sodexoSetText(form, 'Texto882', pielParts.join(' · '))
   }
 }
