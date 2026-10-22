@@ -1,4 +1,5 @@
 import { SODEXO_EXAMEN_FISICO_CATALOG } from '@/lib/sodexo-examen-fisico-catalog'
+import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibility'
 import type { SodexoEfRowValue } from '@/lib/sodexo-examen-fisico-types'
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'
 import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
@@ -22,15 +23,26 @@ function applyRow(form: PdfForm, entry: (typeof SODEXO_EXAMEN_FISICO_CATALOG)[nu
   }
 }
 
+function rowFromMap(
+  map: Record<string, SodexoEfRowValue>,
+  key: string,
+): SodexoEfRowValue | undefined {
+  if (map[key]) return map[key]
+  if (key === '93_auscultacion' && map['93_ruidos']) return map['93_ruidos']
+  return undefined
+}
+
 export function fillSodexoExamenFisicoFromExtension(
   form: PdfForm,
   map: Record<string, SodexoEfRowValue> | null | undefined,
+  patientSexo?: string | null,
 ) {
   if (!map) return
 
   const pielParts: string[] = []
   for (const entry of SODEXO_EXAMEN_FISICO_CATALOG) {
-    const row = map[entry.key]
+    if (!sodexoEfEntryVisibleForSex(entry, patientSexo)) continue
+    const row = rowFromMap(map, entry.key)
     if (!row) continue
     if (PIEL_KEYS.includes(entry.key as (typeof PIEL_KEYS)[number])) {
       const line = row.desc?.trim()

@@ -18,30 +18,46 @@ export function resolvePatientSexo(
   examForm: Record<string, string>,
   modulo1: Record<string, string>,
   antecedentes: Record<string, unknown>,
+  prefilledData?: Record<string, unknown> | null,
 ): string {
   const dp = antecedentes.datos_personales
   const fromDp =
     dp && typeof dp === 'object' && !Array.isArray(dp)
       ? String((dp as Record<string, unknown>).sexo ?? '')
       : ''
+  const pf = prefilledData ?? {}
+  const fromPf = str(pf.sexo) || str(pf.m1_sexo)
   return (
     modulo1.m1_sexo?.trim() ||
     examForm.sexo?.trim() ||
     fromDp.trim() ||
+    fromPf ||
     ''
   )
 }
 
+/** Sexo biológico del paciente (Módulo 1 / antecedentes), no del médico examinador. */
 export function isSodexoFemalePatient(sexo: string | undefined | null): boolean {
-  const s = (sexo ?? '').trim()
-  if (!s) return false
-  return /^(F|FEMENINO|MUJER)/i.test(s)
+  const lower = (sexo ?? '').trim().toLowerCase()
+  if (!lower) return false
+  if (lower === 'masculino' || lower === 'hombre' || lower === 'varon' || lower === 'varón' || lower === 'm') {
+    return false
+  }
+  return lower === 'femenino' || lower === 'mujer' || lower === 'f' || lower.startsWith('fem')
 }
 
 export function isSodexoMalePatient(sexo: string | undefined | null): boolean {
-  const s = (sexo ?? '').trim()
-  if (!s) return false
-  return /^(M|MASCULINO|HOMBRE|VARON|VARÓN)/i.test(s)
+  const lower = (sexo ?? '').trim().toLowerCase()
+  if (!lower) return false
+  if (lower === 'femenino' || lower === 'mujer' || lower === 'f') return false
+  return (
+    lower === 'masculino' ||
+    lower === 'hombre' ||
+    lower === 'varon' ||
+    lower === 'varón' ||
+    lower === 'm' ||
+    lower.startsWith('masc')
+  )
 }
 
 export function sodexoNeedsActividadesBlock(tipo: string | null | undefined): boolean {

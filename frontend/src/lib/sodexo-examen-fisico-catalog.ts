@@ -97,11 +97,11 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   na('92_percusion', '9.2', 'Pulmonar', 'Percusión', 713, 714),
   na('92_palpacion', '9.2', 'Corazón', 'Palpación', 721, 722),
 
-  // —— 9.3 Abdomen (impreso: Ruidos; Inspección; Palpación (Megalias); Percusión; Hernias) ——
-  na('93_ruidos', '9.3', 'Abdomen', 'Ruidos', 723, 724),
+  // —— 9.3 Abdomen (impreso: Inspección; Palpación (Megalias); Percusión; Auscultación; Hernias) ——
   na('93_inspeccion', '9.3', 'Abdomen', 'Inspección', 705, 706),
   na('93_palpacion_megalias', '9.3', 'Abdomen', 'Palpación (Megalias)', 709, 710),
   na('93_percusion', '9.3', 'Abdomen', 'Percusión', 711, 712),
+  na('93_auscultacion', '9.3', 'Abdomen', 'Auscultación', 715, 716),
   na('93_hernias', '9.3', 'Abdomen', 'Hernias', 871, 872),
 
   // —— 9.4 Genitourinario ——

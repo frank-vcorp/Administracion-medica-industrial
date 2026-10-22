@@ -272,6 +272,7 @@ export function SodexoExtension({
     amiCtx.examForm,
     amiCtx.modulo1,
     amiCtx.antecedentesCaptured,
+    amiCtx.prefilledData,
   )
   const showGineco = isSodexoFemalePatient(patientSexo)
   const showActividades = sodexoNeedsActividadesBlock(value.tipo_examen)
@@ -709,7 +710,7 @@ export function SodexoExtension({
         blockId="7"
         section="7"
         title="Historia gineco-obstétrica"
-        subtitle="§7 REG-SO-01 — solo paciente mujer (sexo en Módulo 1 / Antecedentes)."
+        subtitle="§7 REG-SO-01 — solo si el paciente es mujer (sexo en Módulo 1 / Antecedentes; no depende del médico)."
       >
         <BlockSubsection
           title="Referencia AMI (opcional)"
@@ -1751,6 +1752,11 @@ function ExamenFisicoSodexoTable({
     if (readonly || !value.examen_fisico_sodexo) return
     const cleaned = { ...value.examen_fisico_sodexo }
     let touched = false
+    if (cleaned['93_ruidos'] && !cleaned['93_auscultacion']) {
+      cleaned['93_auscultacion'] = cleaned['93_ruidos']
+      delete cleaned['93_ruidos']
+      touched = true
+    }
     for (const key of Object.keys(cleaned)) {
       const entry = SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === key)
       if (entry && !sodexoEfEntryVisibleForSex(entry, patientSexo)) {
@@ -1795,7 +1801,7 @@ function ExamenFisicoSodexoTable({
           </p>
           {genitoSexHint ? (
             <p className="text-[10px] text-amber-800 bg-amber-50 px-3 py-1.5 border-b border-amber-100">
-              Captura el sexo en Módulo 1 para mostrar Testículos o Mujer; TR y anamnesis aplican a todos.
+              Captura el sexo del paciente en Módulo 1 para mostrar Testículos o Mujer; TR y anamnesis aplican a todos.
             </p>
           ) : null}
           <div className="p-2 space-y-3">

@@ -8,6 +8,7 @@ import {
 } from '@/lib/sodexo-examen-fisico-catalog'
 import { prefillExamenFisicoSodexoFromAmi } from '@/lib/sodexo-examen-fisico-prefill'
 import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibility'
+import { isSodexoFemalePatient, isSodexoMalePatient } from '@/lib/sodexo-ami-mirror'
 
 const TEMPLATE = path.join(
   process.cwd(),
@@ -59,20 +60,29 @@ describe('sodexo-examen-fisico-catalog', () => {
   it('§9.3 Abdomen — solo ítems del impreso', () => {
     const rows = SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.section === '9.3')
     expect(rows.map((r) => r.label)).toEqual([
-      'Ruidos',
       'Inspección',
       'Palpación (Megalias)',
       'Percusión',
+      'Auscultación',
       'Hernias',
     ])
   })
 
+  it('sexo del paciente (Módulo 1)', () => {
+    expect(isSodexoMalePatient('Masculino')).toBe(true)
+    expect(isSodexoFemalePatient('Masculino')).toBe(false)
+    expect(isSodexoFemalePatient('Femenino')).toBe(true)
+    expect(isSodexoMalePatient('Femenino')).toBe(false)
+    expect(isSodexoFemalePatient('Mujer')).toBe(true)
+    expect(isSodexoMalePatient('Mujer')).toBe(false)
+  })
+
   it('§9.4 genitourinario según sexo', () => {
     const byKey = (k: string) => SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === k)!
-    expect(sodexoEfEntryVisibleForSex(byKey('94_testiculos'), 'M')).toBe(true)
-    expect(sodexoEfEntryVisibleForSex(byKey('94_testiculos'), 'F')).toBe(false)
-    expect(sodexoEfEntryVisibleForSex(byKey('94_mujer'), 'FEMENINO')).toBe(true)
-    expect(sodexoEfEntryVisibleForSex(byKey('94_mujer'), 'M')).toBe(false)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_testiculos'), 'Masculino')).toBe(true)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_testiculos'), 'Femenino')).toBe(false)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_mujer'), 'Femenino')).toBe(true)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_mujer'), 'Masculino')).toBe(false)
     expect(sodexoEfEntryVisibleForSex(byKey('94_tr'), 'M')).toBe(true)
     expect(sodexoEfEntryVisibleForSex(byKey('94_tr'), 'F')).toBe(true)
   })
