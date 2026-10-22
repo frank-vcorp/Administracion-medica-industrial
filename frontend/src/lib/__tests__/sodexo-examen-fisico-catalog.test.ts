@@ -55,15 +55,20 @@ describe('sodexo-examen-fisico-catalog', () => {
     }
   })
 
-  it('prefill desde exploración AMI solo §9.1', () => {
-    const map = prefillExamenFisicoSodexoFromAmi({
-      cabeza: 'NORMAL al examen',
-      abdomen: 'ANORMAL: dolor',
-      torax: 'Mesomórfico, amplexión normal',
-    })
-    expect(map['91_craneo']?.resultado).toBe('NORMAL')
-    expect(map['91_craneo']?.desc).toBeUndefined()
-    expect(map['92_pulmonar_inspeccion']).toBeUndefined()
-    expect(map['93_inspeccion']).toBeUndefined()
+  it('§9.3 Abdomen — solo ítems del impreso', () => {
+    const rows = SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.section === '9.3')
+    expect(rows.map((r) => r.label)).toEqual([
+      'Ruidos',
+      'Inspección',
+      'Palpación (Megalias)',
+      'Percusión',
+      'Hernias',
+    ])
+  })
+
+  it('sin prellenado AMI en §9 Sodexo', () => {
+    expect(
+      prefillExamenFisicoSodexoFromAmi({ cabeza: 'NORMAL', torax: 'Mesomórfico' }),
+    ).toEqual({})
   })
 })

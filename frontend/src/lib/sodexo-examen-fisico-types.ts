@@ -33,10 +33,6 @@ export type SodexoEfCatalogEntry = {
   signo?: SodexoEfPdfSignoPar
   /** Campo texto AcroForm (§9.8 u observaciones). */
   textField?: string
-  /** Prellenado desde exploración AMI (`examForm`). */
-  amiKey?: string
-  /** Solo marca una casilla cuando `resultado === 'NORMAL'` (p. ej. «A la anamnesis»). */
-  checkNormal?: string
 }
 
 export type SodexoEfSectionDef = {

@@ -33,15 +33,12 @@ import { estilosVidaSodexoIsEmpty } from '@/lib/sodexo-estilos-vida-catalog'
 import { prefillEstilosVidaSodexoFromApnp } from '@/lib/sodexo-estilos-vida-prefill'
 import {
   examenFisicoSodexoIsEmpty,
-  SODEXO_EXAMEN_FISICO_CATALOG,
   SODEXO_EXAMEN_FISICO_SECTIONS,
   sodexoExamenFisicoCatalogBySection,
 } from '@/lib/sodexo-examen-fisico-catalog'
-import { prefillExamenFisicoSodexoFromAmi } from '@/lib/sodexo-examen-fisico-prefill'
 import type { SodexoEfCatalogEntry } from '@/lib/sodexo-examen-fisico-types'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
-  amiExploracionValue,
   eyeAcuitySummary,
   flattenAmiSectionForDisplay,
   historiaOcupacionalAmiNarrative,
@@ -334,14 +331,6 @@ export function SodexoExtension({
     onChange,
     value,
   ])
-
-  useEffect(() => {
-    if (readonly) return
-    if (!examenFisicoSodexoIsEmpty(value.examen_fisico_sodexo)) return
-    const suggested = prefillExamenFisicoSodexoFromAmi(amiCtx.examForm)
-    if (examenFisicoSodexoIsEmpty(suggested)) return
-    onChange({ ...value, examen_fisico_sodexo: suggested })
-  }, [amiCtx.examForm, value.examen_fisico_sodexo, readonly, onChange, value])
 
   return (
     <div className="space-y-6">
@@ -769,20 +758,6 @@ export function SodexoExtension({
               ...eyeAcuitySummary(amiCtx.eyeAcuity),
             ]}
             emptyHint="Completa pestañas Somatometría, Signos vitales y Agudeza visual."
-          />
-        </BlockSubsection>
-        <BlockSubsection
-          title="Referencia AMI (opcional)"
-          hint="Exploración física AMI. Prellenado sugerido si §9 Sodexo está vacío."
-        >
-          <AmiMirrorTable
-            rows={SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.amiKey)
-              .map((e) => {
-                const val = amiExploracionValue(amiCtx.examForm, e.amiKey!)
-                return val ? { label: e.label, value: val } : null
-              })
-              .filter(Boolean) as { label: string; value: string }[]}
-            emptyHint="Captura en Examen Médico → Exploración física."
           />
         </BlockSubsection>
         <BlockSubsection title="Captura REG-SO-01 (9.1 – 9.8)">
@@ -1788,11 +1763,14 @@ function ExamenFisicoSodexoTable({
               const entries = sodexoExamenFisicoCatalogBySection(sec.id).filter((e) => e.group === group)
               if (entries.length === 0) return null
               const headerSigno = entries.some((e) => e.kind === 'signo')
+              const showGroupTitle = sec.groups.length > 1 && group !== sec.title
               return (
                 <div key={group} className="border border-slate-100 rounded-md overflow-hidden">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
-                    {group}
-                  </p>
+                  {showGroupTitle ? (
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+                      {group}
+                    </p>
+                  ) : null}
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-white border-b border-slate-100">
