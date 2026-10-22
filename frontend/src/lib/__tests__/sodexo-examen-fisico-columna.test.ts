@@ -4,11 +4,11 @@ import path from 'node:path'
 import { PDFDocument } from 'pdf-lib'
 import {
   SODEXO_COLUMNA_ARCO_PDF,
+  SODEXO_COLUMNA_ARCO_SINTOMA_PDF,
   SODEXO_COLUMNA_CURVA_PDF,
-  SODEXO_COLUMNA_DOLOR_PDF,
   SODEXO_COLUMNA_ESCOLIOSIS_PDF,
-  SODEXO_COLUMNA_ESPASMO_PDF,
   sodexoColumnaCurvaKey,
+  sodexoColumnaEscoliosisKey,
 } from '@/lib/sodexo-examen-fisico-columna'
 
 const TEMPLATE = path.join(
@@ -26,6 +26,14 @@ describe('sodexo-examen-fisico-columna', () => {
     })
   })
 
+  it('escoliosis: 2 lados × 3 regiones × No/Sí', () => {
+    expect(Object.keys(SODEXO_COLUMNA_ESCOLIOSIS_PDF)).toHaveLength(6)
+    expect(SODEXO_COLUMNA_ESCOLIOSIS_PDF[sodexoColumnaEscoliosisKey('derecha', 'cervical')]).toEqual({
+      NO: 'Check Box749',
+      SI: 'Check Box750',
+    })
+  })
+
   it('referencia campos AcroForm §9.6 mapeados', async () => {
     const bytes = readFileSync(TEMPLATE)
     const doc = await PDFDocument.load(bytes)
@@ -34,15 +42,18 @@ describe('sodexo-examen-fisico-columna', () => {
     for (const m of Object.values(SODEXO_COLUMNA_CURVA_PDF)) {
       for (const f of Object.values(m)) if (f) fields.add(f)
     }
-    for (const f of Object.values(SODEXO_COLUMNA_ESCOLIOSIS_PDF)) fields.add(f)
+    for (const p of Object.values(SODEXO_COLUMNA_ESCOLIOSIS_PDF)) {
+      fields.add(p.NO)
+      fields.add(p.SI)
+    }
     for (const p of Object.values(SODEXO_COLUMNA_ARCO_PDF)) {
       fields.add(p.normal)
       fields.add(p.abnormal)
     }
-    fields.add(SODEXO_COLUMNA_DOLOR_PDF.SI)
-    fields.add(SODEXO_COLUMNA_DOLOR_PDF.NO)
-    fields.add(SODEXO_COLUMNA_ESPASMO_PDF.SI)
-    fields.add(SODEXO_COLUMNA_ESPASMO_PDF.NO)
+    for (const p of Object.values(SODEXO_COLUMNA_ARCO_SINTOMA_PDF)) {
+      fields.add(p.NO)
+      fields.add(p.SI)
+    }
     fields.add('Texto913')
     for (const f of fields) {
       expect(names.has(f)).toBe(true)

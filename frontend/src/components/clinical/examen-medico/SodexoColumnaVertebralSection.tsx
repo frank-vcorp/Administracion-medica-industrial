@@ -2,18 +2,22 @@
 
 import { Fragment } from 'react'
 import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
-import type { SodexoColumnaNad } from '@/lib/sodexo-examen-fisico-columna'
+import type { SodexoColumnaNad, SodexoColumnaSiNo } from '@/lib/sodexo-examen-fisico-columna'
 import {
   SODEXO_COLUMNA_ARCO_MOVIMIENTOS,
+  SODEXO_COLUMNA_ARCO_REGIONES,
   SODEXO_COLUMNA_CURVAS,
+  SODEXO_COLUMNA_ESCOLIOSIS_LADOS,
   SODEXO_COLUMNA_NAD_LABELS,
   SODEXO_COLUMNA_REGIONES,
   sodexoColumnaArcoKey,
   sodexoColumnaCurvaKey,
+  sodexoColumnaEscoliosisKey,
   sodexoColumnaIsEmpty,
 } from '@/lib/sodexo-examen-fisico-columna'
 
 const NAD_OPTS: SodexoColumnaNad[] = ['N', 'A', 'D']
+const SI_NO_OPTS: SodexoColumnaSiNo[] = ['NO', 'SI']
 
 type ColumnaValue = SodexoExtensionData['examen_fisico_columna_sodexo']
 
@@ -29,6 +33,7 @@ function patch(prev: ColumnaValue, p: Partial<NonNullable<ColumnaValue>>): NonNu
 
 export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Props) {
   const curvas = value?.curvas ?? {}
+  const escoliosis = value?.escoliosis ?? {}
   const arcos = value?.arcos ?? {}
 
   const commit = (next: NonNullable<ColumnaValue>) => {
@@ -37,14 +42,21 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
 
   const setCurva = (curva: string, region: string, nad: SodexoColumnaNad) => {
     const key = sodexoColumnaCurvaKey(curva, region)
-    const nextCurvas = { ...curvas, [key]: nad }
-    commit(patch(value, { curvas: nextCurvas }))
+    commit(patch(value, { curvas: { ...curvas, [key]: nad } }))
   }
 
-  const setArco = (mov: string, region: string, resultado: 'NORMAL' | 'ANORMAL') => {
-    const key = sodexoColumnaArcoKey(mov, region)
-    const nextArcos = { ...arcos, [key]: resultado }
-    commit(patch(value, { arcos: nextArcos }))
+  const setEscoliosis = (lado: 'derecha' | 'izquierda', region: string, opt: SodexoColumnaSiNo) => {
+    const key = sodexoColumnaEscoliosisKey(lado, region)
+    commit(patch(value, { escoliosis: { ...escoliosis, [key]: opt } }))
+  }
+
+  const setArco = (
+    mov: string,
+    aspect: string,
+    resultado: 'NORMAL' | 'ANORMAL' | SodexoColumnaSiNo,
+  ) => {
+    const key = sodexoColumnaArcoKey(mov, aspect)
+    commit(patch(value, { arcos: { ...arcos, [key]: resultado } }))
   }
 
   return (
@@ -120,45 +132,15 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
         </div>
       </div>
 
-      <div className="border border-slate-200 rounded-md p-3 bg-white">
-        <p className="text-[10px] font-bold uppercase text-slate-600 mb-2">Escoliosis</p>
-        <div className="flex gap-4 text-xs">
-          {(['DERECHA', 'IZQUIERDA'] as const).map((opt) => (
-            <label key={opt} className="inline-flex items-center gap-1.5">
-              <input
-                type="radio"
-                name="col-escoliosis"
-                disabled={readonly}
-                checked={value?.escoliosis === opt}
-                onChange={() => commit(patch(value, { escoliosis: opt }))}
-              />
-              {opt === 'DERECHA' ? 'Derecha' : 'Izquierda'}
-            </label>
-          ))}
-          <label className="inline-flex items-center gap-1.5 text-slate-500">
-            <input
-              type="radio"
-              name="col-escoliosis"
-              disabled={readonly}
-              checked={!value?.escoliosis}
-              onChange={() => commit(patch(value, { escoliosis: null }))}
-            />
-            Sin marcar
-          </label>
-        </div>
-      </div>
-
       <div className="border border-slate-200 rounded-md overflow-hidden">
         <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
-          Arcos de movimiento
+          Escoliosis
         </p>
         <div className="overflow-x-auto p-2">
-          <table className="w-full text-[10px] border-collapse min-w-[400px]">
+          <table className="w-full text-[10px] border-collapse min-w-[360px]">
             <thead>
               <tr className="border-b border-slate-200">
-                <th className="text-left p-1.5 font-semibold text-slate-600 border-r border-slate-100">
-                  Movimiento
-                </th>
+                <th className="text-left p-1.5 font-semibold text-slate-600 border-r border-slate-100" />
                 {SODEXO_COLUMNA_REGIONES.map((r) => (
                   <th
                     key={r.id}
@@ -173,17 +155,90 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
                 <th className="border-r border-slate-100" />
                 {SODEXO_COLUMNA_REGIONES.map((r) => (
                   <Fragment key={r.id}>
+                    <th className="p-0.5 font-medium text-slate-500">No</th>
+                    <th className="p-0.5 font-medium text-slate-500 border-r border-slate-100">Sí</th>
+                  </Fragment>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {SODEXO_COLUMNA_ESCOLIOSIS_LADOS.map((lado) => (
+                <tr key={lado.id} className="border-b border-slate-50">
+                  <td className="p-1.5 font-medium text-slate-800 border-r border-slate-100">{lado.label}</td>
+                  {SODEXO_COLUMNA_REGIONES.map((region) => {
+                    const key = sodexoColumnaEscoliosisKey(lado.id, region.id)
+                    const val = escoliosis[key]
+                    return (
+                      <Fragment key={region.id}>
+                        {SI_NO_OPTS.map((opt) => (
+                          <td
+                            key={opt}
+                            className={`p-0.5 text-center ${opt === 'SI' ? 'border-r border-slate-100' : ''}`}
+                          >
+                            <input
+                              type="radio"
+                              name={`col-esc-${key}`}
+                              disabled={readonly}
+                              checked={val === opt}
+                              onChange={() => setEscoliosis(lado.id, region.id, opt)}
+                              aria-label={`Escoliosis ${lado.label} ${region.label} ${opt}`}
+                            />
+                          </td>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="border border-slate-200 rounded-md overflow-hidden">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
+          Arcos de movimiento
+        </p>
+        <div className="overflow-x-auto p-2">
+          <table className="w-full text-[10px] border-collapse min-w-[520px]">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className="text-left p-1.5 font-semibold text-slate-600 border-r border-slate-100">
+                  Movimiento
+                </th>
+                {SODEXO_COLUMNA_ARCO_REGIONES.map((r) => (
+                  <th
+                    key={r.id}
+                    colSpan={2}
+                    className="p-1 font-semibold text-slate-700 border-r border-slate-100 text-center"
+                  >
+                    {r.label}
+                  </th>
+                ))}
+                <th colSpan={2} className="p-1 font-semibold text-slate-700 border-r border-slate-100 text-center">
+                  Dolor
+                </th>
+                <th colSpan={2} className="p-1 font-semibold text-slate-700 text-center">Espasmo</th>
+              </tr>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="border-r border-slate-100" />
+                {SODEXO_COLUMNA_ARCO_REGIONES.map((r) => (
+                  <Fragment key={r.id}>
                     <th className="p-0.5 font-medium text-slate-500">Normal</th>
                     <th className="p-0.5 font-medium text-slate-500 border-r border-slate-100">Anorm.</th>
                   </Fragment>
                 ))}
+                <th className="p-0.5 font-medium text-slate-500">No</th>
+                <th className="p-0.5 font-medium text-slate-500 border-r border-slate-100">Sí</th>
+                <th className="p-0.5 font-medium text-slate-500">No</th>
+                <th className="p-0.5 font-medium text-slate-500">Sí</th>
               </tr>
             </thead>
             <tbody>
               {SODEXO_COLUMNA_ARCO_MOVIMIENTOS.map((mov) => (
                 <tr key={mov.id} className="border-b border-slate-50">
                   <td className="p-1.5 font-medium text-slate-800 border-r border-slate-100">{mov.label}</td>
-                  {SODEXO_COLUMNA_REGIONES.map((region) => {
+                  {SODEXO_COLUMNA_ARCO_REGIONES.map((region) => {
                     const key = sodexoColumnaArcoKey(mov.id, region.id)
                     const res = arcos[key]
                     return (
@@ -209,35 +264,29 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
                       </Fragment>
                     )
                   })}
+                  {(['dolor', 'espasmo'] as const).map((aspect) => (
+                    <Fragment key={aspect}>
+                      {SI_NO_OPTS.map((opt, idx) => (
+                        <td
+                          key={opt}
+                          className={`p-0.5 text-center ${idx === 1 && aspect === 'dolor' ? 'border-r border-slate-100' : ''}`}
+                        >
+                          <input
+                            type="radio"
+                            name={`col-arco-${sodexoColumnaArcoKey(mov.id, aspect)}`}
+                            disabled={readonly}
+                            checked={arcos[sodexoColumnaArcoKey(mov.id, aspect)] === opt}
+                            onChange={() => setArco(mov.id, aspect, opt)}
+                          />
+                        </td>
+                      ))}
+                    </Fragment>
+                  ))}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {(['dolor', 'espasmo'] as const).map((field) => (
-          <div key={field} className="border border-slate-200 rounded-md p-3 bg-white">
-            <p className="text-[10px] font-bold uppercase text-slate-600 mb-2">
-              {field === 'dolor' ? 'Dolor' : 'Espasmo'}
-            </p>
-            <div className="flex gap-3 text-xs">
-              {(['NO', 'SI'] as const).map((opt) => (
-                <label key={opt} className="inline-flex items-center gap-1">
-                  <input
-                    type="radio"
-                    name={`col-${field}`}
-                    disabled={readonly}
-                    checked={value?.[field] === opt}
-                    onChange={() => commit(patch(value, { [field]: opt }))}
-                  />
-                  {opt}
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
 
       <div className="border border-slate-200 rounded-md p-3 bg-white">

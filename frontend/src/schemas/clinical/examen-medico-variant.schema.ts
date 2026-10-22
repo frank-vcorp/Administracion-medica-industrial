@@ -309,17 +309,15 @@ export const SodexoExtensionSchema = z.object({
     )
     .optional()
     .nullable(),
-  /** §9.6 Columna vertebral — rejillas curva N/A/D, arcos, escoliosis, dolor/espasmo. */
+  /** §9.6 Columna vertebral — rejillas curva N/A/D, escoliosis No/Sí, arcos + dolor/espasmo por movimiento. */
   examen_fisico_columna_sodexo: z
     .object({
       curvas: z.record(z.string(), z.enum(['N', 'A', 'D'])).optional().nullable(),
-      escoliosis: z.enum(['DERECHA', 'IZQUIERDA']).optional().nullable(),
+      escoliosis: z.record(z.string(), z.enum(['NO', 'SI'])).optional().nullable(),
       arcos: z
-        .record(z.string(), z.enum(['NORMAL', 'ANORMAL']))
+        .record(z.string(), z.enum(['NORMAL', 'ANORMAL', 'SI', 'NO']))
         .optional()
         .nullable(),
-      dolor: z.enum(['SI', 'NO']).optional().nullable(),
-      espasmo: z.enum(['SI', 'NO']).optional().nullable(),
       observaciones: cleanString,
     })
     .optional()

@@ -3,6 +3,8 @@
  */
 
 export type SodexoColumnaNad = 'N' | 'A' | 'D'
+export type SodexoColumnaSiNo = 'SI' | 'NO'
+export type SodexoColumnaLado = 'derecha' | 'izquierda'
 
 export type SodexoColumnaRegion = {
   id: 'cervical' | 'dorsal' | 'lumbar'
@@ -31,8 +33,17 @@ export const SODEXO_COLUMNA_NAD_LABELS: Record<SodexoColumnaNad, string> = {
   D: 'Disminuida',
 }
 
+export const SODEXO_COLUMNA_ESCOLIOSIS_LADOS: { id: SodexoColumnaLado; label: string }[] = [
+  { id: 'derecha', label: 'Derecha' },
+  { id: 'izquierda', label: 'Izquierda' },
+]
+
 export function sodexoColumnaCurvaKey(curva: string, region: string): string {
   return `curva:${curva}:${region}`
+}
+
+export function sodexoColumnaEscoliosisKey(lado: SodexoColumnaLado, region: string): string {
+  return `escoliosis:${lado}:${region}`
 }
 
 export type SodexoColumnaArcoMov = {
@@ -47,33 +58,44 @@ export const SODEXO_COLUMNA_ARCO_MOVIMIENTOS: SodexoColumnaArcoMov[] = [
   { id: 'inclinacion_lateral', label: 'Inclinación lateral' },
 ]
 
-export function sodexoColumnaArcoKey(mov: string, region: string): string {
-  return `arco:${mov}:${region}`
+/** Columnas de la rejilla «Arcos de movimiento» (no confundir con regiones de curva). */
+export const SODEXO_COLUMNA_ARCO_REGIONES: { id: 'cervical' | 'dorsolumbar'; label: string }[] = [
+  { id: 'cervical', label: 'Cervical' },
+  { id: 'dorsolumbar', label: 'Dorsolumbar' },
+]
+
+export function sodexoColumnaArcoKey(mov: string, aspect: string): string {
+  return `arco:${mov}:${aspect}`
 }
 
 /** Alineado con `SodexoExtensionSchema.examen_fisico_columna_sodexo`. */
 export type SodexoColumnaExtension = {
   /** `curva:cifosis|cervical` → N | A | D */
   curvas?: Record<string, SodexoColumnaNad> | null
-  escoliosis?: 'DERECHA' | 'IZQUIERDA' | null
-  /** `arco:flexion:cervical` → NORMAL | ANORMAL */
-  arcos?: Record<string, 'NORMAL' | 'ANORMAL'> | null
-  dolor?: 'SI' | 'NO' | null
-  espasmo?: 'SI' | 'NO' | null
+  /** `escoliosis:derecha|cervical` → NO | SI */
+  escoliosis?: Record<string, SodexoColumnaSiNo> | null
+  /**
+   * `arco:flexion:cervical` → NORMAL | ANORMAL;
+   * `arco:flexion:dolor` / `arco:flexion:espasmo` → NO | SI.
+   */
+  arcos?: Record<string, 'NORMAL' | 'ANORMAL' | SodexoColumnaSiNo> | null
   observaciones?: string | null
 }
 
 export function sodexoColumnaIsEmpty(data: SodexoColumnaExtension | null | undefined): boolean {
   if (!data) return true
   if ((data.observaciones ?? '').trim()) return false
-  if (data.escoliosis) return false
-  if (data.dolor === 'SI' || data.espasmo === 'SI') return false
+  if (data.escoliosis && Object.values(data.escoliosis).some((v) => v === 'SI' || v === 'NO')) {
+    return false
+  }
   if (data.curvas && Object.values(data.curvas).some((v) => v === 'N' || v === 'A' || v === 'D')) {
     return false
   }
   if (
     data.arcos &&
-    Object.values(data.arcos).some((v) => v === 'NORMAL' || v === 'ANORMAL')
+    Object.values(data.arcos).some(
+      (v) => v === 'NORMAL' || v === 'ANORMAL' || v === 'SI' || v === 'NO',
+    )
   ) {
     return false
   }
@@ -111,24 +133,84 @@ export const SODEXO_COLUMNA_CURVA_PDF: Record<
     D: 'Check Box748',
   },
   [sodexoColumnaCurvaKey('lordosis', 'lumbar')]: {
-    N: 'Check Box749',
-    A: 'Check Box750',
-    D: 'Check Box751',
+    N: 'Check Box781',
+    A: 'Check Box784',
+    D: 'Check Box787',
   },
 }
 
-export const SODEXO_COLUMNA_ESCOLIOSIS_PDF: Record<'DERECHA' | 'IZQUIERDA', string> = {
-  DERECHA: 'Check Box755',
-  IZQUIERDA: 'Check Box757',
+/** Escoliosis: lado × región × No/Sí (impreso §9.6). */
+export const SODEXO_COLUMNA_ESCOLIOSIS_PDF: Record<string, { NO: string; SI: string }> = {
+  [sodexoColumnaEscoliosisKey('derecha', 'cervical')]: {
+    NO: 'Check Box749',
+    SI: 'Check Box750',
+  },
+  [sodexoColumnaEscoliosisKey('derecha', 'dorsal')]: {
+    NO: 'Check Box753',
+    SI: 'Check Box755',
+  },
+  [sodexoColumnaEscoliosisKey('derecha', 'lumbar')]: {
+    NO: 'Check Box757',
+    SI: 'Check Box759',
+  },
+  [sodexoColumnaEscoliosisKey('izquierda', 'cervical')]: {
+    NO: 'Check Box751',
+    SI: 'Check Box752',
+  },
+  [sodexoColumnaEscoliosisKey('izquierda', 'dorsal')]: {
+    NO: 'Check Box754',
+    SI: 'Check Box756',
+  },
+  [sodexoColumnaEscoliosisKey('izquierda', 'lumbar')]: {
+    NO: 'Check Box758',
+    SI: 'Check Box760',
+  },
 }
 
 export const SODEXO_COLUMNA_ARCO_PDF: Record<string, { normal: string; abnormal: string }> = {
-  [sodexoColumnaArcoKey('flexion', 'cervical')]: { normal: 'Check Box744', abnormal: 'Check Box745' },
-  [sodexoColumnaArcoKey('flexion', 'dorsal')]: { normal: 'Check Box761', abnormal: 'Check Box762' },
-  [sodexoColumnaArcoKey('flexion', 'lumbar')]: { normal: 'Check Box763', abnormal: 'Check Box764' },
-  [sodexoColumnaArcoKey('extension', 'cervical')]: { normal: 'Check Box805', abnormal: 'Check Box807' },
-  [sodexoColumnaArcoKey('extension', 'dorsal')]: { normal: 'Check Box809', abnormal: 'Check Box810' },
+  [sodexoColumnaArcoKey('flexion', 'cervical')]: {
+    normal: 'Check Box761',
+    abnormal: 'Check Box762',
+  },
+  [sodexoColumnaArcoKey('flexion', 'dorsolumbar')]: {
+    normal: 'Check Box763',
+    abnormal: 'Check Box764',
+  },
+  [sodexoColumnaArcoKey('extension', 'cervical')]: {
+    normal: 'Check Box794',
+    abnormal: 'Check Box797',
+  },
+  [sodexoColumnaArcoKey('extension', 'dorsolumbar')]: {
+    normal: 'Check Box800',
+    abnormal: 'Check Box803',
+  },
+  [sodexoColumnaArcoKey('rotacion', 'cervical')]: {
+    normal: 'Check Box805',
+    abnormal: 'Check Box806',
+  },
+  [sodexoColumnaArcoKey('rotacion', 'dorsolumbar')]: {
+    normal: 'Check Box807',
+    abnormal: 'Check Box808',
+  },
+  [sodexoColumnaArcoKey('inclinacion_lateral', 'cervical')]: {
+    normal: 'Check Box809',
+    abnormal: 'Check Box810',
+  },
+  [sodexoColumnaArcoKey('inclinacion_lateral', 'dorsolumbar')]: {
+    normal: 'Check Box811',
+    abnormal: 'Check Box812',
+  },
 }
 
-export const SODEXO_COLUMNA_DOLOR_PDF = { SI: 'Check Box752', NO: 'Check Box754' }
-export const SODEXO_COLUMNA_ESPASMO_PDF = { SI: 'Check Box753', NO: 'Check Box756' }
+export const SODEXO_COLUMNA_ARCO_SINTOMA_PDF: Record<
+  string,
+  { NO: string; SI: string }
+> = {
+  [sodexoColumnaArcoKey('flexion', 'dolor')]: { NO: 'Check Box793', SI: 'Check Box796' },
+  [sodexoColumnaArcoKey('flexion', 'espasmo')]: { NO: 'Check Box799', SI: 'Check Box802' },
+  [sodexoColumnaArcoKey('extension', 'dolor')]: { NO: 'Check Box795', SI: 'Check Box798' },
+  [sodexoColumnaArcoKey('extension', 'espasmo')]: { NO: 'Check Box801', SI: 'Check Box804' },
+  [sodexoColumnaArcoKey('rotacion', 'dolor')]: { NO: 'Check Box813', SI: 'Check Box814' },
+  [sodexoColumnaArcoKey('rotacion', 'espasmo')]: { NO: 'Check Box815', SI: 'Check Box816' },
+  [sodexoColumnaArcoKey('inclinacion_lateral', 'dolor')]: { NO: 'Check Box817', SI: 'Check Box818' },
+}
