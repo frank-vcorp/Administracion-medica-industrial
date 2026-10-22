@@ -767,104 +767,13 @@ export function SodexoExtension({
             emptyHint="Completa pestañas Somatometría, Signos vitales y Agudeza visual."
           />
         </BlockSubsection>
-        <BlockSubsection title="Captura REG-SO-01 (9.1 – 9.8)">
+        <BlockSubsection title="Captura REG-SO-01 (encabezado + 9.1 – 9.8)">
           <ExamenFisicoSodexoTable
             value={value}
             onChange={onChange}
             readonly={readonly}
             patientSexo={patientSexo}
           />
-        </BlockSubsection>
-        <BlockSubsection title="Encabezado y casillas exclusivas Sodexo">
-        <div className="flex flex-wrap gap-4 items-center">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              disabled={readonly}
-              checked={Boolean(value.examen_encabezado?.estado_general_normal)}
-              onChange={(e) =>
-                set('examen_encabezado', {
-                  ...(value.examen_encabezado ?? {}),
-                  estado_general_normal: e.target.checked,
-                })
-              }
-            />
-            Estado general normal
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              disabled={readonly}
-              checked={Boolean(value.examen_encabezado?.estado_mental_normal)}
-              onChange={(e) =>
-                set('examen_encabezado', {
-                  ...(value.examen_encabezado ?? {}),
-                  estado_mental_normal: e.target.checked,
-                })
-              }
-            />
-            Estado mental normal
-          </label>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">Mano dominante</label>
-            <select
-              disabled={readonly}
-              value={value.examen_encabezado?.mano_dominante ?? ''}
-              onChange={(e) =>
-                set('examen_encabezado', {
-                  ...(value.examen_encabezado ?? {}),
-                  mano_dominante: (e.target.value || null) as ManoDominante | null,
-                })
-              }
-              className="border border-slate-200 rounded-lg p-2 text-sm"
-            >
-              <option value="">—</option>
-              <option value="DIESTRA">Diestra</option>
-              <option value="ZURDA">Zurda</option>
-              <option value="AMBIDIESTRA">Ambidiestra</option>
-            </select>
-          </div>
-        </div>
-        </BlockSubsection>
-
-        <BlockSubsection title="Agudeza visual — casillas del REG-SO-01">
-        <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="text-left p-2 font-semibold text-slate-600">Medición</th>
-              <th className="text-center p-2 font-semibold text-slate-600 w-24">Marcar</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(
-              [
-                ['lejana_od_sin_correccion', 'Lejana OD sin corrección'],
-                ['lejana_oi_sin_correccion', 'Lejana OI sin corrección'],
-                ['lejana_od_con_correccion', 'Lejana OD con corrección'],
-                ['lejana_oi_con_correccion', 'Lejana OI con corrección'],
-                ['cercana_od_sin_correccion', 'Cercana OD sin corrección'],
-                ['cercana_oi_sin_correccion', 'Cercana OI sin corrección'],
-              ] as const
-            ).map(([key, label]) => (
-              <tr key={key} className="border-t border-slate-100">
-                <td className="p-2 text-slate-700">{label}</td>
-                <td className="p-2 text-center">
-                  <input
-                    type="checkbox"
-                    disabled={readonly}
-                    checked={Boolean(value.visiometria_casillas?.[key])}
-                    onChange={(e) =>
-                      set('visiometria_casillas', {
-                        ...(value.visiometria_casillas ?? {}),
-                        [key]: e.target.checked,
-                      })
-                    }
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
         </BlockSubsection>
 
       </SodexoBlock>
@@ -1614,6 +1523,121 @@ type SodexoEfExtensionRow = NonNullable<
   NonNullable<SodexoExtensionData['examen_fisico_sodexo']>[string]
 >
 
+const SODEXO_VISIOMETRIA_CASILLAS: {
+  key: keyof NonNullable<SodexoExtensionData['visiometria_casillas']>
+  label: string
+}[] = [
+  { key: 'lejana_od_sin_correccion', label: 'Lejana OD sin corrección' },
+  { key: 'lejana_oi_sin_correccion', label: 'Lejana OI sin corrección' },
+  { key: 'lejana_od_con_correccion', label: 'Lejana OD con corrección' },
+  { key: 'lejana_oi_con_correccion', label: 'Lejana OI con corrección' },
+  { key: 'cercana_od_sin_correccion', label: 'Cercana OD sin corrección' },
+  { key: 'cercana_oi_sin_correccion', label: 'Cercana OI sin corrección' },
+]
+
+function SodexoExamenEncabezadoCapture({
+  value,
+  onChange,
+  readonly,
+}: {
+  value: SodexoExtensionData
+  onChange: (next: SodexoExtensionData) => void
+  readonly?: boolean
+}) {
+  const patchEnc = (p: Partial<NonNullable<SodexoExtensionData['examen_encabezado']>>) => {
+    const next = { ...(value.examen_encabezado ?? {}), ...p }
+    const empty =
+      !next.estado_general_normal && !next.estado_mental_normal && !next.mano_dominante
+    onChange({ ...value, examen_encabezado: empty ? null : next })
+  }
+  return (
+    <div className="flex flex-wrap gap-4 items-center p-2">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          disabled={readonly}
+          checked={Boolean(value.examen_encabezado?.estado_general_normal)}
+          onChange={(e) => patchEnc({ estado_general_normal: e.target.checked })}
+        />
+        Estado general normal
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          disabled={readonly}
+          checked={Boolean(value.examen_encabezado?.estado_mental_normal)}
+          onChange={(e) => patchEnc({ estado_mental_normal: e.target.checked })}
+        />
+        Estado mental normal
+      </label>
+      <div>
+        <label className="block text-xs font-bold text-slate-500 mb-1">Mano dominante</label>
+        <select
+          disabled={readonly}
+          value={value.examen_encabezado?.mano_dominante ?? ''}
+          onChange={(e) =>
+            patchEnc({ mano_dominante: (e.target.value || null) as ManoDominante | null })
+          }
+          className="border border-slate-200 rounded-lg p-2 text-sm"
+        >
+          <option value="">—</option>
+          <option value="DIESTRA">Diestra</option>
+          <option value="ZURDA">Zurda</option>
+          <option value="AMBIDIESTRA">Ambidiestra</option>
+        </select>
+      </div>
+    </div>
+  )
+}
+
+function SodexoVisiometriaCasillasCapture({
+  value,
+  onChange,
+  readonly,
+}: {
+  value: SodexoExtensionData
+  onChange: (next: SodexoExtensionData) => void
+  readonly?: boolean
+}) {
+  return (
+    <div className="border border-slate-100 rounded-md overflow-hidden">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+        Agudeza visual — casillas REG-SO-01
+      </p>
+      <p className="text-[10px] text-slate-500 px-2 py-1 border-b border-slate-50">
+        Valores Snellen en la tabla AMI arriba; aquí solo marcas las casillas del impreso Sodexo.
+      </p>
+      <table className="w-full text-[11px] border-collapse">
+        <thead>
+          <tr className="bg-slate-50 border-b border-slate-100">
+            <th className="text-left p-1.5 font-semibold text-slate-600">Medición</th>
+            <th className="text-center p-1.5 font-semibold text-slate-600 w-20">Marcar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {SODEXO_VISIOMETRIA_CASILLAS.map(({ key, label }) => (
+            <tr key={key} className="border-t border-slate-50">
+              <td className="p-1.5 text-slate-800">{label}</td>
+              <td className="p-1.5 text-center">
+                <input
+                  type="checkbox"
+                  disabled={readonly}
+                  checked={Boolean(value.visiometria_casillas?.[key])}
+                  onChange={(e) => {
+                    const next = { ...(value.visiometria_casillas ?? {}), [key]: e.target.checked }
+                    const any = Object.values(next).some(Boolean)
+                    onChange({ ...value, visiometria_casillas: any ? next : null })
+                  }}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function ExamenFisicoSodexoRow({
   entry,
   row,
@@ -1887,6 +1911,12 @@ function ExamenFisicoSodexoTable({
 
   return (
     <div className="space-y-6">
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <p className="text-xs font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200">
+          Encabezado §9
+        </p>
+        <SodexoExamenEncabezadoCapture value={value} onChange={onChange} readonly={readonly} />
+      </div>
       {SODEXO_EXAMEN_FISICO_SECTIONS.map((sec) => {
         const sectionVisible = sodexoExamenFisicoCatalogBySection(sec.id).filter((e) =>
           sodexoEfEntryVisibleForSex(e, patientSexo),
@@ -1966,30 +1996,39 @@ function ExamenFisicoSodexoTable({
                 }
               />
             ) : (
-            sec.groups.map((group) => {
-              const entries = sodexoExamenFisicoCatalogBySection(sec.id)
-                .filter((e) => e.group === group)
-                .filter((e) => sodexoEfEntryVisibleForSex(e, patientSexo))
-              if (entries.length === 0) return null
-              const showGroupTitle = sec.groups.length > 1 && group !== sec.title
-              return (
-                <div key={group} className="border border-slate-100 rounded-md overflow-hidden">
-                  {showGroupTitle ? (
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
-                      {group}
-                    </p>
-                  ) : null}
-                  <div className="p-1">
-                    <ExamenFisicoSodexoEntriesTable
-                      entries={entries}
-                      map={map}
-                      readonly={readonly}
-                      patchRow={patchRow}
-                    />
-                  </div>
-                </div>
-              )
-            })
+              <>
+                {sec.groups.map((group) => {
+                  const entries = sodexoExamenFisicoCatalogBySection(sec.id)
+                    .filter((e) => e.group === group)
+                    .filter((e) => sodexoEfEntryVisibleForSex(e, patientSexo))
+                  if (entries.length === 0) return null
+                  const showGroupTitle = sec.groups.length > 1 && group !== sec.title
+                  return (
+                    <div key={group} className="border border-slate-100 rounded-md overflow-hidden">
+                      {showGroupTitle ? (
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+                          {group}
+                        </p>
+                      ) : null}
+                      <div className="p-1">
+                        <ExamenFisicoSodexoEntriesTable
+                          entries={entries}
+                          map={map}
+                          readonly={readonly}
+                          patchRow={patchRow}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+                {sec.id === '9.1' ? (
+                  <SodexoVisiometriaCasillasCapture
+                    value={value}
+                    onChange={onChange}
+                    readonly={readonly}
+                  />
+                ) : null}
+              </>
             )}
           </div>
         </div>

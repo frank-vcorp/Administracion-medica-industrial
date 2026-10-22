@@ -87,9 +87,9 @@ Referencias: `SodexoExtensionSchema`, `SodexoExtension.tsx`, `sodexo-examen-medi
 | Texto por sistema (neurológico, cabeza, …) | **AMI** — exploración física | Proyección ✅ |
 | Somatometría, TA, FC, FR, temperatura | **AMI** | Proyección ✅ |
 | Agudeza visual (texto) | **AMI** | Proyección ✅ |
-| Encabezado (estado general/mental, mano dominante) | **Extensión Sodexo** `examen_encabezado` | UI ✅ (P0) |
-| Casillas Normal/Anormal por región | **AMI** exploración + **Ext.** futuro | Parcial; sin default masivo |
-| Casillas visión (checkbox) | **Extensión Sodexo** `visiometria_casillas` | UI + PDF ✅ |
+| Encabezado (estado general/mental, mano dominante) | **Extensión Sodexo** `examen_encabezado` | UI al inicio del §9 ✅ |
+| Casillas Normal/Anormal por región | **AMI** exploración + **Ext.** `examen_fisico_sodexo` | UI §9.1–9.8 ✅ |
+| Casillas visión (checkbox) | **Extensión Sodexo** `visiometria_casillas` | UI dentro de **§9.1** + PDF ✅ |
 | Campos `Cuál` / `Cuál_2`… | **§9.4** Testículos/Mujer y **§9.5** Atrofia/Hipertrofia MS (`examen_fisico_sodexo` → Describir) | PDF ✅; sin bloque suelto en UI |
 
 ---
