@@ -38,6 +38,12 @@ export function isSodexoFemalePatient(sexo: string | undefined | null): boolean 
   return /^(F|FEMENINO|MUJER)/i.test(s)
 }
 
+export function isSodexoMalePatient(sexo: string | undefined | null): boolean {
+  const s = (sexo ?? '').trim()
+  if (!s) return false
+  return /^(M|MASCULINO|HOMBRE|VARON|VARÓN)/i.test(s)
+}
+
 export function sodexoNeedsActividadesBlock(tipo: string | null | undefined): boolean {
   return tipo === 'PERIODICA' || tipo === 'RETIRO' || tipo === 'REINGRESO'
 }

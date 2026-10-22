@@ -2,6 +2,9 @@
 
 export type SodexoEfSectionId = '9.1' | '9.2' | '9.3' | '9.4' | '9.5' | '9.6' | '9.7' | '9.8'
 
+/** Visibilidad §9.4 Genitourinario según sexo del paciente (impreso Hombre / Mujer). */
+export type SodexoEfSexScope = 'all' | 'male' | 'female'
+
 export type SodexoEfResultado = 'NORMAL' | 'ANORMAL'
 
 /** Signo bilateral (-) / (+). */
@@ -29,6 +32,7 @@ export type SodexoEfCatalogEntry = {
   group: string
   label: string
   kind: 'normal_anormal' | 'signo' | 'texto' | 'check_solo'
+  sexScope?: SodexoEfSexScope
   pdf?: SodexoEfPdfNormalAnormal
   signo?: SodexoEfPdfSignoPar
   /** Campo texto AcroForm (§9.8 u observaciones). */

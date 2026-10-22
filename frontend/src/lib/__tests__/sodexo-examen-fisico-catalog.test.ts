@@ -7,6 +7,7 @@ import {
   SODEXO_EXAMEN_FISICO_SECTIONS,
 } from '@/lib/sodexo-examen-fisico-catalog'
 import { prefillExamenFisicoSodexoFromAmi } from '@/lib/sodexo-examen-fisico-prefill'
+import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibility'
 
 const TEMPLATE = path.join(
   process.cwd(),
@@ -64,6 +65,16 @@ describe('sodexo-examen-fisico-catalog', () => {
       'Percusión',
       'Hernias',
     ])
+  })
+
+  it('§9.4 genitourinario según sexo', () => {
+    const byKey = (k: string) => SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === k)!
+    expect(sodexoEfEntryVisibleForSex(byKey('94_testiculos'), 'M')).toBe(true)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_testiculos'), 'F')).toBe(false)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_mujer'), 'FEMENINO')).toBe(true)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_mujer'), 'M')).toBe(false)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_tr'), 'M')).toBe(true)
+    expect(sodexoEfEntryVisibleForSex(byKey('94_tr'), 'F')).toBe(true)
   })
 
   it('sin prellenado AMI en §9 Sodexo', () => {

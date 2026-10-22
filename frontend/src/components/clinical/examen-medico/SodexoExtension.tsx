@@ -33,10 +33,12 @@ import { estilosVidaSodexoIsEmpty } from '@/lib/sodexo-estilos-vida-catalog'
 import { prefillEstilosVidaSodexoFromApnp } from '@/lib/sodexo-estilos-vida-prefill'
 import {
   examenFisicoSodexoIsEmpty,
+  SODEXO_EXAMEN_FISICO_CATALOG,
   SODEXO_EXAMEN_FISICO_SECTIONS,
   sodexoExamenFisicoCatalogBySection,
 } from '@/lib/sodexo-examen-fisico-catalog'
 import type { SodexoEfCatalogEntry } from '@/lib/sodexo-examen-fisico-types'
+import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibility'
 import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
   eyeAcuitySummary,
@@ -45,6 +47,7 @@ import {
   identificacionAmiRows,
   puestoActualFromAntecedentes,
   isSodexoFemalePatient,
+  isSodexoMalePatient,
   resolvePatientSexo,
   sectionRecord,
   sodexoNeedsActividadesBlock,
@@ -761,7 +764,12 @@ export function SodexoExtension({
           />
         </BlockSubsection>
         <BlockSubsection title="Captura REG-SO-01 (9.1 – 9.8)">
-          <ExamenFisicoSodexoTable value={value} onChange={onChange} readonly={readonly} />
+          <ExamenFisicoSodexoTable
+            value={value}
+            onChange={onChange}
+            readonly={readonly}
+            patientSexo={patientSexo}
+          />
         </BlockSubsection>
         <BlockSubsection title="Encabezado y casillas exclusivas Sodexo">
         <div className="flex flex-wrap gap-4 items-center">
@@ -1730,12 +1738,32 @@ function ExamenFisicoSodexoTable({
   value,
   onChange,
   readonly,
+  patientSexo,
 }: {
   value: SodexoExtensionData
   onChange: (next: SodexoExtensionData) => void
   readonly?: boolean
+  patientSexo: string
 }) {
   const map = value.examen_fisico_sodexo ?? {}
+
+  useEffect(() => {
+    if (readonly || !value.examen_fisico_sodexo) return
+    const cleaned = { ...value.examen_fisico_sodexo }
+    let touched = false
+    for (const key of Object.keys(cleaned)) {
+      const entry = SODEXO_EXAMEN_FISICO_CATALOG.find((e) => e.key === key)
+      if (entry && !sodexoEfEntryVisibleForSex(entry, patientSexo)) {
+        delete cleaned[key]
+        touched = true
+      }
+    }
+    if (!touched) return
+    onChange({
+      ...value,
+      examen_fisico_sodexo: examenFisicoSodexoIsEmpty(cleaned) ? null : cleaned,
+    })
+  }, [patientSexo, readonly, onChange, value])
 
   const patchRow = (key: string, patch: Partial<SodexoEfExtensionRow>) => {
     const prev = map[key] ?? {}
@@ -1753,14 +1781,28 @@ function ExamenFisicoSodexoTable({
 
   return (
     <div className="space-y-6">
-      {SODEXO_EXAMEN_FISICO_SECTIONS.map((sec) => (
+      {SODEXO_EXAMEN_FISICO_SECTIONS.map((sec) => {
+        const sectionVisible = sodexoExamenFisicoCatalogBySection(sec.id).filter((e) =>
+          sodexoEfEntryVisibleForSex(e, patientSexo),
+        )
+        if (sectionVisible.length === 0) return null
+        const genitoSexHint =
+          sec.id === '9.4' && !isSodexoMalePatient(patientSexo) && !isSodexoFemalePatient(patientSexo)
+        return (
         <div key={sec.id} className="border border-slate-200 rounded-lg overflow-hidden">
           <p className="text-xs font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200">
             {sec.id} {sec.title}
           </p>
+          {genitoSexHint ? (
+            <p className="text-[10px] text-amber-800 bg-amber-50 px-3 py-1.5 border-b border-amber-100">
+              Captura el sexo en Módulo 1 para mostrar Testículos o Mujer; TR y anamnesis aplican a todos.
+            </p>
+          ) : null}
           <div className="p-2 space-y-3">
             {sec.groups.map((group) => {
-              const entries = sodexoExamenFisicoCatalogBySection(sec.id).filter((e) => e.group === group)
+              const entries = sodexoExamenFisicoCatalogBySection(sec.id)
+                .filter((e) => e.group === group)
+                .filter((e) => sodexoEfEntryVisibleForSex(e, patientSexo))
               if (entries.length === 0) return null
               const headerSigno = entries.some((e) => e.kind === 'signo')
               const showGroupTitle = sec.groups.length > 1 && group !== sec.title
@@ -1801,7 +1843,8 @@ function ExamenFisicoSodexoTable({
             })}
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

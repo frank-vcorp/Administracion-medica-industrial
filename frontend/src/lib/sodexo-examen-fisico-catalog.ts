@@ -6,6 +6,7 @@ import type {
   SodexoEfCatalogEntry,
   SodexoEfSectionDef,
   SodexoEfSectionId,
+  SodexoEfSexScope,
 } from '@/lib/sodexo-examen-fisico-types'
 
 function cb(n: number): string {
@@ -20,6 +21,7 @@ function na(
   normal: number,
   abnormal: number,
   desc?: string,
+  sexScope: SodexoEfSexScope = 'all',
 ): SodexoEfCatalogEntry {
   return {
     key,
@@ -28,6 +30,7 @@ function na(
     label,
     kind: 'normal_anormal',
     pdf: { normal: cb(normal), abnormal: cb(abnormal), desc },
+    ...(sexScope !== 'all' ? { sexScope } : {}),
   }
 }
 
@@ -102,8 +105,8 @@ export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
   na('93_hernias', '9.3', 'Abdomen', 'Hernias', 871, 872),
 
   // —— 9.4 Genitourinario ——
-  na('94_testiculos', '9.4', 'Genitourinario', 'Testículos', 901, 902),
-  na('94_mujer', '9.4', 'Genitourinario', 'Mujer', 903, 904),
+  na('94_testiculos', '9.4', 'Genitourinario', 'Testículos', 901, 902, undefined, 'male'),
+  na('94_mujer', '9.4', 'Genitourinario', 'Mujer', 903, 904, undefined, 'female'),
   na('94_tr', '9.4', 'Genitourinario', 'TR (si aplica)', 905, 906),
   na('94_anamnesis', '9.4', 'Genitourinario', 'A la anamnesis', 907, 908),
 
