@@ -767,7 +767,7 @@ export function SodexoExtension({
             emptyHint="Completa pestañas Somatometría, Signos vitales y Agudeza visual."
           />
         </BlockSubsection>
-        <BlockSubsection title="Captura REG-SO-01 (encabezado + 9.1 – 9.8)">
+        <BlockSubsection title="Captura REG-SO-01 (9.1 – 9.8)">
           <ExamenFisicoSodexoTable
             value={value}
             onChange={onChange}
@@ -1491,7 +1491,7 @@ function SodexoExamenEncabezadoCapture({
     onChange({ ...value, examen_encabezado: empty ? null : next })
   }
   return (
-    <div className="flex flex-wrap gap-4 items-center p-2">
+    <div className="flex flex-wrap gap-4 items-center px-1 pb-3 mb-1 border-b border-slate-100 text-xs">
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
@@ -1851,12 +1851,7 @@ function ExamenFisicoSodexoTable({
 
   return (
     <div className="space-y-6">
-      <div className="border border-slate-200 rounded-lg overflow-hidden">
-        <p className="text-xs font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200">
-          Encabezado §9
-        </p>
-        <SodexoExamenEncabezadoCapture value={value} onChange={onChange} readonly={readonly} />
-      </div>
+      <SodexoExamenEncabezadoCapture value={value} onChange={onChange} readonly={readonly} />
       {SODEXO_EXAMEN_FISICO_SECTIONS.map((sec) => {
         const sectionVisible = sodexoExamenFisicoCatalogBySection(sec.id).filter((e) =>
           sodexoEfEntryVisibleForSex(e, patientSexo),
