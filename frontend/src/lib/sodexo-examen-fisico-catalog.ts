@@ -64,31 +64,33 @@ function txt(
 
 /** Orden y texto = pdftotext REG-SO-01 §9.1–9.8. */
 export const SODEXO_EXAMEN_FISICO_CATALOG: SodexoEfCatalogEntry[] = [
-  // —— 9.1 Cabeza y cuello ——
-  na('91_craneo', '9.1', 'Cabeza y cuello', 'Cráneo', 580, 581, 'Texto627'),
-  na('91_parpados', '9.1', 'Cabeza y cuello', 'Párpados', 604, 611, 'Texto638'),
-  na('91_escleras', '9.1', 'Cabeza y cuello', 'Escleras', 582, 583, 'Texto628'),
-  na('91_cornea', '9.1', 'Cabeza y cuello', 'Córnea', 605, 612, 'Texto639'),
-  na('91_tabique', '9.1', 'Cabeza y cuello', 'Tabique', 584, 585, 'Texto629'),
-  na('91_cornetes', '9.1', 'Cabeza y cuello', 'Cornetes', 606, 613, 'Texto640'),
-  na('91_iris_pupilas', '9.1', 'Cabeza y cuello', 'Iris-pupilas', 594, 586, 'Texto641'),
-  na('91_senos_paranasales', '9.1', 'Cabeza y cuello', 'Senos paranasales', 607, 610, 'Texto630'),
-  na('91_inspeccion_ojos', '9.1', 'Cabeza y cuello', 'Inspección', 595, 587, 'Texto631'),
-  na('91_fondo_ojo', '9.1', 'Cabeza y cuello', 'Fondo de ojo', 608, 609, 'Texto632'),
-  na('91_pabellones', '9.1', 'Cabeza y cuello', 'Pabellones', 596, 588, 'Texto633'),
-  na('91_oidos', '9.1', 'Cabeza y cuello', 'Oídos', 619, 614, 'Texto643'),
-  na('91_mucosa', '9.1', 'Cabeza y cuello', 'Mucosa', 598, 590, 'Texto635'),
-  na('91_conjuntiva', '9.1', 'Cabeza y cuello', 'Conjuntiva', 597, 589, 'Texto634'),
-  na('91_nariz', '9.1', 'Cabeza y cuello', 'Nariz', 620, 615, 'Texto644'),
-  na('91_conductos', '9.1', 'Cabeza y cuello', 'Conductos', 599, 591, 'Texto636'),
-  na('91_palpacion_cuello', '9.1', 'Cabeza y cuello', 'Palpación', 621, 616, 'Texto645'),
-  na('91_adenopatias', '9.1', 'Cabeza y cuello', 'Adenopatías', 622, 617, 'Texto646'),
-  na('91_timpanos', '9.1', 'Cabeza y cuello', 'Tímpanos', 600, 592, 'Texto637'),
-  na('91_otros', '9.1', 'Cabeza y cuello', 'Otros', 623, 618, 'Texto647'),
-  na('91_amigdalas', '9.1', 'Cabeza y cuello', 'Amígdalas', 601, 593),
-  na('91_dentadura', '9.1', 'Cabeza y cuello', 'Dentadura', 602, 603),
-  sign('91_adeno_sup', '9.1', 'Cabeza y cuello', 'Adenopatías superior', 624, 625),
-  sign('91_adeno_inf', '9.1', 'Cabeza y cuello', 'Adenopatías inferior', 625, 626),
+  // —— 9.1 Cabeza y cuello (grupos = columnas del impreso REG-SO-01) ——
+  na('91_craneo', '9.1', 'Cráneo', 'Cráneo', 580, 581, 'Texto627'),
+  na('91_parpados', '9.1', 'Ojos', 'Párpados', 604, 611, 'Texto638'),
+  na('91_escleras', '9.1', 'Ojos', 'Escleras', 582, 583, 'Texto628'),
+  na('91_cornea', '9.1', 'Ojos', 'Córnea', 605, 612, 'Texto639'),
+  na('91_iris_pupilas', '9.1', 'Ojos', 'Iris-pupilas', 594, 586, 'Texto641'),
+  na('91_inspeccion_ojos', '9.1', 'Ojos', 'Inspección', 595, 587, 'Texto631'),
+  na('91_fondo_ojo', '9.1', 'Ojos', 'Fondo de ojo', 608, 609, 'Texto632'),
+  na('91_pabellones', '9.1', 'Ojos', 'Pabellones', 596, 588, 'Texto633'),
+  na('91_conjuntiva', '9.1', 'Ojos', 'Conjuntiva', 597, 589, 'Texto634'),
+  na('91_tabique', '9.1', 'Nariz', 'Tabique', 584, 585, 'Texto629'),
+  na('91_cornetes', '9.1', 'Nariz', 'Cornetes', 606, 613, 'Texto640'),
+  na('91_senos_paranasales', '9.1', 'Nariz', 'Senos paranasales', 607, 610, 'Texto630'),
+  na('91_nariz', '9.1', 'Nariz', 'Nariz', 620, 615, 'Texto644'),
+  na('91_oidos', '9.1', 'Oídos', 'Oídos', 619, 614, 'Texto643'),
+  na('91_conductos', '9.1', 'Oídos', 'Conductos', 599, 591, 'Texto636'),
+  na('91_timpanos', '9.1', 'Oídos', 'Tímpanos', 600, 592, 'Texto637'),
+  na('91_palpacion_cuello', '9.1', 'Cuello', 'Palpación', 621, 616, 'Texto645'),
+  na('91_adenopatias', '9.1', 'Cuello', 'Adenopatías', 622, 617, 'Texto646'),
+  sign('91_adeno_sup', '9.1', 'Cuello', 'Adenopatías — superior (+/−)', 624, 625),
+  sign('91_adeno_inf', '9.1', 'Cuello', 'Adenopatías — inferior (+/−)', 625, 626),
+  na('91_otros', '9.1', 'Cuello', 'Otros', 623, 618, 'Texto647'),
+  na('91_mucosa', '9.1', 'Cavidad oral', 'Mucosa', 598, 590, 'Texto635'),
+  na('91_amigdalas', '9.1', 'Cavidad oral', 'Amígdalas', 601, 593),
+  na('91_dentadura', '9.1', 'Cavidad oral', 'Dentadura', 602, 603),
+  /** Impreso: Orofaringe / Prótesis sin par N/A en AcroForm; observaciones oído derecho del bloque Ojos. */
+  txt('91_ojos_obs', '9.1', 'Ojos', 'Observaciones (columna Ojos)', 'Texto642'),
 
   // —— 9.2 Tórax ——
   na('92_inspeccion', '9.2', 'Tórax', 'Inspección', 701, 702),
@@ -165,8 +167,18 @@ export function sodexoExamenFisicoGroups(section: SodexoEfSectionId): string[] {
   return out
 }
 
+/** Orden fijo §9.1 (no derivar solo del catálogo: evita mezclar regiones en una sola tabla). */
+export const SODEXO_EXAMEN_FISICO_91_GROUPS = [
+  'Cráneo',
+  'Ojos',
+  'Nariz',
+  'Oídos',
+  'Cuello',
+  'Cavidad oral',
+] as const
+
 export const SODEXO_EXAMEN_FISICO_SECTIONS: SodexoEfSectionDef[] = [
-  { id: '9.1', title: 'Cabeza y cuello', groups: sodexoExamenFisicoGroups('9.1') },
+  { id: '9.1', title: 'Cabeza y cuello', groups: [...SODEXO_EXAMEN_FISICO_91_GROUPS] },
   { id: '9.2', title: 'Tórax', groups: sodexoExamenFisicoGroups('9.2') },
   { id: '9.3', title: 'Abdomen', groups: sodexoExamenFisicoGroups('9.3') },
   { id: '9.4', title: 'Genitourinario', groups: sodexoExamenFisicoGroups('9.4') },

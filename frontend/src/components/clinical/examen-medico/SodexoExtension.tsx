@@ -1542,7 +1542,7 @@ function SodexoVisiometriaCasillasCapture({
   return (
     <div className="border border-slate-100 rounded-md overflow-hidden">
       <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
-        Agudeza visual — casillas REG-SO-01
+        Visiometría — casillas REG-SO-01
       </p>
       <p className="text-[10px] text-slate-500 px-2 py-1 border-b border-slate-50">
         Valores Snellen en la tabla AMI arriba; aquí solo marcas las casillas del impreso Sodexo.
@@ -1937,12 +1937,25 @@ function ExamenFisicoSodexoTable({
                     .filter((e) => e.group === group)
                     .filter((e) => sodexoEfEntryVisibleForSex(e, patientSexo))
                   if (entries.length === 0) return null
-                  const showGroupTitle = sec.groups.length > 1 && group !== sec.title
+                  const showGroupTitle =
+                    sec.id === '9.1' || (sec.groups.length > 1 && group !== sec.title)
                   return (
                     <div key={group} className="border border-slate-100 rounded-md overflow-hidden">
                       {showGroupTitle ? (
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+                        <p
+                          className={
+                            sec.id === '9.1'
+                              ? 'text-[11px] font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200'
+                              : 'text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100'
+                          }
+                        >
                           {group}
+                        </p>
+                      ) : null}
+                      {sec.id === '9.1' && group === 'Cavidad oral' ? (
+                        <p className="text-[10px] text-slate-500 px-3 py-1.5 border-b border-slate-50 bg-white">
+                          En el impreso también figuran Orofaringe y Prótesis; la plantilla PDF no trae casillas
+                          AcroForm para esas filas — usa Mucosa, Amígdalas y Dentadura (+ Describir).
                         </p>
                       ) : null}
                       <div className="p-1">

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { PDFDocument } from 'pdf-lib'
 import {
   SODEXO_EXAMEN_FISICO_CATALOG,
+  SODEXO_EXAMEN_FISICO_91_GROUPS,
   SODEXO_EXAMEN_FISICO_SECTIONS,
 } from '@/lib/sodexo-examen-fisico-catalog'
 import { prefillExamenFisicoSodexoFromAmi } from '@/lib/sodexo-examen-fisico-prefill'
@@ -59,6 +60,28 @@ describe('sodexo-examen-fisico-catalog', () => {
       }
       if (entry.textField) expect(names.has(entry.textField)).toBe(true)
     }
+  })
+
+  it('§9.1 Cabeza y cuello — grupos del impreso (no una sola tabla)', () => {
+    const sec = SODEXO_EXAMEN_FISICO_SECTIONS.find((s) => s.id === '9.1')!
+    expect(sec.groups).toEqual([...SODEXO_EXAMEN_FISICO_91_GROUPS])
+    const rows = SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.section === '9.1')
+    expect(rows.filter((r) => r.group === 'Ojos').map((r) => r.label)).toEqual([
+      'Párpados',
+      'Escleras',
+      'Córnea',
+      'Iris-pupilas',
+      'Inspección',
+      'Fondo de ojo',
+      'Pabellones',
+      'Conjuntiva',
+      'Observaciones (columna Ojos)',
+    ])
+    expect(rows.filter((r) => r.group === 'Cavidad oral').map((r) => r.label)).toEqual([
+      'Mucosa',
+      'Amígdalas',
+      'Dentadura',
+    ])
   })
 
   it('§9.3 Abdomen — solo ítems del impreso', () => {
