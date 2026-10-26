@@ -21,6 +21,7 @@ import { fillSodexoEstilosVida } from '@/lib/sodexo-pdf-estilos-vida'
 import { fillSodexoGineco } from '@/lib/sodexo-pdf-gineco'
 import { fillSodexoPdfFromExtension } from '@/lib/sodexo-pdf-extension'
 import {
+  fillSodexoCierreTitulo,
   fillSodexoConsentFromCheckIn,
   fillSodexoExtensionBlocks,
 } from '@/lib/sodexo-pdf-extension-blocks'
@@ -494,6 +495,8 @@ export async function renderSodexoExamenMedicoPdf(
     'Observaciones generales y seguimiento SALUD OCUPACIONAL SODEXO MÉXICO 4',
     obsParts.join('\n\n'),
   )
+
+  fillSodexoCierreTitulo(form)
 
   await embedSignature(doc, data.medico.signatureImageUrl, 3, {
     x: 380,

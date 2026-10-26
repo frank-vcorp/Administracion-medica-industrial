@@ -345,7 +345,7 @@ export const SodexoExtensionSchema = z.object({
     })
     .optional()
     .nullable(),
-  /** Encabezado §10–12 (opcional). */
+  /** @deprecated Ignorado — PDF usa siempre «SALUD OCUPACIONAL SODEXO MÉXICO». */
   titulo_seccion_sodexo: cleanString,
 })
 

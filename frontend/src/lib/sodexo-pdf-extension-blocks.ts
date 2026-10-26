@@ -9,6 +9,14 @@ const CONSENT_AVISO_PRIVACIDAD = 'Check Box77'
 const DECLARACION_PROTESTA_NOMBRE_1 = 'Texto26'
 const DECLARACION_PROTESTA_NOMBRE_2 = 'Texto27'
 
+export const SODEXO_PDF_CIERRE_TITULO = 'SALUD OCUPACIONAL SODEXO MÉXICO'
+const SODEXO_PDF_CIERRE_TITULO_FIELD = 'SALUD OCUPACIONAL SODEXO MÉXICO'
+
+/** Rótulo fijo §13 del impreso REG-SO-01 (no configurable en extensión). */
+export function fillSodexoCierreTitulo(form: PdfForm) {
+  sodexoSetText(form, SODEXO_PDF_CIERRE_TITULO_FIELD, SODEXO_PDF_CIERRE_TITULO)
+}
+
 /** Casillas y nombre de declaración §3 desde consentimiento de check-in. */
 export function fillSodexoConsentFromCheckIn(
   form: PdfForm,
@@ -36,9 +44,4 @@ export function fillSodexoExtensionBlocks(form: PdfForm, ext: SodexoExtensionDat
   if (cual?.cual_2?.trim()) sodexoSetText(form, 'Cuál_2', cual.cual_2)
   if (cual?.cual_3?.trim()) sodexoSetText(form, 'Cuál_3', cual.cual_3)
   if (cual?.cual_4?.trim()) sodexoSetText(form, 'Cuál_4', cual.cual_4)
-
-  if (ext.titulo_seccion_sodexo?.trim()) {
-    sodexoSetText(form, 'SALUD OCUPACIONAL SODEXO MÉXICO', ext.titulo_seccion_sodexo)
-  }
-
 }

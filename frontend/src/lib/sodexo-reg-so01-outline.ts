@@ -92,8 +92,8 @@ export const SODEXO_REG_SO01_BLOCKS: SodexoRegBlockDef[] = [
   {
     id: '13',
     section: '13',
-    title: 'Título de cierre en PDF',
-    subtitle: 'Opcional — encabezado impreso §13; dx/recomendaciones/restricciones/observaciones vienen de Impresión AMI.',
-    hideInExtension: false,
+    title: 'Observaciones y cierre',
+    amiOnly: true,
+    hideInExtension: true,
   },
 ]

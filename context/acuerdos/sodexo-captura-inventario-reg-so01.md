@@ -100,7 +100,7 @@ Referencias: `SodexoExtensionSchema`, `SodexoExtension.tsx`, `sodexo-examen-medi
 |------------|--------|--------|
 | Impresión diagnóstica, restricciones | **AMI** — Impresión / Aptitud | Proyección al PDF ✅; **no** en pestaña Extensión |
 | Recomendaciones, observaciones, aptitud, estudios | **AMI** consolidado | Proyección al PDF ✅; **no** en pestaña Extensión |
-| Encabezado “SALUD OCUPACIONAL…” | **Ext.** `titulo_seccion_sodexo` (opcional) | UI §13 mínima |
+| Encabezado “SALUD OCUPACIONAL SODEXO MÉXICO” | Texto fijo en PDF | Siempre al exportar; sin UI en Extensión |
 | Firma médico | **AMI** | Proyección imagen ✅ |
 
 ---

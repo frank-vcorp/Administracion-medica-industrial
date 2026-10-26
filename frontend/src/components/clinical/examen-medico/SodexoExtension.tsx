@@ -777,21 +777,6 @@ export function SodexoExtension({
         </BlockSubsection>
 
       </SodexoBlock>
-
-      <SodexoBlock
-        blockId="13"
-        section="13"
-        title="Título de cierre en PDF"
-        subtitle="Opcional. Diagnósticos, recomendaciones, restricciones y observaciones del §10–13 del impreso se arman al exportar desde Impresión / Aptitud (AMI)."
-      >
-        <Field
-          label="Texto «SALUD OCUPACIONAL…» (si difiere del predeterminado)"
-          value={value.titulo_seccion_sodexo ?? ''}
-          onChange={(v) => set('titulo_seccion_sodexo', v)}
-          readonly={readonly}
-          placeholder="SALUD OCUPACIONAL SODEXO MÉXICO"
-        />
-      </SodexoBlock>
     </div>
   )
 }
