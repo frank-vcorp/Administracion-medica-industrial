@@ -7,6 +7,7 @@ import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
 import {
   SODEXO_FUNCIONES_CHECKBOXES,
   SODEXO_FUNCIONES_OTRO_TEXT,
+  SODEXO_PROFESION_TEXT,
 } from '@/lib/sodexo-pdf-mappings'
 
 const LEE_ESCRIBE_SI = 'Check Box26'
@@ -27,7 +28,7 @@ export function fillSodexoPdfFromExtension(form: PdfForm, ext: SodexoExtensionDa
   sodexoSetText(form, 'Num Int', ext.numero_interior)
   sodexoSetText(form, 'Estado', ext.estado_domicilio)
   sodexoSetText(form, 'Tiempo de radicar', ext.tiempo_radicar)
-  sodexoSetText(form, 'Profesión', ext.profesion)
+  sodexoSetText(form, SODEXO_PROFESION_TEXT, ext.profesion)
 
   if (ext.lee_y_escribe === 'SI') sodexoSetCheck(form, LEE_ESCRIBE_SI, true)
 

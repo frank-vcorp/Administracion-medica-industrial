@@ -1,15 +1,43 @@
 /**
  * Utilidades AcroForm compartidas para REG-SO-01.
  */
-import type { PDFDocument } from 'pdf-lib'
+import { TextAlignment, type PDFDocument } from 'pdf-lib'
 
 export type PdfForm = ReturnType<PDFDocument['getForm']>
+
+const SODEXO_TEXT_FONT_SIZE = 7
+
+/** Campos cortos del impreso — centrado para alinear con la celda. */
+const CENTER_ALIGNED_TEXT_FIELDS = new Set([
+  'Edad',
+  'Num Ext',
+  'Num Int',
+  'Texto72',
+  'Texto73',
+  'Texto74',
+  'Antigüedad',
+  'Peso',
+  'Estatura',
+  'IMC',
+  'Pulso',
+  'FR',
+  'Texto48',
+])
 
 export function sodexoSetText(form: PdfForm, fieldName: string, value: string | null | undefined) {
   const text = (value ?? '').trim()
   if (!text) return
   try {
-    form.getTextField(fieldName).setText(text)
+    const field = form.getTextField(fieldName)
+    field.setText(text)
+    try {
+      field.setFontSize(SODEXO_TEXT_FONT_SIZE)
+      if (CENTER_ALIGNED_TEXT_FIELDS.has(fieldName)) {
+        field.setAlignment(TextAlignment.Center)
+      }
+    } catch {
+      // plantilla con fuente embebida
+    }
   } catch {
     // ignore
   }

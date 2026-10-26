@@ -44,15 +44,21 @@ export const SODEXO_AHF_RIGHT_KEYS = [
   'otros',
 ] as const
 
-/** 1.2 Funciones principales (checkboxes en página 1). */
+/**
+ * 1.2 Funciones principales — orden izquierda→derecha en el impreso (geometría y≈521).
+ * Ayudante · Mantenimiento · Técnica · Teléfono · Conducción · Administrativa.
+ */
 export const SODEXO_FUNCIONES_CHECKBOXES = {
-  administrativa: 'Check Box66',
-  ayudante: 'Check Box67',
-  mantenimiento: 'Check Box68',
-  tecnica: 'Check Box69',
-  telefono: 'Check Box70',
-  conduccion: 'Check Box71',
+  ayudante: 'Check Box66',
+  mantenimiento: 'Check Box67',
+  tecnica: 'Check Box68',
+  telefono: 'Check Box69',
+  conduccion: 'Check Box70',
+  administrativa: 'Check Box71',
 } as const
+
+/** §1 Profesión (texto junto a escolaridad; no existe campo «Profesión» en AcroForm). */
+export const SODEXO_PROFESION_TEXT = 'Texto48'
 
 /** §1.2 — especificación cuando la función no es una de las casillas estándar. */
 export const SODEXO_FUNCIONES_OTRO_TEXT = 'Cual'
