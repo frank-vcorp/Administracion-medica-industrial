@@ -121,9 +121,14 @@ export function examenMedicoSodexoPdfUrl(eventId: string): string {
   return `/api/pdf/examen-medico-sodexo/${eventId}`
 }
 
-/** Vista previa Sodexo REG-SO-01 desde la extensión (misma plantilla, sin exigir dictamen firmado). */
+/** Vista previa Sodexo REG-SO-01 (GET legacy; preferir POST con extensión en pantalla). */
 export function examenMedicoSodexoPreviewPdfUrl(eventId: string): string {
   return `/api/pdf/examen-medico-sodexo/${eventId}?preview=1`
+}
+
+/** API Sodexo REG-SO-01 — POST con `{ extension }` para vista previa en extensión. */
+export function examenMedicoSodexoPreviewApiUrl(eventId: string): string {
+  return `/api/pdf/examen-medico-sodexo/${eventId}`
 }
 
 /**
@@ -1729,7 +1734,7 @@ export default function ExamenMedicoEstudio({
             onChange={setSodexoExt}
             readonly={readonly}
             sodexoPdfUrl={examenMedicoSodexoPdfUrl(eventId)}
-            sodexoPreviewPdfUrl={examenMedicoSodexoPreviewPdfUrl(eventId)}
+            sodexoPreviewApiUrl={examenMedicoSodexoPreviewApiUrl(eventId)}
             showSodexoPdfDownload={shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)}
             sodexoPdfPending={Boolean(aptitud) && hasMedicalVerdict !== true}
             validatingViewHref={navigateToValidatingView(eventId)}

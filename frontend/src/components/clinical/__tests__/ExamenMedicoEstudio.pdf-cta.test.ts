@@ -39,6 +39,7 @@ import {
   examenMedicoPdfUrl,
   examenMedicoSodexoPdfUrl,
   examenMedicoSodexoPreviewPdfUrl,
+  examenMedicoSodexoPreviewApiUrl,
   shouldShowExamenMedicoPdfCta,
   clinicalClosureZipUrl,
   shouldShowClinicalClosureZipCta,
@@ -72,6 +73,12 @@ describe('IMPL-FEATURE-20260825-03 ronda 4: CTA PDF consolidado Examen Médico',
   it('examenMedicoSodexoPreviewPdfUrl: misma ruta con ?preview=1 (vista previa en extensión)', () => {
     expect(examenMedicoSodexoPreviewPdfUrl('event-1')).toBe(
       '/api/pdf/examen-medico-sodexo/event-1?preview=1',
+    )
+  })
+
+  it('examenMedicoSodexoPreviewApiUrl: POST con extensión en pantalla (sin query)', () => {
+    expect(examenMedicoSodexoPreviewApiUrl('event-1')).toBe(
+      '/api/pdf/examen-medico-sodexo/event-1',
     )
   })
 

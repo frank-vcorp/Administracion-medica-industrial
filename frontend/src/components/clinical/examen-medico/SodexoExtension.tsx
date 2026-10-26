@@ -245,22 +245,64 @@ const EPP_ITEMS: { key: keyof SodexoExtensionData; label: string }[] = [
 
 function SodexoPdfGeneratePanel({
   value,
-  previewUrl,
+  previewApiUrl,
   officialUrl,
   showOfficial,
 }: {
   value: SodexoExtensionData
-  previewUrl?: string
+  previewApiUrl?: string
   officialUrl?: string
   showOfficial?: boolean
 }) {
+  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null)
   const [generatedAt, setGeneratedAt] = useState<number | null>(null)
-  if (!previewUrl && !officialUrl) return null
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl)
+    }
+  }, [pdfObjectUrl])
+
+  if (!previewApiUrl && !officialUrl) return null
   const validation = validateSodexoExtensionForClinicalClose(value)
   const ready = validation.ok
-  const previewSrc = previewUrl
-    ? `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${generatedAt ?? 0}`
-    : null
+
+  async function generatePreview() {
+    if (!previewApiUrl || !ready) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(previewApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ extension: value }),
+      })
+      const contentType = res.headers.get('content-type') ?? ''
+      if (!res.ok) {
+        if (contentType.includes('application/json')) {
+          const j = (await res.json()) as { error?: string; details?: string[] }
+          setError([j.error, ...(j.details ?? [])].filter(Boolean).join(' · '))
+        } else {
+          const text = (await res.text()).trim()
+          setError(text || 'No se pudo generar el PDF Sodexo.')
+        }
+        return
+      }
+      const blob = await res.blob()
+      setPdfObjectUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return URL.createObjectURL(blob)
+      })
+      setGeneratedAt(Date.now())
+    } catch {
+      setError('No se pudo generar el PDF. Revisa tu conexión e inténtalo de nuevo.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div
@@ -271,11 +313,17 @@ function SodexoPdfGeneratePanel({
         <p className="text-sm font-bold text-emerald-900">PDF Sodexo REG-SO-01</p>
         <p className="text-xs text-slate-600 mt-1">
           Al terminar de llenar la extensión, genera aquí el PDF con el{' '}
-          <strong>formato visual oficial de Sodexo</strong> (plantilla REG-SO-01). Se genera con los
-          datos guardados — espera el autoguardado antes de generarlo. Esta vista previa no sustituye
-          el PDF firmado tras emitir el dictamen.
+          <strong>formato visual oficial de Sodexo</strong> (plantilla REG-SO-01). La vista previa
+          usa los datos de esta pantalla (no hace falta esperar al autoguardado). No sustituye el PDF
+          firmado tras emitir el dictamen.
         </p>
       </div>
+
+      {error ? (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-800">
+          {error}
+        </div>
+      ) : null}
 
       {!ready ? (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
@@ -291,20 +339,28 @@ function SodexoPdfGeneratePanel({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={!ready || !previewUrl}
-          onClick={() => setGeneratedAt(Date.now())}
+          disabled={!ready || !previewApiUrl || loading}
+          onClick={() => void generatePreview()}
           className="bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:text-slate-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
         >
-          {generatedAt ? '↻ Actualizar PDF' : '📄 Generar PDF Sodexo'}
+          {loading
+            ? 'Generando…'
+            : generatedAt
+              ? '↻ Actualizar PDF'
+              : '📄 Generar PDF Sodexo'}
         </button>
-        {previewUrl ? (
+        {previewApiUrl ? (
           <a
-            href={previewUrl}
+            href={pdfObjectUrl ?? '#'}
+            download={pdfObjectUrl ? 'REG-SO-01-vista-previa.pdf' : undefined}
             target="_blank"
             rel="noopener noreferrer"
-            aria-disabled={!ready}
+            aria-disabled={!ready || !pdfObjectUrl}
+            onClick={(e) => {
+              if (!pdfObjectUrl) e.preventDefault()
+            }}
             className={`text-sm font-bold px-5 py-2.5 rounded-xl border transition-colors ${
-              ready
+              ready && pdfObjectUrl
                 ? 'border-emerald-700 text-emerald-800 hover:bg-emerald-50'
                 : 'border-slate-200 text-slate-400 pointer-events-none'
             }`}
@@ -324,10 +380,10 @@ function SodexoPdfGeneratePanel({
         ) : null}
       </div>
 
-      {generatedAt && previewSrc ? (
+      {generatedAt && pdfObjectUrl ? (
         <iframe
           key={generatedAt}
-          src={previewSrc}
+          src={pdfObjectUrl}
           title="PDF Sodexo REG-SO-01"
           className="w-full h-[720px] border border-slate-200 rounded-lg bg-slate-50"
         />
@@ -341,7 +397,7 @@ type Props = {
   onChange: (next: SodexoExtensionData) => void
   readonly?: boolean
   sodexoPdfUrl?: string
-  sodexoPreviewPdfUrl?: string
+  sodexoPreviewApiUrl?: string
   showSodexoPdfDownload?: boolean
   sodexoPdfPending?: boolean
   validatingViewHref?: string
@@ -354,7 +410,7 @@ export function SodexoExtension({
   onChange,
   readonly = false,
   sodexoPdfUrl,
-  sodexoPreviewPdfUrl,
+  sodexoPreviewApiUrl,
   showSodexoPdfDownload = false,
   sodexoPdfPending = false,
   validatingViewHref,
@@ -882,7 +938,7 @@ export function SodexoExtension({
 
       <SodexoPdfGeneratePanel
         value={value}
-        previewUrl={sodexoPreviewPdfUrl}
+        previewApiUrl={sodexoPreviewApiUrl}
         officialUrl={sodexoPdfUrl}
         showOfficial={showSodexoPdfDownload}
       />

@@ -37,3 +37,35 @@ export async function GET(
     userId: session.user.id,
   })
 }
+
+/** Vista previa REG-SO-01 con la extensión capturada en pantalla (POST). */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ eventId: string }> },
+) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return new NextResponse('No autenticado', { status: 401 })
+  }
+  if (!CLINICAL_ROLES.has(session.user.role)) {
+    return new NextResponse(
+      'Sin permisos para descargar el PDF Sodexo del examen médico.',
+      { status: 403 },
+    )
+  }
+  const { eventId } = await params
+  if (!eventId) {
+    return new NextResponse('eventId requerido', { status: 400 })
+  }
+  let body: { extension?: unknown } | null = null
+  try {
+    body = (await request.json()) as { extension?: unknown }
+  } catch {
+    body = null
+  }
+  return deliverExamenMedicoPdf(eventId, 'sodexo', {
+    preview: true,
+    userId: session.user.id,
+    sodexoExtensionOverride: body?.extension,
+  })
+}

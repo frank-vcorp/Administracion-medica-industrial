@@ -99,7 +99,12 @@ export async function GET(
 export async function deliverExamenMedicoPdf(
   eventId: string,
   deliverable: ExamenMedicoPdfDeliverable,
-  opts?: { preview?: boolean; userId?: string },
+  opts?: {
+    preview?: boolean
+    userId?: string
+    /** Vista previa REG-SO-01: extensión en pantalla (evita depender del autoguardado). */
+    sodexoExtensionOverride?: unknown
+  },
 ): Promise<NextResponse> {
   const isSodexoPreview = deliverable === 'sodexo' && opts?.preview === true
   // ── Resolver Event + Verdict + Exam + perfil del paciente ───────────────
@@ -263,6 +268,12 @@ export async function deliverExamenMedicoPdf(
     )
     const variantExtensions =
       (physicalExamData.variant_extensions as Record<string, unknown> | undefined) ?? {}
+    const sodexoExtensionRaw =
+      deliverable === 'sodexo' &&
+      isSodexoPreview &&
+      opts?.sodexoExtensionOverride !== undefined
+        ? opts.sodexoExtensionOverride
+        : variantExtensions.SODEXO
     const eyeAcuity =
       (event.exam?.eyeAcuityData as Record<string, unknown> | null) ?? {}
     const somatometry =
@@ -548,7 +559,7 @@ export async function deliverExamenMedicoPdf(
       variant: examVariant,
       variantExtensions: {
         FLOWSERVE: variantExtensions.FLOWSERVE as Record<string, unknown> | undefined,
-        SODEXO: variantExtensions.SODEXO as Record<string, unknown> | undefined,
+        SODEXO: sodexoExtensionRaw as Record<string, unknown> | undefined,
       },
     })
 
@@ -570,7 +581,7 @@ export async function deliverExamenMedicoPdf(
         null
       data.informedConsentSignedAt = informedConsentSignedAt
 
-      const sodexoCheck = validateSodexoExtensionForClinicalClose(variantExtensions.SODEXO)
+      const sodexoCheck = validateSodexoExtensionForClinicalClose(sodexoExtensionRaw)
       if (!sodexoCheck.ok) {
         return NextResponse.json(
           {
