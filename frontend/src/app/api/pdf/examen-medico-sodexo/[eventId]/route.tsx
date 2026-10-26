@@ -14,7 +14,7 @@ const CLINICAL_ROLES = new Set<string>([
 ])
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   const session = await getServerSession(authOptions)
@@ -31,5 +31,9 @@ export async function GET(
   if (!eventId) {
     return new NextResponse('eventId requerido', { status: 400 })
   }
-  return deliverExamenMedicoPdf(eventId, 'sodexo')
+  const preview = request.nextUrl.searchParams.get('preview') === '1'
+  return deliverExamenMedicoPdf(eventId, 'sodexo', {
+    preview,
+    userId: session.user.id,
+  })
 }

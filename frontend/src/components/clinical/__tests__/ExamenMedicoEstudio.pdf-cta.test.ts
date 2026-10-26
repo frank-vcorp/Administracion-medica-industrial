@@ -38,6 +38,7 @@ import { describe, it, expect } from 'vitest'
 import {
   examenMedicoPdfUrl,
   examenMedicoSodexoPdfUrl,
+  examenMedicoSodexoPreviewPdfUrl,
   shouldShowExamenMedicoPdfCta,
   clinicalClosureZipUrl,
   shouldShowClinicalClosureZipCta,
@@ -66,6 +67,12 @@ describe('IMPL-FEATURE-20260825-03 ronda 4: CTA PDF consolidado Examen Médico',
       '/api/pdf/examen-medico-sodexo/event-1',
     )
     expect(examenMedicoSodexoPdfUrl('event-1')).not.toMatch(/[?#]/)
+  })
+
+  it('examenMedicoSodexoPreviewPdfUrl: misma ruta con ?preview=1 (vista previa en extensión)', () => {
+    expect(examenMedicoSodexoPreviewPdfUrl('event-1')).toBe(
+      '/api/pdf/examen-medico-sodexo/event-1?preview=1',
+    )
   })
 
   // ─── shouldShowExamenMedicoPdfCta (gate aptitud + verdict emitido) ──────

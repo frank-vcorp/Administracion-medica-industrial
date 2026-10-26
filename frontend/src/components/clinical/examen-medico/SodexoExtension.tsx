@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { type SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import {
@@ -80,6 +80,7 @@ import {
   type SodexoHeredofamiliarKey,
 } from '@/lib/sodexo-heredofamiliar'
 import { AmiMirrorTable, AmiMirrorTextBlock } from '@/components/clinical/examen-medico/SodexoAmiPreview'
+import { validateSodexoExtensionForClinicalClose } from '@/lib/sodexo-extension-validation'
 
 type ManoDominante = NonNullable<
   NonNullable<SodexoExtensionData['examen_encabezado']>['mano_dominante']
@@ -242,11 +243,105 @@ const EPP_ITEMS: { key: keyof SodexoExtensionData; label: string }[] = [
   { key: 'epp_faja', label: 'Faja' },
 ]
 
+function SodexoPdfGeneratePanel({
+  value,
+  previewUrl,
+  officialUrl,
+  showOfficial,
+}: {
+  value: SodexoExtensionData
+  previewUrl?: string
+  officialUrl?: string
+  showOfficial?: boolean
+}) {
+  const [generatedAt, setGeneratedAt] = useState<number | null>(null)
+  if (!previewUrl && !officialUrl) return null
+  const validation = validateSodexoExtensionForClinicalClose(value)
+  const ready = validation.ok
+  const previewSrc = previewUrl
+    ? `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${generatedAt ?? 0}`
+    : null
+
+  return (
+    <div
+      className="bg-white border-2 border-emerald-500 rounded-xl p-4 space-y-3"
+      data-testid="sodexo-reg-so01-pdf-generate"
+    >
+      <div>
+        <p className="text-sm font-bold text-emerald-900">PDF Sodexo REG-SO-01</p>
+        <p className="text-xs text-slate-600 mt-1">
+          Al terminar de llenar la extensión, genera aquí el PDF con el{' '}
+          <strong>formato visual oficial de Sodexo</strong> (plantilla REG-SO-01). Se genera con los
+          datos guardados — espera el autoguardado antes de generarlo. Esta vista previa no sustituye
+          el PDF firmado tras emitir el dictamen.
+        </p>
+      </div>
+
+      {!ready ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+          <p className="font-bold">Falta completar para generar:</p>
+          <ul className="list-disc pl-4 mt-1 space-y-0.5">
+            {validation.errors.map((e) => (
+              <li key={e}>{e}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={!ready || !previewUrl}
+          onClick={() => setGeneratedAt(Date.now())}
+          className="bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:text-slate-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
+        >
+          {generatedAt ? '↻ Actualizar PDF' : '📄 Generar PDF Sodexo'}
+        </button>
+        {previewUrl ? (
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled={!ready}
+            className={`text-sm font-bold px-5 py-2.5 rounded-xl border transition-colors ${
+              ready
+                ? 'border-emerald-700 text-emerald-800 hover:bg-emerald-50'
+                : 'border-slate-200 text-slate-400 pointer-events-none'
+            }`}
+          >
+            ⬇ Descargar PDF
+          </a>
+        ) : null}
+        {showOfficial && officialUrl ? (
+          <a
+            href={officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-bold px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white transition-colors"
+          >
+            PDF firmado
+          </a>
+        ) : null}
+      </div>
+
+      {generatedAt && previewSrc ? (
+        <iframe
+          key={generatedAt}
+          src={previewSrc}
+          title="PDF Sodexo REG-SO-01"
+          className="w-full h-[720px] border border-slate-200 rounded-lg bg-slate-50"
+        />
+      ) : null}
+    </div>
+  )
+}
+
 type Props = {
   value: SodexoExtensionData
   onChange: (next: SodexoExtensionData) => void
   readonly?: boolean
   sodexoPdfUrl?: string
+  sodexoPreviewPdfUrl?: string
   showSodexoPdfDownload?: boolean
   sodexoPdfPending?: boolean
   validatingViewHref?: string
@@ -259,6 +354,7 @@ export function SodexoExtension({
   onChange,
   readonly = false,
   sodexoPdfUrl,
+  sodexoPreviewPdfUrl,
   showSodexoPdfDownload = false,
   sodexoPdfPending = false,
   validatingViewHref,
@@ -385,8 +481,9 @@ export function SodexoExtension({
           data-testid="sodexo-reg-so01-pdf-pending"
         >
           <p>
-            ⏳ El PDF Sodexo REG-SO-01 se habilita después de{' '}
-            <strong>Firmar y Emitir Dictamen</strong> (mismo requisito que el entregable clínico).
+            Puedes generar la <strong>vista previa Sodexo REG-SO-01</strong> al final de esta
+            extensión. El PDF firmado se habilita después de{' '}
+            <strong>Firmar y Emitir Dictamen</strong>.
           </p>
           {validatingViewHref ? (
             <Link
@@ -782,6 +879,13 @@ export function SodexoExtension({
         </BlockSubsection>
 
       </SodexoBlock>
+
+      <SodexoPdfGeneratePanel
+        value={value}
+        previewUrl={sodexoPreviewPdfUrl}
+        officialUrl={sodexoPdfUrl}
+        showOfficial={showSodexoPdfDownload}
+      />
     </div>
   )
 }

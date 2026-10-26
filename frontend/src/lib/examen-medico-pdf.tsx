@@ -700,13 +700,16 @@ export async function generateExamenMedicoValidatedPdf(
  * entregable clínico AMI (`generateExamenMedicoValidatedPdf`).
  */
 export async function generateSodexoRegSo01Pdf(
-  input: GenerateExamenMedicoPdfInput,
+  input: GenerateExamenMedicoPdfInput & { persist?: boolean },
 ): Promise<GenerateExamenMedicoPdfResult> {
   const buffer = await renderSodexoExamenMedicoPdf(input.data)
   const hash = `sha256:${createHash('sha256').update(buffer).digest('hex')}`
 
   let url: string | null = null
   let absolutePath: string | null = null
+  if (input.persist === false) {
+    return { buffer, hash, url, absolutePath }
+  }
   try {
     const dir = path.join(REPO_UPLOAD_DIR, 'examen-medico-sodexo-pdfs')
     await mkdir(dir, { recursive: true })

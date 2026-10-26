@@ -121,6 +121,11 @@ export function examenMedicoSodexoPdfUrl(eventId: string): string {
   return `/api/pdf/examen-medico-sodexo/${eventId}`
 }
 
+/** Vista previa Sodexo REG-SO-01 desde la extensión (misma plantilla, sin exigir dictamen firmado). */
+export function examenMedicoSodexoPreviewPdfUrl(eventId: string): string {
+  return `/api/pdf/examen-medico-sodexo/${eventId}?preview=1`
+}
+
 /**
  * IMPL-FEATURE-20260825-03 ronda 6 (FND-20260825-23):
  * URL del expediente orientada a la vista de Validación (paso donde
@@ -1724,6 +1729,7 @@ export default function ExamenMedicoEstudio({
             onChange={setSodexoExt}
             readonly={readonly}
             sodexoPdfUrl={examenMedicoSodexoPdfUrl(eventId)}
+            sodexoPreviewPdfUrl={examenMedicoSodexoPreviewPdfUrl(eventId)}
             showSodexoPdfDownload={shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)}
             sodexoPdfPending={Boolean(aptitud) && hasMedicalVerdict !== true}
             validatingViewHref={navigateToValidatingView(eventId)}

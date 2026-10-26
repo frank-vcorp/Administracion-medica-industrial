@@ -99,7 +99,9 @@ export async function GET(
 export async function deliverExamenMedicoPdf(
   eventId: string,
   deliverable: ExamenMedicoPdfDeliverable,
+  opts?: { preview?: boolean; userId?: string },
 ): Promise<NextResponse> {
+  const isSodexoPreview = deliverable === 'sodexo' && opts?.preview === true
   // ── Resolver Event + Verdict + Exam + perfil del paciente ───────────────
   const event = await prisma.medicalEvent.findUnique({
     where: { id: eventId },
@@ -174,9 +176,10 @@ export async function deliverExamenMedicoPdf(
     return new NextResponse('Recurso no disponible', { status: 404 })
   }
 
-  // ADR-R4/R6: el PDF requiere dictamen firmado con aptitud explícita del
-  // médico. Sin verdict NO se genera.
-  if (!event.verdict) {
+  // ADR-R4/R6: el PDF oficial requiere dictamen firmado con aptitud explícita
+  // del médico. Sin verdict NO se genera. La vista previa Sodexo (borrador
+  // desde la extensión, misma plantilla REG-SO-01) es la única excepción.
+  if (!event.verdict && !isSodexoPreview) {
     return new NextResponse(
       'El dictamen aún no ha sido emitido.',
       { status: 404 }
@@ -189,7 +192,7 @@ export async function deliverExamenMedicoPdf(
   const aptitudSnapshot = str(
     (event.exam?.physicalExamData as Record<string, unknown> | null)?.aptitud
   )
-  if (!aptitudSnapshot) {
+  if (!aptitudSnapshot && !isSodexoPreview) {
     return new NextResponse(
       'El dictamen no tiene aptitud registrada. El médico debe completar la aptitud antes de generar el PDF clínico.',
       { status: 409 }
@@ -215,13 +218,16 @@ export async function deliverExamenMedicoPdf(
 
   const filename =
     deliverable === 'sodexo'
-      ? `ExamenMedicoSodexo-${event.worker.universalId}.pdf`
+      ? isSodexoPreview
+        ? `ExamenMedicoSodexo-${event.worker.universalId}-previo.pdf`
+        : `ExamenMedicoSodexo-${event.worker.universalId}.pdf`
       : `ExamenMedico-${event.worker.universalId}.pdf`
 
-  const fastPathRel =
-    deliverable === 'sodexo'
+  const fastPathRel = isSodexoPreview
+    ? null
+    : deliverable === 'sodexo'
       ? `examen-medico-sodexo-pdfs/${event.id}.pdf`
-      : event.verdict.pdfUrl
+      : event.verdict?.pdfUrl
 
   if (fastPathRel) {
     try {
@@ -330,29 +336,47 @@ export async function deliverExamenMedicoPdf(
 
     // Identidad del médico: el snapshot congelado vive en el validador
     // actual del Verdict (User). Si por algún motivo falta la cédula o la
-    // firma, NO se genera el PDF (gate §R6).
-    const validator = event.verdict.validator
+    // firma, NO se genera el PDF oficial (gate §R6). En vista previa se usa
+    // el usuario en sesión y se toleran campos vacíos (borrador sin firmar).
+    let validator = event.verdict?.validator ?? null
+    if (!validator && isSodexoPreview && opts?.userId) {
+      validator = await prisma.user.findUnique({
+        where: { id: opts.userId },
+        select: {
+          id: true,
+          fullName: true,
+          professionalLicense: true,
+          signatureImageUrl: true,
+        },
+      })
+    }
     if (
-      !validator ||
-      !validator.fullName ||
-      !validator.professionalLicense ||
-      !validator.signatureImageUrl
+      !isSodexoPreview &&
+      (!validator ||
+        !validator.fullName ||
+        !validator.professionalLicense ||
+        !validator.signatureImageUrl)
     ) {
       return new NextResponse(
         'El médico firmante no tiene identidad congelada completa (cédula/firma). El PDF no puede regenerarse. Completa el perfil médico y vuelve a firmar.',
         { status: 410 }
       )
     }
+    const medicoPreview = {
+      fullName: validator?.fullName ?? '',
+      professionalLicense: validator?.professionalLicense ?? '',
+      signatureImageUrl: validator?.signatureImageUrl ?? '',
+    }
 
     // Recomendaciones: el snapshot persistido por el médico
     // (`MedicalVerdict.recommendations`) tiene prioridad sobre el
     // auto-poblamiento. El auto-poblamiento sirve como base si el médico
     // no escribió nada (DA-7).
-    const recomendacionesPersisted = str(event.verdict.recommendations)
+    const recomendacionesPersisted = str(event.verdict?.recommendations)
 
     const data = await buildExamenMedicoPdfDataAsync({
-      folio: event.verdict.id,
-      signedAt: event.verdict.signedAt,
+      folio: event.verdict?.id ?? event.id,
+      signedAt: event.verdict?.signedAt ?? new Date(),
       status: 'SIGNED',
       eventId: event.id,
       attentionDate: event.checkInDate ?? event.createdAt,
@@ -482,7 +506,9 @@ export async function deliverExamenMedicoPdf(
         prueba_lasegue: str(physicalExamData.prueba_lasegue),
         presencia_quiste_sinovial: formatQuisteDisplay(physicalExamData) || null,
       },
-      impresionDiagnostica: str(event.verdict.finalDiagnosis),
+      impresionDiagnostica: str(
+        event.verdict?.finalDiagnosis ?? physicalExamData.impresion_diagnostica,
+      ),
       aptitud: str(physicalExamData.aptitud),
       restricciones: str(physicalExamData.restricciones),
       observacionesFinales: str(physicalExamData.observaciones_finales),
@@ -493,11 +519,7 @@ export async function deliverExamenMedicoPdf(
         labsIa,
         physicalExamData
       ),
-      medico: {
-        fullName: validator.fullName,
-        professionalLicense: validator.professionalLicense,
-        signatureImageUrl: validator.signatureImageUrl,
-      },
+      medico: medicoPreview,
       slots: {
         audiometria: str(physicalExamData.audiometria_texto),
         espirometria: str(physicalExamData.espirometria_texto),
@@ -559,7 +581,7 @@ export async function deliverExamenMedicoPdf(
         )
       }
       const consentCheck = validateSodexoCheckInConsent(informedConsentSignedAt)
-      if (!consentCheck.ok) {
+      if (!consentCheck.ok && !isSodexoPreview) {
         return NextResponse.json(
           {
             error: 'Consentimiento de check-in requerido para REG-SO-01.',
@@ -572,12 +594,16 @@ export async function deliverExamenMedicoPdf(
 
     const result =
       deliverable === 'sodexo'
-        ? await generateSodexoRegSo01Pdf({ data, eventId: event.id })
+        ? await generateSodexoRegSo01Pdf({
+            data,
+            eventId: event.id,
+            persist: !isSodexoPreview,
+          })
         : await generateExamenMedicoValidatedPdf({ data, eventId: event.id })
 
     // P3-1 (QA-20260825-03): cablear el fast-path clínico en MedicalVerdict.
     // El PDF Sodexo usa carpeta propia (`examen-medico-sodexo-pdfs/`).
-    if (deliverable === 'clinical' && result.url && !event.verdict.pdfUrl) {
+    if (deliverable === 'clinical' && result.url && !event.verdict?.pdfUrl) {
       try {
         await prisma.medicalVerdict.update({
           where: { eventId: event.id },
@@ -596,7 +622,7 @@ export async function deliverExamenMedicoPdf(
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${filename}"`,
-        'Cache-Control': 'private, max-age=300',
+        'Cache-Control': isSodexoPreview ? 'private, no-store' : 'private, max-age=300',
       },
     })
   } catch (err) {
