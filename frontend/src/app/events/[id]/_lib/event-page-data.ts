@@ -106,6 +106,7 @@ export async function fetchEventPageData(input: {
   id: string
   view?: string
   eventTest?: string
+  emSection?: string
 }): Promise<EventPageData | null> {
   let event = await getEventById(input.id)
   if (!event) return null
@@ -126,6 +127,7 @@ export async function fetchEventPageData(input: {
     const { redirect } = await import('next/navigation')
     const qs = new URLSearchParams({ view: 'IN_PROGRESS' })
     if (input.eventTest) qs.set('eventTest', input.eventTest)
+    if (input.emSection) qs.set('emSection', input.emSection)
     redirect(`/events/${input.id}?${qs.toString()}`)
   }
 

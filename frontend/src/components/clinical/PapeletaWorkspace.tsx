@@ -29,8 +29,9 @@
  */
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useState, useTransition } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { patchPapeletaSearchParams } from '@/lib/clinical/papeleta-navigation'
 import type { StudyPresentationSchema } from "@/types/calibration"
 import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
@@ -381,7 +382,24 @@ export default function PapeletaWorkspace({
   initialEventTestId = null,
 }: PapeletaWorkspaceProps) {
   const router = useRouter()
-  const [activeTestId, setActiveTestId] = useState<string | null>(null)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [activeTestId, setActiveTestIdInternal] = useState<string | null>(
+    () => initialEventTestId ?? null,
+  )
+
+  const setActiveTestId = useCallback(
+    (testId: string | null) => {
+      setActiveTestIdInternal(testId)
+      const next = patchPapeletaSearchParams(
+        new URLSearchParams(searchParams.toString()),
+        { eventTest: testId },
+      )
+      const qs = next.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams],
+  )
   const [localTests, setLocalTests] = useState<StudyTest[]>(eventTests)
   const [isPending, startTransition] = useTransition()
   const [uploadError, setUploadError] = useState('')
@@ -453,8 +471,10 @@ export default function PapeletaWorkspace({
   useEffect(() => {
     if (!initialEventTestId) return
     const match = eventTests.find(t => t.id === initialEventTestId)
-    if (match) setActiveTestId(initialEventTestId)
-  }, [initialEventTestId, eventTests])
+    if (match && activeTestId !== initialEventTestId) {
+      setActiveTestIdInternal(initialEventTestId)
+    }
+  }, [initialEventTestId, eventTests, activeTestId])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Actualizaciones optimistas del estado local

@@ -259,7 +259,7 @@ function EventView({ data }: EventViewProps) {
 
 export default async function EventPage(props: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ view?: string; eventTest?: string }>
+  searchParams: Promise<{ view?: string; eventTest?: string; emSection?: string }>
 }) {
   const { id } = await props.params
   const searchParams = await props.searchParams
@@ -267,6 +267,7 @@ export default async function EventPage(props: {
     id,
     view: searchParams?.view,
     eventTest: searchParams?.eventTest,
+    emSection: searchParams?.emSection,
   })
   if (!data) notFound()
   return <EventView data={data} />

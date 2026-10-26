@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { type SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import {
@@ -367,16 +367,20 @@ export function SodexoExtension({
     onChange({ ...value, actividades_cargo: fromAmi })
   }, [amiCtx.antecedentesCaptured, value.actividades_cargo, readonly, onChange, value])
 
+  const sodexoValueRef = useRef(value)
+  sodexoValueRef.current = value
+
   useEffect(() => {
     if (readonly) return
-    const synced = syncSodexoExtensionCapture(value, {
+    const current = sodexoValueRef.current
+    const synced = syncSodexoExtensionCapture(current, {
       patientSexo,
       showGineco,
       antecedentesCaptured: amiCtx.antecedentesCaptured,
       modulo1: amiCtx.modulo1 as Record<string, unknown>,
-      inmunizacionesComplementariasLegacy: value.inmunizaciones_complementarias,
+      inmunizacionesComplementariasLegacy: current.inmunizaciones_complementarias,
     })
-    if (JSON.stringify(synced) !== JSON.stringify(value)) {
+    if (JSON.stringify(synced) !== JSON.stringify(current)) {
       onChange(synced)
     }
   }, [
@@ -385,9 +389,7 @@ export function SodexoExtension({
     showGineco,
     amiCtx.antecedentesCaptured,
     amiCtx.modulo1,
-    value,
     onChange,
-    value.inmunizaciones_complementarias,
   ])
 
   return (

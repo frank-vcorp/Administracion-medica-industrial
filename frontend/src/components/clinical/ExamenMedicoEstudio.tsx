@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { getCurrentDoctorProfile } from "@/actions/doctor-profile.actions"
@@ -75,11 +75,15 @@ import {
   type ExamenMedicoVariant,
 } from "@/lib/clinical/examen-medico-variant"
 import { EXAMEN_CAPTURE_CLOSED_KEY } from "@/lib/clinical/examen-medico-capture"
+import { loadSodexoExtensionFromStorage } from '@/lib/sodexo-extension-validation'
+import {
+  examenMedicoNavSectionFromTabs,
+  parseExamenMedicoNavSection,
+  patchPapeletaSearchParams,
+} from '@/lib/clinical/papeleta-navigation'
 import {
   emptyFlowserveExtension,
-  emptySodexoExtension,
   FlowserveExtensionSchema,
-  SodexoExtensionSchema,
   type FlowserveExtensionData,
   type SodexoExtensionData,
 } from "@/schemas/clinical/examen-medico-variant.schema"
@@ -351,6 +355,9 @@ export default function ExamenMedicoEstudio({
   onPapeletaActiveSectionChange,
 }: ExamenMedicoEstudioProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const emNavFromUrl = parseExamenMedicoNavSection(searchParams.get('emSection'))
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
   const examVariant: ExamenMedicoVariant = resolveExamenMedicoVariant(
     testNameSnapshot,
@@ -402,7 +409,9 @@ export default function ExamenMedicoEstudio({
   )
   // IMPL-20260809-02: default 'antecedentes' (era 'declarativa' en v1) — la primera
   // sub-pestaña visible al abrir Examen Médico es Antecedentes.
-  const [activeInnerTab, setActiveInnerTab] = useState<InnerTab>('antecedentes')
+  const [activeInnerTab, setActiveInnerTab] = useState<InnerTab>(
+    () => emNavFromUrl?.innerTab ?? 'antecedentes',
+  )
   const [isPending, startTransition] = useTransition()
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -440,14 +449,9 @@ export default function ExamenMedicoEstudio({
     return emptyFlowserveExtension()
   })
 
-  const [sodexoExt, setSodexoExt] = useState<SodexoExtensionData>(() => {
-    const raw = variantExtensionsStored.SODEXO
-    if (raw && typeof raw === 'object') {
-      const parsed = SodexoExtensionSchema.safeParse(raw)
-      if (parsed.success) return parsed.data
-    }
-    return emptySodexoExtension()
-  })
+  const [sodexoExt, setSodexoExt] = useState<SodexoExtensionData>(() =>
+    loadSodexoExtensionFromStorage(variantExtensionsStored.SODEXO),
+  )
 
   // ── Estado Somatometría (pestaña 1) ───────────────────────────────────────
   const [somaForm, setSomaForm] = useState<Record<string, string>>(() =>
@@ -523,7 +527,34 @@ export default function ExamenMedicoEstudio({
   }
 
   // ── Pestaña activa externa (1-4) ──────────────────────────────────────────
-  const [outerTab, setOuterTab] = useState<OuterTab>('somatometria')
+  const [outerTab, setOuterTab] = useState<OuterTab>(
+    () => emNavFromUrl?.outerTab ?? 'somatometria',
+  )
+
+  // ── Bloqueo de pestaña 4 ─────────────────────────────────────────────────
+  const canAccessExamen = somaCompleted && vitalsCompleted && agudezaCompleted
+
+  useEffect(() => {
+    if (outerTab === 'examen_medico' && !canAccessExamen) {
+      setOuterTab('somatometria')
+    }
+  }, [canAccessExamen, outerTab])
+
+  useEffect(() => {
+    if (activeInnerTab === 'extension' && examVariant === 'AMI') {
+      setActiveInnerTab('impresion')
+    }
+  }, [activeInnerTab, examVariant])
+
+  useEffect(() => {
+    const section = examenMedicoNavSectionFromTabs(outerTab, activeInnerTab)
+    if (searchParams.get('emSection') === section) return
+    const next = patchPapeletaSearchParams(
+      new URLSearchParams(searchParams.toString()),
+      { emSection: section },
+    )
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+  }, [activeInnerTab, outerTab, pathname, router, searchParams])
 
   useEffect(() => {
     if (!papeletaLayout || !onPapeletaActiveSectionChange) return
@@ -536,9 +567,6 @@ export default function ExamenMedicoEstudio({
     activeInnerTab,
     onPapeletaActiveSectionChange,
   ])
-
-  // ── Bloqueo de pestaña 4 ─────────────────────────────────────────────────
-  const canAccessExamen = somaCompleted && vitalsCompleted && agudezaCompleted
 
   // ── Cálculos derivados Somatometría ───────────────────────────────────────
   const peso = parseFloat(somaForm.peso_kg) || 0
