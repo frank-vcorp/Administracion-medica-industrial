@@ -94,13 +94,13 @@ Referencias: `SodexoExtensionSchema`, `SodexoExtension.tsx`, `sodexo-examen-medi
 
 ---
 
-## §10–12 Diagnóstico, restricciones, observaciones
+## §10–13 Diagnóstico, restricciones, observaciones
 
 | Bloque PDF | Fuente | Estado |
 |------------|--------|--------|
-| Impresión diagnóstica, restricciones | **AMI** — dictamen / examen | Proyección ✅ |
-| Observaciones Sodexo, recomendaciones, aptitud, estudios | **AMI** consolidado | Proyección ✅ |
-| Encabezado “SALUD OCUPACIONAL…” | Estático / plantilla | Opcional texto fijo **P3** |
+| Impresión diagnóstica, restricciones | **AMI** — Impresión / Aptitud | Proyección al PDF ✅; **no** en pestaña Extensión |
+| Recomendaciones, observaciones, aptitud, estudios | **AMI** consolidado | Proyección al PDF ✅; **no** en pestaña Extensión |
+| Encabezado “SALUD OCUPACIONAL…” | **Ext.** `titulo_seccion_sodexo` (opcional) | UI §13 mínima |
 | Firma médico | **AMI** | Proyección imagen ✅ |
 
 ---

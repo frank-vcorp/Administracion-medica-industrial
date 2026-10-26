@@ -74,7 +74,7 @@ import {
   SODEXO_HEREDOFAMILIAR_RIGHT,
   type SodexoHeredofamiliarKey,
 } from '@/lib/sodexo-heredofamiliar'
-import { AmiMirrorBanner, AmiMirrorTable, AmiMirrorTextBlock } from '@/components/clinical/examen-medico/SodexoAmiPreview'
+import { AmiMirrorTable, AmiMirrorTextBlock } from '@/components/clinical/examen-medico/SodexoAmiPreview'
 
 type ManoDominante = NonNullable<
   NonNullable<SodexoExtensionData['examen_encabezado']>['mano_dominante']
@@ -778,64 +778,19 @@ export function SodexoExtension({
 
       </SodexoBlock>
 
-      <SodexoBlock blockId="10" section="10" title="Diagnósticos" mode="ami">
-        <AmiMirrorTextBlock
-          title="Impresión diagnóstica"
-          text={
-            [
-              amiCtx.examForm.examen_medico_texto,
-              amiCtx.examForm.impresion_diagnostica,
-              amiCtx.examForm.audiometria_texto,
-              amiCtx.examForm.espirometria_texto,
-              amiCtx.examForm.laboratorios_texto,
-              amiCtx.examForm.radiografia_texto,
-            ]
-              .filter((t) => t?.trim())
-              .join('\n\n') || ''
-          }
-          emptyHint="Captura en Examen Médico → Impresión / Aptitud."
-        />
-      </SodexoBlock>
-
-      <SodexoBlock blockId="11" section="11" title="Recomendaciones" mode="ami">
-        <AmiMirrorTextBlock
-          title="Recomendaciones clínicas"
-          text={amiCtx.examForm.recomendaciones_clinicas ?? ''}
-          emptyHint="Edita recomendaciones en la pestaña Impresión / Aptitud."
-        />
-      </SodexoBlock>
-
-      <SodexoBlock blockId="12" section="12" title="Restricciones" mode="ami">
-        <AmiMirrorTextBlock
-          title="Restricciones"
-          text={amiCtx.examForm.restricciones ?? ''}
-          emptyHint="Captura restricciones en Impresión / Aptitud."
-        />
-      </SodexoBlock>
-
       <SodexoBlock
         blockId="13"
         section="13"
-        title="Observaciones generales y de seguimiento"
-        subtitle="SALUD OCUPACIONAL SODEXO MÉXICO"
+        title="Título de cierre en PDF"
+        subtitle="Opcional. Diagnósticos, recomendaciones, restricciones y observaciones del §10–13 del impreso se arman al exportar desde Impresión / Aptitud (AMI)."
       >
-        <AmiMirrorTextBlock
-          title="Observaciones (AMI)"
-          text={amiCtx.examForm.observaciones_finales ?? ''}
-          emptyHint="Captura observaciones en Impresión / Aptitud."
+        <Field
+          label="Texto «SALUD OCUPACIONAL…» (si difiere del predeterminado)"
+          value={value.titulo_seccion_sodexo ?? ''}
+          onChange={(v) => set('titulo_seccion_sodexo', v)}
+          readonly={readonly}
+          placeholder="SALUD OCUPACIONAL SODEXO MÉXICO"
         />
-        <BlockSubsection title="Encabezado de cierre en PDF (opcional)">
-          <Field
-            label="Título impreso"
-            value={value.titulo_seccion_sodexo ?? ''}
-            onChange={(v) => set('titulo_seccion_sodexo', v)}
-            readonly={readonly}
-            placeholder="SALUD OCUPACIONAL SODEXO MÉXICO"
-          />
-        </BlockSubsection>
-        {amiCtx.examForm.aptitud ? (
-          <AmiMirrorBanner>Aptitud registrada: {amiCtx.examForm.aptitud}</AmiMirrorBanner>
-        ) : null}
       </SodexoBlock>
     </div>
   )
