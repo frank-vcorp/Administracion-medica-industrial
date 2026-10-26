@@ -37,6 +37,8 @@ export type SodexoEfCatalogEntry = {
   signo?: SodexoEfPdfSignoPar
   /** Campo texto AcroForm (§9.8 u observaciones). */
   textField?: string
+  /** Casilla única AcroForm (p. ej. Prótesis Superior / Inferior / Total). */
+  checkField?: string
 }
 
 export type SodexoEfSectionDef = {

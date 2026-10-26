@@ -22,6 +22,9 @@ function applyRow(form: PdfForm, entry: (typeof SODEXO_EXAMEN_FISICO_CATALOG)[nu
   if (entry.kind === 'texto' && entry.textField && row.desc?.trim()) {
     sodexoSetText(form, entry.textField, row.desc)
   }
+  if (entry.kind === 'check_solo' && entry.checkField && row.resultado === 'NORMAL') {
+    sodexoSetCheck(form, entry.checkField, true)
+  }
 }
 
 function rowFromMap(

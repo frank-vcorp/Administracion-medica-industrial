@@ -32,6 +32,11 @@ import {
 import { estilosVidaSodexoIsEmpty } from '@/lib/sodexo-estilos-vida-catalog'
 import { prefillEstilosVidaSodexoFromApnp } from '@/lib/sodexo-estilos-vida-prefill'
 import {
+  SODEXO_EXAMEN_FISICO_91_COLUMN_LEFT,
+  SODEXO_EXAMEN_FISICO_91_COLUMN_RIGHT,
+  SODEXO_91_OROFARINGE_SIN_ACROFORM,
+} from '@/lib/sodexo-examen-fisico-91-layout'
+import {
   examenFisicoSodexoIsEmpty,
   SODEXO_EXAMEN_FISICO_CATALOG,
   SODEXO_EXAMEN_FISICO_SECTIONS,
@@ -1578,20 +1583,59 @@ function SodexoVisiometriaCasillasCapture({
   )
 }
 
+function Sodexo91OrganCell({
+  organCell,
+}: {
+  organCell?: { label: string; rowSpan: number }
+}) {
+  if (!organCell) return null
+  return (
+    <td
+      rowSpan={organCell.rowSpan}
+      className="p-2 font-semibold text-slate-800 align-top border-r border-slate-100 bg-slate-50/80"
+    >
+      {organCell.label}
+    </td>
+  )
+}
+
 function ExamenFisicoSodexoRow({
   entry,
   row,
   readonly,
   onPatch,
+  organCell,
 }: {
   entry: SodexoEfCatalogEntry
   row?: SodexoEfExtensionRow
   readonly?: boolean
   onPatch: (patch: Partial<SodexoEfExtensionRow>) => void
+  organCell?: { label: string; rowSpan: number }
 }) {
+  if (entry.kind === 'check_solo') {
+    const marked = row?.resultado === 'NORMAL'
+    return (
+      <tr className="border-t border-slate-50">
+        <Sodexo91OrganCell organCell={organCell} />
+        <td className="p-1.5 text-slate-800">{entry.label}</td>
+        <td className="p-1.5 text-center" colSpan={3}>
+          <label className="inline-flex items-center gap-2 text-[11px] text-slate-600">
+            <input
+              type="checkbox"
+              disabled={readonly}
+              checked={marked}
+              onChange={(e) => onPatch({ resultado: e.target.checked ? 'NORMAL' : null })}
+            />
+            Marcar
+          </label>
+        </td>
+      </tr>
+    )
+  }
   if (entry.kind === 'texto') {
     return (
       <tr className="border-t border-slate-50">
+        <Sodexo91OrganCell organCell={organCell} />
         <td className="p-1.5 text-slate-800" colSpan={4}>
           <span className="font-medium">{entry.label}</span>
           <input
@@ -1611,6 +1655,7 @@ function ExamenFisicoSodexoRow({
     const pos = row?.resultado === 'POS'
     return (
       <tr className="border-t border-slate-50">
+        <Sodexo91OrganCell organCell={organCell} />
         <td className="p-1.5 text-slate-800">{entry.label}</td>
         <td className="p-1.5 text-center">
           <input
@@ -1640,6 +1685,7 @@ function ExamenFisicoSodexoRow({
   const isAnormal = row?.resultado === 'ANORMAL'
   return (
     <tr className="border-t border-slate-50">
+      <Sodexo91OrganCell organCell={organCell} />
       <td className="p-1.5 text-slate-800">{entry.label}</td>
       <td className="p-1.5 text-center">
         <input
@@ -1694,7 +1740,8 @@ function ExamenFisicoSodexoEntriesTable({
 }) {
   if (entries.length === 0) return null
   const signEntries = entries.filter((e) => e.kind === 'signo')
-  const otherEntries = entries.filter((e) => e.kind !== 'signo')
+  const otherEntries = entries.filter((e) => e.kind !== 'signo' && e.kind !== 'check_solo')
+  const checkEntries = entries.filter((e) => e.kind === 'check_solo')
   const renderBlock = (block: SodexoEfCatalogEntry[], headerSigno: boolean) => (
     <table className="w-full text-xs">
       <thead>
@@ -1726,6 +1773,102 @@ function ExamenFisicoSodexoEntriesTable({
     <div className="space-y-2">
       {signEntries.length > 0 ? renderBlock(signEntries, true) : null}
       {otherEntries.length > 0 ? renderBlock(otherEntries, false) : null}
+      {checkEntries.length > 0 ? renderBlock(checkEntries, false) : null}
+    </div>
+  )
+}
+
+function ExamenFisicoSodexo91OrganBlock({
+  organ,
+  entries,
+  map,
+  readonly,
+  patchRow,
+}: {
+  organ: string
+  entries: SodexoEfCatalogEntry[]
+  map: Record<string, SodexoEfExtensionRow>
+  readonly?: boolean
+  patchRow: (key: string, patch: Partial<SodexoEfExtensionRow>) => void
+}) {
+  const orofaringeExtra = organ === 'Orofaringe' && SODEXO_91_OROFARINGE_SIN_ACROFORM
+  const rowSpan = entries.length + (orofaringeExtra ? 1 : 0)
+  if (rowSpan === 0) return null
+
+  return (
+    <table className="w-full text-xs border border-slate-200 rounded-md overflow-hidden">
+      <thead>
+        <tr className="bg-slate-50 border-b border-slate-200">
+          <th className="text-left p-1.5 font-semibold text-slate-600 italic w-[22%]">Órgano</th>
+          <th className="text-left p-1.5 font-semibold text-slate-600 italic">Hallazgo</th>
+          <th className="p-1.5 w-12 text-center font-semibold text-slate-600 italic">Normal</th>
+          <th className="p-1.5 w-12 text-center font-semibold text-slate-600 italic">Anormal</th>
+          <th className="text-left p-1.5 font-semibold text-slate-600 italic">Describir</th>
+        </tr>
+      </thead>
+      <tbody>
+        {entries.map((entry, i) => {
+          const organCell =
+            i === 0 ? { label: organ, rowSpan } : undefined
+          return (
+            <ExamenFisicoSodexoRow
+              key={entry.key}
+              entry={entry}
+              row={map[entry.key]}
+              readonly={readonly}
+              onPatch={(p) => patchRow(entry.key, p)}
+              organCell={organCell}
+            />
+          )
+        })}
+        {orofaringeExtra ? (
+          <tr className="border-t border-slate-50">
+            <td className="p-1.5 text-slate-800">Orofaringe</td>
+            <td className="p-1.5 text-[10px] text-slate-400 italic" colSpan={3}>
+              Solo en impreso REG-SO-01 (sin casilla en PDF digital)
+            </td>
+          </tr>
+        ) : null}
+      </tbody>
+    </table>
+  )
+}
+
+function ExamenFisicoSodexo91Section({
+  patientSexo,
+  map,
+  readonly,
+  patchRow,
+}: {
+  patientSexo?: string | null
+  map: Record<string, SodexoEfExtensionRow>
+  readonly?: boolean
+  patchRow: (key: string, patch: Partial<SodexoEfExtensionRow>) => void
+}) {
+  const entriesForOrgan = (organ: string) =>
+    sodexoExamenFisicoCatalogBySection('9.1')
+      .filter((e) => e.group === organ)
+      .filter((e) => sodexoEfEntryVisibleForSex(e, patientSexo))
+
+  const column = (organs: string[]) => (
+    <div className="space-y-3 min-w-0">
+      {organs.map((organ) => (
+        <ExamenFisicoSodexo91OrganBlock
+          key={organ}
+          organ={organ}
+          entries={entriesForOrgan(organ)}
+          map={map}
+          readonly={readonly}
+          patchRow={patchRow}
+        />
+      ))}
+    </div>
+  )
+
+  return (
+    <div className="grid md:grid-cols-2 gap-3">
+      {column([...SODEXO_EXAMEN_FISICO_91_COLUMN_LEFT])}
+      {column([...SODEXO_EXAMEN_FISICO_91_COLUMN_RIGHT])}
     </div>
   )
 }
@@ -1930,6 +2073,20 @@ function ExamenFisicoSodexoTable({
                   onChange({ ...value, examen_fisico_columna_sodexo: next })
                 }
               />
+            ) : sec.id === '9.1' ? (
+              <>
+                <ExamenFisicoSodexo91Section
+                  patientSexo={patientSexo}
+                  map={map}
+                  readonly={readonly}
+                  patchRow={patchRow}
+                />
+                <SodexoVisiometriaCasillasCapture
+                  value={value}
+                  onChange={onChange}
+                  readonly={readonly}
+                />
+              </>
             ) : (
               <>
                 {sec.groups.map((group) => {
@@ -1952,12 +2109,6 @@ function ExamenFisicoSodexoTable({
                           {group}
                         </p>
                       ) : null}
-                      {sec.id === '9.1' && group === 'Cavidad oral' ? (
-                        <p className="text-[10px] text-slate-500 px-3 py-1.5 border-b border-slate-50 bg-white">
-                          En el impreso también figuran Orofaringe y Prótesis; la plantilla PDF no trae casillas
-                          AcroForm para esas filas — usa Mucosa, Amígdalas y Dentadura (+ Describir).
-                        </p>
-                      ) : null}
                       <div className="p-1">
                         <ExamenFisicoSodexoEntriesTable
                           entries={entries}
@@ -1969,13 +2120,6 @@ function ExamenFisicoSodexoTable({
                     </div>
                   )
                 })}
-                {sec.id === '9.1' ? (
-                  <SodexoVisiometriaCasillasCapture
-                    value={value}
-                    onChange={onChange}
-                    readonly={readonly}
-                  />
-                ) : null}
               </>
             )}
           </div>

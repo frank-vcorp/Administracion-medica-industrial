@@ -59,29 +59,49 @@ describe('sodexo-examen-fisico-catalog', () => {
         expect(names.has(entry.signo.pos)).toBe(true)
       }
       if (entry.textField) expect(names.has(entry.textField)).toBe(true)
+      if (entry.checkField) expect(names.has(entry.checkField)).toBe(true)
     }
   })
 
-  it('§9.1 Cabeza y cuello — grupos del impreso (no una sola tabla)', () => {
+  it('§9.1 Cabeza y cuello — órgano y hallazgos REG-SO-01', () => {
     const sec = SODEXO_EXAMEN_FISICO_SECTIONS.find((s) => s.id === '9.1')!
     expect(sec.groups).toEqual([...SODEXO_EXAMEN_FISICO_91_GROUPS])
     const rows = SODEXO_EXAMEN_FISICO_CATALOG.filter((e) => e.section === '9.1')
+    expect(rows.filter((r) => r.group === 'Cráneo').map((r) => r.label)).toEqual(['Cráneo'])
     expect(rows.filter((r) => r.group === 'Ojos').map((r) => r.label)).toEqual([
       'Párpados',
+      'Conjuntiva',
       'Escleras',
       'Córnea',
       'Iris-pupilas',
-      'Inspección',
       'Fondo de ojo',
+    ])
+    expect(rows.filter((r) => r.group === 'Oídos').map((r) => r.label)).toEqual([
       'Pabellones',
-      'Conjuntiva',
-      'Observaciones (columna Ojos)',
+      'Conductos',
+      'Tímpanos',
     ])
-    expect(rows.filter((r) => r.group === 'Cavidad oral').map((r) => r.label)).toEqual([
+    expect(rows.filter((r) => r.group === 'Orofaringe').map((r) => r.label)).toEqual(['Amígdalas'])
+    expect(rows.filter((r) => r.group === 'Nariz').map((r) => r.label)).toEqual([
+      'Inspección',
       'Mucosa',
-      'Amígdalas',
-      'Dentadura',
+      'Tabique',
+      'Cornetes',
+      'Senos paranasales',
     ])
+    expect(rows.filter((r) => r.group === 'Cuello').map((r) => r.label)).toEqual([
+      'Inspección',
+      'Palpación',
+      'Adenopatías',
+      'Otros',
+    ])
+    expect(rows.filter((r) => r.group === 'Dentadura / Prótesis').map((r) => r.label)).toEqual([
+      'Dentadura',
+      'Prótesis — Superior',
+      'Prótesis — Inferior',
+      'Prótesis — Total',
+    ])
+    expect(rows.some((r) => r.key === '91_oidos')).toBe(false)
   })
 
   it('§9.3 Abdomen — solo ítems del impreso', () => {
