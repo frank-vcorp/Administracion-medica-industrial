@@ -36,19 +36,14 @@ import { sodexoEfEntryVisibleForSex } from '@/lib/sodexo-examen-fisico-visibilit
 import { SODEXO_ARCOS_MI, SODEXO_ARCOS_MS } from '@/lib/sodexo-examen-fisico-arcos'
 import { SodexoArcosMovimientoGrid } from '@/components/clinical/examen-medico/SodexoArcosMovimientoGrid'
 import { SodexoColumnaVertebralSection } from '@/components/clinical/examen-medico/SodexoColumnaVertebralSection'
-import { SODEXO_REG_SO01_BLOCKS } from '@/lib/sodexo-reg-so01-outline'
 import {
-  eyeAcuitySummary,
-  flattenAmiSectionForDisplay,
   historiaOcupacionalAmiNarrative,
   identificacionAmiRows,
   puestoActualFromAntecedentes,
   isSodexoFemalePatient,
   isSodexoMalePatient,
   resolvePatientSexo,
-  sectionRecord,
   sodexoNeedsActividadesBlock,
-  somatometrySummary,
   type SodexoAmiMirrorInput,
 } from '@/lib/sodexo-ami-mirror'
 import {
@@ -74,90 +69,33 @@ type ManoDominante = NonNullable<
 >
 function SodexoBlock({
   blockId,
-  section,
   title,
-  subtitle,
-  mode = 'extension',
   children,
 }: {
   blockId: string
-  section: string
   title: string
-  subtitle?: string
-  mode?: 'extension' | 'ami'
   children?: ReactNode
 }) {
-  const isAmi = mode === 'ami'
   return (
     <section
       id={`sodexo-block-${blockId}`}
-      className={`rounded-xl overflow-hidden scroll-mt-4 ${
-        isAmi
-          ? 'border border-dashed border-slate-300 bg-slate-50/90'
-          : 'border-2 border-emerald-200 bg-white shadow-sm'
-      }`}
+      className="rounded-lg border border-slate-200 bg-white scroll-mt-4"
     >
-      <div
-        className={`flex gap-3 px-4 py-3 border-b ${
-          isAmi ? 'border-slate-200 bg-slate-100/80' : 'border-emerald-100 bg-emerald-50/60'
-        }`}
-      >
-        <span
-          className={`flex h-10 min-w-10 shrink-0 items-center justify-center rounded-lg px-2 text-xs font-bold ${
-            isAmi ? 'bg-slate-500 text-white' : 'bg-emerald-700 text-white'
-          }`}
-        >
-          {section}
-        </span>
-        <div className="min-w-0">
-          <h2 className="text-sm font-bold text-slate-900 leading-snug">{title}</h2>
-          {subtitle ? <p className="text-[11px] text-slate-600 mt-0.5">{subtitle}</p> : null}
-          {isAmi ? (
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mt-1">
-              Solo papeleta AMI — no se captura aquí
-            </p>
-          ) : (
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800 mt-1">
-              Extensión Sodexo REG-SO-01
-            </p>
-          )}
-        </div>
-      </div>
-      {children ? <div className="p-4 space-y-5">{children}</div> : null}
+      <h2 className="text-xs font-bold text-slate-800 px-3 py-2 border-b border-slate-100 bg-slate-50">
+        {title}
+      </h2>
+      {children ? <div className="p-3 space-y-3">{children}</div> : null}
     </section>
   )
 }
 
-function BlockSubsection({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+function BlockSubsection({ title, children }: { title?: string; children: ReactNode }) {
+  if (!title) return <>{children}</>
   return (
     <div className="space-y-2">
-      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600 border-b border-slate-100 pb-1">
-        {title}
-      </h3>
-      {hint ? <p className="text-[11px] text-slate-500">{hint}</p> : null}
+      <p className="text-[11px] font-semibold text-slate-600">{title}</p>
       {children}
     </div>
-  )
-}
-
-function SodexoBlockNav({ showGineco }: { showGineco: boolean }) {
-  return (
-    <nav
-      className="flex flex-wrap gap-1.5 text-[11px]"
-      aria-label="Secciones REG-SO-01"
-    >
-      {SODEXO_REG_SO01_BLOCKS.filter(
-        (b) => !b.hideInExtension && (!b.femaleOnly || showGineco),
-      ).map((item) => (
-        <a
-          key={item.id}
-          href={`#sodexo-block-${item.id}`}
-          className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 font-semibold text-emerald-900 hover:bg-emerald-50 transition-colors"
-        >
-          {item.section}. {item.title}
-        </a>
-      ))}
-    </nav>
   )
 }
 
@@ -293,16 +231,14 @@ function SodexoPdfGeneratePanel({
 
   return (
     <div
-      className="bg-white border-2 border-emerald-500 rounded-xl p-4 space-y-3"
+      className="bg-white border border-emerald-400 rounded-lg p-3 space-y-2"
       data-testid="sodexo-reg-so01-pdf-generate"
     >
       <div>
-        <p className="text-sm font-bold text-emerald-900">PDF Sodexo REG-SO-01</p>
+        <p className="text-sm font-bold text-emerald-900">Vista previa PDF Sodexo</p>
         <p className="text-xs text-slate-600 mt-1">
-          Al terminar de llenar la extensión, genera aquí el PDF con el{' '}
-          <strong>formato visual oficial de Sodexo</strong> (plantilla REG-SO-01). La vista previa
-          usa los datos de esta pantalla (no hace falta esperar al autoguardado). No sustituye el PDF
-          firmado tras emitir el dictamen.
+          Genera o actualiza el PDF con los datos de esta pantalla. El PDF firmado queda disponible
+          tras emitir el dictamen.
         </p>
       </div>
 
@@ -371,7 +307,7 @@ function SodexoPdfGeneratePanel({
         <iframe
           key={generatedAt}
           src={pdfObjectUrl}
-          title="PDF Sodexo REG-SO-01"
+          title="PDF Sodexo"
           className="w-full h-[720px] border border-slate-200 rounded-lg bg-slate-50"
         />
       ) : null}
@@ -455,30 +391,14 @@ export function SodexoExtension({
   ])
 
   return (
-    <div className="space-y-6">
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-        <p className="text-sm font-bold text-emerald-900">Formato Sodexo — campos adicionales</p>
-        <p className="text-xs text-emerald-700 mt-1">
-          Mismo orden que el <strong>formato ejemplo REG-SO-01</strong>: cada bloque numerado coincide con
-          una sección del impreso.           Los bloques grises son solo lectura desde la papeleta AMI; los verdes (incl. §4
-          heredo-familiar) se capturan aquí. El PDF Sodexo no inventa datos.
-        </p>
-        <div className="mt-3">
-          <SodexoBlockNav showGineco={showGineco} />
-        </div>
-      </div>
-
+    <div className="space-y-3">
       {showSodexoPdfDownload && sodexoPdfUrl ? (
         <div
           className="bg-white border-2 border-emerald-400 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3"
           data-testid="sodexo-reg-so01-pdf-download"
         >
           <div className="flex-1">
-            <p className="text-sm font-bold text-emerald-900">Impresión Sodexo REG-SO-01</p>
-            <p className="text-xs text-slate-600 mt-1">
-              Formato oficial de historia clínica laboral Sodexo (plantilla AcroForm). No sustituye
-              el PDF clínico estándar.
-            </p>
+            <p className="text-sm font-bold text-emerald-900">PDF Sodexo firmado</p>
           </div>
           <a
             href={sodexoPdfUrl}
@@ -495,8 +415,7 @@ export function SodexoExtension({
           data-testid="sodexo-reg-so01-pdf-pending"
         >
           <p>
-            Puedes generar la <strong>vista previa Sodexo REG-SO-01</strong> al final de esta
-            extensión. El PDF firmado se habilita después de{' '}
+            Vista previa al final de esta pestaña. PDF firmado tras{' '}
             <strong>Firmar y Emitir Dictamen</strong>.
           </p>
           {validatingViewHref ? (
@@ -510,20 +429,9 @@ export function SodexoExtension({
         </div>
       ) : null}
 
-      <SodexoBlock
-        blockId="1"
-        section="1"
-        title="Identificación"
-        subtitle="§1 del impreso: nombre, domicilio y datos personales desde Antecedentes; aquí solo contacto de emergencia y complementos Sodexo (sin EPP)."
-      >
-        <BlockSubsection title="Datos ya capturados (papeleta AMI)">
-          <AmiMirrorTable
-            rows={identificacionAmiRows(amiCtx)}
-            emptyHint="Completa Examen Médico → Antecedentes (datos personales arriba; sexo al final de la misma pestaña)."
-          />
-        </BlockSubsection>
-        <BlockSubsection title="Campos adicionales Sodexo — contacto y domicilio">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <SodexoBlock blockId="1" title="Identificación">
+        <AmiMirrorTable rows={identificacionAmiRows(amiCtx)} emptyHint="" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Field
           label="Contacto de emergencia"
           value={value.contacto_emergencia ?? ''}
@@ -537,19 +445,19 @@ export function SodexoExtension({
           readonly={readonly}
         />
         <Field
-          label="Lugar de nacimiento (PDF §1)"
+          label="Lugar de nacimiento"
           value={value.lugar_nacimiento ?? ''}
           onChange={(v) => set('lugar_nacimiento', v)}
           readonly={readonly}
         />
         <Field
-          label="Teléfono casa (PDF §1)"
+          label="Teléfono casa"
           value={value.telefono_casa ?? ''}
           onChange={(v) => set('telefono_casa', v)}
           readonly={readonly}
         />
         <Field
-          label="Teléfono móvil (PDF §1)"
+          label="Teléfono móvil"
           value={value.telefono_movil ?? ''}
           onChange={(v) => set('telefono_movil', v)}
           readonly={readonly}
@@ -579,7 +487,7 @@ export function SodexoExtension({
           readonly={readonly}
         />
         <Field
-          label="Profesión (PDF §1)"
+          label="Profesión"
           value={value.profesion ?? ''}
           onChange={(v) => set('profesion', v)}
           readonly={readonly}
@@ -600,16 +508,10 @@ export function SodexoExtension({
           </select>
         </div>
         </div>
-        </BlockSubsection>
       </SodexoBlock>
 
-      <SodexoBlock
-        blockId="1.2"
-        section="1.2"
-        title="Identificación de actividades"
-        subtitle="Como el impreso §1.2: cargo/ingreso/antigüedad (periódica, retiro o reingreso), funciones principales y Otro (¿Cuál?)."
-      >
-        <div className="space-y-4 rounded-lg border border-emerald-100 bg-emerald-50/30 p-4">
+      <SodexoBlock blockId="1.2" title="Identificación de actividades">
+        <div className="space-y-3">
           <div className="max-w-md">
             <label className="block text-xs font-bold text-slate-500 mb-1">Tipo de examen Sodexo</label>
             <select
@@ -649,17 +551,10 @@ export function SodexoExtension({
                 readonly={readonly}
               />
             </div>
-          ) : (
-            <p className="text-xs text-slate-500">
-              Cargo, fecha de ingreso y antigüedad del impreso aplican solo en{' '}
-              <strong>periódica, retiro o reingreso</strong> (elige el tipo arriba).
-            </p>
-          )}
+          ) : null}
 
-          <div className="pt-2 border-t border-emerald-100">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-600 mb-2">
-              Funciones principales
-            </p>
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-[11px] font-semibold text-slate-600 mb-2">Funciones principales</p>
             <div className="flex flex-wrap gap-3">
               {FUNCIONES_ITEMS.map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-2 text-sm text-slate-700 bg-white rounded-lg px-2 py-1 border border-slate-100">
@@ -692,35 +587,21 @@ export function SodexoExtension({
         </div>
       </SodexoBlock>
 
-      <SodexoBlock
-        blockId="3"
-        section="3"
-        title="Historia ocupacional"
-        subtitle="Narrativa AMI, tabla Sodexo, matriz de riesgo y EPP."
-      >
-        <BlockSubsection title="Narrativa (papeleta AMI)">
-          <AmiMirrorTextBlock
-            title="Historia laboral estándar"
-            text={historiaOcupacionalAmiNarrative(amiCtx.antecedentesCaptured)}
-            emptyHint="Captura en Examen Médico → Antecedentes → Historia laboral."
-          />
-        </BlockSubsection>
-        <BlockSubsection
-          title="Historial de empleos (REG-SO-01)"
-          hint="Filas 1–5 y Actual; las columnas de la matriz toman el número de fila y A = empleo actual."
-        >
+      <SodexoBlock blockId="3" title="Historia ocupacional">
+        <AmiMirrorTextBlock
+          title=""
+          text={historiaOcupacionalAmiNarrative(amiCtx.antecedentesCaptured)}
+          emptyHint=""
+        />
+        <BlockSubsection title="Historial de empleos">
           <HoTabla value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
         <BlockSubsection title="Matriz de factores de riesgo">
-          <p className="text-xs text-slate-600 mb-2">
-            Columnas <strong>1–5</strong> = filas del historial arriba; <strong>A</strong> = actual. Varias
-            casillas por factor.
-          </p>
           <MatrizFactoresTable value={value} onChange={onChange} readonly={readonly} />
         </BlockSubsection>
-        <BlockSubsection title="Equipo de protección personal (EPP)">
-          <div className="mb-3">
-            <label className="block text-xs font-bold text-slate-500 mb-1">Uso de EPP (PDF)</label>
+        <BlockSubsection title="EPP">
+          <div className="mb-2">
+            <label className="block text-xs font-bold text-slate-500 mb-1">Uso de EPP</label>
             <select
               disabled={readonly}
               value={value.epp_uso ?? ''}
@@ -752,146 +633,43 @@ export function SodexoExtension({
         </BlockSubsection>
       </SodexoBlock>
 
-      <SodexoBlock
-        blockId="4"
-        section="4"
-        title="Antecedentes heredo-familiares"
-        subtitle="Cuestionario §4 HEREDOFAMILIAR del impreso Sodexo."
-      >
-        <BlockSubsection
-          title="Referencia AMI (opcional)"
-          hint="Antecedentes → Heredo-familiares. Al abrir la extensión se sugiere prellenado si esta rejilla está vacía."
-        >
-          <AmiMirrorTable
-            rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'heredo_familiares'))}
-            emptyHint="Sin datos en Antecedentes → Heredo-familiares."
-          />
-        </BlockSubsection>
-        <BlockSubsection title="Captura REG-SO-01">
-          <HeredofamiliarSodexoTable value={value} onChange={onChange} readonly={readonly} />
-        </BlockSubsection>
+      <SodexoBlock blockId="4" title="Antecedentes heredo-familiares">
+        <HeredofamiliarSodexoTable value={value} onChange={onChange} readonly={readonly} />
       </SodexoBlock>
 
-      <SodexoBlock
-        blockId="5"
-        section="5"
-        title="Antecedentes personales patológicos"
-        subtitle="§5 PERSONAL PATOLÓGICO — rejilla Niega / Sí + describir."
-      >
-        <BlockSubsection
-          title="Referencia AMI (opcional)"
-          hint="Antecedentes → Patológicos. Prellenado sugerido si la rejilla Sodexo está vacía."
-        >
-          <AmiMirrorTable
-            rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'patologicos'), 32)}
-            emptyHint="Captura en Examen Médico → Antecedentes → Patológicos."
-          />
-        </BlockSubsection>
-        <BlockSubsection title="Captura REG-SO-01">
-          <PatologicosSodexoTable value={value} onChange={onChange} readonly={readonly} />
-        </BlockSubsection>
-        <BlockSubsection title="Aclaración de historia personal en el impreso (opcional)">
+      <SodexoBlock blockId="5" title="Antecedentes personales patológicos">
+        <PatologicosSodexoTable value={value} onChange={onChange} readonly={readonly} />
         <textarea
           disabled={readonly}
-          rows={3}
+          rows={2}
           value={value.aclaracion_historia_personal ?? ''}
           onChange={(e) => set('aclaracion_historia_personal', e.target.value)}
-          className="w-full border border-slate-200 rounded-lg p-2 text-sm"
-          placeholder="Texto adicional en el REG-SO-01…"
+          className="w-full border border-slate-200 rounded-lg p-2 text-sm mt-2"
+          placeholder="Aclaración de historia personal (opcional)"
         />
-        </BlockSubsection>
       </SodexoBlock>
 
-      <SodexoBlock
-        blockId="6"
-        section="6"
-        title="Inmunizaciones"
-        subtitle="§6 INMUNIZACIONES — básica y complementaria del impreso Sodexo."
-      >
-        <BlockSubsection
-          title="Referencia AMI (opcional)"
-          hint="Antecedentes → bloque Inmunizaciones (final de la pestaña). Prellenado sugerido si la rejilla Sodexo está vacía."
-        >
-          <AmiMirrorTable
-            rows={flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 20).filter((r) =>
-              /vac|inmun|hepat|covid|tetano|neumoc/i.test(r.label),
-            )}
-            emptyHint="Captura vacunas en Examen Médico → Antecedentes → Inmunizaciones."
-          />
-        </BlockSubsection>
-        <BlockSubsection title="Captura REG-SO-01">
-          <InmunizacionesSodexoTable value={value} onChange={onChange} readonly={readonly} />
-        </BlockSubsection>
+      <SodexoBlock blockId="6" title="Inmunizaciones">
+        <InmunizacionesSodexoTable value={value} onChange={onChange} readonly={readonly} />
       </SodexoBlock>
 
       {showGineco ? (
-      <SodexoBlock
-        blockId="7"
-        section="7"
-        title="Historia gineco-obstétrica"
-        subtitle="§7 REG-SO-01 — solo si el paciente es mujer (sexo en Antecedentes; no depende del médico examinador)."
-      >
-        <BlockSubsection
-          title="Referencia AMI (opcional)"
-          hint="Antecedentes → Sexo y antecedentes ginecológicos. Prellenado sugerido si §7 Sodexo está vacío."
-        >
-          <AmiMirrorTable
-            rows={flattenAmiSectionForDisplay(amiCtx.modulo1 as Record<string, unknown>, 16).filter((r) =>
-              /gine|menstr|gesta|fum|citolog|menarca|ritmo|mpf/i.test(r.label),
-            )}
-            emptyHint="Captura gineco en Examen Médico → Antecedentes (tras elegir sexo Femenino)."
-          />
-        </BlockSubsection>
-        <BlockSubsection title="Captura REG-SO-01">
+        <SodexoBlock blockId="7" title="Historia gineco-obstétrica">
           <GinecoSodexoTable value={value} onChange={onChange} readonly={readonly} />
-        </BlockSubsection>
-      </SodexoBlock>
+        </SodexoBlock>
       ) : null}
 
-      <SodexoBlock
-        blockId="8"
-        section="8"
-        title="Estilos de vida"
-        subtitle="§8 ESTILOS DE VIDA — tabaquismo, licor y drogadicción (REG-SO-01)."
-      >
-        <BlockSubsection
-          title="Referencia AMI (opcional)"
-          hint="Antecedentes → No patológicos. Prellenado sugerido si §8 Sodexo está vacío."
-        >
-          <AmiMirrorTable
-            rows={flattenAmiSectionForDisplay(sectionRecord(amiCtx.antecedentesCaptured, 'no_patologicos'))}
-            emptyHint="Captura en Examen Médico → Antecedentes → No patológicos."
-          />
-        </BlockSubsection>
-        <BlockSubsection title="Captura REG-SO-01">
-          <EstilosVidaSodexoTable value={value} onChange={onChange} readonly={readonly} />
-        </BlockSubsection>
+      <SodexoBlock blockId="8" title="Estilos de vida">
+        <EstilosVidaSodexoTable value={value} onChange={onChange} readonly={readonly} />
       </SodexoBlock>
 
-      <SodexoBlock
-        blockId="9"
-        section="9"
-        title="Examen físico"
-        subtitle="§9.1–9.8 REG-SO-01; somatometría, signos vitales y agudeza desde AMI."
-      >
-        <BlockSubsection title="Somatometría y signos vitales (AMI)">
-          <AmiMirrorTable
-            rows={[
-              ...somatometrySummary(amiCtx.somatometry, amiCtx.vitalSigns),
-              ...eyeAcuitySummary(amiCtx.eyeAcuity),
-            ]}
-            emptyHint="Completa pestañas Somatometría, Signos vitales y Agudeza visual."
-          />
-        </BlockSubsection>
-        <BlockSubsection title="Captura REG-SO-01 (9.1 – 9.8)">
-          <ExamenFisicoSodexoTable
-            value={value}
-            onChange={onChange}
-            readonly={readonly}
-            patientSexo={patientSexo}
-          />
-        </BlockSubsection>
-
+      <SodexoBlock blockId="9" title="Examen físico">
+        <ExamenFisicoSodexoTable
+          value={value}
+          onChange={onChange}
+          readonly={readonly}
+          patientSexo={patientSexo}
+        />
       </SodexoBlock>
 
       <SodexoPdfGeneratePanel
@@ -1664,11 +1442,8 @@ function SodexoVisiometriaCasillasCapture({
 }) {
   return (
     <div className="border border-slate-100 rounded-md overflow-hidden">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
-        Visiometría — casillas REG-SO-01
-      </p>
-      <p className="text-[10px] text-slate-500 px-2 py-1 border-b border-slate-50">
-        Valores Snellen en la tabla AMI arriba; aquí solo marcas las casillas del impreso Sodexo.
+      <p className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2 py-1 border-b border-slate-100">
+        Visiometría (casillas)
       </p>
       <table className="w-full text-[11px] border-collapse">
         <thead>
@@ -1943,7 +1718,7 @@ function ExamenFisicoSodexo91OrganBlock({
           <tr className="border-t border-slate-50">
             <td className="p-1.5 text-slate-800">Orofaringe</td>
             <td className="p-1.5 text-[10px] text-slate-400 italic" colSpan={3}>
-              Solo en impreso REG-SO-01 (sin casilla en PDF digital)
+              Sin casilla en PDF
             </td>
           </tr>
         ) : null}
@@ -2595,7 +2370,7 @@ function HoTabla({
         </button>
       ) : null}
       <label className="block text-xs font-bold text-slate-500 mb-1">
-        Accidentes, lesiones y/o secuelas (pie §3)
+        Accidentes, lesiones y/o secuelas
       </label>
       <textarea
         disabled={readonly}

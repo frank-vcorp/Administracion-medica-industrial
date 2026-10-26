@@ -19,6 +19,7 @@ export function AmiMirrorTable({
   emptyHint: string
 }) {
   if (!rows.length) {
+    if (!emptyHint.trim()) return null
     return <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">{emptyHint}</p>
   }
   return (
@@ -43,16 +44,17 @@ export function AmiMirrorTable({
 
 export function AmiMirrorTextBlock({ title, text, emptyHint }: { title: string; text: string; emptyHint: string }) {
   if (!text.trim()) {
+    if (!emptyHint.trim()) return null
     return (
       <div>
-        <p className="text-[10px] font-bold uppercase text-slate-500 mb-1">{title}</p>
+        {title ? <p className="text-[11px] font-semibold text-slate-600 mb-1">{title}</p> : null}
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">{emptyHint}</p>
       </div>
     )
   }
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase text-slate-500 mb-1">{title}</p>
+      {title ? <p className="text-[11px] font-semibold text-slate-600 mb-1">{title}</p> : null}
       <p className="text-sm text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2 whitespace-pre-wrap">
         {text}
       </p>
