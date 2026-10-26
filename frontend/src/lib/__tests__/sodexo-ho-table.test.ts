@@ -24,6 +24,19 @@ describe('sodexo-ho-table', () => {
     expect(headers[5].active).toBe(true)
   })
 
+  it('una fila sin es_actual se trata como empleo actual', () => {
+    const ext = {
+      ...emptySodexoExtension(),
+      historia_ocupacional_filas: [
+        { empresa_area: 'Systron', ocupacion: 'Ayudante', anios: '1', meses: '1' },
+      ],
+    }
+    const ui = hoTableForUi(ext)
+    expect(ui.actual.empresa_area).toBe('Systron')
+    expect(ui.actual.ocupacion).toBe('Ayudante')
+    expect(ui.historico[0].empresa_area).toBe('')
+  })
+
   it('matriz admite varias columnas por factor y legacy string', () => {
     expect(normalizeMatrizFactorValue('3')).toEqual(['3'])
     let m = toggleMatrizFactorColumn(null, 'ruido', '1', true)

@@ -59,6 +59,7 @@ import {
   isExamenMedicoTestName,
   resolveExamenMedicoVariant,
 } from '@/lib/clinical/examen-medico-variant'
+import { resolvePatientSexo } from '@/lib/sodexo-ami-mirror'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -294,6 +295,8 @@ export async function deliverExamenMedicoPdf(
       (clinicalHistoryData.no_patologicos as Record<string, unknown>) ?? {}
     const captured =
       (physicalExamData.antecedentes_captured as Record<string, unknown> | null) ?? {}
+    const modulo1Captured =
+      (physicalExamData.modulo1 as Record<string, unknown> | undefined) ?? {}
     const apnpForNoPatologicos =
       (captured.no_patologicos as Record<string, unknown> | undefined) ?? apnp
     const patologicosMaster =
@@ -396,7 +399,11 @@ export async function deliverExamenMedicoPdf(
         lastName: event.worker.lastName ?? '',
         universalId: event.worker.universalId ?? '',
         dob: event.worker.dob ?? null,
-        sexo: str(physicalExamData.sexo ?? dp.sexo),
+        sexo: resolvePatientSexo(
+          { sexo: str(physicalExamData.sexo ?? dp.sexo) },
+          modulo1Captured as Record<string, string>,
+          captured,
+        ),
         identidadGenero: str(physicalExamData.identidad_genero ?? dp.identidad_genero),
         empresa: event.worker.company?.name ?? null,
         puesto: str(dp.puesto_actual),

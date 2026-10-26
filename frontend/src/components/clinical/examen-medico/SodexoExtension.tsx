@@ -10,27 +10,16 @@ import {
 } from '@/lib/sodexo-matriz-factor-labels'
 import { SODEXO_GINECO_TOXICO_EXTENSION_ROWS } from '@/lib/sodexo-gineco-extension-rows'
 import {
-  patologicosSodexoIsEmpty,
   SODEXO_PATOLOGICOS_GROUPS_LEFT,
   SODEXO_PATOLOGICOS_GROUPS_RIGHT,
   sodexoPatologicosCatalogByColumn,
 } from '@/lib/sodexo-patologicos-catalog'
-import { prefillPatologicosSodexoFromAmi } from '@/lib/sodexo-patologicos-prefill'
+import { syncSodexoExtensionCapture } from '@/lib/sodexo-extension-capture-defaults'
 import {
-  inmunizacionesSodexoIsEmpty,
   SODEXO_INMUNIZACIONES_CATALOG,
   type SodexoInmunizacionKey,
 } from '@/lib/sodexo-inmunizaciones-catalog'
-import {
-  mergeLegacyInmunComplementarias,
-  prefillInmunizacionesSodexoFromModulo1,
-} from '@/lib/sodexo-inmunizaciones-prefill'
-import {
-  ginecoObstetricaSodexoIsEmpty,
-  prefillGinecoSodexoFromModulo1,
-} from '@/lib/sodexo-gineco-prefill'
 import { estilosVidaSodexoIsEmpty } from '@/lib/sodexo-estilos-vida-catalog'
-import { prefillEstilosVidaSodexoFromApnp } from '@/lib/sodexo-estilos-vida-prefill'
 import {
   SODEXO_EXAMEN_FISICO_91_COLUMN_LEFT,
   SODEXO_EXAMEN_FISICO_91_COLUMN_RIGHT,
@@ -73,8 +62,6 @@ import {
   type SodexoMatrizColumn,
 } from '@/lib/sodexo-ho-table'
 import {
-  heredofamiliarSodexoIsEmpty,
-  prefillHeredofamiliarFromAmi,
   SODEXO_HEREDOFAMILIAR_LEFT,
   SODEXO_HEREDOFAMILIAR_RIGHT,
   type SodexoHeredofamiliarKey,
@@ -446,54 +433,25 @@ export function SodexoExtension({
 
   useEffect(() => {
     if (readonly) return
-    if (!heredofamiliarSodexoIsEmpty(value.heredofamiliar_sodexo)) return
-    const suggested = prefillHeredofamiliarFromAmi(amiCtx.antecedentesCaptured)
-    if (heredofamiliarSodexoIsEmpty(suggested)) return
-    onChange({ ...value, heredofamiliar_sodexo: suggested })
-  }, [amiCtx.antecedentesCaptured, value.heredofamiliar_sodexo, readonly, onChange, value])
-
-  useEffect(() => {
-    if (readonly) return
-    if (!patologicosSodexoIsEmpty(value.patologicos_sodexo)) return
-    const suggested = prefillPatologicosSodexoFromAmi(
-      sectionRecord(amiCtx.antecedentesCaptured, 'patologicos'),
-    )
-    if (patologicosSodexoIsEmpty(suggested)) return
-    onChange({ ...value, patologicos_sodexo: suggested })
-  }, [amiCtx.antecedentesCaptured, value.patologicos_sodexo, readonly, onChange, value])
-
-  useEffect(() => {
-    if (readonly || !showGineco) return
-    if (!ginecoObstetricaSodexoIsEmpty(value.gineco_sodexo)) return
-    const suggested = prefillGinecoSodexoFromModulo1(amiCtx.modulo1 as Record<string, unknown>)
-    if (ginecoObstetricaSodexoIsEmpty(suggested)) return
-    onChange({ ...value, gineco_sodexo: suggested })
-  }, [amiCtx.modulo1, showGineco, value.gineco_sodexo, readonly, onChange, value])
-
-  useEffect(() => {
-    if (readonly) return
-    if (!estilosVidaSodexoIsEmpty(value.estilos_vida_sodexo)) return
-    const suggested = prefillEstilosVidaSodexoFromApnp(
-      sectionRecord(amiCtx.antecedentesCaptured, 'no_patologicos'),
-    )
-    if (estilosVidaSodexoIsEmpty(suggested)) return
-    onChange({ ...value, estilos_vida_sodexo: suggested })
-  }, [amiCtx.antecedentesCaptured, value.estilos_vida_sodexo, readonly, onChange, value])
-
-  useEffect(() => {
-    if (readonly) return
-    if (!inmunizacionesSodexoIsEmpty(value.inmunizaciones_sodexo)) return
-    let suggested = prefillInmunizacionesSodexoFromModulo1(amiCtx.modulo1 as Record<string, unknown>)
-    suggested = mergeLegacyInmunComplementarias(suggested, value.inmunizaciones_complementarias)
-    if (inmunizacionesSodexoIsEmpty(suggested)) return
-    onChange({ ...value, inmunizaciones_sodexo: suggested })
+    const synced = syncSodexoExtensionCapture(value, {
+      patientSexo,
+      showGineco,
+      antecedentesCaptured: amiCtx.antecedentesCaptured,
+      modulo1: amiCtx.modulo1 as Record<string, unknown>,
+      inmunizacionesComplementariasLegacy: value.inmunizaciones_complementarias,
+    })
+    if (JSON.stringify(synced) !== JSON.stringify(value)) {
+      onChange(synced)
+    }
   }, [
-    amiCtx.modulo1,
-    value.inmunizaciones_complementarias,
-    value.inmunizaciones_sodexo,
     readonly,
-    onChange,
+    patientSexo,
+    showGineco,
+    amiCtx.antecedentesCaptured,
+    amiCtx.modulo1,
     value,
+    onChange,
+    value.inmunizaciones_complementarias,
   ])
 
   return (

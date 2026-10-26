@@ -4,7 +4,7 @@
 import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import type { PdfForm } from '@/lib/sodexo-pdf-acroform'
 import { sodexoSetCheck, sodexoSetText } from '@/lib/sodexo-pdf-acroform'
-import { normalizeHoFila, type SodexoHoFila } from '@/lib/sodexo-ho-table'
+import { hoTableForUi, normalizeHoFila, type SodexoHoFila } from '@/lib/sodexo-ho-table'
 import { SODEXO_HO_ACCIDENTES_TEXT, SODEXO_HO_PDF_ROWS } from '@/lib/sodexo-pdf-ho-rows'
 
 function splitHoLines(text: string | null | undefined): string[] {
@@ -57,25 +57,28 @@ export function fillSodexoHistoriaOcupacionalTabla(
   },
 ) {
   const ext = opts.ext
-  const stored = ext?.historia_ocupacional_filas?.map(normalizeHoFila) ?? []
-  const historico = stored.filter((f) => !f.es_actual)
-  const actual = stored.find((f) => f.es_actual)
+  const hoUi = hoTableForUi({
+    historia_ocupacional_filas: ext?.historia_ocupacional_filas ?? null,
+  } as SodexoExtensionData)
 
   const actualRow = normalizeHoFila(
-    actual ??
-      ({
-        empresa_area: opts.empresaActual ?? '',
-        empresa: opts.empresaActual ?? '',
-        ocupacion: opts.puestoActual ?? '',
-        anios: '',
-        meses: opts.areaActual ?? '',
-        es_actual: true,
-      } as SodexoHoFila),
+    hoUi.actual.empresa_area?.trim() || hoUi.actual.ocupacion?.trim()
+      ? hoUi.actual
+      : {
+          empresa_area: opts.empresaActual ?? '',
+          empresa: opts.empresaActual ?? '',
+          ocupacion: opts.puestoActual ?? '',
+          anios: '',
+          meses: '',
+          tiempo: opts.areaActual ?? '',
+          es_actual: true,
+        },
   )
+  const hist = hoUi.historico.map(normalizeHoFila)
   const pdfRows: SodexoHoFila[] = [
-    historico[0] ? normalizeHoFila(historico[0]) : normalizeHoFila({}),
-    historico[1] ? normalizeHoFila(historico[1]) : normalizeHoFila({}),
-    historico[2] ? normalizeHoFila(historico[2]) : normalizeHoFila({}),
+    hist[0] ?? normalizeHoFila({}),
+    hist[1] ?? normalizeHoFila({}),
+    hist[2] ?? normalizeHoFila({}),
     actualRow,
   ]
 

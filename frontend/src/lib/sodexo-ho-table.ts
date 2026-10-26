@@ -75,10 +75,33 @@ export type HoTableUi = { historico: SodexoHoFila[]; actual: SodexoHoFila }
 
 export function hoTableForUi(value: SodexoExtensionData): HoTableUi {
   const stored = (value.historia_ocupacional_filas ?? []).map(normalizeHoFila)
-  const actualRaw = stored.find((r) => r.es_actual) ?? { ...HO_EMPTY_ROW, es_actual: true }
-  const historico = stored.filter((r) => !r.es_actual).slice(0, 5)
+  const actualMarked = stored.find((r) => r.es_actual)
+  const historicoAll = stored.filter((r) => !r.es_actual)
+  const historicoWithContent = historicoAll.filter(hoRowHasContent)
+
+  if (actualMarked) {
+    const historico = historicoAll.slice(0, 5)
+    if (historico.length === 0) historico.push({ ...HO_EMPTY_ROW })
+    return {
+      historico,
+      actual: { ...HO_EMPTY_ROW, ...actualMarked, es_actual: true },
+    }
+  }
+
+  /** Una sola fila guardada sin `es_actual` → empleo actual (fila «Actual» del impreso). */
+  if (historicoWithContent.length === 1 && historicoAll.length === 1) {
+    return {
+      historico: [{ ...HO_EMPTY_ROW }],
+      actual: { ...HO_EMPTY_ROW, ...historicoWithContent[0], es_actual: true },
+    }
+  }
+
+  const historico = historicoAll.slice(0, 5)
   if (historico.length === 0) historico.push({ ...HO_EMPTY_ROW })
-  return { historico, actual: { ...HO_EMPTY_ROW, ...actualRaw, es_actual: true } }
+  return {
+    historico,
+    actual: { ...HO_EMPTY_ROW, es_actual: true },
+  }
 }
 
 export function commitHoTable(value: SodexoExtensionData, ui: HoTableUi): SodexoExtensionData {

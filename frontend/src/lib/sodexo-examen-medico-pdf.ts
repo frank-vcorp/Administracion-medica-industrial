@@ -31,6 +31,11 @@ import {
   type SodexoHeredofamiliarKey,
 } from '@/lib/sodexo-heredofamiliar'
 import {
+  mapEscolaridadChecksForPdf,
+  mapEstadoCivilCheckboxesForPdf,
+  mapSexCheckboxesForPdf,
+} from '@/lib/sodexo-pdf-identificacion'
+import {
   SODEXO_AHF_LEFT,
   SODEXO_AHF_LEFT_KEYS,
   SODEXO_AHF_RIGHT,
@@ -153,42 +158,6 @@ function resolveTipoExamenCheckbox(
   if (lower.includes('retiro')) return 'RETIRO'
   if (lower.includes('reing')) return 'REINGRESO'
   return null
-}
-
-function mapSexCheckboxes(sexo: string | null | undefined): {
-  femenino: boolean
-  masculino: boolean
-} {
-  const u = s(sexo).toUpperCase()
-  if (u === 'F' || u.includes('FEM')) return { femenino: true, masculino: false }
-  if (u === 'M' || u.includes('MASC')) return { femenino: false, masculino: true }
-  return { femenino: false, masculino: false }
-}
-
-function mapEstadoCivilCheckboxes(estado: string | null | undefined): {
-  soltero: boolean
-  casado: boolean
-  union: boolean
-  viudo: boolean
-} {
-  const u = s(estado).toUpperCase()
-  return {
-    soltero: u.includes('SOLTER') || u === 'S',
-    casado: u.includes('CASAD') || u === 'C',
-    union: u.includes('UNION') || u.includes('LIBRE') || u === 'UL',
-    viudo: u.includes('VIUD') || u === 'V',
-  }
-}
-
-function mapEscolaridadChecks(escolaridad: string | null | undefined) {
-  const u = s(escolaridad).toUpperCase()
-  return {
-    basica: u.includes('BASIC') || u.includes('PRIMAR'),
-    media: u.includes('MEDIA') || u.includes('SECUND') || u.includes('PREPARATOR'),
-    tecnica: u.includes('TECNIC') || u.includes('TÉCNIC'),
-    universidad: u.includes('UNIVERS') || u.includes('LICEN'),
-    postgrado: u.includes('POST') || u.includes('MAESTR') || u.includes('DOCTOR'),
-  }
 }
 
 function mapApnpNegadoSi(value: string | null | undefined): 'no' | 'si' | null {
@@ -322,17 +291,17 @@ export async function renderSodexoExamenMedicoPdf(
   setText(form, 'Colonia', addr.colonia)
   setText(form, 'CiudadMunicipio', addr.ciudad)
 
-  const sex = mapSexCheckboxes(p.sexo)
+  const sex = mapSexCheckboxesForPdf(p.sexo)
   setCheck(form, 'Check Box8', sex.femenino)
   setCheck(form, 'Check Box9', sex.masculino)
 
-  const ec = mapEstadoCivilCheckboxes(p.estadoCivil)
+  const ec = mapEstadoCivilCheckboxesForPdf(p.estadoCivil)
   setCheck(form, 'Check Box10', ec.soltero)
   setCheck(form, 'Check Box11', ec.casado)
   setCheck(form, 'Check Box12', ec.union)
   setCheck(form, 'Check Box13', ec.viudo)
 
-  const esc = mapEscolaridadChecks(p.escolaridad)
+  const esc = mapEscolaridadChecksForPdf(p.escolaridad)
   setCheck(form, SODEXO_ESCOLARIDAD_CHECKS.basica, esc.basica)
   setCheck(form, SODEXO_ESCOLARIDAD_CHECKS.media, esc.media)
   setCheck(form, SODEXO_ESCOLARIDAD_CHECKS.tecnica, esc.tecnica)
@@ -345,7 +314,6 @@ export async function renderSodexoExamenMedicoPdf(
     setText(form, 'Cargo', ext.actividades_cargo)
     setText(form, 'Fecha de ingreso', ext.fecha_ingreso_actividades)
     setText(form, 'Antigüedad', ext.antiguedad_actividades)
-    setText(form, 'Cual', ext.tipo_actividad)
     setText(form, 'Texto28', ext.matriz_riesgos_observaciones)
   }
 
