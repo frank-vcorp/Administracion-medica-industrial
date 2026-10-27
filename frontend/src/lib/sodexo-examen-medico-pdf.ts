@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument } from 'pdf-lib'
 import type { ExamenMedicoPDFData } from '@/components/pdf/ExamenMedicoValidatedPDF'
-import { SodexoExtensionSchema, type SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
+import type { SodexoExtensionData } from '@/schemas/clinical/examen-medico-variant.schema'
 import { fillSodexoPatologicos } from '@/lib/sodexo-pdf-patologicos'
 import { fillSodexoInmunizaciones } from '@/lib/sodexo-pdf-inmunizaciones'
 import { fillSodexoEpp } from '@/lib/sodexo-pdf-epp'
@@ -46,6 +46,17 @@ import {
   SODEXO_RESTRICCIONES_TEXT,
   SODEXO_VISIOMETRIA_TEXT,
 } from '@/lib/sodexo-pdf-mappings'
+import { loadSodexoExtensionFromStorage } from '@/lib/sodexo-extension-validation'
+import {
+  applySodexoGlobalCheckboxDefaults,
+  applySodexoRowLeftmostCheckboxDefaults,
+} from '@/lib/sodexo-pdf-global-defaults'
+import {
+  fillSodexoHoTextParity,
+  fillSodexoTextParity,
+  padSodexoDxRestricciones,
+  sweepSodexoEmptyTextoFields,
+} from '@/lib/sodexo-pdf-text-parity'
 
 const TEMPLATE_CANDIDATES = [
   path.join(process.cwd(), 'resources/pdf/sodexo-examen-medico-template.pdf'),
@@ -119,9 +130,8 @@ function applyHfRow(
 
 function parseSodexoExt(data: ExamenMedicoPDFData): SodexoExtensionData | null {
   const raw = data.variantExtensions?.SODEXO
-  if (!raw) return null
-  const parsed = SodexoExtensionSchema.safeParse(raw)
-  return parsed.success ? parsed.data : null
+  if (raw == null) return null
+  return loadSodexoExtensionFromStorage(raw)
 }
 
 function splitDateParts(isoOrDisplay: string | null | undefined): {
@@ -463,6 +473,13 @@ export async function renderSodexoExamenMedicoPdf(
     'Observaciones generales y seguimiento SALUD OCUPACIONAL SODEXO MÉXICO 4',
     obsParts.join('\n\n'),
   )
+
+  fillSodexoTextParity(form, data, ext)
+  padSodexoDxRestricciones(form)
+  fillSodexoHoTextParity(form)
+  sweepSodexoEmptyTextoFields(form)
+  applySodexoGlobalCheckboxDefaults(form)
+  applySodexoRowLeftmostCheckboxDefaults(form)
 
   fillSodexoCierreTitulo(form)
 
