@@ -14,6 +14,7 @@ import {
 } from "@/schemas/clinical/exam.schema"
 import { deriveAgudezaVisualResumen } from "@/lib/clinical/agudeza-visual"
 import { assertExamenMedicoReadyToClose } from "@/lib/clinical/examen-medico-capture"
+import { mergeVariantExtensionsForPersist } from '@/lib/sodexo-extension-persist'
 
 /**
  * @id ARCH-20260326-01
@@ -255,6 +256,14 @@ export async function saveExamenMedicoPapeleta(
       (priorExam?.physicalExamData as Record<string, unknown> | undefined) ?? {}
 
     const physicalPayload: Record<string, unknown> = { ...data }
+
+    const mergedVariantExtensions = mergeVariantExtensionsForPersist(
+      priorPhysical.variant_extensions,
+      data.variant_extensions,
+    )
+    if (mergedVariantExtensions) {
+      physicalPayload.variant_extensions = mergedVariantExtensions
+    }
 
     if (markComplete) {
       const gateError = assertExamenMedicoReadyToClose({

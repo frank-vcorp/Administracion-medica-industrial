@@ -12,7 +12,7 @@
  */
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -451,6 +451,28 @@ export default function ExamenMedicoEstudio({
 
   const [sodexoExt, setSodexoExt] = useState<SodexoExtensionData>(() =>
     loadSodexoExtensionFromStorage(variantExtensionsStored.SODEXO),
+  )
+  const sodexoUserEdited = useRef(false)
+  const storedSodexoJson = useMemo(
+    () => JSON.stringify(variantExtensionsStored.SODEXO ?? null),
+    [variantExtensionsStored.SODEXO],
+  )
+  const lastHydratedSodexoJson = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (examVariant !== 'SODEXO') return
+    if (sodexoUserEdited.current) return
+    if (lastHydratedSodexoJson.current === storedSodexoJson) return
+    lastHydratedSodexoJson.current = storedSodexoJson
+    setSodexoExt(loadSodexoExtensionFromStorage(variantExtensionsStored.SODEXO))
+  }, [examVariant, storedSodexoJson, variantExtensionsStored.SODEXO])
+
+  const handleSodexoExtChange = useCallback(
+    (next: SodexoExtensionData, options?: { fromSync?: boolean }) => {
+      if (!options?.fromSync) sodexoUserEdited.current = true
+      setSodexoExt(next)
+    },
+    [],
   )
 
   // ── Estado Somatometría (pestaña 1) ───────────────────────────────────────
@@ -1759,7 +1781,7 @@ export default function ExamenMedicoEstudio({
         <div className="space-y-4">
           <SodexoExtension
             value={sodexoExt}
-            onChange={setSodexoExt}
+            onChange={handleSodexoExtChange}
             readonly={readonly}
             sodexoPdfUrl={examenMedicoSodexoPdfUrl(eventId)}
             sodexoPreviewApiUrl={examenMedicoSodexoPreviewApiUrl(eventId)}

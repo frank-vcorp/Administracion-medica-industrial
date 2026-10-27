@@ -315,9 +315,11 @@ function SodexoPdfGeneratePanel({
   )
 }
 
+export type SodexoExtensionChangeOptions = { fromSync?: boolean }
+
 type Props = {
   value: SodexoExtensionData
-  onChange: (next: SodexoExtensionData) => void
+  onChange: (next: SodexoExtensionData, options?: SodexoExtensionChangeOptions) => void
   readonly?: boolean
   sodexoPdfUrl?: string
   sodexoPreviewApiUrl?: string
@@ -364,14 +366,17 @@ export function SodexoExtension({
     if (readonly) return
     const fromAmi = puestoActualFromAntecedentes(amiCtx.antecedentesCaptured)
     if (!fromAmi || value.actividades_cargo?.trim()) return
-    onChange({ ...value, actividades_cargo: fromAmi })
+    onChange({ ...value, actividades_cargo: fromAmi }, { fromSync: true })
   }, [amiCtx.antecedentesCaptured, value.actividades_cargo, readonly, onChange, value])
 
   const sodexoValueRef = useRef(value)
   sodexoValueRef.current = value
+  const captureDefaultsApplied = useRef(false)
+  const amiPrefillApplied = useRef(false)
 
   useEffect(() => {
-    if (readonly) return
+    if (readonly || captureDefaultsApplied.current) return
+    captureDefaultsApplied.current = true
     const current = sodexoValueRef.current
     const synced = syncSodexoExtensionCapture(current, {
       patientSexo,
@@ -381,7 +386,29 @@ export function SodexoExtension({
       inmunizacionesComplementariasLegacy: current.inmunizaciones_complementarias,
     })
     if (JSON.stringify(synced) !== JSON.stringify(current)) {
-      onChange(synced)
+      onChange(synced, { fromSync: true })
+    }
+  }, [readonly, patientSexo, showGineco, amiCtx.antecedentesCaptured, amiCtx.modulo1, onChange])
+
+  useEffect(() => {
+    if (readonly || amiPrefillApplied.current) return
+    const ant = amiCtx.antecedentesCaptured ?? {}
+    const hasAmi = ['patologicos', 'heredo_familiares', 'no_patologicos'].some((sec) => {
+      const block = ant[sec]
+      return block && typeof block === 'object' && Object.keys(block as object).length > 0
+    })
+    if (!hasAmi) return
+    amiPrefillApplied.current = true
+    const current = sodexoValueRef.current
+    const synced = syncSodexoExtensionCapture(current, {
+      patientSexo,
+      showGineco,
+      antecedentesCaptured: amiCtx.antecedentesCaptured,
+      modulo1: amiCtx.modulo1 as Record<string, unknown>,
+      inmunizacionesComplementariasLegacy: current.inmunizaciones_complementarias,
+    })
+    if (JSON.stringify(synced) !== JSON.stringify(current)) {
+      onChange(synced, { fromSync: true })
     }
   }, [
     readonly,
