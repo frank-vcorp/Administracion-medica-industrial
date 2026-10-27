@@ -522,10 +522,8 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
     expect(parsed.salud_bucal).toBe('mala higiene')
   })
 
-  it('21. HEREDOFAMILIARES_VALUES expone 8 valores canónicos ZIN', () => {
-    // SPEC §4.4: 7 campos canónicos (diabetes, has, epilepsia, cardiopatia,
-    // renales, asma, cancer) usan este catálogo.
-    expect(HEREDOFAMILIARES_VALUES).toHaveLength(8)
+  it('21. HEREDOFAMILIARES_VALUES expone 7 valores canónicos ZIN (sin OTROS)', () => {
+    expect(HEREDOFAMILIARES_VALUES).toHaveLength(7)
     expect(HEREDOFAMILIARES_VALUES).toContain('NEGADOS')
     expect(HEREDOFAMILIARES_VALUES).toContain('PADRE')
     expect(HEREDOFAMILIARES_VALUES).toContain('MADRE')
@@ -533,7 +531,7 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
     expect(HEREDOFAMILIARES_VALUES).toContain('HERMANOS')
     expect(HEREDOFAMILIARES_VALUES).toContain('AB PATERNO')
     expect(HEREDOFAMILIARES_VALUES).toContain('AB MATERNO')
-    expect(HEREDOFAMILIARES_VALUES).toContain('OTROS')
+    expect(HEREDOFAMILIARES_VALUES).not.toContain('OTROS')
   })
 
   it('22. HEREDOFAMILIARES_MENTALES_VALUES expone 3 valores canónicos ZIN', () => {

@@ -518,7 +518,7 @@ export default function PrefillPortalClient({
                 Antecedentes de salud laboral
               </p>
               <BooleanField
-                label="¿Ha tenido accidentes de trabajo?"
+                label="¿Ha tenido accidente laboral?"
                 value={hl.accidentes_trabajo}
                 detailLabel="Describe brevemente el accidente"
                 detailValue={hl.accidentes_descripcion}
@@ -526,7 +526,7 @@ export default function PrefillPortalClient({
                 onDetailChange={(v) => updateHL({ accidentes_descripcion: v })}
               />
               <BooleanField
-                label="¿Ha padecido enfermedades de trabajo?"
+                label="¿Ha padecido enfermedad profesional?"
                 value={hl.enfermedades_trabajo}
                 detailLabel="Describe brevemente la enfermedad"
                 detailValue={hl.enfermedades_descripcion}

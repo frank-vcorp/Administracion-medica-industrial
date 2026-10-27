@@ -189,7 +189,7 @@ export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Text style={styles.brand}>RECETA MÉDICA</Text>
+          <Text style={styles.brand}>TRATAMIENTO — MEDICAMENTOS</Text>
           <Text style={styles.sub}>Soluciones Médico Empresariales</Text>
         </View>
 

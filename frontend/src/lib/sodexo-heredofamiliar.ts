@@ -100,7 +100,7 @@ export function prefillHeredofamiliarFromAmi(
   put('cancer', amiDisplayToRow(read('cancer')))
   put('respiratorios', amiDisplayToRow(read('asma')))
   put('neurologicos', amiDisplayToRow(read('epilepsia')))
-  put('mentales', amiDisplayToRow(s(hf.mentales as string)))
+  put('mentales', amiDisplayToRow(read('mentales')))
   put('otros', amiDisplayToRow(read('otras')))
 
   return out

@@ -75,8 +75,8 @@ export const HISTORIA_LABORAL_EXPOSICIONES: HistoriaLaboralExposicion[] = [
   { key: 'exposicion_fisica',     label: 'Física',                 descKey: 'exposicion_fisica_especifique' },
   { key: 'exposicion_biologica',  label: 'Biológica',              descKey: 'exposicion_biologica_especifique' },
   { key: 'exposicion_ergonomica', label: 'Ergonómica',             descKey: 'exposicion_ergonomica_especifique' },
-  { key: 'accidentes_trabajo',    label: 'Accidente de Trabajo',   descKey: 'accidentes_descripcion' },
-  { key: 'enfermedades_trabajo',  label: 'Enfermedad de Trabajo',  descKey: 'enfermedades_descripcion' },
+  { key: 'accidentes_trabajo',    label: 'Accidente laboral',       descKey: 'accidentes_descripcion' },
+  { key: 'enfermedades_trabajo',  label: 'Enfermedad profesional',  descKey: 'enfermedades_descripcion' },
 ]
 
 /** Opciones de turno (select). */
@@ -124,10 +124,19 @@ export const HEREDOFAMILIARES_DESCRIPCIONES: CampoDescripcion[] = [
   { field: 'asma',          label: 'Asma',                    help: 'Algún familiar con asma o bronquitis crónica recurrente.' },
   { field: 'cancer',        label: 'Cáncer',                  help: 'Algún familiar con cáncer de cualquier tipo.' },
   { field: 'mentales',      label: 'Trastornos mentales',     help: 'Algún familiar con depresión, ansiedad, esquizofrenia u otros trastornos psiquiátricos.' },
-  { field: 'otras',         label: 'Otras',                   help: 'Otra enfermedad hereditaria o frecuente en su familia. Anote brevemente.' },
 ]
 
-/** Campos Heredo-Familiares con catálogo ZIN de 8 opciones (incluye OTROS). */
+/** Patológicos con un solo campo «Especificación» cuando aplica (O9-30). */
+export const PATOLOGICOS_ESPECIFICACION_SIMPLE_FIELDS = ['exantematicas', 'psiquiatricas'] as const
+export type PatologicosEspecificacionSimpleField =
+  (typeof PATOLOGICOS_ESPECIFICACION_SIMPLE_FIELDS)[number]
+
+export function patologicosPermiteEspecificacion(estado: string): boolean {
+  const u = estado.trim().toUpperCase()
+  return u === 'SI' || u === 'NO APLICA'
+}
+
+/** Campos Heredo-Familiares con catálogo ZIN multiselect (sin `mentales`). */
 export const HEREDOFAMILIARES_CATALOGO_FIELDS = HEREDOFAMILIARES_DESCRIPCIONES.filter(
   item => item.field !== 'mentales',
 ).map(item => item.field)
@@ -137,16 +146,25 @@ export function heredoFamiliaresEspecifiqueKey(field: string): string {
   return `${field}_especifique`
 }
 
-/** Formato PDF/display: `OTROS` + detalle → `OTROS (TÍO PATERNO)`. */
+/** Formato PDF/display; multiselect `PADRE|MADRE` → `PADRE, MADRE`. */
 export function formatHeredoFamiliaresValor(
   value: string | null | undefined,
   especifique: string | null | undefined,
 ): string {
   const v = (value ?? '').trim()
-  if (!v) return ''
+  if (!v) {
+    const eOnly = (especifique ?? '').trim()
+    return eOnly
+  }
   const e = (especifique ?? '').trim()
-  if (v === 'OTROS' && e) return `OTROS (${e})`
-  return v
+  if (v === 'OTROS') return e || 'OTROS'
+  if (v.includes('|')) {
+    const joined = v.split('|').map((s) => s.trim()).filter(Boolean).join(', ')
+    return e ? `${joined}; ${e}` : joined
+  }
+  if (v === 'SI' && e) return `SI — ${e}`
+  if (v === 'SI' && !e) return 'SI'
+  return e ? `${v}; ${e}` : v
 }
 
 /** Lee un campo Heredo-Familiares con su especifique opcional desde snapshot/maestro. */
@@ -222,7 +240,7 @@ export const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
     { field: 'ginecologicos', label: 'Ginecológicos',  help: 'Enfermedades ginecológicas tratadas (embarazos, quistes, etc.).' },
     { field: 'dermatitis',    label: 'Dermatitis',     help: 'Enfermedades de piel crónicas (eccema, psoriasis, dermatitis atópica).' },
     { field: 'psiquiatricas', label: 'Psiquiátricas',  help: 'Trastornos mentales diagnosticados (depresión, ansiedad, esquizofrenia, etc.).' },
-    { field: 'otras',         label: 'Otras',          help: 'Otra enfermedad no listada — detalle en observaciones.' },
+    { field: 'otras',         label: 'Otras enfermedades', help: 'Otra enfermedad no listada — detalle en observaciones.' },
   ],
 }
 
@@ -354,7 +372,7 @@ export const PATOLOGICOS_GROUP_TITLES: Record<keyof GrupoPatologicos, string> = 
   neurologico: 'Sistema neurológico',
   digestivo: 'Sistema digestivo y genitourinario',
   musculoesqueletico: 'Cáncer, traumatismos y procedimientos',
-  otras: 'Otras condiciones',
+  otras: 'Otras enfermedades',
 }
 
 /** Lista plana de todos los `field` (incluye `key` y todos los `subs`) de No Patológicos. */

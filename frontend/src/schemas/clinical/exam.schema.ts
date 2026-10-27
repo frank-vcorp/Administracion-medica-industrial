@@ -107,6 +107,7 @@ export type TestIshiharaValue = (typeof TEST_ISHIHARA_VALUES)[number]
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Heredo-Familiares — 7 campos con catálogo ZIN canónico (NEGADOS/OTROS). */
+/** Catálogo ZIN; `OTROS` retirado (O9-31) — usar multiselect de parentescos. */
 export const HEREDOFAMILIARES_VALUES = [
   'NEGADOS',
   'PADRE',
@@ -115,8 +116,10 @@ export const HEREDOFAMILIARES_VALUES = [
   'HERMANOS',
   'AB PATERNO',
   'AB MATERNO',
-  'OTROS',
 ] as const
+
+/** @deprecated Solo lectura de datos legacy persistidos antes de O9-31. */
+export const HEREDOFAMILIARES_LEGACY_OTROS = 'OTROS' as const
 
 export type HeredofamiliaresValue = (typeof HEREDOFAMILIARES_VALUES)[number]
 

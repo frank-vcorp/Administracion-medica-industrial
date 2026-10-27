@@ -127,7 +127,8 @@ export const HeredoFamiliaresSchema = z.object({
   cancer: z.string().trim().max(500).optional(),
   cancer_especifique: heredoEspecifiqueOptional,
   mentales: z.string().trim().max(500).optional(),
-  otras: z.string().trim().max(1000).optional(),       // Catálogo ZIN (HEREDOFAMILIARES_VALUES)
+  mentales_especifique: heredoEspecifiqueOptional,
+  otras: z.string().trim().max(1000).optional(),       // Legacy ZIN / multiselect serializado
   otras_especifique: z.string().trim().max(250).default(''),  // Texto libre condicional (FIX L2)
 });
 

@@ -33,7 +33,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'antecedentes', label: 'Antecedentes' },
   { id: 'exploracion', label: 'Exploración' },
   { id: 'diagnostico', label: 'Diagnóstico' },
-  { id: 'tratamiento', label: 'Receta' },
+  { id: 'tratamiento', label: 'Tratamiento' },
   { id: 'cierre', label: 'Cierre' },
 ]
 
@@ -423,7 +423,7 @@ export default function ConsultaMedicaEstudio({
             onChange={(e) => setIndicaciones(e.target.value)}
             disabled={readonly}
           />
-          <p className="text-[10px] font-bold text-slate-400 uppercase">Receta</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase">Medicamento</p>
           {recetaLineas.map((line, idx) => (
             <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3">
               <input
@@ -533,7 +533,7 @@ export default function ConsultaMedicaEstudio({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-teal-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
               >
-                💊 Receta (PDF)
+                💊 Medicamento (PDF)
               </a>
             </div>
           )}

@@ -13,8 +13,8 @@ describe('heredo-familiares OTROS + especifique', () => {
     expect(heredoFamiliaresEspecifiqueKey('cancer')).toBe('cancer_especifique')
   })
 
-  it('formatea OTROS con detalle para PDF', () => {
-    expect(formatHeredoFamiliaresValor('OTROS', 'TÍO PATERNO')).toBe('OTROS (TÍO PATERNO)')
+  it('formatea legacy OTROS con detalle para PDF', () => {
+    expect(formatHeredoFamiliaresValor('OTROS', 'TÍO PATERNO')).toBe('TÍO PATERNO')
     expect(formatHeredoFamiliaresValor('PADRE', '')).toBe('PADRE')
   })
 
@@ -23,7 +23,7 @@ describe('heredo-familiares OTROS + especifique', () => {
       { cancer: 'OTROS', cancer_especifique: 'Mama — abuela materna' },
       'cancer',
     )
-    expect(text).toBe('OTROS (Mama — abuela materna)')
+    expect(text).toBe('Mama — abuela materna')
   })
 
   it('schema acepta cancer_especifique independiente del select', () => {

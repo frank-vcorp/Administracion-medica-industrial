@@ -63,6 +63,8 @@ import {
   getPatologicosAllFields,
   PATOLOGICOS_GROUP_ORDER,
   PATOLOGICOS_GROUP_TITLES,
+  PATOLOGICOS_ESPECIFICACION_SIMPLE_FIELDS,
+  patologicosPermiteEspecificacion,
   SUPLEMENTOS_COMPLEMENTOS_ESPECIFIQUE_PLACEHOLDER,
   SUPLEMENTOS_COMPLEMENTOS_HELP,
   SUPLEMENTOS_COMPLEMENTOS_LABEL,
@@ -76,10 +78,8 @@ import {
   type Modulo1FieldDef,
 } from '@/lib/modulo1-capture-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
-import {
-  HEREDOFAMILIARES_VALUES,
-  HEREDOFAMILIARES_MENTALES_VALUES,
-} from '@/schemas/clinical/exam.schema'
+import { HEREDOFAMILIARES_MENTALES_VALUES } from '@/schemas/clinical/exam.schema'
+import { HeredoFamiliaresZinMulti } from '@/components/clinical/HeredoFamiliaresZinMulti'
 import {
   GRUPO_RH_VALUES,
   type DetalleTriple,
@@ -675,14 +675,10 @@ export function AntecedentesCaptura({
           </legend>
           <div className="space-y-3 mt-2">
             {HEREDOFAMILIARES_DESCRIPCIONES.map(item => {
-              // IMPL-20260817-01-C2: 7 campos con HEREDOFAMILIARES_VALUES (8 opciones),
-              // `mentales` con HEREDOFAMILIARES_MENTALES_VALUES (3 opciones),
-              // `otras` con combo + input "Especifique" condicional. DA-6 espejo AntecedentesForm.
               const isMentales = item.field === 'mentales'
-              const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
               const currentValue = form.heredo_familiares[item.field] ?? ''
               const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-              const showEspecifique = !isMentales && currentValue === 'OTROS'
+              const showMentalesEspecifique = isMentales && currentValue === 'SI'
               return (
                 <FieldRow
                   key={item.field}
@@ -690,24 +686,33 @@ export function AntecedentesCaptura({
                   help={item.help}
                   modified={modified.has(`heredo_familiares.${item.field}`)}
                 >
-                  <select
-                    value={currentValue}
-                    onChange={e => setField('heredo_familiares', item.field, e.target.value)}
-                    disabled={readonly}
-                    className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                  >
-                    <option value="">—</option>
-                    {zinValues.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                  {showEspecifique && (
+                  {isMentales ? (
+                    <select
+                      value={currentValue}
+                      onChange={e => setField('heredo_familiares', item.field, e.target.value)}
+                      disabled={readonly}
+                      className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    >
+                      <option value="">—</option>
+                      {HEREDOFAMILIARES_MENTALES_VALUES.map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <HeredoFamiliaresZinMulti
+                      idPrefix={`hf-${item.field}`}
+                      value={currentValue}
+                      disabled={readonly}
+                      onChange={(next) => setField('heredo_familiares', item.field, next)}
+                    />
+                  )}
+                  {showMentalesEspecifique && (
                     <input
                       type="text"
                       value={form.heredo_familiares[especifiqueKey] ?? ''}
                       onChange={e => setField('heredo_familiares', especifiqueKey, e.target.value)}
                       disabled={readonly}
-                      placeholder="Especifique (ej: TÍO PATERNO, cáncer de mama)"
+                      placeholder="Especifique (parentesco / detalle)"
                       className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                     />
                   )}
@@ -878,6 +883,13 @@ export function AntecedentesCaptura({
               {PATOLOGICOS_DESCRIPCIONES[group].map(item => {
                 const entry = form.patologicos[item.field] ?? emptyPatologia()
                 const detalle = entry.detalle ?? emptyDetalle()
+                const simpleSpec = (PATOLOGICOS_ESPECIFICACION_SIMPLE_FIELDS as readonly string[]).includes(
+                  item.field,
+                )
+                const showDetalle =
+                  simpleSpec
+                    ? patologicosPermiteEspecificacion(entry.estado)
+                    : entry.estado === 'SI'
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
@@ -898,7 +910,22 @@ export function AntecedentesCaptura({
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
-                    {entry.estado === 'SI' && (
+                    {showDetalle && simpleSpec && (
+                      <div className="mt-2 p-2 bg-slate-50 rounded border border-slate-100">
+                        <textarea
+                          value={detalle.observaciones}
+                          onChange={e => updatePatologia(item.field, {
+                            detalle: { ...detalle, observaciones: e.target.value },
+                          })}
+                          disabled={readonly}
+                          placeholder="Especificación"
+                          rows={2}
+                          maxLength={1500}
+                          className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
+                        />
+                      </div>
+                    )}
+                    {showDetalle && !simpleSpec && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
                         <input
                           type="text"

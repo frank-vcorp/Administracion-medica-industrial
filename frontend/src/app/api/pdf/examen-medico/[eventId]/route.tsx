@@ -422,7 +422,7 @@ export async function deliverExamenMedicoPdf(
         renales: readHeredoFamiliaresDisplay(ahf, 'renales') || null,
         asma: readHeredoFamiliaresDisplay(ahf, 'asma') || null,
         cancer: readHeredoFamiliaresDisplay(ahf, 'cancer') || null,
-        mentales: str(ahf.mentales) || null,
+        mentales: readHeredoFamiliaresDisplay(ahf, 'mentales') || null,
         otras: readHeredoFamiliaresDisplay(ahf, 'otras') || null,
       },
       apnp: {
@@ -452,8 +452,8 @@ export async function deliverExamenMedicoPdf(
             .join('. ') || null,
         riesgos:
           [
-            hl.accidentes_trabajo && `Accidentes laborales: ${str(hl.accidentes_descripcion) || 'Sí'}`,
-            hl.enfermedades_trabajo && `Enfermedades laborales: ${str(hl.enfermedades_descripcion) || 'Sí'}`,
+            hl.accidentes_trabajo && `Accidente laboral: ${str(hl.accidentes_descripcion) || 'Sí'}`,
+            hl.enfermedades_trabajo && `Enfermedad profesional: ${str(hl.enfermedades_descripcion) || 'Sí'}`,
           ]
             .filter(Boolean)
             .join('. ') || null,
