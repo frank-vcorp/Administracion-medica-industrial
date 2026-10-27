@@ -19,6 +19,12 @@ describe('patient-name-match', () => {
     ).toBe('Pedro Ruiz')
   })
 
+  it('extrae nombre desde nombre_completo en raíz (XML audiómetro)', () => {
+    expect(
+      extractPatientNameFromStructuredData({ nombre_completo: 'María SAAVEDRA' }),
+    ).toBe('María SAAVEDRA')
+  })
+
   it('acepta cuando todos los tokens del trabajador están en el PDF', () => {
     expect(patientNamesMatch('Juan Carlos Pérez', 'PEREZ JUAN CARLOS')).toBe(true)
   })

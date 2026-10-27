@@ -152,7 +152,12 @@ def _extract_patient_data(root: ET.Element) -> Dict[str, Any]:
     first_name = patient.find("FirstName")
     last_name = patient.find("LastName")
     if first_name is not None and last_name is not None:
-        data["nombre_completo"] = f"{first_name.text} {last_name.text}"
+        full_name = f"{first_name.text or ''} {last_name.text or ''}".strip()
+        if full_name:
+            # Raíz legacy + campos alineados con calibración PDF y patient-name-match (S8-02).
+            data["nombre_completo"] = full_name
+            data["paciente"] = full_name
+            data["paciente_detalle"] = {"nombre_completo": full_name}
     
     gender = patient.find("Gender")
     if gender is not None:

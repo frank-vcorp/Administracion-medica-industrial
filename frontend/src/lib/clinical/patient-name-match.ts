@@ -57,6 +57,11 @@ export function extractPatientNameFromStructuredData(data: unknown): string | nu
     if (typeof nombre === 'string' && nombre.trim()) return nombre.trim()
   }
 
+  // XML audiómetro legacy: parser expone nombre_completo en raíz.
+  if (typeof root.nombre_completo === 'string' && root.nombre_completo.trim()) {
+    return root.nombre_completo.trim()
+  }
+
   return null
 }
 

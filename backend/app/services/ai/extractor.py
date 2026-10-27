@@ -445,6 +445,24 @@ notas de calidad y gráficas.
                 f"{existing} | {warning}" if existing else warning
             )
 
+        # S8-02: Mapeo defensivo paciente/fecha_estudio (espejo espirometría FIX-20260821-01).
+        if not result.get("paciente"):
+            pd = result.get("paciente_detalle")
+            if isinstance(pd, dict):
+                name = pd.get("nombre_completo")
+                if isinstance(name, str) and name.strip():
+                    result["paciente"] = name.strip()
+        if not result.get("paciente"):
+            root_name = result.get("nombre_completo")
+            if isinstance(root_name, str) and root_name.strip():
+                result["paciente"] = root_name.strip()
+        if not result.get("fecha_estudio"):
+            estudio = result.get("estudio")
+            if isinstance(estudio, dict):
+                fecha = estudio.get("fecha_estudio")
+                if isinstance(fecha, str) and fecha.strip():
+                    result["fecha_estudio"] = fecha.strip()
+
         return result
 
     def _normalize_espirometria_result(self, result: dict) -> dict:

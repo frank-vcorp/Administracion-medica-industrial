@@ -1844,6 +1844,30 @@ class TestMultiProviderExtractionARCH20260809_02:
         assert normalized["oido_derecho"]["500"] == 25
         assert normalized["oido_derecho"]["1000"] == 30
 
+    def test_normalize_audiometria_mapea_paciente_desde_subbloques_y_raiz(
+        self, extractor
+    ):
+        """S8-02: paciente ausente → paciente_detalle.nombre_completo o nombre_completo raíz."""
+        from_sub = {
+            "paciente": "",
+            "fecha_estudio": "",
+            "oido_derecho": {"500": 10},
+            "oido_izquierdo": {"500": 15},
+            "paciente_detalle": {"nombre_completo": "Ana López"},
+            "estudio": {"fecha_estudio": "01/10/2026"},
+        }
+        out_sub = extractor._normalize_audiometria_result(dict(from_sub))
+        assert out_sub["paciente"] == "Ana López"
+        assert out_sub["fecha_estudio"] == "01/10/2026"
+
+        from_root = {
+            "oido_derecho": {"500": 10},
+            "oido_izquierdo": {"500": 15},
+            "nombre_completo": "XML Legacy Name",
+        }
+        out_root = extractor._normalize_audiometria_result(dict(from_root))
+        assert out_root["paciente"] == "XML Legacy Name"
+
     def test_resolve_provider_invalido_en_calibracion_levanta_excepcion(self, extractor):
         from app.services.ai.extractor import ExtractionProviderUnknownError
         with pytest.raises(ExtractionProviderUnknownError):
