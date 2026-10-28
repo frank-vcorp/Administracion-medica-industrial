@@ -114,20 +114,45 @@ const appointmentScalarSelectWithoutCancellation = {
   },
 } as const satisfies Prisma.AppointmentSelect
 
+/** Branch sin weeklySchedule (migración 20261028180000 puede no estar aplicada). */
+const branchScalarSelectWithoutWeeklySchedule = {
+  id: true,
+  name: true,
+  address: true,
+  phone: true,
+  managerName: true,
+  tenantId: true,
+  createdAt: true,
+  updatedAt: true,
+  closingTime: true,
+  hourlyCapacity: true,
+  openingTime: true,
+  isActive: true,
+  disabledAt: true,
+  disabledByUserId: true,
+} as const satisfies Prisma.BranchSelect
+
 export type MedicalEventByIdResult = Prisma.MedicalEventGetPayload<{
   include: typeof medicalEventByIdRelations
 }>
 
-/** Rellena columnas de cancelación cuando la BD aún no tiene la migración 20261028170000. */
-function withCancellationDefaults(
+/** Rellena columnas opcionales cuando la BD aún no tiene migraciones recientes. */
+function withOptionalMigrationDefaults(
   row: Record<string, unknown> & {
     appointment?: Record<string, unknown> | null
+    branch?: Record<string, unknown> | null
   },
 ): MedicalEventByIdResult {
   return {
     ...row,
     cancellationReason: null,
     cancelledAt: null,
+    branch: row.branch
+      ? {
+          ...row.branch,
+          weeklySchedule: null,
+        }
+      : null,
     appointment: row.appointment
       ? {
           ...row.appointment,
@@ -140,7 +165,7 @@ function withCancellationDefaults(
 
 export async function queryMedicalEventById(
   id: string,
-  mode: 'full' | 'withoutCancellationColumns',
+  mode: 'full' | 'withoutOptionalMigrationColumns',
 ): Promise<MedicalEventByIdResult | null> {
   if (mode === 'full') {
     return prisma.medicalEvent.findUnique({
@@ -154,7 +179,7 @@ export async function queryMedicalEventById(
     select: {
       ...medicalEventScalarSelectWithoutCancellation,
       worker: medicalEventByIdRelations.worker,
-      branch: medicalEventByIdRelations.branch,
+      branch: { select: branchScalarSelectWithoutWeeklySchedule },
       exam: medicalEventByIdRelations.exam,
       appointment: {
         select: appointmentScalarSelectWithoutCancellation,
@@ -165,5 +190,5 @@ export async function queryMedicalEventById(
   })
 
   if (!row) return null
-  return withCancellationDefaults(row)
+  return withOptionalMigrationDefaults(row)
 }

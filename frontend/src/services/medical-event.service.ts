@@ -30,7 +30,7 @@ export const getEventById = async (id: string) => {
     } catch (error) {
         // Migración 20261028170000_cancellation_reason: prod puede desplegar código antes que `migrate deploy`.
         if (!isPrismaMissingColumnError(error)) throw error
-        return await queryMedicalEventById(id, 'withoutCancellationColumns')
+        return await queryMedicalEventById(id, 'withoutOptionalMigrationColumns')
     }
 }
 
