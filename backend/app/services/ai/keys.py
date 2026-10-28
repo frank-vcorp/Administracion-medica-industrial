@@ -191,9 +191,9 @@ class KeyResolver:
         IMPL-20260812-05 — Single source of truth: para Gemini, el
         `default_model` lo decide el selector (override > aiCalibration >
         AppConfig > env), no el key resolver. El resolver expone SOLO la
-        API key (rotación runtime). Para M3 y DR7 conservamos el env
-        default porque la capa clínica (prediagnóstico) aún inicia
-        instancias sin selector explícito.
+        API key (rotación runtime). Para M3 (extracción y prediagnóstico)
+        y DR7 (fila de keys, sin uso clínico) se conserva el modelo
+        default del resolver/env.
 
         Mapeo:
           - gemini: GEMINI_API_KEY (model=null: lo decide el caller)

@@ -234,7 +234,7 @@ const AI_PIPELINE_STAGE_LABELS: Record<UploadStageId, (provider?: string) => str
   uploading:     () => 'Subiendo archivo',
   classifying:   () => 'Clasificando estudio',
   extracting:    (provider) => extractingStageLabel(provider),
-  prediagnosing: () => 'Generando prediagnóstico con MedGemma',
+  prediagnosing: () => 'Generando prediagnóstico con MiniMax',
   saving:        () => 'Guardando resultado',
 }
 

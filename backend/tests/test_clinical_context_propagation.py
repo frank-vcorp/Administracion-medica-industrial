@@ -138,8 +138,8 @@ class TestGeneratePrediagnosisSignatureCompat:
 
 class TestClinicalContextAbsent:
     @patch("app.services.ai.prediagnostic.MEDGEMMA_ENABLED", True)
-    @patch("app.services.ai.prediagnostic.DR7_API_KEY", "fake-dr7-key")
-    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat")
+    @patch("app.services.ai.prediagnostic.M3_API_KEY", "fake-m3-key")
+    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat")
     def test_sin_clinical_context_prompt_no_contiene_bloque(
         self, mock_dr7, prediagnostic_svc
     ):
@@ -173,8 +173,8 @@ class TestClinicalContextAbsent:
 
 class TestClinicalContextPresent:
     @patch("app.services.ai.prediagnostic.MEDGEMMA_ENABLED", True)
-    @patch("app.services.ai.prediagnostic.DR7_API_KEY", "fake-dr7-key")
-    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat")
+    @patch("app.services.ai.prediagnostic.M3_API_KEY", "fake-m3-key")
+    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat")
     def test_prompt_incluye_bloque_con_schemaVersion_y_json(
         self, mock_dr7, prediagnostic_svc
     ):
@@ -203,8 +203,8 @@ class TestClinicalContextPresent:
         assert "=== FIN BLOQUE ===" in rendered
 
     @patch("app.services.ai.prediagnostic.MEDGEMMA_ENABLED", True)
-    @patch("app.services.ai.prediagnostic.DR7_API_KEY", "fake-dr7-key")
-    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat")
+    @patch("app.services.ai.prediagnostic.M3_API_KEY", "fake-m3-key")
+    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat")
     def test_limitations_documenta_inyeccion(self, mock_dr7, prediagnostic_svc):
         """Limitations del resultado documenta la inyección del cuestionario."""
         mock_dr7.return_value = {
@@ -233,8 +233,8 @@ class TestClinicalContextPresent:
 
 class TestClinicalContextInvalid:
     @patch("app.services.ai.prediagnostic.MEDGEMMA_ENABLED", True)
-    @patch("app.services.ai.prediagnostic.DR7_API_KEY", "fake-dr7-key")
-    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat")
+    @patch("app.services.ai.prediagnostic.M3_API_KEY", "fake-m3-key")
+    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat")
     def test_sin_schemaVersion_se_ignora_silenciosamente(
         self, mock_dr7, prediagnostic_svc
     ):
@@ -262,8 +262,8 @@ class TestClinicalContextInvalid:
         )
 
     @patch("app.services.ai.prediagnostic.MEDGEMMA_ENABLED", True)
-    @patch("app.services.ai.prediagnostic.DR7_API_KEY", "fake-dr7-key")
-    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat")
+    @patch("app.services.ai.prediagnostic.M3_API_KEY", "fake-m3-key")
+    @patch("app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat")
     def test_schemaVersion_futura_se_acepta_pero_se_documenta(self, mock_dr7, prediagnostic_svc):
         """
         SchemaVersion desconocida (futura) → el helper es forward-compatible:

@@ -414,9 +414,10 @@ def v2_ai_status():
     current_api_key = _read_env_var("GEMINI_API_KEY")
     current_extraction_model = _read_env_var("GEMINI_MODEL_EXTRACTION") or GEMINI_MODEL_EXTRACTION
     current_clinical_model   = _read_env_var("GEMINI_MODEL_CLINICAL") or GEMINI_MODEL_CLINICAL
-    # IMPL-20260603-01: estado dinámico del proveedor clínico en DR7
+    # FIX-20261028-01: el prediagnóstico clínico usa MiniMax M3.
+    # DR7_API_KEY / MEDGEMMA_ENABLED no seleccionan el proveedor.
     dr7_key_present = bool(_read_env_var("DR7_API_KEY"))
-    active_clinical_provider = "dr7" if (MEDGEMMA_ENABLED and dr7_key_present) else "gemini"
+    active_clinical_provider = "m3"
     # ARCH-20260519-15: rollback extractivo — Gemini es siempre el proveedor activo
     # de clasificación documental y extracción estructurada en este corte.
     # Featherless/Qwen-VL desactivado del runtime extractivo hasta nueva decisión arquitectónica.
@@ -450,7 +451,7 @@ def v2_ai_status():
         "m3_default_model": M3_DEFAULT_MODEL,
         "m3_key_present": bool(M3_API_KEY),
         "extraction_default_provider_configurable": True,
-        # IMPL-20260603-01: trazabilidad del proveedor clínico activo (DR7)
+        # FIX-20261028-01: proveedor clínico activo = MiniMax M3.
         "clinical_provider_active": active_clinical_provider,
         "dr7_key_present": dr7_key_present,
         "dr7_base_url": DR7_BASE_URL,
@@ -1885,7 +1886,7 @@ def v2_prediagnosis_from_params(
 #   3. Resolver el MedicalTest desde el EventTest para extraer aiCalibration
 #   4. parse_audiometry_xml(local_path) → extracción pura
 #   5. prediagnostic_svc.generate_prediagnosis(Audiometria, extracted, ai_cal)
-#      para la capa DR7.ai clínica posterior
+#      para la capa clínica MiniMax M3
 #   6. Retornar el mismo payload que v2_upload_and_analyze, con
 #      data_source='xml_direct', model_name='xml_parser',
 #      prompt_version='xml_direct_v1' en extraction_snapshot.audit.
@@ -2182,9 +2183,27 @@ async def v2_event_test_upload_xml_audiometry(
             f"audiómetro DD65 V2: {type(xml_err).__name__}",
         )
 
-    # ── 5. Prediagnóstico clínico (DR7.ai) sobre los umbrales extraídos ───
+    # ── 5. Prediagnóstico clínico (MiniMax M3) sobre los umbrales extraídos ───
+    # FIX-20261028-01: este endpoint no pasa por el extractor, así que el
+    # warmup genérico de upload-and-analyze no corrió. Pre-calentar "m3"
+    # para que generate_prediagnosis lea la key de BD (mismo resolver).
+    from app.services.ai.keys import (
+        is_ai_keys_from_db_enabled as _xml_ai_keys_db_enabled,
+        key_resolver as _xml_key_resolver,
+    )
+    if _xml_ai_keys_db_enabled():
+        try:
+            await _xml_key_resolver.resolve("m3")
+        except Exception as _xml_warmup_err:
+            print(
+                f"⚠️ [FIX-20261028-01] Warmup key MiniMax (m3) falló "
+                f"({type(_xml_warmup_err).__name__}); el prediagnóstico "
+                f"degradará a env o a no concluyente."
+            )
+
+    # Prediagnóstico clínico sobre los umbrales extraídos.
     if prediagnostic_svc is None:
-        # Si DR7.ai no está disponible, devolvemos solo la extracción (xml_direct)
+        # Si el servicio clínico no está inicializado, devolvemos solo la extracción (xml_direct)
         # para que el frontend pueda persistir el snapshot y el médico revise
         # manualmente. Marcamos explícitamente el clinical_state.
         prediagnosis_payload: Dict[str, Any] = {

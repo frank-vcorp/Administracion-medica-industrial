@@ -200,8 +200,11 @@ describe('AIProviderKeyManager', () => {
 
     // Sección "Proveedor de extracción predeterminado" siempre visible.
     expect(screen.getByText(/Proveedor de extracción predeterminado/i)).toBeInTheDocument()
-    // Nota DR7 clínico.
-    expect(screen.getByText(/DR7.*cl[ií]nico/i)).toBeInTheDocument()
+    // El prediagnóstico clínico usa MiniMax; la nota no pide DR7.
+    expect(
+      screen.getByText(/prediagnóstico clínico usa la misma clave MiniMax/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/DR7\/MedGemma es clínico/i)).not.toBeInTheDocument()
     // DR7 no aparece como opción de default.
     const radios = screen.getAllByRole('radio')
     expect(radios.length).toBe(2) // solo gemini y m3
