@@ -316,7 +316,9 @@ export default function AppointmentFormModal({
 
                 if (result.success) {
                     setSuccessData(result)
-                    void sendAppointmentPassEmail(result.appointment.id)
+                    if (result.appointment?.id) {
+                        void sendAppointmentPassEmail(result.appointment.id)
+                    }
                     router.refresh()
                     onSuccess?.({ branchId, date })
                 } else {
