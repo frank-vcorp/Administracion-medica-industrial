@@ -40,6 +40,31 @@ app.post('/v1/messages/send', async (req, res) => {
   }
 })
 
+app.post('/v1/messages/send-document', async (req, res) => {
+  if (!requireBearer(req, res)) return
+  const to = typeof req.body?.to === 'string' ? req.body.to : ''
+  const fileName = typeof req.body?.fileName === 'string' ? req.body.fileName : ''
+  const mimetype = typeof req.body?.mimetype === 'string' ? req.body.mimetype : ''
+  const dataBase64 = typeof req.body?.dataBase64 === 'string' ? req.body.dataBase64 : ''
+  const caption = typeof req.body?.caption === 'string' ? req.body.caption : undefined
+  try {
+    await baileysManager.sendDocument({
+      toPhone: to,
+      fileName,
+      mimetype,
+      dataBase64,
+      caption,
+    })
+    res.json({ ok: true, sent: true })
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      sent: false,
+      error: err instanceof Error ? err.message : 'No se pudo enviar documento',
+    })
+  }
+})
+
 app.post('/v1/admin/connect', async (req, res) => {
   if (!requireBearer(req, res)) return
   try {

@@ -145,6 +145,8 @@ export const MedicalDictamenPDF = ({ data }: {
         company?: { name: string },
         finalDiagnosis: string,
         recommendations?: string,
+        /** Aptitud para cubrir o seguir en la plaza (audiencia empleador). */
+        aptitudLaboral?: string,
         validator: { fullName: string },
         id: string,
         studies?: { serviceName: string, extractedData: unknown }[],
@@ -356,18 +358,28 @@ export const MedicalDictamenPDF = ({ data }: {
                 </View>
             )}
 
-            {/* IV. CONCLUSIÓN MÉDICA (DICTAMEN) */}
+            {/* IV. APTITUD LABORAL (EMPLEADOR) */}
+            {data.aptitudLaboral ? (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>IV. APTITUD LABORAL (EMPLEADOR)</Text>
+                    <View style={styles.verdictBox}>
+                        <Text style={styles.verdictText}>{data.aptitudLaboral}</Text>
+                    </View>
+                </View>
+            ) : null}
+
+            {/* V. CONCLUSIÓN MÉDICA (DICTAMEN) */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>IV. CONCLUSIÓN MÉDICA (DICTAMEN)</Text>
+                <Text style={styles.sectionTitle}>{data.aptitudLaboral ? 'V. CONCLUSIÓN MÉDICA (DICTAMEN)' : 'IV. CONCLUSIÓN MÉDICA (DICTAMEN)'}</Text>
                 <View style={styles.verdictBox}>
                     <Text style={styles.verdictText}>{data.finalDiagnosis}</Text>
                 </View>
             </View>
 
-            {/* V. RECOMENDACIONES Y SEGUIMIENTO */}
+            {/* VI. RECOMENDACIONES Y SEGUIMIENTO */}
             {data.recommendations && (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>V. RECOMENDACIONES Y SEGUIMIENTO</Text>
+                    <Text style={styles.sectionTitle}>{data.aptitudLaboral ? 'VI. RECOMENDACIONES Y SEGUIMIENTO' : 'V. RECOMENDACIONES Y SEGUIMIENTO'}</Text>
                     <Text style={styles.verdictText}>{data.recommendations}</Text>
                 </View>
             )}

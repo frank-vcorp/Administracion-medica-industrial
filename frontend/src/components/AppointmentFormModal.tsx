@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect, useMemo } from 'react'
 import { createAppointment } from '@/actions/appointment.actions'
+import { sendAppointmentPassEmail } from '@/actions/appointment-pass-email.actions'
 import { getWorkersByCompany, searchWorkersByCompany } from '@/actions/worker.actions'
 import { getBranches, getCompanies } from '@/actions/admin.actions'
 import {
@@ -315,6 +316,7 @@ export default function AppointmentFormModal({
 
                 if (result.success) {
                     setSuccessData(result)
+                    void sendAppointmentPassEmail(result.appointment.id)
                     router.refresh()
                     onSuccess?.({ branchId, date })
                 } else {

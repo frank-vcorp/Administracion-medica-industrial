@@ -543,6 +543,8 @@ model MedicalVerdict {
   signedAt        DateTime     @default(now())
   signatureHash   String?
   pdfUrl          String?
+  /// PDF firmado de recomendaciones de salud para el paciente (sin aptitud ocupacional).
+  patientPdfUrl   String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   event           MedicalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)

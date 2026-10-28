@@ -23,6 +23,7 @@ export default function AppointmentWhatsAppSuccess({ phone, message, appointment
       text: message,
       auditContext: 'appointment_pass',
       entityId: appointmentId,
+      attachPatientTriptych: true,
     }).then((res) => {
       if (res.sent) setPhase('sent')
       else if (res.fallbackWaUrl) {

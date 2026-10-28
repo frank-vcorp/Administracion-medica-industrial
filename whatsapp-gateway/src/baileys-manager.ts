@@ -367,6 +367,33 @@ class BaileysManager {
     await this.sock.sendMessage(jid, { text: body })
   }
 
+  async sendDocument(input: {
+    toPhone: string
+    fileName: string
+    mimetype: string
+    dataBase64: string
+    caption?: string
+  }): Promise<void> {
+    if (this.status !== 'connected' || !this.sock) {
+      throw new Error('WhatsApp no conectado. Escanee el QR en Configuración.')
+    }
+    const digits = input.toPhone.replace(/\D/g, '')
+    if (digits.length < 10) {
+      throw new Error('Teléfono destino inválido')
+    }
+    const buffer = Buffer.from(input.dataBase64, 'base64')
+    if (buffer.length === 0) {
+      throw new Error('Documento vacío')
+    }
+    const jid = `${digits}@s.whatsapp.net`
+    await this.sock.sendMessage(jid, {
+      document: buffer,
+      mimetype: input.mimetype,
+      fileName: input.fileName,
+      caption: input.caption?.trim().slice(0, 500) || undefined,
+    })
+  }
+
   /** Restaura sesión existente al arrancar el gateway (sin QR). */
   async warmExistingSession(): Promise<void> {
     if (this.starting || this.pairingActive || this.sock) return
