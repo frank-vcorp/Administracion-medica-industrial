@@ -11,6 +11,17 @@ import {
   dictamenBackendUrl,
   deriveEventShortId,
 } from '@/lib/dictamen-pdf'
+import {
+  patientDictamenInputFileName,
+  patientDictamenSignedFileName,
+  renderPatientHealthDictamenToMemory,
+  uploadAndSignPdfOnBackend,
+} from '@/lib/patient-dictamen-pdf'
+import {
+  readEmployerAptitudLaboral,
+  readPatientHealthRecommendations,
+  patientDictamenHasRequiredContent,
+} from '@/lib/clinical/dictamen-audience'
 import { findSiblingEventsInAtencion } from '@/lib/event-atencion'
 import {
   buildDictamenGeneralAmiConsolidado,
@@ -111,6 +122,9 @@ export async function signMedicalDictamPDF(eventId: string) {
             aiPrediction: true,
             extractedData: true,
           },
+        },
+        exam: {
+          select: { physicalExamData: true },
         },
         verdict: {
           select: {
@@ -222,6 +236,10 @@ export async function signMedicalDictamPDF(eventId: string) {
       })),
     ]
 
+    const physicalExamData =
+      (event.exam?.physicalExamData as Record<string, unknown> | null) ?? null
+    const aptitudLaboral = readEmployerAptitudLaboral(physicalExamData)
+
     // 3. Renderizar el dictamen en MEMORIA (sin disco). Si el render
     // falla, NO seguimos (sería pasarle al firmador un buffer vacío).
     const nowMs = Date.now()
@@ -246,6 +264,7 @@ export async function signMedicalDictamPDF(eventId: string) {
             : null,
           finalDiagnosis: event.verdict.finalDiagnosis,
           recommendations: event.verdict.recommendations ?? null,
+          aptitudLaboral: aptitudLaboral || null,
           validator: {
             fullName: event.verdict.validator.fullName,
           },
@@ -386,6 +405,38 @@ export async function signMedicalDictamPDF(eventId: string) {
           ? result.output_pdf
           : expectedSignedFileName
 
+      let patientPdfUrl: string | null = null
+      if (patientDictamenHasRequiredContent(physicalExamData)) {
+        const patientNowMs = Date.now()
+        const patientInputName = patientDictamenInputFileName(eventId, patientNowMs)
+        const patientSignedName = patientDictamenSignedFileName(eventId)
+        try {
+          const patientBuffer = await renderPatientHealthDictamenToMemory({
+            signedAt: new Date(),
+            eventId: event.id,
+            worker: {
+              firstName: event.worker.firstName,
+              lastName: event.worker.lastName,
+              universalId: event.worker.universalId,
+            },
+            healthRecommendations: readPatientHealthRecommendations(physicalExamData),
+            validator: { fullName: event.verdict.validator.fullName },
+            verdictId: event.verdict.id,
+          })
+          const patientSigned = await uploadAndSignPdfOnBackend({
+            pdfBuffer: patientBuffer,
+            inputFileName: patientInputName,
+            expectedSignedFileName: patientSignedName,
+            reason: 'Dictamen de salud para el paciente AMI',
+          })
+          if (patientSigned.success && patientSigned.signedKey) {
+            patientPdfUrl = patientSigned.signedKey
+          }
+        } catch (patientErr) {
+          console.error('[S8-05] Error generando dictamen del paciente:', patientErr)
+        }
+      }
+
       await prisma.medicalEvent.update({
         where: { id: eventId },
         data: {
@@ -398,6 +449,7 @@ export async function signMedicalDictamPDF(eventId: string) {
         data: {
           signatureHash: result.signature_hash || signedKey,
           pdfUrl: signedKey,
+          patientPdfUrl,
           signedAt: new Date(),
         },
       })

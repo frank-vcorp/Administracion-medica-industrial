@@ -7,6 +7,7 @@ import type { ValidationStage } from '@/lib/clinical/validation-stage'
 
 import PartialResultSendModal from '@/components/validation/PartialResultSendModal'
 import WhatsAppAutoSendButton from '@/components/shared/WhatsAppAutoSendButton'
+import SendFinalReportWhatsAppButton from '@/components/validation/SendFinalReportWhatsAppButton'
 
 export type ValidationQueueRow = {
   eventId: string
@@ -180,7 +181,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
             </tr>
           )}
           {filteredRows.map((row) => {
-            const waText = `Hola ${row.patientName}, su dictamen de ${row.companyName} está listo. Descárguelo aquí: https://ami.com/d/${row.eventId}`
+            const waText = `Hola ${row.patientName}, su dictamen de ${row.companyName} está listo. Un miembro del equipo le contactará con los documentos autorizados.`
 
             return (
               <tr key={row.eventId} className="hover:bg-slate-50 transition-colors">
@@ -280,15 +281,23 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                       </span>
                     )}
                     {row.phone ? (
-                      <WhatsAppAutoSendButton
-                        phone={row.phone}
-                        text={waText}
-                        auditContext="validation_verdict_ready"
-                        entityId={row.eventId}
-                        className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold hover:underline disabled:opacity-50"
-                      >
-                        WhatsApp
-                      </WhatsAppAutoSendButton>
+                      <>
+                        <WhatsAppAutoSendButton
+                          phone={row.phone}
+                          text={waText}
+                          auditContext="validation_verdict_ready"
+                          entityId={row.eventId}
+                          className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold hover:underline disabled:opacity-50"
+                        >
+                          WhatsApp
+                        </WhatsAppAutoSendButton>
+                        {row.hasMedicalVerdict ? (
+                          <SendFinalReportWhatsAppButton
+                            eventId={row.eventId}
+                            phone={row.phone}
+                          />
+                        ) : null}
+                      </>
                     ) : (
                       <span
                         className="text-[10px] font-medium text-slate-400"

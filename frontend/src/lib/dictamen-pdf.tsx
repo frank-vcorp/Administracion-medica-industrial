@@ -86,6 +86,8 @@ export interface BuildDictamenPayloadInput {
   finalDiagnosis: string
   /** Recomendaciones persistidas (opcional). */
   recommendations?: string | null
+  /** Aptitud laboral (dictamen empleador — S8-05). */
+  aptitudLaboral?: string | null
   /** Identidad del validador (snapshot congelado al firmar). */
   validator: { fullName: string }
   /** Estudios auxiliares (Audiometría, Espirometría, RX, etc.). */
@@ -182,6 +184,7 @@ export function buildDictamenPdfPayload(
     company: input.company ?? undefined,
     finalDiagnosis: input.finalDiagnosis,
     recommendations: input.recommendations ?? undefined,
+    aptitudLaboral: input.aptitudLaboral ?? undefined,
     validator: input.validator,
     id: input.verdictId,
     // `MedicalDictamenPDF` exige `extractedData: unknown` (required).

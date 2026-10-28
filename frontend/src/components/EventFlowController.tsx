@@ -283,16 +283,27 @@ export default function EventFlowController({
                                 Sin verdict, el endpoint devuelve 404 y NO debemos
                                 exponer al usuario a un 404. */}
                             {hasMedicalVerdict && (
-                                <a
-                                    href={`/api/pdf/${eventId}`}
-                                    target="_blank"
-                                    data-testid="dictamen-pdf-download-link"
-                                    data-implementacion="IMPL-FEATURE-20260825-03"
-                                    data-has-medical-verdict={String(hasMedicalVerdict)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2"
-                                >
-                                    ⬇️ Descargar Dictamen (PDF)
-                                </a>
+                                <>
+                                    <a
+                                        href={`/api/pdf/${eventId}`}
+                                        target="_blank"
+                                        data-testid="dictamen-pdf-download-link"
+                                        data-implementacion="IMPL-FEATURE-20260825-03"
+                                        data-has-medical-verdict={String(hasMedicalVerdict)}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        ⬇️ Dictamen empleador (PDF)
+                                    </a>
+                                    <a
+                                        href={`/api/pdf/patient-dictamen/${eventId}`}
+                                        target="_blank"
+                                        rel="noopener"
+                                        data-testid="patient-dictamen-pdf-download-link"
+                                        className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-teal-100 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        ⬇️ Recomendaciones paciente (PDF)
+                                    </a>
+                                </>
                             )}
                             {/* IMPL-20260826-08 (FND-20260826-03): ZIP de cierre
                                 clínico consolidado por atención/cita (con
