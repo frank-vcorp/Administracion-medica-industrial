@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import {
+  formatCie10Unified,
+  isKnownCie10Code,
+  parseDiagnosticoUnificadoStored,
+} from '@/lib/clinical/cie-10-catalog'
 import { ClinicalHistoryDataSchema } from '@/schemas/clinical/history.schema'
 
 export const CONSULTA_MEDICA_SCHEMA_VERSION = 'consulta-medica-v1' as const
@@ -31,6 +36,28 @@ const optionalString = z
   .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCaseIfAllCaps)])
   .optional()
 
+const diagnosticoUnificadoCieFinal = z
+  .string()
+  .trim()
+  .min(1, 'Selecciona un diagnóstico CIE-10 del catálogo.')
+  .max(500)
+  .superRefine((val, ctx) => {
+    const parsed = parseDiagnosticoUnificadoStored(val)
+    if (!parsed || !isKnownCie10Code(parsed.code)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Debe ser un código CIE-10 válido del catálogo.',
+      })
+    }
+  })
+  .transform((val) => {
+    const parsed = parseDiagnosticoUnificadoStored(val)
+    if (parsed) return formatCie10Unified({ code: parsed.code, description: parsed.description })
+    return val
+  })
+
+const diagnosticoUnificadoCieDraft = z.union([z.literal(''), z.string().trim().max(500)]).optional()
+
 export const RecetaLineaSchema = z.object({
   medicamento: freeText(500, 1),
   presentacion: optionalString,
@@ -59,8 +86,7 @@ export const ConsultaMedicaPayloadSchema = z.object({
   motivo_consulta: freeText(8000, 10),
   signos_vitales: SignosVitalesConsultaSchema,
   exploracion_fisica: freeText(12000, 10),
-  diagnostico_sistema: freeText(500, 1),
-  diagnostico_unificado: freeText(500, 1),
+  diagnostico_unificado: diagnosticoUnificadoCieFinal,
   diagnostico_especifico: freeText(2000, 1),
   incapacidad_aplica: z.boolean(),
   otorga_incapacidad: z.enum(['SI', 'NO']),
@@ -93,8 +119,7 @@ export const ConsultaMedicaDraftSchema = z.object({
   motivo_consulta: draftText(12000).optional(),
   signos_vitales: SignosVitalesConsultaSchema.optional(),
   exploracion_fisica: draftText(12000).optional(),
-  diagnostico_sistema: draftText(500).optional(),
-  diagnostico_unificado: draftText(500).optional(),
+  diagnostico_unificado: diagnosticoUnificadoCieDraft,
   diagnostico_especifico: draftText(2000).optional(),
   incapacidad_aplica: z.boolean().optional(),
   otorga_incapacidad: z.enum(['SI', 'NO']).optional(),

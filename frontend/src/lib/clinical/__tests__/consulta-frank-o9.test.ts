@@ -21,7 +21,6 @@ const freshDraft = {
     complexion: '',
   },
   exploracion_fisica: '',
-  diagnostico_sistema: '',
   diagnostico_unificado: '',
   diagnostico_especifico: '',
   incapacidad_aplica: false,

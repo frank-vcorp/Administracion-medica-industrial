@@ -56,7 +56,6 @@ export async function loadConsultaMedicaPdfInput(
     motivo_consulta: stored.motivo_consulta ?? '',
     signos_vitales: stored.signos_vitales ?? emptySignosVitalesConsulta(),
     exploracion_fisica: stored.exploracion_fisica ?? '',
-    diagnostico_sistema: stored.diagnostico_sistema ?? '',
     diagnostico_unificado: stored.diagnostico_unificado ?? '',
     diagnostico_especifico: stored.diagnostico_especifico ?? '',
     incapacidad_aplica: stored.incapacidad_aplica ?? false,

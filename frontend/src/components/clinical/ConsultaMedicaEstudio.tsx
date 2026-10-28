@@ -5,7 +5,9 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
+import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
+import { parseDiagnosticoUnificadoStored, formatCie10Unified } from '@/lib/clinical/cie-10-catalog'
 import {
   mergeProfileAntecedentesIntoConsulta,
   modulo1Record,
@@ -82,8 +84,13 @@ export default function ConsultaMedicaEstudio({
   const [exploracion, setExploracion] = useState(
     parsed?.exploracion_fisica ?? buildDefaultExploracionPlantilla(),
   )
-  const [diagSistema, setDiagSistema] = useState(parsed?.diagnostico_sistema ?? '')
-  const [diagUnificado, setDiagUnificado] = useState(parsed?.diagnostico_unificado ?? '')
+  const [diagCie, setDiagCie] = useState<Cie10Selection | null>(() => {
+    const parsedUnified = parseDiagnosticoUnificadoStored(parsed?.diagnostico_unificado)
+    if (parsedUnified) {
+      return { code: parsedUnified.code, description: parsedUnified.description }
+    }
+    return null
+  })
   const [diagEspecifico, setDiagEspecifico] = useState(parsed?.diagnostico_especifico ?? '')
   const [otorgaIncap, setOtorgaIncap] = useState<'SI' | 'NO'>(parsed?.otorga_incapacidad ?? 'NO')
   const [diasIncap, setDiasIncap] = useState(String(parsed?.dias_incapacidad ?? ''))
@@ -137,8 +144,7 @@ export default function ConsultaMedicaEstudio({
       motivo_consulta: motivo.trim(),
       signos_vitales: sv,
       exploracion_fisica: exploracion.trim(),
-      diagnostico_sistema: diagSistema.trim(),
-      diagnostico_unificado: diagUnificado.trim(),
+      diagnostico_unificado: diagCie ? formatCie10Unified(diagCie) : '',
       diagnostico_especifico: diagEspecifico.trim(),
       incapacidad_aplica: otorgaIncap === 'SI',
       otorga_incapacidad: otorgaIncap,
@@ -161,8 +167,7 @@ export default function ConsultaMedicaEstudio({
     imc,
     complexion,
     exploracion,
-    diagSistema,
-    diagUnificado,
+    diagCie,
     diagEspecifico,
     otorgaIncap,
     diasIncap,
@@ -349,19 +354,11 @@ export default function ConsultaMedicaEstudio({
 
       {activeTab === 'diagnostico' && (
         <section className="space-y-3 bg-white border border-slate-200 rounded-xl p-4">
-          <input
-            className={inputClass}
-            placeholder="Sistema (ej. Sistema digestivo)"
-            value={diagSistema}
-            onChange={(e) => setDiagSistema(e.target.value)}
+          <Cie10Autocomplete
+            value={diagCie}
+            onChange={setDiagCie}
             disabled={readonly}
-          />
-          <input
-            className={inputClass}
-            placeholder="Diagnóstico unificado / CIE"
-            value={diagUnificado}
-            onChange={(e) => setDiagUnificado(e.target.value)}
-            disabled={readonly}
+            inputClassName={inputClass}
           />
           <textarea
             className={`${inputClass} min-h-[80px]`}

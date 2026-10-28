@@ -9,6 +9,7 @@ import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { validateConsultaMedicaPayload } from '@/lib/clinical/consulta-medica-validate'
 import type { ConsultaMedicaPayload } from '@/schemas/clinical/consulta-medica.schema'
 import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
+import { searchCie10Catalog, type Cie10Entry } from '@/lib/clinical/cie-10-catalog'
 
 const CLINICAL_ROLES = new Set([
   'SUPERADMIN',
@@ -32,6 +33,12 @@ async function assertClinicalAccess(): Promise<{ ok: true; userId: string } | { 
     return { ok: false, error: 'No tienes permisos para capturar consulta médica.' }
   }
   return { ok: true, userId: session.user.id }
+}
+
+export async function searchCie10ForConsulta(query: string): Promise<Cie10Entry[]> {
+  const access = await assertClinicalAccess()
+  if (!access.ok) return []
+  return searchCie10Catalog(query, 25)
 }
 
 export async function saveConsultaMedica(

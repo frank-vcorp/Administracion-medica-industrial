@@ -137,11 +137,7 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
         <View style={styles.block}>
           <Text style={styles.title}>DIAGNÓSTICO</Text>
           <View style={styles.row}>
-            <Text style={styles.label}>Sistema:</Text>
-            <Text style={styles.value}>{c.diagnostico_sistema}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Diagnóstico unificado:</Text>
+            <Text style={styles.label}>Diagnóstico unificado CIE:</Text>
             <Text style={styles.value}>{c.diagnostico_unificado}</Text>
           </View>
           <View style={styles.row}>
