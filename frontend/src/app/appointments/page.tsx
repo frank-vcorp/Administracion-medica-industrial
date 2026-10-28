@@ -8,7 +8,6 @@ import Image from 'next/image'
  */
 import { useEffect, useState, Suspense } from 'react'
 import { getAppointmentsForOverview, getAppointmentForCorroboration, getPendingStudyPatientsForDay, getAttendedAppointmentsCount, type PendingStudyPatientRow } from '@/actions/appointment.actions'
-import { cancelAppointment } from '@/actions/cancellation.actions'
 import AttendedAppointmentsCalendar from '@/components/appointments/AttendedAppointmentsCalendar'
 import CancelWithReasonButton from '@/components/clinical/CancelWithReasonButton'
 import { getBranches } from '@/actions/admin.actions'
@@ -599,20 +598,15 @@ export default function AppointmentsPage() {
 
                             {selectedApt.status !== 'COMPLETED' && selectedApt.status !== 'RESCHEDULED' && (
                                 <CancelWithReasonButton
+                                    kind="appointment"
+                                    appointmentId={selectedApt.id}
                                     label="Cancelar cita"
                                     confirmLabel="Confirmar cancelación"
                                     alreadyCancelled={selectedApt.status === 'CANCELLED'}
                                     existingReason={selectedApt.cancellationReason}
-                                    onConfirm={async (reason) => {
-                                        const res = await cancelAppointment({
-                                            appointmentId: selectedApt.id,
-                                            reason,
-                                        })
-                                        if (res.success) {
-                                            setSelectedApt(null)
-                                            void loadData(selectedDate)
-                                        }
-                                        return res
+                                    onSuccess={() => {
+                                        setSelectedApt(null)
+                                        void loadData(selectedDate)
                                     }}
                                 />
                             )}

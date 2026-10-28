@@ -2,6 +2,7 @@
  * Horario operativo por día (lunes–sábado) por sucursal — O9-32.
  */
 
+import { z } from 'zod'
 import { branchOperatingHours, parseBranchHour } from '@/lib/appointment-capacity'
 
 export const BRANCH_WEEKDAY_KEYS = [
@@ -67,7 +68,7 @@ export function resolveBranchDayMeta(
       typeof day?.hourlyCapacity === 'number' && day.hourlyCapacity > 0
         ? day.hourlyCapacity
         : fallback.hourlyCapacity,
-    open: day?.enabled !== false,
+    open: true,
   }
 }
 

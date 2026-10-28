@@ -266,6 +266,8 @@ function coercePatologiaEntry(v: unknown): PatologiaEntry {
           desde_cuando:  typeof v.detalle.desde_cuando  === 'string' ? v.detalle.desde_cuando  : '',
           tratamiento:   typeof v.detalle.tratamiento   === 'string' ? v.detalle.tratamiento   : '',
           observaciones: typeof v.detalle.observaciones === 'string' ? v.detalle.observaciones : '',
+          especificacion:
+            typeof v.detalle.especificacion === 'string' ? v.detalle.especificacion : '',
         }
       : undefined
     return { estado: v.estado, detalle }

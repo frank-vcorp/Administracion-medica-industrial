@@ -124,7 +124,7 @@ model Branch {
   closingTime        String         @default("17:00")
   hourlyCapacity     Int            @default(15)
   openingTime        String         @default("07:00")
-  /** Horario y cupo por día (lunes–sábado). JSON `BranchWeeklySchedule`. */
+  /// Horario y cupo por día (lunes–sábado). JSON BranchWeeklySchedule.
   weeklySchedule     Json?
   // IMPL-20260730-02 (ARCH-20260730-01): Soft-disable + auditoría de quién la desactivó (PR-1)
   isActive           Boolean        @default(true)

@@ -1,26 +1,49 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import {
+  cancelAppointment,
+  cancelPapeleta,
+} from '@/actions/cancellation.actions'
 
-export default function CancelWithReasonButton({
-  label,
-  confirmLabel,
-  disabled = false,
-  alreadyCancelled = false,
-  existingReason,
-  onConfirm,
-}: {
+type CancelWithReasonButtonProps = {
   label: string
   confirmLabel: string
   disabled?: boolean
   alreadyCancelled?: boolean
   existingReason?: string | null
-  onConfirm: (reason: string) => Promise<{ success: boolean; error?: string }>
-}) {
+} & (
+  | { kind: 'papeleta'; eventId: string }
+  | { kind: 'appointment'; appointmentId: string; onSuccess?: () => void }
+)
+
+export default function CancelWithReasonButton(props: CancelWithReasonButtonProps) {
+  const {
+    label,
+    confirmLabel,
+    disabled = false,
+    alreadyCancelled = false,
+    existingReason,
+  } = props
+
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
+
+  const runCancel = async (cancelReason: string) => {
+    if (props.kind === 'papeleta') {
+      return cancelPapeleta({ eventId: props.eventId, reason: cancelReason })
+    }
+    const res = await cancelAppointment({
+      appointmentId: props.appointmentId,
+      reason: cancelReason,
+    })
+    if (res.success) {
+      props.onSuccess?.()
+    }
+    return res
+  }
 
   if (alreadyCancelled) {
     return (
@@ -53,7 +76,7 @@ export default function CancelWithReasonButton({
         event.preventDefault()
         setError('')
         startTransition(async () => {
-          const res = await onConfirm(reason)
+          const res = await runCancel(reason)
           if (!res.success) {
             setError(res.error ?? 'No se pudo cancelar.')
             return

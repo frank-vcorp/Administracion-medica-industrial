@@ -79,7 +79,12 @@ type PatologiaEntry = {
   detalle: DetalleTriple | undefined
 }
 
-const emptyDetalle = (): DetalleTriple => ({ desde_cuando: '', tratamiento: '', observaciones: '' })
+const emptyDetalle = (): DetalleTriple => ({
+  desde_cuando: '',
+  tratamiento: '',
+  observaciones: '',
+  especificacion: '',
+})
 const emptyPatologia = (): PatologiaEntry => ({ estado: 'NEGADO', detalle: undefined })
 
 function isSnaValue(v: unknown): v is SnaValue {
@@ -107,6 +112,8 @@ function coercePatologiaEntry(v: unknown): PatologiaEntry {
           desde_cuando:  typeof v.detalle.desde_cuando  === 'string' ? v.detalle.desde_cuando  : '',
           tratamiento:   typeof v.detalle.tratamiento   === 'string' ? v.detalle.tratamiento   : '',
           observaciones: typeof v.detalle.observaciones === 'string' ? v.detalle.observaciones : '',
+          especificacion:
+            typeof v.detalle.especificacion === 'string' ? v.detalle.especificacion : '',
         }
       : undefined
     return { estado: v.estado, detalle }
