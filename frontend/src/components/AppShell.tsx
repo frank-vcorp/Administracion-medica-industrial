@@ -182,9 +182,7 @@ function ShellNavigation({
 
           <NavSection label="Médico" collapsed={collapsed} />
           <NavItem href="/validation" icon={BadgeCheck} label="Validación" collapsed={collapsed} onNavigate={onNavigate} />
-          {(role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR') && (
-            <NavItem href="/profile" icon={UserRoundPen} label="Mi perfil médico" collapsed={collapsed} onNavigate={onNavigate} />
-          )}
+          <NavItem href="/profile" icon={UserRoundPen} label="Mi perfil" collapsed={collapsed} onNavigate={onNavigate} />
 
           <NavSection label="Empresas" collapsed={collapsed} />
           <NavItem href="/companies" icon={Building2} label="Empresas Cliente" collapsed={collapsed} onNavigate={onNavigate} />
@@ -249,7 +247,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showAdminItems = isAdmin
   const showPortalItems = isCompanyClient
   const showGlobalSearch = showStaffItems && !isCompanyClient
-  const canEditProfile = Boolean(role)
+  /** Cuenta → /profile (O9-09): firma en lienzo o imagen para todo el personal AMI. */
+  const canEditProfile = showStaffItems && Boolean(role)
   const isEventWorkspace = /^\/events\/[^/]+$/.test(pathname || '')
   const handleSignOut = () => {
     void signOut({ callbackUrl: '/login' })
