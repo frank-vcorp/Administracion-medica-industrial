@@ -6,6 +6,8 @@
 
 import prisma from '@/lib/prisma'
 import { Prisma, EventStatus } from '@prisma/client'
+import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
+import { queryMedicalEventById } from '@/services/medical-event-get-by-id.query'
 
 // --- EVENT ---
 
@@ -23,77 +25,13 @@ export const getEvents = async (workerId?: string) => {
 }
 
 export const getEventById = async (id: string) => {
-    return await prisma.medicalEvent.findUnique({
-        where: { id },
-        include: {
-            worker: {
-                include: {
-                    company: true,
-                    medicalProfile: { select: { id: true, name: true } },
-                }
-            },
-            branch: true,
-            exam: true,
-            // IMPL-20260324-06: Incluir perfil médico desde la cita para cabecera
-            appointment: {
-                include: {
-                    serviceProfile: {
-                        select: { id: true, name: true }
-                    }
-                }
-            },
-            eventTests: {
-                include: {
-                    test: {
-                        select: {
-                            id: true,
-                            code: true,
-                            // ARCH-20260507-06: Incluir options para resolución de grupo de muestra compartida
-                            options: true,
-                            category: {
-                                select: { name: true }
-                            }
-                        }
-                    },
-                    // IMPL-20260326-16: Incluir snapshot IA más reciente (no superseded) por estudio
-                    extractionSnapshots: {
-                        where: { isSuperseded: false },
-                        orderBy: { createdAt: 'desc' },
-                        take: 1,
-                        include: {
-                            aiPrediagnoses: {
-                                where: { isSuperseded: false },
-                                orderBy: { createdAt: 'desc' },
-                                take: 1,
-                                include: {
-                                    doctorReviews: {
-                                        orderBy: { createdAt: 'desc' },
-                                        take: 1,
-                                        select: {
-                                            id: true,
-                                            doctorStatus: true,
-                                            doctorDiagnosis: true,
-                                            doctorNotes: true,
-                                            doctorRecommendations: true,
-                                            createdAt: true,
-                                            // IMPL-FEATURE-20260825-01: exponer estado del
-                                            // PDF validado al cliente (papeleta) para mostrar
-                                            // el botón de descarga o el error.
-                                            validatedPdfUrl: true,
-                                            validatedPdfGeneratedAt: true,
-                                            validatedPdfError: true,
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                orderBy: { createdAt: 'asc' }
-            },
-            verdict: true
-        }
-    })
+    try {
+        return await queryMedicalEventById(id, 'full')
+    } catch (error) {
+        // Migración 20261028170000_cancellation_reason: prod puede desplegar código antes que `migrate deploy`.
+        if (!isPrismaMissingColumnError(error)) throw error
+        return await queryMedicalEventById(id, 'withoutCancellationColumns')
+    }
 }
 
 export const createEvent = async (data: Prisma.MedicalEventCreateInput) => {
