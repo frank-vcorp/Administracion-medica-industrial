@@ -7,7 +7,10 @@ import Image from 'next/image'
  * @id IMPL-20260325-01
  */
 import { useEffect, useState, Suspense } from 'react'
-import { getAppointments, getAppointmentForCorroboration, getPendingStudyPatientsForDay, type PendingStudyPatientRow } from '@/actions/appointment.actions'
+import { getAppointmentsForOverview, getAppointmentForCorroboration, getPendingStudyPatientsForDay, getAttendedAppointmentsCount, type PendingStudyPatientRow } from '@/actions/appointment.actions'
+import { cancelAppointment } from '@/actions/cancellation.actions'
+import AttendedAppointmentsCalendar from '@/components/appointments/AttendedAppointmentsCalendar'
+import CancelWithReasonButton from '@/components/clinical/CancelWithReasonButton'
 import { getBranches } from '@/actions/admin.actions'
 import { generateInvitation } from '@/actions/prefilled-invitation.actions'
 import { useRouter } from 'next/navigation'
@@ -16,7 +19,6 @@ import CorroborationModal from '@/components/CorroborationModal'
 import RescheduleAppointmentModal from '@/components/RescheduleAppointmentModal'
 import { WeeklyAppointmentsModal } from '@/components/appointments/WeeklyAppointmentsModal'
 import { PendingStudiesModal } from '@/components/appointments/PendingStudiesModal'
-import Link from 'next/link'
 import {
     addAgendaDays,
     appointmentAgendaHour,
@@ -35,32 +37,6 @@ function appointmentLocalDateString(scheduledAt: Date | string): string {
 
 function formatDayHeading(dateStr: string): string {
     return formatAgendaDayHeading(dateStr)
-}
-
-function groupAppointmentsByHour(
-    items: AppointmentWithWorker[],
-    dateStr: string,
-    startHour: number,
-    endHour: number,
-): {
-    grouped: Record<number, AppointmentWithWorker[]>
-    afterHours: AppointmentWithWorker[]
-} {
-    const grouped: Record<number, AppointmentWithWorker[]> = {}
-    const afterHours: AppointmentWithWorker[] = []
-
-    for (const apt of agendaForDate(items, dateStr)) {
-        const hour = appointmentAgendaHour(apt.scheduledAt)
-        if (hour > endHour) {
-            afterHours.push(apt)
-            continue
-        }
-        const slotHour = hour < startHour ? startHour : hour
-        if (!grouped[slotHour]) grouped[slotHour] = []
-        grouped[slotHour].push(apt)
-    }
-
-    return { grouped, afterHours }
 }
 
 /** Si quedaron varias citas activas del mismo paciente el mismo día (reagendos fallidos), mostrar solo la más reciente. */
@@ -123,7 +99,8 @@ interface AppointmentWithWorker {
         universalId: string | null;
     };
     company: { name: string } | null;
-    branch: { name: string, hourlyCapacity: number, openingTime: string, closingTime: string } | null;
+    branch: { id: string, name: string, hourlyCapacity: number, openingTime: string, closingTime: string } | null;
+    cancellationReason?: string | null;
 }
 
 interface Branch {
@@ -132,13 +109,17 @@ interface Branch {
     hourlyCapacity: number
     openingTime: string
     closingTime: string
+    isActive?: boolean
 }
 
 export default function AppointmentsPage() {
     const [appointments, setAppointments] = useState<AppointmentWithWorker[]>([])
     const [nextDayAppointments, setNextDayAppointments] = useState<AppointmentWithWorker[]>([])
     const [branches, setBranches] = useState<Branch[]>([])
-    const [selectedBranchId, setSelectedBranchId] = useState<string>('')
+    const [focusBranchId, setFocusBranchId] = useState<string>('')
+    const [weekBranchId, setWeekBranchId] = useState<string>('')
+    const [attendedCount, setAttendedCount] = useState(0)
+    const [attendedOpen, setAttendedOpen] = useState(false)
     const [loading, setLoading] = useState(true)
     const [selectedApt, setSelectedApt] = useState<AppointmentWithWorker | null>(null)
     const [checkingIn, setCheckingIn] = useState<string | null>(null)
@@ -162,25 +143,26 @@ export default function AppointmentsPage() {
     useEffect(() => {
         // Cargar sucursales al inicio
         getBranches().then(data => {
-            setBranches(data as unknown as Branch[])
-            if (data.length > 0) {
-                setSelectedBranchId(data[0].id)
+            const active = (data as unknown as Branch[]).filter((branch) => branch.isActive !== false)
+            setBranches(active)
+            if (active.length > 0) {
+                setWeekBranchId((current) => current || active[0].id)
             }
         })
     }, [])
 
     const nextDate = addAgendaDays(selectedDate, 1)
 
-    const loadData = async () => {
-        if (!selectedBranchId) return // Esperar a tener sucursal seleccionada
-
+    const loadData = async (date = selectedDate) => {
         setLoading(true)
         setError(null)
+        const following = addAgendaDays(date, 1)
         try {
-            const [todayResult, tomorrowResult, pendingResult] = await Promise.all([
-                getAppointments(selectedDate, selectedBranchId),
-                getAppointments(nextDate, selectedBranchId),
-                getPendingStudyPatientsForDay(selectedDate, selectedBranchId),
+            const [todayResult, tomorrowResult, pendingResult, attendedResult] = await Promise.all([
+                getAppointmentsForOverview(date),
+                getAppointmentsForOverview(following),
+                getPendingStudyPatientsForDay(date),
+                getAttendedAppointmentsCount(),
             ])
             if (todayResult.success) {
                 setAppointments(todayResult.appointments as unknown as AppointmentWithWorker[] || [])
@@ -200,6 +182,7 @@ export default function AppointmentsPage() {
             } else {
                 setPendingStudyRows([])
             }
+            setAttendedCount(attendedResult.success ? attendedResult.count : 0)
         } catch {
             setError('Error de conexión al cargar la agenda.')
         } finally {
@@ -207,14 +190,17 @@ export default function AppointmentsPage() {
         }
     }
 
-    /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- recarga al cambiar sucursal/fecha (SPEC FIX-20260729-01-BASELINE fetch-on-mount intencional); se omite `loadData` callback para evitar loops. */
+    /* eslint-disable react-hooks/exhaustive-deps -- recarga al cambiar la fecha (SPEC FIX-20260729-01-BASELINE fetch-on-mount intencional); se omite `loadData` para evitar loops. */
     useEffect(() => {
-        if (selectedBranchId) {
-            loadData()
-        }
-    }, [selectedDate, selectedBranchId])
+        loadData(selectedDate)
+    }, [selectedDate])
 
-    const currentBranch = branches.find(b => b.id === selectedBranchId)
+    useEffect(() => {
+        if (!focusBranchId) return
+        document.getElementById(`agenda-${focusBranchId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, [focusBranchId, appointments])
+
+    const currentBranch = branches.find(b => b.id === weekBranchId) || branches[0]
     const branchConfig = currentBranch || {
         hourlyCapacity: 15,
         openingTime: '07:00',
@@ -222,17 +208,14 @@ export default function AppointmentsPage() {
     }
 
     const startHour = parseInt(branchConfig.openingTime.split(':')[0], 10)
-    const endHour = parseInt(branchConfig.closingTime.split(':')[0], 10)
-    const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i)
 
-    const { grouped: groupedAppointments, afterHours: todayAfterHours } = groupAppointmentsByHour(
-        appointments,
-        selectedDate,
-        startHour,
-        endHour,
-    )
-    const { grouped: groupedNextDayAppointments, afterHours: nextDayAfterHours } =
-        groupAppointmentsByHour(nextDayAppointments, nextDate, startHour, endHour)
+    const branchColumns = branches.map((branch) => ({
+        branch,
+        appointments: appointments
+            .filter((apt) => apt.branch?.id === branch.id)
+            .slice()
+            .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()),
+    }))
 
     const handleGenerateInvite = async (aptId: string) => {
         setInviteAptId(aptId)
@@ -275,7 +258,7 @@ export default function AppointmentsPage() {
             <h3 className="text-xl font-bold text-slate-800">Error al Cargar</h3>
             <p className="text-slate-500">{error}</p>
             <button 
-                onClick={loadData}
+                onClick={() => { void loadData() }}
                 className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2 rounded-xl text-sm font-bold transition-all"
             >
                 Reintentar
@@ -292,18 +275,11 @@ export default function AppointmentsPage() {
                     <p className="text-slate-500 text-sm">Panel de control de ingresos y expedientes EXP</p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
-                    {/* IMPL-20260318-08: Link a vista de 3 agendas */}
-                    <Link
-                        href="/appointments/overview"
-                        className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
-                    >
-                        <span>🗓️</span> 3 Agendas
-                    </Link>
                     <div className="bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-sm flex items-center gap-2">
-                        <span className="text-slate-400">🏥</span>
+                        <span className="text-slate-400 text-xs font-bold">Semana</span>
                         <select
-                            value={selectedBranchId}
-                            onChange={(e) => setSelectedBranchId(e.target.value)}
+                            value={weekBranchId}
+                            onChange={(e) => setWeekBranchId(e.target.value)}
                             className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 cursor-pointer w-32 md:w-auto"
                             disabled={branches.length === 0}
                         >
@@ -329,7 +305,19 @@ export default function AppointmentsPage() {
                         />
                     </div>
                     <Suspense fallback={null}>
-                        <AppointmentFormModal onSuccess={loadData} />
+                        <AppointmentFormModal
+                            onSuccess={(info) => {
+                                if (info?.branchId) {
+                                    setFocusBranchId(info.branchId)
+                                    setWeekBranchId(info.branchId)
+                                }
+                                if (info?.date && info.date !== selectedDate) {
+                                    setSelectedDate(info.date)
+                                    return
+                                }
+                                void loadData(selectedDate)
+                            }}
+                        />
                     </Suspense>
                 </div>
             </div>
@@ -347,7 +335,7 @@ export default function AppointmentsPage() {
                     </button>
                 </div>
             )}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                 <StatCard label="Pacientes citados" value={countAgendaForDate(appointments, selectedDate)} color="blue" />
                 <StatCard label="Citados día siguiente" value={countAgendaForDate(nextDayAppointments, nextDate)} color="indigo" />
                 <StatCard
@@ -359,49 +347,69 @@ export default function AppointmentsPage() {
                 />
                 <StatCard label="Pacientes con atención completa" value={appointments.filter(a => a.status === 'COMPLETED').length} color="emerald" />
                 <StatCard label="no se presentó" value={appointments.filter(a => a.status === 'NO_SHOW').length} color="slate" />
+                <StatCard
+                    label="Citas atendidas hasta hoy"
+                    value={attendedCount}
+                    color="emerald"
+                    onClick={() => setAttendedOpen(true)}
+                    hint="Ver calendario"
+                />
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-                <AgendaDayColumn
-                    title="Agenda del día"
-                    subtitle={formatDayHeading(selectedDate)}
-                    groupedAppointments={groupedAppointments}
-                    afterHoursAppointments={todayAfterHours}
-                    dayCount={countAgendaForDate(appointments, selectedDate)}
-                    hours={hours}
-                    branchConfig={branchConfig}
-                    branchStartHour={startHour}
-                    interactive
-                    onSelectTicket={setSelectedApt}
-                    onReschedule={setRescheduleApt}
-                    onGenerateInvite={handleGenerateInvite}
-                    onCheckIn={handleCheckIn}
-                    checkingIn={checkingIn}
-                />
-                <AgendaDayColumn
-                    title="Día siguiente"
-                    subtitle={formatDayHeading(nextDate)}
-                    groupedAppointments={groupedNextDayAppointments}
-                    afterHoursAppointments={nextDayAfterHours}
-                    dayCount={countAgendaForDate(nextDayAppointments, nextDate)}
-                    hours={hours}
-                    branchConfig={branchConfig}
-                    branchStartHour={startHour}
-                    interactive
-                    onSelectTicket={setSelectedApt}
-                    onReschedule={setRescheduleApt}
-                    onGenerateInvite={handleGenerateInvite}
-                    onCheckIn={handleCheckIn}
-                    checkingIn={checkingIn}
-                />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {branchColumns.map(({ branch, appointments: dayApts }) => (
+                    <div
+                        key={branch.id}
+                        id={`agenda-${branch.id}`}
+                        className={`bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col ${
+                            focusBranchId === branch.id ? 'border-violet-500 ring-2 ring-violet-300' : 'border-slate-200'
+                        }`}
+                    >
+                        <div className="bg-violet-600 px-5 py-4 text-white flex items-center justify-between">
+                            <div>
+                                <p className="font-black text-base">{branch.name}</p>
+                                <p className="text-violet-200 text-xs font-medium">
+                                    {dayApts.length} cita{dayApts.length !== 1 ? 's' : ''} del día
+                                </p>
+                            </div>
+                            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center font-black text-lg">
+                                {dayApts.length}
+                            </div>
+                        </div>
+                        <div className="divide-y divide-slate-100 overflow-y-auto max-h-[55vh]">
+                            {dayApts.length === 0 ? (
+                                <div className="p-8 text-center">
+                                    <p className="text-slate-300 text-3xl mb-2">📭</p>
+                                    <p className="text-slate-400 text-sm font-medium">Sin citas para este día</p>
+                                </div>
+                            ) : (
+                                dayApts.map((apt) => (
+                                    <AgendaAppointmentRow
+                                        key={apt.id}
+                                        apt={apt}
+                                        interactive
+                                        branchStartHour={startHour}
+                                        onSelectTicket={setSelectedApt}
+                                        onReschedule={setRescheduleApt}
+                                        onGenerateInvite={handleGenerateInvite}
+                                        onCheckIn={handleCheckIn}
+                                        checkingIn={checkingIn}
+                                    />
+                                ))
+                            )}
+                        </div>
+                    </div>
+                ))}
             </div>
+
+            <AttendedAppointmentsCalendar open={attendedOpen} onClose={() => setAttendedOpen(false)} />
 
             {/* IMPL-20260325-01: Modal de Invitación de Prellenado */}
             <WeeklyAppointmentsModal
                 open={weekModalOpen}
                 onClose={() => setWeekModalOpen(false)}
                 anchorDate={selectedDate}
-                branchId={selectedBranchId}
+                branchId={weekBranchId || currentBranch?.id || ''}
                 branchName={currentBranch?.name}
                 onSelectDate={setSelectedDate}
             />
@@ -584,6 +592,25 @@ export default function AppointmentsPage() {
                                 </div>
                             </div>
 
+                            {selectedApt.status !== 'COMPLETED' && selectedApt.status !== 'RESCHEDULED' && (
+                                <CancelWithReasonButton
+                                    label="Cancelar cita"
+                                    confirmLabel="Confirmar cancelación"
+                                    alreadyCancelled={selectedApt.status === 'CANCELLED'}
+                                    existingReason={selectedApt.cancellationReason}
+                                    onConfirm={async (reason) => {
+                                        const res = await cancelAppointment({
+                                            appointmentId: selectedApt.id,
+                                            reason,
+                                        })
+                                        if (res.success) {
+                                            setSelectedApt(null)
+                                            void loadData(selectedDate)
+                                        }
+                                        return res
+                                    }}
+                                />
+                            )}
                             <button
                                 onClick={() => setSelectedApt(null)}
                                 className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-2xl font-bold text-sm transition-all active:scale-95"
@@ -688,125 +715,6 @@ function AgendaAppointmentRow({
                                 </button>
                             </>
                         )}
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-}
-
-function AgendaDayColumn({
-    title,
-    subtitle,
-    groupedAppointments,
-    afterHoursAppointments = [],
-    dayCount,
-    hours,
-    branchConfig,
-    branchStartHour,
-    preview = false,
-    interactive = false,
-    onSelectTicket,
-    onReschedule,
-    onGenerateInvite,
-    onCheckIn,
-    checkingIn,
-}: {
-    title: string
-    subtitle: string
-    groupedAppointments: Record<number, AppointmentWithWorker[]>
-    afterHoursAppointments?: AppointmentWithWorker[]
-    dayCount: number
-    hours: number[]
-    branchConfig: { hourlyCapacity: number }
-    branchStartHour: number
-    preview?: boolean
-    interactive?: boolean
-    onSelectTicket?: (apt: AppointmentWithWorker) => void
-    onReschedule?: (apt: AppointmentWithWorker) => void
-    onGenerateInvite?: (aptId: string) => void
-    onCheckIn?: (aptId: string) => void
-    checkingIn?: string | null
-}) {
-    return (
-        <div className={`bg-white rounded-3xl border shadow-xl shadow-slate-200/50 overflow-hidden ${preview ? 'border-indigo-200' : 'border-slate-200'}`}>
-            <div className={`p-5 border-b flex items-start justify-between gap-3 ${preview ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-200'}`}>
-                <div>
-                    <h2 className={`font-bold uppercase tracking-widest text-xs ${preview ? 'text-indigo-700' : 'text-slate-700'}`}>
-                        {title}
-                    </h2>
-                    <p className="mt-1 text-sm font-medium text-slate-600 capitalize">{subtitle}</p>
-                </div>
-                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${preview ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'}`}>
-                    {dayCount} citados
-                </span>
-            </div>
-
-            <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
-                {hours.map((hour) => {
-                    const hourApts = groupedAppointments[hour] || []
-                    const capacity = branchConfig.hourlyCapacity
-                    const isFull = hourApts.length >= capacity
-                    const isAlmostFull = hourApts.length >= capacity * 0.8
-
-                    return (
-                        <div key={hour} className="flex flex-col border-b border-slate-100 last:border-0">
-                            <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/80 border-b border-slate-100">
-                                <div className="text-lg font-black text-slate-800">
-                                    {hour.toString().padStart(2, '0')}:00
-                                </div>
-                                <div className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${isFull ? 'bg-red-100 text-red-700' : isAlmostFull ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                    {hourApts.length} / {capacity}
-                                </div>
-                            </div>
-
-                            <div className="p-3">
-                                {hourApts.length === 0 ? (
-                                    <p className="py-3 text-center text-slate-400 text-sm italic">
-                                        Sin citas
-                                    </p>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {hourApts.map((apt) => (
-                                            <AgendaAppointmentRow
-                                                key={apt.id}
-                                                apt={apt}
-                                                preview={preview}
-                                                interactive={interactive}
-                                                branchStartHour={branchStartHour}
-                                                onSelectTicket={onSelectTicket}
-                                                onReschedule={onReschedule}
-                                                onGenerateInvite={onGenerateInvite}
-                                                onCheckIn={onCheckIn}
-                                                checkingIn={checkingIn}
-                                            />
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )
-                })}
-
-                {afterHoursAppointments.length > 0 && (
-                    <div className="border-t border-amber-200 bg-amber-50/60 p-4 space-y-2">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800">
-                            Después del cierre de sucursal ({afterHoursAppointments.length})
-                        </p>
-                        {afterHoursAppointments.map((apt) => (
-                            <AgendaAppointmentRow
-                                key={apt.id}
-                                apt={apt}
-                                preview={preview}
-                                interactive={interactive}
-                                branchStartHour={branchStartHour}
-                                onSelectTicket={onSelectTicket}
-                                onReschedule={onReschedule}
-                                onGenerateInvite={onGenerateInvite}
-                                onCheckIn={onCheckIn}
-                                checkingIn={checkingIn}
-                            />
-                        ))}
                     </div>
                 )}
             </div>

@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { Document, Image, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 import {
   TIPO_CONSULTA_LABELS,
   type ConsultaMedicaPayload,
@@ -23,6 +23,9 @@ const styles = StyleSheet.create({
   block: { marginBottom: 12 },
   paragraph: { fontSize: 10, lineHeight: 1.45, textAlign: 'justify' },
   footer: { marginTop: 24, fontSize: 9, color: '#64748b' },
+  signature: { width: 140, height: 56, objectFit: 'contain', marginTop: 8 },
+  signBlock: { marginTop: 28, alignItems: 'flex-start' },
+  signName: { marginTop: 4, fontSize: 11, fontWeight: 'bold' },
   tableHeader: { flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 6, fontWeight: 'bold' },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', padding: 6 },
   colMed: { width: '28%' },
@@ -41,9 +44,16 @@ export interface ConsultaMedicaPdfPatient {
   fecha: string
 }
 
+export interface ConsultaMedicaPrescriptor {
+  nombre: string
+  cedula: string
+  firmaUrl?: string | null
+}
+
 export interface ConsultaMedicaPdfInput {
   patient: ConsultaMedicaPdfPatient
   consulta: ConsultaMedicaPayload
+  prescriptor?: ConsultaMedicaPrescriptor
 }
 
 function v(s: string | null | undefined): string {
@@ -182,21 +192,48 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
 }
 
 export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput }) {
-  const { patient, consulta: c } = data
+  const { patient, consulta: c, prescriptor } = data
   const lineas: RecetaLinea[] = c.receta_lineas ?? []
+  const medicoNombre = prescriptor?.nombre?.trim() || c.medico_nombre
+  const medicoCedula = prescriptor?.cedula?.trim() || c.medico_cedula
+  const firmaUrl = prescriptor?.firmaUrl?.trim() || ''
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.brand}>RECETA MÉDICA</Text>
-          <Text style={styles.sub}>Soluciones Médico Empresariales</Text>
+          <Text style={styles.sub}>Soluciones Médico Empresariales · Medicina laboral</Text>
         </View>
 
         <View style={styles.block}>
           <View style={styles.row}>
+            <Text style={styles.label}>Médico:</Text>
+            <Text style={styles.value}>{medicoNombre}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.label}>Cédula profesional:</Text>
+            <Text style={styles.value}>{v(medicoCedula)}</Text>
+          </View>
+          <View style={styles.row}>
             <Text style={styles.label}>Paciente:</Text>
             <Text style={styles.value}>{patient.nombre}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.label}>Edad / sexo:</Text>
+            <Text style={styles.value}>
+              {v(patient.edad)} · {v(patient.sexo)}
+            </Text>
+          </View>
+          {patient.telefono ? (
+            <View style={styles.row}>
+              <Text style={styles.label}>Teléfono:</Text>
+              <Text style={styles.value}>{patient.telefono}</Text>
+            </View>
+          ) : null}
+          <View style={styles.row}>
+            <Text style={styles.label}>Empresa:</Text>
+            <Text style={styles.value}>{v(patient.empresa)}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Fecha:</Text>
@@ -204,9 +241,11 @@ export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Diagnóstico:</Text>
-            <Text style={styles.value}>{c.diagnostico_especifico}</Text>
+            <Text style={styles.value}>{v(c.diagnostico_especifico)}</Text>
           </View>
         </View>
+
+        <Text style={styles.title}>Rp.</Text>
 
         {lineas.length > 0 ? (
           <View style={styles.block}>
@@ -239,10 +278,15 @@ export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput
           </View>
         ) : null}
 
-        <View style={styles.footer}>
-          <Text>
-            {c.medico_nombre} · Ced. Prof. {c.medico_cedula}
-          </Text>
+        <View style={styles.signBlock}>
+          {firmaUrl ? (
+            // Imagen de react-pdf, no un <img> HTML.
+            // eslint-disable-next-line jsx-a11y/alt-text
+            <Image src={firmaUrl} style={styles.signature} />
+          ) : null}
+          <Text style={styles.signName}>{medicoNombre}</Text>
+          <Text>Cédula profesional: {v(medicoCedula)}</Text>
+          <Text style={styles.footer}>Firma de quien capturó la consulta o tenía la sesión abierta.</Text>
         </View>
       </Page>
     </Document>

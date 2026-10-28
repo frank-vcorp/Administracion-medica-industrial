@@ -24,7 +24,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import { revalidatePath } from 'next/cache'
 import { doctorProfileSchema } from '@/schemas/clinical/doctor-profile.schema'
-import { isAdminLike } from '@/lib/auth/roles'
 
 export interface DoctorProfileResult {
   fullName: string
@@ -85,13 +84,8 @@ export async function updateCurrentDoctorProfile(input: {
     return { success: false, error: 'No autenticado' }
   }
 
-  // Permisos: admin-like o DOCTOR_* editan su propio perfil (cédula/firma).
-  const role = session.user.role
-  const allowed =
-    isAdminLike(role) ||
-    role === 'DOCTOR_GENERAL' ||
-    role === 'DOCTOR_VALIDATOR'
-  if (!allowed) {
+  // Cada usuario del sistema guarda su propia firma. La cédula sigue siendo opcional.
+  if (!session.user.role) {
     return { success: false, error: 'Sin permisos para editar perfil médico' }
   }
 

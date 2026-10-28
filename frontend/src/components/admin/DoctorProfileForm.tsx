@@ -8,14 +8,13 @@
  * la validación (Zod). Aquí se hace validación cliente espejo sólo para
  * UX inmediata, pero el schema se importa para mantener un solo contrato.
  *
- * La firma se sube como imagen (PNG/JPEG) y se convierte a data-URL antes
- * de enviar al servidor. No añadimos dependencia de SignaturePad para
- * mantener el incremento mínimo y reversible (la SPEC no exige captura
- * digital en pantalla; basta con subir una imagen preexistente).
+ * La firma se captura en lienzo (pantalla táctil o tableta) o se sube
+ * como imagen PNG/JPEG. Ambas quedan como data-URL en el perfil.
  */
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
+import SignaturePad, { type SignaturePadHandle } from '@/components/reception/SignaturePad'
 import {
   getCurrentDoctorProfile,
   updateCurrentDoctorProfile,
@@ -49,6 +48,7 @@ export default function DoctorProfileForm() {
   const [professionalLicense, setProfessionalLicense] = useState('')
   const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const signaturePadRef = useRef<SignaturePadHandle>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -209,9 +209,45 @@ export default function DoctorProfileForm() {
         </p>
       </div>
 
+      <div className="space-y-3">
+        <label className="block text-xs font-semibold text-slate-500">
+          Firma en pantalla
+        </label>
+        <p className="text-[11px] text-slate-400">
+          Dibuja con el dedo, el mouse o una tableta de firmas. Luego usa el trazo, o sube una imagen.
+        </p>
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <SignaturePad ref={signaturePadRef} height={160} />
+        </div>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              const dataUrl = signaturePadRef.current?.toDataURL()
+              if (!dataUrl) {
+                setError('Dibuja la firma antes de usarla.')
+                return
+              }
+              setSignaturePreview(dataUrl)
+              setError(null)
+            }}
+            className="text-xs font-bold text-teal-700 bg-teal-50 px-3 py-2 rounded-lg"
+          >
+            Usar firma del lienzo
+          </button>
+          <button
+            type="button"
+            onClick={() => signaturePadRef.current?.clear()}
+            className="text-xs font-bold text-slate-500"
+          >
+            Limpiar lienzo
+          </button>
+        </div>
+      </div>
+
       <div>
         <label className="block text-xs font-semibold text-slate-500 mb-1">
-          Firma autógrafa (PNG/JPEG, ≤2 MB)
+          O sube una imagen de firma (PNG/JPEG, ≤2 MB)
         </label>
         <input
           ref={fileInputRef}

@@ -22,6 +22,8 @@ import {
 } from './_lib/event-page-data'
 import { shouldRenderEventFlowController } from './_lib/event-flow-visibility'
 import { isAdminLike } from '@/lib/auth/roles'
+import CancelWithReasonButton from '@/components/clinical/CancelWithReasonButton'
+import { cancelPapeleta } from '@/actions/cancellation.actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +107,13 @@ function EventView({ data }: EventViewProps) {
           </div>
 
           <div className="flex flex-wrap gap-1.5">
+            <CancelWithReasonButton
+              label="Cancelar papeleta"
+              confirmLabel="Confirmar cancelación"
+              alreadyCancelled={event.status === 'CANCELED'}
+              existingReason={event.cancellationReason}
+              onConfirm={(reason) => cancelPapeleta({ eventId: event.id, reason })}
+            />
             <Link
               href={`/workers/${event.worker.id}`}
               className="bg-white hover:bg-slate-50 text-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border border-slate-200"

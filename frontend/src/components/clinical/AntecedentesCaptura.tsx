@@ -289,6 +289,7 @@ function sectionsFromValue(value: Record<string, unknown>): {
       }
       if (typeof v === 'string') empty[key][k] = v
       else if (typeof v === 'boolean') empty[key][k] = v ? 'true' : 'false'
+      else if (typeof v === 'number' && Number.isFinite(v)) empty[key][k] = String(v)
       else if (v === null || v === undefined) empty[key][k] = ''
     }
   }

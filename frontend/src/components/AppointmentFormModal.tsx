@@ -63,7 +63,11 @@ interface AppointmentResult {
     error?: string
 }
 
-export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => void }) {
+export default function AppointmentFormModal({
+    onSuccess,
+}: {
+    onSuccess?: (info?: { branchId: string; date: string }) => void
+}) {
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
@@ -100,7 +104,6 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         const companyId = searchParams.get('companyId')
         
         if (action === 'new-appointment' && !isOpen) {
-             // eslint-disable-next-line react-hooks/set-state-in-effect -- modal se abre al recibir `?action=new-appointment`.
              setIsOpen(true)
              if (workerId) setPreselectedWorkerId(workerId)
              if (branchId) setSelectedBranchId(branchId)
@@ -201,27 +204,7 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
         setProfiles([])
         setSelectedProfileId('')
 
-        if (!companyId) {
-            setSelectedBranchId('')
-            return
-        }
-
-        // Auto-seleccionar sucursal default de la empresa, SOLO si pertenece a las permitidas
-        const company = companies.find(c => c.id === companyId)
-        const allowed = company?.allowedBranches ?? []
-
-        if (company?.defaultBranchId) {
-            // Solo autoseleccionar si la default está dentro de las permitidas (o si no hay restricción)
-            const defaultValid = allowed.length === 0 || allowed.some(b => b.id === company.defaultBranchId)
-            if (defaultValid) {
-                setSelectedBranchId(company.defaultBranchId)
-            } else {
-                // defaultBranch no está dentro de las permitidas: limpiar selección
-                setSelectedBranchId('')
-            }
-        } else {
-            setSelectedBranchId('')
-        }
+        if (!companyId) return
 
         try {
             const [wData, pData] = await Promise.all([
@@ -310,8 +293,8 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
 
                 if (result.success) {
                     setSuccessData(result)
-                    router.refresh() // Revalida server components
-                    if (onSuccess) onSuccess() // Actualiza lista del cliente inmediatamente
+                    router.refresh()
+                    onSuccess?.({ branchId, date })
                 } else {
                     setError(result.error || 'Error al agendar la cita')
                 }
@@ -419,7 +402,45 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                         </div>
 
                         <form action={handleSubmit} className="space-y-4">
-                            {/* IMPL-20260318-07: Flujo Empresa → Trabajador filtrado */}
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal</label>
+                                <select
+                                    name="branchId"
+                                    required
+                                    value={selectedBranchId || ''}
+                                    onChange={(e) => {
+                                        const nextBranch = e.target.value
+                                        setSelectedBranchId(nextBranch)
+                                        if (!nextBranch) {
+                                            setSelectedCompanyId('')
+                                            setSelectedWorker(null)
+                                            setWorkers([])
+                                            return
+                                        }
+                                        const company = companies.find((item) => item.id === selectedCompanyId)
+                                        const allowed = company?.allowedBranches ?? []
+                                        const stillAllowed =
+                                            !company ||
+                                            allowed.length === 0 ||
+                                            allowed.some((branch) => branch.id === nextBranch)
+                                        if (!stillAllowed) {
+                                            setSelectedCompanyId('')
+                                            setSelectedWorker(null)
+                                            setWorkers([])
+                                            setProfiles([])
+                                            setSelectedProfileId('')
+                                        }
+                                    }}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
+                                >
+                                    <option value="">Seleccionar sucursal...</option>
+                                    {branches.map((branch) => (
+                                        <option key={branch.id} value={branch.id}>{branch.name}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[10px] text-slate-400 ml-1">Elige la sucursal antes de la empresa y el trabajador.</p>
+                            </div>
+
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
                                 <select
@@ -427,12 +448,19 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                     required
                                     value={selectedCompanyId}
                                     onChange={handleCompanyChange}
-                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
+                                    disabled={!selectedBranchId}
+                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <option value="">Seleccionar empresa...</option>
-                                    {companies.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
+                                    <option value="">{selectedBranchId ? 'Seleccionar empresa...' : 'Primero selecciona la sucursal'}</option>
+                                    {companies
+                                        .filter((company) => {
+                                            const allowed = company.allowedBranches ?? []
+                                            if (!selectedBranchId || allowed.length === 0) return Boolean(selectedBranchId)
+                                            return allowed.some((branch) => branch.id === selectedBranchId)
+                                        })
+                                        .map((company) => (
+                                            <option key={company.id} value={company.id}>{company.name}</option>
+                                        ))}
                                 </select>
                             </div>
 
@@ -477,30 +505,6 @@ export default function AppointmentFormModal({ onSuccess }: { onSuccess?: () => 
                                         .
                                     </p>
                                 )}
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal</label>
-                                <select 
-                                    name="branchId" 
-                                    required
-                                    value={selectedBranchId || ''}
-                                    onChange={(e) => setSelectedBranchId(e.target.value)}
-                                    className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
-                                >
-                                    <option value="">Seleccionar sucursal...</option>
-                                    {/* IMPL-20260318-09: Filtrar por allowedBranches de la empresa; fallback a todas si no hay restricción */}
-                                    {(() => {
-                                        const selectedCompany = companies.find(c => c.id === selectedCompanyId)
-                                        const allowed = selectedCompany?.allowedBranches ?? []
-                                        const visibleBranches = allowed.length > 0
-                                            ? branches.filter(b => allowed.some(ab => ab.id === b.id))
-                                            : branches
-                                        return visibleBranches.map(b => (
-                                            <option key={b.id} value={b.id}>{b.name}</option>
-                                        ))
-                                    })()}
-                                </select>
                             </div>
 
                             {/* IMPL-20260313-07: Perfil Médico auto-asignado por Puesto de Trabajo */}

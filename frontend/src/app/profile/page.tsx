@@ -16,8 +16,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import { redirect } from 'next/navigation'
 import DoctorProfileForm from '@/components/admin/DoctorProfileForm'
-import { isAdminLike } from '@/lib/auth/roles'
-
 export const dynamic = 'force-dynamic'
 
 export default async function DoctorProfilePage() {
@@ -25,23 +23,14 @@ export default async function DoctorProfilePage() {
   if (!session?.user?.id) {
     redirect('/login')
   }
-  const role = session.user.role
-  if (
-    !isAdminLike(role) &&
-    role !== 'DOCTOR_GENERAL' &&
-    role !== 'DOCTOR_VALIDATOR'
-  ) {
-    redirect('/dashboard')
-  }
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-5">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold text-slate-800">Perfil médico</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Mi perfil</h1>
         <p className="text-sm text-slate-500">
-          Configura tu nombre completo, cédula profesional y firma autógrafa. Esta
-          información aparece en el PDF validado de Espirometría al aceptar o editar
-          una revisión de prediagnóstico IA.
+          Configura tu nombre, cédula profesional si aplica, y tu firma. Puedes
+          dibujarla en pantalla (dedo, lápiz o tableta de firmas) o subir una imagen.
         </p>
       </header>
 

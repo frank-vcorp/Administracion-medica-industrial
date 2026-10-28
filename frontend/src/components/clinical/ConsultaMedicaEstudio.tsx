@@ -7,6 +7,10 @@ import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
 import {
+  mergeProfileAntecedentesIntoConsulta,
+  modulo1Record,
+} from '@/lib/clinical/consulta-antecedentes'
+import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
   TIPO_CONSULTA_VALUES,
   TIPO_CONSULTA_LABELS,
@@ -33,28 +37,9 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'antecedentes', label: 'Antecedentes' },
   { id: 'exploracion', label: 'Exploración' },
   { id: 'diagnostico', label: 'Diagnóstico' },
-  { id: 'tratamiento', label: 'Receta' },
+  { id: 'tratamiento', label: 'Tratamiento' },
   { id: 'cierre', label: 'Cierre' },
 ]
-
-function mergeLongitudinalAntecedentes(
-  longitudinal: Record<string, unknown> | null | undefined,
-): Record<string, unknown> {
-  if (!longitudinal || typeof longitudinal !== 'object') return {}
-  const out: Record<string, unknown> = {}
-  for (const key of [
-    'datos_personales',
-    'historia_laboral',
-    'heredo_familiares',
-    'no_patologicos',
-    'patologicos',
-  ]) {
-    if (longitudinal[key] && typeof longitudinal[key] === 'object') {
-      out[key] = longitudinal[key]
-    }
-  }
-  return out
-}
 
 function emptyRecetaLine(): RecetaLinea {
   return { medicamento: '', presentacion: '', dosis: '', frecuencia: '', duracion: '' }
@@ -66,6 +51,8 @@ export default function ConsultaMedicaEstudio({
   workerId,
   initialClinicalContext,
   longitudinalData,
+  profileAntecedentes,
+  profileModulo1,
   readonly = false,
 }: {
   eventId: string
@@ -73,6 +60,10 @@ export default function ConsultaMedicaEstudio({
   workerId: string
   initialClinicalContext: unknown
   longitudinalData?: Record<string, unknown> | null
+  /** Snapshot de antecedentes del examen de esta visita, si el perfil aplica. */
+  profileAntecedentes?: Record<string, unknown> | null
+  /** Módulo 1 (gineco / vacunas) del examen, ya viviendo dentro de antecedentes. */
+  profileModulo1?: Record<string, string> | null
   readonly?: boolean
 }) {
   const { data: session } = useSession()
@@ -103,14 +94,23 @@ export default function ConsultaMedicaEstudio({
     parsed?.receta_lineas?.length ? parsed.receta_lineas : [emptyRecetaLine()],
   )
   const [medicoNombre, setMedicoNombre] = useState(
-    parsed?.medico_nombre ?? session?.user?.name ?? '',
+    parsed?.medico_nombre ?? session?.user?.fullName ?? session?.user?.name ?? '',
   )
   const [medicoCedula, setMedicoCedula] = useState(parsed?.medico_cedula ?? '')
-  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() => ({
-    ...mergeLongitudinalAntecedentes(longitudinalData),
-    ...(parsed?.antecedentes ?? {}),
-  }))
+  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() =>
+    mergeProfileAntecedentesIntoConsulta(
+      parsed?.antecedentes,
+      longitudinalData,
+      profileAntecedentes,
+    ),
+  )
+  const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
+    const saved = modulo1Record(parsed?.modulo1)
+    if (Object.values(saved).some((value) => value.trim() !== '')) return saved
+    return modulo1Record(profileModulo1)
+  })
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
+  const [hasPersisted, setHasPersisted] = useState(Boolean(parsed))
 
   const imc = useMemo(() => {
     const p = parseFloat(signos.peso_kg ?? '')
@@ -148,9 +148,10 @@ export default function ConsultaMedicaEstudio({
       material_medico: materialMedico.trim() || undefined,
       indicaciones_generales: indicaciones.trim() || undefined,
       receta_lineas: lineas,
-      medico_nombre: medicoNombre.trim() || 'Médico',
+      medico_nombre: medicoNombre.trim() || session?.user?.fullName || session?.user?.name || 'Médico',
       medico_cedula: medicoCedula.trim() || '—',
       antecedentes: antecedentes as ConsultaMedicaPayload['antecedentes'],
+      modulo1,
       cerrada_at: cerradaAt || undefined,
     }
   }, [
@@ -172,7 +173,10 @@ export default function ConsultaMedicaEstudio({
     medicoNombre,
     medicoCedula,
     antecedentes,
+    modulo1,
     cerradaAt,
+    session?.user?.fullName,
+    session?.user?.name,
   ])
 
   const runSave = (finalize: boolean) => {
@@ -193,6 +197,7 @@ export default function ConsultaMedicaEstudio({
       if (finalize && res.payload.cerrada_at) {
         setCerradaAt(res.payload.cerrada_at)
       }
+      setHasPersisted(true)
       setSaveMsg(finalize ? 'Consulta cerrada y guardada.' : 'Borrador guardado.')
     })
   }
@@ -304,8 +309,8 @@ export default function ConsultaMedicaEstudio({
             onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
             workerId={workerId}
             readonly={readonly}
-            modulo1={{}}
-            onModulo1Change={() => {}}
+            modulo1={modulo1}
+            onModulo1Change={setModulo1}
           />
           <p className="text-[10px] text-slate-500 mt-3">
             Al guardar la consulta, estos antecedentes se actualizan en{' '}
@@ -423,7 +428,7 @@ export default function ConsultaMedicaEstudio({
             onChange={(e) => setIndicaciones(e.target.value)}
             disabled={readonly}
           />
-          <p className="text-[10px] font-bold text-slate-400 uppercase">Receta</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase">Medicamento</p>
           {recetaLineas.map((line, idx) => (
             <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3">
               <input
@@ -492,6 +497,18 @@ export default function ConsultaMedicaEstudio({
               + Agregar medicamento
             </button>
           )}
+          {hasPersisted ? (
+            <a
+              href={`/api/pdf/consulta-medica/${eventId}/receta`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-teal-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
+            >
+              Imprimir
+            </a>
+          ) : (
+            <p className="text-xs text-slate-500">Guarda la consulta para imprimir el medicamento.</p>
+          )}
         </section>
       )}
 
@@ -533,7 +550,7 @@ export default function ConsultaMedicaEstudio({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-teal-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
               >
-                💊 Receta (PDF)
+                Imprimir
               </a>
             </div>
           )}
