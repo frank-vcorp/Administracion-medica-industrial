@@ -30,6 +30,9 @@ const BACKEND_URL = (
 ).replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    '/**/*': ['./resources/clinical/cie-10-es.json'],
+  },
   experimental: {
     // La firma autógrafa se envía como data URL al Server Action. El límite
     // predeterminado de 1 MB rechaza firmas PNG/JPEG válidas antes de ejecutar

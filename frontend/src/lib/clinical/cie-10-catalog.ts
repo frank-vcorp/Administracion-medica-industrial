@@ -1,29 +1,30 @@
 import catalogJson from '../../../resources/clinical/cie-10-es.json'
+import {
+  formatCie10Code,
+  formatCie10Unified,
+  normalizeCie10Code,
+  type Cie10Entry,
+} from '@/lib/clinical/cie-10-format'
 
-/** Entrada del catálogo CIE-10 (español). Fuente: verasativa/CIE-10 (códigos oficiales CIE-10). */
-export type Cie10Entry = {
-  code: string
-  description: string
-}
+export type { Cie10Entry }
+export { formatCie10Code, formatCie10Unified }
 
+/** Catálogo CIE-10 (español). Fuente: verasativa/CIE-10 — `frontend/resources/clinical/cie-10-es.json`. */
 const ENTRIES: Cie10Entry[] = catalogJson as Cie10Entry[]
 
 const byNormalizedCode = new Map<string, Cie10Entry>()
+let sortedByCode: Cie10Entry[] | null = null
+
+function getSortedByCode(): Cie10Entry[] {
+  if (sortedByCode) return sortedByCode
+  sortedByCode = [...ENTRIES].sort((a, b) =>
+    normalizeCie10Code(a.code).localeCompare(normalizeCie10Code(b.code), 'en', { sensitivity: 'base' }),
+  )
+  return sortedByCode
+}
 
 function normalizeCode(raw: string): string {
-  return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
-}
-
-/** Presentación con punto decimal (p. ej. G130 → G13.0). */
-export function formatCie10Code(raw: string): string {
-  const n = normalizeCode(raw)
-  const m = n.match(/^([A-Z])(\d{2})(\d+)$/)
-  if (m) return `${m[1]}${m[2]}.${m[3]}`
-  return raw.trim().toUpperCase()
-}
-
-export function formatCie10Unified(entry: Cie10Entry): string {
-  return `${formatCie10Code(entry.code)} — ${entry.description}`
+  return normalizeCie10Code(raw)
 }
 
 function buildIndex(): void {
@@ -38,6 +39,12 @@ export function getCie10CatalogSize(): number {
   return byNormalizedCode.size
 }
 
+/** Lista inicial al enfocar el campo (sin escribir). */
+export function listCie10CatalogPreview(limit = 20): Cie10Entry[] {
+  buildIndex()
+  return getSortedByCode().slice(0, Math.max(1, limit))
+}
+
 export function findCie10ByCode(raw: string): Cie10Entry | null {
   buildIndex()
   const key = normalizeCode(raw)
@@ -48,7 +55,7 @@ export function isKnownCie10Code(raw: string): boolean {
   return findCie10ByCode(raw) != null
 }
 
-/** Parsea valor persistido (`CODE — descripción` o solo código). */
+/** Parsea valor persistido (`CODE — descripción` o solo código) validando contra catálogo. */
 export function parseDiagnosticoUnificadoStored(
   value: string | undefined | null,
 ): { code: string; description: string; display: string } | null {
@@ -91,10 +98,11 @@ function normalizeSearchText(raw: string): string {
 
 export function searchCie10Catalog(query: string, limit = 25): Cie10Entry[] {
   buildIndex()
-  const q = normalizeSearchText(query)
-  if (q.length < 2) return []
+  const trimmed = query.trim()
+  if (!trimmed) return listCie10CatalogPreview(limit)
 
-  const qCode = normalizeCode(query)
+  const q = normalizeSearchText(trimmed)
+  const qCode = normalizeCode(trimmed)
   const out: Cie10Entry[] = []
   const seen = new Set<string>()
 
@@ -105,13 +113,15 @@ export function searchCie10Catalog(query: string, limit = 25): Cie10Entry[] {
     out.push(entry)
   }
 
-  if (qCode.length >= 2) {
+  if (qCode.length >= 1) {
     for (const entry of ENTRIES) {
       const key = normalizeCode(entry.code)
       if (key.startsWith(qCode)) push(entry)
       if (out.length >= limit) return out.slice(0, limit)
     }
   }
+
+  if (q.length < 2) return out.slice(0, limit)
 
   for (const entry of ENTRIES) {
     if (normalizeSearchText(entry.description).includes(q)) push(entry)

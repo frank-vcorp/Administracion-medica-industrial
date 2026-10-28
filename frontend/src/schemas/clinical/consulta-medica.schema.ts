@@ -6,28 +6,21 @@ import {
   parseDiagnosticoUnificadoStored,
 } from '@/lib/clinical/cie-10-catalog'
 import { ClinicalHistoryDataSchema } from '@/schemas/clinical/history.schema'
+import {
+  CONSULTA_MEDICA_SCHEMA_VERSION,
+  TIPO_CONSULTA_VALUES,
+} from '@/schemas/clinical/consulta-medica.constants'
 
-export const CONSULTA_MEDICA_SCHEMA_VERSION = 'consulta-medica-v1' as const
-
-export const TIPO_CONSULTA_VALUES = [
-  'ENFERMEDAD_GENERAL',
-  'ENFERMEDAD_PROFESIONAL',
-  'ACCIDENTE_TRABAJO',
-  'ACCIDENTE_TRAYECTO',
-  'PRIMER_AUXILIO',
-  'INCIDENTE',
-] as const
-
-export type TipoConsultaValue = (typeof TIPO_CONSULTA_VALUES)[number]
-
-export const TIPO_CONSULTA_LABELS: Record<TipoConsultaValue, string> = {
-  ENFERMEDAD_GENERAL: 'Enfermedad general',
-  ENFERMEDAD_PROFESIONAL: 'Enfermedad profesional',
-  ACCIDENTE_TRABAJO: 'Accidente de trabajo',
-  ACCIDENTE_TRAYECTO: 'Accidente de trayecto',
-  PRIMER_AUXILIO: 'Primer auxilio',
-  INCIDENTE: 'Incidente',
-}
+export {
+  CONSULTA_MEDICA_SCHEMA_VERSION,
+  TIPO_CONSULTA_VALUES,
+  TIPO_CONSULTA_LABELS,
+  buildDefaultExploracionPlantilla,
+  emptySignosVitalesConsulta,
+  type ConsultaMedicaPayload,
+  type RecetaLinea,
+  type TipoConsultaValue,
+} from '@/schemas/clinical/consulta-medica.constants'
 
 const freeText = (max: number, min = 0) =>
   z.string().trim().min(min).max(max).transform(applySentenceCaseIfAllCaps)
@@ -66,8 +59,6 @@ export const RecetaLineaSchema = z.object({
   duracion: freeText(300, 1),
 })
 
-export type RecetaLinea = z.infer<typeof RecetaLineaSchema>
-
 export const SignosVitalesConsultaSchema = z.object({
   ta_sistolica: optionalString,
   ta_diastolica: optionalString,
@@ -102,8 +93,6 @@ export const ConsultaMedicaPayloadSchema = z.object({
   modulo1: z.record(z.string(), z.string()).optional(),
   cerrada_at: z.string().datetime().optional(),
 })
-
-export type ConsultaMedicaPayload = z.infer<typeof ConsultaMedicaPayloadSchema>
 
 const draftText = (max: number) =>
   z.string().trim().max(max).transform(applySentenceCaseIfAllCaps)
@@ -145,24 +134,3 @@ export const ConsultaMedicaDraftSchema = z.object({
   modulo1: z.record(z.string(), z.string()).optional(),
   cerrada_at: z.string().datetime().optional(),
 })
-
-export function emptySignosVitalesConsulta(): z.infer<typeof SignosVitalesConsultaSchema> {
-  return {
-    ta_sistolica: '',
-    ta_diastolica: '',
-    fc_min: '',
-    fr_min: '',
-    temperatura: '',
-    peso_kg: '',
-    talla_m: '',
-    imc: '',
-    complexion: '',
-  }
-}
-
-export function buildDefaultExploracionPlantilla(): string {
-  return [
-    'PACIENTE CONSCIENTE, ORIENTADO EN TIEMPO, LUGAR Y PERSONA, ALERTA, COOPERADOR, ADECUADA COLORACIÓN MUCOTEGUMENTARIA.',
-    'CAMPOS PULMONARES CON ADECUADA ENTRADA Y SALIDA DE AIRE; RUIDOS CARDÍACOS RÍTMICOS, SIN SOPLOS; ABDOMEN BLANDO, DEPRESIBLE.',
-  ].join(' ')
-}

@@ -7,7 +7,10 @@ import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
-import { parseDiagnosticoUnificadoStored, formatCie10Unified } from '@/lib/clinical/cie-10-catalog'
+import {
+  formatCie10Unified,
+  parseDiagnosticoUnificadoDisplay,
+} from '@/lib/clinical/cie-10-format'
 import {
   mergeProfileAntecedentesIntoConsulta,
   modulo1Record,
@@ -21,7 +24,7 @@ import {
   type ConsultaMedicaPayload,
   type RecetaLinea,
   type TipoConsultaValue,
-} from '@/schemas/clinical/consulta-medica.schema'
+} from '@/schemas/clinical/consulta-medica.constants'
 import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
 
 type TabId =
@@ -85,11 +88,7 @@ export default function ConsultaMedicaEstudio({
     parsed?.exploracion_fisica ?? buildDefaultExploracionPlantilla(),
   )
   const [diagCie, setDiagCie] = useState<Cie10Selection | null>(() => {
-    const parsedUnified = parseDiagnosticoUnificadoStored(parsed?.diagnostico_unificado)
-    if (parsedUnified) {
-      return { code: parsedUnified.code, description: parsedUnified.description }
-    }
-    return null
+    return parseDiagnosticoUnificadoDisplay(parsed?.diagnostico_unificado)
   })
   const [diagEspecifico, setDiagEspecifico] = useState(parsed?.diagnostico_especifico ?? '')
   const [otorgaIncap, setOtorgaIncap] = useState<'SI' | 'NO'>(parsed?.otorga_incapacidad ?? 'NO')
