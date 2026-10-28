@@ -61,8 +61,8 @@ export interface AIKeyDeleteResponse {
 /** Etiqueta legible del proveedor para UI. */
 export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {
   gemini: 'Gemini (extracción)',
-  m3: 'MiniMax M3 (extracción)',
-  dr7: 'DR7 / MedGemma (clínica)',
+  m3: 'MiniMax M3 (extracción y prediagnóstico)',
+  dr7: 'DR7 / MedGemma (sin uso clínico)',
 }
 
 // ===========================================================================
@@ -102,7 +102,7 @@ export type ProbeResult =
       retryAfterSec?: number
     }
 
-/** Proveedores elegibles como default de extracción (DR7 es clínico-only). */
+/** Proveedores elegibles como default de extracción (gemini o MiniMax M3). */
 export type ExtractionProvider = 'gemini' | 'm3'
 
 export const EXTRACTION_PROVIDERS: readonly ExtractionProvider[] = ['gemini', 'm3'] as const

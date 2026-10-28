@@ -476,7 +476,7 @@ async def upload_calibration_test(
     # FIX-20260810-06: pre-calentar la caché TTL del key_resolver en contexto
     # async (await nativo). El pipeline sync (extract_by_type →
     # _is_m3_unavailable / M3VisionBase._refresh_keys, y generate_prediagnosis
-    # → _resolve_dr7_config) corre en el hilo del event loop y NO puede
+    # → _resolve_m3_clinical_config) corre en el hilo del event loop y NO puede
     # awaitear; lee la caché vía `resolve_sync_cached`. Sin este warmup, la
     # caché estaría fría y el pipeline degradaría a env vars (M3 sin key en
     # env → fallback erróneo a Gemini → 500). Fallo suave: si el resolver

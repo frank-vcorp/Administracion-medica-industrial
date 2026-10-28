@@ -511,6 +511,23 @@ def test_prediagnostic_uses_resolved_dr7_config(monkeypatch, master_key_env):
     assert cfg["warning"] == "flag_off"
 
 
+def test_prediagnostic_clinical_config_uses_m3_and_ignores_dr7(monkeypatch):
+    """FIX-20261028-01: el prediagnóstico lee M3 y no la key DR7."""
+    monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "false")
+    monkeypatch.setenv("M3_API_KEY", "env-m3-clinical")
+    monkeypatch.setenv("M3_BASE_URL", "https://api.minimax.io/v1")
+    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3")
+    monkeypatch.setenv("DR7_API_KEY", "env-dr7-should-not-be-used")
+    from app.services.ai.prediagnostic import _resolve_m3_clinical_config
+
+    cfg = _resolve_m3_clinical_config()
+    assert cfg["api_key"] == "env-m3-clinical"
+    assert cfg["model"] == "MiniMax-M3"
+    assert "api.minimax.io" in cfg["base_url"]
+    assert cfg["api_key"] != "env-dr7-should-not-be-used"
+    assert "dr7.ai" not in cfg["base_url"]
+
+
 def test_prediagnostic_dr7_module_constants_still_preserved(master_key_env):
     """Retrocompat: DR7_API_KEY/DR7_BASE_URL/DR7_MODEL siguen disponibles
     como constantes de módulo (tests legacy las parchean)."""

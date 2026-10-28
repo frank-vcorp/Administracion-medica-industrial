@@ -11,6 +11,7 @@ import json
 import os
 import types
 from pathlib import Path
+from typing import Any, Dict
 
 # Asumimos que los módulos están en PYTHONPATH
 import sys
@@ -341,8 +342,8 @@ class TestPrediagnosticoNuevosTipos:
         assert "confrontacion" in (result.non_conclusive_reason or "")
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_campimetria_con_confrontacion_genera_prediagnostico(self, mock_dr7, prediagnostic_svc):
         """Formulario interno de campimetría con confrontación genera prediagnóstico."""
         mock_dr7.return_value = {
@@ -376,8 +377,8 @@ class TestPrediagnosticoNuevosTipos:
         assert result.confidence == 0.0
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_ecg_con_params_minimos_genera_prediagnostico(self, mock_featherless_text, prediagnostic_svc):
         """ECG con ritmo y frecuencia genera un prediagnóstico IA válido."""
         mock_featherless_text.return_value = {
@@ -397,7 +398,7 @@ class TestPrediagnosticoNuevosTipos:
         )
         assert result.clinical_state == "AI_PENDING_REVIEW"
         assert result.confidence == 0.75
-        assert result.clinical_provider == "dr7"
+        assert result.clinical_provider == "m3"
 
     def test_ecg_sin_params_minimos_retorna_non_conclusive(self, prediagnostic_svc):
         """ECG sin ritmo ni frecuencia debe retornar AI_NON_CONCLUSIVE."""
@@ -408,8 +409,8 @@ class TestPrediagnosticoNuevosTipos:
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_audiometria_dr7_json_puro_parsea_ok(self, mock_dr7_call, prediagnostic_svc):
         """IMPL-20260603-01. Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md."""
         mock_dr7_call.return_value = {
@@ -435,12 +436,12 @@ class TestPrediagnosticoNuevosTipos:
         )
 
         assert result.clinical_state == "AI_PENDING_REVIEW"
-        assert result.clinical_provider == "dr7"
+        assert result.clinical_provider == "m3"
         assert result.summary.startswith("Hallazgos compatibles")
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_audiometria_dr7_json_con_pad_parsea_ok(self, mock_dr7_call, prediagnostic_svc):
         """La capa clínica debe aceptar payload normalizado por parser tolerante en DR7."""
         mock_dr7_call.return_value = {
@@ -470,8 +471,8 @@ class TestPrediagnosticoNuevosTipos:
         assert result.non_conclusive_reason is None
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_audiometria_dr7_content_segmentado_parsea_ok(self, mock_dr7_call, prediagnostic_svc):
         """DR7 debe devolver un objeto clínico válido para Audiometría."""
         mock_dr7_call.return_value = {
@@ -497,16 +498,16 @@ class TestPrediagnosticoNuevosTipos:
         )
 
         assert result.clinical_state == "AI_PENDING_REVIEW"
-        assert result.clinical_provider == "dr7"
+        assert result.clinical_provider == "m3"
         assert result.summary.startswith("Hallazgos compatibles")
         assert result.non_conclusive_reason is None
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_audiometria_dr7_content_vacio_degrada_non_conclusive(self, mock_dr7_call, prediagnostic_svc):
-        """Si DR7 falla en parseo, debe degradar a AI_NON_CONCLUSIVE sin fallback."""
-        mock_dr7_call.side_effect = ValueError("Respuesta DR7 vacia o sin contenido util")
+        """Si MiniMax falla en parseo, debe degradar a AI_NON_CONCLUSIVE sin fallback."""
+        mock_dr7_call.side_effect = ValueError("Respuesta MiniMax vacia o sin contenido util")
 
         result = prediagnostic_svc.generate_prediagnosis(
             "Audiometria",
@@ -519,9 +520,10 @@ class TestPrediagnosticoNuevosTipos:
         )
 
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_provider == "dr7"
-        assert "DR7ParseError" in (result.non_conclusive_reason or "")
+        assert result.clinical_provider == "m3"
+        assert "MiniMaxParseError" in (result.non_conclusive_reason or "")
         assert "vacia o sin contenido util" in (result.non_conclusive_reason or "")
+        assert "dr7" not in (result.non_conclusive_reason or "").lower()
         assert "Gemini" not in (result.non_conclusive_reason or "")
 
 
@@ -824,7 +826,7 @@ class TestCalibrationV1AudioEspiro:
     # --- Prediagnóstico: Calibración médica ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_prediagnostico_audiometria_medical_calibration_legacy_deprecado(self, prediagnostic_svc):
         """
         ARCH-20260820-01 Fase 4 (handoff §2.2): el canal `medical_calibration`
@@ -846,10 +848,10 @@ class TestCalibrationV1AudioEspiro:
             "no_published_version",
             "field_definitions_incomplete",
         )
-        assert result.clinical_model_used == "medgemma-4b-it"
+        assert result.clinical_model_used == "MiniMax-M3"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_prediagnostico_audiometria_usa_legacy_hardcoded_sin_calibracion(self, prediagnostic_svc):
         """
         Cuando NO se pasa `calibration_version` (resolver None) y `ai_calibration`
@@ -867,10 +869,10 @@ class TestCalibrationV1AudioEspiro:
             "no_published_version",
             "field_definitions_incomplete",
         )
-        assert result.clinical_model_used == "medgemma-4b-it"
+        assert result.clinical_model_used == "MiniMax-M3"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_prediagnostico_espirometria_incompleta_devuelve_non_conclusive(self, prediagnostic_svc):
         """
         Espirometría con es_interpretable=False debe retornar AI_NON_CONCLUSIVE
@@ -891,8 +893,8 @@ class TestCalibrationV1AudioEspiro:
         assert "interpretable" in result.non_conclusive_reason.lower() or "faltantes" in result.non_conclusive_reason.lower()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_prediagnostico_espirometria_nominal_sin_calibration_version_v3(self, mock_call, prediagnostic_svc):
         """
         Espirometría nominal SIN `calibration_version` resuelta: el prediagnóstico
@@ -931,7 +933,7 @@ class TestCalibrationV1AudioEspiro:
         # Fase 4: sin calibration_version → legacy_hardcoded (no medical_calibration).
         assert result.calibration_source == "legacy_hardcoded"
         assert result.prompt_source == "backend_fallback"
-        assert result.clinical_model_used == "medgemma-4b-it"
+        assert result.clinical_model_used == "MiniMax-M3"
         assert result.confidence >= 0.60
 
 
@@ -979,83 +981,92 @@ class TestMedGemmaDR7Provider:
     }
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_sin_medgemma_retorna_non_conclusive_y_no_usa_gemini(self, prediagnostic_svc):
         """
         FIX-20260518-02: sin MedGemma disponible no se debe rescatar con Gemini.
         """
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
-        assert result.clinical_provider == "dr7"
+        assert result.clinical_provider == "m3"
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
         assert "Gemini se usa solo para extracción" in (result.non_conclusive_reason or "")
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
-    def test_medgemma_enabled_pero_sin_key_retorna_non_conclusive(self, prediagnostic_svc):
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
+    def test_medgemma_enabled_pero_sin_key_retorna_non_conclusive(self, prediagnostic_svc, monkeypatch):
         """
-        FIX-20260518-02: si falta DR7_API_KEY no existe fallback clínico a Gemini.
+        FIX-20261028-01: sin clave MiniMax no hay fallback clínico a Gemini
+        ni a DR7, aunque DR7_API_KEY siga en el entorno.
         """
+        monkeypatch.delenv("M3_API_KEY", raising=False)
+        monkeypatch.setenv("DR7_API_KEY", "leftover-dr7-key")
+        monkeypatch.setenv("MEDGEMMA_ENABLED", "true")
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
-        assert result.clinical_provider == "dr7"
+        assert result.clinical_provider == "m3"
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert "falta DR7_API_KEY" in (result.non_conclusive_reason or "")
+        reason = result.non_conclusive_reason or ""
+        assert "MiniMax" in reason
+        assert "M3_API_KEY" in reason
+        assert "dr7" not in reason.lower()
+        assert "falta DR7_API_KEY" not in reason
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.DR7_MODEL', 'medgemma-4b-it')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
-    def test_medgemma_enabled_con_key_llama_dr7(self, mock_featherless, prediagnostic_svc):
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.M3_DEFAULT_MODEL', 'MiniMax-M3')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
+    def test_m3_key_llama_minimax(self, mock_featherless, prediagnostic_svc):
         """
-        MEDGEMMA_ENABLED=true + DR7_API_KEY presente → llama a _call_dr7_medical_chat.
-        clinical_provider debe ser 'dr7' y clinical_model_used el modelo DR7.
+        Con M3_API_KEY el prediagnóstico llama a MiniMax.
+        clinical_provider es 'm3' y no depende de DR7_API_KEY.
         """
         mock_featherless.return_value = self.MOCK_PREDIAGNOSIS_RESPONSE.copy()
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
-        assert result.clinical_provider == "dr7"
-        assert result.clinical_model_used == "medgemma-4b-it"
+        assert result.clinical_provider == "m3"
+        assert result.clinical_model_used == "MiniMax-M3"
         assert result.clinical_state == "AI_PENDING_REVIEW"
         mock_featherless.assert_called_once()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_dr7_error_retorna_non_conclusive_con_provider_trazado(self, mock_featherless, prediagnostic_svc):
         """
-        Si DR7 lanza excepción, retorna AI_NON_CONCLUSIVE con clinical_provider='dr7'
-        para mantener trazabilidad del proveedor que falló.
+        Si MiniMax lanza excepción, retorna AI_NON_CONCLUSIVE con
+        clinical_provider='m3'. El texto no menciona DR7.
         """
-        mock_featherless.side_effect = RuntimeError("DR7 timeout")
+        mock_featherless.side_effect = RuntimeError("timeout de red")
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_provider == "dr7"
+        assert result.clinical_provider == "m3"
         assert result.non_conclusive_reason is not None
-        assert "dr7" in result.non_conclusive_reason.lower()
+        assert "minimax" in result.non_conclusive_reason.lower()
+        assert "dr7" not in result.non_conclusive_reason.lower()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_dr7_http_429_retorna_non_conclusive_sin_fallback_a_gemini(
         self,
         mock_featherless,
         prediagnostic_svc,
     ):
         """
-        IMPL-20260603-01: DR7 HTTP 429 debe degradar a no concluyente;
+        HTTP 429 de MiniMax degrada a no concluyente.
         Gemini no participa en la capa clínica.
         """
-        mock_featherless.side_effect = RuntimeError("DR7_HTTP:429:rate limit")
+        mock_featherless.side_effect = RuntimeError("M3_HTTP:429:")
 
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
 
-        assert result.clinical_provider == "dr7"
+        assert result.clinical_provider == "m3"
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_model_used == "medgemma-4b-it"
+        assert result.clinical_model_used == "MiniMax-M3"
         assert any("HTTP 429" in limitation for limitation in result.limitations)
         mock_featherless.assert_called_once()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_non_conclusive_por_params_expone_clinical_provider(self, mock_featherless, prediagnostic_svc):
         """
         Incluso en early-return por params mínimos, clinical_provider queda trazado.
@@ -1065,9 +1076,84 @@ class TestMedGemmaDR7Provider:
             {"paciente": "Test", "fev1": None, "fvc": None, "es_interpretable": False}
         )
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_provider == "dr7"
+        assert result.clinical_provider == "m3"
         # No debe haber llamado al proveedor real
         mock_featherless.assert_not_called()
+
+    def test_http_402_nombra_minimax_sin_filtrar_cuerpo(self, prediagnostic_svc, monkeypatch):
+        """
+        Un HTTP 402 de MiniMax degrada a no concluyente.
+        El texto nombra MiniMax y no copia crédito insuficiente, URLs ni DR7,
+        aunque DR7_API_KEY siga presente y el cuerpo las mencione.
+        """
+        monkeypatch.setenv("M3_API_KEY", "fake-m3-key")
+        monkeypatch.setenv("M3_BASE_URL", "https://api.minimax.io/v1")
+        monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3")
+        monkeypatch.setenv("DR7_API_KEY", "leftover-dr7-key")
+        monkeypatch.setenv("MEDGEMMA_ENABLED", "true")
+        monkeypatch.delenv("AI_KEYS_FROM_DB_ENABLED", raising=False)
+
+        class _Resp:
+            status_code = 402
+            text = "insufficient credit — upgrade at https://dr7.ai/billing"
+
+            def json(self):
+                return {}
+
+        with patch("requests.post", return_value=_Resp()) as mock_post:
+            result = prediagnostic_svc.generate_prediagnosis(
+                "Espirometria", self.ESPIRO_VALIDA
+            )
+
+        assert mock_post.called
+        url = mock_post.call_args[0][0]
+        assert url == "https://api.minimax.io/v1/chat/completions"
+        assert "dr7.ai" not in url
+        headers = mock_post.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "Bearer fake-m3-key"
+        sent = mock_post.call_args.kwargs["json"]
+        assert sent["model"] == "MiniMax-M3"
+        assert "diagnóstico definitivo" in sent["messages"][0]["content"]
+        assert "aptitud laboral" in sent["messages"][0]["content"]
+        blob = " ".join(
+            [
+                result.summary or "",
+                result.non_conclusive_reason or "",
+                *(result.limitations or []),
+            ]
+        ).lower()
+        assert "minimax" in blob
+        assert result.clinical_provider == "m3"
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert "dr7" not in blob
+        assert "insufficient" not in blob
+        assert "upgrade" not in blob
+        assert "http://" not in blob
+        assert "https://" not in blob
+
+    def test_respuesta_vacia_de_minimax_degrada_non_conclusive(self, prediagnostic_svc, monkeypatch):
+        """JSON vacío o no parseable de MiniMax degrada sin llamar a DR7."""
+        monkeypatch.setenv("M3_API_KEY", "fake-m3-key")
+        monkeypatch.setenv("DR7_API_KEY", "leftover-dr7-key")
+        monkeypatch.delenv("AI_KEYS_FROM_DB_ENABLED", raising=False)
+
+        class _Resp:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {"choices": [{"message": {"content": ""}}]}
+
+        with patch("requests.post", return_value=_Resp()) as mock_post:
+            result = prediagnostic_svc.generate_prediagnosis(
+                "Espirometria", self.ESPIRO_VALIDA
+            )
+
+        assert mock_post.call_args[0][0].startswith("https://api.minimax.io/")
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.clinical_provider == "m3"
+        assert "MiniMaxParseError" in (result.non_conclusive_reason or "")
+        assert "dr7" not in (result.non_conclusive_reason or "").lower()
 
 
 # ---------------------------------------------------------------------------
@@ -1356,8 +1442,8 @@ class TestEspirometriaExhaustiva_20260516_12_13:
     # --- Prediagnóstico: caso conflictivo FVC reducida + ratio conservado ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_prediagnostico_ratio_conservado_fvc_reducida_no_cierra_obstructivo(
         self, mock_call, prediagnostic_svc
     ):
@@ -1419,8 +1505,8 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert len(result.recommendation) > 0
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_prediagnostico_espirometria_incluye_recommendation_cuando_normal(
         self, mock_call, prediagnostic_svc
     ):
@@ -1455,7 +1541,7 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert len(result.recommendation) > 5
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_prediagnostico_espirometria_calidad_insuficiente_desde_bloque_calidad(
         self, prediagnostic_svc
     ):
@@ -1483,7 +1569,7 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert result.non_conclusive_reason is not None
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_prediagnostico_espirometria_completitud_no_concluyente_desde_bloque_calidad(
         self, prediagnostic_svc
     ):
@@ -1560,8 +1646,8 @@ class TestPromptResolutionARCH20260518_03:
     # --- Test 2: Clínica usa aiCalibration.diagnosis.prompt si existe ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_prompt_resolution_usa_ai_calibration_cuando_diagnosis_prompt_existe(
         self, mock_call, prediagnostic_svc
     ):
@@ -1631,8 +1717,8 @@ class TestPromptResolutionARCH20260518_03:
     # --- Test 3: Clínica usa backend_fallback cuando no existe diagnosis.prompt ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_prompt_resolution_usa_backend_fallback_cuando_sin_diagnosis_prompt(
         self, mock_call, prediagnostic_svc
     ):
@@ -2896,8 +2982,8 @@ class TestPrediagnosisFase4ARCH20260820_01:
     # --- AC-4.1 --------------------------------------------------------
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_AC_4_1_calibration_v3_resuelta_inyecta_clinical_criteria(
         self, mock_call, prediagnostic_svc
     ):
@@ -2969,7 +3055,7 @@ class TestPrediagnosisFase4ARCH20260820_01:
     # --- AC-4.2 --------------------------------------------------------
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_AC_4_2_fallback_legacy_hardcoded_trazado(self, prediagnostic_svc):
         """
         AC-4.2: si `calibration_version is None`, el comportamiento cae a
@@ -3101,8 +3187,8 @@ class TestPrediagnosisFase4ARCH20260820_01:
     # --- AC-4.4 --------------------------------------------------------
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_AC_4_4_enabled_false_retorna_non_conclusive_sin_llamar_dr7(
         self, mock_call, prediagnostic_svc
     ):
@@ -3155,8 +3241,8 @@ class TestPrediagnosisFase4ARCH20260820_01:
         mock_call.assert_called_once()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_AC_4_4b_prediagnosis_disabled_false_retorna_non_conclusive_sin_llamar_dr7(
         self, mock_call, prediagnostic_svc
     ):
@@ -3210,8 +3296,8 @@ class TestPrediagnosisFase4ARCH20260820_01:
     # --- AC-4.5 --------------------------------------------------------
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_AC_4_5_document_extraction_sintetiza_prediagnosis_solo_con_clinical_criteria(
         self, mock_call, prediagnostic_svc
     ):
@@ -3279,8 +3365,8 @@ class TestPrediagnosisFase4ARCH20260820_01:
     # --- Cobertura adicional: ai_calibration shim legacy → prompt_source --
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_prompt_source_ai_calibration_shim_legacy_sin_v3(
         self, mock_call, prediagnostic_svc
     ):
@@ -3419,8 +3505,8 @@ class TestFIX20260821_01GateTableawareEspirometria:
 
     # ── AC-1.1: Gate table-aware Espirometría — fila FEV1 estándar sin `fev1` raíz
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_check_minimum_params_espirometry_tableaware_basic(
         self, mock_call, prediagnostic_svc
     ):
@@ -3461,8 +3547,8 @@ class TestFIX20260821_01GateTableawareEspirometria:
 
     # ── AC-1.2: Gate table-aware — fila `Mejor FEV1` con m1 poblada
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_check_minimum_params_espirometry_mejor_fila(
         self, mock_call, prediagnostic_svc
     ):
@@ -3507,8 +3593,8 @@ class TestFIX20260821_01GateTableawareEspirometria:
 
     # ── AC-1.3: Negativa — sin filas FEV1/FVC en raíz ni tabla
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', 'fake-dr7-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_dr7_medical_chat')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
+    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_check_minimum_params_espirometry_negative(
         self, mock_call, prediagnostic_svc
     ):
@@ -3756,7 +3842,7 @@ class TestFIX20260821_01GateTableawareEspirometria:
 
     # ── AC-4.1: Audiometría — comportamiento del gate sin cambios
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_check_minimum_params_audiometria_unchanged(self, prediagnostic_svc):
         """
         AC-4.1: Audiometría con oido_derecho/oido_izquierdo presentes en raíz
@@ -3779,7 +3865,7 @@ class TestFIX20260821_01GateTableawareEspirometria:
 
     # ── AC-4.2: Otros tipos — sin cambios
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.DR7_API_KEY', '')
+    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
     def test_check_minimum_params_other_studies_unchanged(self, prediagnostic_svc):
         """
         AC-4.2: Laboratorio / Rayos_X / ECG / Somatometría / AgudezaVisual —
@@ -5618,31 +5704,16 @@ class TestEspirometriaPrediagnosticRecommendationContextDEC20260824_02:
         assert "R-06" in espirometry_prompt or "AMI-SR F-017 R-06" in espirometry_prompt
         assert "SEGUIMIENTO ANUAL" in espirometry_prompt
 
-    def test_prompt_no_minimax_for_prediagnosis(self):
-        # DEC-20260824-02: "No usar Minimax para el diagnóstico: Minimax extrae;
-        # prediagnóstico clínico usa proveedor clínico existente."
-        # El módulo prediagnostic.py no debe mencionar "m3" como proveedor
-        # clínico (sólo aparece m1/m2/m3 de maniobras espirométricas).
-        import re
-
+    def test_prediagnosis_routes_to_minimax_not_dr7(self):
+        # FIX-20261028-01: el prediagnóstico clínico es MiniMax M3.
+        # DEC-20260824-02 quedó sustituida: ya no se usa DR7 para esta capa.
         from app.services.ai import prediagnostic
 
         src = Path(prediagnostic.__file__).read_text(encoding="utf-8")
-        # m3 como proveedor IA clínica NO debe aparecer en este módulo.
-        # m1/m2/m3 como maniobras sí (son referencias a datos clínicos).
-        # Buscamos menciones a 'm3' como string o token aislado (proveedor).
-        bad_patterns = [
-            r'"m3"',            # string literal "m3"
-            r"'m3'",            # string literal 'm3'
-            r'provider\s*=\s*"m3"',
-            r'clinical_provider\s*=\s*"m3"',
-            r"Minimax",          # nombre comercial del proveedor de extracción
-        ]
-        for pat in bad_patterns:
-            assert re.search(pat, src) is None, (
-                f"prediagnostic.py contiene referencia prohibida a M3/Minimax: "
-                f"patrón {pat!r}"
-            )
+        assert 'clinical_provider = "m3"' in src
+        assert "def _call_m3_clinical_chat" in src
+        assert "def _call_dr7_medical_chat" not in src
+        assert "api.minimax.io" in src
 
 
 class TestEspirometriaDiagnosisPromptResolverDEC20260824_02:

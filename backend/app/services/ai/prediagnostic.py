@@ -16,7 +16,7 @@ ARCH-20260820-01 Fase 4 (SPEC §14 + handoff Fase 4):
     `clinicalCriteria`, sino a `legacy_hardcoded`).
   - Si `calibration_version.enabled=false` o `clinicalCriteria.prediagnosisEnabled=false`
     → `AI_NON_CONCLUSIVE` con `non_conclusive_reason="calibration_disabled"`
-    **sin** invocar DR7.
+    **sin** invocar MiniMax, salvo el fallback runtime documentado.
   - `calibration_source` ∈ {`published_v3`, `calibration_disabled`, `legacy_hardcoded`}
     (legacy `medical_calibration`/`general_fallback` siguen aceptos como
     deprecados para compat de snapshots históricos).
@@ -28,18 +28,22 @@ GUARDRAILS obligatorios:
   - El lenguaje deve ser prudente: "compatible con", "sugiere", "requiere correlación clínica".
   - Si faltan parámetros mínimos o calidad es baja → estado: AI_NON_CONCLUSIVE.
 
-MEDGEMMA (IMPL-20260513-01 / IMPL-20260603-01):
-    - MedGemma es el proveedor médico objetivo para esta capa.
-    - Estado: integrado vía DR7.ai usando endpoint médico HTTP directo.
-    - Cuando MEDGEMMA_ENABLED=true y DR7_API_KEY está configurada,
-        PrediagnosticService enruta la llamada a _call_dr7_medical_chat().
-        - Si DR7 no está disponible, la capa clínica degrada a AI_NON_CONCLUSIVE.
-        - Gemini se reserva para la extracción, no para el prediagnóstico clínico.
-    - NUNCA se envía PDF/imagen a DR7 — solo prompt textual/JSON estructurado.
+MINIMAX (FIX-20261028-01):
+    - El prediagnóstico clínico usa solo MiniMax M3 (texto / JSON ya extraído).
+    - Credenciales: el mismo resolver `m3` que la extracción
+      (BD si `AI_KEYS_FROM_DB_ENABLED`, si no `M3_API_KEY` / `M3_BASE_URL` /
+      `M3_DEFAULT_MODEL`).
+    - `DR7_API_KEY` y `MEDGEMMA_ENABLED` no habilitan esta capa. Aunque sigan
+      en el entorno o en la fila `dr7`, este flujo no llama a dr7.ai.
+    - Si MiniMax falla, responde vacío o devuelve JSON no parseable, la capa
+      degrada a `AI_NON_CONCLUSIVE`. No es un diagnóstico final.
+    - Gemini queda reservado a extracción documental, no al prediagnóstico.
+    - NUNCA se envía PDF/imagen al chat clínico — solo prompt textual.
 """
 
 import json
 import os
+import re
 from typing import Dict, Any, Optional
 from .base import GeminiBase
 from .keys import key_resolver, is_ai_keys_from_db_enabled
@@ -73,7 +77,10 @@ def _medgemma_enabled() -> bool:
 
 def _resolve_dr7_config() -> Dict[str, Any]:
     """
-    IMPL-20260809-06: Resuelve la config clínica DR7 (api_key, base_url, model,
+    LEGACY. El prediagnóstico ya no llama esta función (FIX-20261028-01).
+    Se conserva para tests del resolver de keys. No usar en el flujo clínico.
+
+    IMPL-20260809-06: Resuelve la config DR7 (api_key, base_url, model,
     key_source, warning). Si AI_KEYS_FROM_DB_ENABLED está activo, consulta
     el resolver singleton (con caché TTL + invalidación). Si no, cae a env vars
     (con fallback a las constantes de módulo — preserva tests legacy que las
@@ -152,6 +159,113 @@ DR7_API_KEY  = os.environ.get("DR7_API_KEY", "").strip()
 DR7_BASE_URL = os.environ.get("DR7_BASE_URL", "https://dr7.ai/api/v1/medical/chat/completions").strip()
 DR7_MODEL    = os.environ.get("DR7_MODEL", "medgemma-4b-it").strip()
 
+# FIX-20261028-01: credenciales clínicas MiniMax. Lectura runtime en
+# `_resolve_m3_clinical_config()`; estas constantes permiten que los tests
+# parcheen el fallback de módulo (mismo patrón que DR7_API_KEY).
+M3_API_KEY = os.environ.get("M3_API_KEY", "").strip()
+M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
+M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", "MiniMax-M3").strip() or "MiniMax-M3"
+
+# Texto user-facing: no arrastrar cuerpos HTTP (crédito, URLs de upgrade, DR7).
+_PROVIDER_LEAK_RE = re.compile(
+    r"https?://\S+|dr7(?:\.ai)?(?:_[\w-]*)?|insufficient[_\s-]?credit|\bupgrade\b",
+    re.IGNORECASE,
+)
+
+
+def _redact_provider_leak(text: str) -> str:
+    """Quita de un mensaje user-facing URLs, DR7 y texto de crédito insuficiente."""
+    cleaned = _PROVIDER_LEAK_RE.sub("", text or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" :.-")
+    return cleaned
+
+
+def _public_minimax_http_reason(status_code: str) -> str:
+    """
+    Motivo user-facing de un fallo HTTP de MiniMax.
+    No incluye el cuerpo de la respuesta.
+    """
+    code = str(status_code or "").strip()
+    labels = {
+        "0": "clave de MiniMax no disponible",
+        "401": "autenticación rechazada por MiniMax",
+        "402": "solicitud no autorizada por MiniMax",
+        "429": "límite de uso de MiniMax",
+        "500": "error interno de MiniMax",
+    }
+    label = labels.get(code, "error de MiniMax")
+    if code in {"401", "402", "429", "500"}:
+        return (
+            f"MiniMax no pudo completar el prediagnóstico clínico "
+            f"(HTTP {code}: {label})."
+        )
+    return f"MiniMax no pudo completar el prediagnóstico clínico ({label})."
+
+
+def _m3_chat_completions_url(base_url: str) -> str:
+    """Arma el endpoint OpenAI-compatible de MiniMax. Rechaza hosts dr7.ai."""
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        base = "https://api.minimax.io/v1"
+    if "dr7.ai" in base.lower():
+        raise RuntimeError("M3_HTTP:0:endpoint clínico rechazado")
+    if base.endswith("/chat/completions"):
+        return base
+    return f"{base}/chat/completions"
+
+
+def _resolve_m3_clinical_config() -> Dict[str, Any]:
+    """
+    FIX-20261028-01: config clínica MiniMax M3.
+
+    Misma ruta de credenciales que la extracción (key_resolver de "m3"):
+    fila BD cuando `AI_KEYS_FROM_DB_ENABLED`, si no env
+    (`M3_API_KEY`, `M3_BASE_URL`, `M3_DEFAULT_MODEL`).
+    `DR7_API_KEY` no se lee. Caché fría: intenta `_resolve_sync_cold("m3")`
+    (mismo helper que `M3VisionBase._refresh_keys`) y, si no hay key, env.
+    """
+    default_api_key = os.environ.get("M3_API_KEY", "").strip() or M3_API_KEY
+    default_base_url = (
+        os.environ.get("M3_BASE_URL", "").strip()
+        or M3_BASE_URL
+        or "https://api.minimax.io/v1"
+    )
+    default_model = (
+        os.environ.get("M3_DEFAULT_MODEL", "").strip()
+        or M3_DEFAULT_MODEL
+        or "MiniMax-M3"
+    )
+
+    if not is_ai_keys_from_db_enabled():
+        return {
+            "api_key": default_api_key,
+            "base_url": default_base_url,
+            "model": default_model,
+            "key_source": "env",
+            "warning": "flag_off",
+        }
+
+    resolution = key_resolver.resolve_sync_cached("m3")
+    if resolution is None:
+        from .keys import _resolve_sync_cold
+
+        resolution = _resolve_sync_cold("m3")
+    if resolution is None:
+        return {
+            "api_key": default_api_key,
+            "base_url": default_base_url,
+            "model": default_model,
+            "key_source": "env",
+            "warning": "cache_cold",
+        }
+    return {
+        "api_key": resolution.api_key or default_api_key,
+        "base_url": resolution.base_url or default_base_url,
+        "model": resolution.default_model or default_model,
+        "key_source": resolution.source,
+        "warning": resolution.warning,
+    }
+
 
 # Umbrales de confianza mínima por tipo de estudio (ARCH-20260326-16 §"Umbrales V1")
 CONFIDENCE_THRESHOLDS: Dict[str, float] = {
@@ -229,7 +343,7 @@ PREDIAGNOSIS_SUPPORTED_TYPES = {
 
 # IMPL-FEATURE-20260824-02 (gap fix): helper puro para renderizar el bloque
 # de contexto clínico estructurado que se inyecta al prompt del
-# prediagnóstico (MedGemma/DR7). El bloque:
+# prediagnóstico (MiniMax M3). El bloque:
 #   - Está envuelto en un fence `=== CONTEXTO CLÍNICO ===` para delimitar
 #     claramente que NO es parte de los parámetros extraídos del documento.
 #   - Incluye instrucciones explícitas al modelo para que use el cuestionario
@@ -922,7 +1036,7 @@ Responde en JSON con esta estructura exacta:
           - `clinical_context`: cuestionario estructurado opcional del paciente
             (p.ej. `espirometria-questionnaire-v1` con antecedentes
             respiratorios y exploración física). Se inyecta al prompt del
-            prediagnóstico clínico (MedGemma/DR7) como contexto adicional;
+            prediagnóstico clínico (MiniMax M3) como contexto adicional;
             NUNCA se reenvía a la capa extractiva M3. Si está ausente, el
             comportamiento es idéntico al pre-FEATURE-20260824-02.
 
@@ -950,32 +1064,22 @@ Responde en JSON con esta estructura exacta:
             `field_definitions_incomplete`} sólo cuando
             `calibration_source == "legacy_hardcoded"`.
         """
-        # IMPL-20260603-01 | respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md
-        # La capa clínica usa exclusivamente MedGemma vía DR7.ai.
-        # Gemini queda reservado a la extracción multimodal, nunca al prediagnóstico.
-        clinical_provider = "dr7"
+        # FIX-20261028-01: la capa clínica usa solo MiniMax M3.
+        # DR7_API_KEY y MEDGEMMA_ENABLED no habilitan este flujo.
+        # Gemini queda reservado a la extracción, nunca al prediagnóstico.
+        clinical_provider = "m3"
 
-        # IMPL-20260809-06: Resolución fresca de la config DR7 vía key_resolver.
-        # Permite rotación runtime sin reinicio cuando AI_KEYS_FROM_DB_ENABLED=true.
-        # Con flag off (default), cae transparentemente a env vars (comportamiento actual).
-        _dr7_cfg = _resolve_dr7_config()
-        clinical_model_used = _dr7_cfg["model"]
-        _dr7_api_key = _dr7_cfg["api_key"]
-        _dr7_base_url = _dr7_cfg["base_url"]
-        # Trazabilidad de fuente de key (se propaga al result para auditoría clínica).
-        self._last_key_source = _dr7_cfg["key_source"]
-        self._last_key_warning = _dr7_cfg["warning"]
-        clinical_provider_available = bool(_medgemma_enabled() and _dr7_api_key)
+        _m3_cfg = _resolve_m3_clinical_config()
+        clinical_model_used = _m3_cfg["model"]
+        _m3_api_key = _m3_cfg["api_key"]
+        self._last_key_source = _m3_cfg["key_source"]
+        self._last_key_warning = _m3_cfg["warning"]
+        clinical_provider_available = bool(_m3_api_key)
 
-        # IMPL-20260603-01. Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md.
-        # Mantiene compatibilidad con el Literal legado del schema (gemini|featherless)
-        # sin cambiar contrato: valida como featherless y expone dr7 en runtime.
         def _result_with_provider(**kwargs) -> AIPrediagnosisResult:
             payload = dict(kwargs)
-            payload["clinical_provider"] = "featherless"
-            result_obj = AIPrediagnosisResult(**payload)
-            result_obj.clinical_provider = clinical_provider
-            return result_obj
+            payload["clinical_provider"] = clinical_provider
+            return AIPrediagnosisResult(**payload)
 
         # ── Fase 4: resolver clinicalCriteria efectivo ─────────────────────
         effective = self._resolve_clinical_criteria(
@@ -1083,7 +1187,7 @@ Responde en JSON con esta estructura exacta:
                 clinical_basis=[],
                 citations=[],
                 limitations=[
-                    "Calibración publicada deshabilitada para esta prueba; no se invoca DR7.",
+                    "Calibración publicada deshabilitada para esta prueba; no se invoca MiniMax.",
                 ],
                 red_flags=[],
                 non_conclusive_reason="calibration_disabled",
@@ -1114,7 +1218,7 @@ Responde en JSON con esta estructura exacta:
         # `ai_calibration` shim está ausente: calibration_source="legacy_hardcoded"
         # + `fieldDefinitionsIncomplete=False` ⇒ cae al fallback. Si el estudio
         # NO está en PREDIAGNOSIS_SUPPORTED_TYPES, el bloque inferior retorna
-        # AI_NON_CONCLUSIVE explícito sin llamar DR7.
+        # AI_NON_CONCLUSIVE explícito sin llamar a MiniMax.
 
         # IMPL-20260326-17: Tipos sin soporte de prediagnóstico IA en V1
         # RiesgoCardiovascular retorna AI_NON_CONCLUSIVE explícito.
@@ -1214,16 +1318,11 @@ Responde en JSON con esta estructura exacta:
         _rendered_prompt = prompt
 
         if not clinical_provider_available:
-            if not MEDGEMMA_ENABLED:
-                unavailable_reason = (
-                    "Prediagnóstico clínico no disponible: MEDGEMMA_ENABLED=false. "
-                    "Gemini se usa solo para extracción."
-                )
-            else:
-                unavailable_reason = (
-                    "Prediagnóstico clínico no disponible: falta DR7_API_KEY para MedGemma en DR7. "
-                    "Gemini se usa solo para extracción."
-                )
+            unavailable_reason = (
+                "Prediagnóstico clínico no disponible: falta la clave de MiniMax "
+                "(M3_API_KEY o la fila m3 en /admin/ai-keys). "
+                "Gemini se usa solo para extracción."
+            )
 
             return _result_with_provider(
                 summary="No fue posible generar el prediagnóstico clínico porque MedGemma no está disponible.",
@@ -1257,61 +1356,55 @@ Responde en JSON con esta estructura exacta:
             )
 
         print(f"🧠 Generando prediagnóstico IA para: {study_type} | proveedor: {clinical_provider} | modelo: {clinical_model_used} | calibración: {calibration_source}")
-        # IMPL-20260603-01: enrutar al proveedor clínico DR7.ai según configuración
-        # IMPL-20260326-03: degradar a AI_NON_CONCLUSIVE en lugar de propagar excepción
-        # No existe fallback clínico a Featherless ni a Gemini.
+        # FIX-20261028-01: MiniMax M3. Sin fallback clínico a DR7, Featherless ni Gemini.
+        # Un fallo del modelo degrada a AI_NON_CONCLUSIVE (apoyo a la decisión, no diagnóstico).
         try:
-            # IMPL-20260809-06: pasar la config ya resuelta para evitar 2ª lookup.
-            raw_result = self._call_dr7_medical_chat(prompt, dr7_cfg=_dr7_cfg)
+            raw_result = self._call_m3_clinical_chat(prompt, m3_cfg=_m3_cfg)
         except Exception as e:
             err_str = str(e)
-            if err_str.startswith("DR7_HTTP:"):
-                _, status_code, raw_detail = err_str.split(":", 2)
-                status_reason_map = {
-                    "401": "error de autenticación DR7",
-                    "402": "saldo insuficiente en DR7",
-                    "429": "rate limit de DR7",
-                    "500": "error interno del proveedor DR7",
-                }
-                dr7_reason = (
-                    f"DR7 devolvió HTTP {status_code} ({status_reason_map.get(status_code, 'error HTTP DR7')}). "
-                    f"Detalle: {raw_detail[:200]}"
-                )
-                print(f"⚠️ {dr7_reason}")
+            if err_str.startswith("M3_HTTP:"):
+                parts = err_str.split(":", 2)
+                status_code = parts[1] if len(parts) > 1 else "error"
+                minimax_reason = _public_minimax_http_reason(status_code)
+                print(f"⚠️ {minimax_reason}")
                 return _result_with_provider(
-                    summary="El proveedor clínico DR7 no está disponible para completar el prediagnóstico clínico.",
+                    summary="El proveedor clínico MiniMax no está disponible para completar el prediagnóstico clínico.",
                     confidence=0.0,
                     clinical_state="AI_NON_CONCLUSIVE",
                     justification=[],
                     clinical_basis=[],
                     citations=[],
-                    limitations=[dr7_reason],
+                    limitations=[minimax_reason],
                     red_flags=[],
-                    non_conclusive_reason=dr7_reason,
+                    non_conclusive_reason=minimax_reason,
                     calibration_source=calibration_source,
                     legacy_hardcoded_reason=legacy_hardcoded_reason,
                     clinical_model_used=clinical_model_used,
                     prompt_source=prompt_source,
                     prompt_version=_clinical_prompt_version,
                 )
-            else:
-                print(f"⚠️ Fallo al llamar/parsear proveedor '{clinical_provider}' para {study_type}: {e}")
-                return _result_with_provider(
-                    summary="No fue posible obtener análisis IA para este estudio debido a un error en la respuesta del modelo.",
-                    confidence=0.0,
-                    clinical_state="AI_NON_CONCLUSIVE",
-                    justification=[],
-                    clinical_basis=[],
-                    citations=[],
-                    limitations=["Error al parsear respuesta del modelo IA. La extracción de parámetros puede estar disponible."],
-                    red_flags=[],
-                    non_conclusive_reason=f"DR7ParseError: {str(e)[:300]}",
-                    calibration_source=calibration_source,
-                    legacy_hardcoded_reason=legacy_hardcoded_reason,
-                    clinical_model_used=clinical_model_used,
-                    prompt_source=prompt_source,
-                    prompt_version=_clinical_prompt_version,
-                )
+            safe_detail = _redact_provider_leak(str(e)) or "respuesta no utilizable"
+            parse_reason = f"MiniMaxParseError: {safe_detail[:300]}"
+            print(
+                f"⚠️ Fallo al llamar/parsear proveedor '{clinical_provider}' "
+                f"para {study_type}: {parse_reason}"
+            )
+            return _result_with_provider(
+                summary="No fue posible obtener análisis IA para este estudio debido a un error en la respuesta del modelo.",
+                confidence=0.0,
+                clinical_state="AI_NON_CONCLUSIVE",
+                justification=[],
+                clinical_basis=[],
+                citations=[],
+                limitations=["Error al parsear respuesta del modelo IA. La extracción de parámetros puede estar disponible."],
+                red_flags=[],
+                non_conclusive_reason=parse_reason,
+                calibration_source=calibration_source,
+                legacy_hardcoded_reason=legacy_hardcoded_reason,
+                clinical_model_used=clinical_model_used,
+                prompt_source=prompt_source,
+                prompt_version=_clinical_prompt_version,
+            )
 
         try:
             result = AIPrediagnosisResult(**raw_result)
@@ -1411,39 +1504,35 @@ Responde en JSON con esta estructura exacta:
                 prompt_version=_clinical_prompt_version,
             )
 
-    def _call_dr7_medical_chat(self, prompt: str, dr7_cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _call_m3_clinical_chat(self, prompt: str, m3_cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        IMPL-20260603-01. Respaldo: context/SPECs/SPEC_ARCH-20260603-04-MIGRACION-CLINICA-DR7-TEXTO.md.
-        Llama a MedGemma vía DR7.ai usando el endpoint médico HTTP directo.
+        FIX-20261028-01: chat clínico text-only contra MiniMax M3.
 
-        IMPL-20260809-06: Acepta `dr7_cfg` (dict con api_key/base_url/model
-        ya resueltos por `_resolve_dr7_config()`) para no reconsultar el
-        resolver. Si no se pasa, resuelve fresh (compat con tests legacy).
-
-        Contrato estricto:
+        Contrato:
+          - Credenciales ya resueltas por `_resolve_m3_clinical_config()` (mismo
+            resolver `m3` que la extracción). Si no se pasan, se resuelven aquí.
           - NO envía PDF ni imagen. Solo prompt textual/JSON estructurado.
-          - La extracción multimodal SIEMPRE sigue en Gemini (capa separada, sin tocar).
-          - Lanza excepción si hay error → generate_prediagnosis degrada a AI_NON_CONCLUSIVE.
+          - NO llama a dr7.ai. Un base_url que apunte allí se rechaza.
+          - El cuerpo HTTP de error no se propaga al usuario.
+          - Lanza excepción si hay error → generate_prediagnosis degrada a
+            AI_NON_CONCLUSIVE. Esto es apoyo a la decisión, no un diagnóstico.
         """
         import requests
 
-        if dr7_cfg is None:
-            dr7_cfg = _resolve_dr7_config()
+        if m3_cfg is None:
+            m3_cfg = _resolve_m3_clinical_config()
 
-        _dr7_api_key = dr7_cfg.get("api_key") or ""
-        _dr7_base_url = dr7_cfg.get("base_url") or os.environ.get(
-            "DR7_BASE_URL",
-            "https://dr7.ai/api/v1/medical/chat/completions",
-        )
-        _dr7_model = dr7_cfg.get("model") or os.environ.get("DR7_MODEL", "medgemma-4b-it")
+        api_key = (m3_cfg.get("api_key") or "").strip()
+        base_url = m3_cfg.get("base_url") or M3_BASE_URL or "https://api.minimax.io/v1"
+        model = m3_cfg.get("model") or M3_DEFAULT_MODEL or "MiniMax-M3"
 
-        if not _dr7_api_key:
-            raise RuntimeError(
-                "DR7_HTTP:0:DR7_API_KEY ausente (ni env var ni BD)"
-            )
+        if not api_key:
+            raise RuntimeError("M3_HTTP:0:clave ausente")
+
+        url = _m3_chat_completions_url(str(base_url))
 
         payload = {
-            "model": _dr7_model,
+            "model": model,
             "messages": [
                 {
                     "role": "system",
@@ -1465,29 +1554,34 @@ Responde en JSON con esta estructura exacta:
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.2,
-            "max_tokens": 2048,
+            "max_tokens": 8192,
+            "response_format": {"type": "json_object"},
         }
 
         response = requests.post(
-            _dr7_base_url,
+            url,
             headers={
-                "Authorization": f"Bearer {_dr7_api_key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json=payload,
-            timeout=(10, 60),
+            timeout=(10, 90),
         )
 
-        if response.status_code in {401, 402, 429, 500}:
-            raise RuntimeError(f"DR7_HTTP:{response.status_code}:{response.text[:250]}")
+        if response.status_code >= 400:
+            # No loguear ni propagar response.text: puede incluir URLs o saldo.
+            print(f"⚠️ MiniMax clínico HTTP {response.status_code}")
+            raise RuntimeError(f"M3_HTTP:{response.status_code}:")
 
-        response.raise_for_status()
-        data = response.json()
+        try:
+            data = response.json()
+        except Exception as exc:
+            raise ValueError("Respuesta MiniMax vacia o sin contenido util") from exc
         raw_text = GeminiBase._sanitize_model_json_text(
             ((data.get("choices") or [{}])[0].get("message") or {}).get("content", "")
         )
         if not raw_text:
-            raise ValueError("Respuesta DR7 vacia o sin contenido util")
+            raise ValueError("Respuesta MiniMax vacia o sin contenido util")
 
         return GeminiBase._tolerant_json_parse(raw_text)
 

@@ -32,7 +32,7 @@ export default async function AdminAIKeysPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-bold">API Keys de Proveedores IA</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Gestiona las claves de los proveedores de IA (Gemini, MiniMax M3, DR7/MedGemma).
+          Gestiona las claves de Gemini y MiniMax M3. MiniMax M3 cubre la extracción y el prediagnóstico clínico.
           Las claves se cifran con AES-256-GCM antes de persistirse en la base de datos.
           La rotación toma efecto en producción sin redeploy cuando la feature flag
           <code className="mx-1 px-1 bg-gray-100 rounded text-xs">AI_KEYS_FROM_DB_ENABLED</code>

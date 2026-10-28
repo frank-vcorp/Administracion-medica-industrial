@@ -599,12 +599,16 @@ class AIPrediagnosisResult(BaseModel):
     )
     clinical_model_used: Optional[str] = Field(
         default=None,
-        description="Modelo real utilizado para la capa clínica (ej: gemini-2.5-flash, google/medgemma-27b-text-it)"
+        description="Modelo real utilizado para la capa clínica (ej: MiniMax-M3)"
     )
-    # IMPL-20260513-03: Proveedor clínico real (gemini | featherless)
-    clinical_provider: Optional[Literal["gemini", "featherless"]] = Field(
+    # FIX-20261028-01: proveedor clínico activo = MiniMax M3.
+    # 'gemini' y 'featherless' se conservan para snapshots históricos.
+    clinical_provider: Optional[Literal["gemini", "featherless", "m3"]] = Field(
         default=None,
-        description="Proveedor backend de la capa clínica: 'gemini' (Gemini text-only) o 'featherless' (MedGemma vía OpenAI SDK)"
+        description=(
+            "Proveedor backend de la capa clínica. Valor activo: 'm3' (MiniMax). "
+            "'gemini' y 'featherless' son históricos."
+        )
     )
     # IMPL-20260518-03 + ARCH-20260820-01 Fase 4 (handoff §3.4): fuente del prompt.
     prompt_source: Optional[Literal["ai_calibration", "backend_fallback", "clinical_criteria_v3"]] = Field(

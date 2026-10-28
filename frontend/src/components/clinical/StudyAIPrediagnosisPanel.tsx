@@ -55,7 +55,7 @@ interface AIPrediagnosisData {
   non_conclusive_reason?: string | null
   calibration_source?: 'medical_calibration' | 'general_fallback' | null
   clinical_model_used?: string | null
-  clinical_provider?: 'gemini' | 'featherless' | null
+  clinical_provider?: 'gemini' | 'featherless' | 'm3' | null
 }
 
 /**

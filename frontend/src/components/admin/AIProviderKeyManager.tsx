@@ -485,7 +485,7 @@ function ExtractionDefaultSection(props: {
         id="extraction-default-description"
         className="text-xs text-gray-500 mb-3"
       >
-        DR7/MedGemma es clínico, no aplica como proveedor de extracción.
+        La extracción predeterminada es MiniMax M3 o Gemini. El prediagnóstico clínico usa la misma clave MiniMax M3.
       </p>
 
       {error && (
