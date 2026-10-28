@@ -835,7 +835,6 @@ class M3VisionBase:
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{b64_data}",
-                                    "detail": "low",
                                 },
                             },
                         ],

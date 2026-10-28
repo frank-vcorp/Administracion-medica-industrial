@@ -2055,6 +2055,15 @@ class TestMultiProviderExtractionARCH20260809_02:
         assert out["paciente_detalle"]["nombre_completo"] == "JOSE EDUARDO, QUINTANAR SANTOS"
         assert out["campos_fuente"]["cad"] == "permeable"
 
+    def test_resolve_provider_calibracion_minimax_m3_minuscula_promueve_a_flash(
+        self, extractor
+    ):
+        """En BD GEN-003 tiene 'Minimax-M3' (m minúscula); debe resolverse a MiniMax-M3.1-Flash."""
+        cal = {"extraction": {"prompt": "x", "provider": "m3", "model": "Minimax-M3"}}
+        provider, model = extractor._resolve_provider(calibration=cal)
+        assert provider == "m3"
+        assert model == "MiniMax-M3.1-Flash"
+
     def test_resolve_provider_invalido_en_calibracion_levanta_excepcion(self, extractor):
         from app.services.ai.extractor import ExtractionProviderUnknownError
         with pytest.raises(ExtractionProviderUnknownError):
