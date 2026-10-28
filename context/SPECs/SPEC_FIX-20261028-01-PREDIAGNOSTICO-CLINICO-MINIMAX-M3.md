@@ -17,6 +17,10 @@ La extracción ya usa MiniMax M3 (`key_resolver` de `m3`, fila de `/admin/ai-key
 4. Fallos (HTTP, cuerpo vacío, JSON no parseable) degradan a `AI_NON_CONCLUSIVE`. El texto nombra MiniMax y no copia el cuerpo (crédito insuficiente, URL de upgrade, DR7).
 5. Sigue siendo apoyo a la decisión: el system prompt prohíbe diagnóstico definitivo, dictamen y aptitud. `clinical_provider` queda `m3`.
 
+## Plazo de la llamada clínica
+
+La subida del archivo no cambió. Vercel corta la función de `/events/[id]` a los 300 s (`Task timed out after 300 seconds`) y el navegador muestra «Error al subir archivo» porque la acción nunca responde. El `timeout` de `requests` solo corta el silencio entre bytes; MiniMax puede seguir emitiendo tokens y la espera no termina. La llamada clínica tiene un plazo de reloj de 45 s. Si se vence, el prediagnóstico queda `AI_NON_CONCLUSIVE` y la respuesta sale igual, para que el archivo quede vinculado.
+
 ## Verificación
 
 Generar un prediagnóstico de una audiometría. La petición clínica debe ir a `api.minimax.io`, no a `dr7.ai`. Sin `M3_API_KEY` (ni fila `m3`) el resultado es no concluyente y nombra MiniMax.

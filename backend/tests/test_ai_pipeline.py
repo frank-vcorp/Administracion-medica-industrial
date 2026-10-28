@@ -1131,6 +1131,40 @@ class TestMedGemmaDR7Provider:
         assert "http://" not in blob
         assert "https://" not in blob
 
+    def test_minimax_lento_no_retiene_la_subida(self, prediagnostic_svc, monkeypatch):
+        """
+        Si MiniMax no cierra la respuesta, no se espera el tope de Vercel (300s).
+        El prediagnóstico queda no concluyente y la llamada regresa enseguida.
+        """
+        import time
+
+        monkeypatch.setenv("M3_API_KEY", "fake-m3-key")
+        monkeypatch.setenv("M3_BASE_URL", "https://api.minimax.io/v1")
+        monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3")
+        monkeypatch.delenv("AI_KEYS_FROM_DB_ENABLED", raising=False)
+        monkeypatch.setattr(
+            "app.services.ai.prediagnostic.M3_CLINICAL_DEADLINE_SEC",
+            0.4,
+        )
+
+        def _hang(*_args, **_kwargs):
+            time.sleep(5)
+            raise AssertionError("la llamada clínica no debía seguir esperando")
+
+        started = time.monotonic()
+        with patch("requests.post", side_effect=_hang):
+            result = prediagnostic_svc.generate_prediagnosis(
+                "Espirometria", self.ESPIRO_VALIDA
+            )
+        elapsed = time.monotonic() - started
+
+        assert elapsed < 2
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.clinical_provider == "m3"
+        reason = (result.non_conclusive_reason or "").lower()
+        assert "tiempo" in reason
+        assert "dr7" not in reason
+
     def test_respuesta_vacia_de_minimax_degrada_non_conclusive(self, prediagnostic_svc, monkeypatch):
         """JSON vacío o no parseable de MiniMax degrada sin llamar a DR7."""
         monkeypatch.setenv("M3_API_KEY", "fake-m3-key")
