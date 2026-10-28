@@ -1,56 +1,52 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
 import WhatsAppAutoSendButton from '@/components/shared/WhatsAppAutoSendButton'
-import { sendWhatsAppTextMessage } from '@/actions/whatsapp-send.actions'
+import type { AppointmentPassWhatsAppResult } from '@/actions/appointment-pass-whatsapp.actions'
 
 type Props = {
   phone: string
   message: string
   appointmentId: string
+  whatsApp?: AppointmentPassWhatsAppResult
 }
 
-export default function AppointmentWhatsAppSuccess({ phone, message, appointmentId }: Props) {
-  const attempted = useRef(false)
-  const [phase, setPhase] = useState<'sending' | 'sent' | 'fallback' | 'retry'>('sending')
-  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (attempted.current) return
-    attempted.current = true
-    void sendWhatsAppTextMessage({
-      phone,
-      text: message,
-      auditContext: 'appointment_pass',
-      entityId: appointmentId,
-      attachPatientTriptych: true,
-    }).then((res) => {
-      if (res.sent) setPhase('sent')
-      else if (res.fallbackWaUrl) {
-        setFallbackUrl(res.fallbackWaUrl)
-        setPhase('fallback')
-      } else setPhase('retry')
-    })
-  }, [phone, message, appointmentId])
-
-  if (phase === 'sent') {
+export default function AppointmentWhatsAppSuccess({
+  phone,
+  message,
+  appointmentId,
+  whatsApp,
+}: Props) {
+  if (whatsApp?.sent) {
     return (
-      <p className="text-sm text-emerald-700 font-bold text-center py-3">
-        📱 Pase enviado por WhatsApp (línea institucional)
-      </p>
+      <div className="space-y-1">
+        <p className="text-sm text-emerald-700 font-bold text-center py-2">
+          📱 Pase enviado por WhatsApp (línea institucional)
+        </p>
+        {whatsApp.triptychSent ? (
+          <p className="text-[11px] text-emerald-600 text-center font-medium">
+            Tríptico de preparación enviado.
+          </p>
+        ) : (
+          <p className="text-[11px] text-amber-700 text-center">
+            Tríptico: pendiente (gateway) o enlace de respaldo enviado.
+          </p>
+        )}
+      </div>
     )
   }
 
-  if (phase === 'sending') {
+  if (whatsApp?.skipped) {
     return (
-      <p className="text-sm text-slate-500 font-medium text-center py-3">Enviando pase por WhatsApp…</p>
+      <div className="bg-slate-100 text-slate-500 py-3 rounded-xl font-medium text-xs px-4 text-center">
+        WhatsApp automático desactivado o sin teléfono válido.
+      </div>
     )
   }
 
-  if (phase === 'fallback' && fallbackUrl) {
+  if (whatsApp?.fallbackWaUrl) {
     return (
       <a
-        href={fallbackUrl}
+        href={whatsApp.fallbackWaUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
@@ -69,7 +65,7 @@ export default function AppointmentWhatsAppSuccess({ phone, message, appointment
       attachPatientTriptych
       className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2 disabled:opacity-70"
     >
-      <span>📱</span> Enviar Pase por WhatsApp
+      <span>📱</span> Reintentar envío por WhatsApp
     </WhatsAppAutoSendButton>
   )
 }

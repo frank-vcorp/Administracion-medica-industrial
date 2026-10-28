@@ -8,6 +8,8 @@ import { callWhatsAppGateway } from '@/lib/whatsapp-gateway-client'
 import { buildWhatsAppWebUrl, isValidWhatsAppPhone, normalizeWhatsAppPhone } from '@/lib/whatsapp-phone'
 import {
   PATIENT_PREPARATION_TRIPTYCH_FILENAME,
+  readPatientPreparationTriptychPdf,
+  resolvePublicPatientTriptychUrl,
 } from '@/lib/patient-preparation-triptych'
 
 const ROW_ID = 'default'
@@ -95,6 +97,70 @@ export async function attachPatientPreparationTriptychWhatsApp(input: {
           phoneSuffix: phone.slice(-4),
           fileName: PATIENT_PREPARATION_TRIPTYCH_FILENAME,
           documentKey: 'patient_preparation_triptych',
+          delivery: 'document_key',
+        },
+      },
+    })
+    return { success: true, sent: true }
+  }
+
+  // Gateway sin redeploy (sin send-document-key): PDF por base64 si el endpoint existe.
+  try {
+    const triptych = await readPatientPreparationTriptychPdf()
+    const legacy = await callWhatsAppGateway({
+      path: '/v1/messages/send-document',
+      method: 'POST',
+      role: session.user.role as string,
+      userId: session.user.id,
+      body: {
+        to: phone,
+        fileName: PATIENT_PREPARATION_TRIPTYCH_FILENAME,
+        mimetype: 'application/pdf',
+        dataBase64: triptych.toString('base64'),
+        caption:
+          input.caption ?? 'Tríptico de preparación para su cita médica (Tips para pacientes).',
+      },
+    })
+    if (legacy.ok && legacy.data && (legacy.data as { sent?: boolean }).sent) {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: 'WHATSAPP_DOCUMENT_SENT',
+          entity: input.auditContext ?? 'appointment_pass',
+          entityId: input.entityId ?? null,
+          details: {
+            phoneSuffix: phone.slice(-4),
+            fileName: PATIENT_PREPARATION_TRIPTYCH_FILENAME,
+            delivery: 'document_base64',
+          },
+        },
+      })
+      return { success: true, sent: true }
+    }
+  } catch {
+    /* continuar a fallback de enlace */
+  }
+
+  // Fallback operativo: enlace al PDF público en Vercel (gateway antiguo sin adjuntos).
+  const triptychUrl = resolvePublicPatientTriptychUrl()
+  const linkText = `📄 Tríptico de preparación para su cita:\n${triptychUrl}`
+  const linkSend = await callWhatsAppGateway({
+    path: '/v1/messages/send',
+    method: 'POST',
+    role: session.user.role as string,
+    userId: session.user.id,
+    body: { to: phone, text: linkText },
+  })
+  if (linkSend.ok && linkSend.data && (linkSend.data as { sent?: boolean }).sent) {
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: 'WHATSAPP_MESSAGE_SENT',
+        entity: input.auditContext ?? 'appointment_pass',
+        entityId: input.entityId ?? null,
+        details: {
+          phoneSuffix: phone.slice(-4),
+          delivery: 'triptych_public_link',
         },
       },
     })
@@ -104,7 +170,7 @@ export async function attachPatientPreparationTriptychWhatsApp(input: {
   return {
     success: false,
     sent: false,
-    error: live.error ?? 'No se pudo adjuntar el tríptico por WhatsApp',
+    error: live.error ?? linkSend.error ?? 'No se pudo adjuntar el tríptico por WhatsApp',
   }
 }
 
@@ -118,6 +184,7 @@ export async function sendWhatsAppTextMessage(input: {
   success: boolean
   sent: boolean
   skipped: boolean
+  triptychSent?: boolean
   fallbackWaUrl?: string
   error?: string
 }> {
@@ -159,12 +226,14 @@ export async function sendWhatsAppTextMessage(input: {
   })
 
   if (live.ok && live.data && (live.data as { sent?: boolean }).sent) {
+    let triptychSent = false
     if (parsed.data.attachPatientTriptych) {
-      await attachPatientPreparationTriptychWhatsApp({
+      const triptych = await attachPatientPreparationTriptychWhatsApp({
         phone: parsed.data.phone,
         auditContext: parsed.data.auditContext ?? 'appointment_pass',
         entityId: parsed.data.entityId,
       })
+      triptychSent = triptych.sent
     }
     await prisma.auditLog.create({
       data: {
@@ -175,7 +244,7 @@ export async function sendWhatsAppTextMessage(input: {
         details: { phoneSuffix: phone.slice(-4) },
       },
     })
-    return { success: true, sent: true, skipped: false }
+    return { success: true, sent: true, skipped: false, triptychSent }
   }
 
   return {

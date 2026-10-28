@@ -46,7 +46,11 @@ import {
   isAppointmentScheduleInPast,
 } from '@/lib/appointment-scheduling'
 import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
+<<<<<<< HEAD
 import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+=======
+import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
+>>>>>>> 51343f9 (fix(s23-03): Baileys al crear cita con mensaje completo y tríptico)
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -206,9 +210,12 @@ export async function createAppointment(data: {
     revalidatePath('/appointments')
     revalidatePath('/dashboard')
 
+    const whatsApp = await sendAppointmentPassWhatsApp(appointment.id)
+
     return {
       success: true,
       appointment,
+      whatsApp,
     }
   } catch (error) {
     console.error('[CREATE APPOINTMENT ERROR]:', error)

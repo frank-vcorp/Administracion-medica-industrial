@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import WorkerFormModal, { type WorkerCreatedPayload } from '@/components/WorkerFormModal'
 import { parseAppointmentLocalDateTime, todayAgendaDateString } from '@/lib/appointment-scheduling'
 import AppointmentWhatsAppSuccess from '@/components/AppointmentWhatsAppSuccess'
+import type { AppointmentPassWhatsAppResult } from '@/actions/appointment-pass-whatsapp.actions'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
@@ -62,6 +63,7 @@ interface AppointmentResult {
         scheduledAt: Date | string
     }
     error?: string
+    whatsApp?: AppointmentPassWhatsAppResult
 }
 
 export default function AppointmentFormModal({
@@ -337,7 +339,9 @@ export default function AppointmentFormModal({
         const cleanPhone = rawPhone.replace(/\D/g, '');
         const hasValidPhone = cleanPhone.length >= 10;
         
-        const message = `Hola ${apt.worker?.firstName}, tu cita médica en AMI está confirmada para el ${new Date(apt.scheduledAt).toLocaleDateString('es-ES')} a las ${new Date(apt.scheduledAt).toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'})}. Tu número de expediente es: ${apt.expedientId}. Por favor presenta este mensaje en recepción.`;
+        const message =
+            successData.whatsApp?.messageText ??
+            `Hola ${apt.worker?.firstName}, tu cita médica en AMI está confirmada para el ${new Date(apt.scheduledAt).toLocaleDateString('es-ES')} a las ${new Date(apt.scheduledAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}. Tu número de expediente es: ${apt.expedientId}. Por favor presenta este mensaje en recepción.`
 
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
@@ -376,6 +380,7 @@ export default function AppointmentFormModal({
                                 phone={rawPhone}
                                 message={message}
                                 appointmentId={apt.id}
+                                whatsApp={successData.whatsApp}
                             />
                         ) : (
                             <div className="bg-slate-100 text-slate-500 py-3 rounded-xl font-medium text-xs px-4">

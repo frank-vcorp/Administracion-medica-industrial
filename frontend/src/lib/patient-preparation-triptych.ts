@@ -15,3 +15,13 @@ export async function readPatientPreparationTriptychPdf(): Promise<Buffer> {
   )
   return readFile(absolute)
 }
+
+/** URL pública del tríptico (fallback si el gateway aún no tiene send-document-key). */
+export function resolvePublicPatientTriptychUrl(): string {
+  const base =
+    process.env.NEXTAUTH_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+    'http://localhost:3000'
+  return `${base.replace(/\/$/, '')}${PATIENT_PREPARATION_TRIPTYCH_PUBLIC_PATH}`
+}
