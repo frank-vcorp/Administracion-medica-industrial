@@ -1989,6 +1989,72 @@ class TestMultiProviderExtractionARCH20260809_02:
         out_root = extractor._normalize_audiometria_result(dict(from_root))
         assert out_root["paciente"] == "XML Legacy Name"
 
+    def test_normalize_audiometria_preserva_va_anidado_y_pta(self, extractor):
+        """
+        Cuando el prompt V3 devuelve oido_derecho: {va: {500: 5, ...}, pta: 14},
+        el normalizador NO debe aplastar `va` a un escalar (ej. 5), sino
+        conservar el mapa de frecuencias y exponer pta_visible + paciente_detalle.
+        """
+        raw_v3 = {
+            "paciente": "JOSE EDUARDO, QUINTANAR SANTOS",
+            "fecha_estudio": "20/04/2026",
+            "oido_derecho": {
+                "va": {
+                    "125": None,
+                    "250": 5,
+                    "500": 5,
+                    "1000": 5,
+                    "2000": 20,
+                    "3000": 35,
+                    "4000": 20,
+                    "6000": 10,
+                    "8000": 15,
+                },
+                "pta": 14,
+            },
+            "oido_izquierdo": {
+                "va": {
+                    "125": None,
+                    "250": 15,
+                    "500": 20,
+                    "1000": 10,
+                    "2000": 25,
+                    "3000": 30,
+                    "4000": 30,
+                    "6000": 20,
+                    "8000": 20,
+                },
+                "pta": 21,
+            },
+            "frecuencias_detectadas": ["250", "500", "1000", "2000", "3000", "4000", "6000", "8000"],
+            "completitud_documental": "suficiente",
+            "notas_calidad": "Tabla + gráfica",
+            "faringe": "Sin datos patológicos",
+            "cad": "permeable",
+            "cai": "permeable",
+            "mtd": "Íntegra",
+            "mti": "Íntegra",
+        }
+        out = extractor._normalize_audiometria_result(dict(raw_v3))
+        assert isinstance(out["oido_derecho"]["va"], dict)
+        assert out["oido_derecho"]["va"] == {
+            "250": 5,
+            "500": 5,
+            "1000": 5,
+            "2000": 20,
+            "3000": 35,
+            "4000": 20,
+            "6000": 10,
+            "8000": 15,
+        }
+        assert out["oido_derecho"]["pta"] == 14
+        assert out["oido_derecho"]["pta_visible"] == 14
+        assert isinstance(out["oido_izquierdo"]["va"], dict)
+        assert out["oido_izquierdo"]["va"]["500"] == 20
+        assert out["oido_izquierdo"]["pta_visible"] == 21
+        assert out["paciente_detalle"]["nombre_completo"] == "JOSE EDUARDO, QUINTANAR SANTOS"
+        assert out["campos_fuente"]["cad"] == "permeable"
+
     def test_resolve_provider_invalido_en_calibracion_levanta_excepcion(self, extractor):
         from app.services.ai.extractor import ExtractionProviderUnknownError
         with pytest.raises(ExtractionProviderUnknownError):

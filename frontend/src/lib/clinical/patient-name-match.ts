@@ -47,13 +47,15 @@ export function extractPatientNameFromStructuredData(data: unknown): string | nu
 
   const pacienteObj = root.paciente
   if (pacienteObj && typeof pacienteObj === 'object') {
-    const nombre = (pacienteObj as Record<string, unknown>).nombre_completo
+    const rec = pacienteObj as Record<string, unknown>
+    const nombre = rec.nombre_completo ?? rec.nombre
     if (typeof nombre === 'string' && nombre.trim()) return nombre.trim()
   }
 
   const detalle = root.paciente_detalle
   if (detalle && typeof detalle === 'object') {
-    const nombre = (detalle as Record<string, unknown>).nombre_completo
+    const rec = detalle as Record<string, unknown>
+    const nombre = rec.nombre_completo ?? rec.nombre
     if (typeof nombre === 'string' && nombre.trim()) return nombre.trim()
   }
 

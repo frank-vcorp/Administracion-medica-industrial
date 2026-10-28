@@ -69,10 +69,9 @@ def _coerce_audiometry_threshold_value(value: Any) -> Optional[int]:
         for key in ("value", "db", "umbral", "threshold", "hl", "dB"):
             if key in value and value[key] is not None:
                 return _coerce_audiometry_threshold_value(value[key])
-        for nested in value.values():
-            coerced = _coerce_audiometry_threshold_value(nested)
-            if coerced is not None:
-                return coerced
+        if len(value) == 1:
+            only_val = next(iter(value.values()))
+            return _coerce_audiometry_threshold_value(only_val)
         return None
     if isinstance(value, (int, float)):
         return int(value)
@@ -80,6 +79,23 @@ def _coerce_audiometry_threshold_value(value: Any) -> Optional[int]:
         return int(str(value).strip())
     except (ValueError, TypeError):
         return None
+
+
+def _normalize_audiometry_freq_map(freq_map: Any) -> Dict[str, int]:
+    """Normaliza un dict frecuencia(str)->dB(int), omitiendo nulos y no-frecuencias."""
+    if not isinstance(freq_map, dict):
+        return {}
+    out: Dict[str, int] = {}
+    for k, v in freq_map.items():
+        k_str = str(k).strip().lower().replace("hz", "").strip()
+        if k_str in ("1k", "2k", "3k", "4k", "6k", "8k"):
+            k_str = str(int(k_str[:-1]) * 1000)
+        if not k_str.isdigit():
+            continue
+        coerced = _coerce_audiometry_threshold_value(v)
+        if coerced is not None:
+            out[k_str] = coerced
+    return out
 
 
 # ARCH-20260809-02: Excepciones de control del dispatcher (no son errores de upstream;
@@ -187,6 +203,10 @@ GUARDRAILS ESPECÍFICOS PARA AUDIOMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBRA
    - "suficiente"     → ≥6 frecuencias con valor por oído en la tabla
    - "parcial"        → 3-5 frecuencias con valor por oído
    - "no_concluyente" → <3 frecuencias con valor por oído
+7. IDENTIFICACIÓN Y EXPLORACIÓN FÍSICA OBLIGATORIAS EN EL JSON DE SALIDA (aún si el bloque de calibración no las menciona):
+   - Incluye SIEMPRE en la raíz del JSON `"paciente"` con el nombre completo impreso del paciente y `"fecha_estudio"` con la fecha del estudio.
+   - Incluye también `"paciente_detalle": {"nombre_completo": "...", "fecha_nacimiento": "...", "empresa": "...", "puesto": "..."}` y `"estudio": {"fecha_estudio": "...", "equipo_modelo": "..."}` cuando sean visibles.
+   - Si el documento muestra exploración otoscópica/faríngea (Faringe, CAD, CAI, MTD, MTI), inclúyelos en `"campos_fuente": {"faringe": "...", "cad": "...", "cai": "...", "mtd": "...", "mti": "..."}` y también en raíz (`"faringe"`, `"cad"`, `"cai"`, `"mtd"`, `"mti"`).
 """.strip()
 
 
@@ -396,32 +416,97 @@ notas de calidad y gráficas.
         4. Anota sospecha de corrimiento en `notas_calidad` cuando hay frecuencias
            fuera del conjunto canónico (ej. 125 Hz).
         """
-        # 1. Normalizar: str keys, int values, omitir nulos
+        # 1. Normalizar: soportar tanto formato plano {"500": 10} como anidado
+        #    {"va": {"500": 10}, "vo": {...}, "pta": 14, "pta_visible": 14}
+        ear_freq_maps: Dict[str, Dict[str, int]] = {"oido_derecho": {}, "oido_izquierdo": {}}
         for ear_key in ("oido_derecho", "oido_izquierdo"):
-            if isinstance(result.get(ear_key), dict):
-                normalized_ear: Dict[str, int] = {}
-                for k, v in result[ear_key].items():
-                    coerced = _coerce_audiometry_threshold_value(v)
-                    if coerced is not None:
-                        normalized_ear[str(k)] = coerced
-                result[ear_key] = normalized_ear
+            ear_raw = result.get(ear_key)
+            if not isinstance(ear_raw, dict):
+                continue
+            has_nested_submap = any(
+                sub_k in ear_raw and isinstance(ear_raw.get(sub_k), dict)
+                for sub_k in ("va", "via_aerea", "vo", "via_osea", "separacion", "umbrales_tonales_db")
+            )
+            if has_nested_submap:
+                normalized_ear_nested: Dict[str, Any] = {}
+                va_source = (
+                    ear_raw.get("va")
+                    if isinstance(ear_raw.get("va"), dict)
+                    else (
+                        ear_raw.get("via_aerea")
+                        if isinstance(ear_raw.get("via_aerea"), dict)
+                        else ear_raw.get("umbrales_tonales_db")
+                    )
+                )
+                va_norm = _normalize_audiometry_freq_map(va_source)
+                normalized_ear_nested["va"] = va_norm
+                ear_freq_maps[ear_key] = va_norm
 
-        # 2. Derivar frecuencias_detectadas si null
-        if not result.get("frecuencias_detectadas"):
-            all_freqs: set = set()
-            for ear_key in ("oido_derecho", "oido_izquierdo"):
-                if isinstance(result.get(ear_key), dict):
-                    all_freqs.update(result[ear_key].keys())
-            if all_freqs:
+                vo_source = (
+                    ear_raw.get("vo")
+                    if isinstance(ear_raw.get("vo"), dict)
+                    else ear_raw.get("via_osea")
+                )
+                if isinstance(vo_source, dict):
+                    vo_norm = _normalize_audiometry_freq_map(vo_source)
+                    if vo_norm:
+                        normalized_ear_nested["vo"] = vo_norm
+
+                if isinstance(ear_raw.get("separacion"), dict):
+                    sep_norm = _normalize_audiometry_freq_map(ear_raw.get("separacion"))
+                    if sep_norm:
+                        normalized_ear_nested["separacion"] = sep_norm
+
+                pta_val = ear_raw.get("pta_visible")
+                if pta_val is None:
+                    pta_val = ear_raw.get("pta")
+                pta_coerced = _coerce_audiometry_threshold_value(pta_val)
+                if pta_coerced is not None:
+                    normalized_ear_nested["pta"] = pta_coerced
+                    normalized_ear_nested["pta_visible"] = pta_coerced
+
+                # También conservar umbrales directos si el LLM mezcló claves numéricas en el oído
+                for k, v in ear_raw.items():
+                    if str(k).strip().isdigit():
+                        c_val = _coerce_audiometry_threshold_value(v)
+                        if c_val is not None and str(k).strip() not in va_norm:
+                            va_norm[str(k).strip()] = c_val
+
+                result[ear_key] = normalized_ear_nested
+            else:
+                normalized_ear_flat = _normalize_audiometry_freq_map(ear_raw)
+                pta_val = ear_raw.get("pta_visible") if "pta_visible" in ear_raw else ear_raw.get("pta")
+                pta_coerced = _coerce_audiometry_threshold_value(pta_val)
+                if pta_coerced is not None and not normalized_ear_flat:
+                    result[ear_key] = {"va": {}, "pta": pta_coerced, "pta_visible": pta_coerced}
+                else:
+                    result[ear_key] = normalized_ear_flat
+                ear_freq_maps[ear_key] = normalized_ear_flat
+
+        # 2. Derivar frecuencias_detectadas si null o si contiene nulos/no-canónicos
+        all_freqs: set = set()
+        for ear_key in ("oido_derecho", "oido_izquierdo"):
+            all_freqs.update(ear_freq_maps.get(ear_key, {}).keys())
+        if not result.get("frecuencias_detectadas") and all_freqs:
+            result["frecuencias_detectadas"] = sorted(
+                all_freqs, key=lambda f: int(f)
+            )
+        elif isinstance(result.get("frecuencias_detectadas"), list):
+            cleaned_freqs = [
+                str(f).strip()
+                for f in result["frecuencias_detectadas"]
+                if str(f).strip().isdigit()
+            ]
+            if cleaned_freqs:
                 result["frecuencias_detectadas"] = sorted(
-                    all_freqs, key=lambda f: int(f)
+                    set(cleaned_freqs), key=lambda f: int(f)
                 )
 
         # 3. Derivar completitud_documental si null
         if result.get("completitud_documental") is None:
             freqs_per_ear = max(
-                len(result.get("oido_derecho") or {}),
-                len(result.get("oido_izquierdo") or {}),
+                len(ear_freq_maps.get("oido_derecho") or {}),
+                len(ear_freq_maps.get("oido_izquierdo") or {}),
             )
             if freqs_per_ear >= 6:
                 result["completitud_documental"] = "suficiente"
@@ -433,8 +518,7 @@ notas de calidad y gráficas.
         # 4. Detectar sospecha de corrimiento tabular
         all_detected_keys: set = set()
         for ear_key in ("oido_derecho", "oido_izquierdo"):
-            if isinstance(result.get(ear_key), dict):
-                all_detected_keys.update(result[ear_key].keys())
+            all_detected_keys.update(ear_freq_maps.get(ear_key, {}).keys())
         non_canonical = all_detected_keys - _AUDIOMETRIA_CANONICAL_FREQS
         if non_canonical:
             warning = (
@@ -443,27 +527,72 @@ notas de calidad y gráficas.
                 "Verifique alineación tabular de columnas."
             )
             existing = result.get("notas_calidad") or ""
-            result["notas_calidad"] = (
-                f"{existing} | {warning}" if existing else warning
-            )
+            if isinstance(existing, dict):
+                desc = existing.get("descripcion") or ""
+                existing["descripcion"] = f"{desc} | {warning}" if desc else warning
+                result["notas_calidad"] = existing
+            else:
+                result["notas_calidad"] = (
+                    f"{existing} | {warning}" if existing else warning
+                )
 
         # S8-02: Mapeo defensivo paciente/fecha_estudio (espejo espirometría FIX-20260821-01).
+        if isinstance(result.get("paciente"), dict):
+            pac_obj = result["paciente"]
+            pac_name = pac_obj.get("nombre_completo") or pac_obj.get("nombre")
+            if isinstance(pac_name, str) and pac_name.strip():
+                result.setdefault("paciente_detalle", {})
+                if isinstance(result["paciente_detalle"], dict):
+                    result["paciente_detalle"].setdefault("nombre_completo", pac_name.strip())
+                result["paciente"] = pac_name.strip()
         if not result.get("paciente"):
             pd = result.get("paciente_detalle")
             if isinstance(pd, dict):
-                name = pd.get("nombre_completo")
+                name = pd.get("nombre_completo") or pd.get("nombre")
                 if isinstance(name, str) and name.strip():
                     result["paciente"] = name.strip()
         if not result.get("paciente"):
             root_name = result.get("nombre_completo")
             if isinstance(root_name, str) and root_name.strip():
                 result["paciente"] = root_name.strip()
+        if isinstance(result.get("paciente"), str) and result["paciente"].strip():
+            if not isinstance(result.get("paciente_detalle"), dict):
+                result["paciente_detalle"] = {"nombre_completo": result["paciente"].strip()}
+            elif not result["paciente_detalle"].get("nombre_completo"):
+                result["paciente_detalle"]["nombre_completo"] = result["paciente"].strip()
+
         if not result.get("fecha_estudio"):
             estudio = result.get("estudio")
             if isinstance(estudio, dict):
-                fecha = estudio.get("fecha_estudio")
+                fecha = estudio.get("fecha_estudio") or estudio.get("fecha")
                 if isinstance(fecha, str) and fecha.strip():
                     result["fecha_estudio"] = fecha.strip()
+        if isinstance(result.get("fecha_estudio"), str) and result["fecha_estudio"].strip():
+            if not isinstance(result.get("estudio"), dict):
+                result["estudio"] = {"fecha_estudio": result["fecha_estudio"].strip()}
+            elif not result["estudio"].get("fecha_estudio"):
+                result["estudio"]["fecha_estudio"] = result["fecha_estudio"].strip()
+
+        # Normalizar campos_fuente ↔ raíz (faringe, cad, cai, mtd, mti)
+        cf = result.get("campos_fuente")
+        if not isinstance(cf, dict):
+            cf = (
+                result.get("exploracion_fisica")
+                if isinstance(result.get("exploracion_fisica"), dict)
+                else {}
+            )
+        cf_norm: Dict[str, Any] = dict(cf) if isinstance(cf, dict) else {}
+        for src_field in ("faringe", "cad", "cai", "mtd", "mti"):
+            val = (
+                result.get(src_field)
+                or cf_norm.get(src_field)
+                or cf_norm.get(src_field.upper())
+            )
+            if isinstance(val, str) and val.strip():
+                result[src_field] = val.strip()
+                cf_norm[src_field] = val.strip()
+        if cf_norm:
+            result["campos_fuente"] = cf_norm
 
         return result
 
@@ -1171,6 +1300,12 @@ notas de calidad y gráficas.
                     result.pop(legacy_field, None)
                 # ARCH-20260518-17: normalización + guardrails post-extracción
                 result = self._normalize_audiometria_result(result)
+                # Si el prompt V3 devolvió estructura anidada (oido_derecho.va/pta,
+                # paciente_detalle, campos_fuente), preservar el dict completo para
+                # que el renderer clínico del frontend pinte tabla VA, PTA y paciente.
+                od_val = result.get("oido_derecho")
+                if isinstance(od_val, dict) and ("va" in od_val or "vo" in od_val or "pta" in od_val or "pta_visible" in od_val):
+                    return result
                 return AudiometriaData(**result)
 
             elif doc_type == "Laboratorio":

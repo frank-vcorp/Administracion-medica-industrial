@@ -77,19 +77,54 @@ function hasRenderableValue(value: unknown): boolean {
 function normalizeAudiometriaData(data: Record<string, unknown>): Record<string, unknown> {
   const normalized: Record<string, unknown> = { ...data }
 
-  // Normalizar oídos: via_aerea → va, via_osea → vo (solo si la alias destino no existe)
-  for (const earKey of ["oido_derecho", "oido_izquierdo"]) {
-    const ear = normalized[earKey]
-    if (ear && typeof ear === "object" && !Array.isArray(ear)) {
-      const earObj = ear as Record<string, unknown>
-      const earNorm: Record<string, unknown> = { ...earObj }
-      if (!("va" in earNorm) && "via_aerea" in earNorm) earNorm.va = earNorm.via_aerea
-      if (!("vo" in earNorm) && "via_osea" in earNorm) earNorm.vo = earNorm.via_osea
-      // IMPL-20260519-04 — normalizar pta → pta_visible
-      if (!("pta_visible" in earNorm) && "pta" in earNorm) earNorm.pta_visible = earNorm.pta
-      normalized[earKey] = earNorm
+    // Normalizar oídos:
+    //  - via_aerea → va, via_osea → vo (solo si la alias destino no existe)
+    //  - formato plano {"500": 5, "1000": 5} → envolver en va: {"500": 5, "1000": 5}
+    for (const earKey of ["oido_derecho", "oido_izquierdo"]) {
+      const ear = normalized[earKey]
+      if (ear && typeof ear === "object" && !Array.isArray(ear)) {
+        const earObj = ear as Record<string, unknown>
+        const earNorm: Record<string, unknown> = { ...earObj }
+        if (!("va" in earNorm) && "via_aerea" in earNorm) earNorm.va = earNorm.via_aerea
+        if (!("vo" in earNorm) && "via_osea" in earNorm) earNorm.vo = earNorm.via_osea
+        if (!("va" in earNorm) || typeof earNorm.va !== "object" || earNorm.va === null) {
+          const directFreqs: Record<string, unknown> = {}
+          for (const [k, v] of Object.entries(earObj)) {
+            if (/^\d+$/.test(k.trim()) && v !== null && v !== undefined && typeof v !== "object") {
+              directFreqs[k.trim()] = v
+            }
+          }
+          if (Object.keys(directFreqs).length > 0) {
+            earNorm.va = directFreqs
+          }
+        }
+        // IMPL-20260519-04 — normalizar pta → pta_visible
+        if (!("pta_visible" in earNorm) && "pta" in earNorm) earNorm.pta_visible = earNorm.pta
+        normalized[earKey] = earNorm
+      }
     }
-  }
+
+    // Normalizar paciente raíz → paciente_detalle.nombre_completo si falta
+    if (
+      typeof normalized.paciente === "string" &&
+      normalized.paciente.trim() &&
+      (!normalized.paciente_detalle || typeof normalized.paciente_detalle !== "object")
+    ) {
+      normalized.paciente_detalle = { nombre_completo: normalized.paciente.trim() }
+    }
+
+    // Normalizar campos fuente en raíz → campos_fuente
+    if (!normalized.campos_fuente || typeof normalized.campos_fuente !== "object") {
+      const cf: Record<string, unknown> = {}
+      for (const fKey of ["faringe", "cad", "cai", "mtd", "mti"]) {
+        if (typeof normalized[fKey] === "string" && (normalized[fKey] as string).trim()) {
+          cf[fKey] = normalized[fKey]
+        }
+      }
+      if (Object.keys(cf).length > 0) {
+        normalized.campos_fuente = cf
+      }
+    }
 
   // IMPL-20260519-04 — normalizar notas_calidad: string plano, string[] o estructura ya correcta
   if (typeof normalized.notas_calidad === "string") {

@@ -45,9 +45,9 @@ const PROVIDER_MODELS: Record<AIProvider, { id: string; label: string; descripti
     { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Mayor calidad, más lento y caro' },
     { id: 'gemini-flash-lite-latest', label: 'Gemini Flash-Lite (latest)', description: 'Más barato y rápido' },
   ],
-  m3: [
-    { id: 'MiniMax-M3', label: 'MiniMax-M3', description: 'El que ya extrae los estudios. No cambiarlo si la audiometría se lee bien.' },
-    { id: 'MiniMax-M3.1-Flash', label: 'MiniMax-M3.1-Flash', description: 'Más rápido. En audiometría dejó la tabla incompleta.' },
+    m3: [
+      { id: 'MiniMax-M3.1-Flash', label: 'MiniMax-M3.1-Flash', description: 'Modelo activo para extracción y prediagnóstico (rápido, multimodal, 1M context).' },
+      { id: 'MiniMax-M3', label: 'MiniMax-M3', description: 'Modelo anterior (1M context).' },
     { id: 'MiniMax-M2.7', label: 'MiniMax-M2.7', description: 'Recursive self-improvement' },
     { id: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', description: 'Más rápido (~100 tps)' },
     { id: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
