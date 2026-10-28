@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
@@ -214,6 +215,13 @@ async def _probe_gemini(resolution, client: httpx.AsyncClient) -> Dict[str, Any]
         }
 
 
+def _probe_visible_text(content: str) -> str:
+    """Quita el bloque de pensamiento. MiniMax lo mete en content y el probe lo mostraba crudo."""
+    text = re.sub(r"<think>.*?</think>", " ", content or "", flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<think>.*", " ", text, flags=re.IGNORECASE | re.DOTALL)
+    return " ".join(text.split())
+
+
 async def _probe_openai_compatible(
     provider_label: str, resolution, client: httpx.AsyncClient
 ) -> Dict[str, Any]:
@@ -238,7 +246,7 @@ async def _probe_openai_compatible(
     body = {
         "model": model,
         "messages": [{"role": "user", "content": "Hola"}],
-        "max_tokens": 16,
+        "max_tokens": 256,
         "temperature": 0,
     }
 
@@ -264,6 +272,7 @@ async def _probe_openai_compatible(
                     .get("message", {})
                     .get("content", "")
                 )
+                content = _probe_visible_text(content if isinstance(content, str) else "")
                 if not content:
                     return {
                         "ok": False,

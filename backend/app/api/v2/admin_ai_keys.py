@@ -105,13 +105,13 @@ def _row_to_public(row: Any) -> Dict[str, Any]:
     }
 
 
-def _source_for_provider(provider: str) -> str:
-    """Decide 'env' vs 'db' para el status público del GET.
-    Si la flag está off, siempre 'env'. Si on y la fila existe y enabled, 'db'.
-    """
+def _source_for_provider(row: Any = None) -> str:
+    """'db' si la flag está activa y la fila está habilitada. Si no, 'env'."""
     if not is_ai_keys_from_db_enabled():
         return "env"
-    return "env"  # placeholder; el caller lo sobreescribe tras el lookup
+    if row is not None and bool(getattr(row, "enabled", False)):
+        return "db"
+    return "env"
 
 
 async def _build_listing_response(prisma: Any) -> List[Dict[str, Any]]:
@@ -135,11 +135,11 @@ async def _build_listing_response(prisma: Any) -> List[Dict[str, Any]]:
                 "enabled": False,
                 "updatedAt": None,
                 "updatedBy": None,
-                "source": _source_for_provider(provider),
+                "source": _source_for_provider(None),
             })
         else:
             item = _row_to_public(row)
-            item["source"] = _source_for_provider(provider)
+            item["source"] = _source_for_provider(row)
             out.append(item)
     return out
 

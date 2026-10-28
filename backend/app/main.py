@@ -210,7 +210,7 @@ MEDGEMMA_STATUS = "available" if (MEDGEMMA_ENABLED and DR7_API_KEY) else "pendin
 # Respaldo: context/SPECs/SPEC_ARCH-20260809-02-SELECTOR-EXTRACCION-MULTI-PROVEEDOR.md
 M3_API_KEY = _read_env_var("M3_API_KEY") or ""
 M3_BASE_URL = _read_env_var("M3_BASE_URL") or "https://api.minimax.io/v1"
-M3_DEFAULT_MODEL = _read_env_var("M3_DEFAULT_MODEL") or "MiniMax-M3.1-Flash"
+M3_DEFAULT_MODEL = _read_env_var("M3_DEFAULT_MODEL") or "MiniMax-M3"
 # IMPL-20260809-06 — ARCH-20260809-03: feature flag opt-in para lectura de
 # keys desde BD (ai_provider_keys). Default False → comportamiento idéntico
 # al actual (env vars), cero cambio observable. Frank lo activa cuando esté

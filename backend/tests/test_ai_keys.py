@@ -522,7 +522,7 @@ def test_prediagnostic_clinical_config_uses_m3_and_ignores_dr7(monkeypatch):
 
     cfg = _resolve_m3_clinical_config()
     assert cfg["api_key"] == "env-m3-clinical"
-    assert cfg["model"] == "MiniMax-M3.1-Flash"
+    assert cfg["model"] == "MiniMax-M3"
     assert "api.minimax.io" in cfg["base_url"]
     assert cfg["api_key"] != "env-dr7-should-not-be-used"
     assert "dr7.ai" not in cfg["base_url"]

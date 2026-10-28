@@ -19,7 +19,7 @@ La extracción ya usa MiniMax M3 (`key_resolver` de `m3`, fila de `/admin/ai-key
 
 ## Modelo
 
-El default de extracción y prediagnóstico es `MiniMax-M3.1-Flash` (publicado el 19 oct 2026). En la comparación pública de MiniMax queda por delante de `MiniMax-M3` en capacidad, velocidad y precio, y también acepta imagen. El id guardado `MiniMax-M3` se promueve a Flash porque era la única opción del admin. Otro id explícito se respeta. Flash, si no se le dice otra cosa, razona en nivel `max` y alarga la respuesta; estas llamadas envían `reasoning_effort=low`. No se manda `thinking.type=disabled` (Flash responde 400).
+La extracción se queda en el modelo guardado en `/admin/ai-keys`. Esa fila es `MiniMax-M3` y es la que ya leía la audiometría. No se promueve a `MiniMax-M3.1-Flash`: con ese cambio la tabla de umbrales salió incompleta. Flash solo entra si se elige explícitamente.
 
 ## Plazo de la llamada clínica
 

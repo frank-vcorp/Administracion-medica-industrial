@@ -164,9 +164,9 @@ DR7_MODEL    = os.environ.get("DR7_MODEL", "medgemma-4b-it").strip()
 # parcheen el fallback de módulo (mismo patrón que DR7_API_KEY).
 M3_API_KEY = os.environ.get("M3_API_KEY", "").strip()
 M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
-from app.services.ai.m3_model import M3_MODEL_FLASH, resolve_m3_model
+from app.services.ai.m3_model import M3_MODEL_LEGACY, resolve_m3_model
 
-M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_FLASH).strip() or M3_MODEL_FLASH
+M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_LEGACY).strip() or M3_MODEL_LEGACY
 # Tope de reloj de la llamada clínica. El timeout de `requests` solo mide
 # silencio entre bytes: MiniMax puede ir soltando tokens durante minutos y
 # la función de Vercel (tope 300s en este proyecto) muere antes de guardar
@@ -251,11 +251,12 @@ def _resolve_m3_clinical_config() -> Dict[str, Any]:
             "warning": "flag_off",
         }
 
-    resolution = key_resolver.resolve_sync_cached("m3")
-    if resolution is None:
-        from .keys import _resolve_sync_cold
+    from app.services.ai import keys as keys_mod
 
-        resolution = _resolve_sync_cold("m3")
+    resolver = keys_mod.key_resolver
+    resolution = resolver.resolve_sync_cached("m3")
+    if resolution is None:
+        resolution = keys_mod._resolve_sync_cold("m3")
     if resolution is None:
         return {
             "api_key": default_api_key,
@@ -1331,7 +1332,7 @@ Responde en JSON con esta estructura exacta:
             )
 
             return _result_with_provider(
-                summary="No fue posible generar el prediagnóstico clínico porque MedGemma no está disponible.",
+                summary="No fue posible generar el prediagnóstico clínico porque la clave de MiniMax no está disponible en este proceso.",
                 confidence=0.0,
                 clinical_state="AI_NON_CONCLUSIVE",
                 justification=[],
@@ -1530,7 +1531,7 @@ Responde en JSON con esta estructura exacta:
 
         api_key = (m3_cfg.get("api_key") or "").strip()
         base_url = m3_cfg.get("base_url") or M3_BASE_URL or "https://api.minimax.io/v1"
-        model = resolve_m3_model(m3_cfg.get("model") or M3_DEFAULT_MODEL or M3_MODEL_FLASH)
+        model = resolve_m3_model(m3_cfg.get("model") or M3_DEFAULT_MODEL or M3_MODEL_LEGACY)
 
         if not api_key:
             raise RuntimeError("M3_HTTP:0:clave ausente")

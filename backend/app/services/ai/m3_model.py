@@ -1,14 +1,13 @@
 """
-Modelo MiniMax usado por extracción y prediagnóstico.
+Modelo MiniMax de extracción y prediagnóstico.
 
-MiniMax-M3.1-Flash (19 oct 2026) es el modelo vigente del plan: en la
-comparación pública es más capaz que MiniMax-M3, igual o más rápido, y
-más barato. Acepta imagen, igual que M3.
+El modelo que ya lee los estudios (audiometría incluida) es el que está
+guardado en /admin/ai-keys. Hoy esa fila dice MiniMax-M3. No se sustituye
+por otro id: cambiarlo a MiniMax-M3.1-Flash con poco razonamiento dejó la
+extracción incompleta.
 
-Si no se pide `reasoning_effort`, Flash piensa en nivel `max` y la
-respuesta se alarga hasta el corte de 300 s de Vercel. Para este flujo
-(JSON clínico y extracción de un estudio) el esfuerzo queda en `low`.
-No se envía `thinking.type=disabled`: Flash responde 400.
+Si no hay modelo configurado, el default vuelve a ser MiniMax-M3.
+MiniMax-M3.1-Flash solo se usa cuando alguien lo elige de forma explícita.
 """
 
 from __future__ import annotations
@@ -22,22 +21,16 @@ M3_FLASH_REASONING_EFFORT = "low"
 
 
 def resolve_m3_model(configured: Optional[str] = None) -> str:
-    """
-    Modelo efectivo.
-
-    Vacío o el id viejo `MiniMax-M3` (la única opción que había en admin)
-    pasan a Flash. Cualquier otro id explícito se respeta.
-    `M3_DEFAULT_MODEL` solo gana si trae un id distinto del legado.
-    """
+    """Respeta el id configurado. Vacío → env → MiniMax-M3."""
+    raw = (configured or "").strip()
+    if raw:
+        return raw
     env_model = (os.environ.get("M3_DEFAULT_MODEL") or "").strip()
-    raw = (configured or "").strip() or env_model
-    if not raw or raw == M3_MODEL_LEGACY:
-        return M3_MODEL_FLASH
-    return raw
+    return env_model or M3_MODEL_LEGACY
 
 
 def m3_performance_body(model: Optional[str]) -> Dict[str, Any]:
-    """Campos extra del chat. Solo Flash: esfuerzo de razonamiento bajo."""
+    """Flash, si se eligió a mano, no razona en nivel max."""
     if (model or "").strip() == M3_MODEL_FLASH:
         return {"reasoning_effort": M3_FLASH_REASONING_EFFORT}
     return {}
