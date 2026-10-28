@@ -87,6 +87,79 @@ export async function getCompanyDashboardStats() {
   }
 }
 
+export type PortalMonthlyAttendedRow = {
+  monthKey: string
+  label: string
+  attendedCount: number
+}
+
+/** O9-15 — pacientes atendidos (eventos completados) por mes, últimos 12 meses. */
+export async function getCompanyMonthlyAttendedStats() {
+  try {
+    const { companyId } = await resolvePortalCompanyAccess()
+
+    const now = new Date()
+    const from = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0, 0)
+
+    const events = await prisma.medicalEvent.findMany({
+      where: {
+        worker: { companyId },
+        status: 'COMPLETED',
+        OR: [
+          { dischargedAt: { gte: from } },
+          { dischargedAt: null, updatedAt: { gte: from } },
+        ],
+      },
+      select: {
+        dischargedAt: true,
+        updatedAt: true,
+      },
+    })
+
+    const buckets = new Map<string, number>()
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      buckets.set(key, 0)
+    }
+
+    for (const ev of events) {
+      const ref = ev.dischargedAt ?? ev.updatedAt
+      if (ref < from) continue
+      const key = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}`
+      if (buckets.has(key)) {
+        buckets.set(key, (buckets.get(key) ?? 0) + 1)
+      }
+    }
+
+    const months: PortalMonthlyAttendedRow[] = [...buckets.entries()].map(
+      ([monthKey, attendedCount]) => {
+        const [y, m] = monthKey.split('-').map(Number)
+        const label = new Date(y, m - 1, 1).toLocaleDateString('es-MX', {
+          month: 'short',
+          year: 'numeric',
+        })
+        return { monthKey, label, attendedCount }
+      },
+    )
+
+    const totalAttended = months.reduce((a, b) => a + b.attendedCount, 0)
+
+    return {
+      success: true as const,
+      months,
+      totalAttended,
+      workers: await prisma.worker.count({ where: { companyId } }),
+    }
+  } catch (error) {
+    console.error(
+      'Error fetching portal monthly attended:',
+      error instanceof Error ? error.message : 'Unknown error',
+    )
+    return { success: false as const, error: 'No se pudo cargar el dashboard.' }
+  }
+}
+
 /**
  * Obtiene la lista de trabajadores de una empresa con su último estatus médico
  * Solo retorna datos de la empresa del usuario logueado

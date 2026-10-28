@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useMemo } from 'react'
 import { createAppointment } from '@/actions/appointment.actions'
-import { getWorkersByCompany } from '@/actions/worker.actions'
+import { getWorkersByCompany, searchWorkersByCompany } from '@/actions/worker.actions'
 import { getBranches, getCompanies } from '@/actions/admin.actions'
 import {
     getAssignableMedicalProfilesForCompany,
@@ -80,6 +80,9 @@ export default function AppointmentFormModal({
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
     const [selectedBranchId, setSelectedBranchId] = useState<string>('')
     const [selectedProfileId, setSelectedProfileId] = useState<string>('')
+    const [workerSearchQuery, setWorkerSearchQuery] = useState('')
+    const [workerSearchResults, setWorkerSearchResults] = useState<Worker[]>([])
+    const [workerSearchPending, setWorkerSearchPending] = useState(false)
     const [preselectedWorkerId, setPreselectedWorkerId] = useState<string | null>(null)
     const [preselectedCompanyId, setPreselectedCompanyId] = useState<string | null>(null)
     const [workerQuickOpen, setWorkerQuickOpen] = useState(false)
@@ -180,6 +183,30 @@ export default function AppointmentFormModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]) // Solo ejecutar al abrirse el modal
 
+    // O9-22 — búsqueda de trabajador por nombre/código (sin cargar lista completa)
+    useEffect(() => {
+        if (!isOpen || !selectedCompanyId) {
+            setWorkerSearchResults([])
+            return
+        }
+        const q = workerSearchQuery.trim()
+        if (q.length < 2) {
+            setWorkerSearchResults([])
+            return
+        }
+        const handle = window.setTimeout(() => {
+            setWorkerSearchPending(true)
+            searchWorkersByCompany(selectedCompanyId, q)
+                .then((res) => {
+                    if (res.success) setWorkerSearchResults(res.workers as Worker[])
+                    else setWorkerSearchResults([])
+                })
+                .catch(() => setWorkerSearchResults([]))
+                .finally(() => setWorkerSearchPending(false))
+        }, 280)
+        return () => window.clearTimeout(handle)
+    }, [isOpen, selectedCompanyId, workerSearchQuery])
+    
     // Listener de eventos globales
     useEffect(() => {
         const handleOpenEvent = (e: CustomEvent<OpenAppointmentModalDetail>) => {
@@ -200,6 +227,8 @@ export default function AppointmentFormModal({
         const companyId = e.target.value
         setSelectedCompanyId(companyId)
         setSelectedWorker(null)
+        setWorkerSearchQuery('')
+        setWorkerSearchResults([])
         setWorkers([])
         setProfiles([])
         setSelectedProfileId('')
@@ -240,18 +269,6 @@ export default function AppointmentFormModal({
         })
     }
 
-    const handleWorkerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const workerId = e.target.value
-        const worker = workers.find(w => w.id === workerId) || null
-        setSelectedWorker(worker)
-        setSelectedProfileId('')
-
-        // Auto-seleccionar perfil del paciente
-        if (worker?.medicalProfileId) {
-            setSelectedProfileId(worker.medicalProfileId)
-        }
-    }
-
     async function handleSubmit(formData: FormData) {
         startTransition(async () => {
             setError(null)
@@ -266,6 +283,11 @@ export default function AppointmentFormModal({
 
             if (!workerId || !branchId || !date || !time) {
                 setError('Todos los campos son obligatorios')
+                return
+            }
+
+            if (!selectedWorker && !workers.find(w => w.id === workerId)) {
+                setError('Selecciona un trabajador de la búsqueda')
                 return
             }
 
@@ -477,24 +499,78 @@ export default function AppointmentFormModal({
                                         </button>
                                     )}
                                 </div>
-                                <select 
-                                    name="workerId" 
-                                    required
-                                    value={selectedWorker?.id || ''}
-                                    onChange={handleWorkerChange}
+                                <input type="hidden" name="workerId" value={selectedWorker?.id ?? ''} />
+                                <input
+                                    type="search"
+                                    autoComplete="off"
+                                    placeholder={
+                                        selectedCompanyId
+                                            ? 'Buscar por nombre, folio o CURP (mín. 2 letras)...'
+                                            : 'Primero selecciona una empresa'
+                                    }
                                     disabled={!selectedCompanyId}
+                                    value={
+                                        selectedWorker
+                                            ? `${selectedWorker.firstName} ${selectedWorker.lastName}`
+                                            : workerSearchQuery
+                                    }
+                                    onChange={(e) => {
+                                        setSelectedWorker(null)
+                                        setSelectedProfileId('')
+                                        setWorkerSearchQuery(e.target.value)
+                                    }}
                                     className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <option value="">{selectedCompanyId ? 'Seleccionar trabajador...' : 'Primero selecciona una empresa'}</option>
-                                    {workers.map(w => (
-                                        <option key={w.id} value={w.id}>
-                                            {w.firstName} {w.lastName}
-                                        </option>
-                                    ))}
-                                </select>
-                                {selectedCompanyId && workers.length === 0 && (
+                                />
+                                {selectedCompanyId && workerSearchPending && (
+                                    <p className="text-[10px] text-slate-400 ml-1">Buscando…</p>
+                                )}
+                                {selectedCompanyId &&
+                                    !selectedWorker &&
+                                    workerSearchQuery.trim().length >= 2 &&
+                                    workerSearchResults.length > 0 && (
+                                        <ul
+                                            className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg text-sm"
+                                            role="listbox"
+                                        >
+                                            {workerSearchResults.map((w) => (
+                                                <li key={w.id}>
+                                                    <button
+                                                        type="button"
+                                                        role="option"
+                                                        className="w-full text-left px-3 py-2 hover:bg-blue-50"
+                                                        onClick={() => {
+                                                            setSelectedWorker(w)
+                                                            setWorkerSearchQuery('')
+                                                            setWorkerSearchResults([])
+                                                            if (w.medicalProfileId) {
+                                                                setSelectedProfileId(w.medicalProfileId)
+                                                            }
+                                                        }}
+                                                    >
+                                                        <span className="font-medium text-slate-800">
+                                                            {w.firstName} {w.lastName}
+                                                        </span>
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                {selectedWorker && (
+                                    <button
+                                        type="button"
+                                        className="text-[10px] text-slate-500 underline ml-1"
+                                        onClick={() => {
+                                            setSelectedWorker(null)
+                                            setWorkerSearchQuery('')
+                                            setSelectedProfileId('')
+                                        }}
+                                    >
+                                        Cambiar trabajador
+                                    </button>
+                                )}
+                                {selectedCompanyId && !selectedWorker && workerSearchQuery.trim().length >= 2 && !workerSearchPending && workerSearchResults.length === 0 && (
                                     <p className="text-[10px] text-amber-600 ml-1">
-                                        ⚠️ Esta empresa no tiene trabajadores. Usa{' '}
+                                        Sin coincidencias. Usa{' '}
                                         <button
                                             type="button"
                                             onClick={() => setWorkerQuickOpen(true)}

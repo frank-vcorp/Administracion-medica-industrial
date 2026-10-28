@@ -26,6 +26,7 @@
  *     queda como TODO para PR-3 si se requiere).
  */
 import { z } from 'zod'
+import { branchWeeklyScheduleSchema } from '@/lib/branch-weekly-schedule'
 
 // --------------------------------------------------------------------------
 // Regex reutilizables
@@ -101,6 +102,7 @@ export const branchUpdateSchema = z
     hourlyCapacity: hourlyCapacityField.optional(),
     openingTime: openingTimeField.optional(),
     closingTime: closingTimeField.optional(),
+    weeklySchedule: branchWeeklyScheduleSchema,
   })
   .refine(openingBeforeClosingRefine, {
     message: 'openingTime debe ser menor que closingTime',

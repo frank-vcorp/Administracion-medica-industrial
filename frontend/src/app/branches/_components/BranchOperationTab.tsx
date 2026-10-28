@@ -27,12 +27,37 @@ import {
 import { branchUpdateSchema } from '@/lib/schemas/branch'
 import type { BranchDetail } from './BranchDetailTabs'
 import { BranchDeleteGuardModal } from './BranchDeleteGuardModal'
+import {
+  BRANCH_WEEKDAY_KEYS,
+  BRANCH_WEEKDAY_LABELS,
+  defaultBranchWeeklySchedule,
+  parseBranchWeeklySchedule,
+  type BranchDaySchedule,
+  type BranchWeeklySchedule,
+  type BranchWeekdayKey,
+} from '@/lib/branch-weekly-schedule'
 
 export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [successHours, setSuccessHours] = useState(false)
+  const [successWeekly, setSuccessWeekly] = useState(false)
+  const [weekly, setWeekly] = useState<BranchWeeklySchedule>(() =>
+    parseBranchWeeklySchedule(branch.weeklySchedule) ??
+      defaultBranchWeeklySchedule(
+        branch.openingTime,
+        branch.closingTime,
+        branch.hourlyCapacity,
+      ),
+  )
+
+  const patchDay = (key: BranchWeekdayKey, patch: Partial<BranchDaySchedule>) => {
+    setWeekly((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? {}), ...patch },
+    }))
+  }
 
   const handleSubmitHours = async (formData: FormData) => {
     const raw = {
@@ -55,6 +80,26 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
       } else {
         setError(null)
         setSuccessHours(true)
+        router.refresh()
+      }
+    })
+  }
+
+  const handleSubmitWeekly = () => {
+    const parsed = branchUpdateSchema.safeParse({ weeklySchedule: weekly })
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Horario semanal inválido')
+      setSuccessWeekly(false)
+      return
+    }
+    setError(null)
+    setSuccessWeekly(false)
+    startTransition(async () => {
+      const result = await updateBranch(branch.id, { weeklySchedule: weekly })
+      if (!result.ok) {
+        setError(result.error)
+      } else {
+        setSuccessWeekly(true)
         router.refresh()
       }
     })
@@ -83,6 +128,11 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
       {successHours && (
         <div className="bg-emerald-50 text-emerald-700 p-3 rounded text-sm">
           Horarios actualizados.
+        </div>
+      )}
+      {successWeekly && (
+        <div className="bg-emerald-50 text-emerald-700 p-3 rounded text-sm">
+          Capacidad por día (lunes–sábado) actualizada.
         </div>
       )}
 
@@ -130,6 +180,78 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
           {pending ? 'Guardando...' : 'Actualizar Horarios'}
         </button>
       </form>
+
+      <div className="border-t border-slate-200 pt-6 space-y-4">
+        <div>
+          <h3 className="font-bold text-slate-800">Capacidad por día (O9-32)</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Lunes a sábado: horario y cupo por hora. Si un día está deshabilitado, no
+            se ofrecen slots ese día en la agenda.
+          </p>
+        </div>
+        <div className="space-y-3">
+          {BRANCH_WEEKDAY_KEYS.map((key) => {
+            const day = weekly[key] ?? {}
+            return (
+              <div
+                key={key}
+                className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end border border-slate-100 rounded-lg p-3 bg-slate-50/50"
+              >
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 md:col-span-1">
+                  <input
+                    type="checkbox"
+                    checked={day.enabled !== false}
+                    onChange={(e) => patchDay(key, { enabled: e.target.checked })}
+                  />
+                  {BRANCH_WEEKDAY_LABELS[key]}
+                </label>
+                <label className="text-xs text-slate-500">
+                  Apertura
+                  <input
+                    type="time"
+                    disabled={day.enabled === false}
+                    value={day.openingTime ?? branch.openingTime}
+                    onChange={(e) => patchDay(key, { openingTime: e.target.value })}
+                    className="mt-1 w-full border border-slate-300 p-2 rounded text-sm disabled:opacity-40"
+                  />
+                </label>
+                <label className="text-xs text-slate-500">
+                  Cierre
+                  <input
+                    type="time"
+                    disabled={day.enabled === false}
+                    value={day.closingTime ?? branch.closingTime}
+                    onChange={(e) => patchDay(key, { closingTime: e.target.value })}
+                    className="mt-1 w-full border border-slate-300 p-2 rounded text-sm disabled:opacity-40"
+                  />
+                </label>
+                <label className="text-xs text-slate-500">
+                  Cap./hr
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    disabled={day.enabled === false}
+                    value={day.hourlyCapacity ?? branch.hourlyCapacity}
+                    onChange={(e) =>
+                      patchDay(key, { hourlyCapacity: Number(e.target.value) || 1 })
+                    }
+                    className="mt-1 w-full border border-slate-300 p-2 rounded text-sm disabled:opacity-40"
+                  />
+                </label>
+              </div>
+            )
+          })}
+        </div>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleSubmitWeekly}
+          className="bg-purple-600 text-white px-4 py-2 rounded shadow hover:bg-purple-700 disabled:opacity-50 text-sm font-medium"
+        >
+          {pending ? 'Guardando...' : 'Guardar horario semanal'}
+        </button>
+      </div>
 
       <div className="border-t border-slate-200 pt-6">
         <h3 className="font-bold text-slate-800 mb-2">Estado de la Sucursal</h3>

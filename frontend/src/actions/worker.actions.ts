@@ -133,6 +133,56 @@ export async function getWorkersByCompany(companyId: string) {
     })
 }
 
+/** O9-22 — búsqueda paginada de trabajadores por empresa (agenda). */
+export async function searchWorkersByCompany(companyId: string, query: string) {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.role || session.user.role === 'COMPANY_CLIENT') {
+        return { success: false as const, error: 'No autorizado', workers: [] as const }
+    }
+    if (!companyId?.trim()) {
+        return { success: false as const, error: 'Empresa requerida', workers: [] as const }
+    }
+
+    const q = query.trim().replace(/\s+/g, ' ')
+    if (q.length < 2) {
+        return { success: true as const, workers: [] as const }
+    }
+
+    const terms = q.split(' ').filter(Boolean)
+    try {
+        const workers = await prisma.worker.findMany({
+            where: {
+                companyId,
+                OR: [
+                    {
+                        AND: terms.map((term) => ({
+                            OR: [
+                                { firstName: { contains: term, mode: 'insensitive' as const } },
+                                { lastName: { contains: term, mode: 'insensitive' as const } },
+                            ],
+                        })),
+                    },
+                    { universalId: { contains: q, mode: 'insensitive' } },
+                    { nationalId: { contains: q, mode: 'insensitive' } },
+                ],
+            },
+            take: 20,
+            orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+            include: {
+                company: { select: { name: true, defaultBranchId: true } },
+                medicalProfile: { select: { id: true, name: true } },
+            },
+        })
+        return { success: true as const, workers }
+    } catch (e) {
+        console.error(
+            '[searchWorkersByCompany]',
+            e instanceof Error ? e.message : 'unknown',
+        )
+        return { success: false as const, error: 'Error en búsqueda', workers: [] as const }
+    }
+}
+
 async function validateMedicalProfileForCompany(
     medicalProfileId: string,
     companyId: string

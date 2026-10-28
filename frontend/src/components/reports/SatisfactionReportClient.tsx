@@ -47,6 +47,14 @@ export default function SatisfactionReportClient({
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap gap-2 items-center">
+        <Link
+          href="/reports/satisfaction/charts"
+          className="text-sm font-bold text-violet-700 hover:underline"
+        >
+          Gráficas O9-13 →
+        </Link>
+      </div>
       <form
         className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 bg-white rounded-2xl border border-slate-100 p-4"
         onSubmit={(e) => {

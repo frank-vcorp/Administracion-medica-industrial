@@ -63,6 +63,7 @@ import {
 } from '@/lib/sodexo-heredofamiliar'
 import { AmiMirrorTable, AmiMirrorTextBlock } from '@/components/clinical/examen-medico/SodexoAmiPreview'
 import { validateSodexoExtensionForClinicalClose } from '@/lib/sodexo-extension-validation'
+import { SodexoPrivacyNoticePanel } from '@/components/clinical/examen-medico/SodexoPrivacyNoticePanel'
 
 type ManoDominante = NonNullable<
   NonNullable<SodexoExtensionData['examen_encabezado']>['mano_dominante']
@@ -328,6 +329,8 @@ type Props = {
   validatingViewHref?: string
   /** Datos AMI ya capturados (se muestran en espejo en cada bloque). */
   ami?: SodexoAmiMirrorInput
+  informedConsentSignedAt?: string | Date | null
+  patientFullName?: string | null
 }
 
 export function SodexoExtension({
@@ -340,6 +343,8 @@ export function SodexoExtension({
   sodexoPdfPending = false,
   validatingViewHref,
   ami,
+  informedConsentSignedAt = null,
+  patientFullName = null,
 }: Props) {
   const set = <K extends keyof SodexoExtensionData>(key: K, v: SodexoExtensionData[K]) => {
     onChange({ ...value, [key]: v })
@@ -700,6 +705,11 @@ export function SodexoExtension({
           patientSexo={patientSexo}
         />
       </SodexoBlock>
+
+      <SodexoPrivacyNoticePanel
+        informedConsentSignedAt={informedConsentSignedAt}
+        patientFullName={patientFullName}
+      />
 
       <SodexoPdfGeneratePanel
         value={value}
@@ -2387,7 +2397,7 @@ function HoTabla({
         </table>
       </div>
       <p className="text-[10px] text-slate-500">
-        * RT = Riesgo de trabajo o enfermedad de trabajo calificada.
+        * RT = Riesgo de trabajo o enfermedad profesional calificada.
       </p>
       {!readonly && ui.historico.length < 5 ? (
         <button

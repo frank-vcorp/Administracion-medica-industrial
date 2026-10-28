@@ -12,7 +12,6 @@ export const SODEXO_HEREDOFAMILIAR_KEYS = [
   'neurologicos',
   'mentales',
   'digestivos',
-  'otros',
 ] as const
 
 export type SodexoHeredofamiliarKey = (typeof SODEXO_HEREDOFAMILIAR_KEYS)[number]
@@ -37,7 +36,6 @@ export const SODEXO_HEREDOFAMILIAR_RIGHT: { key: SodexoHeredofamiliarKey; label:
   { key: 'neurologicos', label: 'Neurológicos' },
   { key: 'mentales', label: 'Mentales' },
   { key: 'digestivos', label: 'Digestivos' },
-  { key: 'otros', label: 'Otros' },
 ]
 
 function s(v: string | null | undefined): string {
@@ -101,7 +99,6 @@ export function prefillHeredofamiliarFromAmi(
   put('respiratorios', amiDisplayToRow(read('asma')))
   put('neurologicos', amiDisplayToRow(read('epilepsia')))
   put('mentales', amiDisplayToRow(s(hf.mentales as string)))
-  put('otros', amiDisplayToRow(read('otras')))
 
   return out
 }
@@ -134,8 +131,6 @@ export function amiAhfFallbackDisplay(
       return ahf.mentales
     case 'digestivos':
       return null
-    case 'otros':
-      return ahf.otras
     default:
       return null
   }

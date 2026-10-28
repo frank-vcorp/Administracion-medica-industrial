@@ -43,6 +43,7 @@ import {
   formatAppointmentAgendaTime,
   parseAppointmentLocalDateTime,
   todayAgendaDateString,
+  isAppointmentScheduleInPast,
 } from '@/lib/appointment-scheduling'
 import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
 
@@ -83,6 +84,13 @@ export async function createAppointment(data: {
     const scheduledDate = typeof data.scheduledAt === 'string'
       ? new Date(data.scheduledAt)
       : data.scheduledAt
+
+    if (Number.isNaN(scheduledDate.getTime())) {
+      return { success: false, error: 'Fecha u hora inválida' }
+    }
+    if (isAppointmentScheduleInPast(scheduledDate)) {
+      return { success: false, error: 'APPOINTMENT_IN_PAST' }
+    }
 
     const capacityCheck = await checkBranchHourCapacity(prisma, data.branchId, scheduledDate)
     if (!capacityCheck.ok) {
@@ -319,6 +327,9 @@ export async function rescheduleAppointment(
     const scheduledAt = parseAppointmentLocalDateTime(data.date, data.time)
     if (Number.isNaN(scheduledAt.getTime())) {
       return { success: false, error: 'Fecha u hora inválida' }
+    }
+    if (isAppointmentScheduleInPast(scheduledAt)) {
+      return { success: false, error: 'APPOINTMENT_IN_PAST' }
     }
 
     const existing = await prisma.appointment.findUnique({

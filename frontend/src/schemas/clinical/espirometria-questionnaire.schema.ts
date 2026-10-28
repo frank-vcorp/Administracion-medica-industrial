@@ -320,6 +320,15 @@ export const EspirometriaQuestionnairePayloadSchema = z.object({
   capturedAt: z.string().datetime({
     message: 'capturedAt debe ser un ISO 8601 válido.',
   }),
+  /** Peso, talla y TA — heredados de somatometría o captura manual (O9-20). */
+  signos_somatometria: z
+    .object({
+      peso_kg: optString,
+      talla_m: optString,
+      ta_sistolica: optString,
+      ta_diastolica: optString,
+    })
+    .optional(),
   antecedentes: AntecedentesSchema,
   exploracionFisica: ExploracionFisicaSchema,
   observaciones: optString,

@@ -75,8 +75,8 @@ export const HISTORIA_LABORAL_EXPOSICIONES: HistoriaLaboralExposicion[] = [
   { key: 'exposicion_fisica',     label: 'Física',                 descKey: 'exposicion_fisica_especifique' },
   { key: 'exposicion_biologica',  label: 'Biológica',              descKey: 'exposicion_biologica_especifique' },
   { key: 'exposicion_ergonomica', label: 'Ergonómica',             descKey: 'exposicion_ergonomica_especifique' },
-  { key: 'accidentes_trabajo',    label: 'Accidente de Trabajo',   descKey: 'accidentes_descripcion' },
-  { key: 'enfermedades_trabajo',  label: 'Enfermedad de Trabajo',  descKey: 'enfermedades_descripcion' },
+  { key: 'accidentes_trabajo',    label: 'Accidente laboral',      descKey: 'accidentes_descripcion' },
+  { key: 'enfermedades_trabajo',  label: 'Enfermedad profesional', descKey: 'enfermedades_descripcion' },
 ]
 
 /** Opciones de turno (select). */
@@ -124,10 +124,9 @@ export const HEREDOFAMILIARES_DESCRIPCIONES: CampoDescripcion[] = [
   { field: 'asma',          label: 'Asma',                    help: 'Algún familiar con asma o bronquitis crónica recurrente.' },
   { field: 'cancer',        label: 'Cáncer',                  help: 'Algún familiar con cáncer de cualquier tipo.' },
   { field: 'mentales',      label: 'Trastornos mentales',     help: 'Algún familiar con depresión, ansiedad, esquizofrenia u otros trastornos psiquiátricos.' },
-  { field: 'otras',         label: 'Otras',                   help: 'Otra enfermedad hereditaria o frecuente en su familia. Anote brevemente.' },
 ]
 
-/** Campos Heredo-Familiares con catálogo ZIN de 8 opciones (incluye OTROS). */
+/** Campos Heredo-Familiares con catálogo ZIN (sin «Otros» — O9-31). */
 export const HEREDOFAMILIARES_CATALOGO_FIELDS = HEREDOFAMILIARES_DESCRIPCIONES.filter(
   item => item.field !== 'mentales',
 ).map(item => item.field)

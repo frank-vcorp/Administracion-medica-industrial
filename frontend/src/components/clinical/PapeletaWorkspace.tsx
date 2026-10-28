@@ -942,6 +942,7 @@ export default function PapeletaWorkspace({
           <EspirometriaQuestionnaireModal
             eventTestId={questionnaireTargetTest.id}
             eventId={eventId}
+            somatometryData={(examData?.somatometryData as Record<string, unknown>) ?? null}
             initialContext={
               (questionnaireTargetTest.clinicalContext as
                 | EspirometriaQuestionnairePayload

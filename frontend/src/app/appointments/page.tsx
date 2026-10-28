@@ -222,13 +222,18 @@ export default function AppointmentsPage() {
         setInviteLink(null)
         setInviteError(null)
         setInviteLoading(true)
-        const res = await generateInvitation({ appointmentId: aptId, channel: 'LINK' })
-        setInviteLoading(false)
-        if (res.success && res.data) {
-            const origin = window.location.origin
-            setInviteLink(`${origin}/prefill/${res.data.plainToken}`)
-        } else {
-            setInviteError(res.error ?? 'Error al generar el enlace.')
+        try {
+            const res = await generateInvitation({ appointmentId: aptId, channel: 'LINK' })
+            if (res.success && res.data) {
+                const origin = window.location.origin
+                setInviteLink(`${origin}/prefill/${res.data.plainToken}`)
+            } else {
+                setInviteError(res.error ?? 'Error al generar el enlace.')
+            }
+        } catch {
+            setInviteError('Error al generar el enlace.')
+        } finally {
+            setInviteLoading(false)
         }
     }
 

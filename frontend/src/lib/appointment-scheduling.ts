@@ -204,3 +204,32 @@ export function formatAgendaDayHeading(dateStr: string, timeZone = AMI_APPOINTME
     year: 'numeric',
   })
 }
+
+/** YYYY-MM-DD en zona de agenda AMI para un instante UTC. */
+export function formatAppointmentAgendaDateStringFromDate(
+  date: Date,
+  timeZone = AMI_APPOINTMENT_TIMEZONE,
+): string {
+  const p = zonedPartsFromUtcMs(date.getTime(), timeZone)
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
+}
+
+/**
+ * O9-17 — no permitir agendar día u hora ya pasados (zona AMI).
+ * Misma fecha: bloquea si la hora:minuto es anterior al momento actual.
+ */
+export function isAppointmentScheduleInPast(
+  scheduledAt: Date,
+  now = new Date(),
+  timeZone = AMI_APPOINTMENT_TIMEZONE,
+): boolean {
+  const sched = zonedPartsFromUtcMs(scheduledAt.getTime(), timeZone)
+  const cur = zonedPartsFromUtcMs(now.getTime(), timeZone)
+  const schedKey = `${sched.year}-${String(sched.month).padStart(2, '0')}-${String(sched.day).padStart(2, '0')}`
+  const curKey = `${cur.year}-${String(cur.month).padStart(2, '0')}-${String(cur.day).padStart(2, '0')}`
+  if (schedKey < curKey) return true
+  if (schedKey > curKey) return false
+  if (sched.hour < cur.hour) return true
+  if (sched.hour > cur.hour) return false
+  return sched.minute < cur.minute
+}

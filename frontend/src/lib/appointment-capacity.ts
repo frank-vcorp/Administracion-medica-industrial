@@ -3,7 +3,13 @@ import {
   appointmentAgendaHour,
   agendaDayUtcRange,
   formatAppointmentAgendaDateString,
+  isAppointmentScheduleInPast,
 } from '@/lib/appointment-scheduling'
+import {
+  branchOperatingHoursForDate,
+  parseBranchWeeklySchedule,
+  resolveBranchDayMeta,
+} from '@/lib/branch-weekly-schedule'
 
 /** Citas que ocupan cupo (canceladas y reagendadas no cuentan). */
 export const ACTIVE_APPOINTMENT_STATUSES = [
@@ -91,14 +97,23 @@ export async function computeBranchDayAvailabilityForDates(
   db: PrismaClient,
   branchId: string,
   dateStrings: string[],
-  branchMeta: { hourlyCapacity: number; openingTime: string; closingTime: string },
+  branchMeta: {
+    hourlyCapacity: number
+    openingTime: string
+    closingTime: string
+    weeklySchedule?: unknown
+  },
   todayStr: string,
 ): Promise<BranchDayAvailability[]> {
   const uniqueDates = [...new Set(dateStrings)].sort()
   if (uniqueDates.length === 0) return []
 
-  const hours = branchOperatingHours(branchMeta.openingTime, branchMeta.closingTime)
-  const hourlyCapacity = branchMeta.hourlyCapacity
+  const weekly = parseBranchWeeklySchedule(branchMeta.weeklySchedule)
+  const fallback = {
+    openingTime: branchMeta.openingTime,
+    closingTime: branchMeta.closingTime,
+    hourlyCapacity: branchMeta.hourlyCapacity,
+  }
   const gte = agendaDayUtcRange(uniqueDates[0]).gte
   const lte = agendaDayUtcRange(uniqueDates[uniqueDates.length - 1]).lte
 
@@ -120,30 +135,66 @@ export async function computeBranchDayAvailabilityForDates(
     hourMap.set(hour, (hourMap.get(hour) ?? 0) + 1)
   }
 
-  return uniqueDates.map((dateStr) =>
-    summarizeDayFromHourCounts(
+  return uniqueDates.map((dateStr) => {
+    const dayMeta = resolveBranchDayMeta(dateStr, fallback, weekly)
+    if (!dayMeta.open) {
+      return {
+        date: dateStr,
+        booked: 0,
+        capacityTotal: 0,
+        openHourSlots: 0,
+        status: dateStr < todayStr ? ('past' as const) : ('full' as const),
+      }
+    }
+    const hours = branchOperatingHours(dayMeta.openingTime, dayMeta.closingTime)
+    return summarizeDayFromHourCounts(
       dateStr,
       byDateHour.get(dateStr) ?? new Map(),
       hours,
-      hourlyCapacity,
+      dayMeta.hourlyCapacity,
       todayStr,
-    ),
-  )
+    )
+  })
 }
 
 export async function checkBranchHourCapacity(
   db: PrismaClient,
   branchId: string,
   scheduledAt: Date,
-): Promise<{ ok: boolean; count: number; capacity: number }> {
+): Promise<{ ok: boolean; count: number; capacity: number; reason?: string }> {
   const branch = await db.branch.findUnique({
     where: { id: branchId },
-    select: { hourlyCapacity: true, isActive: true },
+    select: {
+      hourlyCapacity: true,
+      openingTime: true,
+      closingTime: true,
+      isActive: true,
+      weeklySchedule: true,
+    },
   })
   if (!branch?.isActive) {
-    return { ok: false, count: 0, capacity: 0 }
+    return { ok: false, count: 0, capacity: 0, reason: 'BRANCH_INACTIVE' }
   }
-  const capacity = branch.hourlyCapacity ?? 15
+  if (isAppointmentScheduleInPast(scheduledAt)) {
+    return { ok: false, count: 0, capacity: branch.hourlyCapacity ?? 15, reason: 'APPOINTMENT_IN_PAST' }
+  }
+  const dateStr = formatAppointmentAgendaDateString(scheduledAt)
+  const fallback = {
+    openingTime: branch.openingTime,
+    closingTime: branch.closingTime,
+    hourlyCapacity: branch.hourlyCapacity ?? 15,
+  }
+  const weekly = parseBranchWeeklySchedule(branch.weeklySchedule)
+  const dayMeta = resolveBranchDayMeta(dateStr, fallback, weekly)
+  if (!dayMeta.open) {
+    return { ok: false, count: 0, capacity: dayMeta.hourlyCapacity, reason: 'BRANCH_CLOSED' }
+  }
+  const hours = branchOperatingHoursForDate(dateStr, fallback, weekly)
+  const targetHour = appointmentAgendaHour(scheduledAt)
+  if (!hours.includes(targetHour)) {
+    return { ok: false, count: 0, capacity: dayMeta.hourlyCapacity, reason: 'OUTSIDE_HOURS' }
+  }
+  const capacity = dayMeta.hourlyCapacity
   const count = await countAppointmentsInBranchHour(db, branchId, scheduledAt)
   return { ok: count < capacity, count, capacity }
 }

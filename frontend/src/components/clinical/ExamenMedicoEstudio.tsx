@@ -75,6 +75,10 @@ import {
   type ExamenMedicoVariant,
 } from "@/lib/clinical/examen-medico-variant"
 import { EXAMEN_CAPTURE_CLOSED_KEY } from "@/lib/clinical/examen-medico-capture"
+import {
+  antecedentesCapturedIsEmpty,
+  mergePortalPrefillIntoAntecedentes,
+} from '@/lib/clinical/prefill-portal-merge'
 import { loadSodexoExtensionFromStorage } from '@/lib/sodexo-extension-validation'
 import {
   examenMedicoNavSectionFromTabs,
@@ -439,6 +443,15 @@ export default function ExamenMedicoEstudio({
       ? (existing as Record<string, unknown>)
       : {}
   })
+  const prefillPortalMerged = useRef(false)
+  useEffect(() => {
+    if (readonly || prefillPortalMerged.current || !prefilledData) return
+    prefillPortalMerged.current = true
+    setAntecedentesCaptured((prev) => {
+      if (!antecedentesCapturedIsEmpty(prev)) return prev
+      return mergePortalPrefillIntoAntecedentes(prev, prefilledData)
+    })
+  }, [readonly, prefilledData])
 
   const [flowserveExt, setFlowserveExt] = useState<FlowserveExtensionData>(() => {
     const raw = variantExtensionsStored.FLOWSERVE
@@ -895,10 +908,6 @@ export default function ExamenMedicoEstudio({
         // Notificamos al padre el nuevo studyStatus siempre (el Event
         // status sólo si cambió — null en borrador).
         onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED')
-        if (markComplete) {
-          setCaptureClosed(true)
-          router.push(navigateToValidatingView(eventId))
-        }
       } else {
         setSaveError(res.error ?? 'Error al guardar')
       }
@@ -2149,26 +2158,19 @@ export default function ExamenMedicoEstudio({
                 onClick={() => handleSave(true)}
                 disabled={
                   isPending ||
-                  captureClosed ||
                   !(form.impresion_diagnostica ?? '').trim() ||
                   !recomendaciones.trim()
                 }
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title={
-                  captureClosed
-                    ? 'La captura ya está cerrada'
-                    : !(form.impresion_diagnostica ?? '').trim()
-                      ? 'Agrega impresión diagnóstica'
-                      : !recomendaciones.trim()
-                        ? 'Ingresa recomendaciones'
-                        : ''
+                  !(form.impresion_diagnostica ?? '').trim()
+                    ? 'Agrega impresión diagnóstica'
+                    : !recomendaciones.trim()
+                      ? 'Ingresa recomendaciones'
+                      : ''
                 }
               >
-                {isPending
-                  ? 'Guardando...'
-                  : captureClosed
-                    ? '✓ Captura cerrada — listo para revisión'
-                    : '🏁 Cerrar captura del examen'}
+                {isPending ? 'Guardando...' : '📋 Guardar para revisión'}
               </button>
             </div>
           )}

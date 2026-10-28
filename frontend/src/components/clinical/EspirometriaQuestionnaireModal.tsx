@@ -36,6 +36,11 @@ import {
   type ExploracionEstado,
 } from '@/schemas/clinical/espirometria-questionnaire.schema'
 import { saveEspirometriaQuestionnaire } from '@/actions/espirometria-questionnaire.actions'
+import {
+  inheritVitalsFromSomatometry,
+  mergeEspirometriaVitals,
+  type EspirometriaInheritedVitals,
+} from '@/lib/espirometria-inherited-vitals'
 
 // ──────────────────────────────────────────────────────────────────────────
 // Etiquetas legibles (FEATURE-20260824-02 §UI: predominantemente seleccionable)
@@ -119,6 +124,7 @@ export type EspirometriaQuestionnaireModalProps = {
    * actualizar el estado local del summary sin esperar al re-fetch).
    */
   onSaved: (payload: EspirometriaQuestionnairePayload) => void
+  somatometryData?: Record<string, unknown> | null
 }
 
 // Estado vacío de antecedentes / exploración (todos los campos `undefined`).
@@ -167,8 +173,16 @@ export default function EspirometriaQuestionnaireModal({
   initialContext,
   onClose,
   onSaved,
+  somatometryData = null,
 }: EspirometriaQuestionnaireModalProps) {
   const isEditing = !!initialContext
+
+  const [signos, setSignos] = useState<EspirometriaInheritedVitals>(() =>
+    mergeEspirometriaVitals(
+      initialContext?.signos_somatometria ?? null,
+      inheritVitalsFromSomatometry(somatometryData),
+    ),
+  )
 
   const [antecedentes, setAntecedentes] =
     useState<AntecedentesEspirometria>(() => {
@@ -295,6 +309,7 @@ export default function EspirometriaQuestionnaireModal({
     const payload = {
       schemaVersion: ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
       capturedAt: new Date().toISOString(),
+      signos_somatometria: signos,
       antecedentes,
       exploracionFisica: exploracion,
       observaciones: observaciones.trim() ? observaciones.trim() : undefined,
@@ -368,6 +383,73 @@ export default function EspirometriaQuestionnaireModal({
         </header>
 
         <div className="px-6 py-4 space-y-6">
+          {/* ── SIGNOS / SOMATOMETRÍA (O9-20) ── */}
+          <section>
+            <h3 className="text-sm font-bold text-slate-700 mb-1">
+              Peso, talla y tensión arterial
+            </h3>
+            <p className="text-xs text-slate-500 mb-3">
+              Se prellenan desde somatometría de la papeleta; puede ajustar valores
+              antes de guardar.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <label className="text-xs font-medium text-slate-600">
+                Peso (kg)
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={signos.peso_kg ?? ''}
+                  onChange={(e) =>
+                    setSignos((s) => ({ ...s, peso_kg: e.target.value || undefined }))
+                  }
+                  className="mt-1 w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5"
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Talla (m)
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={signos.talla_m ?? ''}
+                  onChange={(e) =>
+                    setSignos((s) => ({ ...s, talla_m: e.target.value || undefined }))
+                  }
+                  className="mt-1 w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5"
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                TA sistólica
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={signos.ta_sistolica ?? ''}
+                  onChange={(e) =>
+                    setSignos((s) => ({
+                      ...s,
+                      ta_sistolica: e.target.value || undefined,
+                    }))
+                  }
+                  className="mt-1 w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5"
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                TA diastólica
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={signos.ta_diastolica ?? ''}
+                  onChange={(e) =>
+                    setSignos((s) => ({
+                      ...s,
+                      ta_diastolica: e.target.value || undefined,
+                    }))
+                  }
+                  className="mt-1 w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5"
+                />
+              </label>
+            </div>
+          </section>
+
           {/* ── ANTECEDENTES ── */}
           <section>
             <h3 className="text-sm font-bold text-slate-700 mb-3">

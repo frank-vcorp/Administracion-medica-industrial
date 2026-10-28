@@ -44,6 +44,7 @@ function hashToken(plainToken: string): string {
  * @returns plainToken y expiresAt para construir el enlace de invitación
  */
 export async function generateInvitation(rawInput: unknown) {
+  try {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return { success: false, error: 'No autenticado' }
@@ -68,24 +69,30 @@ export async function generateInvitation(rawInput: unknown) {
   const tokenHash  = hashToken(plainToken)
   const expiresAt  = new Date(Date.now() + INVITATION_TTL_HOURS * 60 * 60 * 1000)
 
-  // Cancelar invitaciones previas activas y crear la nueva, de forma atómica
+  // Reemplazar invitación previa (incl. SUBMITTED) — evita unique constraint y enlace colgado (O9-16)
   await prisma.$transaction(async (tx) => {
-    await tx.prefilledInvitation.updateMany({
-      where: {
-        appointmentId,
-        status: { in: ['INVITATION_ACTIVE', 'OPENED', 'PARTIAL'] },
-      },
-      data: { status: 'CANCELLED' },
-    })
-
-    await tx.prefilledInvitation.create({
-      data: {
+    await tx.prefilledInvitation.upsert({
+      where: { appointmentId },
+      create: {
         appointmentId,
         tokenHash,
         expiresAt,
         status: 'INVITATION_ACTIVE',
         channel: channel ?? null,
         generatedById: session.user.id,
+        module1Data: undefined,
+        openedCount: 0,
+        submittedAt: null,
+      },
+      update: {
+        tokenHash,
+        expiresAt,
+        status: 'INVITATION_ACTIVE',
+        channel: channel ?? null,
+        generatedById: session.user.id,
+        module1Data: undefined,
+        openedCount: 0,
+        submittedAt: null,
       },
     })
   })
@@ -97,6 +104,9 @@ export async function generateInvitation(rawInput: unknown) {
       expiresAt,
       channel: channel ?? null,
     },
+  }
+  } catch {
+    return { success: false, error: 'No se pudo generar el enlace de prellenado' }
   }
 }
 
@@ -335,50 +345,52 @@ export async function submitModule1(plainToken: string, rawData: unknown) {
 
   const workerId = invitation.appointment?.workerId
 
-  await prisma.$transaction(async (tx) => {
-    await tx.prefilledInvitation.update({
-      where: { tokenHash },
-      data: {
-        module1Data: parsed.data.data as object,
-        status:      'SUBMITTED',
-        submittedAt: new Date(),
-      },
-    })
-
-    // ARCH-20260326-06: Fusionar secciones longitudinales en raíz de ClinicalHistory.data
-    // Mantener prefill_base como snapshot de cita por compatibilidad legada.
-    if (workerId) {
-      const existingHistory = await tx.clinicalHistory.findUnique({
-        where: { workerId },
-        select: { data: true },
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.prefilledInvitation.update({
+        where: { tokenHash },
+        data: {
+          module1Data: parsed.data.data as object,
+          status:      'SUBMITTED',
+          submittedAt: new Date(),
+        },
       })
-      const existingData = (existingHistory?.data as Record<string, unknown>) ?? {}
-      const submitted = parsed.data.data as Record<string, unknown>
-      const { datos_personales, historia_laboral, heredo_familiares, patologicos, no_patologicos } = submitted
 
-      const updatedData: Record<string, unknown> = {
-        ...existingData,
-        prefill_base: submitted,
-        ...(datos_personales  ? { datos_personales }  : {}),
-        ...(historia_laboral  ? { historia_laboral }  : {}),
-        ...(heredo_familiares ? { heredo_familiares } : {}),
-        ...(patologicos       ? { patologicos }       : {}),
-        ...(no_patologicos    ? { no_patologicos }    : {}),
+      if (workerId) {
+        const existingHistory = await tx.clinicalHistory.findUnique({
+          where: { workerId },
+          select: { data: true },
+        })
+        const existingData = (existingHistory?.data as Record<string, unknown>) ?? {}
+        const submitted = parsed.data.data as Record<string, unknown>
+        const { datos_personales, historia_laboral, heredo_familiares, patologicos, no_patologicos } = submitted
+
+        const updatedData: Record<string, unknown> = {
+          ...existingData,
+          prefill_base: submitted,
+          ...(datos_personales  ? { datos_personales }  : {}),
+          ...(historia_laboral  ? { historia_laboral }  : {}),
+          ...(heredo_familiares ? { heredo_familiares } : {}),
+          ...(patologicos       ? { patologicos }       : {}),
+          ...(no_patologicos    ? { no_patologicos }    : {}),
+        }
+        await tx.clinicalHistory.upsert({
+          where: { workerId },
+          create: {
+            workerId,
+            data: updatedData as object,
+            lastUpdated: new Date(),
+          },
+          update: {
+            data: updatedData as object,
+            lastUpdated: new Date(),
+          },
+        })
       }
-      await tx.clinicalHistory.upsert({
-        where: { workerId },
-        create: {
-          workerId,
-          data: updatedData as object,
-          lastUpdated: new Date(),
-        },
-        update: {
-          data: updatedData as object,
-          lastUpdated: new Date(),
-        },
-      })
-    }
-  })
+    })
+  } catch {
+    return { success: false, error: 'No se pudo guardar el envío. Intenta de nuevo.' }
+  }
 
   return { success: true }
 }
