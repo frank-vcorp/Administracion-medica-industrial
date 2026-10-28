@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
 import { ClinicalHistoryDataSchema } from '@/schemas/clinical/history.schema'
 
 export const CONSULTA_MEDICA_SCHEMA_VERSION = 'consulta-medica-v1' as const
@@ -23,15 +24,19 @@ export const TIPO_CONSULTA_LABELS: Record<TipoConsultaValue, string> = {
   INCIDENTE: 'Incidente',
 }
 
-const cleanString = z.string().trim()
-const optionalString = cleanString.max(8000).optional().or(z.literal(''))
+const freeText = (max: number, min = 0) =>
+  z.string().trim().min(min).max(max).transform(applySentenceCaseIfAllCaps)
+const plainString = z.string().trim()
+const optionalString = z
+  .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCaseIfAllCaps)])
+  .optional()
 
 export const RecetaLineaSchema = z.object({
-  medicamento: cleanString.min(1).max(500),
+  medicamento: freeText(500, 1),
   presentacion: optionalString,
-  dosis: cleanString.min(1).max(300),
-  frecuencia: cleanString.min(1).max(300),
-  duracion: cleanString.min(1).max(300),
+  dosis: freeText(300, 1),
+  frecuencia: freeText(300, 1),
+  duracion: freeText(300, 1),
 })
 
 export type RecetaLinea = z.infer<typeof RecetaLineaSchema>
@@ -51,12 +56,12 @@ export const SignosVitalesConsultaSchema = z.object({
 export const ConsultaMedicaPayloadSchema = z.object({
   schemaVersion: z.literal(CONSULTA_MEDICA_SCHEMA_VERSION),
   tipo_consulta: z.enum(TIPO_CONSULTA_VALUES),
-  motivo_consulta: cleanString.min(10).max(8000),
+  motivo_consulta: freeText(8000, 10),
   signos_vitales: SignosVitalesConsultaSchema,
-  exploracion_fisica: cleanString.min(10).max(12000),
-  diagnostico_sistema: cleanString.min(1).max(500),
-  diagnostico_unificado: cleanString.min(1).max(500),
-  diagnostico_especifico: cleanString.min(1).max(2000),
+  exploracion_fisica: freeText(12000, 10),
+  diagnostico_sistema: freeText(500, 1),
+  diagnostico_unificado: freeText(500, 1),
+  diagnostico_especifico: freeText(2000, 1),
   incapacidad_aplica: z.boolean(),
   otorga_incapacidad: z.enum(['SI', 'NO']),
   dias_incapacidad: z.number().int().min(0).max(365).optional(),
@@ -64,8 +69,8 @@ export const ConsultaMedicaPayloadSchema = z.object({
   material_medico: optionalString,
   indicaciones_generales: optionalString,
   receta_lineas: z.array(RecetaLineaSchema).max(30),
-  medico_nombre: cleanString.min(1).max(200),
-  medico_cedula: cleanString.min(1).max(50),
+  medico_nombre: freeText(200, 1),
+  medico_cedula: plainString.min(1).max(50),
   antecedentes: ClinicalHistoryDataSchema.optional(),
   /** Gineco / vacunas (ex Módulo 1) copiados del perfil o del examen de la visita. */
   modulo1: z.record(z.string(), z.string()).optional(),
@@ -74,7 +79,8 @@ export const ConsultaMedicaPayloadSchema = z.object({
 
 export type ConsultaMedicaPayload = z.infer<typeof ConsultaMedicaPayloadSchema>
 
-const draftText = z.string().trim().max(12000)
+const draftText = (max: number) =>
+  z.string().trim().max(max).transform(applySentenceCaseIfAllCaps)
 
 /**
  * Borrador: solo exige la versión. Los textos vacíos y las líneas de
@@ -84,12 +90,12 @@ const draftText = z.string().trim().max(12000)
 export const ConsultaMedicaDraftSchema = z.object({
   schemaVersion: z.literal(CONSULTA_MEDICA_SCHEMA_VERSION),
   tipo_consulta: z.enum(TIPO_CONSULTA_VALUES).optional(),
-  motivo_consulta: draftText.optional(),
+  motivo_consulta: draftText(12000).optional(),
   signos_vitales: SignosVitalesConsultaSchema.optional(),
-  exploracion_fisica: draftText.optional(),
-  diagnostico_sistema: draftText.max(500).optional(),
-  diagnostico_unificado: draftText.max(500).optional(),
-  diagnostico_especifico: draftText.max(2000).optional(),
+  exploracion_fisica: draftText(12000).optional(),
+  diagnostico_sistema: draftText(500).optional(),
+  diagnostico_unificado: draftText(500).optional(),
+  diagnostico_especifico: draftText(2000).optional(),
   incapacidad_aplica: z.boolean().optional(),
   otorga_incapacidad: z.enum(['SI', 'NO']).optional(),
   dias_incapacidad: z.number().int().min(0).max(365).optional(),
@@ -99,17 +105,17 @@ export const ConsultaMedicaDraftSchema = z.object({
   receta_lineas: z
     .array(
       z.object({
-        medicamento: draftText.max(500).optional().or(z.literal('')),
+        medicamento: z.union([z.literal(''), draftText(500)]).optional(),
         presentacion: optionalString,
-        dosis: draftText.max(300).optional().or(z.literal('')),
-        frecuencia: draftText.max(300).optional().or(z.literal('')),
-        duracion: draftText.max(300).optional().or(z.literal('')),
+        dosis: z.union([z.literal(''), draftText(300)]).optional(),
+        frecuencia: z.union([z.literal(''), draftText(300)]).optional(),
+        duracion: z.union([z.literal(''), draftText(300)]).optional(),
       }),
     )
     .max(30)
     .optional(),
-  medico_nombre: draftText.max(200).optional(),
-  medico_cedula: draftText.max(50).optional(),
+  medico_nombre: draftText(200).optional(),
+  medico_cedula: plainString.max(50).optional(),
   antecedentes: ClinicalHistoryDataSchema.optional(),
   modulo1: z.record(z.string(), z.string()).optional(),
   cerrada_at: z.string().datetime().optional(),

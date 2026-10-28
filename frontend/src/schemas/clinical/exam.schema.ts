@@ -1,8 +1,15 @@
 import { z } from 'zod';
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case';
 import { ClinicalHistoryDataSchema } from './history.schema';
 import { tolerantZinEnum } from './zin.helper';
 
 const cleanString = z.string().trim().max(1000).optional();
+const freeTextOptional = z
+  .string()
+  .trim()
+  .max(1000)
+  .transform(applySentenceCaseIfAllCaps)
+  .optional();
 const cleanNum = z.coerce.number().nonnegative().optional();
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -684,17 +691,17 @@ export const ImpresiónAptitudSchema = z.object({
   // DA-1: los 5 slots son `.optional()` para preservar registros legacy
   // con `impresion_diagnostica` consolidado. Helpers deben preferir el
   // slot nuevo si existe, con fallback al legacy.
-  examen_medico_texto: cleanString.optional(),
-  audiometria_texto: cleanString.optional(),
-  espirometria_texto: cleanString.optional(),
-  laboratorios_texto: cleanString.optional(),
-  radiografia_texto: cleanString.optional(),
+  examen_medico_texto: freeTextOptional,
+  audiometria_texto: freeTextOptional,
+  espirometria_texto: freeTextOptional,
+  laboratorios_texto: freeTextOptional,
+  radiografia_texto: freeTextOptional,
 
   // === LEGACY (DA-1) ===
   // IMPL-20260817-12-C1: campo antiguo consolidado, ahora opcional para
   // retrocompatibilidad. Los nuevos slots por prueba son la fuente de
   // verdad; este se conserva solo para parsear datos legacy sin migración.
-  impresion_diagnostica: cleanString.optional(),
+  impresion_diagnostica: freeTextOptional,
 
   // === RESUMEN EJECUTIVO (auto-poblado por buildExamSummary) ===
   // Campos faltantes identificados en ARCH-20260325-09
@@ -710,10 +717,10 @@ export const ImpresiónAptitudSchema = z.object({
   // IMPL-20260817-08-C1 (ARCH-20260817-02 DA-1): enum de aptitud pasa de 4 a 5
   // valores del PDF canónico. Schema tolerante preserva legacy `'NO APTO'`.
   aptitud: aptitudSchema.optional(),
-  restricciones: cleanString,
-  observaciones_finales: cleanString,
-  medico_evaluador: cleanString,
-  medico_revisor: cleanString,
+  restricciones: freeTextOptional,
+  observaciones_finales: freeTextOptional,
+  medico_evaluador: freeTextOptional,
+  medico_revisor: freeTextOptional,
 });
 
 // ----------------------------------------------------------------------

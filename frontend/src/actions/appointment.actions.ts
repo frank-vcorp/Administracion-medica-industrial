@@ -46,6 +46,7 @@ import {
   isAppointmentScheduleInPast,
 } from '@/lib/appointment-scheduling'
 import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -84,6 +85,11 @@ export async function createAppointment(data: {
     const scheduledDate = typeof data.scheduledAt === 'string'
       ? new Date(data.scheduledAt)
       : data.scheduledAt
+
+    const normalizedNotes =
+      data.notes != null && data.notes.trim().length > 0
+        ? applySentenceCaseIfAllCaps(data.notes.trim())
+        : undefined
 
     if (Number.isNaN(scheduledDate.getTime())) {
       return { success: false, error: 'Fecha u hora inválida' }
@@ -167,7 +173,7 @@ export async function createAppointment(data: {
         companyId: data.companyId,
         branchId: data.branchId,
         scheduledAt: scheduledDate,
-        notes: data.notes || null,
+        notes: normalizedNotes ?? null,
         source: data.source || 'SUCURSAL',
         status: 'SCHEDULED',
         expedientId,

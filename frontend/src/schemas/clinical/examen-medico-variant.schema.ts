@@ -1,6 +1,13 @@
 import { z } from 'zod'
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
 
 const cleanString = z.string().trim().optional().nullable()
+const freeTextString = z
+  .string()
+  .trim()
+  .transform(applySentenceCaseIfAllCaps)
+  .optional()
+  .nullable()
 
 export const INTERROGATORIO_SISTEMAS = [
   'cardiovascular',
@@ -191,7 +198,7 @@ export const SodexoExtensionSchema = z.object({
   epp_botas: z.boolean().optional().nullable(),
   epp_guantes: z.boolean().optional().nullable(),
   epp_faja: z.boolean().optional().nullable(),
-  declaracion_protesta_nombre: cleanString,
+  declaracion_protesta_nombre: freeTextString,
   /**
    * Solo impresión REG-SO-01: aclaración §5 si hace falta texto extra en el PDF.
    * No sustituye Antecedentes patológicos de la papeleta (se proyectan al PDF aparte).

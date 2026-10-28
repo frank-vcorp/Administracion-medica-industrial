@@ -13,6 +13,18 @@ import { logAudit } from "@/actions/audit.actions"
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+
+function normalizeStoredPersonName(raw: string): string {
+    return applySentenceCaseIfAllCaps(raw.trim())
+}
+
+const personNameSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .transform(applySentenceCaseIfAllCaps)
 
 // Get all workers with their company name and medical profile
 // @id IMPL-20260313-07
@@ -192,8 +204,8 @@ async function validateMedicalProfileForCompany(
 
 export async function createWorker(formData: FormData) {
     try {
-        const firstName = formData.get('firstName') as string
-        const lastName = formData.get('lastName') as string
+        const firstName = normalizeStoredPersonName(formData.get('firstName') as string)
+        const lastName = normalizeStoredPersonName(formData.get('lastName') as string)
         const companyId = formData.get('companyId') as string
 
         if (!firstName || !lastName) {
@@ -303,8 +315,8 @@ export async function createWorker(formData: FormData) {
  */
 export async function updateWorker(id: string, formData: FormData) {
     try {
-        const firstName = formData.get('firstName') as string
-        const lastName = formData.get('lastName') as string
+        const firstName = normalizeStoredPersonName(formData.get('firstName') as string)
+        const lastName = normalizeStoredPersonName(formData.get('lastName') as string)
 
         if (!firstName || !lastName) {
             return { success: false, error: 'Nombre y apellidos son obligatorios' }
@@ -399,8 +411,8 @@ export async function updateWorkerCorroboratedName(
         })
         if (!previous) return { success: false, error: 'Trabajador no encontrado' }
 
-        const newFirstName = updates.firstName.trim()
-        const newLastName = updates.lastName.trim()
+        const newFirstName = normalizeStoredPersonName(updates.firstName)
+        const newLastName = normalizeStoredPersonName(updates.lastName)
 
         if (!newFirstName || !newLastName) {
             return { success: false, error: 'El nombre y los apellidos son obligatorios' }
@@ -439,8 +451,8 @@ export async function updateWorkerCorroboratedName(
 // ===========================================================================
 
 const BulkWorkerRowSchema = z.object({
-    firstName: z.string().min(1).max(100),
-    lastName: z.string().min(1).max(100),
+    firstName: personNameSchema,
+    lastName: personNameSchema,
     nationalId: z.string().max(18).optional(),
     dob: z.string().optional(),
     gender: z.enum(['M', 'F']).optional(),
@@ -468,8 +480,8 @@ type ActionResult<T = undefined> =
     | { success: false; error: string }
 
 const QuickWorkerRowSchema = z.object({
-    firstName: z.string().min(1).max(100),
-    lastName: z.string().min(1).max(100),
+    firstName: personNameSchema,
+    lastName: personNameSchema,
     nationalId: z.string().max(18).optional(),
     dob: z.string().optional(),
     phone: z.string().max(15).optional(),
@@ -861,8 +873,8 @@ export async function createExternalWorkerIntake(input: {
         return { success: false, error: 'No autorizado' }
     }
 
-    const firstName = input.firstName.trim()
-    const lastName = input.lastName.trim()
+    const firstName = normalizeStoredPersonName(input.firstName)
+    const lastName = normalizeStoredPersonName(input.lastName)
     const dobDate = parseDob(input.dob)
 
     if (!firstName || !lastName) {
@@ -948,8 +960,8 @@ export async function createExternalWorkerIntake(input: {
 // ===========================================================================
 
 const ClinicWalkInRowSchema = z.object({
-    firstName: z.string().min(1, 'Nombre obligatorio').max(100),
-    lastName: z.string().min(1, 'Apellidos obligatorios').max(100),
+    firstName: personNameSchema,
+    lastName: personNameSchema,
     nationalId: z.string().max(18).optional(),
     dob: z.string().optional(),
     phone: z.string().max(15).optional(),

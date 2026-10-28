@@ -40,6 +40,7 @@
  * @backup context/SPECs/SPEC-FEATURE-20260825-02-AUDIOMETRIA-ENTREGABLE.md
  */
 import { z } from 'zod'
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
 
 // ──────────────────────────────────────────────────────────────────────────
 // Rangos y catálogos (FEATURE-20260825-02 §4.1)
@@ -107,6 +108,7 @@ const optString = z
   .string()
   .trim()
   .max(500, 'Máximo 500 caracteres')
+  .transform(applySentenceCaseIfAllCaps)
   .optional()
 
 /**
