@@ -118,6 +118,7 @@ export default function AppointmentsPage() {
     const [focusBranchId, setFocusBranchId] = useState<string>('')
     const [weekBranchId, setWeekBranchId] = useState<string>('')
     const [attendedCount, setAttendedCount] = useState(0)
+    const [attendedByBranch, setAttendedByBranch] = useState<{ branchId: string; branchName: string; count: number }[]>([])
     const [attendedOpen, setAttendedOpen] = useState(false)
     const [loading, setLoading] = useState(true)
     const [selectedApt, setSelectedApt] = useState<AppointmentWithWorker | null>(null)
@@ -182,6 +183,7 @@ export default function AppointmentsPage() {
                 setPendingStudyRows([])
             }
             setAttendedCount(attendedResult.success ? attendedResult.count : 0)
+            setAttendedByBranch(attendedResult.success ? attendedResult.byBranch : [])
         } catch {
             setError('Error de conexión al cargar la agenda.')
         } finally {
@@ -357,6 +359,11 @@ export default function AppointmentsPage() {
                     color="emerald"
                     onClick={() => setAttendedOpen(true)}
                     hint="Ver calendario"
+                    detail={
+                        attendedByBranch.length > 0
+                            ? attendedByBranch.map((row) => `${row.branchName}: ${row.count}`).join(' · ')
+                            : undefined
+                    }
                 />
             </div>
 
@@ -406,7 +413,11 @@ export default function AppointmentsPage() {
                 ))}
             </div>
 
-            <AttendedAppointmentsCalendar open={attendedOpen} onClose={() => setAttendedOpen(false)} />
+            <AttendedAppointmentsCalendar
+                open={attendedOpen}
+                onClose={() => setAttendedOpen(false)}
+                branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+            />
 
             {/* IMPL-20260325-01: Modal de Invitación de Prellenado */}
             <WeeklyAppointmentsModal
@@ -727,12 +738,14 @@ function StatCard({
     color,
     onClick,
     hint,
+    detail,
 }: {
     label: string
     value: number
     color: 'blue' | 'indigo' | 'amber' | 'emerald' | 'slate'
     onClick?: () => void
     hint?: string
+    detail?: string
 }) {
     const variants: Record<string, string> = {
         blue: "bg-blue-50 border-blue-100 text-blue-600",
@@ -750,6 +763,9 @@ function StatCard({
         <>
             <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">{label}</p>
             <p className="text-3xl font-black">{value}</p>
+            {detail && (
+                <p className="mt-2 text-[10px] font-bold leading-snug opacity-80">{detail}</p>
+            )}
             {hint && onClick && (
                 <p className="mt-2 text-[10px] font-bold uppercase tracking-wide opacity-60">{hint}</p>
             )}
