@@ -66,6 +66,7 @@ export default function AppointmentWhatsAppSuccess({ phone, message, appointment
       text={message}
       auditContext="appointment_pass"
       entityId={appointmentId}
+      attachPatientTriptych
       className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2 disabled:opacity-70"
     >
       <span>📱</span> Enviar Pase por WhatsApp

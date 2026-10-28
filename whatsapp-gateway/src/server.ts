@@ -1,8 +1,8 @@
 import express from 'express'
 import { baileysManager } from './baileys-manager.js'
+import { readGatewayDocumentAsset, type GatewayDocumentKey } from './triptych-asset.js'
 
 const app = express()
-app.use(express.json({ limit: '32kb' }))
 
 function requireBearer(req: express.Request, res: express.Response): boolean {
   const secret = process.env.WHATSAPP_GATEWAY_SECRET?.trim()
@@ -24,23 +24,36 @@ app.get('/v1/admin/status', (req, res) => {
   res.json({ ok: true, ...baileysManager.getSnapshot() })
 })
 
-app.post('/v1/messages/send', async (req, res) => {
+/** PDF embebido (~9 MB): payload pequeño; evita límite JSON 32kb en producción. */
+app.post('/v1/messages/send-document-key', express.json({ limit: '32kb' }), async (req, res) => {
   if (!requireBearer(req, res)) return
   const to = typeof req.body?.to === 'string' ? req.body.to : ''
-  const text = typeof req.body?.text === 'string' ? req.body.text : ''
+  const documentKey = req.body?.documentKey as GatewayDocumentKey
+  const caption = typeof req.body?.caption === 'string' ? req.body.caption : undefined
+  if (documentKey !== 'patient_preparation_triptych') {
+    res.status(400).json({ ok: false, sent: false, error: 'documentKey no soportada' })
+    return
+  }
   try {
-    await baileysManager.sendText(to, text)
+    const asset = await readGatewayDocumentAsset(documentKey)
+    await baileysManager.sendDocumentBuffer({
+      toPhone: to,
+      fileName: asset.fileName,
+      mimetype: asset.mimetype,
+      buffer: asset.buffer,
+      caption,
+    })
     res.json({ ok: true, sent: true })
   } catch (err) {
     res.status(400).json({
       ok: false,
       sent: false,
-      error: err instanceof Error ? err.message : 'No se pudo enviar',
+      error: err instanceof Error ? err.message : 'No se pudo enviar documento',
     })
   }
 })
 
-app.post('/v1/messages/send-document', async (req, res) => {
+app.post('/v1/messages/send-document', express.json({ limit: '20mb' }), async (req, res) => {
   if (!requireBearer(req, res)) return
   const to = typeof req.body?.to === 'string' ? req.body.to : ''
   const fileName = typeof req.body?.fileName === 'string' ? req.body.fileName : ''
@@ -61,6 +74,24 @@ app.post('/v1/messages/send-document', async (req, res) => {
       ok: false,
       sent: false,
       error: err instanceof Error ? err.message : 'No se pudo enviar documento',
+    })
+  }
+})
+
+app.use(express.json({ limit: '32kb' }))
+
+app.post('/v1/messages/send', async (req, res) => {
+  if (!requireBearer(req, res)) return
+  const to = typeof req.body?.to === 'string' ? req.body.to : ''
+  const text = typeof req.body?.text === 'string' ? req.body.text : ''
+  try {
+    await baileysManager.sendText(to, text)
+    res.json({ ok: true, sent: true })
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      sent: false,
+      error: err instanceof Error ? err.message : 'No se pudo enviar',
     })
   }
 })
