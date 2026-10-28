@@ -215,9 +215,9 @@ class KeyResolver:
             base_url = (
                 os.environ.get("M3_BASE_URL") or "https://api.minimax.io/v1"
             )
-            default_model = (
-                os.environ.get("M3_DEFAULT_MODEL") or "MiniMax-M3"
-            )
+            from app.services.ai.m3_model import resolve_m3_model
+
+            default_model = resolve_m3_model(os.environ.get("M3_DEFAULT_MODEL"))
             return api_key, base_url, default_model
         if provider == "dr7":
             api_key = (os.environ.get("DR7_API_KEY") or "").strip()

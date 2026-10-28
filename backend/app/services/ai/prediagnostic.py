@@ -164,7 +164,9 @@ DR7_MODEL    = os.environ.get("DR7_MODEL", "medgemma-4b-it").strip()
 # parcheen el fallback de módulo (mismo patrón que DR7_API_KEY).
 M3_API_KEY = os.environ.get("M3_API_KEY", "").strip()
 M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
-M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", "MiniMax-M3").strip() or "MiniMax-M3"
+from app.services.ai.m3_model import M3_MODEL_FLASH, resolve_m3_model
+
+M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_FLASH).strip() or M3_MODEL_FLASH
 # Tope de reloj de la llamada clínica. El timeout de `requests` solo mide
 # silencio entre bytes: MiniMax puede ir soltando tokens durante minutos y
 # la función de Vercel (tope 300s en este proyecto) muere antes de guardar
@@ -236,10 +238,8 @@ def _resolve_m3_clinical_config() -> Dict[str, Any]:
         or M3_BASE_URL
         or "https://api.minimax.io/v1"
     )
-    default_model = (
-        os.environ.get("M3_DEFAULT_MODEL", "").strip()
-        or M3_DEFAULT_MODEL
-        or "MiniMax-M3"
+    default_model = resolve_m3_model(
+        os.environ.get("M3_DEFAULT_MODEL", "").strip() or M3_DEFAULT_MODEL
     )
 
     if not is_ai_keys_from_db_enabled():
@@ -267,7 +267,7 @@ def _resolve_m3_clinical_config() -> Dict[str, Any]:
     return {
         "api_key": resolution.api_key or default_api_key,
         "base_url": resolution.base_url or default_base_url,
-        "model": resolution.default_model or default_model,
+        "model": resolve_m3_model(resolution.default_model or default_model),
         "key_source": resolution.source,
         "warning": resolution.warning,
     }
@@ -1530,7 +1530,7 @@ Responde en JSON con esta estructura exacta:
 
         api_key = (m3_cfg.get("api_key") or "").strip()
         base_url = m3_cfg.get("base_url") or M3_BASE_URL or "https://api.minimax.io/v1"
-        model = m3_cfg.get("model") or M3_DEFAULT_MODEL or "MiniMax-M3"
+        model = resolve_m3_model(m3_cfg.get("model") or M3_DEFAULT_MODEL or M3_MODEL_FLASH)
 
         if not api_key:
             raise RuntimeError("M3_HTTP:0:clave ausente")
@@ -1563,6 +1563,9 @@ Responde en JSON con esta estructura exacta:
             "max_tokens": 8192,
             "response_format": {"type": "json_object"},
         }
+        from app.services.ai.m3_model import m3_performance_body
+
+        payload.update(m3_performance_body(model))
 
         # Plazo total, no solo silencio entre bytes. Si MiniMax no cierra
         # el cuerpo, se abandona la llamada y el estudio igual se guarda
