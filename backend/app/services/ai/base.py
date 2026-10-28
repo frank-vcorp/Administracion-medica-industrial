@@ -666,11 +666,9 @@ class M3VisionBase:
             or _read_env_var("M3_BASE_URL")
             or "https://api.minimax.io/v1"
         )
-        self.model = (
-            model
-            or _read_env_var("M3_DEFAULT_MODEL")
-            or "MiniMax-M3"
-        )
+        from app.services.ai.m3_model import resolve_m3_model
+
+        self.model = model or resolve_m3_model(_read_env_var("M3_DEFAULT_MODEL"))
         self.key_source: str = "env"
         self.key_resolution_warning: Optional[str] = None
 
@@ -820,6 +818,8 @@ class M3VisionBase:
                 "openai SDK no instalado. Ejecuta: pip install openai>=1.0"
             ) from exc
 
+        from app.services.ai.m3_model import m3_performance_body
+
         client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         b64_data = self.get_b64_jpeg(file_path)
 
@@ -868,6 +868,7 @@ class M3VisionBase:
                 # el catch-all la mapee a `error_code` accionable.
                 max_tokens=32768,
                 response_format={"type": "json_object"},
+                extra_body=m3_performance_body(self.model) or None,
             )
         except Exception as e:
             # IMPL-20260809-04 PRIVACIDAD: nunca loguear M3_API_KEY ni tokens.

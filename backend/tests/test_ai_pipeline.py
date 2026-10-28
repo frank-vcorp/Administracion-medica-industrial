@@ -848,7 +848,7 @@ class TestCalibrationV1AudioEspiro:
             "no_published_version",
             "field_definitions_incomplete",
         )
-        assert result.clinical_model_used == "MiniMax-M3"
+        assert result.clinical_model_used == "MiniMax-M3.1-Flash"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
@@ -869,7 +869,7 @@ class TestCalibrationV1AudioEspiro:
             "no_published_version",
             "field_definitions_incomplete",
         )
-        assert result.clinical_model_used == "MiniMax-M3"
+        assert result.clinical_model_used == "MiniMax-M3.1-Flash"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
@@ -933,7 +933,7 @@ class TestCalibrationV1AudioEspiro:
         # Fase 4: sin calibration_version → legacy_hardcoded (no medical_calibration).
         assert result.calibration_source == "legacy_hardcoded"
         assert result.prompt_source == "backend_fallback"
-        assert result.clinical_model_used == "MiniMax-M3"
+        assert result.clinical_model_used == "MiniMax-M3.1-Flash"
         assert result.confidence >= 0.60
 
 
@@ -1022,7 +1022,7 @@ class TestMedGemmaDR7Provider:
         mock_featherless.return_value = self.MOCK_PREDIAGNOSIS_RESPONSE.copy()
         result = prediagnostic_svc.generate_prediagnosis("Espirometria", self.ESPIRO_VALIDA)
         assert result.clinical_provider == "m3"
-        assert result.clinical_model_used == "MiniMax-M3"
+        assert result.clinical_model_used == "MiniMax-M3.1-Flash"
         assert result.clinical_state == "AI_PENDING_REVIEW"
         mock_featherless.assert_called_once()
 
@@ -1060,7 +1060,7 @@ class TestMedGemmaDR7Provider:
 
         assert result.clinical_provider == "m3"
         assert result.clinical_state == "AI_NON_CONCLUSIVE"
-        assert result.clinical_model_used == "MiniMax-M3"
+        assert result.clinical_model_used == "MiniMax-M3.1-Flash"
         assert any("HTTP 429" in limitation for limitation in result.limitations)
         mock_featherless.assert_called_once()
 
@@ -1112,7 +1112,8 @@ class TestMedGemmaDR7Provider:
         headers = mock_post.call_args.kwargs["headers"]
         assert headers["Authorization"] == "Bearer fake-m3-key"
         sent = mock_post.call_args.kwargs["json"]
-        assert sent["model"] == "MiniMax-M3"
+        assert sent["model"] == "MiniMax-M3.1-Flash"
+        assert sent["reasoning_effort"] == "low"
         assert "diagnóstico definitivo" in sent["messages"][0]["content"]
         assert "aptitud laboral" in sent["messages"][0]["content"]
         blob = " ".join(
@@ -1914,13 +1915,13 @@ class TestMultiProviderExtractionARCH20260809_02:
         """Sin aiCalibration ni override → default m3 (M3-only)."""
         provider, model = extractor._resolve_provider(calibration=None)
         assert provider == "m3"
-        assert model == "MiniMax-M3"
+        assert model == "MiniMax-M3.1-Flash"
 
     def test_resolve_provider_calibracion_legacy_sin_provider_es_m3(self, extractor, base_calibration):
         """CA-04: calibración sin `extraction.provider` → default m3."""
         provider, model = extractor._resolve_provider(calibration=base_calibration)
         assert provider == "m3"
-        assert model == "MiniMax-M3"
+        assert model == "MiniMax-M3.1-Flash"
 
     def test_resolve_provider_calibracion_con_provider_m3(self, extractor):
         """aiCalibration.extraction.provider='m3' + .model='custom-m3'."""
@@ -1933,10 +1934,10 @@ class TestMultiProviderExtractionARCH20260809_02:
         """CA-05: override por payload gana sobre calibración."""
         cal = {"extraction": {"prompt": "x", "provider": "gemini", "model": "gemini-2.5-pro"}}
         provider, model = extractor._resolve_provider(
-            calibration=cal, override_provider="m3", override_model="MiniMax-M3"
+            calibration=cal, override_provider="m3", override_model="MiniMax-M2.7"
         )
         assert provider == "m3"
-        assert model == "MiniMax-M3"
+        assert model == "MiniMax-M2.7"
 
     def test_resolve_provider_override_model_solo(self, extractor):
         """CB-06: override solo de modelo conserva provider de calibración."""
@@ -1945,7 +1946,7 @@ class TestMultiProviderExtractionARCH20260809_02:
             calibration=cal, override_provider=None, override_model="gemini-2.5-pro"
         )
         assert provider == "m3"
-        assert model == "MiniMax-M3"
+        assert model == "MiniMax-M3.1-Flash"
 
     def test_resolve_provider_invalido_levanta_excepcion(self, extractor):
         """CB-02: proveedor desconocido → ExtractionProviderUnknownError, sin fallback."""
@@ -2006,7 +2007,7 @@ class TestMultiProviderExtractionARCH20260809_02:
         get_app_config_store().invalidate_all()
         provider, model = extractor._resolve_provider(calibration=None)
         assert provider == "m3"
-        assert model == "MiniMax-M3"
+        assert model == "MiniMax-M3.1-Flash"
 
     def test_resolve_provider_default_desde_appconfig_persistente(self, extractor):
         """ARCH-20260809-05: AppConfig con {provider:'m3'} → m3 + M3_DEFAULT_MODEL."""
@@ -2023,7 +2024,7 @@ class TestMultiProviderExtractionARCH20260809_02:
         )
         provider, model = extractor._resolve_provider(calibration=None)
         assert provider == "m3"
-        assert model == "MiniMax-M3"  # _default_model_for("m3")
+        assert model == "MiniMax-M3.1-Flash"  # _default_model_for("m3")
         # Cleanup
         get_app_config_store().invalidate_all()
 
@@ -2072,7 +2073,7 @@ class TestMultiProviderExtractionARCH20260809_02:
         # Sin override ni calibración → paso 3 del _resolve_provider lee del cache.
         provider, model = extractor._resolve_provider(calibration=None)
         assert provider == "m3"
-        assert model == "MiniMax-M3"  # _default_model_for("m3")
+        assert model == "MiniMax-M3.1-Flash"  # _default_model_for("m3")
 
         # Cleanup
         get_app_config_store().invalidate_all()
@@ -2269,11 +2270,11 @@ class TestMultiProviderExtractionARCH20260809_02:
         assert client.base_url == "https://example.com"
 
     def test_m3_vision_base_constructor_default_model(self):
-        """Default model = MiniMax-M3 si no se especifica."""
+        """Default model = MiniMax-M3.1-Flash si no se especifica."""
         from app.services.ai.base import M3VisionBase
         with patch.dict(os.environ, {"M3_DEFAULT_MODEL": ""}, clear=False):
             client = M3VisionBase(api_key="test-key")
-            assert client.model == "MiniMax-M3"
+            assert client.model == "MiniMax-M3.1-Flash"
 
     def test_m3_vision_base_constructor_default_base_url(self):
         """Default base_url = https://api.minimax.io/v1 si no se especifica."""

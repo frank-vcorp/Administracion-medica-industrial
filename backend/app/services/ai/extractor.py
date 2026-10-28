@@ -54,9 +54,11 @@ def _effective_extraction_model(provider: str, model: Optional[str]) -> str:
     """Evita enviar modelos Gemini cuando la política forzó provider=m3."""
     if provider != "m3":
         return model or os.environ.get("GEMINI_MODEL_EXTRACTION", "gemini-2.5-flash")
+    from app.services.ai.m3_model import resolve_m3_model
+
     if not model or "gemini" in str(model).lower():
-        return os.environ.get("M3_DEFAULT_MODEL", "MiniMax-M3")
-    return model
+        return resolve_m3_model(None)
+    return resolve_m3_model(model)
 
 
 def _coerce_audiometry_threshold_value(value: Any) -> Optional[int]:
@@ -769,7 +771,9 @@ notas de calidad y gráficas.
         La precedencia de selección completa vive en `_resolve_provider`.
         """
         if provider == "m3":
-            return os.environ.get("M3_DEFAULT_MODEL", "MiniMax-M3")
+            from app.services.ai.m3_model import resolve_m3_model
+
+            return resolve_m3_model(os.environ.get("M3_DEFAULT_MODEL"))
         return os.environ.get("GEMINI_MODEL_EXTRACTION", "gemini-2.5-flash")
 
     def _resolve_provider(

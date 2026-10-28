@@ -46,7 +46,8 @@ const PROVIDER_MODELS: Record<AIProvider, { id: string; label: string; descripti
     { id: 'gemini-flash-lite-latest', label: 'Gemini Flash-Lite (latest)', description: 'Más barato y rápido' },
   ],
   m3: [
-    { id: 'MiniMax-M3', label: 'MiniMax-M3', description: 'Modelo frontier multimodal (1M context)' },
+    { id: 'MiniMax-M3.1-Flash', label: 'MiniMax-M3.1-Flash', description: 'Mejor rendimiento: más rápido y más capaz. Pensamiento en nivel bajo.' },
+    { id: 'MiniMax-M3', label: 'MiniMax-M3', description: 'Modelo anterior. Piensa más y tarda más.' },
     { id: 'MiniMax-M2.7', label: 'MiniMax-M2.7', description: 'Recursive self-improvement' },
     { id: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', description: 'Más rápido (~100 tps)' },
     { id: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
