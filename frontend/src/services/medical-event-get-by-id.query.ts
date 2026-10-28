@@ -1,5 +1,10 @@
 import prisma from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
+import {
+  branchScalarSelectWithoutWeeklySchedule,
+  withBranchWeeklyScheduleDefault,
+  type BranchWithoutWeeklyScheduleRow,
+} from '@/lib/prisma/branch-scalar-select'
 
 /** Relaciones compartidas entre la query completa y la compatible sin columnas de cancelación. */
 export const medicalEventByIdRelations = {
@@ -114,24 +119,6 @@ const appointmentScalarSelectWithoutCancellation = {
   },
 } as const satisfies Prisma.AppointmentSelect
 
-/** Branch sin weeklySchedule (migración 20261028180000 puede no estar aplicada). */
-const branchScalarSelectWithoutWeeklySchedule = {
-  id: true,
-  name: true,
-  address: true,
-  phone: true,
-  managerName: true,
-  tenantId: true,
-  createdAt: true,
-  updatedAt: true,
-  closingTime: true,
-  hourlyCapacity: true,
-  openingTime: true,
-  isActive: true,
-  disabledAt: true,
-  disabledByUserId: true,
-} as const satisfies Prisma.BranchSelect
-
 export type MedicalEventByIdResult = Prisma.MedicalEventGetPayload<{
   include: typeof medicalEventByIdRelations
 }>
@@ -148,10 +135,7 @@ function withOptionalMigrationDefaults(
     cancellationReason: null,
     cancelledAt: null,
     branch: row.branch
-      ? {
-          ...row.branch,
-          weeklySchedule: null,
-        }
+      ? withBranchWeeklyScheduleDefault(row.branch as BranchWithoutWeeklyScheduleRow)
       : null,
     appointment: row.appointment
       ? {

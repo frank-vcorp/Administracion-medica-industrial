@@ -7,6 +7,11 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
+import {
+  branchScalarSelectWithoutWeeklySchedule,
+  withBranchWeeklyScheduleDefault,
+} from '@/lib/prisma/branch-scalar-select'
 import {
     PUBLIC_GENERAL_COMPANY_NAME,
     PUBLIC_GENERAL_COMPANY_RFC,
@@ -20,13 +25,29 @@ import {
  * Retorna empresas con sucursal predeterminada y sucursales permitidas
  */
 export async function getCompanies() {
-    return await prisma.company.findMany({ 
-        include: {
-            defaultBranch: true,
-            allowedBranches: { select: { id: true, name: true } },
-        },
-        orderBy: { createdAt: 'desc' } 
-    })
+    try {
+        return await prisma.company.findMany({
+            include: {
+                defaultBranch: true,
+                allowedBranches: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        })
+    } catch (error) {
+        // Migración 20261028180000_branch_weekly_schedule: prod puede desplegar antes que migrate deploy.
+        if (!isPrismaMissingColumnError(error)) throw error
+        const companies = await prisma.company.findMany({
+            include: {
+                defaultBranch: { select: branchScalarSelectWithoutWeeklySchedule },
+                allowedBranches: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        })
+        return companies.map((company) => ({
+            ...company,
+            defaultBranch: withBranchWeeklyScheduleDefault(company.defaultBranch),
+        }))
+    }
 }
 
 /**
@@ -265,10 +286,20 @@ export async function ensurePublicGeneralCompany() {
 export async function getBranches() {
     const tenant = await prisma.tenant.findFirst()
     if (!tenant) return []
-    return await prisma.branch.findMany({
-        where: { tenantId: tenant.id },
-        orderBy: { createdAt: 'desc' }
-    })
+    try {
+        return await prisma.branch.findMany({
+            where: { tenantId: tenant.id },
+            orderBy: { createdAt: 'desc' },
+        })
+    } catch (error) {
+        if (!isPrismaMissingColumnError(error)) throw error
+        const branches = await prisma.branch.findMany({
+            where: { tenantId: tenant.id },
+            select: branchScalarSelectWithoutWeeklySchedule,
+            orderBy: { createdAt: 'desc' },
+        })
+        return branches.map((branch) => withBranchWeeklyScheduleDefault(branch))
+    }
 }
 
 /**
