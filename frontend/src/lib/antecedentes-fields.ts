@@ -145,6 +145,7 @@ export function formatHeredoFamiliaresValor(
   if (!v) return ''
   const e = (especifique ?? '').trim()
   if (v === 'OTROS' && e) return `OTROS (${e})`
+  if (v === 'SI' && e) return `SI (${e})`
   return v
 }
 
@@ -161,7 +162,7 @@ export function readHeredoFamiliaresDisplay(
 
 /** Estado vacío inicial para Heredo-Familiares (select + especifique por campo catálogo). */
 export function emptyHeredoFamiliaresRecord(): Record<string, string> {
-  const hf: Record<string, string> = { mentales: '' }
+  const hf: Record<string, string> = { mentales: '', mentales_especifique: '' }
   for (const field of HEREDOFAMILIARES_CATALOGO_FIELDS) {
     hf[field] = ''
     hf[heredoFamiliaresEspecifiqueKey(field)] = ''

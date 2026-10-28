@@ -16,6 +16,8 @@ export const DetalleTripleSchema = z.object({
   desde_cuando:  z.string().trim().max(200).optional().default(''),
   tratamiento:   z.string().trim().max(500).optional().default(''),
   observaciones: z.string().trim().max(1500).optional().default(''),
+  /** O9-30 — texto libre cuando aplica (p. ej. exantemáticas). */
+  especificacion: z.string().trim().max(500).optional().default(''),
 })
 export type DetalleTriple = z.infer<typeof DetalleTripleSchema>
 
@@ -127,6 +129,7 @@ export const HeredoFamiliaresSchema = z.object({
   cancer: z.string().trim().max(500).optional(),
   cancer_especifique: heredoEspecifiqueOptional,
   mentales: z.string().trim().max(500).optional(),
+  mentales_especifique: heredoEspecifiqueOptional,
   otras: z.string().trim().max(1000).optional(),       // Catálogo ZIN (HEREDOFAMILIARES_VALUES)
   otras_especifique: z.string().trim().max(250).default(''),  // Texto libre condicional (FIX L2)
 });

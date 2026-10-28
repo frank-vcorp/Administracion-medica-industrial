@@ -600,7 +600,9 @@ export function AntecedentesForm({
                   const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
                   const currentValue = heredofamiliares[item.field as keyof typeof heredofamiliares] ?? ''
                   const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-                  const showEspecifique = !isMentales && currentValue === 'OTROS'
+                  const showEspecifique =
+                    (!isMentales && currentValue === 'OTROS') ||
+                    (isMentales && currentValue === 'SI')
                   return (
                     <div key={item.field}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -622,7 +624,11 @@ export function AntecedentesForm({
                           type="text"
                           value={heredofamiliares[especifiqueKey] ?? ''}
                           onChange={(e) => handleHeredofamiliaresChange(especifiqueKey, e.target.value)}
-                          placeholder="Especifique (ej: TÍO PATERNO, cáncer de mama)"
+                          placeholder={
+                            isMentales
+                              ? 'Especificación (ej: depresión materna)'
+                              : 'Especifique (ej: TÍO PATERNO, cáncer de mama)'
+                          }
                           className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                         />
                       )}

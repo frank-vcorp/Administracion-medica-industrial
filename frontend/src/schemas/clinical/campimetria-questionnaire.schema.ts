@@ -221,6 +221,22 @@ export const CampimetriaQuestionnairePayloadSchema = z.object({
   capturedAt: z.string().datetime({
     message: 'capturedAt debe ser un ISO 8601 válido.',
   }),
+  /** Snapshot de agudeza heredada de agudeza visual / examen (O9-21). */
+  agudeza_heredada: z
+    .object({
+      vision_lejana_od: optString,
+      vision_lejana_oi: optString,
+      vision_cercana_od: optString,
+      vision_cercana_oi: optString,
+      lejana_corregida_od: optString,
+      lejana_corregida_oi: optString,
+      cercana_corregida_od: optString,
+      cercana_corregida_oi: optString,
+      resumen: optString,
+      pending: z.boolean().optional(),
+    })
+    .nullable()
+    .optional(),
   antecedentes: AntecedentesCampimetriaSchema,
   exploracion: z.object({
     ojo_izquierdo: ExploracionOjoSchema,

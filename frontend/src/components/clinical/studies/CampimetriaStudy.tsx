@@ -8,7 +8,7 @@
  */
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveCampimetriaQuestionnaire } from '@/actions/campimetria-questionnaire.actions'
 import { updateEventTestStatus } from '@/actions/event-test.actions'
@@ -36,6 +36,8 @@ import {
 import {
   inheritAcuityFromExam,
   inheritAntecedentesFromPapeleta,
+  applyExamEyeDataToCampimetriaDraft,
+  acuityToCampimetriaPayloadSnapshot,
 } from '@/lib/clinical/campimetria-inherited'
 
 const TIEMPO_LENTES_LABEL: Record<(typeof TIEMPO_LENTES_VALUES)[number], string> = {
@@ -52,6 +54,17 @@ type WorkerBanner = {
   eventDate?: string
   occupationalLine?: string | null
 }
+
+const ACUITY_DISPLAY_ROWS: { key: keyof ReturnType<typeof inheritAcuityFromExam>; label: string }[] = [
+  { key: 'vision_lejana_od', label: 'Lejana OD' },
+  { key: 'vision_lejana_oi', label: 'Lejana OI' },
+  { key: 'vision_cercana_od', label: 'Cercana OD' },
+  { key: 'vision_cercana_oi', label: 'Cercana OI' },
+  { key: 'lejana_corregida_od', label: 'Lejana corr. OD' },
+  { key: 'lejana_corregida_oi', label: 'Lejana corr. OI' },
+  { key: 'cercana_corregida_od', label: 'Cercana corr. OD' },
+  { key: 'cercana_corregida_oi', label: 'Cercana corr. OI' },
+]
 
 export default function CampimetriaStudy({
   eventId,
@@ -76,9 +89,13 @@ export default function CampimetriaStudy({
   onStatusChange?: (status: string) => void
 }) {
   const router = useRouter()
-  const [form, setForm] = useState<CampimetriaQuestionnairePayload>(
-    () => initialContext ?? defaultCampimetriaDraftPayload(),
-  )
+  const [form, setForm] = useState<CampimetriaQuestionnairePayload>(() => {
+    if (initialContext) return initialContext
+    return applyExamEyeDataToCampimetriaDraft(
+      defaultCampimetriaDraftPayload(),
+      examData?.eyeAcuityData,
+    )
+  })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [aiWarning, setAiWarning] = useState('')
@@ -88,6 +105,13 @@ export default function CampimetriaStudy({
     () => inheritAcuityFromExam(examData?.eyeAcuityData),
     [examData?.eyeAcuityData],
   )
+
+  useEffect(() => {
+    if (initialContext) return
+    setForm(prev =>
+      applyExamEyeDataToCampimetriaDraft(prev, examData?.eyeAcuityData),
+    )
+  }, [examData?.eyeAcuityData, initialContext])
   const inheritedAnt = useMemo(
     () =>
       inheritAntecedentesFromPapeleta({
@@ -215,9 +239,13 @@ export default function CampimetriaStudy({
     setMessage('')
     setAiWarning('')
     setFieldErrors({})
+    const acuityLive = inheritAcuityFromExam(examData?.eyeAcuityData)
     const payload: CampimetriaQuestionnairePayload = {
       ...form,
       ishihara: applyIshiharaDerivation(form.ishihara),
+      agudeza_heredada: acuityLive.pending
+        ? null
+        : acuityToCampimetriaPayloadSnapshot(acuityLive),
       capturedAt: new Date().toISOString(),
     }
     const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId, {
@@ -290,6 +318,21 @@ export default function CampimetriaStudy({
                 ? 'Pendiente en agudeza visual / examen médico'
                 : `${acuity.resumen ?? '—'} · OD ${acuity.vision_lejana_od ?? '—'} / OI ${acuity.vision_lejana_oi ?? '—'}`}
             </p>
+            {!acuity.pending && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 pt-1 border-t border-slate-200/80 mt-2">
+                {ACUITY_DISPLAY_ROWS.map(({ key, label }) => (
+                  <p key={key}>
+                    <span className="text-slate-500">{label}:</span>{' '}
+                    {acuity[key] ?? '—'}
+                  </p>
+                ))}
+              </div>
+            )}
+            {!acuity.pending && (
+              <p className="text-[10px] text-slate-500 pt-1">
+                Confrontación precargada desde agudeza visual cuando aplica.
+              </p>
+            )}
           </div>
         </section>
 

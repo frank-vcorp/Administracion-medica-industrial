@@ -12,7 +12,11 @@ import {
   CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION,
   type CampimetriaQuestionnairePayload,
 } from '@/schemas/clinical/campimetria-questionnaire.schema'
-import { inheritAcuityFromExam } from '@/lib/clinical/campimetria-inherited'
+import {
+  inheritAcuityFromExam,
+  acuityToCampimetriaPayloadSnapshot,
+  applyExamEyeDataToCampimetriaDraft,
+} from '@/lib/clinical/campimetria-inherited'
 import { buildCampimetriaExtractedData } from '@/lib/clinical/campimetria-report'
 import { triggerStructuredStudyAIPrediagnosis } from '@/actions/ai-prediagnosis.actions'
 
@@ -110,10 +114,26 @@ export async function saveCampimetriaQuestionnaire(
   }
 
   try {
+    const exam = await prisma.medicalExam.findUnique({
+      where: { eventId },
+      select: { eyeAcuityData: true },
+    })
+    const eye = (exam?.eyeAcuityData as Record<string, unknown> | null) ?? null
+    const acuity = inheritAcuityFromExam(eye)
+    const enriched = applyExamEyeDataToCampimetriaDraft(
+      {
+        ...payload,
+        agudeza_heredada: acuity.pending
+          ? null
+          : acuityToCampimetriaPayloadSnapshot(acuity),
+      },
+      eye,
+    )
+
     const updated = await prisma.eventTest.update({
       where: { id: eventTestId },
       data: {
-        clinicalContext: payload as unknown as Prisma.InputJsonValue,
+        clinicalContext: enriched as unknown as Prisma.InputJsonValue,
       },
       select: { id: true, updatedAt: true },
     })
@@ -123,7 +143,7 @@ export async function saveCampimetriaQuestionnaire(
       const predx = await runCampimetriaPrediagnosis({
         eventTestId,
         eventId,
-        payload: validation.payload,
+        payload: enriched,
       })
       aiWarning = predx.aiWarning
     }
@@ -132,7 +152,7 @@ export async function saveCampimetriaQuestionnaire(
     return {
       success: true,
       eventTestId: updated.id,
-      payload,
+      payload: enriched,
       updatedAt: updated.updatedAt.toISOString(),
       aiWarning,
     }

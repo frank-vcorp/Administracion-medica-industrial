@@ -12,7 +12,27 @@ import {
   isIshiharaPlateAnswerCorrect,
 } from '../campimetria-questionnaire.schema'
 import { buildCampimetriaImpresion, buildCampimetriaExtractedData } from '@/lib/clinical/campimetria-report'
-import { inheritAcuityFromExam } from '@/lib/clinical/campimetria-inherited'
+import { inheritAcuityFromExam, applyExamEyeDataToCampimetriaDraft, mapExamCampimetriaToConfrontacion } from '@/lib/clinical/campimetria-inherited'
+
+describe('O9-21 herencia agudeza → campimetría', () => {
+  it('mapExamCampimetriaToConfrontacion normaliza valores del examen', () => {
+    expect(
+      mapExamCampimetriaToConfrontacion('CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES'),
+    ).toBe('CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES')
+    expect(mapExamCampimetriaToConfrontacion('ALTERADOS')).toBe('ALTERADOS')
+  })
+
+  it('applyExamEyeDataToCampimetriaDraft precarga confrontación y agudeza', () => {
+    const draft = defaultCampimetriaDraftPayload()
+    const next = applyExamEyeDataToCampimetriaDraft(draft, {
+      vision_lejana_od: '20/20',
+      vision_lejana_oi: '20/25',
+      campimetria: 'ALTERADOS',
+    })
+    expect(next.confrontacion.ojo_derecho).toBe('ALTERADOS')
+    expect(next.agudeza_heredada?.vision_lejana_od).toBe('20/20')
+  })
+})
 
 describe('Ishihara defaults y validación por placa', () => {
   it('borrador nuevo trae placas normales y resultado NORMAL', () => {

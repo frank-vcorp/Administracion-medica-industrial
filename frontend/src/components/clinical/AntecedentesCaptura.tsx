@@ -129,7 +129,12 @@ type PatologiaEntry = {
   detalle: DetalleTriple | undefined
 }
 
-const emptyDetalle = (): DetalleTriple => ({ desde_cuando: '', tratamiento: '', observaciones: '' })
+const emptyDetalle = (): DetalleTriple => ({
+  desde_cuando: '',
+  tratamiento: '',
+  observaciones: '',
+  especificacion: '',
+})
 const emptyPatologia = (): PatologiaEntry => ({ estado: 'NEGADO', detalle: undefined })
 
 /**
@@ -683,7 +688,9 @@ export function AntecedentesCaptura({
               const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
               const currentValue = form.heredo_familiares[item.field] ?? ''
               const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-              const showEspecifique = !isMentales && currentValue === 'OTROS'
+              const showEspecifique =
+                (!isMentales && currentValue === 'OTROS') ||
+                (isMentales && currentValue === 'SI')
               return (
                 <FieldRow
                   key={item.field}
@@ -708,7 +715,11 @@ export function AntecedentesCaptura({
                       value={form.heredo_familiares[especifiqueKey] ?? ''}
                       onChange={e => setField('heredo_familiares', especifiqueKey, e.target.value)}
                       disabled={readonly}
-                      placeholder="Especifique (ej: TÍO PATERNO, cáncer de mama)"
+                      placeholder={
+                        isMentales
+                          ? 'Especificación (ej: depresión materna, esquizofrenia paterna)'
+                          : 'Especifique (ej: TÍO PATERNO, cáncer de mama)'
+                      }
                       className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                     />
                   )}
@@ -879,6 +890,7 @@ export function AntecedentesCaptura({
               {PATOLOGICOS_DESCRIPCIONES[group].map(item => {
                 const entry = form.patologicos[item.field] ?? emptyPatologia()
                 const detalle = entry.detalle ?? emptyDetalle()
+                const isExantematicas = item.field === 'exantematicas'
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
@@ -901,6 +913,19 @@ export function AntecedentesCaptura({
                     </select>
                     {entry.estado === 'SI' && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
+                        {isExantematicas && (
+                          <input
+                            type="text"
+                            value={detalle.especificacion ?? ''}
+                            onChange={e => updatePatologia(item.field, {
+                              detalle: { ...detalle, especificacion: e.target.value },
+                            })}
+                            disabled={readonly}
+                            placeholder="Especificación (ej: varicela infantil, sarampión)"
+                            maxLength={500}
+                            className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                          />
+                        )}
                         <input
                           type="text"
                           value={detalle.desde_cuando}

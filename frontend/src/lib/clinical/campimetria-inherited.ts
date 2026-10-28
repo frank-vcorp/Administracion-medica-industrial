@@ -73,6 +73,53 @@ export function inheritAcuityFromExam(
   }
 }
 
+/** Convierte `eyeAcuityData.campimetria` del examen/agudeza a valor de confrontación (O9-21). */
+export function mapExamCampimetriaToConfrontacion(
+  raw: unknown,
+): 'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES' | 'ALTERADOS' | 'NO APLICA' | null {
+  const s = String(raw ?? '').trim().toUpperCase()
+  if (!s || s === 'NO APLICA') {
+    if (String(raw ?? '').trim() === 'NO APLICA') return 'NO APLICA'
+    return null
+  }
+  if (s.includes('ALTER')) return 'ALTERADOS'
+  if (s.includes('NORMAL') || s.includes('PARAMETRO')) {
+    return 'CAMPOS VISUALES DENTRO DE PARAMETROS NORMALES'
+  }
+  return null
+}
+
+export type CampimetriaAgudezaHeredada = Omit<InheritedAcuity, 'pending'> & {
+  pending?: boolean
+}
+
+export function acuityToCampimetriaPayloadSnapshot(
+  acuity: InheritedAcuity,
+): CampimetriaAgudezaHeredada {
+  const { pending, ...rest } = acuity
+  return { ...rest, pending }
+}
+
+export function applyExamEyeDataToCampimetriaDraft<
+  T extends {
+    confrontacion: {
+      ojo_izquierdo: string
+      ojo_derecho: string
+    }
+    agudeza_heredada?: CampimetriaAgudezaHeredada | null
+  },
+>(draft: T, eyeAcuityData: Record<string, unknown> | null | undefined): T {
+  const acuity = inheritAcuityFromExam(eyeAcuityData)
+  const confront = mapExamCampimetriaToConfrontacion(eyeAcuityData?.campimetria)
+  return {
+    ...draft,
+    agudeza_heredada: acuity.pending ? null : acuityToCampimetriaPayloadSnapshot(acuity),
+    confrontacion: confront
+      ? { ojo_izquierdo: confront, ojo_derecho: confront }
+      : draft.confrontacion,
+  }
+}
+
 export function inheritAntecedentesFromPapeleta(input: {
   physicalExamData?: Record<string, unknown> | null
   longitudinalData?: Record<string, unknown> | null

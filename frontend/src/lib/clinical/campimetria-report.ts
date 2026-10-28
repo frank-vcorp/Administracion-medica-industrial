@@ -113,6 +113,12 @@ export function buildCampimetriaExtractedData(input: {
     cirugias_oculares: input.payload.antecedentes.cirugias_oculares,
     vision_lejana_od: input.acuity.vision_lejana_od ?? null,
     vision_lejana_oi: input.acuity.vision_lejana_oi ?? null,
+    vision_cercana_od: input.acuity.vision_cercana_od ?? null,
+    vision_cercana_oi: input.acuity.vision_cercana_oi ?? null,
+    lejana_corregida_od: input.acuity.lejana_corregida_od ?? null,
+    lejana_corregida_oi: input.acuity.lejana_corregida_oi ?? null,
+    cercana_corregida_od: input.acuity.cercana_corregida_od ?? null,
+    cercana_corregida_oi: input.acuity.cercana_corregida_oi ?? null,
     agudeza_resumen: input.acuity.pending ? 'PENDIENTE' : (input.acuity.resumen ?? null),
   }
 }
