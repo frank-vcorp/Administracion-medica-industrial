@@ -7,7 +7,7 @@
  * Correcciones aplicadas (FIX-20260324-01):
  * - Oculta sidebar/header en /login (usuario no autenticado)
  * - Filtra ítems de navegación según rol (ADMIN, COMPANY_CLIENT, staff)
- * - Expone "Vista 3 Agendas" como entrada secundaria bajo Citas
+ * - Las tres sucursales se ven en /appointments; ya no hay enlace aparte de 3 agendas
  * @intervention ARCH-20260327-07
  * @see context/checkpoints/CHK_ARCH-20260327-07-HEADER-MINIMO-WORKSPACE.md
  * @id IMPL-20260527-01
@@ -27,7 +27,6 @@ import {
   BadgeCheck,
   Building2,
   Calendar,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -176,7 +175,6 @@ function ShellNavigation({
       {showStaffItems && (
         <>
           <NavItem href="/appointments" icon={Calendar} label="Gestión de citas" collapsed={collapsed} onNavigate={onNavigate} />
-          <NavItem href="/appointments/overview" icon={CalendarDays} label="Vista 3 Agendas" secondary collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/workers" icon={Users} label="Listado de pacientes" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/publico-general" icon={User} label="Público General" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/reception" icon={Stethoscope} label="Proceso de atención clínica" collapsed={collapsed} onNavigate={onNavigate} />
@@ -251,7 +249,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showAdminItems = isAdmin
   const showPortalItems = isCompanyClient
   const showGlobalSearch = showStaffItems && !isCompanyClient
-  const canEditProfile = isAdminLike(role) || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR'
+  const canEditProfile = Boolean(role)
   const isEventWorkspace = /^\/events\/[^/]+$/.test(pathname || '')
   const handleSignOut = () => {
     void signOut({ callbackUrl: '/login' })

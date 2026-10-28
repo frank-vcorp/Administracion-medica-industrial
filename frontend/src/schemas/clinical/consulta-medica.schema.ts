@@ -67,14 +67,52 @@ export const ConsultaMedicaPayloadSchema = z.object({
   medico_nombre: cleanString.min(1).max(200),
   medico_cedula: cleanString.min(1).max(50),
   antecedentes: ClinicalHistoryDataSchema.optional(),
+  /** Gineco / vacunas (ex Módulo 1) copiados del perfil o del examen de la visita. */
+  modulo1: z.record(z.string(), z.string()).optional(),
   cerrada_at: z.string().datetime().optional(),
 })
 
 export type ConsultaMedicaPayload = z.infer<typeof ConsultaMedicaPayloadSchema>
 
-/** Borrador: guardado parcial (solo exige schemaVersion). */
-export const ConsultaMedicaDraftSchema = ConsultaMedicaPayloadSchema.partial().required({
-  schemaVersion: true,
+const draftText = z.string().trim().max(12000)
+
+/**
+ * Borrador: solo exige la versión. Los textos vacíos y las líneas de
+ * medicamento a medias son válidos. El cierre sigue usando el schema estricto.
+ * `.partial()` no sirve: si el campo viene como "" igual exige min().
+ */
+export const ConsultaMedicaDraftSchema = z.object({
+  schemaVersion: z.literal(CONSULTA_MEDICA_SCHEMA_VERSION),
+  tipo_consulta: z.enum(TIPO_CONSULTA_VALUES).optional(),
+  motivo_consulta: draftText.optional(),
+  signos_vitales: SignosVitalesConsultaSchema.optional(),
+  exploracion_fisica: draftText.optional(),
+  diagnostico_sistema: draftText.max(500).optional(),
+  diagnostico_unificado: draftText.max(500).optional(),
+  diagnostico_especifico: draftText.max(2000).optional(),
+  incapacidad_aplica: z.boolean().optional(),
+  otorga_incapacidad: z.enum(['SI', 'NO']).optional(),
+  dias_incapacidad: z.number().int().min(0).max(365).optional(),
+  pase_salida: z.enum(['SI', 'NO']).optional(),
+  material_medico: optionalString,
+  indicaciones_generales: optionalString,
+  receta_lineas: z
+    .array(
+      z.object({
+        medicamento: draftText.max(500).optional().or(z.literal('')),
+        presentacion: optionalString,
+        dosis: draftText.max(300).optional().or(z.literal('')),
+        frecuencia: draftText.max(300).optional().or(z.literal('')),
+        duracion: draftText.max(300).optional().or(z.literal('')),
+      }),
+    )
+    .max(30)
+    .optional(),
+  medico_nombre: draftText.max(200).optional(),
+  medico_cedula: draftText.max(50).optional(),
+  antecedentes: ClinicalHistoryDataSchema.optional(),
+  modulo1: z.record(z.string(), z.string()).optional(),
+  cerrada_at: z.string().datetime().optional(),
 })
 
 export function emptySignosVitalesConsulta(): z.infer<typeof SignosVitalesConsultaSchema> {

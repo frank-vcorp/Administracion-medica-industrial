@@ -4,6 +4,11 @@ import {
   parseConsultaMedicaClinicalContext,
 } from '@/lib/clinical/consulta-medica'
 import type { ConsultaMedicaPdfInput } from '@/lib/consulta-medica-pdf'
+import {
+  CONSULTA_MEDICA_SCHEMA_VERSION,
+  emptySignosVitalesConsulta,
+  type ConsultaMedicaPayload,
+} from '@/schemas/clinical/consulta-medica.schema'
 
 export async function loadConsultaMedicaPdfInput(
   eventId: string,
@@ -40,9 +45,40 @@ export async function loadConsultaMedicaPdfInput(
     return { ok: false, status: 404, message: 'No hay consulta médica en esta papeleta.' }
   }
 
-  const consulta = parseConsultaMedicaClinicalContext(consultaTest.clinicalContext)
-  if (!consulta) {
+  const stored = parseConsultaMedicaClinicalContext(consultaTest.clinicalContext)
+  if (!stored) {
     return { ok: false, status: 404, message: 'La consulta médica aún no tiene captura.' }
+  }
+
+  const consulta: ConsultaMedicaPayload = {
+    schemaVersion: CONSULTA_MEDICA_SCHEMA_VERSION,
+    tipo_consulta: stored.tipo_consulta ?? 'ENFERMEDAD_GENERAL',
+    motivo_consulta: stored.motivo_consulta ?? '',
+    signos_vitales: stored.signos_vitales ?? emptySignosVitalesConsulta(),
+    exploracion_fisica: stored.exploracion_fisica ?? '',
+    diagnostico_sistema: stored.diagnostico_sistema ?? '',
+    diagnostico_unificado: stored.diagnostico_unificado ?? '',
+    diagnostico_especifico: stored.diagnostico_especifico ?? '',
+    incapacidad_aplica: stored.incapacidad_aplica ?? false,
+    otorga_incapacidad: stored.otorga_incapacidad ?? 'NO',
+    dias_incapacidad: stored.dias_incapacidad,
+    pase_salida: stored.pase_salida,
+    material_medico: stored.material_medico,
+    indicaciones_generales: stored.indicaciones_generales,
+    receta_lineas: (stored.receta_lineas ?? [])
+      .filter((line) => (line.medicamento ?? '').trim().length > 0)
+      .map((line) => ({
+        medicamento: line.medicamento ?? '',
+        presentacion: line.presentacion,
+        dosis: line.dosis?.trim() || '—',
+        frecuencia: line.frecuencia?.trim() || '—',
+        duracion: line.duracion?.trim() || '—',
+      })),
+    medico_nombre: stored.medico_nombre?.trim() || 'Médico',
+    medico_cedula: stored.medico_cedula?.trim() || '—',
+    antecedentes: stored.antecedentes,
+    modulo1: stored.modulo1,
+    cerrada_at: stored.cerrada_at,
   }
 
   const eventDateRaw = event.checkInDate ?? event.createdAt
@@ -65,7 +101,7 @@ export async function loadConsultaMedicaPdfInput(
     patient: {
       nombre: `${event.worker.firstName} ${event.worker.lastName}`.trim(),
       telefono: event.worker.phone,
-      sexo: null,
+      sexo: stored.modulo1?.m1_sexo?.trim() || null,
       edad,
       empresa: event.worker.company?.name ?? null,
       departamento: null,

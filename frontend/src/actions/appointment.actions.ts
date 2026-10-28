@@ -15,6 +15,7 @@
  * - Integración con auditoría
  */
 
+import { z } from 'zod'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
@@ -41,6 +42,7 @@ import {
   formatAppointmentAgendaDateString,
   formatAppointmentAgendaTime,
   parseAppointmentLocalDateTime,
+  todayAgendaDateString,
 } from '@/lib/appointment-scheduling'
 import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
 
@@ -958,7 +960,7 @@ export async function getAppointmentsForOverview(date: string) {
         scheduledAt: { gte, lte },
       },
       include: {
-        worker: { select: { firstName: true, lastName: true } },
+        worker: { select: { id: true, firstName: true, lastName: true, universalId: true } },
         company: { select: { name: true } },
         branch: { select: { id: true, name: true, hourlyCapacity: true, openingTime: true, closingTime: true } },
       },
@@ -968,6 +970,65 @@ export async function getAppointmentsForOverview(date: string) {
     return { success: true, appointments }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Error' }
+  }
+}
+
+const attendedMonthSchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+})
+
+function lastAgendaDayOfMonth(year: number, month: number): string {
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  return `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`
+}
+
+/** Citas con estatus COMPLETED cuya fecha de agenda es hoy o anterior. */
+export async function getAttendedAppointmentsCount() {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return { success: false as const, error: 'No autenticado', count: 0 }
+    const { lte } = agendaDayUtcRange(todayAgendaDateString())
+    const count = await prisma.appointment.count({
+      where: { status: 'COMPLETED', scheduledAt: { lte } },
+    })
+    return { success: true as const, count }
+  } catch (error) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'No se pudo contar las citas atendidas',
+      count: 0,
+    }
+  }
+}
+
+export async function getAttendedAppointmentsForMonth(year: number, month: number) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return { success: false as const, error: 'No autenticado', appointments: [] }
+    const parsed = attendedMonthSchema.safeParse({ year, month })
+    if (!parsed.success) {
+      return { success: false as const, error: 'Mes no válido', appointments: [] }
+    }
+    const startKey = `${parsed.data.year}-${String(parsed.data.month).padStart(2, '0')}-01`
+    const { gte } = agendaDayUtcRange(startKey)
+    const { lte } = agendaDayUtcRange(lastAgendaDayOfMonth(parsed.data.year, parsed.data.month))
+    const appointments = await prisma.appointment.findMany({
+      where: { status: 'COMPLETED', scheduledAt: { gte, lte } },
+      include: {
+        worker: { select: { firstName: true, lastName: true } },
+        company: { select: { name: true } },
+        branch: { select: { id: true, name: true } },
+      },
+      orderBy: { scheduledAt: 'asc' },
+    })
+    return { success: true as const, appointments }
+  } catch (error) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'No se pudieron cargar las citas atendidas',
+      appointments: [],
+    }
   }
 }
 

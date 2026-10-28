@@ -429,6 +429,9 @@ model MedicalEvent {
   intakeSource          IntakeSource?
   projectId             String?
   intakeCreatedByUserId String?
+  /// Motivo obligatorio al pasar la papeleta a CANCELED. Reutiliza EventStatus.
+  cancellationReason    String?
+  cancelledAt           DateTime?
   /// Salida en recepción (checkout): cuándo el paciente se retira y se ofrece encuesta (#13 F-017).
   dischargedAt          DateTime?
   dischargedByUserId    String?
@@ -574,6 +577,9 @@ model Appointment {
   /// Consentimiento informado firmado en recepción (PDF en storage).
   informedConsentPdfUrl    String?
   informedConsentSignedAt  DateTime?
+  /// Motivo obligatorio al pasar la cita a CANCELLED. No crea un estatus nuevo.
+  cancellationReason       String?
+  cancelledAt              DateTime?
   branch                   Branch               @relation(fields: [branchId], references: [id])
   company                  Company?             @relation(fields: [companyId], references: [id])
   serviceProfile           MedicalProfile?      @relation(fields: [serviceProfileId], references: [id])

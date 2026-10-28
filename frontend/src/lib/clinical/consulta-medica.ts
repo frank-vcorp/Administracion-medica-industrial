@@ -1,5 +1,6 @@
 import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
+  ConsultaMedicaDraftSchema,
   ConsultaMedicaPayloadSchema,
   type ConsultaMedicaPayload,
 } from '@/schemas/clinical/consulta-medica.schema'
@@ -14,10 +15,12 @@ export function isConsultaMedicaTestName(name: string): boolean {
 
 export function parseConsultaMedicaClinicalContext(
   raw: unknown,
-): ConsultaMedicaPayload | null {
+): Partial<ConsultaMedicaPayload> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const v = (raw as { schemaVersion?: string }).schemaVersion
   if (v !== CONSULTA_MEDICA_SCHEMA_VERSION) return null
-  const parsed = ConsultaMedicaPayloadSchema.safeParse(raw)
-  return parsed.success ? parsed.data : null
+  const full = ConsultaMedicaPayloadSchema.safeParse(raw)
+  if (full.success) return full.data
+  const draft = ConsultaMedicaDraftSchema.safeParse(raw)
+  return draft.success ? (draft.data as Partial<ConsultaMedicaPayload>) : null
 }
