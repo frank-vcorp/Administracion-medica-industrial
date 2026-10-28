@@ -165,6 +165,11 @@ DR7_MODEL    = os.environ.get("DR7_MODEL", "medgemma-4b-it").strip()
 M3_API_KEY = os.environ.get("M3_API_KEY", "").strip()
 M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
 M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", "MiniMax-M3").strip() or "MiniMax-M3"
+# Tope de reloj de la llamada clínica. El timeout de `requests` solo mide
+# silencio entre bytes: MiniMax puede ir soltando tokens durante minutos y
+# la función de Vercel (tope 300s en este proyecto) muere antes de guardar
+# el archivo. Este plazo es el máximo que se espera, pase lo que pase.
+M3_CLINICAL_DEADLINE_SEC = 45
 
 # Texto user-facing: no arrastrar cuerpos HTTP (crédito, URLs de upgrade, DR7).
 _PROVIDER_LEAK_RE = re.compile(
@@ -188,6 +193,7 @@ def _public_minimax_http_reason(status_code: str) -> str:
     code = str(status_code or "").strip()
     labels = {
         "0": "clave de MiniMax no disponible",
+        "timeout": "tiempo de espera agotado",
         "401": "autenticación rechazada por MiniMax",
         "402": "solicitud no autorizada por MiniMax",
         "429": "límite de uso de MiniMax",
@@ -1558,15 +1564,34 @@ Responde en JSON con esta estructura exacta:
             "response_format": {"type": "json_object"},
         }
 
-        response = requests.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=(10, 90),
-        )
+        # Plazo total, no solo silencio entre bytes. Si MiniMax no cierra
+        # el cuerpo, se abandona la llamada y el estudio igual se guarda
+        # con prediagnóstico no concluyente.
+        from concurrent.futures import ThreadPoolExecutor
+        from concurrent.futures import TimeoutError as FuturesTimeout
+
+        def _post_clinical():
+            return requests.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=(10, M3_CLINICAL_DEADLINE_SEC),
+            )
+
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="m3-clinical")
+        try:
+            response = pool.submit(_post_clinical).result(timeout=M3_CLINICAL_DEADLINE_SEC)
+        except FuturesTimeout:
+            print(
+                f"⚠️ MiniMax clínico superó {M3_CLINICAL_DEADLINE_SEC}s; "
+                "se guarda el archivo sin prediagnóstico."
+            )
+            raise RuntimeError("M3_HTTP:timeout:")
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
 
         if response.status_code >= 400:
             # No loguear ni propagar response.text: puede incluir URLs o saldo.
