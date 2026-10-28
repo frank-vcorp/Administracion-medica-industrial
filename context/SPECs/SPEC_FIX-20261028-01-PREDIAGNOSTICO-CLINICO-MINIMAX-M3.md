@@ -19,7 +19,7 @@ La extracción ya usa MiniMax M3 (`key_resolver` de `m3`, fila de `/admin/ai-key
 
 ## Modelo
 
-La extracción se queda en el modelo guardado en `/admin/ai-keys`. Esa fila es `MiniMax-M3` y es la que ya leía la audiometría. No se promueve a `MiniMax-M3.1-Flash`: con ese cambio la tabla de umbrales salió incompleta. Flash solo entra si se elige explícitamente.
+La prueba usa `MiniMax-M3.1-Flash` con `reasoning_effort=high` en extracción y prediagnóstico. El id guardado `MiniMax-M3` se lee como Flash solo para esta medición. La llamada clínica espera hasta 240 s. El panel deja la duración en las limitaciones: extracción y prediagnóstico, en segundos.
 
 ## Plazo de la llamada clínica
 

@@ -818,7 +818,9 @@ class M3VisionBase:
                 "openai SDK no instalado. Ejecuta: pip install openai>=1.0"
             ) from exc
 
-        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        from app.services.ai.m3_model import m3_performance_body
+
+        client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=240)
         b64_data = self.get_b64_jpeg(file_path)
 
         try:
@@ -866,6 +868,7 @@ class M3VisionBase:
                 # el catch-all la mapee a `error_code` accionable.
                 max_tokens=32768,
                 response_format={"type": "json_object"},
+                extra_body=m3_performance_body(self.model) or None,
             )
         except Exception as e:
             # IMPL-20260809-04 PRIVACIDAD: nunca loguear M3_API_KEY ni tokens.

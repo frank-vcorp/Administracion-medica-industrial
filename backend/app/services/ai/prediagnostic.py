@@ -167,11 +167,11 @@ M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
 from app.services.ai.m3_model import M3_MODEL_LEGACY, resolve_m3_model
 
 M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_LEGACY).strip() or M3_MODEL_LEGACY
-# Tope de reloj de la llamada clínica. El timeout de `requests` solo mide
-# silencio entre bytes: MiniMax puede ir soltando tokens durante minutos y
-# la función de Vercel (tope 300s en este proyecto) muere antes de guardar
-# el archivo. Este plazo es el máximo que se espera, pase lo que pase.
-M3_CLINICAL_DEADLINE_SEC = 45
+# Tope de reloj de la llamada clínica durante la prueba Flash.
+# 45s cortaba el razonamiento alto antes de que el modelo cerrara.
+# 240s deja medir la duración real y todavía puede volver antes del
+# corte de 300s de Vercel si la extracción no se come todo el margen.
+M3_CLINICAL_DEADLINE_SEC = 240
 
 # Texto user-facing: no arrastrar cuerpos HTTP (crédito, URLs de upgrade, DR7).
 _PROVIDER_LEAK_RE = re.compile(

@@ -1540,6 +1540,12 @@ async def v2_upload_and_analyze(
         predx_prompt_version = getattr(prediagnosis, "prompt_version", None)
         predx_input_debug = getattr(prediagnosis, "input_debug", None)
         print(f"   ✓ Prediagnóstico ({prediagnosis.clinical_state}) en {predx_seconds}s | prompt_source={predx_prompt_source}")
+        timing_note = (
+            f"Prueba MiniMax-M3.1-Flash, razonamiento alto. "
+            f"Extracción {extraction_seconds}s, prediagnóstico {predx_seconds}s."
+        )
+        if isinstance(getattr(prediagnosis, "limitations", None), list):
+            prediagnosis.limitations.append(timing_note)
 
         # ARCH-20260820-01 Fase 5 — snapshot versionado histórico:
         # agregar al payload los hashes y el schema congelado que el frontend
