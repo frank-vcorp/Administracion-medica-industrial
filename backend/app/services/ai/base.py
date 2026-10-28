@@ -820,7 +820,7 @@ class M3VisionBase:
 
         from app.services.ai.m3_model import m3_performance_body
 
-        client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=240)
+        client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=90)
         b64_data = self.get_b64_jpeg(file_path)
 
         try:
@@ -834,7 +834,8 @@ class M3VisionBase:
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/jpeg;base64,{b64_data}"
+                                    "url": f"data:image/jpeg;base64,{b64_data}",
+                                    "detail": "low",
                                 },
                             },
                         ],

@@ -2,7 +2,8 @@
 Prueba MiniMax-M3.1-Flash en extracción y prediagnóstico.
 
 El id guardado MiniMax-M3 se trata como Flash para esta medición.
-El razonamiento va en `high`. Otro id explícito, distinto de M3, se respeta.
+El razonamiento va en `low`, el nivel más rápido de la API.
+Otro id explícito, distinto de M3, se respeta.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from typing import Any, Dict, Optional
 
 M3_MODEL_FLASH = "MiniMax-M3.1-Flash"
 M3_MODEL_LEGACY = "MiniMax-M3"
-M3_FLASH_REASONING_EFFORT = "high"
+M3_FLASH_REASONING_EFFORT = "low"
 
 
 def resolve_m3_model(configured: Optional[str] = None) -> str:

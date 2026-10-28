@@ -1113,7 +1113,7 @@ class TestMedGemmaDR7Provider:
         assert headers["Authorization"] == "Bearer fake-m3-key"
         sent = mock_post.call_args.kwargs["json"]
         assert sent["model"] == "MiniMax-M3.1-Flash"
-        assert sent["reasoning_effort"] == "high"
+        assert sent["reasoning_effort"] == "low"
         assert "diagnóstico definitivo" in sent["messages"][0]["content"]
         assert "aptitud laboral" in sent["messages"][0]["content"]
         blob = " ".join(

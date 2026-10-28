@@ -1541,7 +1541,7 @@ async def v2_upload_and_analyze(
         predx_input_debug = getattr(prediagnosis, "input_debug", None)
         print(f"   ✓ Prediagnóstico ({prediagnosis.clinical_state}) en {predx_seconds}s | prompt_source={predx_prompt_source}")
         timing_note = (
-            f"Prueba MiniMax-M3.1-Flash, razonamiento alto. "
+            f"Prueba MiniMax-M3.1-Flash, razonamiento bajo. "
             f"Extracción {extraction_seconds}s, prediagnóstico {predx_seconds}s."
         )
         if isinstance(getattr(prediagnosis, "limitations", None), list):

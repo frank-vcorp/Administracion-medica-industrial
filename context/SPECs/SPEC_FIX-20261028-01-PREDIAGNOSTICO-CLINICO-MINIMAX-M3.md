@@ -19,7 +19,7 @@ La extracción ya usa MiniMax M3 (`key_resolver` de `m3`, fila de `/admin/ai-key
 
 ## Modelo
 
-La prueba usa `MiniMax-M3.1-Flash` con `reasoning_effort=high` en extracción y prediagnóstico. El id guardado `MiniMax-M3` se lee como Flash solo para esta medición. La llamada clínica espera hasta 240 s. El panel deja la duración en las limitaciones: extracción y prediagnóstico, en segundos.
+La prueba usa `MiniMax-M3.1-Flash` con `reasoning_effort=low` (el nivel más rápido) en extracción y prediagnóstico. La imagen va con `detail=low`. El id guardado `MiniMax-M3` se lee como Flash solo para esta medición. La llamada clínica espera hasta 90 s. El panel deja la duración en las limitaciones.
 
 ## Plazo de la llamada clínica
 
