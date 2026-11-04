@@ -51,6 +51,8 @@ import {
   DATOS_PERSONALES_CAMPOS,
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
   HISTORIA_LABORAL_EXPOSICIONES,
+  HISTORIA_LABORAL_EXPOSICION_AGENTES,
+  HISTORIA_LABORAL_RIESGOS_TRABAJO,
   HEREDOFAMILIARES_DESCRIPCIONES,
   emptyHeredoFamiliaresRecord,
   heredoFamiliaresEspecifiqueKey,
@@ -646,9 +648,36 @@ export function AntecedentesCaptura({
                   ))}
               </div>
             ))}
-            <div className="pt-2 border-t border-slate-100 space-y-2">
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Exposición / Antecedentes</p>
-              {HISTORIA_LABORAL_EXPOSICIONES.map(exp => (
+            <div className="pt-2 border-t border-slate-100 space-y-3">
+              <p className="text-[10px] font-bold text-slate-500 uppercase">Exposición a agentes</p>
+              {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(exp => (
+                <div key={exp.key}>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={form.historia_laboral[exp.key] === 'true' || form.historia_laboral[exp.key] === 'SI'}
+                      onChange={e => setField('historia_laboral', exp.key, e.target.checked ? 'true' : 'false')}
+                      disabled={readonly}
+                      className="rounded border-slate-300 text-teal-600"
+                    />
+                    <span className="font-medium text-slate-700">{exp.label}</span>
+                  </label>
+                  {(form.historia_laboral[exp.key] === 'true' || form.historia_laboral[exp.key] === 'SI') && (
+                    <input
+                      type="text"
+                      value={form.historia_laboral[exp.descKey] ?? ''}
+                      onChange={e => setField('historia_laboral', exp.descKey, e.target.value)}
+                      disabled={readonly}
+                      placeholder="Especifique…"
+                      className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    />
+                  )}
+                </div>
+              ))}
+              <p className="text-[10px] font-bold text-slate-500 uppercase pt-2 border-t border-slate-100">
+                Accidente laboral y enfermedad profesional
+              </p>
+              {HISTORIA_LABORAL_RIESGOS_TRABAJO.map(exp => (
                 <div key={exp.key}>
                   <label className="flex items-center gap-2 text-xs">
                     <input

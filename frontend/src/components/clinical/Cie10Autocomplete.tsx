@@ -36,7 +36,7 @@ async function fetchCie10Results(
 }
 
 export function Cie10Autocomplete({
-  label = 'Diagnóstico unificado CIE',
+  label = 'Diagnóstico CIE-10',
   value,
   onChange,
   disabled = false,

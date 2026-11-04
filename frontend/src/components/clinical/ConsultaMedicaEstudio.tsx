@@ -365,9 +365,11 @@ export default function ConsultaMedicaEstudio({
             value={diagEspecifico}
             onChange={(e) => setDiagEspecifico(e.target.value)}
             disabled={readonly}
+            spellCheck
           />
           <div className="border-t border-slate-100 pt-3 space-y-2">
             <p className="text-[10px] font-bold text-slate-400 uppercase">Incapacidad</p>
+            <p className="text-xs text-slate-500">¿Requiere incapacidad?</p>
             <div className="flex gap-4">
               {(['SI', 'NO'] as const).map((v) => (
                 <label key={v} className="flex items-center gap-2 text-sm">
@@ -377,18 +379,18 @@ export default function ConsultaMedicaEstudio({
                     onChange={() => setOtorgaIncap(v)}
                     disabled={readonly}
                   />
-                  Otorga: {v}
+                  {v === 'SI' ? 'Sí' : 'No'}
                 </label>
               ))}
             </div>
             {otorgaIncap === 'SI' && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input
                   className={inputClass}
                   type="number"
                   min={0}
                   max={365}
-                  placeholder="Núm. días"
+                  placeholder="Días (incapacidad interna AMI)"
                   value={diasIncap}
                   onChange={(e) => setDiasIncap(e.target.value)}
                   disabled={readonly}
@@ -399,8 +401,8 @@ export default function ConsultaMedicaEstudio({
                   onChange={(e) => setPaseSalida(e.target.value as 'SI' | 'NO')}
                   disabled={readonly}
                 >
-                  <option value="NO">Pase de salida: NO</option>
-                  <option value="SI">Pase de salida: SÍ</option>
+                  <option value="NO">Sin pase de salida</option>
+                  <option value="SI">Con pase de salida (IMSS u otro)</option>
                 </select>
               </div>
             )}

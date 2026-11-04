@@ -69,14 +69,24 @@ export const HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS: [string, string][] = [
   ['tiempo_anterior_2', 'Tiempo 2'],
 ]
 
-/** Definición declarativa de las exposiciones booleanas (cada una con su descripción). */
+/** Exposición a agentes en el puesto (minuta 28-oct: separar de riesgos/accidentes). */
+export const HISTORIA_LABORAL_EXPOSICION_AGENTES: HistoriaLaboralExposicion[] = [
+  { key: 'exposicion_quimica',    label: 'Química',    descKey: 'exposicion_quimica_especifique' },
+  { key: 'exposicion_fisica',     label: 'Física',     descKey: 'exposicion_fisica_especifique' },
+  { key: 'exposicion_biologica',  label: 'Biológica',  descKey: 'exposicion_biologica_especifique' },
+  { key: 'exposicion_ergonomica', label: 'Ergonómica', descKey: 'exposicion_ergonomica_especifique' },
+]
+
+/** Accidente laboral y enfermedad profesional (apartado distinto de exposición). */
+export const HISTORIA_LABORAL_RIESGOS_TRABAJO: HistoriaLaboralExposicion[] = [
+  { key: 'accidentes_trabajo',   label: 'Accidente laboral',     descKey: 'accidentes_descripcion' },
+  { key: 'enfermedades_trabajo', label: 'Enfermedad profesional', descKey: 'enfermedades_descripcion' },
+]
+
+/** Iteración completa (persistencia / payload); mantener orden legacy. */
 export const HISTORIA_LABORAL_EXPOSICIONES: HistoriaLaboralExposicion[] = [
-  { key: 'exposicion_quimica',    label: 'Química',                descKey: 'exposicion_quimica_especifique' },
-  { key: 'exposicion_fisica',     label: 'Física',                 descKey: 'exposicion_fisica_especifique' },
-  { key: 'exposicion_biologica',  label: 'Biológica',              descKey: 'exposicion_biologica_especifique' },
-  { key: 'exposicion_ergonomica', label: 'Ergonómica',             descKey: 'exposicion_ergonomica_especifique' },
-  { key: 'accidentes_trabajo',    label: 'Accidente laboral',      descKey: 'accidentes_descripcion' },
-  { key: 'enfermedades_trabajo',  label: 'Enfermedad profesional', descKey: 'enfermedades_descripcion' },
+  ...HISTORIA_LABORAL_EXPOSICION_AGENTES,
+  ...HISTORIA_LABORAL_RIESGOS_TRABAJO,
 ]
 
 /** Opciones de turno (select). */

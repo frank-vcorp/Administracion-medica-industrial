@@ -35,6 +35,8 @@ import {
   DATOS_PERSONALES_CAMPOS,
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
   HISTORIA_LABORAL_EXPOSICIONES,
+  HISTORIA_LABORAL_EXPOSICION_AGENTES,
+  HISTORIA_LABORAL_RIESGOS_TRABAJO,
   HEREDOFAMILIARES_DESCRIPCIONES,
   emptyHeredoFamiliaresRecord,
   heredoFamiliaresEspecifiqueKey,
@@ -417,9 +419,38 @@ export function AntecedentesForm({
               </div>
             </fieldset>
             <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-base font-semibold text-gray-900 px-2">Exposición a Riesgos y Antecedentes</legend>
+              <legend className="text-base font-semibold text-gray-900 px-2">Exposición a agentes</legend>
               <div className="space-y-3 mt-3">
-                {HISTORIA_LABORAL_EXPOSICIONES.map(({ key, label, descKey }) => (
+                {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(({ key, label, descKey }) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={!!historiaLaboral[key]}
+                        onChange={e => setHistoriaLaboral(p => ({ ...p, [key]: e.target.checked }))}
+                        className="rounded border-gray-300 text-blue-600"
+                      />
+                      <span className="text-sm font-medium text-gray-700 w-44">{label}</span>
+                    </label>
+                    {historiaLaboral[key] && (
+                      <input
+                        type="text"
+                        value={String(historiaLaboral[descKey] ?? '')}
+                        onChange={e => setHistoriaLaboral(p => ({ ...p, [descKey]: e.target.value }))}
+                        placeholder="Especifique…"
+                        className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="border border-gray-200 rounded-lg p-4">
+              <legend className="text-base font-semibold text-gray-900 px-2">
+                Accidente laboral y enfermedad profesional
+              </legend>
+              <div className="space-y-3 mt-3">
+                {HISTORIA_LABORAL_RIESGOS_TRABAJO.map(({ key, label, descKey }) => (
                   <div key={key} className="flex items-center gap-3">
                     <label className="flex items-center gap-2 cursor-pointer shrink-0">
                       <input
