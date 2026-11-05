@@ -717,11 +717,11 @@ function AgendaAppointmentRow({
                                     type="button"
                                     onClick={() => onCheckIn(apt.id)}
                                     disabled={checkingIn === apt.id}
-                                    className="max-w-[5.5rem] px-1.5 py-1 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-[10px] leading-tight text-center"
-                                    title="Doy mi consentimiento (identidad + firma, mismo flujo de ingreso)"
-                                    aria-label="Doy mi consentimiento"
+                                    className="px-2 py-1 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-[10px] leading-tight text-center whitespace-nowrap"
+                                    title="Registrar check-in: corroborar identidad, consentimiento informado y firma"
+                                    aria-label="Registrar check-in"
                                 >
-                                    {checkingIn === apt.id ? '…' : 'Doy mi consentimiento'}
+                                    {checkingIn === apt.id ? '…' : 'Check-in'}
                                 </button>
                             </>
                         )}
