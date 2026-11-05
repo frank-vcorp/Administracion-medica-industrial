@@ -126,13 +126,13 @@ export const SI_NEGADO = ['NEGADO', 'SI'] as const
  * Coincide con `HeredoFamiliaresSchema` en `schemas/clinical/history.schema.ts`.
  */
 export const HEREDOFAMILIARES_DESCRIPCIONES: CampoDescripcion[] = [
-  { field: 'diabetes',      label: 'Diabetes',                help: 'Algún familiar con azúcar alta en sangre (diabetes).' },
+  { field: 'diabetes',      label: 'Diabetes (en familia)',   help: 'Algún familiar con azúcar alta en sangre (diabetes). No es diabetes del trabajador — eso va en Personales (APP).' },
   { field: 'has',           label: 'Hipertensión',            help: 'Algún familiar con presión arterial alta diagnosticada.' },
   { field: 'epilepsia',     label: 'Epilepsia',               help: 'Algún familiar con convulsiones o epilepsia diagnosticada.' },
   { field: 'cardiopatia',   label: 'Cardiopatía',             help: 'Algún familiar con enfermedades del corazón (infartos, arritmias, soplos, etc.).' },
   { field: 'renales',       label: 'Enfermedad renal',        help: 'Algún familiar con problemas del riñón, diálisis o trasplante.' },
-  { field: 'asma',          label: 'Asma',                    help: 'Algún familiar con asma o bronquitis crónica recurrente.' },
-  { field: 'cancer',        label: 'Cáncer',                  help: 'Algún familiar con cáncer de cualquier tipo.' },
+  { field: 'asma',          label: 'Asma (en familia)',       help: 'Algún familiar con asma o bronquitis crónica recurrente.' },
+  { field: 'cancer',        label: 'Cáncer (en familia)',     help: 'Algún familiar con cáncer de cualquier tipo.' },
   { field: 'mentales',      label: 'Trastornos mentales',     help: 'Algún familiar con depresión, ansiedad, esquizofrenia u otros trastornos psiquiátricos.' },
 ]
 
@@ -187,9 +187,9 @@ export function emptyHeredoFamiliaresRecord(): Record<string, string> {
  */
 export const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
   endocrino: [
-    { field: 'diabetes',       label: 'Diabetes',         help: 'Azúcar alta en sangre diagnosticada por un médico.' },
+    { field: 'diabetes',       label: 'Diabetes (paciente)', help: 'Azúcar alta en sangre del trabajador, diagnosticada por un médico. Distinto de diabetes en Familiares (AHF).' },
     { field: 'endocrinopatias',label: 'Endocrinopatías',  help: 'Otras enfermedades de tiroides, suprarrenales u hormonales.' },
-    { field: 'asma',           label: 'Asma',             help: 'Asma persistente (crisis frecuentes, uso de inhalador).' },
+    { field: 'asma',           label: 'Asma (paciente)',  help: 'Asma del trabajador (crisis frecuentes, inhalador). Distinto de asma en Familiares (AHF).' },
   ],
   cardiopulmonar: [
     { field: 'cardiopatias', label: 'Cardiopatías',          help: 'Enfermedades del corazón (infarto, soplo, arritmia, insuficiencia).' },

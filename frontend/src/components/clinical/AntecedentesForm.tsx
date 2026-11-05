@@ -49,6 +49,11 @@ import {
   SUPLEMENTOS_COMPLEMENTOS_HELP,
   SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
+import {
+  ANTECEDENTES_SECTION_LEGEND,
+  ANTECEDENTES_TABS,
+  antecedentesTabIntro,
+} from '@/lib/antecedentes-section-ui'
 import { hasDetalleContent } from '@/lib/patologicos-accordion'
 import {
   HEREDOFAMILIARES_VALUES,
@@ -324,17 +329,12 @@ export function AntecedentesForm({
 
       {/* Tabs — 5 secciones longitudinales ARCH-20260326-06 */}
       <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 mb-6">
-        {([
-          ['datos_personales', '👤', 'Datos Personales'],
-          ['historia_laboral', '🏭', 'Historia Laboral'],
-          ['heredofamiliares', '🧬', 'Heredo-Familiares'],
-          ['no_patologicos',   '🍺', 'No Patológicos'],
-          ['patologicos',      '🏥', 'Patológicos'],
-        ] as [string, string, string][]).map(([id, icon, label]) => (
+        {ANTECEDENTES_TABS.map(({ id, icon, label }) => (
           <button
             key={id}
             type="button"
             onClick={() => setActiveTab(id as ActiveTab)}
+            title={antecedentesTabIntro(id)}
             className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold transition ${
               activeTab === id
                 ? 'bg-white shadow text-blue-700'
@@ -352,8 +352,8 @@ export function AntecedentesForm({
         {/* ── DATOS PERSONALES ────────────────────────────────────────────── */}
         {activeTab === 'datos_personales' && (
           <div className="space-y-6">
-            <p className="text-sm text-gray-600">
-              ℹ️ Datos declarativos del trabajador — sirven como base longitudinal reutilizable entre citas.
+            <p className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              ℹ️ {antecedentesTabIntro('datos_personales')}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {DATOS_PERSONALES_CAMPOS.filter(c => c.kind === 'text' || c.kind === 'number').map(campo => (
@@ -396,6 +396,9 @@ export function AntecedentesForm({
         {/* ── HISTORIA LABORAL ───────────────────────────────────────────── */}
         {activeTab === 'historia_laboral' && (
           <div className="space-y-6">
+            <p className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              ℹ️ {antecedentesTabIntro('historia_laboral')}
+            </p>
             <fieldset className="border border-gray-200 rounded-lg p-4">
               <legend className="text-base font-semibold text-gray-900 px-2">Empleos Anteriores</legend>
               <div className="space-y-4 mt-3">
@@ -480,12 +483,12 @@ export function AntecedentesForm({
         {/* SECCIÓN: ANTECEDENTES PATOLÓGICOS — IMPL-20260817-04 acordeón */}
         {activeTab === 'patologicos' && (
           <div className="space-y-6">
-            <p className="text-sm text-gray-600 mb-4">
-              ℹ️ Por defecto, todos los campos están configurados como &quot;NEGADO&quot;. Cambiar solo si aplica.
-              <br />
-              <span className="text-gray-500">Auto: conteste lo que recuerde. No es necesario que sea un diagnóstico médico formal.</span>
-              <br />
-              <span className="text-gray-500">Al marcar <strong>SÍ</strong> aparecen 3 campos: desde cuándo, tratamiento y observaciones.</span>
+            <p className="text-sm text-gray-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
+              ℹ️ {antecedentesTabIntro('patologicos')}
+              <span className="block text-gray-500 mt-2 text-xs">
+                Por defecto NEGADO. Al marcar SÍ complete desde cuándo, tratamiento y observaciones. No
+                requiere diagnóstico formal escrito.
+              </span>
             </p>
 
             {(
@@ -618,15 +621,17 @@ export function AntecedentesForm({
         {/* PESTAÑA: ANTECEDENTES HEREDO-FAMILIARES */}
         {activeTab === 'heredofamiliares' && (
           <div className="space-y-6">
-            <p className="text-sm text-gray-600 mb-4">
-              ℹ️ Indique familiares con antecedentes de estas enfermedades (ej: &quot;PADRE&quot;, &quot;ABUELO&quot;, &quot;ABUELA MATERNA&quot;, etc.)
-              <br />
-              <span className="text-gray-500">Auto: si no recuerda el familiar exacto, deje el campo en blanco. Solo anote lo que recuerde con seguridad.</span>
+            <p className="text-sm text-gray-600 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2 mb-4">
+              ℹ️ {antecedentesTabIntro('heredofamiliares')}
+              <span className="block text-gray-500 mt-2 text-xs">
+                Indique el parentesco cuando aplique (PADRE, ABUELO MATERNO, OTROS, etc.). Solo anote lo
+                que recuerde con seguridad.
+              </span>
             </p>
 
             <fieldset className="border border-gray-200 rounded-lg p-4">
               <legend className="text-lg font-semibold text-gray-900 px-2">
-                Antecedentes en Familia
+                {ANTECEDENTES_SECTION_LEGEND.heredo_familiares}
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 {HEREDOFAMILIARES_DESCRIPCIONES.map((item) => {
@@ -681,10 +686,11 @@ export function AntecedentesForm({
         {/* ── NO PATOLÓGICOS / TOXICOMANÍAS ───────────────────────────────────── */}
         {activeTab === 'no_patologicos' && (
           <div className="space-y-6">
-            <p className="text-sm text-gray-600">
-              ℹ️ Indique SI o NEGADO para cada hábito. Si aplica, complete los detalles adicionales.
-              <br />
-              <span className="text-gray-500">Auto: conteste lo que recuerde. Aproxime las cantidades si no las sabe exactas (ej: &quot;3-4 por semana&quot;).</span>
+            <p className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              ℹ️ {antecedentesTabIntro('no_patologicos')}
+              <span className="block text-gray-500 mt-2 text-xs">
+                Indique SI o NEGADO por hábito. Aproxime cantidades si no las sabe (ej. 3–4 por semana).
+              </span>
             </p>
             {NO_PATOLOGICOS_DESCRIPCIONES.map((item) => (
               <div key={item.key} className="border border-gray-200 rounded-lg p-4">

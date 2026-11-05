@@ -69,6 +69,7 @@ import {
   SUPLEMENTOS_COMPLEMENTOS_HELP,
   SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
+import { ANTECEDENTES_SECTION_LEGEND, antecedentesTabIntro } from '@/lib/antecedentes-section-ui'
 import {
   GINE_FIELDS,
   M1_SEX_OPTIONS,
@@ -572,6 +573,11 @@ export function AntecedentesCaptura({
         </a>
       )}
 
+      <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+        <strong>AHF</strong> (Familiares) = en parientes · <strong>APP</strong> (Personales) = en el
+        trabajador · <strong>ANP</strong> (Hábitos) = tabaco, alcohol, etc.
+      </p>
+
       {/* ── Grid 3 columnas: DP | HL | HF ───────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Datos Personales */}
@@ -706,10 +712,13 @@ export function AntecedentesCaptura({
         </fieldset>
 
         {/* Heredo-Familiares */}
-        <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
-            Heredo-Familiares
+        <fieldset className="border border-violet-100 rounded-xl p-3 bg-violet-50/30">
+          <legend className="text-xs font-bold text-violet-900 uppercase tracking-wider px-1">
+            {ANTECEDENTES_SECTION_LEGEND.heredo_familiares}
           </legend>
+          <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
+            {antecedentesTabIntro('heredofamiliares')}
+          </p>
           <div className="space-y-3 mt-2">
             {HEREDOFAMILIARES_DESCRIPCIONES.map(item => {
               // IMPL-20260817-01-C2: 7 campos con HEREDOFAMILIARES_VALUES (8 opciones),
@@ -764,8 +773,11 @@ export function AntecedentesCaptura({
       {/* ── Fila 2: No Patológicos ──────────────────────────────────────── */}
       <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
         <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
-          No Patológicos / Toxicomanías
+          {ANTECEDENTES_SECTION_LEGEND.no_patologicos}
         </legend>
+        <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
+          {antecedentesTabIntro('no_patologicos')}
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
           {NO_PATOLOGICOS_DESCRIPCIONES.map(item => {
             const active = form.no_patologicos[item.key] === 'SI'
@@ -905,12 +917,13 @@ export function AntecedentesCaptura({
       </fieldset>
 
       {/* ── Fila 3: Patológicos ─────────────────────────────────────────── */}
-      <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-        <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
-          Patológicos
+      <fieldset className="border border-amber-100 rounded-xl p-3 bg-amber-50/30">
+        <legend className="text-xs font-bold text-amber-900 uppercase tracking-wider px-1">
+          {ANTECEDENTES_SECTION_LEGEND.patologicos}
         </legend>
-        <p className="text-[10px] text-slate-500 mt-1 mb-3">
-          Por defecto NEGADO. Si marca <strong>SÍ</strong>, complete desde cuándo, tratamiento y observaciones (sin acordeón).
+        <p className="text-[10px] text-slate-600 mt-1 mb-3 leading-snug">
+          {antecedentesTabIntro('patologicos')} Por defecto NEGADO; con SÍ complete desde cuándo,
+          tratamiento y observaciones.
         </p>
         {PATOLOGICOS_GROUP_ORDER.map(group => (
           <div key={group} className="mb-4 last:mb-0">
