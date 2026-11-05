@@ -4,6 +4,7 @@ import {
   buildDiagnosticoRecetaDisplay,
   SME_PDF_FOOTER,
 } from '@/lib/clinical/consulta-receta-pdf-format'
+import { CONSULTA_ANTECEDENTES_RUBROS } from '@/lib/clinical/consulta-antecedentes-resumen'
 import {
   TIPO_CONSULTA_LABELS,
   type ConsultaMedicaPayload,
@@ -284,6 +285,25 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
           <Text style={styles.title}>MOTIVO DE LA CONSULTA</Text>
           <Text style={styles.paragraph}>{c.motivo_consulta}</Text>
         </View>
+
+        {c.antecedentes_consulta &&
+        CONSULTA_ANTECEDENTES_RUBROS.some(({ key }) =>
+          String(c.antecedentes_consulta?.[key] ?? '').trim(),
+        ) ? (
+          <View style={styles.block}>
+            <Text style={styles.title}>ANTECEDENTES PERSONALES</Text>
+            {CONSULTA_ANTECEDENTES_RUBROS.map(({ key, label }) => {
+              const text = String(c.antecedentes_consulta?.[key] ?? '').trim()
+              if (!text) return null
+              return (
+                <View key={key} style={{ marginBottom: 6 }}>
+                  <Text style={styles.label}>{label}:</Text>
+                  <Text style={styles.paragraph}>{text}</Text>
+                </View>
+              )
+            })}
+          </View>
+        ) : null}
 
         <View style={styles.block}>
           <Text style={styles.title}>EXPLORACIÓN FÍSICA</Text>

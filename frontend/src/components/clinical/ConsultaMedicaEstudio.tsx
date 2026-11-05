@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
+import { ConsultaAntecedentesResumen } from '@/components/clinical/ConsultaAntecedentesResumen'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
@@ -17,6 +18,10 @@ import {
   mergeProfileAntecedentesIntoConsulta,
   modulo1Record,
 } from '@/lib/clinical/consulta-antecedentes'
+import {
+  mergeAntecedentesConsultaResumen,
+  suggestAntecedentesConsultaFromProfile,
+} from '@/lib/clinical/consulta-antecedentes-resumen'
 import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
   TIPO_CONSULTA_VALUES,
@@ -105,11 +110,24 @@ export default function ConsultaMedicaEstudio({
     parsed?.medico_nombre ?? session?.user?.fullName ?? session?.user?.name ?? '',
   )
   const [medicoCedula, setMedicoCedula] = useState(parsed?.medico_cedula ?? '')
-  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() =>
-    mergeProfileAntecedentesIntoConsulta(
-      parsed?.antecedentes,
-      longitudinalData,
-      profileAntecedentes,
+  const initialAntecedentesMerged = useMemo(
+    () =>
+      mergeProfileAntecedentesIntoConsulta(
+        parsed?.antecedentes,
+        longitudinalData,
+        profileAntecedentes,
+      ),
+    [parsed?.antecedentes, longitudinalData, profileAntecedentes],
+  )
+
+  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(
+    () => initialAntecedentesMerged,
+  )
+
+  const [antecedentesConsulta, setAntecedentesConsulta] = useState(() =>
+    mergeAntecedentesConsultaResumen(
+      parsed?.antecedentes_consulta,
+      suggestAntecedentesConsultaFromProfile(initialAntecedentesMerged),
     ),
   )
   const antecedentesHydratedRef = useRef(false)
@@ -166,6 +184,7 @@ export default function ConsultaMedicaEstudio({
       medico_nombre: medicoNombre.trim() || session?.user?.fullName || session?.user?.name || 'Médico',
       medico_cedula: medicoCedula.trim() || '—',
       antecedentes: antecedentes as ConsultaMedicaPayload['antecedentes'],
+      antecedentes_consulta: antecedentesConsulta,
       modulo1,
       cerrada_at: cerradaAt || undefined,
     }
@@ -187,6 +206,7 @@ export default function ConsultaMedicaEstudio({
     medicoNombre,
     medicoCedula,
     antecedentes,
+    antecedentesConsulta,
     modulo1,
     cerradaAt,
     session?.user?.fullName,
@@ -342,7 +362,26 @@ export default function ConsultaMedicaEstudio({
       )}
 
       {activeTab === 'antecedentes' && workerId && (
-        <section className="bg-white border border-slate-200 rounded-xl p-4">
+        <section className="space-y-4">
+          <ConsultaAntecedentesResumen
+            value={antecedentesConsulta}
+            onChange={setAntecedentesConsulta}
+            readonly={readonly}
+          />
+          {!readonly && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="text-xs font-bold text-teal-700 hover:text-teal-900 underline"
+                onClick={() =>
+                  setAntecedentesConsulta(suggestAntecedentesConsultaFromProfile(antecedentes))
+                }
+              >
+                Precargar 6 rubros desde cuestionario estructurado
+              </button>
+            </div>
+          )}
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
           <AntecedentesCaptura
             value={antecedentes as AntecedentesCapturaData}
             onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
@@ -359,6 +398,7 @@ export default function ConsultaMedicaEstudio({
             </Link>
             .
           </p>
+          </div>
         </section>
       )}
 

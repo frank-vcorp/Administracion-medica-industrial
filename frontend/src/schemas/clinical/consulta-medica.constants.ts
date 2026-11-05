@@ -40,6 +40,16 @@ export type RecetaLinea = {
   duracion: string
 }
 
+/** Seis rubros de texto — antecedentes patológicos / no patológicos en consulta (Dra. Jacky). */
+export type AntecedentesConsultaResumen = {
+  cronico_degenerativos: string
+  traumaticos: string
+  quirurgicos: string
+  transfusionales: string
+  alergicos: string
+  toxicomanias: string
+}
+
 export type ConsultaMedicaPayload = {
   schemaVersion: typeof CONSULTA_MEDICA_SCHEMA_VERSION
   tipo_consulta: TipoConsultaValue
@@ -58,6 +68,8 @@ export type ConsultaMedicaPayload = {
   medico_nombre: string
   medico_cedula: string
   antecedentes?: Record<string, unknown>
+  /** Resumen narrativo para nota de consulta (6 rubros). */
+  antecedentes_consulta?: AntecedentesConsultaResumen
   modulo1?: Record<string, string>
   cerrada_at?: string
 }

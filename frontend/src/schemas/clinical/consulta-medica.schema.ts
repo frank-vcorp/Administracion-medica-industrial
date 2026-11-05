@@ -59,6 +59,15 @@ export const RecetaLineaSchema = z.object({
   duracion: freeText(300, 1),
 })
 
+export const AntecedentesConsultaResumenSchema = z.object({
+  cronico_degenerativos: optionalString,
+  traumaticos: optionalString,
+  quirurgicos: optionalString,
+  transfusionales: optionalString,
+  alergicos: optionalString,
+  toxicomanias: optionalString,
+})
+
 export const SignosVitalesConsultaSchema = z.object({
   ta_sistolica: optionalString,
   ta_diastolica: optionalString,
@@ -89,6 +98,7 @@ export const ConsultaMedicaPayloadSchema = z.object({
   medico_nombre: freeText(200, 1),
   medico_cedula: plainString.min(1).max(50),
   antecedentes: ClinicalHistoryDataSchema.optional(),
+  antecedentes_consulta: AntecedentesConsultaResumenSchema.optional(),
   /** Gineco / vacunas (ex Módulo 1) copiados del perfil o del examen de la visita. */
   modulo1: z.record(z.string(), z.string()).optional(),
   cerrada_at: z.string().datetime().optional(),
@@ -131,6 +141,7 @@ export const ConsultaMedicaDraftSchema = z.object({
   medico_nombre: draftText(200).optional(),
   medico_cedula: plainString.max(50).optional(),
   antecedentes: ClinicalHistoryDataSchema.optional(),
+  antecedentes_consulta: AntecedentesConsultaResumenSchema.optional(),
   modulo1: z.record(z.string(), z.string()).optional(),
   cerrada_at: z.string().datetime().optional(),
 })
