@@ -141,12 +141,12 @@ export const HEREDOFAMILIARES_CATALOGO_FIELDS = HEREDOFAMILIARES_DESCRIPCIONES.f
   item => item.field !== 'mentales',
 ).map(item => item.field)
 
-/** State key del texto libre cuando el select ZIN = OTROS (ej. `cancer_especifique`). */
+/** State key del texto libre opcional (p. ej. `mentales_especifique` cuando SI). */
 export function heredoFamiliaresEspecifiqueKey(field: string): string {
   return `${field}_especifique`
 }
 
-/** Formato PDF/display: `OTROS` + detalle → `OTROS (TÍO PATERNO)`. */
+/** Formato PDF/display para heredo-familiares (multiselect o mentales SI). */
 export function formatHeredoFamiliaresValor(
   value: string | null | undefined,
   especifique: string | null | undefined,
@@ -154,8 +154,18 @@ export function formatHeredoFamiliaresValor(
   const v = (value ?? '').trim()
   if (!v) return ''
   const e = (especifique ?? '').trim()
-  if (v === 'OTROS' && e) return `OTROS (${e})`
   if (v === 'SI' && e) return `SI (${e})`
+  if (v.includes(',')) {
+    return v
+      .split(',')
+      .map((part) => {
+        const p = part.trim()
+        if (p === 'OTROS' && e) return `OTROS (${e})`
+        return p
+      })
+      .join(', ')
+  }
+  if (v === 'OTROS' && e) return `OTROS (${e})`
   return v
 }
 

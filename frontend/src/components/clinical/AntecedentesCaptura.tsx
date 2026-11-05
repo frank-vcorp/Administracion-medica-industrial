@@ -73,6 +73,7 @@ import {
   ClinicalFreeTextInput,
   ClinicalTextarea,
 } from '@/components/clinical/ClinicalFreeTextControls'
+import { HeredofamiliaresRelacionMultiSelect } from '@/components/clinical/HeredofamiliaresRelacionMultiSelect'
 import {
   patologiaEspecificacionPlaceholder,
   patologiaRequiresEspecificacion,
@@ -88,7 +89,6 @@ import {
 } from '@/lib/modulo1-capture-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
 import {
-  HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
 } from '@/schemas/clinical/exam.schema'
 import {
@@ -733,12 +733,9 @@ export function AntecedentesCaptura({
               // `mentales` con HEREDOFAMILIARES_MENTALES_VALUES (3 opciones),
               // `otras` con combo + input "Especifique" condicional. DA-6 espejo AntecedentesForm.
               const isMentales = item.field === 'mentales'
-              const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
               const currentValue = form.heredo_familiares[item.field] ?? ''
               const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-              const showEspecifique =
-                (!isMentales && currentValue === 'OTROS') ||
-                (isMentales && currentValue === 'SI')
+              const showEspecifiqueMentales = isMentales && currentValue === 'SI'
               return (
                 <FieldRow
                   key={item.field}
@@ -746,28 +743,32 @@ export function AntecedentesCaptura({
                   help={item.help}
                   modified={modified.has(`heredo_familiares.${item.field}`)}
                 >
-                  <select
-                    value={currentValue}
-                    onChange={e => setField('heredo_familiares', item.field, e.target.value)}
-                    disabled={readonly}
-                    className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                  >
-                    <option value="">—</option>
-                    {zinValues.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                  {showEspecifique && (
+                  {isMentales ? (
+                    <select
+                      value={currentValue}
+                      onChange={e => setField('heredo_familiares', item.field, e.target.value)}
+                      disabled={readonly}
+                      className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    >
+                      <option value="">—</option>
+                      {HEREDOFAMILIARES_MENTALES_VALUES.map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <HeredofamiliaresRelacionMultiSelect
+                      value={currentValue}
+                      onChange={(next) => setField('heredo_familiares', item.field, next)}
+                      disabled={readonly}
+                    />
+                  )}
+                  {showEspecifiqueMentales && (
                     <input
                       type="text"
                       value={form.heredo_familiares[especifiqueKey] ?? ''}
                       onChange={e => setField('heredo_familiares', especifiqueKey, e.target.value)}
                       disabled={readonly}
-                      placeholder={
-                        isMentales
-                          ? 'Especificación (ej: depresión materna, esquizofrenia paterna)'
-                          : 'Especifique (ej: TÍO PATERNO, cáncer de mama)'
-                      }
+                      placeholder="Especificación (ej: depresión materna, esquizofrenia paterna)"
                       className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                     />
                   )}

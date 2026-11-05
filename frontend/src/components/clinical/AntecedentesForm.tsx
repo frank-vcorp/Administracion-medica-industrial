@@ -60,13 +60,13 @@ import {
   ClinicalFreeTextInput,
   ClinicalTextarea,
 } from '@/components/clinical/ClinicalFreeTextControls'
+import { HeredofamiliaresRelacionMultiSelect } from '@/components/clinical/HeredofamiliaresRelacionMultiSelect'
 import {
   patologiaEspecificacionPlaceholder,
   patologiaRequiresEspecificacion,
 } from '@/lib/patologia-especificacion-fields'
 import { hasDetalleContent } from '@/lib/patologicos-accordion'
 import {
-  HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
 } from '@/schemas/clinical/exam.schema'
 import {
@@ -672,7 +672,7 @@ export function AntecedentesForm({
             <p className="text-sm text-gray-600 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2 mb-4">
               ℹ️ {antecedentesTabIntro('heredofamiliares')}
               <span className="block text-gray-500 mt-2 text-xs">
-                Indique el parentesco cuando aplique (PADRE, ABUELO MATERNO, OTROS, etc.). Solo anote lo
+                Indique el parentesco cuando aplique (puede marcar más de un familiar). Solo anote lo
                 que recuerde con seguridad.
               </span>
             </p>
@@ -688,38 +688,39 @@ export function AntecedentesForm({
                   // `mentales` con SI/NO/NO APLICA, `otras` con combo + input "Especifique"
                   // condicional cuando value === 'OTROS'. Ver SPEC §4.4.
                   const isMentales = item.field === 'mentales'
-                  const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
                   const currentValue = heredofamiliares[item.field as keyof typeof heredofamiliares] ?? ''
                   const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-                  const showEspecifique =
-                    (!isMentales && currentValue === 'OTROS') ||
-                    (isMentales && currentValue === 'SI')
+                  const showEspecifiqueMentales = isMentales && currentValue === 'SI'
                   return (
                     <div key={item.field}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         {item.label}
                       </label>
                       <p className="text-xs text-gray-500 mb-2">{item.help}</p>
-                      <select
-                        value={currentValue}
-                        onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">— Seleccionar —</option>
-                        {zinValues.map(v => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
-                      {showEspecifique && (
+                      {isMentales ? (
+                        <select
+                          value={currentValue}
+                          onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">— Seleccionar —</option>
+                          {HEREDOFAMILIARES_MENTALES_VALUES.map(v => (
+                            <option key={v} value={v}>{v}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <HeredofamiliaresRelacionMultiSelect
+                          value={currentValue}
+                          onChange={(next) => handleHeredofamiliaresChange(item.field, next)}
+                          itemClassName="flex items-center gap-2 text-sm text-gray-700"
+                        />
+                      )}
+                      {showEspecifiqueMentales && (
                         <input
                           type="text"
                           value={heredofamiliares[especifiqueKey] ?? ''}
                           onChange={(e) => handleHeredofamiliaresChange(especifiqueKey, e.target.value)}
-                          placeholder={
-                            isMentales
-                              ? 'Especificación (ej: depresión materna)'
-                              : 'Especifique (ej: TÍO PATERNO, cáncer de mama)'
-                          }
+                          placeholder="Especificación (ej: depresión materna)"
                           className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                         />
                       )}
