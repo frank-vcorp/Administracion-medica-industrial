@@ -718,10 +718,10 @@ function AgendaAppointmentRow({
                                     onClick={() => onCheckIn(apt.id)}
                                     disabled={checkingIn === apt.id}
                                     className="px-2 py-1 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-[10px] leading-tight text-center whitespace-nowrap"
-                                    title="Registrar check-in: corroborar identidad, consentimiento informado y firma"
-                                    aria-label="Registrar check-in"
+                                    title="Ingresar: corroborar identidad, consentimiento informado y firma"
+                                    aria-label="Ingresar paciente"
                                 >
-                                    {checkingIn === apt.id ? '…' : 'Check-in'}
+                                    {checkingIn === apt.id ? '…' : 'Ingresar'}
                                 </button>
                             </>
                         )}
