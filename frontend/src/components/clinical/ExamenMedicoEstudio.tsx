@@ -61,6 +61,10 @@ import {
 // hallazgo → recomendacion + edicion manual).
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
 import { formatMedicoNombreYCedula } from "@/lib/clinical/medico-display"
+import {
+  medicoLineFromProfile,
+  prepareExamenMedicoPayloadForSave,
+} from '@/lib/clinical/examen-medico-payload'
 import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
 import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
 import {
@@ -885,15 +889,33 @@ export default function ExamenMedicoEstudio({
     setSaveError('')
     setAiWarning('')
     startTransition(async () => {
-      const medicoPatch = await resolveMedicoLinesForSave()
-      if (Object.keys(medicoPatch).length > 0) {
-        setForm(prev => ({ ...prev, ...medicoPatch }))
+      const profileRes = await getCurrentDoctorProfile()
+      const medicoLine = profileRes.success
+        ? medicoLineFromProfile(
+            profileRes.profile.fullName,
+            profileRes.profile.professionalLicense,
+          )
+        : sessionMedicoLine
+
+      const rawPayload = buildPayload()
+      const prepared = prepareExamenMedicoPayloadForSave(rawPayload, { medicoLine })
+
+      const formPatch: Record<string, string> = {}
+      for (const [key, value] of Object.entries(prepared)) {
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          formPatch[key] = String(value)
+        }
       }
-      const payload = {
-        ...buildPayload(),
-        ...medicoPatch,
+      if (Object.keys(formPatch).length > 0) {
+        setForm(prev => ({ ...prev, ...formPatch }))
       }
-      const res = await saveExamenMedicoPapeleta(eventId, eventTestId, payload, markComplete)
+
+      const res = await saveExamenMedicoPapeleta(
+        eventId,
+        eventTestId,
+        prepared,
+        markComplete,
+      )
       if (res.success) {
         // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / FND-20260825-22):
         // cuando se marca como completado, el Event pasa a `VALIDATING` y
@@ -1898,7 +1920,7 @@ export default function ExamenMedicoEstudio({
                 value={form.impresion_diagnostica ?? ''}
                 onChange={e => handleField('impresion_diagnostica', e.target.value)}
                 disabled={readonly}
-                placeholder="Describe los diagnósticos principales o hallazgos clínicos relevantes..."
+                placeholder="Opcional: se auto-completa desde el resumen clínico al guardar si lo dejas vacío."
                 className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
               />
             </label>
@@ -2013,46 +2035,14 @@ export default function ExamenMedicoEstudio({
             </div>
           </div>
 
-          {/* Médicos firmantes — auto desde sesión / aptitud */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Médicos firmantes
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Médico evaluador (nombre y cédula)
-                </span>
-                <input
-                  type="text"
-                  value={form.medico_evaluador ?? ''}
-                  onChange={e => handleField('medico_evaluador', e.target.value)}
-                  disabled={readonly}
-                  className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                  placeholder="Se completa con tu cuenta al abrir esta pestaña"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">
-                  Desde el perfil del usuario que captura el examen.
-                </p>
-              </label>
-              <label className="block">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Médico revisor (nombre y cédula)
-                </span>
-                <input
-                  type="text"
-                  value={form.medico_revisor ?? ''}
-                  onChange={e => handleField('medico_revisor', e.target.value)}
-                  disabled={readonly}
-                  className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                  placeholder="Se completa al elegir aptitud laboral"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">
-                  Quien selecciona la aptitud laboral (misma cuenta en sesión).
-                </p>
-              </label>
-            </div>
-          </div>
+          <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 leading-snug">
+            Al guardar y al generar PDFs se usan automáticamente el{' '}
+            <strong>nombre, cédula y firma</strong> de tu cuenta (
+            <a href="/profile" className="text-teal-700 underline font-medium">
+              Mi perfil
+            </a>
+            ). No hace falta capturarlos aquí.
+          </p>
 
           {/* Mensajes de resultado */}
           {saveMsg && (
@@ -2159,19 +2149,9 @@ export default function ExamenMedicoEstudio({
               </button>
               <button
                 onClick={() => handleSave(true)}
-                disabled={
-                  isPending ||
-                  !(form.impresion_diagnostica ?? '').trim() ||
-                  !recomendaciones.trim()
-                }
+                disabled={isPending || !recomendaciones.trim()}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={
-                  !(form.impresion_diagnostica ?? '').trim()
-                    ? 'Agrega impresión diagnóstica'
-                    : !recomendaciones.trim()
-                      ? 'Ingresa recomendaciones'
-                      : ''
-                }
+                title={!recomendaciones.trim() ? 'Ingresa recomendaciones' : ''}
               >
                 {isPending ? 'Guardando...' : '📋 Guardar para revisión'}
               </button>
