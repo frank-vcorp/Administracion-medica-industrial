@@ -56,6 +56,10 @@ import {
   ANTECEDENTES_TABS,
   antecedentesTabIntro,
 } from '@/lib/antecedentes-section-ui'
+import {
+  patologiaEspecificacionPlaceholder,
+  patologiaRequiresEspecificacion,
+} from '@/lib/patologia-especificacion-fields'
 import { hasDetalleContent } from '@/lib/patologicos-accordion'
 import {
   HEREDOFAMILIARES_VALUES,
@@ -568,6 +572,9 @@ export function AntecedentesForm({
                               <span className="text-emerald-600 ml-auto text-xs">click para editar</span>
                             </div>
                             <div className="text-gray-600 space-y-0.5">
+                              {detalle.especificacion && (
+                                <p><span className="font-medium">Especificación:</span> {detalle.especificacion}</p>
+                              )}
                               {detalle.desde_cuando && (
                                 <p><span className="font-medium">Desde:</span> {detalle.desde_cuando}</p>
                               )}
@@ -582,6 +589,23 @@ export function AntecedentesForm({
                         )}
                         {showInputs && (
                           <div className="mt-3 space-y-2 p-3 bg-white border border-gray-200 rounded-lg">
+                            {patologiaRequiresEspecificacion(item.field) && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  Especificación
+                                </label>
+                                <input
+                                  type="text"
+                                  value={detalle.especificacion ?? ''}
+                                  onChange={e => handlePatologiaPatch(item.field, {
+                                    detalle: { ...detalle, especificacion: e.target.value },
+                                  })}
+                                  placeholder={patologiaEspecificacionPlaceholder(item.field)}
+                                  maxLength={500}
+                                  className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                            )}
                             <div>
                               <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Desde cuándo

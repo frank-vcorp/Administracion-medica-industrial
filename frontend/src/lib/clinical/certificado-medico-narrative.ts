@@ -36,6 +36,7 @@ function formatRecordSection(
       const o = raw as { estado?: string; detalle?: Record<string, string> }
       if (o.estado === 'SI' && o.detalle) {
         const d = [
+          o.detalle.especificacion,
           o.detalle.desde_cuando,
           o.detalle.tratamiento,
           o.detalle.observaciones,
@@ -83,7 +84,12 @@ function formatDynamicPatologicos(record: Record<string, unknown> | undefined): 
     if (typeof raw === 'object' && raw && 'estado' in (raw as object)) {
       const o = raw as { estado?: string; detalle?: Record<string, string> }
       if (o.estado === 'SI') {
-        const d = [o.detalle?.desde_cuando, o.detalle?.tratamiento, o.detalle?.observaciones]
+        const d = [
+          o.detalle?.especificacion,
+          o.detalle?.desde_cuando,
+          o.detalle?.tratamiento,
+          o.detalle?.observaciones,
+        ]
           .filter(Boolean)
           .join('; ')
         parts.push(`${label}: ${d || 'Sí'}.`)

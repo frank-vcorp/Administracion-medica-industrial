@@ -69,6 +69,10 @@ import {
   SUPLEMENTOS_COMPLEMENTOS_HELP,
   SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
+import {
+  patologiaEspecificacionPlaceholder,
+  patologiaRequiresEspecificacion,
+} from '@/lib/patologia-especificacion-fields'
 import { ANTECEDENTES_SECTION_LEGEND, antecedentesTabIntro } from '@/lib/antecedentes-section-ui'
 import {
   GINE_FIELDS,
@@ -934,7 +938,7 @@ export function AntecedentesCaptura({
               {PATOLOGICOS_DESCRIPCIONES[group].map(item => {
                 const entry = form.patologicos[item.field] ?? emptyPatologia()
                 const detalle = entry.detalle ?? emptyDetalle()
-                const isExantematicas = item.field === 'exantematicas'
+                const needsEspecificacion = patologiaRequiresEspecificacion(item.field)
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
@@ -957,7 +961,7 @@ export function AntecedentesCaptura({
                     </select>
                     {entry.estado === 'SI' && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
-                        {isExantematicas && (
+                        {needsEspecificacion && (
                           <input
                             type="text"
                             value={detalle.especificacion ?? ''}
@@ -965,7 +969,7 @@ export function AntecedentesCaptura({
                               detalle: { ...detalle, especificacion: e.target.value },
                             })}
                             disabled={readonly}
-                            placeholder="Especificación (ej: varicela infantil, sarampión)"
+                            placeholder={patologiaEspecificacionPlaceholder(item.field)}
                             maxLength={500}
                             className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                           />

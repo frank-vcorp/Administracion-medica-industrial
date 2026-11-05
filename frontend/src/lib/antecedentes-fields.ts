@@ -232,7 +232,11 @@ export const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
     { field: 'ginecologicos', label: 'Ginecológicos',  help: 'Enfermedades ginecológicas tratadas (embarazos, quistes, etc.).' },
     { field: 'dermatitis',    label: 'Dermatitis',     help: 'Enfermedades de piel crónicas (eccema, psoriasis, dermatitis atópica).' },
     { field: 'psiquiatricas', label: 'Psiquiátricas',  help: 'Trastornos mentales diagnosticados (depresión, ansiedad, esquizofrenia, etc.).' },
-    { field: 'otras',         label: 'Otras',          help: 'Otra enfermedad no listada — detalle en observaciones.' },
+    {
+      field: 'otras',
+      label: 'Otras enfermedades',
+      help: 'Enfermedad no listada arriba: indique el nombre al marcar SÍ.',
+    },
   ],
 }
 
