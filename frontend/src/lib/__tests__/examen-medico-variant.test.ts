@@ -4,6 +4,7 @@ import {
   isExamenMedicoTestName,
   EXAMEN_MEDICO_CATALOG_NAMES,
   LEGACY_EXAMEN_MEDICO_VARIANT_AMI,
+  normalizeExamenMedicoVariant,
 } from '@/lib/clinical/examen-medico-variant'
 
 describe('examen-medico-variant', () => {
@@ -25,6 +26,8 @@ describe('examen-medico-variant', () => {
     expect(resolveExamenMedicoVariant('Examen Médico Sodexo', LEGACY_EXAMEN_MEDICO_VARIANT_AMI)).toBe(
       'SME',
     )
+    expect(normalizeExamenMedicoVariant(LEGACY_EXAMEN_MEDICO_VARIANT_AMI)).toBe('SME')
+    expect(normalizeExamenMedicoVariant('SODEXO')).toBe('SODEXO')
   })
 
   it('prefers persisted variant over name', () => {

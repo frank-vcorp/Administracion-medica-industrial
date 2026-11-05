@@ -43,6 +43,13 @@ function normalizePersistedVariant(
   return null
 }
 
+/** Normaliza variante persistida o legada (`AMI`) al slug canónico SME. */
+export function normalizeExamenMedicoVariant(
+  variant?: string | null,
+): ExamenMedicoVariant {
+  return normalizePersistedVariant(variant) ?? 'SME'
+}
+
 /** Detecta si un EventTest corresponde a examen médico (cualquier variante). */
 export function isExamenMedicoTestName(name: string): boolean {
   const lower = name.toLowerCase().trim()
