@@ -3,6 +3,11 @@ import {
   isConsultaMedicaTestName,
   parseConsultaMedicaClinicalContext,
 } from '@/lib/clinical/consulta-medica'
+import {
+  buildFechaLugarReceta,
+  buildLugarReceta,
+  formatFechaRecetaCorta,
+} from '@/lib/clinical/consulta-receta-pdf-format'
 import type { ConsultaMedicaPdfInput } from '@/lib/consulta-medica-pdf'
 import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
@@ -16,6 +21,7 @@ export async function loadConsultaMedicaPdfInput(
   const event = await prisma.medicalEvent.findUnique({
     where: { id: eventId },
     include: {
+      branch: { select: { name: true, address: true } },
       worker: {
         select: {
           firstName: true,
@@ -80,12 +86,12 @@ export async function loadConsultaMedicaPdfInput(
     cerrada_at: stored.cerrada_at,
   }
 
-  const eventDateRaw = event.checkInDate ?? event.createdAt
-  const fecha = new Intl.DateTimeFormat('es-MX', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(eventDateRaw)
+  const eventDateRaw = stored.cerrada_at
+    ? new Date(stored.cerrada_at)
+    : (event.checkInDate ?? event.createdAt)
+  const lugar = buildLugarReceta(event.branch)
+  const fecha = formatFechaRecetaCorta(eventDateRaw)
+  const fechaLegal = buildFechaLugarReceta(lugar, eventDateRaw)
 
   let edad: string | null = null
   if (event.worker.dob) {
@@ -105,6 +111,9 @@ export async function loadConsultaMedicaPdfInput(
       empresa: event.worker.company?.name ?? null,
       departamento: null,
       fecha,
+      fechaLegal,
+      lugar,
+      folio: event.id.slice(0, 8).toUpperCase(),
     },
     consulta,
   }
