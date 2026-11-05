@@ -28,8 +28,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const session = await getServerSession(authOptions)
 
   return (
-    <html lang="es" className={inter.className} spellCheck>
-      <body className="min-h-screen bg-sme-surface text-sme-gray" spellCheck>
+    <html lang="es-MX" className={inter.className}>
+      <body className="min-h-screen bg-sme-surface text-sme-gray">
         <Providers session={session}>
           {/* Suspense requerido por useSearchParams en AppShell — IMPL-20260324-07 */}
           <Suspense>

@@ -106,6 +106,8 @@ export function Cie10Autocomplete({
       <input
         type="text"
         className={inputClassName}
+        data-spellcheck="off"
+        spellCheck={false}
         value={query}
         disabled={disabled}
         placeholder={placeholder}

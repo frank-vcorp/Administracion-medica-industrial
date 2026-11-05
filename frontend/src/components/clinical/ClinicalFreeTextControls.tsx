@@ -14,10 +14,11 @@ type ClinicalTextareaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, '
 }
 
 /** Textarea clínico: al salir del campo, MAYÚSCULAS → formato oración (F-26). */
-export function ClinicalTextarea({ value, onChange, onBlur, ...rest }: ClinicalTextareaProps) {
+export function ClinicalTextarea({ value, onChange, onBlur, spellCheck = true, ...rest }: ClinicalTextareaProps) {
   return (
     <textarea
       {...rest}
+      spellCheck={spellCheck}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onBlur={(e) => {
@@ -34,10 +35,11 @@ type ClinicalFreeTextInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'v
 }
 
 /** Input de texto libre clínico con la misma normalización al blur que {@link ClinicalTextarea}. */
-export function ClinicalFreeTextInput({ value, onChange, onBlur, ...rest }: ClinicalFreeTextInputProps) {
+export function ClinicalFreeTextInput({ value, onChange, onBlur, spellCheck = true, ...rest }: ClinicalFreeTextInputProps) {
   return (
     <input
       {...rest}
+      spellCheck={spellCheck}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onBlur={(e) => {
