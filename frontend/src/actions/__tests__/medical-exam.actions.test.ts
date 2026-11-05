@@ -60,7 +60,7 @@ import {
   AG_NUMERIC_0_11,
   AG_ABORTO_VALUES,
   AR_MPF_VALUES,
-  VAC_SI_NO_VALUES,
+  VAC_IMMUNIZATION_VALUES,
   SI_NO_NA_VALUES,
   // IMPL-20260817-08 (ARCH-20260817-02): 5 valores PDF para aptitud +
   // enums cortos para agudeza/presión.
@@ -1013,13 +1013,12 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
     expect(AG_ABORTO_VALUES).toContain('NO')
   })
 
-  it('52. VAC_SI_NO_VALUES es alias de SI_NO_NA_VALUES (NEGADO / SI / NO APLICA)', () => {
-    // Mismas 3 opciones, en el mismo orden
-    expect(VAC_SI_NO_VALUES.length).toBe(3)
-    expect(VAC_SI_NO_VALUES).toContain('NEGADO')
-    expect(VAC_SI_NO_VALUES).toContain('SI')
-    expect(VAC_SI_NO_VALUES).toContain('NO APLICA')
-    expect([...VAC_SI_NO_VALUES]).toEqual([...SI_NO_NA_VALUES])
+  it('52. VAC_IMMUNIZATION_VALUES — negado / sí / desconoce (F-19)', () => {
+    expect(VAC_IMMUNIZATION_VALUES.length).toBe(3)
+    expect(VAC_IMMUNIZATION_VALUES).toContain('NEGADO')
+    expect(VAC_IMMUNIZATION_VALUES).toContain('SI')
+    expect(VAC_IMMUNIZATION_VALUES).toContain('DESCONOCE')
+    expect(VAC_IMMUNIZATION_VALUES).not.toContain('NO APLICA')
   })
 
   // ── 7 vacunas esperadas (mantener en sync con VACUNAS_LIST en componente) ─
@@ -1033,6 +1032,7 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
       'm1_vac_influenza',
       'm1_vac_toxoide',
       'm1_vac_hepatitisb',
+      'm1_vac_covid19',
       'm1_vac_otras',
     ]
     expect(EXPECTED_KEYS.length).toBe(7)

@@ -438,10 +438,15 @@ export const AR_MPF_VALUES = [
 
 export type ArMpfValue = (typeof AR_MPF_VALUES)[number]
 
-/** Módulo 1 — Vacunas — acordeón Sí/No/No aplica (alias semántico de SI_NO_NA_VALUES). */
-export const VAC_SI_NO_VALUES = SI_NO_NA_VALUES
+/** Módulo 1 — Inmunizaciones (minuta F-19: negado / sí / desconoce). Legacy `NO APLICA` se tolera al leer. */
+export const VAC_IMMUNIZATION_VALUES = ['NEGADO', 'SI', 'DESCONOCE'] as const
 
-export type VacSiNoValue = (typeof VAC_SI_NO_VALUES)[number]
+export type VacImmunizationValue = (typeof VAC_IMMUNIZATION_VALUES)[number]
+
+/** @deprecated Usar `VAC_IMMUNIZATION_VALUES`. */
+export const VAC_SI_NO_VALUES = VAC_IMMUNIZATION_VALUES
+
+export type VacSiNoValue = VacImmunizationValue
 
 /**
  * Plantillas ZIN literales — Exploración Física (16 textos).

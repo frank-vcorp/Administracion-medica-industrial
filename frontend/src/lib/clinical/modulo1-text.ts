@@ -77,12 +77,13 @@ export function buildInmunizacionesModulo1Text(m1: Record<string, unknown>): str
     ['Influenza', m1.m1_vac_influenza],
     ['Toxoide tetánico', m1.m1_vac_toxoide],
     ['Hepatitis B', m1.m1_vac_hepatitisb],
+    ['COVID-19', m1.m1_vac_covid19],
     ['Otras', m1.m1_vac_otras],
   ] as const
   const lines: string[] = []
   for (const [label, val] of fields) {
     const v = str(val)
-    if (v && v !== 'NEGADO' && v !== 'NO APLICA') lines.push(`${label}: ${v}`)
+    if (v && v !== 'NEGADO' && v !== 'NO APLICA' && v !== 'DESCONOCE') lines.push(`${label}: ${v}`)
   }
   return lines.length > 0 ? lines.join(' · ') : null
 }

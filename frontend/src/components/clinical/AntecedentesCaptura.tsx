@@ -75,7 +75,7 @@ import {
   M1_SEX_OPTIONS,
   REPRO_FIELDS,
   VACUNAS_CAPTURE_LIST,
-  VAC_SI_NO_VALUES,
+  VAC_IMMUNIZATION_VALUES,
   type Modulo1FieldDef,
 } from '@/lib/modulo1-capture-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
@@ -1067,7 +1067,9 @@ export function AntecedentesCaptura({
         </legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
           {VACUNAS_CAPTURE_LIST.map(({ key, label }) => {
-            const estado = modulo1[key] ?? 'NEGADO'
+            const rawEstado = modulo1[key] ?? 'NEGADO'
+            const estado =
+              rawEstado === 'NO APLICA' ? 'DESCONOCE' : rawEstado
             const especifiqueKey = `${key}_especifique`
             const especifique = modulo1[especifiqueKey] ?? ''
             return (
@@ -1079,7 +1081,7 @@ export function AntecedentesCaptura({
                   disabled={readonly}
                   className="w-full text-xs px-2 py-1 border border-slate-200 rounded-lg mt-1 focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                 >
-                  {VAC_SI_NO_VALUES.map(opt => (
+                  {VAC_IMMUNIZATION_VALUES.map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>

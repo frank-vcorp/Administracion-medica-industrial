@@ -9,7 +9,7 @@ import {
   AG_GINE_MPF_VALUES,
   AG_NUMERIC_0_11,
   AR_MPF_VALUES,
-  VAC_SI_NO_VALUES,
+  VAC_IMMUNIZATION_VALUES,
 } from '@/schemas/clinical/exam.schema'
 
 export const M1_SEX_OPTIONS = ['Femenino', 'Masculino'] as const
@@ -51,7 +51,8 @@ export const VACUNAS_CAPTURE_LIST: { key: string; label: string }[] = [
   { key: 'm1_vac_influenza', label: 'Influenza' },
   { key: 'm1_vac_toxoide', label: 'Toxoide Tetánico' },
   { key: 'm1_vac_hepatitisb', label: 'Hepatitis B' },
+  { key: 'm1_vac_covid19', label: 'COVID-19' },
   { key: 'm1_vac_otras', label: 'Otras' },
 ]
 
-export { VAC_SI_NO_VALUES }
+export { VAC_IMMUNIZATION_VALUES }
