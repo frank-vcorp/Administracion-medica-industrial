@@ -75,6 +75,24 @@ describe('O9-03 antecedentes del perfil', () => {
     )
     expect(merged.datos_personales).toEqual({ puesto_actual: 'Capturado en consulta' })
   })
+
+  it('mezcla por campo: consulta vacía + historial con patológicos', () => {
+    const merged = mergeProfileAntecedentesIntoConsulta(
+      { datos_personales: { puesto_actual: '', turno: 'MATUTINO' } },
+      {
+        datos_personales: { puesto_actual: 'Operador', area_departamento: 'Planta' },
+        patologicos: { diabetes: { estado: 'SI', detalle: { observaciones: 'controlada' } } },
+      },
+    )
+    expect(merged.datos_personales).toMatchObject({
+      puesto_actual: 'Operador',
+      area_departamento: 'Planta',
+      turno: 'MATUTINO',
+    })
+    expect(merged.patologicos).toEqual({
+      diabetes: { estado: 'SI', detalle: { observaciones: 'controlada' } },
+    })
+  })
 })
 
 describe('O9-04 motivo de cancelación', () => {

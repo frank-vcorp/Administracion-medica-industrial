@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
@@ -110,6 +110,14 @@ export default function ConsultaMedicaEstudio({
       profileAntecedentes,
     ),
   )
+  const antecedentesHydratedRef = useRef(false)
+  useEffect(() => {
+    if (antecedentesHydratedRef.current) return
+    antecedentesHydratedRef.current = true
+    setAntecedentes((prev) =>
+      mergeProfileAntecedentesIntoConsulta(parsed?.antecedentes ?? prev, longitudinalData, profileAntecedentes),
+    )
+  }, [longitudinalData, profileAntecedentes, parsed?.antecedentes])
   const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
     const saved = modulo1Record(parsed?.modulo1)
     if (Object.values(saved).some((value) => value.trim() !== '')) return saved
@@ -317,7 +325,8 @@ export default function ConsultaMedicaEstudio({
             onModulo1Change={setModulo1}
           />
           <p className="text-[10px] text-slate-500 mt-3">
-            Al guardar la consulta, estos antecedentes se actualizan en{' '}
+            Precarga desde historial clínico longitudinal (y examen previo si aplica). Al guardar, se
+            actualizan en{' '}
             <Link href={`/history/${workerId}`} className="text-teal-600 underline">
               Historia clínica del paciente
             </Link>

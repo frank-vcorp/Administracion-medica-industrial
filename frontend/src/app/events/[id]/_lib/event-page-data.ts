@@ -20,6 +20,10 @@ import {
   resolveOccupationalIdentification,
 } from '@/lib/clinical/occupational-identification'
 import { formatVisitDuration } from '@/lib/clinical/visit-duration'
+import {
+  buildWorkerLongitudinalAntecedentesPrefill,
+  findLatestWorkerAntecedentesCaptured,
+} from '@/lib/clinical/worker-antecedentes-prefill'
 
 const STATUS_NAMES: Record<string, string> = {
   SCHEDULED: 'Ingreso',
@@ -268,7 +272,7 @@ export async function fetchEventPageData(input: {
     ? (histData?.prefill_base as PrefillBase | null | undefined)
     : null
 
-  const longitudinalData = hasRootLongitudinal
+  const historySections = hasRootLongitudinal
     ? {
         ...(rootDP ? { datos_personales: rootDP } : {}),
         ...(rootHL ? { historia_laboral: rootHL } : {}),
@@ -276,7 +280,26 @@ export async function fetchEventPageData(input: {
         ...(rootNP ? { no_patologicos: rootNP } : {}),
         ...(rootPT ? { patologicos: rootPT } : {}),
       }
-    : legacyBase
+    : (legacyBase as Record<string, unknown> | null | undefined)
+
+  const currentExamCaptured =
+    physicalExamData && typeof physicalExamData === 'object'
+      ? ((physicalExamData as Record<string, unknown>).antecedentes_captured as
+          | Record<string, unknown>
+          | undefined)
+      : undefined
+
+  const priorExamCaptured = await findLatestWorkerAntecedentesCaptured(
+    event.worker.id,
+    event.id,
+  )
+
+  const longitudinalData =
+    buildWorkerLongitudinalAntecedentesPrefill({
+      clinicalHistoryData: historySections ?? histData ?? null,
+      currentExamCaptured: currentExamCaptured ?? null,
+      priorExamCaptured,
+    }) ?? historySections ?? legacyBase
 
   const occupational = resolveOccupationalIdentification([
     physicalExamData,
