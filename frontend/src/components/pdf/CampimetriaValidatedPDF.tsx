@@ -6,6 +6,7 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 import { ISHIHARA_PLATES } from '@/schemas/clinical/campimetria-questionnaire.schema'
 import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
+import { SME_LEGAL_NAME, SME_LOGO_FALLBACK_TEXT } from '@/lib/brand-constants'
 
 const styles = StyleSheet.create({
   page: {
@@ -262,14 +263,14 @@ export function CampimetriaValidatedPDF({ data }: { data: CampimetriaValidatedPD
       <Page size="LETTER" style={styles.page}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.brand}>AMI</Text>
-            <Text style={styles.brandSub}>Salud en el Trabajo</Text>
+            <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
+            <Text style={styles.brandSub}>Medicina Laboral</Text>
           </View>
           <Text style={styles.title}>REPORTE DE EXAMEN VISUAL</Text>
           {data.logoUrl ? (
             <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
-            <Text style={styles.brand}>AMI</Text>
+            <Text style={styles.brand}>{SME_LOGO_FALLBACK_TEXT}</Text>
           )}
         </View>
 

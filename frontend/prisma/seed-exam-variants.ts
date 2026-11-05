@@ -1,5 +1,5 @@
 /**
- * Seed idempotente: catálogo Examen Médico AMI / Sodexo / Flowserve + perfiles piloto.
+ * Seed idempotente: catálogo Examen Médico General (SME) / Sodexo / Flowserve + perfiles piloto.
  *
  * Uso:
  *   cd frontend && DATABASE_URL=... npx tsx prisma/seed-exam-variants.ts
@@ -52,9 +52,9 @@ async function main() {
     category = await prisma.testCategory.create({ data: { name: 'Generales' } })
   }
 
-  const ami = await upsertTest(
-    EXAMEN_MEDICO_CATALOG_CODES.AMI,
-    EXAMEN_MEDICO_CATALOG_NAMES.AMI,
+  const sme = await upsertTest(
+    EXAMEN_MEDICO_CATALOG_CODES.SME,
+    EXAMEN_MEDICO_CATALOG_NAMES.SME,
     category.id,
   )
   const sodexo = await upsertTest(
@@ -77,7 +77,7 @@ async function main() {
 
   const commonLabs = [espiro?.id, audio?.id].filter(Boolean) as string[]
 
-  await ensureProfile('Paquete Examen Médico AMI Estándar', [ami.id, ...commonLabs])
+  await ensureProfile('Paquete Examen Médico SME Estándar', [sme.id, ...commonLabs])
   await ensureProfile(
     'Paquete Examen Médico Sodexo',
     [sodexo.id, ...commonLabs],
@@ -90,7 +90,7 @@ async function main() {
   )
 
   console.log('✅ Catálogo y perfiles de variantes examen médico listos')
-  console.log(`   - ${ami.name} (${ami.code})`)
+  console.log(`   - ${sme.name} (${sme.code})`)
   console.log(`   - ${sodexo.name} (${sodexo.code})`)
   console.log(`   - ${flowserve.name} (${flowserve.code}) — incluye Kuorinka integrado`)
 }

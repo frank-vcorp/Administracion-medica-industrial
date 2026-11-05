@@ -113,9 +113,9 @@ function SatisfactionFormInner() {
       className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${
         isKiosk ? 'p-8' : 'p-6'
       }`}
-      data-testid="ami-satisfaction-form"
+      data-testid="sme-satisfaction-form"
     >
-      <h2 className="text-xl font-bold text-slate-800">Encuesta de satisfacción AMI</h2>
+      <h2 className="text-xl font-bold text-slate-800">Encuesta de satisfacción</h2>
       <p className="mt-2 text-sm text-slate-600">
         Califica del 1 (nada satisfecho) al 5 (totalmente satisfecho).
       </p>

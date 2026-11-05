@@ -6,7 +6,7 @@ describe('resolveEventTestPdfForZip', () => {
     const out = await resolveEventTestPdfForZip({
       id: '1',
       status: 'COMPLETED',
-      testNameSnapshot: 'Examen Médico AMI',
+      testNameSnapshot: 'Examen Médico General',
       fileUrl: null,
       validatedPdfUrl: 'examen-medico-pdfs/x.pdf',
     })

@@ -47,7 +47,7 @@ export const FRECUENCIAS_GRAVES_HZ = [250, 500, 1000] as const
 export const FRECUENCIAS_AGUDAS_HZ = [2000, 3000, 4000, 6000, 8000] as const
 
 // ──────────────────────────────────────────────────────────────────────────
-// FND-20260825-12 — Referencia del programa audiométrico AMI.
+// FND-20260825-12 — Referencia del programa audiométrico SME.
 //
 // Estas constantes representan la TABLA DE REFERENCIA del criterio
 // audiométrico AMI (BR-20260825-04 / DEC-20260825-05). NO son resultados
@@ -489,7 +489,7 @@ export function resolveAudiometriaCriteria(
   ) {
     bilateralEstado = 'NO_CONCLUYENTE'
     bilateralNota =
-      'Al menos un oído no es concluyente para clasificación AMI (faltan TA500/TA1000/TA2000 o patrón incompleto).'
+      'Al menos un oído no es concluyente para clasificación audiométrica (faltan TA500/TA1000/TA2000 o patrón incompleto).'
   } else if (odEstado === oiEstado) {
     bilateralEstado =
       odEstado === 'NORMAL' ? 'NORMAL_BILATERAL' : 'ALTERADO_BILATERAL'
@@ -543,13 +543,13 @@ function LayerBadge({
   children,
 }: {
   label: string
-  tone: 'nom' | 'ami' | 'fuente' | 'derivada'
+  tone: 'nom' | 'sme' | 'fuente' | 'derivada'
   children: ReactNode
 }) {
   const cls =
     tone === 'nom'
       ? 'bg-slate-100 text-slate-700 border-slate-300'
-      : tone === 'ami'
+      : tone === 'sme'
         ? 'bg-amber-50 text-amber-800 border-amber-300'
         : tone === 'fuente'
           ? 'bg-sky-50 text-sky-800 border-sky-300'
@@ -643,7 +643,7 @@ export default function AudiometriaClinicalCriteriaPanel({
       <p className="text-[11px] text-slate-500">
         Capas diferenciadas:{' '}
         <LayerBadge label="NOM" tone="nom"> referencia regulatoria</LayerBadge>{' '}
-        <LayerBadge label="AMI" tone="ami"> criterio audiométrico</LayerBadge>{' '}
+        <LayerBadge label="SME" tone="sme"> criterio audiométrico</LayerBadge>{' '}
         <LayerBadge label="Fuente" tone="fuente"> datos del documento</LayerBadge>{' '}
         <LayerBadge label="Derivada" tone="derivada"> cálculo del sistema</LayerBadge>
       </p>
@@ -767,12 +767,12 @@ export default function AudiometriaClinicalCriteriaPanel({
         </p>
       </div>
 
-      {/* FND-20260825-12 — Criterio audiométrico AMI (referencia).
+      {/* FND-20260825-12 — Criterio audiométrico SME (referencia).
           Sección explícita y legible, SEPARADA del resultado derivado
           (arriba) y de la decisión médica (abajo, fuera del panel).
           El médico y el programa consultan esta tabla para emitir la
           impresión diagnóstica. */}
-      <AMIReferenceSection />
+      <SmeAudiometryReferenceSection />
 
       {/* Guardia clínica: el panel NO copia diagnóstico ni recomendación
           textual del PDF AMI como salida de IA (SPEC §3). */}
@@ -839,34 +839,34 @@ function readOidoVo(
 // también desde el PDF validado.
 // ──────────────────────────────────────────────────────────────────────────
 
-function AMIReferenceSection() {
+function SmeAudiometryReferenceSection() {
   return (
     <details
       className="bg-slate-50 border border-slate-300 rounded-lg overflow-hidden group"
-      data-testid="audiometria-ami-reference-section"
-      aria-label="Criterio audiométrico AMI (referencia)"
+      data-testid="audiometria-sme-reference-section"
+      aria-label="Criterio audiométrico SME (referencia)"
     >
       <summary
         className="cursor-pointer select-none px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-100 transition-colors [&::-webkit-details-marker]:hidden"
-        data-testid="audiometria-ami-reference-summary"
+        data-testid="audiometria-sme-reference-summary"
       >
         <div className="flex items-center gap-2">
           <span aria-hidden="true">📖</span>
           <p className="text-sm font-bold text-slate-800">
-            Criterio audiométrico AMI (referencia)
+            Criterio audiométrico SME (referencia)
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span
             className="text-[10px] font-bold uppercase tracking-wider text-slate-500 border border-slate-300 rounded px-2 py-0.5 bg-white"
-            data-testid="audiometria-ami-reference-tag"
+            data-testid="audiometria-sme-reference-tag"
           >
             Referencia operativa
           </span>
           <span
             aria-hidden="true"
             className="text-slate-500 text-xs transition-transform group-open:rotate-90"
-            data-testid="audiometria-ami-reference-toggle"
+            data-testid="audiometria-sme-reference-toggle"
           >
             ▶
           </span>
@@ -874,21 +874,21 @@ function AMIReferenceSection() {
       </summary>
       <div
         className="px-3 py-3 space-y-3 border-t border-slate-200"
-        data-testid="audiometria-ami-reference-body"
+        data-testid="audiometria-sme-reference-body"
         role="region"
-        aria-label="Contenido de la referencia audiométrica AMI"
+        aria-label="Contenido de la referencia audiométrica SME"
       >
         <p className="text-[11px] text-slate-600">
-          Tabla administrativa del programa audiométrico AMI. Esta sección
+          Tabla administrativa del programa audiométrico SME. Esta sección
           es de <strong>consulta</strong>: el resultado derivado del paciente
           (PTA, criterio, patrón) está arriba; la impresión diagnóstica la
           emite el médico firmante.
         </p>
 
         {/* 1. Normalidad */}
-        <div data-testid="audiometria-ami-ref-normalidad">
+        <div data-testid="audiometria-sme-ref-normalidad">
           <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-            1. Normalidad (umbral AMI)
+            1. Normalidad (umbral del programa)
           </p>
           <p className="text-xs text-slate-700 font-mono">
             PTA ≤ {AMI_NORMALIDAD_DB} dB HL → Normal
@@ -896,7 +896,7 @@ function AMIReferenceSection() {
         </div>
 
         {/* 2. Patrones nosológicos operativos */}
-        <div data-testid="audiometria-ami-ref-patrones">
+        <div data-testid="audiometria-sme-ref-patrones">
           <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
             2. Patrón nosológico operativo
           </p>
@@ -917,7 +917,7 @@ function AMIReferenceSection() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {AMI_PATRONES_REFERENCIA.map(p => (
-                  <tr key={p.id} data-testid={`audiometria-ami-ref-patron-${p.id.toLowerCase()}`}>
+                  <tr key={p.id} data-testid={`audiometria-sme-ref-patron-${p.id.toLowerCase()}`}>
                     <td className="px-2 py-1 font-medium text-slate-700">
                       {p.etiqueta}
                     </td>
@@ -935,7 +935,7 @@ function AMIReferenceSection() {
         </div>
 
         {/* 3. Severidad */}
-        <div data-testid="audiometria-ami-ref-severidad">
+        <div data-testid="audiometria-sme-ref-severidad">
           <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
             3. Severidad (por peor PTA, dB HL)
           </p>
@@ -958,7 +958,7 @@ function AMIReferenceSection() {
                 {AMI_SEVERIDAD_REFERENCIA.map(s => (
                   <tr
                     key={s.id}
-                    data-testid={`audiometria-ami-ref-severidad-${s.id.toLowerCase()}`}
+                    data-testid={`audiometria-sme-ref-severidad-${s.id.toLowerCase()}`}
                   >
                     <td className="px-2 py-1 font-medium text-slate-700">
                       {s.etiqueta}
@@ -977,16 +977,16 @@ function AMIReferenceSection() {
         </div>
 
         {/* 4. Categorías etiológicas */}
-        <div data-testid="audiometria-ami-ref-etiologias">
+        <div data-testid="audiometria-sme-ref-etiologias">
           <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-            4. Categorías etiológicas AMI (referencia administrativa)
+            4. Categorías etiológicas (referencia administrativa)
           </p>
           <ul className="space-y-1">
             {AMI_ETIOLOGIAS_REFERENCIA.map(e => (
               <li
                 key={e.id}
                 className="bg-white border border-slate-200 rounded px-2 py-1"
-                data-testid={`audiometria-ami-ref-etiologia-${e.id.toLowerCase()}`}
+                data-testid={`audiometria-sme-ref-etiologia-${e.id.toLowerCase()}`}
               >
                 <span className="text-xs font-bold text-slate-700">
                   {e.etiqueta}

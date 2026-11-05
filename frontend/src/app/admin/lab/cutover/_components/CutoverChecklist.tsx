@@ -78,7 +78,7 @@ const Props: FC<{ status: CutoverStatus }> = ({ status }) => {
           <div>
             <h2 className="text-lg font-semibold">
               {status.ready
-                ? "✅ AMI es el sistema único"
+                ? "✅ SME es el sistema único"
                 : `⏳ ${status.pending.length} slice(s) pendiente(s)`}
             </h2>
             <p className="text-sm mt-1">

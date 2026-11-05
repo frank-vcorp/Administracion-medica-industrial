@@ -106,14 +106,14 @@ export default function DashboardPage() {
             {/* Premium Welcome Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-ami-gray tracking-tight">
-                        Tu <span className="text-ami-secondary">agenda</span>, nuestra prioridad en{' '}
-                        <span className="text-ami-secondary">Salud Ocupacional</span>
+                    <h1 className="text-3xl font-extrabold text-sme-gray tracking-tight">
+                        Tu <span className="text-sme-secondary">agenda</span>, nuestra prioridad en{' '}
+                        <span className="text-sme-secondary">Salud Ocupacional</span>
                     </h1>
-                    <p className="text-ami-gray font-medium capitalize mt-1">{today}</p>
+                    <p className="text-sme-gray font-medium capitalize mt-1">{today}</p>
                 </div>
-                <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-ami-secondary/10">
-                    <div className="w-10 h-10 bg-ami-secondary rounded-xl flex items-center justify-center text-white font-bold">A</div>
+                <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-sme-secondary/10">
+                    <div className="w-10 h-10 bg-sme-secondary rounded-xl flex items-center justify-center text-white font-bold">A</div>
                     <div className="pr-4">
                         <p className="text-[10px] uppercase font-bold text-slate-400 leading-none">Perfil</p>
                         <p className="text-sm font-bold text-slate-700">Administrador</p>
@@ -170,9 +170,9 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Content: Performance & Status */}
                 <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-ami-secondary/10">
-                        <h3 className="text-lg font-bold text-ami-gray mb-1 flex items-center gap-2">
-                            <span className="w-2 h-6 bg-ami-primary rounded-full"></span>
+                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-sme-secondary/10">
+                        <h3 className="text-lg font-bold text-sme-gray mb-1 flex items-center gap-2">
+                            <span className="w-2 h-6 bg-sme-primary rounded-full"></span>
                             Resumen de atenciones del mes
                         </h3>
                         <p className="text-sm text-slate-500 mb-6 capitalize">{monthlySummary.monthLabel}</p>
@@ -206,7 +206,7 @@ export default function DashboardPage() {
                     {satisfactionSummary && (
                         <Link
                             href="/reports/satisfaction"
-                            className="block bg-white p-6 rounded-3xl shadow-sm border border-ami-secondary/10 hover:border-violet-200 transition-colors"
+                            className="block bg-white p-6 rounded-3xl shadow-sm border border-sme-secondary/10 hover:border-violet-200 transition-colors"
                         >
                             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                 <Smile className="h-4 w-4 text-violet-600" />
@@ -238,8 +238,8 @@ export default function DashboardPage() {
                             <p className="mt-4 text-xs font-semibold text-violet-700">Ver reporte y exportar Excel →</p>
                         </Link>
                     )}
-                    <div className="bg-ami-secondary text-white p-8 rounded-3xl shadow-xl shadow-ami-secondary/20 overflow-hidden relative">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-ami-accent/20 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                    <div className="bg-sme-secondary text-white p-8 rounded-3xl shadow-xl shadow-sme-secondary/20 overflow-hidden relative">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-sme-accent/20 rounded-full -mr-16 -mt-16 blur-3xl"></div>
                         <h3 className="text-lg font-bold mb-4 relative z-10">Acciones Rápidas</h3>
                         <div className="space-y-3 relative z-10">
                             <button className="w-full bg-white/10 hover:bg-white/20 text-white text-left p-4 rounded-2xl transition-all border border-white/10 group">
@@ -278,16 +278,16 @@ function StatCard({
     onClick?: () => void
 }) {
     const interactive = Boolean(href || onClick)
-    const className = `bg-white p-6 rounded-[2rem] border border-ami-secondary/10 shadow-sm transition-all group block w-full text-left ${
+    const className = `bg-white p-6 rounded-[2rem] border border-sme-secondary/10 shadow-sm transition-all group block w-full text-left ${
         interactive
-            ? 'cursor-pointer hover:border-ami-secondary/30 hover:shadow-md active:scale-[0.99]'
+            ? 'cursor-pointer hover:border-sme-secondary/30 hover:shadow-md active:scale-[0.99]'
             : 'cursor-default'
     }`
 
     const inner = (
         <>
             <div className="flex items-start justify-between">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-ami-secondary/10 text-ami-secondary">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-sme-secondary/10 text-sme-secondary">
                     {icon}
                 </div>
                 <div className="text-right">
@@ -298,7 +298,7 @@ function StatCard({
             <div className="mt-6 flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-medium">{description}</span>
                 {interactive && (
-                    <span className="text-ami-secondary font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-sme-secondary font-bold opacity-0 group-hover:opacity-100 transition-opacity">
                         Ir →
                     </span>
                 )}
@@ -330,7 +330,7 @@ function InfoBox({ label, value, trend }: { label: string; value: string; trend:
         <div className="p-6 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-lg hover:shadow-slate-100 transition-all group">
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">{label}</p>
             <p className="text-lg font-extrabold text-slate-800">{value}</p>
-            <p className="text-[10px] mt-2 text-ami-primary font-bold">{trend}</p>
+            <p className="text-[10px] mt-2 text-sme-primary font-bold">{trend}</p>
         </div>
     )
 }

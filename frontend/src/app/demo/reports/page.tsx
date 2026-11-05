@@ -75,7 +75,7 @@ export default function DemoReportsListPage() {
         <footer className="mt-12 text-xs text-slate-500">
           <p>
             Este demo es 100% standalone. No consulta la base de datos ni el backend
-            de AMI. Implementaci&oacute;n de referencia para validar el M&oacute;dulo de
+            de SME. Implementaci&oacute;n de referencia para validar el M&oacute;dulo de
             Reportes Masivos UMM antes de invertir en la versi&oacute;n productiva.
           </p>
         </footer>

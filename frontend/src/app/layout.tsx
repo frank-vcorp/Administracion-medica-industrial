@@ -29,7 +29,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang="es" className={inter.className} spellCheck>
-      <body className="min-h-screen bg-ami-surface text-ami-gray" spellCheck>
+      <body className="min-h-screen bg-sme-surface text-sme-gray" spellCheck>
         <Providers session={session}>
           {/* Suspense requerido por useSearchParams en AppShell — IMPL-20260324-07 */}
           <Suspense>

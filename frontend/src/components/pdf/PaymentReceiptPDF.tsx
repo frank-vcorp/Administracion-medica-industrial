@@ -170,7 +170,7 @@ export const PaymentReceiptPDF = ({ data }: { data: ReceiptPDFData }) => {
         </View>
 
         <Text style={styles.footer}>
-          Este documento es un comprobante interno de pago emitido por AMI.
+          Este documento es un comprobante interno de pago emitido por {SME_LEGAL_NAME}.
           Para factura, contacte a su ejecutivo de cuenta en un plazo máximo de 72 horas.
         </Text>
       </Page>

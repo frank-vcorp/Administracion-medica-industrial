@@ -313,7 +313,7 @@ export interface ExamenMedicoPDFData {
     labs: Array<{ serviceName: string; extractedData: unknown | null }>
   }>
   /** Variante corporativa del examen médico (AMI | SODEXO | FLOWSERVE). */
-  variant?: 'AMI' | 'SODEXO' | 'FLOWSERVE'
+  variant?: 'SME' | 'SODEXO' | 'FLOWSERVE' | 'AMI'
   variantExtensions?: {
     FLOWSERVE?: Record<string, unknown>
     SODEXO?: Record<string, unknown>
@@ -351,7 +351,7 @@ const statusLabel = (s: ExamenMedicoPDFData['status']) => {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }) => {
-  const variant = data.variant ?? 'AMI'
+  const variant = data.variant ?? 'SME'
   const variantLabel = examenMedicoVariantLabel(variant)
   return (
   <Document

@@ -346,13 +346,13 @@ export default function EventFlowController({
                             <div className="mt-2 pt-4 border-t border-slate-200 space-y-2">
                                 <p className="text-xs text-slate-500">
                                     <strong>¿Necesitas re-emitir el dictamen?</strong>{' '}
-                                    El renderer AMI vigente actualiza el PDF con el formato
+                                    El renderer SME vigente actualiza el PDF con el formato
                                     canónico (4 bloques) y la consolidación por atención/cita.
                                     La versión firmada anterior queda sustituida en la descarga.
                                 </p>
                                 <button
                                     onClick={() => {
-                                        if (!confirm('¿Re-emitir el dictamen general con el renderer AMI? Esta acción sustituye la versión descargable.')) return
+                                        if (!confirm('¿Re-emitir el dictamen general con el renderer SME? Esta acción sustituye la versión descargable.')) return
                                         startTransition(async () => {
                                             try {
                                                 const result = await reemitSignedDictamen(eventId)

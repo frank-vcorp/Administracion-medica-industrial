@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
-/* Identidad AMI — extraída del sitio institucional ami-theme */
+/* Identidad SME — paleta institucional (tema sme-*) */
 @theme {
-  --color-ami-primary: #00afaa;
-  --color-ami-primary-hover: #00928e;
-  --color-ami-secondary: #592c82;
-  --color-ami-secondary-hover: #43215f;
-  --color-ami-accent: #dede19;
-  --color-ami-accent-hover: #cbc817;
-  --color-ami-gray: #636569;
-  --color-ami-surface: #f9fafb;
+  --color-sme-primary: #00afaa;
+  --color-sme-primary-hover: #00928e;
+  --color-sme-secondary: #592c82;
+  --color-sme-secondary-hover: #43215f;
+  --color-sme-accent: #dede19;
+  --color-sme-accent-hover: #cbc817;
+  --color-sme-gray: #636569;
+  --color-sme-surface: #f9fafb;
   --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 

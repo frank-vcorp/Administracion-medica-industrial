@@ -70,6 +70,7 @@ import {
 import { FlowserveExtension } from "@/components/clinical/examen-medico/FlowserveExtension"
 import { SodexoExtension } from "@/components/clinical/examen-medico/SodexoExtension"
 import {
+  isDefaultExamenMedicoVariant,
   resolveExamenMedicoVariant,
   examenMedicoVariantLabel,
   type ExamenMedicoVariant,
@@ -354,7 +355,7 @@ export default function ExamenMedicoEstudio({
   somatometryEventTestId,
   agudezaEventTestId,
   hasMedicalVerdict = false,
-  testNameSnapshot = 'Examen Médico AMI',
+  testNameSnapshot = 'Examen Médico General',
   papeletaLayout = false,
   onPapeletaActiveSectionChange,
 }: ExamenMedicoEstudioProps) {
@@ -576,7 +577,7 @@ export default function ExamenMedicoEstudio({
   }, [canAccessExamen, outerTab])
 
   useEffect(() => {
-    if (activeInnerTab === 'extension' && examVariant === 'AMI') {
+    if (activeInnerTab === 'extension' && isDefaultExamenMedicoVariant(examVariant)) {
       setActiveInnerTab('impresion')
     }
   }, [activeInnerTab, examVariant])
@@ -671,7 +672,7 @@ export default function ExamenMedicoEstudio({
   const innerTabs: { id: InnerTab; label: string; icon: string; done: boolean }[] = [
     { id: 'antecedentes', label: 'Antecedentes', icon: '🩺', done: hasAntecedentes },
     { id: 'exploracion', label: 'Exploración Física', icon: '🩻', done: hasPhysicalExam },
-    ...(examVariant !== 'AMI'
+    ...( !isDefaultExamenMedicoVariant(examVariant)
       ? [{
           id: 'extension' as const,
           label: examenMedicoVariantLabel(examVariant),
@@ -1756,10 +1757,17 @@ export default function ExamenMedicoEstudio({
               ← Antecedentes
             </button>
             <button
-              onClick={() => setActiveInnerTab(examVariant !== 'AMI' ? 'extension' : 'impresion')}
+              onClick={() =>
+                setActiveInnerTab(
+                  !isDefaultExamenMedicoVariant(examVariant) ? 'extension' : 'impresion',
+                )
+              }
               className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
             >
-              Continuar → {examVariant !== 'AMI' ? examenMedicoVariantLabel(examVariant) : 'Impresión'}
+              Continuar →{' '}
+              {!isDefaultExamenMedicoVariant(examVariant)
+                ? examenMedicoVariantLabel(examVariant)
+                : 'Impresión'}
             </button>
           </div>
         </div>

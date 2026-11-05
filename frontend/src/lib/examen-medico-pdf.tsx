@@ -331,7 +331,7 @@ export interface BuildExamenMedicoPdfInput {
       extractedData: unknown | null
     }>
   }>
-  variant?: 'AMI' | 'SODEXO' | 'FLOWSERVE'
+  variant?: 'SME' | 'SODEXO' | 'FLOWSERVE' | 'AMI'
   variantExtensions?: {
     FLOWSERVE?: Record<string, unknown>
     SODEXO?: Record<string, unknown>
@@ -587,7 +587,7 @@ export function buildExamenMedicoPdfData(
     // IMPL-20260826-08: pasamos consolidado al output tal cual (el renderer
     // lo pinta o lo omite según presente). NO se aplica ninguna transformación.
     consolidatedEvents: input.consolidatedEvents ?? [],
-    variant: input.variant ?? 'AMI',
+    variant: input.variant ?? 'SME',
     variantExtensions: input.variantExtensions ?? {},
   }
 }
