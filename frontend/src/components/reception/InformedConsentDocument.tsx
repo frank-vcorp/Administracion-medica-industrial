@@ -1,5 +1,6 @@
 'use client'
 
+import { PrivacyNoticePdfLinks } from '@/components/legal/PrivacyNoticePdfLinks'
 import {
   INFORMED_CONSENT_BODY_INTRO,
   INFORMED_CONSENT_FORMAT_CODE,
@@ -57,6 +58,9 @@ export function InformedConsentDocument({ patientFullName, dateLabel }: Props) {
           ))}
         </ol>
         <p className="text-justify text-[13px] text-slate-700">{INFORMED_CONSENT_PRIVACY_FOOTER}</p>
+        <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-3 mt-2">
+          <PrivacyNoticePdfLinks compact showPreview />
+        </div>
       </section>
 
       <footer className="mt-5 pt-3 border-t border-dashed border-slate-200 text-[10px] text-slate-400 text-center">

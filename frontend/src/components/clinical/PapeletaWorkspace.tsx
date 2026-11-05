@@ -181,6 +181,7 @@ type WorkerInfo = {
   tenureLabel?: string | null
   occupationalLine?: string | null
   visitDurationLabel?: string | null
+  nationalId?: string | null
 }
 
 type MedicalExamData = {
@@ -1737,8 +1738,11 @@ function StudyPanel({
           eventId={eventId}
           eventTestId={test.id}
           workerId={workerId}
+          workerNationalId={workerInfo.nationalId ?? null}
           initialClinicalContext={test.clinicalContext}
           longitudinalData={longitudinalData ?? null}
+          somatometryData={(examData?.somatometryData as Record<string, unknown>) ?? null}
+          eyeAcuityData={(examData?.eyeAcuityData as Record<string, unknown>) ?? null}
           readonly={readonly}
         />
       )}

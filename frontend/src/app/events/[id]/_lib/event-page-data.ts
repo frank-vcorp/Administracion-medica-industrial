@@ -309,6 +309,7 @@ export async function fetchEventPageData(input: {
 
   const workerInfo = {
     name: `${event.worker.firstName} ${event.worker.lastName}`,
+    nationalId: event.worker.nationalId ?? null,
     position: occupational.position ?? '',
     company:
       event.worker.company?.name ||
