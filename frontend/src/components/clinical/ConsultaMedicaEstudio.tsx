@@ -7,6 +7,10 @@ import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ConsultaAntecedentesResumen } from '@/components/clinical/ConsultaAntecedentesResumen'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import {
+  ClinicalFreeTextInput,
+  ClinicalTextarea,
+} from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
@@ -316,10 +320,10 @@ export default function ConsultaMedicaEstudio({
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
               Motivo de la consulta
             </label>
-            <textarea
+            <ClinicalTextarea
               className={`${inputClass} min-h-[140px]`}
               value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
+              onChange={setMotivo}
               disabled={readonly}
               placeholder="Padecimiento actual, síntomas, evolución…"
             />
@@ -418,10 +422,10 @@ export default function ConsultaMedicaEstudio({
               </button>
             )}
           </div>
-          <textarea
+          <ClinicalTextarea
             className={`${inputClass} min-h-[200px]`}
             value={exploracion}
-            onChange={(e) => setExploracion(e.target.value)}
+            onChange={setExploracion}
             disabled={readonly}
           />
         </section>
@@ -435,11 +439,11 @@ export default function ConsultaMedicaEstudio({
             disabled={readonly}
             inputClassName={inputClass}
           />
-          <textarea
+          <ClinicalTextarea
             className={`${inputClass} min-h-[80px]`}
             placeholder="Diagnóstico específico"
             value={diagEspecifico}
-            onChange={(e) => setDiagEspecifico(e.target.value)}
+            onChange={setDiagEspecifico}
             disabled={readonly}
             spellCheck
           />
@@ -488,74 +492,74 @@ export default function ConsultaMedicaEstudio({
 
       {activeTab === 'tratamiento' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <textarea
+          <ClinicalTextarea
             className={`${inputClass} min-h-[80px]`}
             placeholder="Material médico utilizado"
             value={materialMedico}
-            onChange={(e) => setMaterialMedico(e.target.value)}
+            onChange={setMaterialMedico}
             disabled={readonly}
           />
-          <textarea
+          <ClinicalTextarea
             className={`${inputClass} min-h-[80px]`}
             placeholder="Indicaciones generales (dieta, reposo…)"
             value={indicaciones}
-            onChange={(e) => setIndicaciones(e.target.value)}
+            onChange={setIndicaciones}
             disabled={readonly}
           />
           <p className="text-[10px] font-bold text-slate-400 uppercase">Medicamento</p>
           {recetaLineas.map((line, idx) => (
             <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3">
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 placeholder="Medicamento"
                 value={line.medicamento}
-                onChange={(e) => {
+                onChange={(medicamento) => {
                   const next = [...recetaLineas]
-                  next[idx] = { ...line, medicamento: e.target.value }
+                  next[idx] = { ...line, medicamento }
                   setRecetaLineas(next)
                 }}
                 disabled={readonly}
               />
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 placeholder="Presentación"
                 value={line.presentacion ?? ''}
-                onChange={(e) => {
+                onChange={(presentacion) => {
                   const next = [...recetaLineas]
-                  next[idx] = { ...line, presentacion: e.target.value }
+                  next[idx] = { ...line, presentacion }
                   setRecetaLineas(next)
                 }}
                 disabled={readonly}
               />
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 placeholder="Dosis"
                 value={line.dosis}
-                onChange={(e) => {
+                onChange={(dosis) => {
                   const next = [...recetaLineas]
-                  next[idx] = { ...line, dosis: e.target.value }
+                  next[idx] = { ...line, dosis }
                   setRecetaLineas(next)
                 }}
                 disabled={readonly}
               />
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 placeholder="Frecuencia"
                 value={line.frecuencia}
-                onChange={(e) => {
+                onChange={(frecuencia) => {
                   const next = [...recetaLineas]
-                  next[idx] = { ...line, frecuencia: e.target.value }
+                  next[idx] = { ...line, frecuencia }
                   setRecetaLineas(next)
                 }}
                 disabled={readonly}
               />
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 placeholder="Duración"
                 value={line.duracion}
-                onChange={(e) => {
+                onChange={(duracion) => {
                   const next = [...recetaLineas]
-                  next[idx] = { ...line, duracion: e.target.value }
+                  next[idx] = { ...line, duracion }
                   setRecetaLineas(next)
                 }}
                 disabled={readonly}

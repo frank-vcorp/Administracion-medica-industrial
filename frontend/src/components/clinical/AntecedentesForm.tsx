@@ -57,6 +57,10 @@ import {
   antecedentesTabIntro,
 } from '@/lib/antecedentes-section-ui'
 import {
+  ClinicalFreeTextInput,
+  ClinicalTextarea,
+} from '@/components/clinical/ClinicalFreeTextControls'
+import {
   patologiaEspecificacionPlaceholder,
   patologiaRequiresEspecificacion,
 } from '@/lib/patologia-especificacion-fields'
@@ -594,11 +598,11 @@ export function AntecedentesForm({
                                 <label className="block text-xs font-medium text-gray-600 mb-1">
                                   Especificación
                                 </label>
-                                <input
+                                <ClinicalFreeTextInput
                                   type="text"
                                   value={detalle.especificacion ?? ''}
-                                  onChange={e => handlePatologiaPatch(item.field, {
-                                    detalle: { ...detalle, especificacion: e.target.value },
+                                  onChange={especificacion => handlePatologiaPatch(item.field, {
+                                    detalle: { ...detalle, especificacion },
                                   })}
                                   placeholder={patologiaEspecificacionPlaceholder(item.field)}
                                   maxLength={500}
@@ -610,11 +614,11 @@ export function AntecedentesForm({
                               <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Desde cuándo
                               </label>
-                              <input
+                              <ClinicalFreeTextInput
                                 type="text"
                                 value={detalle.desde_cuando}
-                                onChange={e => handlePatologiaPatch(item.field, {
-                                  detalle: { ...detalle, desde_cuando: e.target.value },
+                                onChange={desde_cuando => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, desde_cuando },
                                 })}
                                 placeholder="ej: 15 años, 2019"
                                 maxLength={200}
@@ -625,10 +629,10 @@ export function AntecedentesForm({
                               <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Tratamiento
                               </label>
-                              <textarea
+                              <ClinicalTextarea
                                 value={detalle.tratamiento}
-                                onChange={e => handlePatologiaPatch(item.field, {
-                                  detalle: { ...detalle, tratamiento: e.target.value },
+                                onChange={tratamiento => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, tratamiento },
                                 })}
                                 placeholder="ej: Metformina 500mg cada 24h"
                                 rows={2}
@@ -640,10 +644,10 @@ export function AntecedentesForm({
                               <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Observaciones
                               </label>
-                              <textarea
+                              <ClinicalTextarea
                                 value={detalle.observaciones}
-                                onChange={e => handlePatologiaPatch(item.field, {
-                                  detalle: { ...detalle, observaciones: e.target.value },
+                                onChange={observaciones => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, observaciones },
                                 })}
                                 placeholder="ej: HbA1c 6.5%, sin complicaciones"
                                 rows={3}

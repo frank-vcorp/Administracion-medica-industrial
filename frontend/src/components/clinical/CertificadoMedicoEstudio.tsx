@@ -5,6 +5,10 @@ import { useSession } from 'next-auth/react'
 import { saveCertificadoMedico } from '@/actions/certificado-medico.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import {
+  ClinicalFreeTextInput,
+  ClinicalTextarea,
+} from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
 import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
@@ -288,10 +292,10 @@ export default function CertificadoMedicoEstudio({
       {activeTab === 'exploracion' && (
         <section className="bg-white border border-slate-200 rounded-xl p-4">
           <label className="text-[10px] font-bold text-slate-400 uppercase">Exploración física (V)</label>
-          <textarea
+          <ClinicalTextarea
             className={`${inputClass} min-h-[200px]`}
             value={exploracion}
-            onChange={(e) => setExploracion(e.target.value)}
+            onChange={setExploracion}
             disabled={readonly}
           />
         </section>
@@ -303,10 +307,10 @@ export default function CertificadoMedicoEstudio({
             <label className="text-[10px] font-bold text-slate-400 uppercase">
               Integración diagnóstica (VI)
             </label>
-            <textarea
+            <ClinicalTextarea
               className={`${inputClass} min-h-[80px]`}
               value={integracion}
-              onChange={(e) => setIntegracion(e.target.value)}
+              onChange={setIntegracion}
               placeholder="Diagnóstico o integración clínica en prosa breve"
               disabled={readonly}
             />
@@ -330,10 +334,10 @@ export default function CertificadoMedicoEstudio({
             <label className="text-[10px] font-bold text-slate-400 uppercase">
               Frase para el PDF
             </label>
-            <textarea
+            <ClinicalTextarea
               className={`${inputClass} min-h-[72px]`}
               value={dictamenTexto}
-              onChange={(e) => setDictamenTexto(e.target.value)}
+              onChange={setDictamenTexto}
               disabled={readonly}
             />
           </div>
@@ -345,10 +349,10 @@ export default function CertificadoMedicoEstudio({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Lugar de expedición</label>
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 value={lugar}
-                onChange={(e) => setLugar(e.target.value)}
+                onChange={setLugar}
                 disabled={readonly}
               />
             </div>

@@ -70,6 +70,10 @@ import {
   SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
 import {
+  ClinicalFreeTextInput,
+  ClinicalTextarea,
+} from '@/components/clinical/ClinicalFreeTextControls'
+import {
   patologiaEspecificacionPlaceholder,
   patologiaRequiresEspecificacion,
 } from '@/lib/patologia-especificacion-fields'
@@ -962,11 +966,11 @@ export function AntecedentesCaptura({
                     {entry.estado === 'SI' && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
                         {needsEspecificacion && (
-                          <input
+                          <ClinicalFreeTextInput
                             type="text"
                             value={detalle.especificacion ?? ''}
-                            onChange={e => updatePatologia(item.field, {
-                              detalle: { ...detalle, especificacion: e.target.value },
+                            onChange={especificacion => updatePatologia(item.field, {
+                              detalle: { ...detalle, especificacion },
                             })}
                             disabled={readonly}
                             placeholder={patologiaEspecificacionPlaceholder(item.field)}
@@ -974,21 +978,21 @@ export function AntecedentesCaptura({
                             className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                           />
                         )}
-                        <input
+                        <ClinicalFreeTextInput
                           type="text"
                           value={detalle.desde_cuando}
-                          onChange={e => updatePatologia(item.field, {
-                            detalle: { ...detalle, desde_cuando: e.target.value },
+                          onChange={desde_cuando => updatePatologia(item.field, {
+                            detalle: { ...detalle, desde_cuando },
                           })}
                           disabled={readonly}
                           placeholder="Desde cuándo"
                           maxLength={200}
                           className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                         />
-                        <textarea
+                        <ClinicalTextarea
                           value={detalle.tratamiento}
-                          onChange={e => updatePatologia(item.field, {
-                            detalle: { ...detalle, tratamiento: e.target.value },
+                          onChange={tratamiento => updatePatologia(item.field, {
+                            detalle: { ...detalle, tratamiento },
                           })}
                           disabled={readonly}
                           placeholder="Tratamiento"
@@ -996,10 +1000,10 @@ export function AntecedentesCaptura({
                           maxLength={500}
                           className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
                         />
-                        <textarea
+                        <ClinicalTextarea
                           value={detalle.observaciones}
-                          onChange={e => updatePatologia(item.field, {
-                            detalle: { ...detalle, observaciones: e.target.value },
+                          onChange={observaciones => updatePatologia(item.field, {
+                            detalle: { ...detalle, observaciones },
                           })}
                           disabled={readonly}
                           placeholder="Observaciones"

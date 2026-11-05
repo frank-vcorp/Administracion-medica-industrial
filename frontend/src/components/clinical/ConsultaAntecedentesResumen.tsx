@@ -1,5 +1,6 @@
 'use client'
 
+import { ClinicalTextarea } from '@/components/clinical/ClinicalFreeTextControls'
 import {
   CONSULTA_ANTECEDENTES_RUBROS,
   type AntecedentesConsultaResumen,
@@ -35,10 +36,10 @@ export function ConsultaAntecedentesResumen({
               {idx + 1}. {label}
             </label>
             <p className="text-[10px] text-slate-500 mb-0.5">{hint}</p>
-            <textarea
+            <ClinicalTextarea
               className={inputClass}
               value={value[key]}
-              onChange={(e) => onChange({ ...value, [key]: e.target.value })}
+              onChange={(text) => onChange({ ...value, [key]: text })}
               disabled={readonly}
               rows={2}
               maxLength={4000}
