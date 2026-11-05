@@ -168,7 +168,7 @@ Requieren decisión de negocio, diseño, reglas clínicas, integración o impact
 - Cierre: `closeReceptionCorroboration` genera PDF firmado, persiste en `Appointment` / `Worker`, auditoría, luego `checkInAppointment`.
 - Historial en expediente del paciente: `WorkerInformedConsentCard`.
 
-**Matiz operativo:** check-in **walk-in** vía `CheckInModal` (`createEvent`) no incluye este paso; el acuerdo de minuta se cumple en el flujo estándar con cita.
+**Matiz operativo:** check-in **walk-in** vía `CheckInModal` pasa por `ReceptionInformedConsentStep` y `createReceptionWalkInEvent` (PDF + aviso FY27), igual que corroboración con cita.
 
 ### R-13 — Paquetes Flowserve y Sodexo (2026-09-21, Frank)
 
