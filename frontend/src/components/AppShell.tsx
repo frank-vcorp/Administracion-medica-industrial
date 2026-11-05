@@ -196,8 +196,8 @@ function ShellNavigation({
       {showAdminItems && (
         <>
           <NavSection label="Administración" collapsed={collapsed} />
-          <NavItem href="/branches" icon={MapPin} label="Sucursales AMI" collapsed={collapsed} onNavigate={onNavigate} />
-          <NavItem href="/admin/users" icon={UserCog} label="Personal AMI" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/branches" icon={MapPin} label="Sucursales SME" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/users" icon={UserCog} label="Personal SME" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/admin/services" icon={FlaskConical} label="Catálogo de Pruebas" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/admin/lab/catalogs?mod=unidades" icon={TestTubes} label="Módulo de Laboratorios" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/admin/lab/migration" icon={RefreshCw} label="Migración NOVA" secondary collapsed={collapsed} onNavigate={onNavigate} />

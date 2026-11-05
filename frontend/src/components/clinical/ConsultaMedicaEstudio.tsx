@@ -390,7 +390,7 @@ export default function ConsultaMedicaEstudio({
                   type="number"
                   min={0}
                   max={365}
-                  placeholder="Días (incapacidad interna AMI)"
+                  placeholder="Días (incapacidad interna SME)"
                   value={diasIncap}
                   onChange={(e) => setDiasIncap(e.target.value)}
                   disabled={readonly}

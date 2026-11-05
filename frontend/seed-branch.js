@@ -11,7 +11,7 @@ async function main() {
     let tenant = await prisma.tenant.findFirst()
     if (!tenant) {
       tenant = await prisma.tenant.create({
-        data: { name: 'AMI - Administracion Medica Industrial' }
+        data: { name: 'Soluciones Medico Empresariales' }
       })
       console.log(`✅ Tenant creado: ${tenant.id}`)
     } else {

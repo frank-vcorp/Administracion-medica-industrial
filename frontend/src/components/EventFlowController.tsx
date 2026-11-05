@@ -377,7 +377,7 @@ export default function EventFlowController({
                                     data-implementacion="IMPL-20260826-08"
                                     className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-6 py-3 rounded-xl font-semibold transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 mx-auto"
                                 >
-                                    {isPending ? 'Re-emitiendo…' : '🔄 Re-emitir Dictamen General (formato AMI)'}
+                                    {isPending ? 'Re-emitiendo…' : '🔄 Re-emitir Dictamen General (formato SME)'}
                                 </button>
                                 {reemitInfo && (
                                     <div

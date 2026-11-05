@@ -12,6 +12,7 @@ import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { FormEvent, useState, Suspense } from 'react'
 import { BrandLogo } from '@/components/BrandLogo'
+import { SME_BRAND_LINE, SME_LEGAL_NAME } from '@/lib/brand-constants'
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -53,7 +54,7 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <div className="border-b border-[#f0f0f0] px-6 py-3">
-        <p className="text-center text-sm font-bold text-ami-primary">AMI Salud Responsable</p>
+        <p className="text-center text-sm font-bold text-ami-primary">{SME_BRAND_LINE}</p>
       </div>
       <div className="border-t-2 border-b-[6px] border-t-ami-secondary border-b-ami-primary bg-white px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-center">
@@ -120,7 +121,7 @@ function LoginForm() {
             ¿No tienes cuenta? Contacta a tu administrador.
           </p>
           <p className="mt-2 text-center text-xs text-ami-gray/70">
-            © 2026 AMI Salud Responsable. Todos los derechos reservados.
+            © 2026 {SME_LEGAL_NAME}. Todos los derechos reservados.
           </p>
         </div>
       </div>

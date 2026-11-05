@@ -3,6 +3,7 @@
  * Mitad inferior del informe fuente + bloque clínico AMI.
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { SME_LEGAL_NAME, SME_PDF_FOOTER } from '@/lib/brand-constants'
 import type { EspirometryAmiSectionData } from '@/lib/espirometry-ami-section'
 import { formatAmiSectionMl } from '@/lib/espirometry-ami-section'
 import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
@@ -221,7 +222,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
       <Page size="LETTER" style={styles.page}>
         <View style={styles.header} fixed>
           <View style={styles.headerLeft}>
-            <Text style={styles.brand}>Administración Médica Industrial</Text>
+            <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
             <Text style={styles.brandSub}>
               Evaluaciones médicas · Outsourcing · Capacitación
             </Text>
@@ -296,7 +297,7 @@ export const EspirometryValidatedPDF = ({ data }: { data: EspirometryValidatedPD
         </View>
 
         <Text style={styles.footer} fixed>
-          Administración Médica Industrial — Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro — (442) 225-52-67 — www.medicaindustrial.com
+          {SME_PDF_FOOTER}
           {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
           {'\n'}Este documento es un reporte clínico validado por el médico firmante. Queda prohibida su alteración o reproducción no autorizada.
         </Text>

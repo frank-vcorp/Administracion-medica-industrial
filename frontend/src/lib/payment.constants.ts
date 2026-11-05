@@ -1,4 +1,5 @@
 import { buildWhatsAppWebUrl, normalizeWhatsAppPhone } from '@/lib/whatsapp-phone'
+import { SME_LEGAL_NAME } from '@/lib/brand-constants'
 
 export { normalizeWhatsAppPhone }
 
@@ -72,7 +73,7 @@ export function buildDefaultReceiptMessage(args: {
   if (args.downloadUrl) {
     lines.push(``, `📄 *Recibo:* ${args.downloadUrl}`)
   }
-  lines.push(``, `— Administración Médica Industrial`)
+  lines.push(``, `— ${SME_LEGAL_NAME}`)
   return lines.join('\n')
 }
 

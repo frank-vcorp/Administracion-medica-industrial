@@ -19,6 +19,7 @@ import {
   type PaymentMethod,
   type PaymentHistoryItem,
 } from '@/lib/payment.constants'
+import { SME_LEGAL_NAME } from '@/lib/brand-constants'
 import { readCatalogPriceFromOptions } from '@/lib/medical-test-catalog-price'
 
 export type SuggestedPaymentLine = {
@@ -349,9 +350,9 @@ async function dispatchReceiptEmail(args: {
   const result = await sendSmtpMail({
     purpose: 'receipts',
     to: args.email,
-    subject: `Recibo de pago #${args.paymentId.slice(0, 8)} — AMI`,
+    subject: `Recibo de pago #${args.paymentId.slice(0, 8)} — ${SME_LEGAL_NAME}`,
     text:
-      `Adjuntamos el comprobante de su pago reciente en Administración Médica Industrial.\n\n` +
+      `Adjuntamos el comprobante de su pago reciente en ${SME_LEGAL_NAME}.\n\n` +
       `Folio de pago: ${args.paymentId}\n\n` +
       `Este correo es generado automáticamente. Si requiere factura, responda a este mensaje.`,
     attachments: attachments.length ? attachments : undefined,

@@ -49,7 +49,7 @@ export default async function SatisfactionReportPage({ searchParams }: Props) {
           Satisfacción del paciente
         </h2>
         <p className="text-sm text-slate-500 font-medium">
-          Encuesta AMI — KPIs y detalle por visita.{' '}
+          Encuesta de satisfacción — KPIs y detalle por visita.{' '}
           <Link href="/reports/satisfaction/charts" className="text-violet-700 font-semibold hover:underline">
             Ver gráficas
           </Link>

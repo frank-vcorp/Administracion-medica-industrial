@@ -2,7 +2,7 @@
 
 ## Project Identity
 - **Name**: Administracion-medica-industrial
-- **Description**: Sistema de gestión médica industrial con Historial Clínico, Triaje y Gestión de Trabajadores.
+- **Description**: Soluciones Medico Empresariales (SME) — sistema clínico con Historial Clínico, Triaje y Gestión de Trabajadores.
 
 ## Tech Stack & Versioning (CRITICAL)
 - **Framework**: Next.js **16.1.6** (App Router)

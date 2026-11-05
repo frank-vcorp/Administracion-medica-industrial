@@ -235,8 +235,8 @@ class ReportService:
     </table>
     
     <div class="footer">
-        <p>Reporte generado por AMI Sistema - Administración Médica Industrial</p>
-        <p>© 2026 AMI Clínica</p>
+        <p>Reporte generado por Soluciones Medico Empresariales</p>
+        <p>© 2026 Soluciones Medico Empresariales</p>
     </div>
 </body>
 </html>

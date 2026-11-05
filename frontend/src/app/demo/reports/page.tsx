@@ -9,7 +9,7 @@ import { getDemoProjects } from '@/lib/demo/demo-data';
 export const dynamic = 'force-static';
 
 export const metadata = {
-  title: 'Demo Reportes Masivos UMM | AMI',
+  title: 'Demo Reportes Masivos UMM | SME',
   description: 'Demo navegable del Módulo de Reportes Masivos UMM (datos estáticos).',
 };
 

@@ -3,6 +3,7 @@
  */
 
 import { sendSmtpMail } from '@/lib/smtp-mail'
+import { SME_LEGAL_NAME } from '@/lib/brand-constants'
 
 export async function sendPortalAccessCredentialsEmail(args: {
   to: string
@@ -16,7 +17,7 @@ export async function sendPortalAccessCredentialsEmail(args: {
     to: args.to,
     subject: `Acceso al portal cliente — ${args.companyName}`,
     text:
-      `Administración Médica Industrial\n\n` +
+      `${SME_LEGAL_NAME}\n\n` +
       `Se habilitó el portal para ${args.companyName}.\n\n` +
       `URL de acceso: ${args.loginUrl}\n` +
       `Usuario: ${args.loginEmail}\n` +

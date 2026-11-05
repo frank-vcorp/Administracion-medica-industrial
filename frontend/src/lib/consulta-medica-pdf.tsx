@@ -1,5 +1,5 @@
 import { Document, Image, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
-import { SME_BRAND_LINE, SME_LOGO_FALLBACK_TEXT } from '@/lib/brand-constants'
+import { SME_BRAND_LINE, SME_LEGAL_NAME, SME_LOGO_FALLBACK_TEXT } from '@/lib/brand-constants'
 import {
   buildDiagnosticoRecetaDisplay,
   SME_PDF_FOOTER,
@@ -365,7 +365,7 @@ export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput
       <Page size="A4" style={recetaStyles.page}>
         <View style={recetaStyles.header} fixed>
           <View style={recetaStyles.headerLeft}>
-            <Text style={recetaStyles.brand}>Administración Médica Industrial</Text>
+            <Text style={recetaStyles.brand}>{SME_LEGAL_NAME}</Text>
             <Text style={recetaStyles.brandSub}>{SME_BRAND_LINE}</Text>
             <Text style={recetaStyles.brandSub}>
               Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro
@@ -489,7 +489,8 @@ export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput
         <Text style={recetaStyles.footer} fixed>
           {SME_PDF_FOOTER}
           {'\n'}
-          Documento generado electrónicamente por AMI. Válido con firma autógrafa del médico tratante.
+          Documento generado electrónicamente por {SME_LEGAL_NAME}. Válido con firma autógrafa del
+          médico tratante.
         </Text>
       </Page>
     </Document>

@@ -12,6 +12,7 @@ import {
 import { describeSmtpTransportBlockReason, resolveSmtpTransport } from '@/lib/smtp-config'
 import { sendSmtpMail } from '@/lib/smtp-mail'
 import { SENDGRID_SMTP_ROW_ID, SendGridSmtpSaveSchema } from '@/schemas/sendgrid-smtp.schema'
+import { SME_LEGAL_NAME } from '@/lib/brand-constants'
 
 export type SendGridSmtpPublicSettings = {
   configured: boolean
@@ -243,12 +244,12 @@ export async function probeSendGridSmtpConnection(testRecipient?: string): Promi
     purpose: 'default',
     forProbe: true,
     to,
-    subject: 'Prueba SendGrid — Administración Médica Industrial',
+    subject: `Prueba SendGrid — ${SME_LEGAL_NAME}`,
     text:
       'Este mensaje confirma que la configuración SMTP (SendGrid) responde correctamente.\n\n' +
       `Origen efectivo: ${transport.source}\n` +
       `Servidor: ${transport.host}:${transport.port}\n\n` +
-      'Administración Médica Industrial',
+      SME_LEGAL_NAME,
   })
 
   if (result.skipped) {

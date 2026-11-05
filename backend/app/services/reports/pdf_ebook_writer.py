@@ -162,7 +162,7 @@ def generar_ebook(
         leftMargin=2 * inch,
         rightMargin=2 * inch,
         title=f"EBOOK {project.get('empresa', 'Proyecto')}",
-        author="AMI - Administración Médica Industrial",
+        author="Soluciones Medico Empresariales",
     )
 
     styles = _build_styles()
