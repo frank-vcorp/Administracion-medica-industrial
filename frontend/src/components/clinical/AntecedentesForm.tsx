@@ -29,8 +29,10 @@
  * Click en otra enfermedad colapsa la actual automáticamente. Estado
  * NEGADO/NO APLICA → card pequeño sin campos. Sin botón "Confirmar".
  */
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
+import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import {
   DATOS_PERSONALES_CAMPOS,
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
@@ -264,23 +266,40 @@ export function AntecedentesForm({
     })
   }
 
+  const buildPayload = useCallback(
+    () => ({
+      datos_personales: datosPersonales,
+      historia_laboral: historiaLaboral,
+      heredo_familiares: heredofamiliares,
+      no_patologicos: noPatologicos,
+      patologicos: patologicos,
+    }),
+    [datosPersonales, historiaLaboral, heredofamiliares, noPatologicos, patologicos],
+  )
+
+  const historySnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
+
+  const persistHistory = useCallback(async (): Promise<boolean> => {
+    const result = await upsertWorkerClinicalHistory(workerId, buildPayload())
+    return result.success
+  }, [workerId, buildPayload])
+
+  const { statusLabel: autosaveLabel, markSaved: markHistorySaved } = useClinicalIntervalAutosave({
+    enabled: true,
+    snapshotKey: historySnapshotKey,
+    save: persistHistory,
+  })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
 
     try {
-      const payload = {
-        datos_personales:  datosPersonales,
-        historia_laboral:  historiaLaboral,
-        heredo_familiares: heredofamiliares,
-        no_patologicos:    noPatologicos,
-        patologicos:       patologicos,
-      }
-
-      const result = await upsertWorkerClinicalHistory(workerId, payload)
+      const result = await upsertWorkerClinicalHistory(workerId, buildPayload())
 
       if (result.success) {
+        markHistorySaved()
         setMessage({
           type: 'success',
           text: 'Historial clínico guardado exitosamente'
@@ -312,6 +331,7 @@ export function AntecedentesForm({
         <p className="text-gray-600">
           <strong>Paciente:</strong> {workerName} (ID: {workerId})
         </p>
+        <ClinicalAutosaveIndicator label={autosaveLabel} className="mt-2" />
       </div>
 
       {/* Messages */}
@@ -817,6 +837,7 @@ export function AntecedentesForm({
           >
             {loading ? 'Guardando...' : 'Guardar Historial Clínico'}
           </button>
+          <ClinicalAutosaveIndicator label={autosaveLabel} />
         </div>
       </form>
     </div>

@@ -61,6 +61,7 @@ import {
 // hallazgo → recomendacion + edicion manual).
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
 import { formatMedicoNombreYCedula } from "@/lib/clinical/medico-display"
+import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
 import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
 import {
   deriveAgudezaVisualResumen,
@@ -1103,17 +1104,11 @@ export default function ExamenMedicoEstudio({
       </div>
       )}
 
-      {!readonly && autosaveStatusLabel && (
-        <p
-          className={`text-[11px] px-3 py-1.5 rounded-lg border ${
-            autosaveStatusLabel.includes('Error')
-              ? 'bg-red-50 border-red-200 text-red-700'
-              : 'bg-slate-50 border-slate-200 text-slate-600'
-          }`}
-          aria-live="polite"
-        >
-          {autosaveStatusLabel}
-        </p>
+      {!readonly && (
+        <ClinicalAutosaveIndicator
+          label={autosaveStatusLabel}
+          className="text-[11px] px-3 py-1.5 rounded-lg border bg-slate-50 border-slate-200"
+        />
       )}
 
       {/* Banner de bloqueo visible cuando el médico intenta ir a Examen Médico sin completar prereqs.

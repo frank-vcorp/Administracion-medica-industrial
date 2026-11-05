@@ -5,6 +5,8 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
+import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
 import {
@@ -191,6 +193,28 @@ export default function ConsultaMedicaEstudio({
     session?.user?.name,
   ])
 
+  const consultaSnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
+
+  const persistConsultaDraft = useCallback(async (): Promise<boolean> => {
+    const res = await saveConsultaMedica(
+      eventTestId,
+      eventId,
+      workerId,
+      buildPayload(),
+      { finalize: false },
+    )
+    if (!res.success) return false
+    setHasPersisted(true)
+    return true
+  }, [eventTestId, eventId, workerId, buildPayload])
+
+  const autosaveEnabled = !readonly && !cerradaAt
+  const { statusLabel: autosaveLabel, markSaved: markConsultaSaved } = useClinicalIntervalAutosave({
+    enabled: autosaveEnabled,
+    snapshotKey: consultaSnapshotKey,
+    save: persistConsultaDraft,
+  })
+
   const runSave = (finalize: boolean) => {
     setSaveError('')
     setSaveMsg('')
@@ -209,6 +233,7 @@ export default function ConsultaMedicaEstudio({
       if (finalize && res.payload.cerrada_at) {
         setCerradaAt(res.payload.cerrada_at)
       }
+      markConsultaSaved()
       setHasPersisted(true)
       setSaveMsg(finalize ? 'Consulta cerrada y guardada.' : 'Borrador guardado.')
     })
@@ -224,8 +249,10 @@ export default function ConsultaMedicaEstudio({
         <div>
           <p className="text-sm font-bold text-teal-900">Consulta médica</p>
           <p className="text-xs text-teal-700">
-            Nota clínica + receta · Antecedentes se guardan en el perfil del paciente
+            Nota clínica + receta · Borrador con autoguardado cada 15 s (incluye antecedentes en el
+            perfil del paciente)
           </p>
+          <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} className="mt-1" />
         </div>
       </div>
 
@@ -584,6 +611,7 @@ export default function ConsultaMedicaEstudio({
           </button>
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
           {saveError && <span className="text-xs text-red-600 font-medium">{saveError}</span>}
+          <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} />
         </div>
       )}
     </div>

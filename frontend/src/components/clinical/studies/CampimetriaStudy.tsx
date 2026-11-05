@@ -8,10 +8,12 @@
  */
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveCampimetriaQuestionnaire } from '@/actions/campimetria-questionnaire.actions'
 import { updateEventTestStatus } from '@/actions/event-test.actions'
+import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import {
   CONFRONTACION_VALUES,
   EXPLORACION_OJO_FIELDS,
@@ -234,13 +236,9 @@ export default function CampimetriaStudy({
 
   const ishiharaDerived = deriveIshiharaResultado(form.ishihara)
 
-  const save = async (complete: boolean) => {
-    setSaving(true)
-    setMessage('')
-    setAiWarning('')
-    setFieldErrors({})
+  const buildQuestionnairePayload = useCallback((): CampimetriaQuestionnairePayload => {
     const acuityLive = inheritAcuityFromExam(examData?.eyeAcuityData)
-    const payload: CampimetriaQuestionnairePayload = {
+    return {
       ...form,
       ishihara: applyIshiharaDerivation(form.ishihara),
       agudeza_heredada: acuityLive.pending
@@ -248,6 +246,45 @@ export default function CampimetriaStudy({
         : acuityToCampimetriaPayloadSnapshot(acuityLive),
       capturedAt: new Date().toISOString(),
     }
+  }, [form, examData?.eyeAcuityData])
+
+  const snapshotKey = useMemo(() => {
+    const acuityLive = inheritAcuityFromExam(examData?.eyeAcuityData)
+    return JSON.stringify({
+      ...form,
+      ishihara: applyIshiharaDerivation(form.ishihara),
+      agudeza_heredada: acuityLive.pending
+        ? null
+        : acuityToCampimetriaPayloadSnapshot(acuityLive),
+    })
+  }, [form, examData?.eyeAcuityData])
+
+  const persistDraft = useCallback(async (): Promise<boolean> => {
+    const res = await saveCampimetriaQuestionnaire(
+      eventTestId,
+      buildQuestionnairePayload(),
+      eventId,
+      { triggerPrediagnosis: false },
+    )
+    if (res.success) {
+      setForm(res.payload)
+      return true
+    }
+    return false
+  }, [eventTestId, eventId, buildQuestionnairePayload])
+
+  const { statusLabel: autosaveLabel, markSaved } = useClinicalIntervalAutosave({
+    enabled: !readonly,
+    snapshotKey,
+    save: persistDraft,
+  })
+
+  const save = async (complete: boolean) => {
+    setSaving(true)
+    setMessage('')
+    setAiWarning('')
+    setFieldErrors({})
+    const payload = buildQuestionnairePayload()
     const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId, {
       triggerPrediagnosis: complete,
     })
@@ -257,6 +294,7 @@ export default function CampimetriaStudy({
       setSaving(false)
       return
     }
+    markSaved()
     setForm(res.payload)
     const status = complete ? 'COMPLETED' : 'RESULT_REGISTERED'
     await updateEventTestStatus(
@@ -285,6 +323,7 @@ export default function CampimetriaStudy({
 
   return (
     <div className="space-y-4">
+        {!readonly && <ClinicalAutosaveIndicator label={autosaveLabel} />}
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
           <p className="text-sm font-bold text-violet-900">Campimetría — captura manual</p>
           <p className="text-xs text-violet-700 mt-0.5">

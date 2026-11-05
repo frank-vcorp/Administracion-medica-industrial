@@ -4,6 +4,8 @@ import { useCallback, useMemo, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
 import { saveCertificadoMedico } from '@/actions/certificado-medico.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
+import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
 import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
 import {
@@ -166,6 +168,26 @@ export default function CertificadoMedicoEstudio({
     cerradaAt,
   ])
 
+  const certificadoSnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
+
+  const persistCertificadoDraft = useCallback(async (): Promise<boolean> => {
+    const res = await saveCertificadoMedico(
+      eventTestId,
+      eventId,
+      workerId,
+      buildPayload(),
+      { finalize: false },
+    )
+    return res.success
+  }, [eventTestId, eventId, workerId, buildPayload])
+
+  const autosaveEnabled = !readonly && !cerradaAt
+  const { statusLabel: autosaveLabel, markSaved: markCertificadoSaved } = useClinicalIntervalAutosave({
+    enabled: autosaveEnabled,
+    snapshotKey: certificadoSnapshotKey,
+    save: persistCertificadoDraft,
+  })
+
   const runSave = (finalize: boolean) => {
     setSaveError('')
     setSaveMsg('')
@@ -184,6 +206,7 @@ export default function CertificadoMedicoEstudio({
       if (finalize && res.payload.cerrada_at) {
         setCerradaAt(res.payload.cerrada_at)
       }
+      markCertificadoSaved()
       setSaveMsg(finalize ? 'Certificado cerrado y guardado.' : 'Borrador guardado.')
     })
   }
@@ -195,6 +218,7 @@ export default function CertificadoMedicoEstudio({
 
   return (
     <div className="space-y-4">
+      <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} />
       <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">
         {TABS.map((t) => (
           <button
@@ -445,6 +469,7 @@ export default function CertificadoMedicoEstudio({
           </button>
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
           {saveError && <span className="text-xs text-red-600 font-medium">{saveError}</span>}
+          <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} />
         </div>
       )}
     </div>

@@ -2,10 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { updateAgudezaVisual, updateSomatometria } from '@/actions/medical-exam.actions'
+import {
+  CLINICAL_AUTOSAVE_INTERVAL_MS,
+  clinicalAutosaveStatusLabel,
+  type ClinicalAutosaveStatus,
+} from '@/lib/hooks/useClinicalIntervalAutosave'
 
-export const EXAMEN_MEDICO_AUTOSAVE_DEBOUNCE_MS = 1200
+/** @deprecated Use CLINICAL_AUTOSAVE_INTERVAL_MS — kept for imports/tests. */
+export const EXAMEN_MEDICO_AUTOSAVE_DEBOUNCE_MS = CLINICAL_AUTOSAVE_INTERVAL_MS
 
-export type AutosaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
+export type AutosaveStatus = ClinicalAutosaveStatus
 
 type OuterTab = 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'examen_medico'
 
@@ -24,7 +30,6 @@ export function useExamenMedicoAutosave(params: {
   const {
     enabled,
     eventId,
-    eventTestId,
     outerTab,
     somaPayload,
     agudezaPayload,
@@ -35,12 +40,15 @@ export function useExamenMedicoAutosave(params: {
   } = params
 
   const [status, setStatus] = useState<AutosaveStatus>('idle')
-  const [statusDetail, setStatusDetail] = useState<string | null>(null)
+  const [errorDetail, setErrorDetail] = useState<string | null>(null)
 
   const somaBaseline = useRef<string | null>(null)
   const agudezaBaseline = useRef<string | null>(null)
   const examBaseline = useRef<string | null>(null)
   const inFlight = useRef(false)
+
+  const onAutosaveExamRef = useRef(onAutosaveExam)
+  onAutosaveExamRef.current = onAutosaveExam
 
   useEffect(() => {
     if (somaBaseline.current === null) {
@@ -55,99 +63,98 @@ export function useExamenMedicoAutosave(params: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const somaKey = JSON.stringify(somaPayload)
+  const agudezaKey = JSON.stringify(agudezaPayload)
+
+  const isDirty =
+    somaKey !== somaBaseline.current ||
+    agudezaKey !== agudezaBaseline.current ||
+    (outerTab === 'examen_medico' && examSnapshotKey !== examBaseline.current)
+
   useEffect(() => {
-    if (!enabled) return
-    const key = JSON.stringify(somaPayload)
-    if (key === somaBaseline.current) return
-
-    setStatus('pending')
-    const timer = setTimeout(() => {
-      void (async () => {
-        if (inFlight.current) return
-        inFlight.current = true
-        setStatus('saving')
-        setStatusDetail(null)
-        const res = await updateSomatometria(eventId, somaPayload, { autosave: true })
-        inFlight.current = false
-        if (res.success) {
-          somaBaseline.current = key
-          onAfterSomaAutosave?.()
-          setStatus('saved')
-        } else {
-          setStatus('error')
-          setStatusDetail(res.error ?? 'No se pudo guardar somatometría')
-        }
-      })()
-    }, EXAMEN_MEDICO_AUTOSAVE_DEBOUNCE_MS)
-
-    return () => clearTimeout(timer)
-  }, [enabled, eventId, somaPayload])
+    if (!enabled) {
+      setStatus('idle')
+      return
+    }
+    if (isDirty && status !== 'saving') {
+      setStatus('dirty')
+    }
+  }, [enabled, isDirty, status])
 
   useEffect(() => {
     if (!enabled) return
-    const key = JSON.stringify(agudezaPayload)
-    if (key === agudezaBaseline.current) return
 
-    setStatus('pending')
-    const timer = setTimeout(() => {
+    const tick = () => {
+      if (inFlight.current) return
+
+      const dirtySoma = somaKey !== somaBaseline.current
+      const dirtyAgudeza = agudezaKey !== agudezaBaseline.current
+      const dirtyExam =
+        outerTab === 'examen_medico' && examSnapshotKey !== examBaseline.current
+
+      if (!dirtySoma && !dirtyAgudeza && !dirtyExam) return
+
+      inFlight.current = true
+      setStatus('saving')
+      setErrorDetail(null)
+
       void (async () => {
-        if (inFlight.current) return
-        inFlight.current = true
-        setStatus('saving')
-        setStatusDetail(null)
-        const res = await updateAgudezaVisual(eventId, agudezaPayload, { autosave: true })
-        inFlight.current = false
-        if (res.success) {
-          agudezaBaseline.current = key
-          onAfterAgudezaAutosave?.()
+        try {
+          if (dirtySoma) {
+            const res = await updateSomatometria(eventId, somaPayload, { autosave: true })
+            if (!res.success) {
+              setStatus('error')
+              setErrorDetail(res.error ?? 'No se pudo guardar somatometría')
+              return
+            }
+            somaBaseline.current = somaKey
+            onAfterSomaAutosave?.()
+          }
+
+          if (agudezaKey !== agudezaBaseline.current) {
+            const res = await updateAgudezaVisual(eventId, agudezaPayload, { autosave: true })
+            if (!res.success) {
+              setStatus('error')
+              setErrorDetail(res.error ?? 'No se pudo guardar agudeza visual')
+              return
+            }
+            agudezaBaseline.current = agudezaKey
+            onAfterAgudezaAutosave?.()
+          }
+
+          if (outerTab === 'examen_medico' && examSnapshotKey !== examBaseline.current) {
+            const ok = await onAutosaveExamRef.current()
+            if (!ok) {
+              setStatus('error')
+              setErrorDetail('No se pudo guardar examen médico')
+              return
+            }
+            examBaseline.current = examSnapshotKey
+          }
+
           setStatus('saved')
-        } else {
-          setStatus('error')
-          setStatusDetail(res.error ?? 'No se pudo guardar agudeza visual')
+        } finally {
+          inFlight.current = false
         }
       })()
-    }, EXAMEN_MEDICO_AUTOSAVE_DEBOUNCE_MS)
+    }
 
-    return () => clearTimeout(timer)
-  }, [enabled, eventId, agudezaPayload])
+    const id = window.setInterval(tick, CLINICAL_AUTOSAVE_INTERVAL_MS)
+    return () => window.clearInterval(id)
+  }, [
+    enabled,
+    eventId,
+    outerTab,
+    somaKey,
+    somaPayload,
+    agudezaKey,
+    agudezaPayload,
+    examSnapshotKey,
+    onAfterSomaAutosave,
+    onAfterAgudezaAutosave,
+  ])
 
-  useEffect(() => {
-    if (!enabled || outerTab !== 'examen_medico') return
-
-    if (examSnapshotKey === examBaseline.current) return
-
-    setStatus('pending')
-    const timer = setTimeout(() => {
-      void (async () => {
-        if (inFlight.current) return
-        inFlight.current = true
-        setStatus('saving')
-        setStatusDetail(null)
-        const ok = await onAutosaveExam()
-        inFlight.current = false
-        if (ok) {
-          examBaseline.current = examSnapshotKey
-          setStatus('saved')
-        } else {
-          setStatus('error')
-          setStatusDetail('No se pudo guardar examen médico')
-        }
-      })()
-    }, EXAMEN_MEDICO_AUTOSAVE_DEBOUNCE_MS)
-
-    return () => clearTimeout(timer)
-  }, [enabled, eventId, eventTestId, outerTab, examSnapshotKey, onAutosaveExam])
-
-  const statusLabel =
-    status === 'saving'
-      ? 'Guardando automáticamente…'
-      : status === 'saved'
-        ? 'Guardado automáticamente'
-        : status === 'error'
-          ? statusDetail ?? 'Error al guardar'
-          : status === 'pending'
-            ? 'Cambios pendientes…'
-            : null
+  const statusLabel = clinicalAutosaveStatusLabel(status, errorDetail)
 
   return { status, statusLabel }
 }

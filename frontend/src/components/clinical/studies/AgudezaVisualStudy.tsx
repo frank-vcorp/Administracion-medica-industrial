@@ -8,9 +8,11 @@
  */
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
+import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
+import { useClinicalIntervalAutosave } from "@/lib/hooks/useClinicalIntervalAutosave"
 // IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): se adopta el catálogo ZIN
 // para los 8 campos de visión (Snellen) + 3 pruebas complementarias.
 // Ver SPEC §4.1.
@@ -85,12 +87,26 @@ export default function AgudezaVisualStudy({
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
+  const snapshotKey = useMemo(() => JSON.stringify(formData), [formData])
+
+  const persistDraft = useCallback(async (): Promise<boolean> => {
+    const res = await updateAgudezaVisual(eventId, formData, { autosave: true })
+    return res.success
+  }, [eventId, formData])
+
+  const { statusLabel: autosaveLabel, markSaved } = useClinicalIntervalAutosave({
+    enabled: !readonly,
+    snapshotKey,
+    save: persistDraft,
+  })
+
   const handleSave = async (markComplete: boolean) => {
     setIsSaving(true)
     setMessage("")
     setAiWarning("")
     const res = await updateAgudezaVisual(eventId, formData)
     if (res.success) {
+      markSaved()
       const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
       await updateEventTestStatus(
         eventTestId,
@@ -110,6 +126,7 @@ export default function AgudezaVisualStudy({
 
   return (
     <div className="space-y-5">
+      {!readonly && <ClinicalAutosaveIndicator label={autosaveLabel} />}
       {/* Campo Visual */}
       <div>
         <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Campo Visual</h4>

@@ -8,9 +8,11 @@
  */
 "use client"
 
-import { useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { updateSomatometria } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
+import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
+import { useClinicalIntervalAutosave } from "@/lib/hooks/useClinicalIntervalAutosave"
 
 interface SomatometriaStudyProps {
   eventId: string
@@ -49,13 +51,32 @@ export default function SomatometriaStudy({
   else if (parseFloat(imc) > 24.9) complexion = "SOBREPESO"
   else if (parseFloat(imc) < 18.5 && parseFloat(imc) > 0) complexion = "BAJO PESO"
 
+  const buildPayload = useCallback(
+    () => ({ ...formData, imc: parseFloat(imc), complexion }),
+    [formData, imc, complexion],
+  )
+
+  const snapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
+
+  const persistDraft = useCallback(async (): Promise<boolean> => {
+    const res = await updateSomatometria(eventId, buildPayload(), { autosave: true })
+    return res.success
+  }, [eventId, buildPayload])
+
+  const { statusLabel: autosaveLabel, markSaved } = useClinicalIntervalAutosave({
+    enabled: !readonly,
+    snapshotKey,
+    save: persistDraft,
+  })
+
   const handleSave = async (markComplete: boolean) => {
     setIsSaving(true)
     setMessage("")
     setAiWarning("")
-    const payload = { ...formData, imc: parseFloat(imc), complexion }
+    const payload = buildPayload()
     const res = await updateSomatometria(eventId, payload)
     if (res.success) {
+      markSaved()
       const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
       await updateEventTestStatus(
         eventTestId,
@@ -75,6 +96,7 @@ export default function SomatometriaStudy({
 
   return (
     <div className="space-y-6">
+      {!readonly && <ClinicalAutosaveIndicator label={autosaveLabel} />}
       {/* Peso, Talla e IMC */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div>
