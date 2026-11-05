@@ -19,7 +19,13 @@ import {
   formatExamenMedicoZodError,
   medicoLineFromProfile,
   prepareExamenMedicoPayloadForSave,
+  zodErrorToFieldErrors,
 } from '@/lib/clinical/examen-medico-payload'
+import {
+  mapExamenMedicoGateError,
+  resolveExamenMedicoSaveNavigation,
+  type ExamenMedicoSaveNavigation,
+} from '@/lib/clinical/examen-medico-save-errors'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 
@@ -261,7 +267,17 @@ export async function saveExamenMedicoPapeleta(
         : null
     }
     const prepared = prepareExamenMedicoPayloadForSave(rawData, { medicoLine })
-    const data = ExamenMedicoCompletoSchema.parse(prepared)
+    const parsed = ExamenMedicoCompletoSchema.safeParse(prepared)
+    if (!parsed.success) {
+      const fieldErrors = zodErrorToFieldErrors(parsed.error)
+      return {
+        success: false as const,
+        error: formatExamenMedicoZodError(parsed.error),
+        fieldErrors,
+        navigation: resolveExamenMedicoSaveNavigation(fieldErrors),
+      }
+    }
+    const data = parsed.data
 
     const priorExam = await prisma.medicalExam.findUnique({
       where: { eventId },
@@ -291,7 +307,13 @@ export async function saveExamenMedicoPapeleta(
         physicalExamData: physicalPayload,
       })
       if (gateError) {
-        return { success: false, error: gateError }
+        const mapped = mapExamenMedicoGateError(gateError)
+        return {
+          success: false as const,
+          error: gateError,
+          fieldErrors: mapped.fieldErrors,
+          navigation: mapped.navigation,
+        }
       }
       // O9-23: cerrar revisión clínica del estudio sin bloquear edición (no examen_capture_closed).
     } else if (priorPhysical.examen_capture_closed === true) {
@@ -369,8 +391,18 @@ export async function saveExamenMedicoPapeleta(
     }
   } catch (error: unknown) {
     console.error("Error saving examen médico papeleta:", error)
-    return { success: false, error: formatExamenMedicoZodError(error) }
+    return {
+      success: false as const,
+      error: formatExamenMedicoZodError(error),
+    }
   }
+}
+
+export type SaveExamenMedicoFailure = {
+  success: false
+  error: string
+  fieldErrors?: Record<string, string[]>
+  navigation?: ExamenMedicoSaveNavigation
 }
 
 /**

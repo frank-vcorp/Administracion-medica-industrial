@@ -65,6 +65,10 @@ import {
   medicoLineFromProfile,
   prepareExamenMedicoPayloadForSave,
 } from '@/lib/clinical/examen-medico-payload'
+import {
+  examFieldRingClass,
+  type ExamenMedicoSaveNavigation,
+} from '@/lib/clinical/examen-medico-save-errors'
 import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
 import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
 import {
@@ -425,6 +429,7 @@ export default function ExamenMedicoEstudio({
   const [isPending, startTransition] = useTransition()
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string[]>>({})
   const [aiWarning, setAiWarning] = useState('')
 
   // Estado Módulo 1
@@ -692,8 +697,33 @@ export default function ExamenMedicoEstudio({
   function setM1Field(key: string, value: string) {
     setModulo1(prev => ({ ...prev, [key]: value }))
   }
+  function clearFieldSaveError(fieldKey: string) {
+    setSaveFieldErrors(prev => {
+      if (!prev[fieldKey]) return prev
+      const next = { ...prev }
+      delete next[fieldKey]
+      return next
+    })
+  }
+
   function handleField(name: string, value: string) {
+    clearFieldSaveError(name)
     setForm(prev => ({ ...prev, [name]: value }))
+  }
+
+  function examSaveErr(fieldKey: string): string | undefined {
+    return saveFieldErrors[fieldKey]?.[0]
+  }
+
+  function applySaveFailure(
+    error: string,
+    fieldErrors?: Record<string, string[]>,
+    navigation?: ExamenMedicoSaveNavigation,
+  ) {
+    setSaveError(error)
+    setSaveFieldErrors(fieldErrors ?? {})
+    if (navigation?.outerTab) setOuterTab(navigation.outerTab)
+    if (navigation?.innerTab) setActiveInnerTab(navigation.innerTab)
   }
 
   const sessionMedicoLine = useMemo(
@@ -887,6 +917,7 @@ export default function ExamenMedicoEstudio({
   function handleSave(markComplete: boolean) {
     setSaveMsg('')
     setSaveError('')
+    setSaveFieldErrors({})
     setAiWarning('')
     startTransition(async () => {
       const profileRes = await getCurrentDoctorProfile()
@@ -917,6 +948,7 @@ export default function ExamenMedicoEstudio({
         markComplete,
       )
       if (res.success) {
+        setSaveFieldErrors({})
         // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / FND-20260825-22):
         // cuando se marca como completado, el Event pasa a `VALIDATING` y
         // se muestra el flujo "Firmar y Emitir Dictamen" en el workspace.
@@ -933,7 +965,11 @@ export default function ExamenMedicoEstudio({
         // status sólo si cambió — null en borrador).
         onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED')
       } else {
-        setSaveError(res.error ?? 'Error al guardar')
+        applySaveFailure(
+          res.error ?? 'Error al guardar',
+          'fieldErrors' in res ? res.fieldErrors : undefined,
+          'navigation' in res ? res.navigation : undefined,
+        )
       }
     })
   }
@@ -1165,22 +1201,40 @@ export default function ExamenMedicoEstudio({
               <input
                 type="number" step="0.1" min={0} max={500}
                 value={somaForm.peso_kg || ''}
-                onChange={e => setSomaForm(prev => ({ ...prev, peso_kg: e.target.value }))}
+                onChange={e => {
+                  clearFieldSaveError('peso_kg')
+                  setSomaForm(prev => ({ ...prev, peso_kg: e.target.value }))
+                }}
                 disabled={readonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60"
+                className={examFieldRingClass(
+                  Boolean(examSaveErr('peso_kg')),
+                  'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60',
+                )}
                 placeholder="Ej: 75.5"
               />
+              {examSaveErr('peso_kg') && (
+                <p className="text-[10px] text-red-600 mt-1">{examSaveErr('peso_kg')}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (Metros)</label>
               <input
                 type="number" step="0.01" min={0} max={3}
                 value={somaForm.talla_m || ''}
-                onChange={e => setSomaForm(prev => ({ ...prev, talla_m: e.target.value }))}
+                onChange={e => {
+                  clearFieldSaveError('talla_m')
+                  setSomaForm(prev => ({ ...prev, talla_m: e.target.value }))
+                }}
                 disabled={readonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60"
+                className={examFieldRingClass(
+                  Boolean(examSaveErr('talla_m')),
+                  'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60',
+                )}
                 placeholder="Ej: 1.75"
               />
+              {examSaveErr('talla_m') && (
+                <p className="text-[10px] text-red-600 mt-1">{examSaveErr('talla_m')}</p>
+              )}
             </div>
             <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
               <div>
@@ -1879,6 +1933,7 @@ export default function ExamenMedicoEstudio({
                     : isPresionArterial
                     ? PRESION_ARTERIAL_RESUMEN_VALUES
                     : null
+                  const fieldErr = examSaveErr(field)
                   return (
                   <div key={field}>
                     <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
@@ -1887,7 +1942,10 @@ export default function ExamenMedicoEstudio({
                         value={form[field] ?? ''}
                         onChange={e => handleField(field, e.target.value)}
                         disabled={readonly}
-                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                        className={examFieldRingClass(
+                          Boolean(fieldErr),
+                          'w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
+                        )}
                       >
                         <option value="">—</option>
                         {comboValues.map(v => (
@@ -1900,9 +1958,13 @@ export default function ExamenMedicoEstudio({
                         value={form[field] ?? ''}
                         onChange={e => handleField(field, e.target.value)}
                         disabled={readonly}
-                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                        className={examFieldRingClass(
+                          Boolean(fieldErr),
+                          'w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
+                        )}
                       />
                     )}
+                    {fieldErr && <p className="text-[10px] text-red-600 mt-0.5">{fieldErr}</p>}
                   </div>
                   )
                 })}
@@ -1921,8 +1983,14 @@ export default function ExamenMedicoEstudio({
                 onChange={e => handleField('impresion_diagnostica', e.target.value)}
                 disabled={readonly}
                 placeholder="Opcional: se auto-completa desde el resumen clínico al guardar si lo dejas vacío."
-                className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                className={examFieldRingClass(
+                  Boolean(examSaveErr('impresion_diagnostica')),
+                  'mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
+                )}
               />
+              {examSaveErr('impresion_diagnostica') && (
+                <p className="text-[10px] text-red-600 mt-1">{examSaveErr('impresion_diagnostica')}</p>
+              )}
             </label>
 
             <label className="block">
@@ -1993,11 +2061,20 @@ export default function ExamenMedicoEstudio({
               <textarea
                 rows={6}
                 value={recomendaciones}
-                onChange={e => setRecomendaciones(e.target.value)}
+                onChange={e => {
+                  clearFieldSaveError('recomendaciones_clinicas')
+                  setRecomendaciones(e.target.value)
+                }}
                 disabled={readonly}
                 placeholder="1.- Recomendación uno. 2.- Recomendación dos. (auto-poblado desde hallazgos)"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                className={examFieldRingClass(
+                  Boolean(examSaveErr('recomendaciones_clinicas')),
+                  'w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
+                )}
               />
+              {examSaveErr('recomendaciones_clinicas') && (
+                <p className="text-[10px] text-red-600">{examSaveErr('recomendaciones_clinicas')}</p>
+              )}
               <p className="text-[10px] text-slate-400 italic">
                 Auto-poblado desde hallazgos del examen (caries, sobrepeso,
                 agudeza visual, presión arterial, etc). Puedes editar, agregar
@@ -2051,8 +2128,17 @@ export default function ExamenMedicoEstudio({
             </div>
           )}
           {saveError && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 font-medium">
-              ❌ {saveError}
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 font-medium space-y-2">
+              <p>❌ {saveError}</p>
+              {Object.keys(saveFieldErrors).length > 0 && (
+                <ul className="text-xs font-normal list-disc pl-4 space-y-0.5">
+                  {Object.entries(saveFieldErrors).map(([key, messages]) => (
+                    <li key={key}>
+                      <span className="font-semibold">{key}</span>: {messages[0]}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {aiWarning && (

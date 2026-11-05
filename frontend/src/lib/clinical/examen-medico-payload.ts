@@ -18,6 +18,8 @@ function isPrimitiveFieldValue(v: unknown): v is string | number | boolean {
   )
 }
 
+export { zodErrorToFieldErrors } from '@/lib/clinical/examen-medico-save-errors'
+
 /** Mensaje legible cuando falla Zod al guardar examen médico (F17). */
 export function formatExamenMedicoZodError(error: unknown): string {
   if (error instanceof ZodError) {
