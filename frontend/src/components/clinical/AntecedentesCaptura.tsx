@@ -1136,7 +1136,7 @@ export function AntecedentesCaptura({
         </div>
       ) : (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700">
-          💾 Autoguardado cada 15 s mientras capturas (consulta, certificado o examen médico). También
+          💾 Autoguardado cada 7 s mientras capturas (consulta, certificado o examen médico). También
           puedes usar &ldquo;Guardar borrador&rdquo; en cualquier momento.
         </div>
       )}

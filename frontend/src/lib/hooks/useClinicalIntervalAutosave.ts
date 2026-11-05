@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /** Intervalo estándar de autoguardado clínico en todo el sistema (borrador). */
-export const CLINICAL_AUTOSAVE_INTERVAL_MS = 15_000
+export const CLINICAL_AUTOSAVE_INTERVAL_MS = 7_000
 
 export type ClinicalAutosaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -19,7 +19,7 @@ export function clinicalAutosaveStatusLabel(
     case 'error':
       return errorDetail ?? 'Error al guardar automáticamente'
     case 'dirty':
-      return 'Cambios pendientes (autoguardado cada 15 s)…'
+      return 'Cambios pendientes (autoguardado cada 7 s)…'
     default:
       return null
   }

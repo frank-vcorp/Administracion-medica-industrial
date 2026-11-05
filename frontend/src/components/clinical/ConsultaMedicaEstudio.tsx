@@ -249,7 +249,7 @@ export default function ConsultaMedicaEstudio({
         <div>
           <p className="text-sm font-bold text-teal-900">Consulta médica</p>
           <p className="text-xs text-teal-700">
-            Nota clínica + receta · Borrador con autoguardado cada 15 s (incluye antecedentes en el
+            Nota clínica + receta · Borrador con autoguardado cada 7 s (incluye antecedentes en el
             perfil del paciente)
           </p>
           <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} className="mt-1" />
