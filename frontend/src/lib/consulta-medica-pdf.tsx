@@ -442,7 +442,11 @@ export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput
             {lineas.map((line, i) => (
               <View
                 key={i}
-                style={[recetaStyles.tableRow, i % 2 === 1 ? recetaStyles.tableRowAlt : undefined]}
+                style={
+                  i % 2 === 1
+                    ? [recetaStyles.tableRow, recetaStyles.tableRowAlt]
+                    : recetaStyles.tableRow
+                }
               >
                 <Text style={[recetaStyles.colMed, recetaStyles.cell]}>{line.medicamento}</Text>
                 <Text style={[recetaStyles.colPres, recetaStyles.cell]}>
