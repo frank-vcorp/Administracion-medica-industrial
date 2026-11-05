@@ -60,6 +60,10 @@ import {
 // auto-poblamiento para las recomendaciones del dictamen (catalogo
 // hallazgo → recomendacion + edicion manual).
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
+import {
+  buildImpresionDiagnosticaFromAntecedentesYExamen,
+  examForHallazgosFromForm,
+} from '@/lib/clinical/impresion-diagnostica'
 import { formatMedicoNombreYCedula } from "@/lib/clinical/medico-display"
 import {
   medicoLineFromProfile,
@@ -431,6 +435,11 @@ export default function ExamenMedicoEstudio({
   const [saveError, setSaveError] = useState('')
   const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string[]>>({})
   const [aiWarning, setAiWarning] = useState('')
+  /** DA-2: no sobrescribir impresión diagnóstica tras edición manual del médico. */
+  const impresionDiagnosticaManualRef = useRef(
+    typeof physicalExamData.impresion_diagnostica === 'string' &&
+      physicalExamData.impresion_diagnostica.trim().length > 0,
+  )
 
   // Estado Módulo 1
   const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
@@ -591,6 +600,32 @@ export default function ExamenMedicoEstudio({
       setActiveInnerTab('impresion')
     }
   }, [activeInnerTab, examVariant])
+
+  const impresionDiagnosticaPropuesta = useMemo(
+    () =>
+      buildImpresionDiagnosticaFromAntecedentesYExamen({
+        antecedentes: antecedentesCaptured,
+        exam: examForHallazgosFromForm(form),
+        especifiquePositivos: form.especifique_positivos ?? null,
+      }),
+    [antecedentesCaptured, form],
+  )
+
+  useEffect(() => {
+    if (readonly) return
+    if (activeInnerTab !== 'impresion') return
+    if (impresionDiagnosticaManualRef.current) return
+    const propuesta = impresionDiagnosticaPropuesta.trim()
+    if (!propuesta) return
+    setForm(prev => {
+      if ((prev.impresion_diagnostica ?? '').trim()) return prev
+      const next = { ...prev, impresion_diagnostica: propuesta }
+      if (!(prev.examen_medico_texto ?? '').trim()) {
+        next.examen_medico_texto = propuesta
+      }
+      return next
+    })
+  }, [activeInnerTab, impresionDiagnosticaPropuesta, readonly])
 
   useEffect(() => {
     const section = examenMedicoNavSectionFromTabs(outerTab, activeInnerTab)
@@ -1973,16 +2008,42 @@ export default function ExamenMedicoEstudio({
 
           {/* Impresión Diagnóstica */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <label className="block">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Impresión diagnóstica
               </span>
+              {!readonly && impresionDiagnosticaPropuesta.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    impresionDiagnosticaManualRef.current = false
+                    const propuesta = impresionDiagnosticaPropuesta.trim()
+                    handleField('impresion_diagnostica', propuesta)
+                    if (!(form.examen_medico_texto ?? '').trim()) {
+                      handleField('examen_medico_texto', propuesta)
+                    }
+                  }}
+                  className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline"
+                  title="Generar texto desde antecedentes patológicos SÍ y hallazgos del examen"
+                >
+                  ↻ Generar desde antecedentes y examen
+                </button>
+              )}
+            </div>
+            <label className="block">
               <textarea
                 rows={4}
                 value={form.impresion_diagnostica ?? ''}
-                onChange={e => handleField('impresion_diagnostica', e.target.value)}
+                onChange={e => {
+                  impresionDiagnosticaManualRef.current = true
+                  handleField('impresion_diagnostica', e.target.value)
+                }}
                 disabled={readonly}
-                placeholder="Opcional: se auto-completa desde el resumen clínico al guardar si lo dejas vacío."
+                placeholder={
+                  impresionDiagnosticaPropuesta.trim()
+                    ? 'Se auto-completa al abrir esta pestaña si hay antecedentes patológicos en SÍ (editable).'
+                    : 'Opcional: con APP en SÍ se propone texto desde el examen; si no, se completa al guardar.'
+                }
                 className={examFieldRingClass(
                   Boolean(examSaveErr('impresion_diagnostica')),
                   'mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',

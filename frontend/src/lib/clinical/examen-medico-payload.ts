@@ -1,6 +1,11 @@
 import { ZodError } from 'zod'
 import { applyExploracionFisicaDefaults } from '@/schemas/clinical/exam.schema'
 import { buildExamSummary, type ExamSnapshot } from '@/lib/clinical/exam-summary'
+import {
+  buildImpresionDiagnosticaFromAntecedentesYExamen,
+  examForHallazgosFromForm,
+  hasPatologicoSi,
+} from '@/lib/clinical/impresion-diagnostica'
 import { formatMedicoNombreYCedula } from '@/lib/clinical/medico-display'
 
 const IMPRESION_RESUMEN_DEFAULTS: Record<string, string> = {
@@ -84,7 +89,34 @@ export function prepareExamenMedicoPayloadForSave(
     radiografia_texto: String(next.radiografia_texto ?? ''),
   }
 
-  const summary = buildExamSummary(snapshot)
+  const antecedentesCaptured =
+    input.antecedentes_captured && typeof input.antecedentes_captured === 'object'
+      ? (input.antecedentes_captured as Record<string, unknown>)
+      : null
+
+  if (
+    !String(next.impresion_diagnostica ?? '').trim() &&
+    hasPatologicoSi(antecedentesCaptured)
+  ) {
+    const examFormSlice: Record<string, string> = {}
+    for (const [key, value] of Object.entries(next)) {
+      if (isPrimitiveFieldValue(value)) examFormSlice[key] = String(value ?? '')
+    }
+    const fromAntecedentes = buildImpresionDiagnosticaFromAntecedentesYExamen({
+      antecedentes: antecedentesCaptured,
+      exam: examForHallazgosFromForm(examFormSlice),
+      especifiquePositivos: examFormSlice.especifique_positivos ?? null,
+    })
+    if (fromAntecedentes.trim()) {
+      next.impresion_diagnostica = fromAntecedentes
+    }
+  }
+
+  const summary = buildExamSummary({
+    ...snapshot,
+    impresion_diagnostica: String(next.impresion_diagnostica ?? ''),
+    examen_medico_texto: String(next.examen_medico_texto ?? ''),
+  })
   const autoImpresion = summary.examen_medico.trim()
   if (!String(next.impresion_diagnostica ?? '').trim() && autoImpresion) {
     next.impresion_diagnostica = autoImpresion
