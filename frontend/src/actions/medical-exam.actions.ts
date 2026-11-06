@@ -15,6 +15,19 @@ import {
 import { deriveAgudezaVisualResumen } from "@/lib/clinical/agudeza-visual"
 import { assertExamenMedicoReadyToClose } from "@/lib/clinical/examen-medico-capture"
 import { mergeVariantExtensionsForPersist } from '@/lib/sodexo-extension-persist'
+import {
+  formatExamenMedicoZodError,
+  medicoLineFromProfile,
+  prepareExamenMedicoPayloadForSave,
+  zodErrorToFieldErrors,
+} from '@/lib/clinical/examen-medico-payload'
+import {
+  mapExamenMedicoGateError,
+  resolveExamenMedicoSaveNavigation,
+  type ExamenMedicoSaveNavigation,
+} from '@/lib/clinical/examen-medico-save-errors'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/auth'
 
 /**
  * @id ARCH-20260326-01
@@ -242,7 +255,29 @@ export async function saveExamenMedicoPapeleta(
 
   try {
     const autosave = options?.autosave === true
-    const data = ExamenMedicoCompletoSchema.parse(rawData)
+    const session = await getServerSession(authOptions)
+    let medicoLine: string | null = null
+    if (session?.user?.id) {
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { fullName: true, professionalLicense: true },
+      })
+      medicoLine = user
+        ? medicoLineFromProfile(user.fullName, user.professionalLicense)
+        : null
+    }
+    const prepared = prepareExamenMedicoPayloadForSave(rawData, { medicoLine })
+    const parsed = ExamenMedicoCompletoSchema.safeParse(prepared)
+    if (!parsed.success) {
+      const fieldErrors = zodErrorToFieldErrors(parsed.error)
+      return {
+        success: false as const,
+        error: formatExamenMedicoZodError(parsed.error),
+        fieldErrors,
+        navigation: resolveExamenMedicoSaveNavigation(fieldErrors),
+      }
+    }
+    const data = parsed.data
 
     const priorExam = await prisma.medicalExam.findUnique({
       where: { eventId },
@@ -272,7 +307,13 @@ export async function saveExamenMedicoPapeleta(
         physicalExamData: physicalPayload,
       })
       if (gateError) {
-        return { success: false, error: gateError }
+        const mapped = mapExamenMedicoGateError(gateError)
+        return {
+          success: false as const,
+          error: gateError,
+          fieldErrors: mapped.fieldErrors,
+          navigation: mapped.navigation,
+        }
       }
       // O9-23: cerrar revisión clínica del estudio sin bloquear edición (no examen_capture_closed).
     } else if (priorPhysical.examen_capture_closed === true) {
@@ -350,8 +391,18 @@ export async function saveExamenMedicoPapeleta(
     }
   } catch (error: unknown) {
     console.error("Error saving examen médico papeleta:", error)
-    return { success: false, error: "Error al guardar Examen Médico" }
+    return {
+      success: false as const,
+      error: formatExamenMedicoZodError(error),
+    }
   }
+}
+
+export type SaveExamenMedicoFailure = {
+  success: false
+  error: string
+  fieldErrors?: Record<string, string[]>
+  navigation?: ExamenMedicoSaveNavigation
 }
 
 /**
