@@ -157,11 +157,38 @@ export async function computeBranchDayAvailabilityForDates(
   })
 }
 
+export type BranchHourCapacityCheck = {
+  ok: boolean
+  count: number
+  capacity: number
+  reason?: string
+}
+
+/** Mensaje en español para rechazos de cupo / horario al agendar. */
+export function appointmentCapacityUserMessage(check: BranchHourCapacityCheck): string {
+  if (check.ok) return ''
+  switch (check.reason) {
+    case 'OUTSIDE_HOURS':
+      return 'La hora elegida está fuera del horario operativo de la sucursal ese día. Ajuste la fecha o la hora.'
+    case 'BRANCH_CLOSED':
+      return 'La sucursal no atiende ese día. Elija otra fecha.'
+    case 'BRANCH_INACTIVE':
+      return 'La sucursal seleccionada no está activa.'
+    case 'APPOINTMENT_IN_PAST':
+      return 'No puede agendar en una fecha u hora pasada.'
+    default:
+      if (check.capacity > 0 && check.count >= check.capacity) {
+        return `Este horario ya alcanzó el cupo (${check.count}/${check.capacity}). Elija otra hora.`
+      }
+      return 'No hay cupo en el horario seleccionado. Elija otra fecha u hora.'
+  }
+}
+
 export async function checkBranchHourCapacity(
   db: PrismaClient,
   branchId: string,
   scheduledAt: Date,
-): Promise<{ ok: boolean; count: number; capacity: number; reason?: string }> {
+): Promise<BranchHourCapacityCheck> {
   const branch = await db.branch.findUnique({
     where: { id: branchId },
     select: {

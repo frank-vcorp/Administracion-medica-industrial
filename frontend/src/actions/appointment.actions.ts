@@ -45,7 +45,10 @@ import {
   todayAgendaDateString,
   isAppointmentScheduleInPast,
 } from '@/lib/appointment-scheduling'
-import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
+import {
+  appointmentCapacityUserMessage,
+  checkBranchHourCapacity,
+} from '@/lib/appointment-capacity'
 import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
 import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
 
@@ -96,15 +99,22 @@ export async function createAppointment(data: {
       return { success: false, error: 'Fecha u hora inválida' }
     }
     if (isAppointmentScheduleInPast(scheduledDate)) {
-      return { success: false, error: 'APPOINTMENT_IN_PAST' }
+      return {
+        success: false,
+        error: appointmentCapacityUserMessage({
+          ok: false,
+          count: 0,
+          capacity: 0,
+          reason: 'APPOINTMENT_IN_PAST',
+        }),
+      }
     }
 
     const capacityCheck = await checkBranchHourCapacity(prisma, data.branchId, scheduledDate)
     if (!capacityCheck.ok) {
       return {
         success: false,
-        error: 'BRANCH_HOUR_FULL',
-        capacity: capacityCheck,
+        error: appointmentCapacityUserMessage(capacityCheck),
       }
     }
 
