@@ -289,12 +289,20 @@ export function AntecedentesForm({
 
   const historySnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
 
-  const persistHistory = useCallback(async (): Promise<boolean> => {
+  const persistHistory = useCallback(async () => {
     const result = await upsertWorkerClinicalHistory(workerId, buildPayload())
-    return result.success
+    if (!result.success) {
+      return {
+        ok: false,
+        message: result.error,
+        context: 'Historial clínico (autoguardado)',
+      } as const
+    }
+    return true
   }, [workerId, buildPayload])
 
-  const { statusLabel: autosaveLabel, markSaved: markHistorySaved } = useClinicalIntervalAutosave({
+  const { statusLabel: autosaveLabel, markSaved: markHistorySaved, userFacingError: historyAutosaveError } =
+    useClinicalIntervalAutosave({
     enabled: true,
     snapshotKey: historySnapshotKey,
     save: persistHistory,
@@ -341,7 +349,7 @@ export function AntecedentesForm({
         <p className="text-gray-600">
           <strong>Paciente:</strong> {workerName} (ID: {workerId})
         </p>
-        <ClinicalAutosaveIndicator label={autosaveLabel} className="mt-2" />
+        <ClinicalAutosaveIndicator label={autosaveLabel} error={historyAutosaveError} className="mt-2" />
       </div>
 
       {/* Messages */}
@@ -873,7 +881,7 @@ export function AntecedentesForm({
           >
             {loading ? 'Guardando...' : 'Guardar Historial Clínico'}
           </button>
-          <ClinicalAutosaveIndicator label={autosaveLabel} />
+          <ClinicalAutosaveIndicator label={autosaveLabel} error={historyAutosaveError} />
         </div>
       </form>
     </div>

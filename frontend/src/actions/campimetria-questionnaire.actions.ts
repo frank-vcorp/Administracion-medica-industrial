@@ -65,6 +65,7 @@ export type SaveCampimetriaQuestionnaireResult =
       success: false
       error: string
       fieldErrors?: Record<string, string[]>
+      technicalDetail?: string
     }
 
 export async function saveCampimetriaQuestionnaire(
@@ -160,7 +161,8 @@ export async function saveCampimetriaQuestionnaire(
     console.error('[IMPL-FEATURE-20260914-01] saveCampimetriaQuestionnaire failed:', err)
     return {
       success: false,
-      error: 'No se pudo guardar la campimetría. Intente nuevamente.',
+      error: 'No se pudo guardar la campimetría por un problema del servidor o de red.',
+      technicalDetail: err instanceof Error ? err.message : 'unknown_error',
     }
   }
 }

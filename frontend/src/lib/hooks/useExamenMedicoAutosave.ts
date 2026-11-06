@@ -5,8 +5,11 @@ import { updateAgudezaVisual, updateSomatometria } from '@/actions/medical-exam.
 import {
   CLINICAL_AUTOSAVE_INTERVAL_MS,
   clinicalAutosaveStatusLabel,
+  normalizeClinicalAutosaveOutcome,
+  type ClinicalAutosaveSaveOutcome,
   type ClinicalAutosaveStatus,
 } from '@/lib/hooks/useClinicalIntervalAutosave'
+import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 
 /** @deprecated Use CLINICAL_AUTOSAVE_INTERVAL_MS — kept for imports/tests. */
 export const EXAMEN_MEDICO_AUTOSAVE_DEBOUNCE_MS = CLINICAL_AUTOSAVE_INTERVAL_MS
@@ -23,7 +26,7 @@ export function useExamenMedicoAutosave(params: {
   somaPayload: Record<string, unknown>
   agudezaPayload: Record<string, unknown>
   examSnapshotKey: string
-  onAutosaveExam: () => Promise<boolean>
+  onAutosaveExam: () => Promise<ClinicalAutosaveSaveOutcome>
   onAfterSomaAutosave?: () => void
   onAfterAgudezaAutosave?: () => void
 }) {
@@ -40,7 +43,7 @@ export function useExamenMedicoAutosave(params: {
   } = params
 
   const [status, setStatus] = useState<AutosaveStatus>('idle')
-  const [errorDetail, setErrorDetail] = useState<string | null>(null)
+  const [userFacingError, setUserFacingError] = useState<UserFacingError | null>(null)
 
   const somaBaseline = useRef<string | null>(null)
   const agudezaBaseline = useRef<string | null>(null)
@@ -96,7 +99,7 @@ export function useExamenMedicoAutosave(params: {
 
       inFlight.current = true
       setStatus('saving')
-      setErrorDetail(null)
+      setUserFacingError(null)
 
       void (async () => {
         try {
@@ -104,7 +107,12 @@ export function useExamenMedicoAutosave(params: {
             const res = await updateSomatometria(eventId, somaPayload, { autosave: true })
             if (!res.success) {
               setStatus('error')
-              setErrorDetail(res.error ?? 'No se pudo guardar somatometría')
+              setUserFacingError(
+                mapSaveClinicalFailure(
+                  { success: false, error: res.error ?? 'No se pudo guardar somatometría' },
+                  { context: 'Somatometría (autoguardado)' },
+                ),
+              )
               return
             }
             somaBaseline.current = somaKey
@@ -115,7 +123,12 @@ export function useExamenMedicoAutosave(params: {
             const res = await updateAgudezaVisual(eventId, agudezaPayload, { autosave: true })
             if (!res.success) {
               setStatus('error')
-              setErrorDetail(res.error ?? 'No se pudo guardar agudeza visual')
+              setUserFacingError(
+                mapSaveClinicalFailure(
+                  { success: false, error: res.error ?? 'No se pudo guardar agudeza visual' },
+                  { context: 'Agudeza visual (autoguardado)' },
+                ),
+              )
               return
             }
             agudezaBaseline.current = agudezaKey
@@ -123,10 +136,11 @@ export function useExamenMedicoAutosave(params: {
           }
 
           if (outerTab === 'examen_medico' && examSnapshotKey !== examBaseline.current) {
-            const ok = await onAutosaveExamRef.current()
-            if (!ok) {
+            const raw = await onAutosaveExamRef.current()
+            const normalized = await normalizeClinicalAutosaveOutcome(raw)
+            if (!normalized.ok) {
               setStatus('error')
-              setErrorDetail('No se pudo guardar examen médico')
+              setUserFacingError(normalized.mapped)
               return
             }
             examBaseline.current = examSnapshotKey
@@ -154,7 +168,7 @@ export function useExamenMedicoAutosave(params: {
     onAfterAgudezaAutosave,
   ])
 
-  const statusLabel = clinicalAutosaveStatusLabel(status, errorDetail)
+  const statusLabel = clinicalAutosaveStatusLabel(status, userFacingError)
 
-  return { status, statusLabel }
+  return { status, statusLabel, userFacingError }
 }

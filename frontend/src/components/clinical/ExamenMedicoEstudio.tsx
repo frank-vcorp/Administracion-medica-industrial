@@ -74,7 +74,14 @@ import {
   type ExamenMedicoSaveNavigation,
 } from '@/lib/clinical/examen-medico-save-errors'
 import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
+import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCallout"
 import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
+import { mapMedicalExamActionFailure, parseMedicalExamZodIssues } from "@/lib/medical-exam-action-errors"
+import {
+  mapSaveClinicalFailure,
+  splitUserFacingMessageLines,
+  type UserFacingError,
+} from "@/lib/user-facing-error"
 import {
   deriveAgudezaVisualResumen,
   VISION_SNELLEN_NO_APLICA,
@@ -432,7 +439,7 @@ export default function ExamenMedicoEstudio({
   )
   const [isPending, startTransition] = useTransition()
   const [saveMsg, setSaveMsg] = useState('')
-  const [saveError, setSaveError] = useState('')
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string[]>>({})
   const [aiWarning, setAiWarning] = useState('')
   /** DA-2: no sobrescribir impresión diagnóstica tras edición manual del médico. */
@@ -755,7 +762,7 @@ export default function ExamenMedicoEstudio({
     fieldErrors?: Record<string, string[]>,
     navigation?: ExamenMedicoSaveNavigation,
   ) {
-    setSaveError(error)
+    setSaveError(mapSaveClinicalFailure({ success: false, error }, { context: 'Examen médico' }))
     setSaveFieldErrors(fieldErrors ?? {})
     if (navigation?.outerTab) setOuterTab(navigation.outerTab)
     if (navigation?.innerTab) setActiveInnerTab(navigation.innerTab)
@@ -878,7 +885,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setSomaSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Somatometría (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setSomaSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingSoma(false)
   }
@@ -902,7 +918,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setVitalsSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Signos vitales (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setVitalsSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingVitals(false)
   }
@@ -926,7 +951,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setAgudezaSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Agudeza visual (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setAgudezaSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingAgudeza(false)
   }
@@ -951,7 +985,7 @@ export default function ExamenMedicoEstudio({
 
   function handleSave(markComplete: boolean) {
     setSaveMsg('')
-    setSaveError('')
+    setSaveError(null)
     setSaveFieldErrors({})
     setAiWarning('')
     startTransition(async () => {
@@ -999,11 +1033,27 @@ export default function ExamenMedicoEstudio({
         // Notificamos al padre el nuevo studyStatus siempre (el Event
         // status sólo si cambió — null en borrador).
         onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED')
-      } else {
+      } else if (
+        'fieldErrors' in res &&
+        res.fieldErrors &&
+        Object.keys(res.fieldErrors).length > 0
+      ) {
         applySaveFailure(
           res.error ?? 'Error al guardar',
-          'fieldErrors' in res ? res.fieldErrors : undefined,
+          res.fieldErrors,
           'navigation' in res ? res.navigation : undefined,
+        )
+      } else {
+        setSaveFieldErrors({})
+        setSaveError(
+          mapMedicalExamActionFailure(
+            {
+              success: false,
+              error: res.error ?? 'Error al guardar',
+              technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+            },
+            markComplete ? 'Examen médico (cierre)' : 'Examen médico (borrador)',
+          ),
         )
       }
     })
@@ -1045,7 +1095,13 @@ export default function ExamenMedicoEstudio({
       false,
       { autosave: true },
     )
-    return res.success
+    if (res.success) return true
+    return {
+      ok: false,
+      message: res.error,
+      error: parseMedicalExamZodIssues(res.technicalDetail) ?? res.technicalDetail,
+      context: 'Examen médico (autoguardado)',
+    }
   }, [
     eventId,
     eventTestId,
@@ -1060,7 +1116,7 @@ export default function ExamenMedicoEstudio({
     sessionMedicoLine,
   ])
 
-  const { statusLabel: autosaveStatusLabel } = useExamenMedicoAutosave({
+  const { statusLabel: autosaveStatusLabel, userFacingError: autosaveExamError } = useExamenMedicoAutosave({
     enabled: !readonly,
     eventId,
     eventTestId,
@@ -1200,6 +1256,7 @@ export default function ExamenMedicoEstudio({
       {!readonly && (
         <ClinicalAutosaveIndicator
           label={autosaveStatusLabel}
+          error={autosaveExamError}
           className="text-[11px] px-3 py-1.5 rounded-lg border bg-slate-50 border-slate-200"
         />
       )}
@@ -2189,10 +2246,10 @@ export default function ExamenMedicoEstudio({
             </div>
           )}
           {saveError && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 font-medium space-y-2">
-              <p>❌ {saveError}</p>
+            <div className="space-y-2">
+              <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50" />
               {Object.keys(saveFieldErrors).length > 0 && (
-                <ul className="text-xs font-normal list-disc pl-4 space-y-0.5">
+                <ul className="text-xs font-normal list-disc pl-4 space-y-0.5 text-red-700">
                   {Object.entries(saveFieldErrors).map(([key, messages]) => (
                     <li key={key}>
                       <span className="font-semibold">{key}</span>: {messages[0]}

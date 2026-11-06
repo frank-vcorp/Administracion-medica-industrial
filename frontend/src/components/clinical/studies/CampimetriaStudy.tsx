@@ -13,7 +13,9 @@ import { useRouter } from 'next/navigation'
 import { saveCampimetriaQuestionnaire } from '@/actions/campimetria-questionnaire.actions'
 import { updateEventTestStatus } from '@/actions/event-test.actions'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
+import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import {
   CONFRONTACION_VALUES,
   EXPLORACION_OJO_FIELDS,
@@ -102,6 +104,7 @@ export default function CampimetriaStudy({
   const [message, setMessage] = useState('')
   const [aiWarning, setAiWarning] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
+  const [saveMappedError, setSaveMappedError] = useState<UserFacingError | null>(null)
 
   const acuity = useMemo(
     () => inheritAcuityFromExam(examData?.eyeAcuityData),
@@ -259,7 +262,7 @@ export default function CampimetriaStudy({
     })
   }, [form, examData?.eyeAcuityData])
 
-  const persistDraft = useCallback(async (): Promise<boolean> => {
+  const persistDraft = useCallback(async () => {
     const res = await saveCampimetriaQuestionnaire(
       eventTestId,
       buildQuestionnairePayload(),
@@ -270,10 +273,17 @@ export default function CampimetriaStudy({
       setForm(res.payload)
       return true
     }
-    return false
+    return {
+      ok: false,
+      message: res.error,
+      fieldErrors: res.fieldErrors,
+      technicalDetail: res.technicalDetail,
+      context: 'Campimetría (autoguardado)',
+    } as const
   }, [eventTestId, eventId, buildQuestionnairePayload])
 
-  const { statusLabel: autosaveLabel, markSaved } = useClinicalIntervalAutosave({
+  const { statusLabel: autosaveLabel, markSaved, userFacingError: campimetriaAutosaveError } =
+    useClinicalIntervalAutosave({
     enabled: !readonly,
     snapshotKey,
     save: persistDraft,
@@ -284,13 +294,24 @@ export default function CampimetriaStudy({
     setMessage('')
     setAiWarning('')
     setFieldErrors({})
+    setSaveMappedError(null)
     const payload = buildQuestionnairePayload()
     const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId, {
       triggerPrediagnosis: complete,
     })
     if (!res.success) {
       setFieldErrors(res.fieldErrors ?? {})
-      setMessage(res.error)
+      setSaveMappedError(
+        mapSaveClinicalFailure(
+          {
+            success: false,
+            error: res.error,
+            fieldErrors: res.fieldErrors,
+            technicalDetail: res.technicalDetail,
+          },
+          { context: complete ? 'Campimetría (completar)' : 'Campimetría (borrador)' },
+        ),
+      )
       setSaving(false)
       return
     }
@@ -323,7 +344,9 @@ export default function CampimetriaStudy({
 
   return (
     <div className="space-y-4">
-        {!readonly && <ClinicalAutosaveIndicator label={autosaveLabel} />}
+        {!readonly && (
+          <ClinicalAutosaveIndicator label={autosaveLabel} error={campimetriaAutosaveError} />
+        )}
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
           <p className="text-sm font-bold text-violet-900">Campimetría — captura manual</p>
           <p className="text-xs text-violet-700 mt-0.5">
@@ -670,10 +693,11 @@ export default function CampimetriaStudy({
           </p>
         )}
 
-        {message && (
-          <p className={`text-sm font-medium ${message.includes('inválid') || message.includes('Error') || fieldErrors && Object.keys(fieldErrors).length ? 'text-red-600' : 'text-teal-700'}`}>
-            {message}
-          </p>
+        {saveMappedError && (
+          <UserFacingErrorCallout mapped={saveMappedError} className="border-red-200 bg-red-50/90" />
+        )}
+        {message && !saveMappedError && (
+          <p className="text-sm font-medium text-teal-700">{message}</p>
         )}
         {aiWarning && (
           <p className="text-sm font-medium text-amber-700">{aiWarning}</p>

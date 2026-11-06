@@ -6,11 +6,13 @@ import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
 import { saveCertificadoMedico } from '@/actions/certificado-medico.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
 import {
   ClinicalFreeTextInput,
   ClinicalTextarea,
 } from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
+import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import {
   defaultHoraAtencionMexico,
   mergeCertificadoSignosPrefill,
@@ -97,7 +99,7 @@ export default function CertificadoMedicoEstudio({
 
   const [activeTab, setActiveTab] = useState<TabId>('antecedentes')
   const [saveMsg, setSaveMsg] = useState('')
-  const [saveError, setSaveError] = useState('')
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const [lugar, setLugar] = useState(parsed?.lugar_expedicion ?? DEFAULT_LUGAR_EXPEDICION)
@@ -215,7 +217,7 @@ export default function CertificadoMedicoEstudio({
 
   const certificadoSnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
 
-  const persistCertificadoDraft = useCallback(async (): Promise<boolean> => {
+  const persistCertificadoDraft = useCallback(async () => {
     const res = await saveCertificadoMedico(
       eventTestId,
       eventId,
@@ -223,18 +225,28 @@ export default function CertificadoMedicoEstudio({
       buildPayload(),
       { finalize: false },
     )
-    return res.success
+    if (!res.success) {
+      return {
+        ok: false,
+        message: res.error,
+        fieldErrors: res.fieldErrors,
+        technicalDetail: res.technicalDetail,
+        context: 'Certificado médico (autoguardado)',
+      } as const
+    }
+    return true
   }, [eventTestId, eventId, workerId, buildPayload])
 
   const autosaveEnabled = !readonly && !cerradaAt
-  const { statusLabel: autosaveLabel, markSaved: markCertificadoSaved } = useClinicalIntervalAutosave({
+  const { statusLabel: autosaveLabel, markSaved: markCertificadoSaved, userFacingError: certAutosaveError } =
+    useClinicalIntervalAutosave({
     enabled: autosaveEnabled,
     snapshotKey: certificadoSnapshotKey,
     save: persistCertificadoDraft,
   })
 
   const runSave = (finalize: boolean) => {
-    setSaveError('')
+    setSaveError(null)
     setSaveMsg('')
     startTransition(async () => {
       const res = await saveCertificadoMedico(
@@ -245,7 +257,17 @@ export default function CertificadoMedicoEstudio({
         { finalize },
       )
       if (!res.success) {
-        setSaveError(res.error)
+        setSaveError(
+          mapSaveClinicalFailure(
+            {
+              success: false,
+              error: res.error,
+              fieldErrors: res.fieldErrors,
+              technicalDetail: res.technicalDetail,
+            },
+            { context: finalize ? 'Certificado médico (cierre)' : 'Certificado médico (borrador)' },
+          ),
+        )
         return
       }
       if (finalize && res.payload.cerrada_at) {
@@ -263,7 +285,10 @@ export default function CertificadoMedicoEstudio({
 
   return (
     <div className="space-y-4">
-      <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} />
+      <ClinicalAutosaveIndicator
+        label={autosaveEnabled ? autosaveLabel : null}
+        error={autosaveEnabled ? certAutosaveError : null}
+      />
       <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">
         {TABS.map((t) => (
           <button
@@ -517,8 +542,15 @@ export default function CertificadoMedicoEstudio({
             Cerrar certificado
           </button>
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
-          {saveError && <span className="text-xs text-red-600 font-medium">{saveError}</span>}
-          <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} />
+          {saveError && (
+            <div className="w-full min-w-[220px]">
+              <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
+            </div>
+          )}
+          <ClinicalAutosaveIndicator
+            label={autosaveEnabled ? autosaveLabel : null}
+            error={autosaveEnabled ? certAutosaveError : null}
+          />
         </div>
       )}
     </div>
