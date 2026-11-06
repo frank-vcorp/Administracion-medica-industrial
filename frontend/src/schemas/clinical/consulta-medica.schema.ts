@@ -9,12 +9,16 @@ import { ClinicalHistoryDataSchema } from '@/schemas/clinical/history.schema'
 import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
   TIPO_CONSULTA_VALUES,
+  TIPO_INCAPACIDAD_CONSULTA_VALUES,
 } from '@/schemas/clinical/consulta-medica.constants'
 
 export {
   CONSULTA_MEDICA_SCHEMA_VERSION,
+  CONSULTA_MEDICA_SCHEMA_VERSION_V1,
   TIPO_CONSULTA_VALUES,
   TIPO_CONSULTA_LABELS,
+  TIPO_INCAPACIDAD_CONSULTA_VALUES,
+  TIPO_INCAPACIDAD_CONSULTA_LABELS,
   buildDefaultExploracionPlantilla,
   emptySignosVitalesConsulta,
   type ConsultaMedicaPayload,
@@ -80,29 +84,54 @@ export const SignosVitalesConsultaSchema = z.object({
   complexion: optionalString,
 })
 
-export const ConsultaMedicaPayloadSchema = z.object({
-  schemaVersion: z.literal(CONSULTA_MEDICA_SCHEMA_VERSION),
-  tipo_consulta: z.enum(TIPO_CONSULTA_VALUES),
-  motivo_consulta: freeText(8000, 10),
-  signos_vitales: SignosVitalesConsultaSchema,
-  exploracion_fisica: freeText(12000, 10),
-  diagnostico_unificado: diagnosticoUnificadoCieFinal,
-  diagnostico_especifico: freeText(2000, 1),
-  incapacidad_aplica: z.boolean(),
-  otorga_incapacidad: z.enum(['SI', 'NO']),
-  dias_incapacidad: z.number().int().min(0).max(365).optional(),
-  pase_salida: z.enum(['SI', 'NO']).optional(),
-  material_medico: optionalString,
-  indicaciones_generales: optionalString,
-  receta_lineas: z.array(RecetaLineaSchema).max(30),
-  medico_nombre: freeText(200, 1),
-  medico_cedula: plainString.min(1).max(50),
-  antecedentes: ClinicalHistoryDataSchema.optional(),
-  antecedentes_consulta: AntecedentesConsultaResumenSchema.optional(),
-  /** Gineco / vacunas (ex Módulo 1) copiados del perfil o del examen de la visita. */
-  modulo1: z.record(z.string(), z.string()).optional(),
-  cerrada_at: z.string().datetime().optional(),
-})
+export const ConsultaMedicaPayloadSchema = z
+  .object({
+    schemaVersion: z.literal(CONSULTA_MEDICA_SCHEMA_VERSION),
+    tipo_consulta: z.enum(TIPO_CONSULTA_VALUES),
+    motivo_consulta: freeText(8000, 10),
+    signos_vitales: SignosVitalesConsultaSchema,
+    exploracion_fisica: freeText(12000, 10),
+    diagnostico_unificado: diagnosticoUnificadoCieFinal,
+    diagnostico_especifico: freeText(2000, 1),
+    incapacidad_aplica: z.boolean(),
+    otorga_incapacidad: z.enum(['SI', 'NO']),
+    tipo_incapacidad: z.enum(TIPO_INCAPACIDAD_CONSULTA_VALUES).optional(),
+    dias_incapacidad: z.number().int().min(0).max(365).optional(),
+    /** Legacy v1; se limpia al guardar v2. */
+    pase_salida: z.enum(['SI', 'NO']).optional(),
+    material_medico: optionalString,
+    indicaciones_generales: optionalString,
+    receta_lineas: z.array(RecetaLineaSchema).max(30),
+    medico_nombre: freeText(200, 1),
+    medico_cedula: plainString.min(1).max(50),
+    antecedentes: ClinicalHistoryDataSchema.optional(),
+    antecedentes_consulta: AntecedentesConsultaResumenSchema.optional(),
+    /** Gineco / vacunas (ex Módulo 1) copiados del perfil o del examen de la visita. */
+    modulo1: z.record(z.string(), z.string()).optional(),
+    cerrada_at: z.string().datetime().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.otorga_incapacidad === 'NO') return
+    const t = data.tipo_incapacidad
+    if (!t || t === 'NINGUNA') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Seleccione el tipo de incapacidad o documentación.',
+        path: ['tipo_incapacidad'],
+      })
+      return
+    }
+    if (t === 'INTERNA_SME') {
+      const d = data.dias_incapacidad
+      if (d === undefined || d < 1) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Indique los días de incapacidad interna (SME).',
+          path: ['dias_incapacidad'],
+        })
+      }
+    }
+  })
 
 const draftText = (max: number) =>
   z.string().trim().max(max).transform(applySentenceCaseIfAllCaps)
@@ -122,6 +151,7 @@ export const ConsultaMedicaDraftSchema = z.object({
   diagnostico_especifico: draftText(2000).optional(),
   incapacidad_aplica: z.boolean().optional(),
   otorga_incapacidad: z.enum(['SI', 'NO']).optional(),
+  tipo_incapacidad: z.enum(TIPO_INCAPACIDAD_CONSULTA_VALUES).optional(),
   dias_incapacidad: z.number().int().min(0).max(365).optional(),
   pase_salida: z.enum(['SI', 'NO']).optional(),
   material_medico: optionalString,

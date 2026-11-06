@@ -4,14 +4,45 @@ import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
   type ConsultaMedicaPayload,
 } from '@/schemas/clinical/consulta-medica.schema'
+import {
+  CONSULTA_MEDICA_SCHEMA_VERSION_V1,
+  type TipoIncapacidadConsultaValue,
+} from '@/schemas/clinical/consulta-medica.constants'
 import { sanitizeClinicalHistoryInput } from '@/lib/clinical/sanitize-clinical-history'
+
+function coerceTipoIncapacidadFromV1(
+  base: Record<string, unknown>,
+): TipoIncapacidadConsultaValue | undefined {
+  const otorga = base.otorga_incapacidad
+  if (otorga !== 'SI') {
+    return 'NINGUNA'
+  }
+  if (base.tipo_incapacidad && typeof base.tipo_incapacidad === 'string') {
+    return base.tipo_incapacidad as TipoIncapacidadConsultaValue
+  }
+  const pase = base.pase_salida
+  if (pase === 'SI') return 'PASE_SALIDA'
+  const dias = base.dias_incapacidad
+  if (typeof dias === 'number' && dias > 0) return 'INTERNA_SME'
+  return 'IMSS'
+}
+
+/** Normaliza v1→v2 (incapacidad) antes de validar o armar PDF. */
+export function normalizeConsultaClinicalContext(raw: unknown): Record<string, unknown> {
+  return prepareConsultaRaw(raw)
+}
 
 function prepareConsultaRaw(raw: unknown): Record<string, unknown> {
   const base =
     raw && typeof raw === 'object' && !Array.isArray(raw)
       ? { ...(raw as Record<string, unknown>) }
       : {}
+  const fromVersion = base.schemaVersion
   base.schemaVersion = CONSULTA_MEDICA_SCHEMA_VERSION
+  if (fromVersion === CONSULTA_MEDICA_SCHEMA_VERSION_V1) {
+    base.tipo_incapacidad = coerceTipoIncapacidadFromV1(base)
+    delete base.pase_salida
+  }
   if ('antecedentes' in base) {
     const sanitized = sanitizeClinicalHistoryInput(base.antecedentes)
     if (sanitized === undefined) delete base.antecedentes

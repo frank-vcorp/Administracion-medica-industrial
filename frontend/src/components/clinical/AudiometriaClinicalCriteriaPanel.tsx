@@ -528,6 +528,24 @@ export function resolveAudiometriaCriteria(
   }
 }
 
+function resolvedAudiometriaHasRenderable(
+  resolved: ResolvedAudiometriaCriteria,
+): boolean {
+  if (resolved.frecuenciasDetectadas.length > 0) return true
+  return resolved.oidos.some((o) => o.ptaFuente !== null)
+}
+
+/**
+ * Hay algo que mostrar en la papeleta (umbrales y/o PTA del documento).
+ * Evita un panel vacío cuando el snapshot existe pero aún no trae extracción.
+ */
+export function hasRenderableAudiometriaCriteria(
+  extractedData: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!extractedData || typeof extractedData !== 'object') return false
+  return resolvedAudiometriaHasRenderable(resolveAudiometriaCriteria(extractedData))
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Sub-componentes UI (cliente puro)
 // ──────────────────────────────────────────────────────────────────────────
@@ -610,7 +628,9 @@ export default function AudiometriaClinicalCriteriaPanel({
   extractedData,
   version,
 }: AudiometriaClinicalCriteriaPanelProps) {
+  if (!extractedData || typeof extractedData !== 'object') return null
   const resolved = resolveAudiometriaCriteria(extractedData)
+  if (!resolvedAudiometriaHasRenderable(resolved)) return null
   const od = resolved.oidos.find((o) => o.oido === 'OD') ?? null
   const oi = resolved.oidos.find((o) => o.oido === 'OI') ?? null
 
@@ -1016,6 +1036,15 @@ function PTACard({
   const ta500 = va[500] ?? null
   const ta1000 = va[1000] ?? null
   const ta2000 = va[2000] ?? null
+  const subNum = (v: number | null) => (v === null ? '—' : String(v))
+  const sustitucion =
+    ptaCalculadoCompleto &&
+    ptaCalculado !== null &&
+    ta500 !== null &&
+    ta1000 !== null &&
+    ta2000 !== null
+      ? `(${subNum(ta500)} + ${subNum(ta1000)} + ${subNum(ta2000)}) ÷ 3 = ${ptaCalculado} dB`
+      : `(${subNum(ta500)} + ${subNum(ta1000)} + ${subNum(ta2000)}) ÷ 3`
   return (
     <div
       className="bg-white border border-slate-200 rounded-lg p-3"
@@ -1032,6 +1061,12 @@ function PTACard({
         data-testid={`audiometria-pta-equation-${oidoLabel.toLowerCase()}`}
       >
         PTA3 = (TA500 + TA1000 + TA2000) / 3
+      </p>
+      <p
+        className="text-[11px] text-slate-700 font-mono mt-0.5"
+        data-testid={`audiometria-pta-sustitucion-${oidoLabel.toLowerCase()}`}
+      >
+        Sustitución: {sustitucion}
       </p>
       <p
         className="text-[11px] text-slate-700 mt-1"
