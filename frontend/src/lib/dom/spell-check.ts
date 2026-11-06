@@ -33,7 +33,7 @@ export function shouldEnableSpellCheck(el: HTMLInputElement | HTMLTextAreaElemen
 export function applySpellCheckDefault(el: Element): void {
   if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return
   if (!shouldEnableSpellCheck(el)) return
-  el.spellCheck = true
+  el.spellcheck = true
 }
 
 export function applySpellCheckUnder(root: ParentNode): void {
