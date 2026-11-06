@@ -50,6 +50,19 @@ export type AntecedentesConsultaResumen = {
   toxicomanias: string
 }
 
+/** Procedimientos / cargos en consulta sin EventTest (férula, medicamento tópico/local, otros). */
+export type ConsultaAdicionalItem = {
+  detalle?: string
+  /** Monto MXN para cobro sugerido; omitir o 0 si no aplica cargo. */
+  precio?: number
+}
+
+export type ConsultaAdicionalesConsulta = {
+  ferula?: ConsultaAdicionalItem
+  medicamento_aplicacion?: ConsultaAdicionalItem
+  otros?: ConsultaAdicionalItem
+}
+
 export type ConsultaMedicaPayload = {
   schemaVersion: typeof CONSULTA_MEDICA_SCHEMA_VERSION
   tipo_consulta: TipoConsultaValue
@@ -70,6 +83,8 @@ export type ConsultaMedicaPayload = {
   antecedentes?: Record<string, unknown>
   /** Resumen narrativo para nota de consulta (6 rubros). */
   antecedentes_consulta?: AntecedentesConsultaResumen
+  /** Cargos adicionales registrados en consulta (incluidos en tarifa sugerida de pago). */
+  adicionales_consulta?: ConsultaAdicionalesConsulta
   modulo1?: Record<string, string>
   cerrada_at?: string
 }

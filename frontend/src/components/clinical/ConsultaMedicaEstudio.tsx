@@ -61,6 +61,47 @@ function emptyRecetaLine(): RecetaLinea {
   return { medicamento: '', presentacion: '', dosis: '', frecuencia: '', duracion: '' }
 }
 
+function parseOptionalPriceInput(s: string): number | undefined {
+  const t = s.trim()
+  if (!t) return undefined
+  const n = Number(t.replace(',', '.'))
+  if (!Number.isFinite(n) || n < 0) return undefined
+  return n
+}
+
+function buildAdicionalesConsultaFromForm(args: {
+  ferulaDetalle: string
+  ferulaPrecioStr: string
+  medicamentoDetalle: string
+  medicamentoPrecioStr: string
+  otrosDetalle: string
+  otrosPrecioStr: string
+}): ConsultaMedicaPayload['adicionales_consulta'] {
+  const out: NonNullable<ConsultaMedicaPayload['adicionales_consulta']> = {}
+  const ferulaD = args.ferulaDetalle.trim()
+  const ferulaP = parseOptionalPriceInput(args.ferulaPrecioStr)
+  if (ferulaD || ferulaP !== undefined) {
+    out.ferula = {}
+    if (ferulaD) out.ferula.detalle = ferulaD
+    if (ferulaP !== undefined) out.ferula.precio = ferulaP
+  }
+  const medD = args.medicamentoDetalle.trim()
+  const medP = parseOptionalPriceInput(args.medicamentoPrecioStr)
+  if (medD || medP !== undefined) {
+    out.medicamento_aplicacion = {}
+    if (medD) out.medicamento_aplicacion.detalle = medD
+    if (medP !== undefined) out.medicamento_aplicacion.precio = medP
+  }
+  const otrosD = args.otrosDetalle.trim()
+  const otrosP = parseOptionalPriceInput(args.otrosPrecioStr)
+  if (otrosD || otrosP !== undefined) {
+    out.otros = {}
+    if (otrosD) out.otros.detalle = otrosD
+    if (otrosP !== undefined) out.otros.precio = otrosP
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 export default function ConsultaMedicaEstudio({
   eventId,
   eventTestId,
@@ -107,6 +148,26 @@ export default function ConsultaMedicaEstudio({
   const [paseSalida, setPaseSalida] = useState<'SI' | 'NO'>(parsed?.pase_salida ?? 'NO')
   const [materialMedico, setMaterialMedico] = useState(parsed?.material_medico ?? '')
   const [indicaciones, setIndicaciones] = useState(parsed?.indicaciones_generales ?? '')
+  const adic = parsed?.adicionales_consulta
+  const [adicFerulaDetalle, setAdicFerulaDetalle] = useState(adic?.ferula?.detalle ?? '')
+  const [adicFerulaPrecioStr, setAdicFerulaPrecioStr] = useState(
+    adic?.ferula?.precio != null && Number.isFinite(adic.ferula.precio)
+      ? String(adic.ferula.precio)
+      : '',
+  )
+  const [adicMedicamentoDetalle, setAdicMedicamentoDetalle] = useState(
+    adic?.medicamento_aplicacion?.detalle ?? '',
+  )
+  const [adicMedicamentoPrecioStr, setAdicMedicamentoPrecioStr] = useState(
+    adic?.medicamento_aplicacion?.precio != null &&
+      Number.isFinite(adic.medicamento_aplicacion.precio)
+      ? String(adic.medicamento_aplicacion.precio)
+      : '',
+  )
+  const [adicOtrosDetalle, setAdicOtrosDetalle] = useState(adic?.otros?.detalle ?? '')
+  const [adicOtrosPrecioStr, setAdicOtrosPrecioStr] = useState(
+    adic?.otros?.precio != null && Number.isFinite(adic.otros.precio) ? String(adic.otros.precio) : '',
+  )
   const [recetaLineas, setRecetaLineas] = useState<RecetaLinea[]>(
     parsed?.receta_lineas?.length ? parsed.receta_lineas : [emptyRecetaLine()],
   )
@@ -190,6 +251,14 @@ export default function ConsultaMedicaEstudio({
       antecedentes: antecedentes as ConsultaMedicaPayload['antecedentes'],
       antecedentes_consulta: antecedentesConsulta,
       modulo1,
+      adicionales_consulta: buildAdicionalesConsultaFromForm({
+        ferulaDetalle: adicFerulaDetalle,
+        ferulaPrecioStr: adicFerulaPrecioStr,
+        medicamentoDetalle: adicMedicamentoDetalle,
+        medicamentoPrecioStr: adicMedicamentoPrecioStr,
+        otrosDetalle: adicOtrosDetalle,
+        otrosPrecioStr: adicOtrosPrecioStr,
+      }),
       cerrada_at: cerradaAt || undefined,
     }
   }, [
@@ -215,6 +284,12 @@ export default function ConsultaMedicaEstudio({
     cerradaAt,
     session?.user?.fullName,
     session?.user?.name,
+    adicFerulaDetalle,
+    adicFerulaPrecioStr,
+    adicMedicamentoDetalle,
+    adicMedicamentoPrecioStr,
+    adicOtrosDetalle,
+    adicOtrosPrecioStr,
   ])
 
   const consultaSnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
@@ -506,6 +581,86 @@ export default function ConsultaMedicaEstudio({
             onChange={setIndicaciones}
             disabled={readonly}
           />
+          <div className="border-t border-slate-100 pt-4 space-y-4">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Cargos adicionales (cobro en papeleta)
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Férula, aplicación de medicamento u otros procedimientos sin fila en catálogo. El monto se suma a la
+                tarifa sugerida en «Pago y recibo» si es mayor a 0.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-start rounded-lg border border-slate-100 p-3">
+              <ClinicalTextarea
+                className={`${inputClass} min-h-[60px]`}
+                placeholder="Colocación de férula — nota clínica (opcional)"
+                value={adicFerulaDetalle}
+                onChange={setAdicFerulaDetalle}
+                disabled={readonly}
+              />
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                  Precio MXN
+                </label>
+                <input
+                  className={inputClass}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={adicFerulaPrecioStr}
+                  onChange={(e) => setAdicFerulaPrecioStr(e.target.value)}
+                  disabled={readonly}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-start rounded-lg border border-slate-100 p-3">
+              <ClinicalTextarea
+                className={`${inputClass} min-h-[60px]`}
+                placeholder="Aplicación de medicamento (tópico, local…) — detalle (opcional)"
+                value={adicMedicamentoDetalle}
+                onChange={setAdicMedicamentoDetalle}
+                disabled={readonly}
+              />
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                  Precio MXN
+                </label>
+                <input
+                  className={inputClass}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={adicMedicamentoPrecioStr}
+                  onChange={(e) => setAdicMedicamentoPrecioStr(e.target.value)}
+                  disabled={readonly}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-start rounded-lg border border-slate-100 p-3">
+              <ClinicalTextarea
+                className={`${inputClass} min-h-[60px]`}
+                placeholder="Otros — descripción (opcional)"
+                value={adicOtrosDetalle}
+                onChange={setAdicOtrosDetalle}
+                disabled={readonly}
+              />
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                  Precio MXN
+                </label>
+                <input
+                  className={inputClass}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={adicOtrosPrecioStr}
+                  onChange={(e) => setAdicOtrosPrecioStr(e.target.value)}
+                  disabled={readonly}
+                />
+              </div>
+            </div>
+          </div>
           <p className="text-[10px] font-bold text-slate-400 uppercase">Medicamento</p>
           {recetaLineas.map((line, idx) => (
             <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3">

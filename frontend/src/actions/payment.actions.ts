@@ -21,6 +21,11 @@ import {
 } from '@/lib/payment.constants'
 import { SME_LEGAL_NAME } from '@/lib/brand-constants'
 import { readCatalogPriceFromOptions } from '@/lib/medical-test-catalog-price'
+import {
+  parseConsultaMedicaClinicalContext,
+  isConsultaMedicaTestName,
+} from '@/lib/clinical/consulta-medica'
+import { consultaAdicionalesBillingLines } from '@/lib/clinical/consulta-adicionales-billing'
 
 export type SuggestedPaymentLine = {
   testName: string
@@ -424,6 +429,7 @@ export async function getSuggestedPaymentForEvent(
       orderBy: { createdAt: 'asc' },
       select: {
         testNameSnapshot: true,
+        clinicalContext: true,
         test: { select: { code: true, options: true } },
       },
     })
@@ -434,13 +440,25 @@ export async function getSuggestedPaymentForEvent(
       unitPrice: readCatalogPriceFromOptions(row.test?.options),
     }))
 
+    const consultaRow = tests.find((row) => isConsultaMedicaTestName(row.testNameSnapshot))
+    const consultaPayload = parseConsultaMedicaClinicalContext(consultaRow?.clinicalContext)
+    const adicionalesLines: SuggestedPaymentLine[] = consultaAdicionalesBillingLines(
+      consultaPayload ?? undefined,
+    ).map((l) => ({
+      testName: l.testName,
+      code: l.code,
+      unitPrice: l.unitPrice,
+    }))
+
+    const mergedLines = [...lines, ...adicionalesLines]
+
     const suggestedTotal = Number(
-      lines.reduce((sum, line) => sum + line.unitPrice, 0).toFixed(2),
+      mergedLines.reduce((sum, line) => sum + line.unitPrice, 0).toFixed(2),
     )
 
     return {
       success: true,
-      data: { suggestedTotal, lines },
+      data: { suggestedTotal, lines: mergedLines },
     }
   } catch (error) {
     console.error('[GET SUGGESTED PAYMENT ERROR]:', error)

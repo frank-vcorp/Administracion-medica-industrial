@@ -17,6 +17,8 @@ export {
   TIPO_CONSULTA_LABELS,
   buildDefaultExploracionPlantilla,
   emptySignosVitalesConsulta,
+  type ConsultaAdicionalItem,
+  type ConsultaAdicionalesConsulta,
   type ConsultaMedicaPayload,
   type RecetaLinea,
   type TipoConsultaValue,
@@ -80,6 +82,49 @@ export const SignosVitalesConsultaSchema = z.object({
   complexion: optionalString,
 })
 
+const optionalAdicionalDetalle = z
+  .union([z.literal(''), z.string().trim().max(500).transform(applySentenceCaseIfAllCaps)])
+  .optional()
+
+const ConsultaAdicionalItemPayloadSchema = z
+  .object({
+    detalle: optionalAdicionalDetalle,
+    precio: z.number().min(0).max(99999999.99).optional(),
+  })
+  .strict()
+
+const AdicionalesConsultaPayloadSchema = z
+  .object({
+    ferula: ConsultaAdicionalItemPayloadSchema.optional(),
+    medicamento_aplicacion: ConsultaAdicionalItemPayloadSchema.optional(),
+    otros: ConsultaAdicionalItemPayloadSchema.optional(),
+  })
+  .strict()
+  .optional()
+
+const ConsultaAdicionalItemDraftSchema = z
+  .object({
+    detalle: optionalString,
+    precio: z.preprocess((val) => {
+      if (val === '' || val === undefined || val === null) return undefined
+      const n =
+        typeof val === 'number'
+          ? val
+          : Number(String(val).replace(',', '.').replace(/[^0-9.-]/g, ''))
+      return Number.isFinite(n) ? n : undefined
+    }, z.number().min(0).max(99999999.99).optional()),
+  })
+  .strict()
+
+const AdicionalesConsultaDraftSchema = z
+  .object({
+    ferula: ConsultaAdicionalItemDraftSchema.optional(),
+    medicamento_aplicacion: ConsultaAdicionalItemDraftSchema.optional(),
+    otros: ConsultaAdicionalItemDraftSchema.optional(),
+  })
+  .strict()
+  .optional()
+
 export const ConsultaMedicaPayloadSchema = z.object({
   schemaVersion: z.literal(CONSULTA_MEDICA_SCHEMA_VERSION),
   tipo_consulta: z.enum(TIPO_CONSULTA_VALUES),
@@ -99,6 +144,7 @@ export const ConsultaMedicaPayloadSchema = z.object({
   medico_cedula: plainString.min(1).max(50),
   antecedentes: ClinicalHistoryDataSchema.optional(),
   antecedentes_consulta: AntecedentesConsultaResumenSchema.optional(),
+  adicionales_consulta: AdicionalesConsultaPayloadSchema,
   /** Gineco / vacunas (ex Módulo 1) copiados del perfil o del examen de la visita. */
   modulo1: z.record(z.string(), z.string()).optional(),
   cerrada_at: z.string().datetime().optional(),
@@ -142,6 +188,7 @@ export const ConsultaMedicaDraftSchema = z.object({
   medico_cedula: plainString.max(50).optional(),
   antecedentes: ClinicalHistoryDataSchema.optional(),
   antecedentes_consulta: AntecedentesConsultaResumenSchema.optional(),
+  adicionales_consulta: AdicionalesConsultaDraftSchema,
   modulo1: z.record(z.string(), z.string()).optional(),
   cerrada_at: z.string().datetime().optional(),
 })
