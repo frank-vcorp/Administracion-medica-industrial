@@ -6,7 +6,7 @@ import Image from 'next/image'
  * @description Agenda diaria con expedientes EXP, QR y acceso a Portal de Prellenado
  * @id IMPL-20260325-01
  */
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, useMemo, Suspense } from 'react'
 import { getAppointmentsForOverview, getAppointmentForCorroboration, getPendingStudyPatientsForDay, getAttendedAppointmentsCount, type PendingStudyPatientRow } from '@/actions/appointment.actions'
 import AttendedAppointmentsCalendar from '@/components/appointments/AttendedAppointmentsCalendar'
 import CancelWithReasonButton from '@/components/clinical/CancelWithReasonButton'
@@ -77,6 +77,32 @@ function countAgendaForDate(items: AppointmentWithWorker[], dateStr: string): nu
     return agendaForDate(items, dateStr).length
 }
 
+/** Filtro por nombre, apellidos, ID o empresa — agenda del día (O9). */
+function normalizeAgendaSearch(s: string): string {
+    return s.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+}
+
+function appointmentMatchesPatientSearch(
+    apt: AppointmentWithWorker,
+    rawQuery: string,
+): boolean {
+    const q = normalizeAgendaSearch(rawQuery)
+    if (!q) return true
+    const worker = apt.worker
+    const first = normalizeAgendaSearch(worker?.firstName ?? '')
+    const last = normalizeAgendaSearch(worker?.lastName ?? '')
+    const full = `${first} ${last}`.trim()
+    const uid = normalizeAgendaSearch(String(worker?.universalId ?? ''))
+    const company = normalizeAgendaSearch(apt.company?.name ?? '')
+    return (
+        first.includes(q) ||
+        last.includes(q) ||
+        full.includes(q) ||
+        uid.includes(q) ||
+        company.includes(q)
+    )
+}
+
 /**
  * Vista de Gestión de citas Premium v2.2
  * @description Implementa vista de calendario diario con expedientes EXP y QR
@@ -137,6 +163,7 @@ export default function AppointmentsPage() {
     const [weekModalOpen, setWeekModalOpen] = useState(false)
     const [pendingModalOpen, setPendingModalOpen] = useState(false)
     const [pendingStudyRows, setPendingStudyRows] = useState<PendingStudyPatientRow[]>([])
+    const [agendaPatientSearch, setAgendaPatientSearch] = useState('')
     const _router = useRouter()
     void _router
 
@@ -210,13 +237,26 @@ export default function AppointmentsPage() {
 
     const startHour = parseInt(branchConfig.openingTime.split(':')[0], 10)
 
+    const appointmentsForAgendaList = useMemo(
+        () => appointments.filter((apt) => appointmentMatchesPatientSearch(apt, agendaPatientSearch)),
+        [appointments, agendaPatientSearch],
+    )
+
+    const nextDayForAgendaList = useMemo(
+        () => nextDayAppointments.filter((apt) => appointmentMatchesPatientSearch(apt, agendaPatientSearch)),
+        [nextDayAppointments, agendaPatientSearch],
+    )
+
     const branchColumns = branches.map((branch) => ({
         branch,
-        appointments: appointments
+        appointments: appointmentsForAgendaList
             .filter((apt) => apt.branch?.id === branch.id)
             .slice()
             .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()),
     }))
+
+    const agendaSearchActive = agendaPatientSearch.trim().length > 0
+    const totalVisibleAgendaRows = branchColumns.reduce((sum, col) => sum + col.appointments.length, 0)
 
     const handleGenerateInvite = async (aptId: string) => {
         setInviteAptId(aptId)
@@ -342,8 +382,8 @@ export default function AppointmentsPage() {
                 </div>
             )}
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                <StatCard label="Pacientes citados" value={countAgendaForDate(appointments, selectedDate)} color="blue" />
-                <StatCard label="Citados día siguiente" value={countAgendaForDate(nextDayAppointments, nextDate)} color="indigo" />
+                <StatCard label="Pacientes citados" value={countAgendaForDate(appointmentsForAgendaList, selectedDate)} color="blue" />
+                <StatCard label="Citados día siguiente" value={countAgendaForDate(nextDayForAgendaList, nextDate)} color="indigo" />
                 <StatCard
                     label="Pacientes con pruebas pendientes"
                     value={pendingStudyRows.reduce((sum, row) => sum + row.pendingTests.length, 0)}
@@ -366,6 +406,37 @@ export default function AppointmentsPage() {
                     }
                 />
             </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm">
+                <label htmlFor="agenda-patient-search" className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">
+                    Buscar en agenda
+                </label>
+                <div className="flex flex-1 items-center gap-2 min-w-0">
+                    <input
+                        id="agenda-patient-search"
+                        type="search"
+                        value={agendaPatientSearch}
+                        onChange={(e) => setAgendaPatientSearch(e.target.value)}
+                        placeholder="Nombre, apellidos, ID o empresa…"
+                        autoComplete="off"
+                        className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-300"
+                    />
+                    {agendaSearchActive && (
+                        <button
+                            type="button"
+                            onClick={() => setAgendaPatientSearch('')}
+                            className="shrink-0 text-xs font-bold text-violet-700 hover:text-violet-900 px-2 py-1 rounded-lg hover:bg-violet-50"
+                        >
+                            Limpiar
+                        </button>
+                    )}
+                </div>
+            </div>
+            {agendaSearchActive && totalVisibleAgendaRows === 0 && (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                    Ninguna cita del día coincide con «{agendaPatientSearch.trim()}». Prueba otro nombre o quita el filtro.
+                </p>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {branchColumns.map(({ branch, appointments: dayApts }) => (
@@ -391,7 +462,11 @@ export default function AppointmentsPage() {
                             {dayApts.length === 0 ? (
                                 <div className="p-8 text-center">
                                     <p className="text-slate-300 text-3xl mb-2">📭</p>
-                                    <p className="text-slate-400 text-sm font-medium">Sin citas para este día</p>
+                                    <p className="text-slate-400 text-sm font-medium">
+                                        {agendaSearchActive
+                                            ? 'Ningún paciente coincide con la búsqueda en esta sucursal'
+                                            : 'Sin citas para este día'}
+                                    </p>
                                 </div>
                             ) : (
                                 dayApts.map((apt) => (
