@@ -97,6 +97,8 @@ export const HistoriaLaboralSchema = z.object({
   exposicion_biologica_especifique:  cleanStr,
   exposicion_ergonomica:             z.boolean().optional(),
   exposicion_ergonomica_especifique: cleanStr,
+  exposicion_psicosocial:            z.boolean().optional(),
+  exposicion_psicosocial_especifique: cleanStr,
   accidentes_trabajo:                z.boolean().optional(),
   accidentes_descripcion:            cleanStr,
   enfermedades_trabajo:              z.boolean().optional(),

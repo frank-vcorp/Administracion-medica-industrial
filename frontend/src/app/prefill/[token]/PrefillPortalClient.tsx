@@ -15,6 +15,7 @@ import {
   HISTORIA_LABORAL_EXPOSICION_AGENTES,
   HISTORIA_LABORAL_RIESGOS_TRABAJO,
 } from '@/lib/antecedentes-fields'
+import HistoriaLaboralFactoresRiesgoReferencia from '@/components/clinical/HistoriaLaboralFactoresRiesgoReferencia'
 
 // ─── Tipos locales ────────────────────────────────────────────────────────────
 
@@ -45,6 +46,8 @@ interface HistoriaLaboral {
   exposicion_fisica_especifique?: string
   exposicion_biologica?: boolean
   exposicion_biologica_especifique?: string
+  exposicion_psicosocial?: boolean
+  exposicion_psicosocial_especifique?: string
   exposicion_ergonomica?: boolean
   exposicion_ergonomica_especifique?: string
   accidentes_trabajo?: boolean
@@ -243,6 +246,8 @@ function normalizeHistoriaLaboral(raw: unknown): HistoriaLaboral {
     exposicion_fisica_especifique: str('exposicion_fisica_especifique'),
     exposicion_biologica: bool('exposicion_biologica'),
     exposicion_biologica_especifique: str('exposicion_biologica_especifique'),
+    exposicion_psicosocial: bool('exposicion_psicosocial'),
+    exposicion_psicosocial_especifique: str('exposicion_psicosocial_especifique'),
     exposicion_ergonomica: bool('exposicion_ergonomica'),
     exposicion_ergonomica_especifique: str('exposicion_ergonomica_especifique'),
     accidentes_trabajo: bool('accidentes_trabajo'),
@@ -563,20 +568,22 @@ export default function PrefillPortalClient({
               </div>
             </div>
 
-            {/* Exposición a agentes — distinto de accidente laboral / enfermedad profesional */}
+            {/* Factores de riesgo — distinto de accidente laboral / enfermedad profesional */}
             <div className="space-y-4 pt-2 border-t border-slate-100">
               <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                Exposición a agentes en el trabajo
+                Factores de riesgo en el trabajo
               </p>
+              <HistoriaLaboralFactoresRiesgoReferencia />
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                Indica si en tu puesto hubo contacto habitual con agentes químicos, físicos,
-                biológicos o cargas ergonómicas. No es lo mismo que haber tenido un accidente o
-                una enfermedad ya declarada como profesional.
+                Indica si en tu puesto hubo exposición habitual a alguno de estos factores.
+                Cuéntalo con el mayor detalle posible (qué, cuánto tiempo, EPP, turnos).
+                No es lo mismo que haber tenido un accidente o una enfermedad ya declarada como
+                profesional (eso va abajo).
               </p>
-              {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(({ key, label, descKey }) => (
+              {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(({ key, label, descKey, questionLabel }) => (
                 <BooleanField
                   key={key}
-                  label={`¿Exposición ${label.toLowerCase()} en el trabajo?`}
+                  label={questionLabel ?? `¿Exposición a ${label.toLowerCase()}?`}
                   value={hl[key as keyof HistoriaLaboral] as boolean | undefined}
                   detailLabel="Describe brevemente (agente, tiempo aproximado, EPP…)"
                   detailValue={hl[descKey as keyof HistoriaLaboral] as string | undefined}
