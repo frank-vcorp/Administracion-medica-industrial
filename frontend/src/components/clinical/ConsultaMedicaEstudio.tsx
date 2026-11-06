@@ -7,11 +7,13 @@ import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ConsultaAntecedentesResumen } from '@/components/clinical/ConsultaAntecedentesResumen'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
 import {
   ClinicalFreeTextInput,
   ClinicalTextarea,
 } from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
+import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
 import {
@@ -87,7 +89,7 @@ export default function ConsultaMedicaEstudio({
 
   const [activeTab, setActiveTab] = useState<TabId>('motivo')
   const [saveMsg, setSaveMsg] = useState('')
-  const [saveError, setSaveError] = useState('')
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const [tipoConsulta, setTipoConsulta] = useState<TipoConsultaValue>(
@@ -219,7 +221,7 @@ export default function ConsultaMedicaEstudio({
 
   const consultaSnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
 
-  const persistConsultaDraft = useCallback(async (): Promise<boolean> => {
+  const persistConsultaDraft = useCallback(async () => {
     const res = await saveConsultaMedica(
       eventTestId,
       eventId,
@@ -227,20 +229,29 @@ export default function ConsultaMedicaEstudio({
       buildPayload(),
       { finalize: false },
     )
-    if (!res.success) return false
+    if (!res.success) {
+      return {
+        ok: false,
+        message: res.error,
+        fieldErrors: res.fieldErrors,
+        technicalDetail: res.technicalDetail,
+        context: 'Consulta médica (autoguardado)',
+      } as const
+    }
     setHasPersisted(true)
     return true
   }, [eventTestId, eventId, workerId, buildPayload])
 
   const autosaveEnabled = !readonly && !cerradaAt
-  const { statusLabel: autosaveLabel, markSaved: markConsultaSaved } = useClinicalIntervalAutosave({
+  const { statusLabel: autosaveLabel, markSaved: markConsultaSaved, userFacingError: consultaAutosaveError } =
+    useClinicalIntervalAutosave({
     enabled: autosaveEnabled,
     snapshotKey: consultaSnapshotKey,
     save: persistConsultaDraft,
   })
 
   const runSave = (finalize: boolean) => {
-    setSaveError('')
+    setSaveError(null)
     setSaveMsg('')
     startTransition(async () => {
       const res = await saveConsultaMedica(
@@ -251,7 +262,17 @@ export default function ConsultaMedicaEstudio({
         { finalize },
       )
       if (!res.success) {
-        setSaveError(res.error)
+        setSaveError(
+          mapSaveClinicalFailure(
+            {
+              success: false,
+              error: res.error,
+              fieldErrors: res.fieldErrors,
+              technicalDetail: res.technicalDetail,
+            },
+            { context: finalize ? 'Consulta médica (cierre)' : 'Consulta médica (borrador)' },
+          ),
+        )
         return
       }
       if (finalize && res.payload.cerrada_at) {
@@ -276,7 +297,11 @@ export default function ConsultaMedicaEstudio({
             Nota clínica + receta · Borrador con autoguardado cada 7 s (incluye antecedentes en el
             perfil del paciente)
           </p>
-          <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} className="mt-1" />
+          <ClinicalAutosaveIndicator
+            label={autosaveEnabled ? autosaveLabel : null}
+            error={autosaveEnabled ? consultaAutosaveError : null}
+            className="mt-1"
+          />
         </div>
       </div>
 
@@ -654,8 +679,15 @@ export default function ConsultaMedicaEstudio({
             Cerrar consulta
           </button>
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
-          {saveError && <span className="text-xs text-red-600 font-medium">{saveError}</span>}
-          <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} />
+          {saveError && (
+            <div className="w-full min-w-[220px]">
+              <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
+            </div>
+          )}
+          <ClinicalAutosaveIndicator
+            label={autosaveEnabled ? autosaveLabel : null}
+            error={autosaveEnabled ? consultaAutosaveError : null}
+          />
         </div>
       )}
     </div>

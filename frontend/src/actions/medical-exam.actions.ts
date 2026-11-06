@@ -1,6 +1,7 @@
 "use server"
 
 import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { triggerStructuredStudyAIPrediagnosis } from "./ai-prediagnosis.actions"
@@ -23,6 +24,10 @@ import { mergeVariantExtensionsForPersist } from '@/lib/sodexo-extension-persist
 export type MedicalExamPersistOptions = {
   /** Guardado en segundo plano: solo persiste datos, sin IA ni cronograma. */
   autosave?: boolean
+}
+
+function zodIssuesForClient(err: z.ZodError) {
+  return { issues: err.issues }
 }
 
 function buildStructuredAIResultNote(input: { success: boolean; studyLabel: string; summary?: string | null; clinicalState?: string | null; error?: string | null }) {
@@ -109,8 +114,20 @@ export async function updateSomatometria(
     }
     return { success: true, aiWarning }
   } catch (error: unknown) {
-    console.error("Error updating somatometry:", error)
-    return { success: false, error: "Datos de somatometría inválidos o error de servidor" }
+    if (error instanceof z.ZodError) {
+      console.error('Error updating somatometry (validation)')
+      return {
+        success: false,
+        error: 'Revisa somatometría y signos vitales: hay datos que no coinciden con lo esperado.',
+        technicalDetail: JSON.stringify(zodIssuesForClient(error)),
+      }
+    }
+    console.error('Error updating somatometry:', error)
+    return {
+      success: false,
+      error: 'No se pudo guardar por un problema del servidor o de red.',
+      technicalDetail: error instanceof Error ? error.message : 'unknown_error',
+    }
   }
 }
 
@@ -188,8 +205,20 @@ export async function updateAgudezaVisual(
     }
     return { success: true, aiWarning }
   } catch (error: unknown) {
-    console.error("Error updating visual acuity:", error)
-    return { success: false, error: "Datos de agudeza visual inválidos o error de servidor" }
+    if (error instanceof z.ZodError) {
+      console.error('Error updating visual acuity (validation)')
+      return {
+        success: false,
+        error: 'Revisa agudeza visual: hay datos que no coinciden con lo esperado.',
+        technicalDetail: JSON.stringify(zodIssuesForClient(error)),
+      }
+    }
+    console.error('Error updating visual acuity:', error)
+    return {
+      success: false,
+      error: 'No se pudo guardar por un problema del servidor o de red.',
+      technicalDetail: error instanceof Error ? error.message : 'unknown_error',
+    }
   }
 }
 
@@ -349,8 +378,20 @@ export async function saveExamenMedicoPapeleta(
       aiWarning,
     }
   } catch (error: unknown) {
-    console.error("Error saving examen médico papeleta:", error)
-    return { success: false, error: "Error al guardar Examen Médico" }
+    if (error instanceof z.ZodError) {
+      console.error('Error saving examen médico papeleta (validation)')
+      return {
+        success: false,
+        error: 'Revisa el examen médico: hay campos con formato incorrecto o incompletos.',
+        technicalDetail: JSON.stringify(zodIssuesForClient(error)),
+      }
+    }
+    console.error('Error saving examen médico papeleta:', error)
+    return {
+      success: false,
+      error: 'No se pudo guardar el examen médico por un problema del servidor o de red.',
+      technicalDetail: error instanceof Error ? error.message : 'unknown_error',
+    }
   }
 }
 
