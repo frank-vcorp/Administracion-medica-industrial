@@ -1,4 +1,12 @@
-export const CONSULTA_MEDICA_SCHEMA_VERSION = 'consulta-medica-v1' as const
+/** Borradores guardados antes de próxima cita. El parser los sigue leyendo (DA-1). */
+export const CONSULTA_MEDICA_SCHEMA_VERSION_V1 = 'consulta-medica-v1' as const
+
+export const CONSULTA_MEDICA_SCHEMA_VERSION = 'consulta-medica-v2' as const
+
+export const CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS = [
+  CONSULTA_MEDICA_SCHEMA_VERSION_V1,
+  CONSULTA_MEDICA_SCHEMA_VERSION,
+] as const
 
 export const TIPO_CONSULTA_VALUES = [
   'ENFERMEDAD_GENERAL',
@@ -64,6 +72,13 @@ export type ConsultaMedicaPayload = {
   pase_salida?: 'SI' | 'NO'
   material_medico?: string
   indicaciones_generales?: string
+  /**
+   * Próxima cita de seguimiento. Texto libre: el médico indica fecha y hora
+   * a mano. El id de cita es opcional y no bloquea el guardado.
+   */
+  proxima_cita_fecha?: string
+  proxima_cita_hora?: string
+  proxima_cita_appointment_id?: string
   receta_lineas: RecetaLinea[]
   medico_nombre: string
   medico_cedula: string

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth/next'
 import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { authOptions } from '@/auth'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
@@ -39,6 +40,38 @@ export async function searchCie10ForConsulta(query: string): Promise<Cie10Entry[
   const access = await assertClinicalAccess()
   if (!access.ok) return []
   return searchCie10Catalog(query, 25)
+}
+
+/**
+ * Enlace opcional. Si la cita no existe, el id no es UUID o la columna aún
+ * no está migrada, la consulta igual queda guardada en clinicalContext.
+ */
+async function syncFollowUpAppointmentLink(
+  eventId: string,
+  workerId: string,
+  appointmentId: string | undefined,
+): Promise<void> {
+  const id = appointmentId?.trim() ?? ''
+  if (id && !z.string().uuid().safeParse(id).success) return
+  try {
+    if (!id) {
+      await prisma.appointment.updateMany({
+        where: { followUpFromMedicalEventId: eventId },
+        data: { followUpFromMedicalEventId: null },
+      })
+      return
+    }
+    await prisma.appointment.updateMany({
+      where: { followUpFromMedicalEventId: eventId, NOT: { id } },
+      data: { followUpFromMedicalEventId: null },
+    })
+    await prisma.appointment.updateMany({
+      where: { id, workerId },
+      data: { followUpFromMedicalEventId: eventId },
+    })
+  } catch {
+    console.error('[saveConsultaMedica] follow-up link', eventId)
+  }
 }
 
 export async function saveConsultaMedica(
@@ -111,6 +144,11 @@ export async function saveConsultaMedica(
       },
       select: { updatedAt: true },
     })
+    await syncFollowUpAppointmentLink(
+      eventId,
+      workerId,
+      toStore.proxima_cita_appointment_id,
+    )
     revalidatePath(`/events/${eventId}`)
     return {
       success: true,

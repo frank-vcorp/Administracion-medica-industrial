@@ -5,6 +5,7 @@ import {
   SME_PDF_FOOTER,
 } from '@/lib/clinical/consulta-receta-pdf-format'
 import { CONSULTA_ANTECEDENTES_RUBROS } from '@/lib/clinical/consulta-antecedentes-resumen'
+import { formatProximaCitaLine } from '@/lib/clinical/consulta-seguimiento'
 import {
   TIPO_CONSULTA_LABELS,
   type ConsultaMedicaPayload,
@@ -345,10 +346,17 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
           </View>
         ) : null}
 
-        {c.indicaciones_generales?.trim() ? (
+        {c.indicaciones_generales?.trim() || formatProximaCitaLine(c) ? (
           <View style={styles.block}>
             <Text style={styles.title}>TRATAMIENTO / INDICACIONES</Text>
-            <Text style={styles.paragraph}>{c.indicaciones_generales}</Text>
+            {c.indicaciones_generales?.trim() ? (
+              <Text style={styles.paragraph}>{c.indicaciones_generales}</Text>
+            ) : null}
+            {formatProximaCitaLine(c) ? (
+              <Text style={styles.paragraph}>
+                Próxima cita de seguimiento: {formatProximaCitaLine(c)}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -485,10 +493,19 @@ export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput
           </Text>
         )}
 
-        {c.indicaciones_generales?.trim() ? (
+        {c.indicaciones_generales?.trim() || formatProximaCitaLine(c) ? (
           <View style={recetaStyles.indicaciones}>
-            <Text style={recetaStyles.indicacionesTitle}>Indicaciones generales</Text>
-            <Text style={recetaStyles.paragraph}>{c.indicaciones_generales}</Text>
+            {c.indicaciones_generales?.trim() ? (
+              <>
+                <Text style={recetaStyles.indicacionesTitle}>Indicaciones generales</Text>
+                <Text style={recetaStyles.paragraph}>{c.indicaciones_generales}</Text>
+              </>
+            ) : null}
+            {formatProximaCitaLine(c) ? (
+              <Text style={recetaStyles.paragraph}>
+                Próxima cita de seguimiento: {formatProximaCitaLine(c)}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 

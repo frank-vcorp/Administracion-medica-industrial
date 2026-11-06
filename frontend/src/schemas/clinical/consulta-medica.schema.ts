@@ -7,12 +7,15 @@ import {
 } from '@/lib/clinical/cie-10-catalog'
 import { ClinicalHistoryDataSchema } from '@/schemas/clinical/history.schema'
 import {
+  CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS,
   CONSULTA_MEDICA_SCHEMA_VERSION,
   TIPO_CONSULTA_VALUES,
 } from '@/schemas/clinical/consulta-medica.constants'
 
 export {
+  CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS,
   CONSULTA_MEDICA_SCHEMA_VERSION,
+  CONSULTA_MEDICA_SCHEMA_VERSION_V1,
   TIPO_CONSULTA_VALUES,
   TIPO_CONSULTA_LABELS,
   buildDefaultExploracionPlantilla,
@@ -51,6 +54,63 @@ const diagnosticoUnificadoCieFinal = z
 
 const diagnosticoUnificadoCieDraft = z.union([z.literal(''), z.string().trim().max(500)]).optional()
 
+/** Texto libre de fecha/hora. Vacío, null o ausente quedan fuera del payload (DA-1). */
+const optionalManualText = (max: number) =>
+  z
+    .union([z.string().trim().max(max), z.literal(''), z.null()])
+    .optional()
+    .transform((value) => {
+      if (value == null) return undefined
+      const trimmed = value.trim()
+      return trimmed.length > 0 ? trimmed : undefined
+    })
+
+const optionalAppointmentId = (strict: boolean) =>
+  z
+    .union([z.string(), z.literal(''), z.null()])
+    .optional()
+    .superRefine((value, ctx) => {
+      if (value == null) return
+      const trimmed = value.trim()
+      if (!trimmed) return
+      if (strict) {
+        if (!z.string().uuid().safeParse(trimmed).success) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'El id de la cita debe ser un UUID.',
+          })
+        }
+        return
+      }
+      if (trimmed.length > 64) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'El id de la cita es demasiado largo.',
+        })
+      }
+    })
+    .transform((value) => {
+      if (value == null) return undefined
+      const trimmed = value.trim()
+      return trimmed.length > 0 ? trimmed : undefined
+    })
+
+const proximaCitaDraftFields = {
+  proxima_cita_fecha: optionalManualText(200),
+  proxima_cita_hora: optionalManualText(80),
+  proxima_cita_appointment_id: optionalAppointmentId(false),
+}
+
+const proximaCitaFinalFields = {
+  proxima_cita_fecha: optionalManualText(200),
+  proxima_cita_hora: optionalManualText(80),
+  proxima_cita_appointment_id: optionalAppointmentId(true),
+}
+
+const acceptedSchemaVersion = z
+  .enum(CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS)
+  .transform(() => CONSULTA_MEDICA_SCHEMA_VERSION)
+
 export const RecetaLineaSchema = z.object({
   medicamento: freeText(500, 1),
   presentacion: optionalString,
@@ -81,7 +141,7 @@ export const SignosVitalesConsultaSchema = z.object({
 })
 
 export const ConsultaMedicaPayloadSchema = z.object({
-  schemaVersion: z.literal(CONSULTA_MEDICA_SCHEMA_VERSION),
+  schemaVersion: acceptedSchemaVersion,
   tipo_consulta: z.enum(TIPO_CONSULTA_VALUES),
   motivo_consulta: freeText(8000, 10),
   signos_vitales: SignosVitalesConsultaSchema,
@@ -94,6 +154,7 @@ export const ConsultaMedicaPayloadSchema = z.object({
   pase_salida: z.enum(['SI', 'NO']).optional(),
   material_medico: optionalString,
   indicaciones_generales: optionalString,
+  ...proximaCitaFinalFields,
   receta_lineas: z.array(RecetaLineaSchema).max(30),
   medico_nombre: freeText(200, 1),
   medico_cedula: plainString.min(1).max(50),
@@ -113,7 +174,7 @@ const draftText = (max: number) =>
  * `.partial()` no sirve: si el campo viene como "" igual exige min().
  */
 export const ConsultaMedicaDraftSchema = z.object({
-  schemaVersion: z.literal(CONSULTA_MEDICA_SCHEMA_VERSION),
+  schemaVersion: acceptedSchemaVersion,
   tipo_consulta: z.enum(TIPO_CONSULTA_VALUES).optional(),
   motivo_consulta: draftText(12000).optional(),
   signos_vitales: SignosVitalesConsultaSchema.optional(),
@@ -126,6 +187,7 @@ export const ConsultaMedicaDraftSchema = z.object({
   pase_salida: z.enum(['SI', 'NO']).optional(),
   material_medico: optionalString,
   indicaciones_generales: optionalString,
+  ...proximaCitaDraftFields,
   receta_lineas: z
     .array(
       z.object({

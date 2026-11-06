@@ -1,4 +1,5 @@
 import {
+  CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS,
   CONSULTA_MEDICA_SCHEMA_VERSION,
   type ConsultaMedicaPayload,
 } from '@/schemas/clinical/consulta-medica.constants'
@@ -17,7 +18,12 @@ export function parseConsultaMedicaClinicalContext(
 ): Partial<ConsultaMedicaPayload> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const v = (raw as { schemaVersion?: string }).schemaVersion
-  if (v !== CONSULTA_MEDICA_SCHEMA_VERSION) return null
+  if (
+    !v ||
+    !(CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS as readonly string[]).includes(v)
+  ) {
+    return null
+  }
   return raw as Partial<ConsultaMedicaPayload>
 }
 

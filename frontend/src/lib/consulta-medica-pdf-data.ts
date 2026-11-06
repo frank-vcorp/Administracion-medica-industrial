@@ -70,6 +70,9 @@ export async function loadConsultaMedicaPdfInput(
     pase_salida: stored.pase_salida,
     material_medico: stored.material_medico,
     indicaciones_generales: stored.indicaciones_generales,
+    proxima_cita_fecha: stored.proxima_cita_fecha,
+    proxima_cita_hora: stored.proxima_cita_hora,
+    proxima_cita_appointment_id: stored.proxima_cita_appointment_id,
     receta_lineas: (stored.receta_lineas ?? [])
       .filter((line) => (line.medicamento ?? '').trim().length > 0)
       .map((line) => ({

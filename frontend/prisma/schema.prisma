@@ -464,6 +464,8 @@ model MedicalEvent {
   //  porque el modelo MedicalEvent no tiene FK explícita a LabResult)
   satisfactionSurveys   SatisfactionSurvey[]
   resultDeliveryLogs  ResultDeliveryLog[]
+  /// Citas de seguimiento cuya consulta de origen es este evento (SME-97).
+  followUpAppointments  Appointment[]           @relation("AppointmentFollowUpFromConsult")
 
   @@map("medical_events")
 }
@@ -595,7 +597,12 @@ model Appointment {
   /// de futuras relaciones con `Appointment`.
   medicalEvents            MedicalEvent[]        @relation("MedicalEventAppointment")
   prefilledInvitation      PrefilledInvitation? // IMPL-20260324-07
+  /// SME-97: cita creada después, ligada a la consulta donde se indicó el seguimiento.
+  /// Nullable e indexada. La captura de próxima cita no exige este enlace.
+  followUpFromMedicalEventId String?
+  followUpFromMedicalEvent   MedicalEvent? @relation("AppointmentFollowUpFromConsult", fields: [followUpFromMedicalEventId], references: [id], onDelete: SetNull)
 
+  @@index([followUpFromMedicalEventId])
   @@map("appointments")
 }
 

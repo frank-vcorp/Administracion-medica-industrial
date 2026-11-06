@@ -14,6 +14,7 @@ import {
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
+import { buildProximaCitaFields } from '@/lib/clinical/consulta-seguimiento'
 import {
   formatCie10Unified,
   parseDiagnosticoUnificadoDisplay,
@@ -107,6 +108,11 @@ export default function ConsultaMedicaEstudio({
   const [paseSalida, setPaseSalida] = useState<'SI' | 'NO'>(parsed?.pase_salida ?? 'NO')
   const [materialMedico, setMaterialMedico] = useState(parsed?.material_medico ?? '')
   const [indicaciones, setIndicaciones] = useState(parsed?.indicaciones_generales ?? '')
+  const [proximaCitaFecha, setProximaCitaFecha] = useState(parsed?.proxima_cita_fecha ?? '')
+  const [proximaCitaHora, setProximaCitaHora] = useState(parsed?.proxima_cita_hora ?? '')
+  const [proximaCitaAppointmentId, setProximaCitaAppointmentId] = useState(
+    parsed?.proxima_cita_appointment_id ?? '',
+  )
   const [recetaLineas, setRecetaLineas] = useState<RecetaLinea[]>(
     parsed?.receta_lineas?.length ? parsed.receta_lineas : [emptyRecetaLine()],
   )
@@ -184,6 +190,11 @@ export default function ConsultaMedicaEstudio({
       pase_salida: otorgaIncap === 'SI' ? paseSalida : undefined,
       material_medico: materialMedico.trim() || undefined,
       indicaciones_generales: indicaciones.trim() || undefined,
+      ...buildProximaCitaFields({
+        fecha: proximaCitaFecha,
+        hora: proximaCitaHora,
+        appointmentId: proximaCitaAppointmentId,
+      }),
       receta_lineas: lineas,
       medico_nombre: medicoNombre.trim() || session?.user?.fullName || session?.user?.name || 'Médico',
       medico_cedula: medicoCedula.trim() || '—',
@@ -206,6 +217,9 @@ export default function ConsultaMedicaEstudio({
     paseSalida,
     materialMedico,
     indicaciones,
+    proximaCitaFecha,
+    proximaCitaHora,
+    proximaCitaAppointmentId,
     recetaLineas,
     medicoNombre,
     medicoCedula,
@@ -506,6 +520,55 @@ export default function ConsultaMedicaEstudio({
             onChange={setIndicaciones}
             disabled={readonly}
           />
+          <div className="border-t border-slate-100 pt-3 space-y-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Seguimiento</p>
+            <p className="text-xs text-slate-500">
+              Próxima cita. El médico escribe fecha y hora a mano.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha</label>
+                <input
+                  className={inputClass}
+                  placeholder="Ej. 12 de diciembre de 2026"
+                  value={proximaCitaFecha}
+                  onChange={(e) => setProximaCitaFecha(e.target.value)}
+                  disabled={readonly}
+                  maxLength={200}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Hora</label>
+                <input
+                  className={inputClass}
+                  placeholder="Ej. 10:30"
+                  value={proximaCitaHora}
+                  onChange={(e) => setProximaCitaHora(e.target.value)}
+                  disabled={readonly}
+                  maxLength={80}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">
+                Id de cita (opcional)
+              </label>
+              <input
+                className={inputClass}
+                placeholder="UUID de la cita, si ya existe"
+                value={proximaCitaAppointmentId}
+                onChange={(e) => setProximaCitaAppointmentId(e.target.value)}
+                disabled={readonly}
+                maxLength={64}
+                spellCheck={false}
+              />
+              {proximaCitaAppointmentId.trim() ? (
+                <p className="mt-1 text-xs text-slate-600 font-mono">
+                  Cita vinculada: {proximaCitaAppointmentId.trim()}
+                </p>
+              ) : null}
+            </div>
+          </div>
           <p className="text-[10px] font-bold text-slate-400 uppercase">Medicamento</p>
           {recetaLineas.map((line, idx) => (
             <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3">
