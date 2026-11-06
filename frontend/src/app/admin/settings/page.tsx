@@ -6,6 +6,7 @@ import BrandingLogoManager from '@/components/admin/BrandingLogoManager'
 import OperationalCleanupPanel from '@/components/admin/OperationalCleanupPanel'
 import SendGridSmtpSettingsPanel from '@/components/admin/SendGridSmtpSettingsPanel'
 import WhatsAppBaileysSettingsPanel from '@/components/admin/WhatsAppBaileysSettingsPanel'
+import PortalSpecialRequestWhatsAppSettingsPanel from '@/components/admin/PortalSpecialRequestWhatsAppSettingsPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,8 @@ export default async function AdminSettingsPage() {
       <SendGridSmtpSettingsPanel />
 
       <WhatsAppBaileysSettingsPanel />
+
+      <PortalSpecialRequestWhatsAppSettingsPanel />
 
       {showOperationalCleanup ? <OperationalCleanupPanel /> : null}
     </div>
