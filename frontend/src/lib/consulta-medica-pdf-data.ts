@@ -59,6 +59,17 @@ export async function loadConsultaMedicaPdfInput(
 
   const normalized = normalizeConsultaClinicalContext(stored as Record<string, unknown>)
 
+  const recetaRaw = normalized.receta_lineas ?? stored.receta_lineas
+  const recetaLineasArray = Array.isArray(recetaRaw) ? recetaRaw : []
+
+  const antecedentesRaw = normalized.antecedentes ?? stored.antecedentes
+  const antecedentesPayload =
+    antecedentesRaw &&
+    typeof antecedentesRaw === 'object' &&
+    !Array.isArray(antecedentesRaw)
+      ? (antecedentesRaw as ConsultaMedicaPayload['antecedentes'])
+      : undefined
+
   const consulta: ConsultaMedicaPayload = {
     schemaVersion: CONSULTA_MEDICA_SCHEMA_VERSION,
     tipo_consulta: (normalized.tipo_consulta as ConsultaMedicaPayload['tipo_consulta']) ?? 'ENFERMEDAD_GENERAL',
@@ -73,7 +84,7 @@ export async function loadConsultaMedicaPdfInput(
     dias_incapacidad: normalized.dias_incapacidad as number | undefined,
     material_medico: normalized.material_medico as string | undefined,
     indicaciones_generales: normalized.indicaciones_generales as string | undefined,
-    receta_lineas: ((normalized.receta_lineas ?? stored.receta_lineas) ?? [])
+    receta_lineas: recetaLineasArray
       .filter((line: { medicamento?: string }) => (line.medicamento ?? '').trim().length > 0)
       .map((line: {
         medicamento?: string
@@ -90,7 +101,7 @@ export async function loadConsultaMedicaPdfInput(
       })),
     medico_nombre: String(normalized.medico_nombre ?? stored.medico_nombre ?? '').trim() || 'Médico',
     medico_cedula: String(normalized.medico_cedula ?? stored.medico_cedula ?? '').trim() || '—',
-    antecedentes: normalized.antecedentes ?? stored.antecedentes,
+    antecedentes: antecedentesPayload,
     antecedentes_consulta: normalized.antecedentes_consulta as ConsultaMedicaPayload['antecedentes_consulta'] ?? stored.antecedentes_consulta,
     modulo1: (normalized.modulo1 as ConsultaMedicaPayload['modulo1']) ?? stored.modulo1,
     cerrada_at: (normalized.cerrada_at as string | undefined) ?? stored.cerrada_at,
