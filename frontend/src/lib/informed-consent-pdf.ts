@@ -79,3 +79,8 @@ export function informedConsentFileKey(workerId: string, appointmentId: string):
   const ts = Date.now()
   return `consent/${workerId}/${appointmentId}-${ts}.pdf`
 }
+
+/** Ingreso directo recepción (sin cita en agenda). */
+export function informedConsentFileKeyReceptionWalkIn(workerId: string): string {
+  return `consent/${workerId}/reception-walk-in-${Date.now()}.pdf`
+}
