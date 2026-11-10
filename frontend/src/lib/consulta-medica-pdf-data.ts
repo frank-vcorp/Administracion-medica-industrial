@@ -3,6 +3,7 @@ import {
   isConsultaMedicaTestName,
   parseConsultaMedicaClinicalContext,
 } from '@/lib/clinical/consulta-medica'
+import { normalizeConsultaClinicalContext } from '@/lib/clinical/consulta-medica-validate'
 import {
   buildFechaLugarReceta,
   buildLugarReceta,
@@ -56,34 +57,54 @@ export async function loadConsultaMedicaPdfInput(
     return { ok: false, status: 404, message: 'La consulta médica aún no tiene captura.' }
   }
 
+  const normalized = normalizeConsultaClinicalContext(stored as Record<string, unknown>)
+
+  const recetaRaw = normalized.receta_lineas ?? stored.receta_lineas
+  const recetaLineasArray = Array.isArray(recetaRaw) ? recetaRaw : []
+
+  const antecedentesRaw = normalized.antecedentes ?? stored.antecedentes
+  const antecedentesPayload =
+    antecedentesRaw &&
+    typeof antecedentesRaw === 'object' &&
+    !Array.isArray(antecedentesRaw)
+      ? (antecedentesRaw as ConsultaMedicaPayload['antecedentes'])
+      : undefined
+
   const consulta: ConsultaMedicaPayload = {
     schemaVersion: CONSULTA_MEDICA_SCHEMA_VERSION,
-    tipo_consulta: stored.tipo_consulta ?? 'ENFERMEDAD_GENERAL',
-    motivo_consulta: stored.motivo_consulta ?? '',
-    signos_vitales: stored.signos_vitales ?? emptySignosVitalesConsulta(),
-    exploracion_fisica: stored.exploracion_fisica ?? '',
-    diagnostico_unificado: stored.diagnostico_unificado ?? '',
-    diagnostico_especifico: stored.diagnostico_especifico ?? '',
-    incapacidad_aplica: stored.incapacidad_aplica ?? false,
-    otorga_incapacidad: stored.otorga_incapacidad ?? 'NO',
-    dias_incapacidad: stored.dias_incapacidad,
-    pase_salida: stored.pase_salida,
-    material_medico: stored.material_medico,
-    indicaciones_generales: stored.indicaciones_generales,
-    receta_lineas: (stored.receta_lineas ?? [])
-      .filter((line) => (line.medicamento ?? '').trim().length > 0)
-      .map((line) => ({
+    tipo_consulta: (normalized.tipo_consulta as ConsultaMedicaPayload['tipo_consulta']) ?? 'ENFERMEDAD_GENERAL',
+    motivo_consulta: String(normalized.motivo_consulta ?? ''),
+    signos_vitales: (normalized.signos_vitales as ConsultaMedicaPayload['signos_vitales']) ?? emptySignosVitalesConsulta(),
+    exploracion_fisica: String(normalized.exploracion_fisica ?? ''),
+    diagnostico_unificado: String(normalized.diagnostico_unificado ?? ''),
+    diagnostico_especifico: String(normalized.diagnostico_especifico ?? ''),
+    incapacidad_aplica: Boolean(normalized.incapacidad_aplica),
+    otorga_incapacidad: (normalized.otorga_incapacidad as 'SI' | 'NO') ?? 'NO',
+    tipo_incapacidad: normalized.tipo_incapacidad as ConsultaMedicaPayload['tipo_incapacidad'],
+    dias_incapacidad: normalized.dias_incapacidad as number | undefined,
+    material_medico: normalized.material_medico as string | undefined,
+    indicaciones_generales: normalized.indicaciones_generales as string | undefined,
+    receta_lineas: recetaLineasArray
+      .filter((line: { medicamento?: string }) => (line.medicamento ?? '').trim().length > 0)
+      .map((line: {
+        medicamento?: string
+        presentacion?: string
+        dosis?: string
+        frecuencia?: string
+        duracion?: string
+      }) => ({
         medicamento: line.medicamento ?? '',
         presentacion: line.presentacion,
         dosis: line.dosis?.trim() || '—',
         frecuencia: line.frecuencia?.trim() || '—',
         duracion: line.duracion?.trim() || '—',
       })),
-    medico_nombre: stored.medico_nombre?.trim() || 'Médico',
-    medico_cedula: stored.medico_cedula?.trim() || '—',
-    antecedentes: stored.antecedentes,
-    modulo1: stored.modulo1,
-    cerrada_at: stored.cerrada_at,
+    medico_nombre: String(normalized.medico_nombre ?? stored.medico_nombre ?? '').trim() || 'Médico',
+    medico_cedula: String(normalized.medico_cedula ?? stored.medico_cedula ?? '').trim() || '—',
+    antecedentes: antecedentesPayload,
+    antecedentes_consulta: normalized.antecedentes_consulta as ConsultaMedicaPayload['antecedentes_consulta'] ?? stored.antecedentes_consulta,
+    modulo1: (normalized.modulo1 as ConsultaMedicaPayload['modulo1']) ?? stored.modulo1,
+    cerrada_at: (normalized.cerrada_at as string | undefined) ?? stored.cerrada_at,
   }
 
   const eventDateRaw = stored.cerrada_at

@@ -13,6 +13,7 @@ import {
   ClinicalTextarea,
 } from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
+import ConsultaDerivadosStudiesPicker from '@/components/clinical/ConsultaDerivadosStudiesPicker'
 import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
@@ -32,11 +33,14 @@ import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
   TIPO_CONSULTA_VALUES,
   TIPO_CONSULTA_LABELS,
+  TIPO_INCAPACIDAD_CONSULTA_VALUES,
+  TIPO_INCAPACIDAD_CONSULTA_LABELS,
   buildDefaultExploracionPlantilla,
   emptySignosVitalesConsulta,
   type ConsultaMedicaPayload,
   type RecetaLinea,
   type TipoConsultaValue,
+  type TipoIncapacidadConsultaValue,
 } from '@/schemas/clinical/consulta-medica.constants'
 import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
 
@@ -47,6 +51,7 @@ type TabId =
   | 'exploracion'
   | 'diagnostico'
   | 'tratamiento'
+  | 'derivados'
   | 'cierre'
 
 const TABS: { id: TabId; label: string }[] = [
@@ -56,6 +61,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'exploracion', label: 'Exploración' },
   { id: 'diagnostico', label: 'Diagnóstico' },
   { id: 'tratamiento', label: 'Tratamiento' },
+  { id: 'derivados', label: 'Estudios derivados' },
   { id: 'cierre', label: 'Cierre' },
 ]
 
@@ -105,8 +111,18 @@ export default function ConsultaMedicaEstudio({
   })
   const [diagEspecifico, setDiagEspecifico] = useState(parsed?.diagnostico_especifico ?? '')
   const [otorgaIncap, setOtorgaIncap] = useState<'SI' | 'NO'>(parsed?.otorga_incapacidad ?? 'NO')
+  const [tipoIncap, setTipoIncap] = useState<TipoIncapacidadConsultaValue>(() => {
+    const t = parsed?.tipo_incapacidad
+    if (t && TIPO_INCAPACIDAD_CONSULTA_VALUES.includes(t)) return t
+    if (parsed?.otorga_incapacidad === 'SI') {
+      if (parsed?.pase_salida === 'SI') return 'PASE_SALIDA'
+      const d = parsed?.dias_incapacidad
+      if (typeof d === 'number' && d > 0) return 'INTERNA_SME'
+      return 'IMSS'
+    }
+    return 'NINGUNA'
+  })
   const [diasIncap, setDiasIncap] = useState(String(parsed?.dias_incapacidad ?? ''))
-  const [paseSalida, setPaseSalida] = useState<'SI' | 'NO'>(parsed?.pase_salida ?? 'NO')
   const [materialMedico, setMaterialMedico] = useState(parsed?.material_medico ?? '')
   const [indicaciones, setIndicaciones] = useState(parsed?.indicaciones_generales ?? '')
   const [recetaLineas, setRecetaLineas] = useState<RecetaLinea[]>(
@@ -181,9 +197,15 @@ export default function ConsultaMedicaEstudio({
       diagnostico_especifico: diagEspecifico.trim(),
       incapacidad_aplica: otorgaIncap === 'SI',
       otorga_incapacidad: otorgaIncap,
+      tipo_incapacidad:
+        otorgaIncap === 'SI' && tipoIncap !== 'NINGUNA' ? tipoIncap : undefined,
       dias_incapacidad:
-        otorgaIncap === 'SI' ? Math.max(0, parseInt(diasIncap, 10) || 0) : undefined,
-      pase_salida: otorgaIncap === 'SI' ? paseSalida : undefined,
+        otorgaIncap === 'SI' && tipoIncap === 'INTERNA_SME'
+          ? (() => {
+              const n = parseInt(diasIncap.trim(), 10)
+              return Number.isFinite(n) && n >= 1 ? n : undefined
+            })()
+          : undefined,
       material_medico: materialMedico.trim() || undefined,
       indicaciones_generales: indicaciones.trim() || undefined,
       receta_lineas: lineas,
@@ -204,8 +226,8 @@ export default function ConsultaMedicaEstudio({
     diagCie,
     diagEspecifico,
     otorgaIncap,
+    tipoIncap,
     diasIncap,
-    paseSalida,
     materialMedico,
     indicaciones,
     recetaLineas,
@@ -218,6 +240,15 @@ export default function ConsultaMedicaEstudio({
     session?.user?.fullName,
     session?.user?.name,
   ])
+
+  useEffect(() => {
+    if (otorgaIncap === 'NO') {
+      setTipoIncap('NINGUNA')
+      setDiasIncap('')
+      return
+    }
+    setTipoIncap((prev) => (prev === 'NINGUNA' ? 'IMSS' : prev))
+  }, [otorgaIncap])
 
   const consultaSnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
 
@@ -489,26 +520,45 @@ export default function ConsultaMedicaEstudio({
               ))}
             </div>
             {otorgaIncap === 'SI' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  className={inputClass}
-                  type="number"
-                  min={0}
-                  max={365}
-                  placeholder="Días (incapacidad interna SME)"
-                  value={diasIncap}
-                  onChange={(e) => setDiasIncap(e.target.value)}
-                  disabled={readonly}
-                />
-                <select
-                  className={inputClass}
-                  value={paseSalida}
-                  onChange={(e) => setPaseSalida(e.target.value as 'SI' | 'NO')}
-                  disabled={readonly}
-                >
-                  <option value="NO">Sin pase de salida</option>
-                  <option value="SI">Con pase de salida (IMSS u otro)</option>
-                </select>
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Tipo</span>
+                  <select
+                    className={`${inputClass} mt-1`}
+                    value={tipoIncap}
+                    onChange={(e) =>
+                      setTipoIncap(e.target.value as TipoIncapacidadConsultaValue)
+                    }
+                    disabled={readonly}
+                  >
+                    {(['PASE_SALIDA', 'INTERNA_SME', 'IMSS'] as const).map((k) => (
+                      <option key={k} value={k}>
+                        {TIPO_INCAPACIDAD_CONSULTA_LABELS[k]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-[10px] text-slate-500">
+                  Pase de salida e IMSS no llevan días aquí. Solo incapacidad interna (SME) pide número
+                  de días.
+                </p>
+                {tipoIncap === 'INTERNA_SME' && (
+                  <label className="block">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">
+                      Días (incapacidad interna SME)
+                    </span>
+                    <input
+                      className={`${inputClass} mt-1`}
+                      type="number"
+                      min={1}
+                      max={365}
+                      placeholder="Ej. 3"
+                      value={diasIncap}
+                      onChange={(e) => setDiasIncap(e.target.value)}
+                      disabled={readonly}
+                    />
+                  </label>
+                )}
               </div>
             )}
           </div>
@@ -612,6 +662,19 @@ export default function ConsultaMedicaEstudio({
           ) : (
             <p className="text-xs text-slate-500">Guarda la consulta para imprimir el medicamento.</p>
           )}
+        </section>
+      )}
+
+      {activeTab === 'derivados' && (
+        <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            Estudios derivados (catálogo)
+          </p>
+          <ConsultaDerivadosStudiesPicker
+            eventId={eventId}
+            consultaEventTestId={eventTestId}
+            readonly={readonly}
+          />
         </section>
       )}
 

@@ -12,6 +12,10 @@
  *   - PTA calculado (PTA3) por oído: `(TA500 + TA1000 + TA2000) / 3`. Se
  *     muestra la ECUACIÓN, sus TRES ENTRADAS, el resultado, la fuente del
  *     cálculo y el `pta_fuente` del documento por separado.
+ *   - Índice de Fletcher (bilateral): a partir de los dos PTA3 completos,
+ *     oído menos afectado = menor dB HL, oído más afectado = mayor dB HL:
+ *     `((PTA_menor × 7) + (PTA_mayor × 1)) / 8`. Si falta PTA3 en algún
+ *     oído, no se calcula (no se interpola).
  *   - Criterio AMI de normalidad: ≤ 25 dB → normal.
  *   - Clasificación por patrón (graves vs agudas) + PTA/criterio AMI. Si
  *     hay umbrales en huecos AMI, la clasificación se marca
@@ -252,6 +256,7 @@ export interface OidoInterpretacion {
 
 export interface ResolvedAudiometriaCriteria {
   readonly oidos: ReadonlyArray<OidoInterpretacion>
+  readonly indiceFletcher: IndiceFletcherResultado
   readonly bilateral: {
     readonly estado: 'NORMAL_BILATERAL' | 'ALTERADO_BILATERAL' | 'ASIMETRIA' | 'NO_CONCLUYENTE'
     readonly nota: string
@@ -348,6 +353,70 @@ export function calcularPTA3(
   return { promedio, completo: true, valores }
 }
 
+export type IndiceFletcherResultado = {
+  valor: number | null
+  completo: boolean
+  /** Menor PTA3 (dB HL) = oído menos afectado. */
+  oidoMenosAfectado: 'OD' | 'OI' | null
+  /** Mayor PTA3 (dB HL) = oído más afectado. */
+  oidoMasAfectado: 'OD' | 'OI' | null
+  ptaMenor: number | null
+  ptaMayor: number | null
+}
+
+/**
+ * Índice de Fletcher (audiometría): media ponderada bilateral usando los
+ * PTA3 por oído. Oído **menos afectado** = menor umbral en dB HL; **más
+ * afectado** = mayor dB HL.
+ * Fórmula: `((PTA_menor × 7) + (PTA_mayor × 1)) / 8`.
+ * Si empatan, el resultado es el mismo PTA y se etiqueta OD como menor y OI
+ * como mayor solo para mostrar la sustitución (la expresión es simétrica).
+ */
+export function calcularIndiceFletcher(
+  ptaOd: number | null,
+  ptaOi: number | null,
+): IndiceFletcherResultado {
+  if (ptaOd === null || ptaOi === null) {
+    return {
+      valor: null,
+      completo: false,
+      oidoMenosAfectado: null,
+      oidoMasAfectado: null,
+      ptaMenor: null,
+      ptaMayor: null,
+    }
+  }
+  let oidoMenosAfectado: 'OD' | 'OI'
+  let oidoMasAfectado: 'OD' | 'OI'
+  let ptaMenor: number
+  let ptaMayor: number
+  if (ptaOd < ptaOi) {
+    oidoMenosAfectado = 'OD'
+    oidoMasAfectado = 'OI'
+    ptaMenor = ptaOd
+    ptaMayor = ptaOi
+  } else if (ptaOi < ptaOd) {
+    oidoMenosAfectado = 'OI'
+    oidoMasAfectado = 'OD'
+    ptaMenor = ptaOi
+    ptaMayor = ptaOd
+  } else {
+    oidoMenosAfectado = 'OD'
+    oidoMasAfectado = 'OI'
+    ptaMenor = ptaOd
+    ptaMayor = ptaOi
+  }
+  const valor = Math.round(((ptaMenor * 7 + ptaMayor * 1) / 8) * 10) / 10
+  return {
+    valor,
+    completo: true,
+    oidoMenosAfectado,
+    oidoMasAfectado,
+    ptaMenor,
+    ptaMayor,
+  }
+}
+
 /**
  * Clasifica el patrón audiométrico (graves vs agudas) usando el peor
  * umbral TA en cada grupo. Si el grupo no tiene umbrales en el documento,
@@ -413,6 +482,7 @@ export function resolveAudiometriaCriteria(
 
   const ptaOd = calcularPTA3(od.va)
   const ptaOi = calcularPTA3(oi.va)
+  const indiceFletcher = calcularIndiceFletcher(ptaOd.promedio, ptaOi.promedio)
 
   const advertencias: string[] = []
   if (!ptaOd.completo) {
@@ -423,6 +493,11 @@ export function resolveAudiometriaCriteria(
   if (!ptaOi.completo) {
     advertencias.push(
       'OI: PTA3 incompleto (faltan TA500/TA1000/TA2000). Mostrando valores disponibles.',
+    )
+  }
+  if (!indiceFletcher.completo) {
+    advertencias.push(
+      'Índice de Fletcher: no calculable hasta tener PTA3 completo en ambos oídos.',
     )
   }
 
@@ -521,11 +596,30 @@ export function resolveAudiometriaCriteria(
 
   return {
     oidos,
+    indiceFletcher,
     bilateral: { estado: bilateralEstado, nota: bilateralNota },
     completitudDocumental: completitud,
     frecuenciasDetectadas,
     advertencias,
   }
+}
+
+function resolvedAudiometriaHasRenderable(
+  resolved: ResolvedAudiometriaCriteria,
+): boolean {
+  if (resolved.frecuenciasDetectadas.length > 0) return true
+  return resolved.oidos.some((o) => o.ptaFuente !== null)
+}
+
+/**
+ * Hay algo que mostrar en la papeleta (umbrales y/o PTA del documento).
+ * Evita un panel vacío cuando el snapshot existe pero aún no trae extracción.
+ */
+export function hasRenderableAudiometriaCriteria(
+  extractedData: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!extractedData || typeof extractedData !== 'object') return false
+  return resolvedAudiometriaHasRenderable(resolveAudiometriaCriteria(extractedData))
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -610,7 +704,9 @@ export default function AudiometriaClinicalCriteriaPanel({
   extractedData,
   version,
 }: AudiometriaClinicalCriteriaPanelProps) {
+  if (!extractedData || typeof extractedData !== 'object') return null
   const resolved = resolveAudiometriaCriteria(extractedData)
+  if (!resolvedAudiometriaHasRenderable(resolved)) return null
   const od = resolved.oidos.find((o) => o.oido === 'OD') ?? null
   const oi = resolved.oidos.find((o) => o.oido === 'OI') ?? null
 
@@ -732,6 +828,8 @@ export default function AudiometriaClinicalCriteriaPanel({
         <PTACard oidoLabel="OD" interpretacion={od} va={od_va} />
         <PTACard oidoLabel="OI" interpretacion={oi} va={oi_va} />
       </div>
+
+      <FletcherCard indice={resolved.indiceFletcher} />
 
       {/* Estado bilateral */}
       <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
@@ -1001,6 +1099,58 @@ function SmeAudiometryReferenceSection() {
   )
 }
 
+function FletcherCard({ indice }: { indice: IndiceFletcherResultado }) {
+  const {
+    valor,
+    completo,
+    oidoMenosAfectado,
+    oidoMasAfectado,
+    ptaMenor,
+    ptaMayor,
+  } = indice
+  const sustitucion =
+    completo &&
+    ptaMenor !== null &&
+    ptaMayor !== null &&
+    oidoMenosAfectado &&
+    oidoMasAfectado
+      ? `((PTA ${oidoMenosAfectado} ${ptaMenor} × 7) + (PTA ${oidoMasAfectado} ${ptaMayor} × 1)) ÷ 8 = ${valor} dB`
+      : null
+  return (
+    <div
+      className="bg-violet-50 border border-violet-200 rounded-lg p-3"
+      data-testid="audiometria-fletcher-card"
+    >
+      <p className="text-xs font-bold text-violet-900 mb-1">Índice de Fletcher</p>
+      <p className="text-[11px] text-violet-800 font-mono">
+        ((PTA oído menos afectado × 7) + (PTA oído más afectado × 1)) ÷ 8
+      </p>
+      <p className="text-[10px] text-violet-700 mt-1">
+        Menos afectado = menor PTA3 (dB HL); más afectado = mayor PTA3. Entradas: PTA3 por oído
+        (TA500+TA1000+TA2000)÷3.
+      </p>
+      {sustitucion && (
+        <p
+          className="text-[11px] text-violet-900 font-mono mt-2"
+          data-testid="audiometria-fletcher-sustitucion"
+        >
+          Sustitución: {sustitucion}
+        </p>
+      )}
+      {!completo && (
+        <p className="text-[11px] text-orange-700 mt-2" data-testid="audiometria-fletcher-incompleto">
+          Requiere PTA3 completo en OD y en OI.
+        </p>
+      )}
+      {completo && valor !== null && (
+        <p className="text-sm font-bold text-violet-950 mt-2" data-testid="audiometria-fletcher-valor">
+          {valor} dB HL
+        </p>
+      )}
+    </div>
+  )
+}
+
 function PTACard({
   oidoLabel,
   interpretacion,
@@ -1016,6 +1166,15 @@ function PTACard({
   const ta500 = va[500] ?? null
   const ta1000 = va[1000] ?? null
   const ta2000 = va[2000] ?? null
+  const subNum = (v: number | null) => (v === null ? '—' : String(v))
+  const sustitucion =
+    ptaCalculadoCompleto &&
+    ptaCalculado !== null &&
+    ta500 !== null &&
+    ta1000 !== null &&
+    ta2000 !== null
+      ? `(${subNum(ta500)} + ${subNum(ta1000)} + ${subNum(ta2000)}) ÷ 3 = ${ptaCalculado} dB`
+      : `(${subNum(ta500)} + ${subNum(ta1000)} + ${subNum(ta2000)}) ÷ 3`
   return (
     <div
       className="bg-white border border-slate-200 rounded-lg p-3"
@@ -1032,6 +1191,12 @@ function PTACard({
         data-testid={`audiometria-pta-equation-${oidoLabel.toLowerCase()}`}
       >
         PTA3 = (TA500 + TA1000 + TA2000) / 3
+      </p>
+      <p
+        className="text-[11px] text-slate-700 font-mono mt-0.5"
+        data-testid={`audiometria-pta-sustitucion-${oidoLabel.toLowerCase()}`}
+      >
+        Sustitución: {sustitucion}
       </p>
       <p
         className="text-[11px] text-slate-700 mt-1"

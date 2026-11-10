@@ -55,6 +55,8 @@ export interface HistoriaLaboralExposicion {
   /** stateKey booleano (ej: `exposicion_quimica`). */
   key: string
   label: string
+  /** Pregunta en formularios Sí/No (portal, etc.). */
+  questionLabel?: string
   /** stateKey del input de texto que aparece cuando el booleano es true. */
   descKey: string
 }
@@ -69,12 +71,72 @@ export const HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS: [string, string][] = [
   ['tiempo_anterior_2', 'Tiempo 2'],
 ]
 
+/**
+ * Referencia de factores de riesgo (medicina industrial / NOM).
+ * Cada ítem describe la categoría y ejemplos típicos; el trabajador detalla
+ * en el campo "Especifique" al marcar Sí.
+ */
+export const FACTORES_RIESGO_LABORAL_REFERENCIA: ReadonlyArray<{
+  categoria: string
+  ejemplos: string
+}> = [
+  {
+    categoria: 'Físicos',
+    ejemplos:
+      'presiones anormales, radiación, iluminación, vibraciones, temperatura, ruido',
+  },
+  {
+    categoria: 'Químicos',
+    ejemplos: 'gases, sustancias, solventes',
+  },
+  {
+    categoria: 'Biológicos',
+    ejemplos: 'agentes patógenos, sustancias animales',
+  },
+  {
+    categoria: 'Psicosociales',
+    ejemplos: 'estrés laboral, carga mental, atención al público',
+  },
+  {
+    categoria: 'Ergonómicos',
+    ejemplos: 'posturas inadecuadas, movimiento repetitivo, levantamiento de carga',
+  },
+]
+
 /** Exposición a agentes en el puesto (minuta 28-oct: separar de riesgos/accidentes). */
 export const HISTORIA_LABORAL_EXPOSICION_AGENTES: HistoriaLaboralExposicion[] = [
-  { key: 'exposicion_quimica',    label: 'Química',    descKey: 'exposicion_quimica_especifique' },
-  { key: 'exposicion_fisica',     label: 'Física',     descKey: 'exposicion_fisica_especifique' },
-  { key: 'exposicion_biologica',  label: 'Biológica',  descKey: 'exposicion_biologica_especifique' },
-  { key: 'exposicion_ergonomica', label: 'Ergonómica', descKey: 'exposicion_ergonomica_especifique' },
+  {
+    key: 'exposicion_fisica',
+    label: 'Riesgos físicos',
+    questionLabel:
+      '¿Ha estado expuesto a riesgos físicos (ruido, vibración, temperatura, radiación, iluminación, presión)?',
+    descKey: 'exposicion_fisica_especifique',
+  },
+  {
+    key: 'exposicion_quimica',
+    label: 'Riesgos químicos',
+    questionLabel: '¿Ha estado expuesto a riesgos químicos (gases, sustancias, solventes)?',
+    descKey: 'exposicion_quimica_especifique',
+  },
+  {
+    key: 'exposicion_biologica',
+    label: 'Riesgos biológicos',
+    questionLabel: '¿Ha estado expuesto a riesgos biológicos (patógenos, sustancias animales)?',
+    descKey: 'exposicion_biologica_especifique',
+  },
+  {
+    key: 'exposicion_psicosocial',
+    label: 'Riesgos psicosociales',
+    questionLabel: '¿Ha estado expuesto a factores psicosociales (estrés laboral, carga mental, atención al público)?',
+    descKey: 'exposicion_psicosocial_especifique',
+  },
+  {
+    key: 'exposicion_ergonomica',
+    label: 'Riesgos ergonómicos',
+    questionLabel:
+      '¿Ha estado expuesto a riesgos ergonómicos (posturas, movimientos repetitivos, levantamiento de carga)?',
+    descKey: 'exposicion_ergonomica_especifique',
+  },
 ]
 
 /** Accidente laboral y enfermedad profesional (apartado distinto de exposición). */

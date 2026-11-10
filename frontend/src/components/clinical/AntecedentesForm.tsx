@@ -32,6 +32,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import HistoriaLaboralFactoresRiesgoReferencia from '@/components/clinical/HistoriaLaboralFactoresRiesgoReferencia'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import {
   DATOS_PERSONALES_CAMPOS,
@@ -163,9 +164,10 @@ export function AntecedentesForm({
   const [historiaLaboral, setHistoriaLaboral] = useState<Record<string, string | boolean>>({
     empresa_anterior_1: '', puesto_anterior_1: '', tiempo_anterior_1: '',
     empresa_anterior_2: '', puesto_anterior_2: '', tiempo_anterior_2: '',
+    exposicion_fisica: false, exposicion_fisica_especifique: '',
     exposicion_quimica: false, exposicion_quimica_especifique: '',
-    exposicion_fisica: false,  exposicion_fisica_especifique: '',
     exposicion_biologica: false, exposicion_biologica_especifique: '',
+    exposicion_psicosocial: false, exposicion_psicosocial_especifique: '',
     exposicion_ergonomica: false, exposicion_ergonomica_especifique: '',
     accidentes_trabajo: false, accidentes_descripcion: '',
     enfermedades_trabajo: false, enfermedades_descripcion: '',
@@ -458,7 +460,12 @@ export function AntecedentesForm({
               </div>
             </fieldset>
             <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-base font-semibold text-gray-900 px-2">Exposición a agentes</legend>
+              <legend className="text-base font-semibold text-gray-900 px-2">
+                Factores de riesgo en el trabajo
+              </legend>
+              <div className="mb-4">
+                <HistoriaLaboralFactoresRiesgoReferencia />
+              </div>
               <div className="space-y-3 mt-3">
                 {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(({ key, label, descKey }) => (
                   <div key={key} className="flex items-center gap-3">

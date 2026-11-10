@@ -56,6 +56,7 @@ import { StudyMenuIcon } from "@/components/clinical/StudyMenuIcon"
 // mostrados en la columna derecha entre el visor y el panel IA. Sólo
 // presentación; consume el snapshot ya extraído sin recalcular ni reinterpretar.
 import EspirometriaClinicalCriteriaPanel from "@/components/clinical/EspirometriaClinicalCriteriaPanel"
+import AudiometriaClinicalCriteriaPanel from "@/components/clinical/AudiometriaClinicalCriteriaPanel"
 // IMPL-FEATURE-20260824-02: modal emergente del cuestionario de Espirometría
 // (Completar/Editar) y resumen compacto. Predominantemente seleccionable;
 // persiste en EventTest.clinicalContext vía server action atómica.
@@ -2088,6 +2089,14 @@ function StudyPanel({
                 (PTA3, ecuación, PTA fuente, capas NOM/AMI/fuente). */}
             {getCanonicalAIStudyType(test) === 'Espirometria' && test.extractionSnapshot ? (
               <EspirometriaClinicalCriteriaPanel
+                extractedData={
+                  (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined) ?? null
+                }
+                version={test.extractionSnapshot.version}
+              />
+            ) : null}
+            {getCanonicalAIStudyType(test) === 'Audiometria' && test.extractionSnapshot ? (
+              <AudiometriaClinicalCriteriaPanel
                 extractedData={
                   (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined) ?? null
                 }

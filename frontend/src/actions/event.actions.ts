@@ -20,6 +20,11 @@ import { isExamenMedicoCaptureClosed } from "@/lib/clinical/examen-medico-captur
 import { isExamenMedicoTestName } from "@/lib/clinical/examen-medico-variant"
 import type { EventTestPipelineStatus } from "@/lib/clinical/study-status-display"
 import { agendaDayUtcRange, todayAgendaDateString } from "@/lib/appointment-scheduling"
+import {
+    buildInformedConsentPdf,
+    informedConsentFileKeyReceptionWalkIn,
+} from '@/lib/informed-consent-pdf'
+import { uploadPdfBuffer } from '@/lib/upload-pdf-buffer'
 
 /** Límites del día de agenda AMI (YYYY-MM-DD) para filtrar eventos del kanban. */
 function receptionDayBounds(dateStr: string): { start: Date; end: Date } {
@@ -297,6 +302,102 @@ export async function createEvent(formData: FormData) {
  * @intervention IMPL-20260527-01
  * @see context/interconsultas/HANDOFF_ARCH-20260527-14_SOFIA_SLICE-D-ADMISION-EXTERNA.md
  */
+export type ReceptionWalkInIntakeSource = 'DIRECT_RECEPTION' | 'EXTERNAL_WALK_IN'
+
+/**
+ * Ingreso desde recepción (CheckInModal) con consentimiento informado + aviso FY27 en UI previo.
+ */
+export async function createReceptionWalkInEvent(input: {
+    workerId: string
+    branchId?: string | null
+    intakeSource: ReceptionWalkInIntakeSource
+    informedConsentSignatureDataUrl: string
+}) {
+    try {
+        const session = await getServerSession(authOptions)
+        if (!session?.user) {
+            return { success: false as const, error: 'No autenticado' }
+        }
+        if (!input.informedConsentSignatureDataUrl?.trim()) {
+            return { success: false as const, error: 'La firma del consentimiento informado es obligatoria.' }
+        }
+
+        const worker = await prisma.worker.findUnique({
+            where: { id: input.workerId },
+            select: { id: true, firstName: true, lastName: true },
+        })
+        if (!worker) {
+            return { success: false as const, error: 'Trabajador no encontrado.' }
+        }
+
+        const branch = input.branchId
+            ? await prisma.branch.findUnique({ where: { id: input.branchId } })
+            : await prisma.branch.findFirst()
+        if (!branch) {
+            return { success: false as const, error: 'No hay sucursal disponible.' }
+        }
+
+        const patientFullName = `${worker.firstName} ${worker.lastName}`.trim()
+        const signedAt = new Date()
+        let consentPdfKey: string
+        try {
+            const pdfBuffer = await buildInformedConsentPdf({
+                patientFullName,
+                signedAt,
+                signatureDataUrl: input.informedConsentSignatureDataUrl,
+            })
+            consentPdfKey = informedConsentFileKeyReceptionWalkIn(worker.id)
+            const uploadResult = await uploadPdfBuffer(pdfBuffer, consentPdfKey)
+            if (!uploadResult.success) {
+                return {
+                    success: false as const,
+                    error: uploadResult.error || 'No se pudo guardar el consentimiento firmado.',
+                }
+            }
+        } catch (consentErr) {
+            console.error('[createReceptionWalkInEvent consent]', consentErr)
+            return {
+                success: false as const,
+                error:
+                    consentErr instanceof Error
+                        ? consentErr.message
+                        : 'Error al generar el consentimiento informado.',
+            }
+        }
+
+        const intakeCreatedByUserId = session.user.id
+        const created = await prisma.$transaction(async (tx) => {
+            const event = await tx.medicalEvent.create({
+                data: {
+                    workerId: worker.id,
+                    branchId: branch.id,
+                    status: 'CHECKED_IN',
+                    checkInDate: signedAt,
+                    intakeSource: input.intakeSource,
+                    appointmentId: input.intakeSource === 'EXTERNAL_WALK_IN' ? null : undefined,
+                    billingCompanyId: input.intakeSource === 'EXTERNAL_WALK_IN' ? null : undefined,
+                    intakeCreatedByUserId,
+                },
+                select: { id: true },
+            })
+            await tx.worker.update({
+                where: { id: worker.id },
+                data: {
+                    lastInformedConsentPdfUrl: consentPdfKey,
+                    lastInformedConsentSignedAt: signedAt,
+                },
+            })
+            return event
+        })
+
+        revalidatePath('/reception')
+        return { success: true as const, eventId: created.id }
+    } catch (error) {
+        console.error('createReceptionWalkInEvent', error)
+        return { success: false as const, error: 'No se pudo registrar el ingreso.' }
+    }
+}
+
 export async function createExternalWalkInEvent(input: { workerId: string, branchId: string }) {
     try {
         const session = await getServerSession(authOptions)

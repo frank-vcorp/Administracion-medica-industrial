@@ -443,10 +443,12 @@ export async function deliverExamenMedicoPdf(
           [
             hl.empresa_anterior_1 && `Anterior 1: ${str(hl.empresa_anterior_1)} (${str(hl.puesto_anterior_1)}, ${str(hl.tiempo_anterior_1)})`,
             hl.empresa_anterior_2 && `Anterior 2: ${str(hl.empresa_anterior_2)} (${str(hl.puesto_anterior_2)}, ${str(hl.tiempo_anterior_2)})`,
-            hl.exposicion_quimica && `Exposición química: ${str(hl.exposicion_quimica_especifique) || 'Sí'}`,
-            hl.exposicion_fisica && `Exposición física: ${str(hl.exposicion_fisica_especifique) || 'Sí'}`,
-            hl.exposicion_biologica && `Exposición biológica: ${str(hl.exposicion_biologica_especifique) || 'Sí'}`,
-            hl.exposicion_ergonomica && `Exposición ergonómica: ${str(hl.exposicion_ergonomica_especifique) || 'Sí'}`,
+            hl.exposicion_fisica && `Riesgos físicos: ${str(hl.exposicion_fisica_especifique) || 'Sí'}`,
+            hl.exposicion_quimica && `Riesgos químicos: ${str(hl.exposicion_quimica_especifique) || 'Sí'}`,
+            hl.exposicion_biologica && `Riesgos biológicos: ${str(hl.exposicion_biologica_especifique) || 'Sí'}`,
+            hl.exposicion_psicosocial &&
+              `Riesgos psicosociales: ${str(hl.exposicion_psicosocial_especifique) || 'Sí'}`,
+            hl.exposicion_ergonomica && `Riesgos ergonómicos: ${str(hl.exposicion_ergonomica_especifique) || 'Sí'}`,
           ]
             .filter(Boolean)
             .join('. ') || null,

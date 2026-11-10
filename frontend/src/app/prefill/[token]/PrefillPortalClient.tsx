@@ -11,6 +11,11 @@
 
 import { useState } from 'react'
 import { savePartialModule1, submitModule1 } from '@/actions/prefilled-invitation.actions'
+import {
+  HISTORIA_LABORAL_EXPOSICION_AGENTES,
+  HISTORIA_LABORAL_RIESGOS_TRABAJO,
+} from '@/lib/antecedentes-fields'
+import HistoriaLaboralFactoresRiesgoReferencia from '@/components/clinical/HistoriaLaboralFactoresRiesgoReferencia'
 
 // ─── Tipos locales ────────────────────────────────────────────────────────────
 
@@ -35,6 +40,16 @@ interface HistoriaLaboral {
   empresa_anterior_2?: string
   puesto_anterior_2?: string
   tiempo_anterior_2?: string
+  exposicion_quimica?: boolean
+  exposicion_quimica_especifique?: string
+  exposicion_fisica?: boolean
+  exposicion_fisica_especifique?: string
+  exposicion_biologica?: boolean
+  exposicion_biologica_especifique?: string
+  exposicion_psicosocial?: boolean
+  exposicion_psicosocial_especifique?: string
+  exposicion_ergonomica?: boolean
+  exposicion_ergonomica_especifique?: string
   accidentes_trabajo?: boolean
   accidentes_descripcion?: string
   enfermedades_trabajo?: boolean
@@ -202,6 +217,46 @@ function BooleanField({
   )
 }
 
+/** Normaliza booleanos si vienen como string desde datos guardados antiguos. */
+function normalizeHistoriaLaboral(raw: unknown): HistoriaLaboral {
+  if (!raw || typeof raw !== 'object') return {}
+  const o = raw as Record<string, unknown>
+  const str = (k: string): string | undefined => {
+    const v = o[k]
+    if (v == null) return undefined
+    if (typeof v === 'string') return v
+    return String(v)
+  }
+  const bool = (k: string): boolean | undefined => {
+    const v = o[k]
+    if (v === true || v === 'true') return true
+    if (v === false || v === 'false') return false
+    return undefined
+  }
+  return {
+    empresa_anterior_1: str('empresa_anterior_1'),
+    puesto_anterior_1: str('puesto_anterior_1'),
+    tiempo_anterior_1: str('tiempo_anterior_1'),
+    empresa_anterior_2: str('empresa_anterior_2'),
+    puesto_anterior_2: str('puesto_anterior_2'),
+    tiempo_anterior_2: str('tiempo_anterior_2'),
+    exposicion_quimica: bool('exposicion_quimica'),
+    exposicion_quimica_especifique: str('exposicion_quimica_especifique'),
+    exposicion_fisica: bool('exposicion_fisica'),
+    exposicion_fisica_especifique: str('exposicion_fisica_especifique'),
+    exposicion_biologica: bool('exposicion_biologica'),
+    exposicion_biologica_especifique: str('exposicion_biologica_especifique'),
+    exposicion_psicosocial: bool('exposicion_psicosocial'),
+    exposicion_psicosocial_especifique: str('exposicion_psicosocial_especifique'),
+    exposicion_ergonomica: bool('exposicion_ergonomica'),
+    exposicion_ergonomica_especifique: str('exposicion_ergonomica_especifique'),
+    accidentes_trabajo: bool('accidentes_trabajo'),
+    accidentes_descripcion: str('accidentes_descripcion'),
+    enfermedades_trabajo: bool('enfermedades_trabajo'),
+    enfermedades_descripcion: str('enfermedades_descripcion'),
+  }
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function PrefillPortalClient({
@@ -215,7 +270,7 @@ export default function PrefillPortalClient({
 }: Props) {
   const [formData, setFormData] = useState<FormData>({
     datos_personales: (existingData?.datos_personales as DatosPersonales) ?? {},
-    historia_laboral:  (existingData?.historia_laboral  as HistoriaLaboral) ?? {},
+    historia_laboral: normalizeHistoriaLaboral(existingData?.historia_laboral),
     heredo_familiares: (existingData?.heredo_familiares as HeredoFamiliares) ?? {},
   })
   const [activeTab, setActiveTab] = useState<Tab>('datos_personales')
@@ -453,7 +508,8 @@ export default function PrefillPortalClient({
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
             <h2 className="text-base font-black text-slate-800">🏭 Historia Laboral</h2>
             <p className="text-xs text-slate-500">
-              Empleos anteriores y antecedentes de riesgos laborales.
+              Empleos anteriores; <strong>exposición a agentes</strong> en el trabajo (apartado propio);
+              y <strong>aparte</strong>, si aplica, accidente laboral o enfermedad profesional.
             </p>
 
             {/* Empleo anterior 1 */}
@@ -512,27 +568,65 @@ export default function PrefillPortalClient({
               </div>
             </div>
 
-            {/* Accidentes y enfermedades */}
-            <div className="space-y-4 pt-2">
+            {/* Factores de riesgo — distinto de accidente laboral / enfermedad profesional */}
+            <div className="space-y-4 pt-2 border-t border-slate-100">
               <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                Antecedentes de salud laboral
+                Factores de riesgo en el trabajo
               </p>
-              <BooleanField
-                label="¿Ha tenido accidente laboral?"
-                value={hl.accidentes_trabajo}
-                detailLabel="Describe brevemente el accidente"
-                detailValue={hl.accidentes_descripcion}
-                onBoolChange={(v) => updateHL({ accidentes_trabajo: v })}
-                onDetailChange={(v) => updateHL({ accidentes_descripcion: v })}
-              />
-              <BooleanField
-                label="¿Ha padecido enfermedad profesional?"
-                value={hl.enfermedades_trabajo}
-                detailLabel="Describe brevemente la enfermedad"
-                detailValue={hl.enfermedades_descripcion}
-                onBoolChange={(v) => updateHL({ enfermedades_trabajo: v })}
-                onDetailChange={(v) => updateHL({ enfermedades_descripcion: v })}
-              />
+              <HistoriaLaboralFactoresRiesgoReferencia />
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Indica si en tu puesto hubo exposición habitual a alguno de estos factores.
+                Cuéntalo con el mayor detalle posible (qué, cuánto tiempo, EPP, turnos).
+                No es lo mismo que haber tenido un accidente o una enfermedad ya declarada como
+                profesional (eso va abajo).
+              </p>
+              {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(({ key, label, descKey, questionLabel }) => (
+                <BooleanField
+                  key={key}
+                  label={questionLabel ?? `¿Exposición a ${label.toLowerCase()}?`}
+                  value={hl[key as keyof HistoriaLaboral] as boolean | undefined}
+                  detailLabel="Describe brevemente (agente, tiempo aproximado, EPP…)"
+                  detailValue={hl[descKey as keyof HistoriaLaboral] as string | undefined}
+                  onBoolChange={(v) =>
+                    updateHL({
+                      [key]: v,
+                      ...(v ? {} : { [descKey]: '' }),
+                    } as Partial<HistoriaLaboral>)
+                  }
+                  onDetailChange={(v) => updateHL({ [descKey]: v } as Partial<HistoriaLaboral>)}
+                />
+              ))}
+            </div>
+
+            {/* Accidente laboral y enfermedad profesional */}
+            <div className="space-y-4 pt-2 border-t border-slate-100">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+                Accidente laboral y enfermedad profesional
+              </p>
+              {HISTORIA_LABORAL_RIESGOS_TRABAJO.map(({ key, label, descKey }) => (
+                <BooleanField
+                  key={key}
+                  label={
+                    key === 'accidentes_trabajo'
+                      ? '¿Ha tenido accidente laboral?'
+                      : '¿Ha padecido enfermedad profesional?'
+                  }
+                  value={hl[key as keyof HistoriaLaboral] as boolean | undefined}
+                  detailLabel={
+                    key === 'accidentes_trabajo'
+                      ? 'Describe brevemente el accidente'
+                      : 'Describe brevemente la enfermedad'
+                  }
+                  detailValue={hl[descKey as keyof HistoriaLaboral] as string | undefined}
+                  onBoolChange={(v) =>
+                    updateHL({
+                      [key]: v,
+                      ...(v ? {} : { [descKey]: '' }),
+                    } as Partial<HistoriaLaboral>)
+                  }
+                  onDetailChange={(v) => updateHL({ [descKey]: v } as Partial<HistoriaLaboral>)}
+                />
+              ))}
             </div>
           </div>
         )}

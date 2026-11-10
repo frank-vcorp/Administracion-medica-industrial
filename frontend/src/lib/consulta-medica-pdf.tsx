@@ -7,6 +7,7 @@ import {
 import { CONSULTA_ANTECEDENTES_RUBROS } from '@/lib/clinical/consulta-antecedentes-resumen'
 import {
   TIPO_CONSULTA_LABELS,
+  TIPO_INCAPACIDAD_CONSULTA_LABELS,
   type ConsultaMedicaPayload,
   type RecetaLinea,
   type TipoConsultaValue,
@@ -317,19 +318,25 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
             <Text style={styles.value}>{c.diagnostico_unificado}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Incapacidad:</Text>
+            <Text style={styles.label}>¿Requiere incapacidad?:</Text>
             <Text style={styles.value}>{c.otorga_incapacidad}</Text>
           </View>
           {c.otorga_incapacidad === 'SI' ? (
             <>
               <View style={styles.row}>
-                <Text style={styles.label}>Días:</Text>
-                <Text style={styles.value}>{String(c.dias_incapacidad ?? 0)}</Text>
+                <Text style={styles.label}>Tipo:</Text>
+                <Text style={styles.value}>
+                  {c.tipo_incapacidad
+                    ? TIPO_INCAPACIDAD_CONSULTA_LABELS[c.tipo_incapacidad]
+                    : '—'}
+                </Text>
               </View>
-              <View style={styles.row}>
-                <Text style={styles.label}>Pase de salida:</Text>
-                <Text style={styles.value}>{c.pase_salida ?? 'NO'}</Text>
-              </View>
+              {c.tipo_incapacidad === 'INTERNA_SME' ? (
+                <View style={styles.row}>
+                  <Text style={styles.label}>Días (interna SME):</Text>
+                  <Text style={styles.value}>{String(c.dias_incapacidad ?? 0)}</Text>
+                </View>
+              ) : null}
             </>
           ) : null}
           <View style={styles.row}>
