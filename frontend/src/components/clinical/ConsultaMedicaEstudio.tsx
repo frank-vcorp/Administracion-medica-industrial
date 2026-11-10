@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
+import { saveConsultaMedica, scheduleConsultaSeguimiento } from '@/actions/consulta-medica.actions'
+import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ConsultaAntecedentesResumen } from '@/components/clinical/ConsultaAntecedentesResumen'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
@@ -17,7 +18,7 @@ import ConsultaDerivadosStudiesPicker from '@/components/clinical/ConsultaDeriva
 import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
-import { buildProximaCitaFields } from '@/lib/clinical/consulta-seguimiento'
+import { buildProximaCitaFields, formatProximaCitaLine } from '@/lib/clinical/consulta-seguimiento'
 import {
   formatCie10Unified,
   parseDiagnosticoUnificadoDisplay,
@@ -131,6 +132,10 @@ export default function ConsultaMedicaEstudio({
   const [proximaCitaAppointmentId, setProximaCitaAppointmentId] = useState(
     parsed?.proxima_cita_appointment_id ?? '',
   )
+  const [seguimientoFechaInput, setSeguimientoFechaInput] = useState('')
+  const [seguimientoHoraInput, setSeguimientoHoraInput] = useState('')
+  const [scheduleError, setScheduleError] = useState('')
+  const [schedulePending, setSchedulePending] = useState(false)
   const [recetaLineas, setRecetaLineas] = useState<RecetaLinea[]>(
     parsed?.receta_lineas?.length ? parsed.receta_lineas : [emptyRecetaLine()],
   )
@@ -173,6 +178,23 @@ export default function ConsultaMedicaEstudio({
   })
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
   const [hasPersisted, setHasPersisted] = useState(Boolean(parsed))
+
+  useEffect(() => {
+    const savedName = parsed?.medico_nombre?.trim() ?? ''
+    const savedLicense = parsed?.medico_cedula?.trim() ?? ''
+    if (savedName && savedLicense && savedLicense !== '—') return
+    let cancelled = false
+    void getCurrentDoctorProfile().then((res) => {
+      if (cancelled || !res.success) return
+      const name = res.profile.fullName?.trim() ?? ''
+      const license = res.profile.professionalLicense?.trim() ?? ''
+      if (!savedName && name) setMedicoNombre(name)
+      if ((!savedLicense || savedLicense === '—') && license) setMedicoCedula(license)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [parsed?.medico_cedula, parsed?.medico_nombre])
 
   const imc = useMemo(() => {
     const p = parseFloat(signos.peso_kg ?? '')
@@ -329,8 +351,44 @@ export default function ConsultaMedicaEstudio({
     })
   }
 
+  async function agendarSeguimiento() {
+    setScheduleError('')
+    if (!seguimientoFechaInput || !seguimientoHoraInput) {
+      setScheduleError('Indica la fecha y la hora de la consulta de seguimiento.')
+      return
+    }
+    setSchedulePending(true)
+    try {
+      const res = await scheduleConsultaSeguimiento({
+        eventId,
+        eventTestId,
+        workerId,
+        date: seguimientoFechaInput,
+        time: seguimientoHoraInput,
+        existingAppointmentId: proximaCitaAppointmentId,
+      })
+      if (!res.success) {
+        setScheduleError(res.error)
+        return
+      }
+      setProximaCitaFecha(res.fecha)
+      setProximaCitaHora(res.hora)
+      setProximaCitaAppointmentId(res.appointmentId)
+      setSeguimientoFechaInput(res.dateInput)
+      setSeguimientoHoraInput(res.timeInput)
+      setHasPersisted(true)
+    } finally {
+      setSchedulePending(false)
+    }
+  }
+
   const inputClass =
     'w-full bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 border-none p-2.5 rounded-lg text-sm outline-none disabled:opacity-60'
+
+  const seguimientoAgendado = formatProximaCitaLine({
+    proxima_cita_fecha: proximaCitaFecha,
+    proxima_cita_hora: proximaCitaHora,
+  })
 
   return (
     <div className="space-y-4">
@@ -595,55 +653,6 @@ export default function ConsultaMedicaEstudio({
             onChange={setIndicaciones}
             disabled={readonly}
           />
-          <div className="border-t border-slate-100 pt-3 space-y-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Seguimiento</p>
-            <p className="text-xs text-slate-500">
-              Próxima cita. El médico escribe fecha y hora a mano.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha</label>
-                <input
-                  className={inputClass}
-                  placeholder="Ej. 12 de diciembre de 2026"
-                  value={proximaCitaFecha}
-                  onChange={(e) => setProximaCitaFecha(e.target.value)}
-                  disabled={readonly}
-                  maxLength={200}
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Hora</label>
-                <input
-                  className={inputClass}
-                  placeholder="Ej. 10:30"
-                  value={proximaCitaHora}
-                  onChange={(e) => setProximaCitaHora(e.target.value)}
-                  disabled={readonly}
-                  maxLength={80}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">
-                Id de cita (opcional)
-              </label>
-              <input
-                className={inputClass}
-                placeholder="UUID de la cita, si ya existe"
-                value={proximaCitaAppointmentId}
-                onChange={(e) => setProximaCitaAppointmentId(e.target.value)}
-                disabled={readonly}
-                maxLength={64}
-                spellCheck={false}
-              />
-              {proximaCitaAppointmentId.trim() ? (
-                <p className="mt-1 text-xs text-slate-600 font-mono">
-                  Cita vinculada: {proximaCitaAppointmentId.trim()}
-                </p>
-              ) : null}
-            </div>
-          </div>
           <p className="text-[10px] font-bold text-slate-400 uppercase">Medicamento</p>
           {recetaLineas.map((line, idx) => (
             <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3">
@@ -743,25 +752,58 @@ export default function ConsultaMedicaEstudio({
 
       {activeTab === 'cierre' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Médico</label>
-              <input
-                className={inputClass}
-                value={medicoNombre}
-                onChange={(e) => setMedicoNombre(e.target.value)}
-                disabled={readonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Cédula profesional</label>
-              <input
-                className={inputClass}
-                value={medicoCedula}
-                onChange={(e) => setMedicoCedula(e.target.value)}
-                disabled={readonly}
-              />
-            </div>
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Consulta de seguimiento</p>
+            <p className="text-xs text-slate-500">
+              Elige fecha y hora. La cita queda en la agenda de la sucursal y se imprime en la nota
+              y la receta.
+            </p>
+            {seguimientoAgendado ? (
+              <p className="text-sm font-semibold text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
+                Agendada: {seguimientoAgendado}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">Aún no hay consulta de seguimiento.</p>
+            )}
+            {!readonly && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Fecha</span>
+                    <input
+                      className={`${inputClass} mt-1`}
+                      type="date"
+                      value={seguimientoFechaInput}
+                      onChange={(e) => setSeguimientoFechaInput(e.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Hora</span>
+                    <input
+                      className={`${inputClass} mt-1`}
+                      type="time"
+                      value={seguimientoHoraInput}
+                      onChange={(e) => setSeguimientoHoraInput(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  disabled={schedulePending}
+                  onClick={() => void agendarSeguimiento()}
+                  className="bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl disabled:opacity-50"
+                >
+                  {schedulePending
+                    ? 'Agendando…'
+                    : proximaCitaAppointmentId
+                      ? 'Reagendar consulta de seguimiento'
+                      : 'Agendar consulta de seguimiento'}
+                </button>
+                {scheduleError ? (
+                  <p className="text-xs text-red-600">{scheduleError}</p>
+                ) : null}
+              </>
+            )}
           </div>
           {Boolean(cerradaAt) && (
             <div className="flex flex-wrap gap-3 pt-2">

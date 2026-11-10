@@ -7,10 +7,22 @@ import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { authOptions } from '@/auth'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
+import { createAppointment } from '@/actions/appointment.actions'
 import { validateConsultaMedicaPayload } from '@/lib/clinical/consulta-medica-validate'
 import type { ConsultaMedicaPayload } from '@/schemas/clinical/consulta-medica.schema'
 import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
+import { formatScheduledFollowUp } from '@/lib/clinical/consulta-seguimiento'
 import { searchCie10Catalog, type Cie10Entry } from '@/lib/clinical/cie-10-catalog'
+import {
+  appointmentAgendaHour,
+  formatAppointmentAgendaDateString,
+  parseAppointmentLocalDateTime,
+} from '@/lib/appointment-scheduling'
+import {
+  appointmentCapacityUserMessage,
+  checkBranchHourCapacity,
+} from '@/lib/appointment-capacity'
+import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
 
 const CLINICAL_ROLES = new Set([
   'SUPERADMIN',
@@ -72,6 +84,173 @@ async function syncFollowUpAppointmentLink(
   } catch {
     console.error('[saveConsultaMedica] follow-up link', eventId)
   }
+}
+
+export type ScheduleConsultaSeguimientoResult =
+  | {
+      success: true
+      appointmentId: string
+      fecha: string
+      hora: string
+      dateInput: string
+      timeInput: string
+    }
+  | { success: false; error: string }
+
+/**
+ * Crea o mueve la cita de seguimiento del mismo paciente, en la sucursal del evento.
+ * La fecha y la hora quedan en la nota; el id enlaza la cita de la agenda.
+ */
+export async function scheduleConsultaSeguimiento(input: {
+  eventId: string
+  eventTestId: string
+  workerId: string
+  date: string
+  time: string
+  existingAppointmentId?: string
+}): Promise<ScheduleConsultaSeguimientoResult> {
+  const access = await assertClinicalAccess()
+  if (!access.ok) return { success: false, error: access.error }
+
+  const date = input.date.trim()
+  const time = input.time.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
+    return { success: false, error: 'Indica una fecha y una hora válidas.' }
+  }
+
+  const eventTest = await prisma.eventTest.findUnique({
+    where: { id: input.eventTestId },
+    select: {
+      id: true,
+      eventId: true,
+      testNameSnapshot: true,
+      clinicalContext: true,
+      event: {
+        select: {
+          id: true,
+          workerId: true,
+          branchId: true,
+          billingCompanyId: true,
+          worker: { select: { companyId: true, medicalProfileId: true } },
+        },
+      },
+    },
+  })
+  if (!eventTest || eventTest.eventId !== input.eventId) {
+    return { success: false, error: 'El estudio no pertenece a este expediente.' }
+  }
+  if (eventTest.event.workerId !== input.workerId) {
+    return { success: false, error: 'El paciente no coincide con el expediente.' }
+  }
+  if (!isConsultaMedicaTestName(eventTest.testNameSnapshot)) {
+    return { success: false, error: 'Este estudio no es una consulta médica.' }
+  }
+
+  const companyId = eventTest.event.billingCompanyId ?? eventTest.event.worker.companyId
+  if (!companyId) {
+    return {
+      success: false,
+      error: 'Este paciente no tiene empresa. Agéndalo desde Gestión de citas.',
+    }
+  }
+
+  const scheduledAt = parseAppointmentLocalDateTime(date, time)
+  if (Number.isNaN(scheduledAt.getTime())) {
+    return { success: false, error: 'Indica una fecha y una hora válidas.' }
+  }
+
+  const branchId = eventTest.event.branchId
+  const existingId = input.existingAppointmentId?.trim() ?? ''
+  let appointmentId = ''
+
+  try {
+    if (existingId && z.string().uuid().safeParse(existingId).success) {
+      const existing = await prisma.appointment.findFirst({
+        where: { id: existingId, workerId: input.workerId },
+        select: { id: true, branchId: true, scheduledAt: true, status: true, notes: true },
+      })
+      if (existing && existing.status !== 'CANCELLED' && existing.status !== 'RESCHEDULED') {
+        const capacity = await checkBranchHourCapacity(prisma, branchId, scheduledAt)
+        const sameSlot =
+          existing.branchId === branchId &&
+          formatAppointmentAgendaDateString(existing.scheduledAt) ===
+            formatAppointmentAgendaDateString(scheduledAt) &&
+          appointmentAgendaHour(existing.scheduledAt) === appointmentAgendaHour(scheduledAt)
+        if (!capacity.ok && !sameSlot) {
+          return { success: false, error: appointmentCapacityUserMessage(capacity) }
+        }
+        const notes = existing.notes?.trim() ? existing.notes : 'Consulta de seguimiento'
+        try {
+          await prisma.appointment.update({
+            where: { id: existing.id },
+            data: {
+              scheduledAt,
+              branchId,
+              notes,
+              followUpFromMedicalEventId: eventTest.event.id,
+            },
+          })
+        } catch (err) {
+          if (!isPrismaMissingColumnError(err)) throw err
+          await prisma.appointment.update({
+            where: { id: existing.id },
+            data: { scheduledAt, branchId, notes },
+          })
+        }
+        appointmentId = existing.id
+      }
+    }
+
+    if (!appointmentId) {
+      const created = await createAppointment({
+        workerId: input.workerId,
+        companyId,
+        branchId,
+        scheduledAt,
+        notes: 'Consulta de seguimiento',
+        source: 'CONSULTA_SEGUIMIENTO',
+        serviceProfileId: eventTest.event.worker.medicalProfileId,
+      })
+      if (!created.success || !created.appointment) {
+        const raw = created.success ? '' : created.error
+        return {
+          success: false,
+          error:
+            raw === 'CLIENTE_DESHABILITADO'
+              ? 'No se puede agendar: la empresa del paciente no está activa.'
+              : raw || 'No se pudo agendar la consulta de seguimiento.',
+        }
+      }
+      appointmentId = created.appointment.id
+      await syncFollowUpAppointmentLink(eventTest.event.id, input.workerId, appointmentId)
+    }
+  } catch (err) {
+    console.error('[scheduleConsultaSeguimiento]', eventTest.event.id)
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'No se pudo agendar la consulta de seguimiento.',
+    }
+  }
+
+  const formatted = formatScheduledFollowUp(scheduledAt)
+  const current = eventTest.clinicalContext
+  if (current && typeof current === 'object' && !Array.isArray(current)) {
+    await prisma.eventTest.update({
+      where: { id: eventTest.id },
+      data: {
+        clinicalContext: {
+          ...(current as Record<string, unknown>),
+          proxima_cita_fecha: formatted.fecha,
+          proxima_cita_hora: formatted.hora,
+          proxima_cita_appointment_id: appointmentId,
+        } as Prisma.InputJsonValue,
+      },
+    })
+  }
+
+  revalidatePath(`/events/${input.eventId}`)
+  revalidatePath('/appointments')
+  return { success: true, appointmentId, ...formatted }
 }
 
 export async function saveConsultaMedica(

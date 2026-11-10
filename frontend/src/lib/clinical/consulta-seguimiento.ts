@@ -1,4 +1,9 @@
 import type { ConsultaMedicaPayload } from '@/schemas/clinical/consulta-medica.constants'
+import {
+  AMI_APPOINTMENT_TIMEZONE,
+  formatAppointmentAgendaDateString,
+  formatAppointmentAgendaTime,
+} from '@/lib/appointment-scheduling'
 
 export type ProximaCitaFields = Pick<
   ConsultaMedicaPayload,
@@ -30,7 +35,24 @@ export function formatProximaCitaLine(
   const appointmentId = payload?.proxima_cita_appointment_id?.trim()
   if (!fecha && !hora && !appointmentId) return null
   const when = [fecha, hora].filter(Boolean).join(' · ')
-  if (when && appointmentId) return `${when} (cita ${appointmentId})`
   if (when) return when
   return `Cita vinculada: ${appointmentId}`
+}
+
+/** Fecha y hora que ve el médico y las que se imprimen en la nota. */
+export function formatScheduledFollowUp(scheduledAt: Date): {
+  fecha: string
+  hora: string
+  dateInput: string
+  timeInput: string
+} {
+  const dateInput = formatAppointmentAgendaDateString(scheduledAt)
+  const timeInput = formatAppointmentAgendaTime(scheduledAt).replace(/\s/g, '')
+  const fecha = new Intl.DateTimeFormat('es-MX', {
+    timeZone: AMI_APPOINTMENT_TIMEZONE,
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(scheduledAt)
+  return { fecha, hora: timeInput, dateInput, timeInput }
 }
