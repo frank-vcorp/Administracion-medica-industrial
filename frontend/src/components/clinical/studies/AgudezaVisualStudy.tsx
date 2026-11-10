@@ -8,9 +8,14 @@
  */
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
+import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
+import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCallout"
+import { useClinicalIntervalAutosave } from "@/lib/hooks/useClinicalIntervalAutosave"
+import { mapMedicalExamActionFailure, parseMedicalExamZodIssues } from "@/lib/medical-exam-action-errors"
+import { splitUserFacingMessageLines, type UserFacingError } from "@/lib/user-facing-error"
 // IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): se adopta el catálogo ZIN
 // para los 8 campos de visión (Snellen) + 3 pruebas complementarias.
 // Ver SPEC §4.1.
@@ -71,6 +76,7 @@ export default function AgudezaVisualStudy({
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [aiWarning, setAiWarning] = useState("")
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
 
   const derivedResumen = useMemo(
     () =>
@@ -85,12 +91,35 @@ export default function AgudezaVisualStudy({
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
+  const snapshotKey = useMemo(() => JSON.stringify(formData), [formData])
+
+  const persistDraft = useCallback(async () => {
+    const res = await updateAgudezaVisual(eventId, formData, { autosave: true })
+    if (!res.success) {
+      return {
+        ok: false,
+        message: res.error,
+        error: parseMedicalExamZodIssues(res.technicalDetail) ?? res.technicalDetail,
+        context: 'Agudeza visual (autoguardado)',
+      } as const
+    }
+    return true
+  }, [eventId, formData])
+
+  const { statusLabel: autosaveLabel, markSaved, userFacingError: autosaveError } = useClinicalIntervalAutosave({
+    enabled: !readonly,
+    snapshotKey,
+    save: persistDraft,
+  })
+
   const handleSave = async (markComplete: boolean) => {
     setIsSaving(true)
     setMessage("")
     setAiWarning("")
+    setSaveError(null)
     const res = await updateAgudezaVisual(eventId, formData)
     if (res.success) {
+      markSaved()
       const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
       await updateEventTestStatus(
         eventTestId,
@@ -103,13 +132,27 @@ export default function AgudezaVisualStudy({
         setAiWarning(`La captura clínica se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`)
       }
     } else {
-      setMessage("❌ Error: " + res.error)
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: res.technicalDetail,
+        },
+        markComplete ? 'Agudeza visual (completar)' : 'Agudeza visual (guardado)',
+      )
+      setSaveError(mapped)
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setMessage(`❌ ${mapped.title}: ${line}`)
     }
     setIsSaving(false)
   }
 
   return (
     <div className="space-y-5">
+      {!readonly && (
+        <ClinicalAutosaveIndicator label={autosaveLabel} error={autosaveError} />
+      )}
+      {saveError && <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />}
       {/* Campo Visual */}
       <div>
         <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Campo Visual</h4>

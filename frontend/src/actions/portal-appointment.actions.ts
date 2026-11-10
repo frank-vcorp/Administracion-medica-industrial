@@ -17,7 +17,7 @@ import {
   todayAgendaDateString,
 } from '@/lib/appointment-scheduling'
 import { logAudit } from '@/actions/audit.actions'
-import { getPortalLogisticsWhatsAppPhone } from '@/lib/portal-logistics-whatsapp'
+import { getPortalSpecialRequestRouting } from '@/lib/portal-special-request-logistics'
 import { sendInstitutionalWhatsAppMessage } from '@/lib/portal-institutional-whatsapp'
 import { buildPortalSpecialRequestMessage } from '@/lib/portal-special-request-message'
 import { getServerSession } from 'next-auth/next'
@@ -418,15 +418,21 @@ export async function submitPortalSpecialRequestContact(input: {
   })
 
   const actor = { actorUserId: session.user.id, actorRole: session.user.role as string }
-  const logistics = await sendInstitutionalWhatsAppMessage({
-    toPhone: getPortalLogisticsWhatsAppPhone(),
-    text: message,
-    ...actor,
-  })
+  const routing = await getPortalSpecialRequestRouting()
+
+  let anyLogisticsSent = false
+  for (const to of routing.logisticsPhones) {
+    const r = await sendInstitutionalWhatsAppMessage({
+      toPhone: to,
+      text: message,
+      ...actor,
+    })
+    if (r.sent) anyLogisticsSent = true
+  }
 
   const sellerPhone = company.seller?.phone?.trim() || null
   let seller = { sent: false }
-  if (sellerPhone) {
+  if (routing.copyToSeller && sellerPhone) {
     seller = await sendInstitutionalWhatsAppMessage({
       toPhone: sellerPhone,
       text: message,
@@ -434,7 +440,7 @@ export async function submitPortalSpecialRequestContact(input: {
     })
   }
 
-  if (!logistics.sent && !seller.sent) {
+  if (!anyLogisticsSent && !seller.sent) {
     return {
       success: false as const,
       error:

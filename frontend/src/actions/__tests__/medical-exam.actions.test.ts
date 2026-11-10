@@ -60,7 +60,7 @@ import {
   AG_NUMERIC_0_11,
   AG_ABORTO_VALUES,
   AR_MPF_VALUES,
-  VAC_SI_NO_VALUES,
+  VAC_IMMUNIZATION_VALUES,
   SI_NO_NA_VALUES,
   // IMPL-20260817-08 (ARCH-20260817-02): 5 valores PDF para aptitud +
   // enums cortos para agudeza/presión.
@@ -522,18 +522,11 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
     expect(parsed.salud_bucal).toBe('mala higiene')
   })
 
-  it('21. HEREDOFAMILIARES_VALUES expone 8 valores canónicos ZIN', () => {
-    // SPEC §4.4: 7 campos canónicos (diabetes, has, epilepsia, cardiopatia,
-    // renales, asma, cancer) usan este catálogo.
-    expect(HEREDOFAMILIARES_VALUES).toHaveLength(8)
+  it('21. HEREDOFAMILIARES_VALUES expone 7 parentescos ZIN (F-23 sin OTROS)', () => {
+    expect(HEREDOFAMILIARES_VALUES).toHaveLength(7)
     expect(HEREDOFAMILIARES_VALUES).toContain('NEGADOS')
     expect(HEREDOFAMILIARES_VALUES).toContain('PADRE')
-    expect(HEREDOFAMILIARES_VALUES).toContain('MADRE')
-    expect(HEREDOFAMILIARES_VALUES).toContain('AMBOS')
-    expect(HEREDOFAMILIARES_VALUES).toContain('HERMANOS')
-    expect(HEREDOFAMILIARES_VALUES).toContain('AB PATERNO')
-    expect(HEREDOFAMILIARES_VALUES).toContain('AB MATERNO')
-    expect(HEREDOFAMILIARES_VALUES).toContain('OTROS')
+    expect(HEREDOFAMILIARES_VALUES).not.toContain('OTROS')
   })
 
   it('22. HEREDOFAMILIARES_MENTALES_VALUES expone 3 valores canónicos ZIN', () => {
@@ -631,48 +624,23 @@ describe('ExploracionFisicaSchema IMPL-20260817-01-C2 (ZIN combos + plantilla li
 // `otras_especifique` (max 250 chars, default '') que DA-1 tolera como
 // opcional — registros legacy sin este campo siguen parseando OK.
 // @id IMPL-20260817-02
-describe('FIX L2 IMPL-20260817-02 (heredo-familiares: otras_especifique separado de otras)', () => {
-  it('26. HeredoFamiliaresSchema: input Especifique NO destruye `otras` al tipear', () => {
-    // Antes: tipear 'T' cambiaba `otras` a 'T' → condición se perdía → input
-    // desaparecía. Ahora: `otras` y `otras_especifique` son keys independientes.
-    const initial = HeredoFamiliaresSchema.parse({
-      otras: 'OTROS',
-      otras_especifique: '',
-    })
-    expect(initial.otras).toBe('OTROS')
-    expect(initial.otras_especifique).toBe('')
-
-    // Tipear 'T' en otras_especifique — el campo `otras` NO debe cambiar.
-    const afterTyping = HeredoFamiliaresSchema.parse({
-      otras: 'OTROS',
-      otras_especifique: 'TÍO PATERNO',
-    })
-    expect(afterTyping.otras).toBe('OTROS')
-    expect(afterTyping.otras_especifique).toBe('TÍO PATERNO')
+describe('F-23 heredo-familiares multiselect en schema', () => {
+  it('26. acepta varios parentescos en un campo', () => {
+    const parsed = HeredoFamiliaresSchema.parse({ diabetes: 'PADRE, HERMANOS' })
+    expect(parsed.diabetes).toBe('PADRE, HERMANOS')
   })
 
-  it('27. HeredoFamiliaresSchema: otras_especifique acepta hasta 250 chars', () => {
-    const exactly250 = 'a'.repeat(250)
-    expect(() =>
-      HeredoFamiliaresSchema.parse({ otras: 'OTROS', otras_especifique: exactly250 }),
-    ).not.toThrow()
-
-    const tooLong = 'a'.repeat(251)
-    const result = HeredoFamiliaresSchema.safeParse({
-      otras: 'OTROS',
-      otras_especifique: tooLong,
+  it('27. mentales_especifique independiente del select mentales', () => {
+    const parsed = HeredoFamiliaresSchema.parse({
+      mentales: 'SI',
+      mentales_especifique: 'Depresión — madre',
     })
-    expect(result.success).toBe(false)
+    expect(parsed.mentales).toBe('SI')
+    expect(parsed.mentales_especifique).toBe('Depresión — madre')
   })
 
-  it('28. HeredoFamiliaresSchema: otras_especifique es opcional (default "")', () => {
-    // DA-1: campo nuevo con default '' → registros legacy sin este campo
-    // parsean OK. Verifica además que NO contamina otros campos.
-    const minimal = HeredoFamiliaresSchema.parse({ otras: 'OTROS' })
-    expect(minimal.otras_especifique).toBe('')
-
+  it('28. otras_especifique opcional (default "")', () => {
     const legacyOnly = HeredoFamiliaresSchema.parse({ diabetes: 'PADRE' })
-    expect(legacyOnly.otras).toBeUndefined()
     expect(legacyOnly.otras_especifique).toBe('')
     expect(legacyOnly.diabetes).toBe('PADRE')
   })
@@ -1013,13 +981,12 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
     expect(AG_ABORTO_VALUES).toContain('NO')
   })
 
-  it('52. VAC_SI_NO_VALUES es alias de SI_NO_NA_VALUES (NEGADO / SI / NO APLICA)', () => {
-    // Mismas 3 opciones, en el mismo orden
-    expect(VAC_SI_NO_VALUES.length).toBe(3)
-    expect(VAC_SI_NO_VALUES).toContain('NEGADO')
-    expect(VAC_SI_NO_VALUES).toContain('SI')
-    expect(VAC_SI_NO_VALUES).toContain('NO APLICA')
-    expect([...VAC_SI_NO_VALUES]).toEqual([...SI_NO_NA_VALUES])
+  it('52. VAC_IMMUNIZATION_VALUES — negado / sí / desconoce (F-19)', () => {
+    expect(VAC_IMMUNIZATION_VALUES.length).toBe(3)
+    expect(VAC_IMMUNIZATION_VALUES).toContain('NEGADO')
+    expect(VAC_IMMUNIZATION_VALUES).toContain('SI')
+    expect(VAC_IMMUNIZATION_VALUES).toContain('DESCONOCE')
+    expect(VAC_IMMUNIZATION_VALUES).not.toContain('NO APLICA')
   })
 
   // ── 7 vacunas esperadas (mantener en sync con VACUNAS_LIST en componente) ─
@@ -1033,6 +1000,7 @@ describe('IMPL-20260817-07: Módulo 1 combos — ginecológicos + vacunas', () =
       'm1_vac_influenza',
       'm1_vac_toxoide',
       'm1_vac_hepatitisb',
+      'm1_vac_covid19',
       'm1_vac_otras',
     ]
     expect(EXPECTED_KEYS.length).toBe(7)

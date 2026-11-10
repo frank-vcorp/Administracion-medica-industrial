@@ -9,7 +9,7 @@ import { getDemoProjects } from '@/lib/demo/demo-data';
 export const dynamic = 'force-static';
 
 export const metadata = {
-  title: 'Demo Reportes Masivos UMM | AMI',
+  title: 'Demo Reportes Masivos UMM | SME',
   description: 'Demo navegable del Módulo de Reportes Masivos UMM (datos estáticos).',
 };
 
@@ -75,7 +75,7 @@ export default function DemoReportsListPage() {
         <footer className="mt-12 text-xs text-slate-500">
           <p>
             Este demo es 100% standalone. No consulta la base de datos ni el backend
-            de AMI. Implementaci&oacute;n de referencia para validar el M&oacute;dulo de
+            de SME. Implementaci&oacute;n de referencia para validar el M&oacute;dulo de
             Reportes Masivos UMM antes de invertir en la versi&oacute;n productiva.
           </p>
         </footer>

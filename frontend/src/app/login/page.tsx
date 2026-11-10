@@ -12,6 +12,7 @@ import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { FormEvent, useState, Suspense } from 'react'
 import { BrandLogo } from '@/components/BrandLogo'
+import { SME_BRAND_LINE, SME_LEGAL_NAME } from '@/lib/brand-constants'
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -53,20 +54,20 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <div className="border-b border-[#f0f0f0] px-6 py-3">
-        <p className="text-center text-sm font-bold text-ami-primary">AMI Salud Responsable</p>
+        <p className="text-center text-sm font-bold text-sme-primary">{SME_BRAND_LINE}</p>
       </div>
-      <div className="border-t-2 border-b-[6px] border-t-ami-secondary border-b-ami-primary bg-white px-6 py-4">
+      <div className="border-t-2 border-b-[6px] border-t-sme-secondary border-b-sme-primary bg-white px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-center">
           <BrandLogo className="max-h-14 w-auto" />
         </div>
       </div>
 
       <div className="flex flex-1 items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md rounded-[24px] border border-ami-secondary/10 bg-white p-8 shadow-[0_8px_24px_#592c8226]">
-          <h1 className="mb-2 text-center text-2xl font-bold text-ami-gray">
-            Residente <span className="text-ami-secondary">Digital</span>
+        <div className="w-full max-w-md rounded-[24px] border border-sme-secondary/10 bg-white p-8 shadow-[0_8px_24px_#592c8226]">
+          <h1 className="mb-2 text-center text-2xl font-bold text-sme-gray">
+            Residente <span className="text-sme-secondary">Digital</span>
           </h1>
-          <p className="mb-8 text-center text-sm text-ami-gray">
+          <p className="mb-8 text-center text-sm text-sme-gray">
             Acceso al sistema de salud ocupacional
           </p>
 
@@ -78,7 +79,7 @@ function LoginForm() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-ami-secondary">
+              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-sme-secondary">
                 Correo Electrónico
               </label>
               <input
@@ -88,12 +89,12 @@ function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tu@correo.com"
                 required
-                className="w-full rounded-2xl border-2 border-gray-200 bg-ami-surface px-4 py-3 text-ami-secondary outline-none transition focus:border-ami-primary focus:bg-white focus:ring-4 focus:ring-ami-primary/20"
+                className="w-full rounded-2xl border-2 border-gray-200 bg-sme-surface px-4 py-3 text-sme-secondary outline-none transition focus:border-sme-primary focus:bg-white focus:ring-4 focus:ring-sme-primary/20"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-ami-secondary">
+              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-sme-secondary">
                 Contraseña
               </label>
               <input
@@ -103,24 +104,24 @@ function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="w-full rounded-2xl border-2 border-gray-200 bg-ami-surface px-4 py-3 text-ami-secondary outline-none transition focus:border-ami-primary focus:bg-white focus:ring-4 focus:ring-ami-primary/20"
+                className="w-full rounded-2xl border-2 border-gray-200 bg-sme-surface px-4 py-3 text-sme-secondary outline-none transition focus:border-sme-primary focus:bg-white focus:ring-4 focus:ring-sme-primary/20"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-full bg-ami-primary py-3 font-semibold text-white shadow-[0_4px_12px_#00afaa4d] transition hover:bg-ami-primary-hover disabled:bg-ami-primary/40"
+              className="w-full rounded-full bg-sme-primary py-3 font-semibold text-white shadow-[0_4px_12px_#00afaa4d] transition hover:bg-sme-primary-hover disabled:bg-sme-primary/40"
             >
               {loading ? 'Cargando...' : 'Iniciar Sesión'}
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-ami-gray">
+          <p className="mt-6 text-center text-sm text-sme-gray">
             ¿No tienes cuenta? Contacta a tu administrador.
           </p>
-          <p className="mt-2 text-center text-xs text-ami-gray/70">
-            © 2026 AMI Salud Responsable. Todos los derechos reservados.
+          <p className="mt-2 text-center text-xs text-sme-gray/70">
+            © 2026 {SME_LEGAL_NAME}. Todos los derechos reservados.
           </p>
         </div>
       </div>

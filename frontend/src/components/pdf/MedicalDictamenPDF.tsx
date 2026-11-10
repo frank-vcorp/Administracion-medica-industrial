@@ -5,7 +5,7 @@ import {
     buildDictamenStudySummary,
     type DictamenStudyEntry,
 } from '@/lib/dictamen-summary'
-import { SME_BRAND_LINE } from '@/lib/brand-constants'
+import { SME_BRAND_LINE, SME_LEGAL_NAME } from '@/lib/brand-constants'
 
 const styles = StyleSheet.create({
     page: { padding: 40, fontFamily: 'Helvetica' },
@@ -192,7 +192,7 @@ export const MedicalDictamenPDF = ({ data }: {
                     <Text style={styles.membreteBrandTitle}>DICTAMEN MÉDICO DE APTITUD LABORAL</Text>
                     <Text style={styles.membreteBrandSubtitle}>{SME_BRAND_LINE}</Text>
                     <Text style={styles.membreteBrandSystem}>
-                        Administración Médica Industrial (AMI) · Sistema Residente Digital
+                        {SME_LEGAL_NAME} · Sistema clínico digital
                     </Text>
                 </View>
                 <View style={styles.membreteFolio}>
@@ -268,9 +268,9 @@ export const MedicalDictamenPDF = ({ data }: {
                 sólo nombres de estudios disponibles en el dominio AMI. */}
             {availableNotApplied.length > 0 && (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>III. ESTUDIOS ADICIONALES DISPONIBLES EN EL CATÁLOGO AMI</Text>
+                    <Text style={styles.sectionTitle}>III. ESTUDIOS ADICIONALES DISPONIBLES EN EL CATÁLOGO CLÍNICO</Text>
                     <Text style={{ fontSize: 9, color: '#64748b', marginBottom: 6 }}>
-                        Estudios del catálogo AMI no aplicados a este evento. Su inclusión en
+                        Estudios del catálogo clínico no aplicados a este evento. Su inclusión en
                         futuros exámenes queda a criterio del médico dictaminador.
                     </Text>
                     {availableNotApplied.map((name) => (
@@ -280,7 +280,7 @@ export const MedicalDictamenPDF = ({ data }: {
                                 <Text style={[styles.studyBadge, styles.studyBadgeDisponible]}>  NO APLICADO  </Text>
                             </Text>
                             <Text style={styles.studySummary}>
-                                Disponible en el catálogo AMI — no aplicado a este evento.
+                                Disponible en el catálogo clínico — no aplicado a este evento.
                             </Text>
                         </View>
                     ))}
@@ -396,7 +396,7 @@ export const MedicalDictamenPDF = ({ data }: {
 
             {/* PIE */}
             <Text style={styles.footer}>
-                Este documento es un dictamen médico oficial y confidencial emitido por Residente Digital (Sistema AMI).
+                Este documento es un dictamen médico oficial y confidencial emitido por Residente Digital ({SME_LEGAL_NAME}).
                 Queda estrictamente prohibida su alteración o reproducción no autorizada.
             </Text>
         </Page>

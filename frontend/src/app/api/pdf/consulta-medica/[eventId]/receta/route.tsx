@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { pdf } from '@react-pdf/renderer'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
+import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
 import { ConsultaMedicaRecetaPDF } from '@/lib/consulta-medica-pdf'
 import { loadConsultaMedicaPdfInput } from '@/lib/consulta-medica-pdf-data'
 
@@ -41,8 +42,10 @@ export async function GET(
   const sessionName = prescriptorUser?.fullName?.trim() || session.user.fullName || session.user.name || ''
   const filledBySession = !storedName || storedName === 'Médico' || storedName === sessionName
   const storedLicense = loaded.data.consulta.medico_cedula.trim()
+  const logoUrl = (await resolveSmeLogoDataUrl()) ?? ''
   const data = {
     ...loaded.data,
+    logoUrl,
     prescriptor: {
       nombre: filledBySession ? sessionName || storedName || 'Médico' : storedName,
       cedula:

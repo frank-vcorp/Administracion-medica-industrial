@@ -8,6 +8,7 @@ type Props = {
   text: string
   auditContext?: string
   entityId?: string
+  attachPatientTriptych?: boolean
   className?: string
   'data-testid'?: string
   children: React.ReactNode
@@ -18,6 +19,7 @@ export default function WhatsAppAutoSendButton({
   text,
   auditContext,
   entityId,
+  attachPatientTriptych,
   className,
   'data-testid': dataTestId,
   children,
@@ -33,6 +35,7 @@ export default function WhatsAppAutoSendButton({
         text,
         auditContext,
         entityId,
+        attachPatientTriptych,
       })
       if (res.sent) {
         setSent(true)

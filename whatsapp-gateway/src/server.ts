@@ -1,8 +1,8 @@
 import express from 'express'
 import { baileysManager } from './baileys-manager.js'
+import { readGatewayDocumentAsset, type GatewayDocumentKey } from './triptych-asset.js'
 
 const app = express()
-app.use(express.json({ limit: '32kb' }))
 
 function requireBearer(req: express.Request, res: express.Response): boolean {
   const secret = process.env.WHATSAPP_GATEWAY_SECRET?.trim()
@@ -23,6 +23,62 @@ app.get('/v1/admin/status', (req, res) => {
   if (!requireBearer(req, res)) return
   res.json({ ok: true, ...baileysManager.getSnapshot() })
 })
+
+/** PDF embebido (~9 MB): payload pequeño; evita límite JSON 32kb en producción. */
+app.post('/v1/messages/send-document-key', express.json({ limit: '32kb' }), async (req, res) => {
+  if (!requireBearer(req, res)) return
+  const to = typeof req.body?.to === 'string' ? req.body.to : ''
+  const documentKey = req.body?.documentKey as GatewayDocumentKey
+  const caption = typeof req.body?.caption === 'string' ? req.body.caption : undefined
+  if (documentKey !== 'patient_preparation_triptych') {
+    res.status(400).json({ ok: false, sent: false, error: 'documentKey no soportada' })
+    return
+  }
+  try {
+    const asset = await readGatewayDocumentAsset(documentKey)
+    await baileysManager.sendDocumentBuffer({
+      toPhone: to,
+      fileName: asset.fileName,
+      mimetype: asset.mimetype,
+      buffer: asset.buffer,
+      caption,
+    })
+    res.json({ ok: true, sent: true })
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      sent: false,
+      error: err instanceof Error ? err.message : 'No se pudo enviar documento',
+    })
+  }
+})
+
+app.post('/v1/messages/send-document', express.json({ limit: '20mb' }), async (req, res) => {
+  if (!requireBearer(req, res)) return
+  const to = typeof req.body?.to === 'string' ? req.body.to : ''
+  const fileName = typeof req.body?.fileName === 'string' ? req.body.fileName : ''
+  const mimetype = typeof req.body?.mimetype === 'string' ? req.body.mimetype : ''
+  const dataBase64 = typeof req.body?.dataBase64 === 'string' ? req.body.dataBase64 : ''
+  const caption = typeof req.body?.caption === 'string' ? req.body.caption : undefined
+  try {
+    await baileysManager.sendDocument({
+      toPhone: to,
+      fileName,
+      mimetype,
+      dataBase64,
+      caption,
+    })
+    res.json({ ok: true, sent: true })
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      sent: false,
+      error: err instanceof Error ? err.message : 'No se pudo enviar documento',
+    })
+  }
+})
+
+app.use(express.json({ limit: '32kb' }))
 
 app.post('/v1/messages/send', async (req, res) => {
   if (!requireBearer(req, res)) return

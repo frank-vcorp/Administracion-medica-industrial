@@ -27,7 +27,7 @@ const SEARCH_HINTS = [
   'Nombre o RFC de empresa (admin)',
 ]
 
-const RECENT_KEY = 'ami-global-search-recent'
+const RECENT_KEY = 'sme-global-search-recent'
 const MAX_RECENT = 5
 
 function groupResults(results: GlobalSearchResult[]) {

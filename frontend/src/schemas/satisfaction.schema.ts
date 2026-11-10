@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
 
 const likert = z.number().int().min(1).max(5)
 
@@ -13,7 +14,12 @@ export const SatisfactionSurveySchema = z.object({
   qLimpieza: likert,
   qPrivacidad: likert,
   recomienda: likert,
-  comentario: z.string().max(2000).optional(),
+  comentario: z
+    .string()
+    .trim()
+    .max(2000)
+    .transform(applySentenceCaseIfAllCaps)
+    .optional(),
   channel: z.enum(['TABLET', 'WHATSAPP_LINK', 'DIRECT']).default('DIRECT'),
 })
 

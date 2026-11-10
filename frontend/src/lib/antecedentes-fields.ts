@@ -55,6 +55,8 @@ export interface HistoriaLaboralExposicion {
   /** stateKey booleano (ej: `exposicion_quimica`). */
   key: string
   label: string
+  /** Pregunta en formularios Sí/No (portal, etc.). */
+  questionLabel?: string
   /** stateKey del input de texto que aparece cuando el booleano es true. */
   descKey: string
 }
@@ -69,14 +71,84 @@ export const HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS: [string, string][] = [
   ['tiempo_anterior_2', 'Tiempo 2'],
 ]
 
-/** Definición declarativa de las exposiciones booleanas (cada una con su descripción). */
+/**
+ * Referencia de factores de riesgo (medicina industrial / NOM).
+ * Cada ítem describe la categoría y ejemplos típicos; el trabajador detalla
+ * en el campo "Especifique" al marcar Sí.
+ */
+export const FACTORES_RIESGO_LABORAL_REFERENCIA: ReadonlyArray<{
+  categoria: string
+  ejemplos: string
+}> = [
+  {
+    categoria: 'Físicos',
+    ejemplos:
+      'presiones anormales, radiación, iluminación, vibraciones, temperatura, ruido',
+  },
+  {
+    categoria: 'Químicos',
+    ejemplos: 'gases, sustancias, solventes',
+  },
+  {
+    categoria: 'Biológicos',
+    ejemplos: 'agentes patógenos, sustancias animales',
+  },
+  {
+    categoria: 'Psicosociales',
+    ejemplos: 'estrés laboral, carga mental, atención al público',
+  },
+  {
+    categoria: 'Ergonómicos',
+    ejemplos: 'posturas inadecuadas, movimiento repetitivo, levantamiento de carga',
+  },
+]
+
+/** Exposición a agentes en el puesto (minuta 28-oct: separar de riesgos/accidentes). */
+export const HISTORIA_LABORAL_EXPOSICION_AGENTES: HistoriaLaboralExposicion[] = [
+  {
+    key: 'exposicion_fisica',
+    label: 'Riesgos físicos',
+    questionLabel:
+      '¿Ha estado expuesto a riesgos físicos (ruido, vibración, temperatura, radiación, iluminación, presión)?',
+    descKey: 'exposicion_fisica_especifique',
+  },
+  {
+    key: 'exposicion_quimica',
+    label: 'Riesgos químicos',
+    questionLabel: '¿Ha estado expuesto a riesgos químicos (gases, sustancias, solventes)?',
+    descKey: 'exposicion_quimica_especifique',
+  },
+  {
+    key: 'exposicion_biologica',
+    label: 'Riesgos biológicos',
+    questionLabel: '¿Ha estado expuesto a riesgos biológicos (patógenos, sustancias animales)?',
+    descKey: 'exposicion_biologica_especifique',
+  },
+  {
+    key: 'exposicion_psicosocial',
+    label: 'Riesgos psicosociales',
+    questionLabel: '¿Ha estado expuesto a factores psicosociales (estrés laboral, carga mental, atención al público)?',
+    descKey: 'exposicion_psicosocial_especifique',
+  },
+  {
+    key: 'exposicion_ergonomica',
+    label: 'Riesgos ergonómicos',
+    questionLabel:
+      '¿Ha estado expuesto a riesgos ergonómicos (posturas, movimientos repetitivos, levantamiento de carga)?',
+    descKey: 'exposicion_ergonomica_especifique',
+  },
+]
+
+/** Accidente laboral y enfermedad profesional (apartado distinto de exposición). */
+export const HISTORIA_LABORAL_RIESGOS_TRABAJO: HistoriaLaboralExposicion[] = [
+  { key: 'accidentes_trabajo',   label: 'Accidente laboral',     descKey: 'accidentes_descripcion' },
+  { key: 'enfermedades_trabajo', label: 'Enfermedad profesional', descKey: 'enfermedades_descripcion' },
+]
+
+/** Iteración completa (persistencia / payload); mantener orden legacy. */
 export const HISTORIA_LABORAL_EXPOSICIONES: HistoriaLaboralExposicion[] = [
-  { key: 'exposicion_quimica',    label: 'Química',                descKey: 'exposicion_quimica_especifique' },
-  { key: 'exposicion_fisica',     label: 'Física',                 descKey: 'exposicion_fisica_especifique' },
-  { key: 'exposicion_biologica',  label: 'Biológica',              descKey: 'exposicion_biologica_especifique' },
-  { key: 'exposicion_ergonomica', label: 'Ergonómica',             descKey: 'exposicion_ergonomica_especifique' },
-  { key: 'accidentes_trabajo',    label: 'Accidente laboral',      descKey: 'accidentes_descripcion' },
-  { key: 'enfermedades_trabajo',  label: 'Enfermedad profesional', descKey: 'enfermedades_descripcion' },
+  ...HISTORIA_LABORAL_EXPOSICION_AGENTES,
+  ...HISTORIA_LABORAL_RIESGOS_TRABAJO,
 ]
 
 /** Opciones de turno (select). */
@@ -116,13 +188,13 @@ export const SI_NEGADO = ['NEGADO', 'SI'] as const
  * Coincide con `HeredoFamiliaresSchema` en `schemas/clinical/history.schema.ts`.
  */
 export const HEREDOFAMILIARES_DESCRIPCIONES: CampoDescripcion[] = [
-  { field: 'diabetes',      label: 'Diabetes',                help: 'Algún familiar con azúcar alta en sangre (diabetes).' },
+  { field: 'diabetes',      label: 'Diabetes (en familia)',   help: 'Algún familiar con azúcar alta en sangre (diabetes). No es diabetes del trabajador — eso va en Personales (APP).' },
   { field: 'has',           label: 'Hipertensión',            help: 'Algún familiar con presión arterial alta diagnosticada.' },
   { field: 'epilepsia',     label: 'Epilepsia',               help: 'Algún familiar con convulsiones o epilepsia diagnosticada.' },
   { field: 'cardiopatia',   label: 'Cardiopatía',             help: 'Algún familiar con enfermedades del corazón (infartos, arritmias, soplos, etc.).' },
   { field: 'renales',       label: 'Enfermedad renal',        help: 'Algún familiar con problemas del riñón, diálisis o trasplante.' },
-  { field: 'asma',          label: 'Asma',                    help: 'Algún familiar con asma o bronquitis crónica recurrente.' },
-  { field: 'cancer',        label: 'Cáncer',                  help: 'Algún familiar con cáncer de cualquier tipo.' },
+  { field: 'asma',          label: 'Asma (en familia)',       help: 'Algún familiar con asma o bronquitis crónica recurrente.' },
+  { field: 'cancer',        label: 'Cáncer (en familia)',     help: 'Algún familiar con cáncer de cualquier tipo.' },
   { field: 'mentales',      label: 'Trastornos mentales',     help: 'Algún familiar con depresión, ansiedad, esquizofrenia u otros trastornos psiquiátricos.' },
 ]
 
@@ -131,12 +203,12 @@ export const HEREDOFAMILIARES_CATALOGO_FIELDS = HEREDOFAMILIARES_DESCRIPCIONES.f
   item => item.field !== 'mentales',
 ).map(item => item.field)
 
-/** State key del texto libre cuando el select ZIN = OTROS (ej. `cancer_especifique`). */
+/** State key del texto libre opcional (p. ej. `mentales_especifique` cuando SI). */
 export function heredoFamiliaresEspecifiqueKey(field: string): string {
   return `${field}_especifique`
 }
 
-/** Formato PDF/display: `OTROS` + detalle → `OTROS (TÍO PATERNO)`. */
+/** Formato PDF/display para heredo-familiares (multiselect o mentales SI). */
 export function formatHeredoFamiliaresValor(
   value: string | null | undefined,
   especifique: string | null | undefined,
@@ -144,8 +216,18 @@ export function formatHeredoFamiliaresValor(
   const v = (value ?? '').trim()
   if (!v) return ''
   const e = (especifique ?? '').trim()
-  if (v === 'OTROS' && e) return `OTROS (${e})`
   if (v === 'SI' && e) return `SI (${e})`
+  if (v.includes(',')) {
+    return v
+      .split(',')
+      .map((part) => {
+        const p = part.trim()
+        if (p === 'OTROS' && e) return `OTROS (${e})`
+        return p
+      })
+      .join(', ')
+  }
+  if (v === 'OTROS' && e) return `OTROS (${e})`
   return v
 }
 
@@ -177,9 +259,9 @@ export function emptyHeredoFamiliaresRecord(): Record<string, string> {
  */
 export const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
   endocrino: [
-    { field: 'diabetes',       label: 'Diabetes',         help: 'Azúcar alta en sangre diagnosticada por un médico.' },
+    { field: 'diabetes',       label: 'Diabetes (paciente)', help: 'Azúcar alta en sangre del trabajador, diagnosticada por un médico. Distinto de diabetes en Familiares (AHF).' },
     { field: 'endocrinopatias',label: 'Endocrinopatías',  help: 'Otras enfermedades de tiroides, suprarrenales u hormonales.' },
-    { field: 'asma',           label: 'Asma',             help: 'Asma persistente (crisis frecuentes, uso de inhalador).' },
+    { field: 'asma',           label: 'Asma (paciente)',  help: 'Asma del trabajador (crisis frecuentes, inhalador). Distinto de asma en Familiares (AHF).' },
   ],
   cardiopulmonar: [
     { field: 'cardiopatias', label: 'Cardiopatías',          help: 'Enfermedades del corazón (infarto, soplo, arritmia, insuficiencia).' },
@@ -222,7 +304,11 @@ export const PATOLOGICOS_DESCRIPCIONES: GrupoPatologicos = {
     { field: 'ginecologicos', label: 'Ginecológicos',  help: 'Enfermedades ginecológicas tratadas (embarazos, quistes, etc.).' },
     { field: 'dermatitis',    label: 'Dermatitis',     help: 'Enfermedades de piel crónicas (eccema, psoriasis, dermatitis atópica).' },
     { field: 'psiquiatricas', label: 'Psiquiátricas',  help: 'Trastornos mentales diagnosticados (depresión, ansiedad, esquizofrenia, etc.).' },
-    { field: 'otras',         label: 'Otras',          help: 'Otra enfermedad no listada — detalle en observaciones.' },
+    {
+      field: 'otras',
+      label: 'Otras enfermedades',
+      help: 'Enfermedad no listada arriba: indique el nombre al marcar SÍ.',
+    },
   ],
 }
 

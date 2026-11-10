@@ -374,6 +374,26 @@ class BaileysManager {
     dataBase64: string
     caption?: string
   }): Promise<void> {
+    const buffer = Buffer.from(input.dataBase64, 'base64')
+    if (buffer.length === 0) {
+      throw new Error('Documento vacío')
+    }
+    await this.sendDocumentBuffer({
+      toPhone: input.toPhone,
+      fileName: input.fileName,
+      mimetype: input.mimetype,
+      buffer,
+      caption: input.caption,
+    })
+  }
+
+  async sendDocumentBuffer(input: {
+    toPhone: string
+    fileName: string
+    mimetype: string
+    buffer: Buffer
+    caption?: string
+  }): Promise<void> {
     if (this.status !== 'connected' || !this.sock) {
       throw new Error('WhatsApp no conectado. Escanee el QR en Configuración.')
     }
@@ -381,13 +401,9 @@ class BaileysManager {
     if (digits.length < 10) {
       throw new Error('Teléfono destino inválido')
     }
-    const buffer = Buffer.from(input.dataBase64, 'base64')
-    if (buffer.length === 0) {
-      throw new Error('Documento vacío')
-    }
     const jid = `${digits}@s.whatsapp.net`
     await this.sock.sendMessage(jid, {
-      document: buffer,
+      document: input.buffer,
       mimetype: input.mimetype,
       fileName: input.fileName,
       caption: input.caption?.trim().slice(0, 500) || undefined,

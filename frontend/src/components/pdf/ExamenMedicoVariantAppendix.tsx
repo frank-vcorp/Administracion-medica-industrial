@@ -1,4 +1,6 @@
 import { Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { SME_LEGAL_NAME } from '@/lib/brand-constants'
+import { isDefaultExamenMedicoVariant } from '@/lib/clinical/examen-medico-variant'
 import type { ExamenMedicoPDFData } from '@/components/pdf/ExamenMedicoValidatedPDF'
 import {
   INTERROGATORIO_SISTEMAS,
@@ -55,7 +57,7 @@ function FieldRow({ label, value }: { label: string; value?: string | null }) {
 }
 
 export function ExamenMedicoVariantAppendixPages({ data }: { data: ExamenMedicoPDFData }) {
-  if (!data.variant || data.variant === 'AMI') return null
+  if (isDefaultExamenMedicoVariant(data.variant)) return null
 
   if (data.variant === 'FLOWSERVE') {
     const ext = data.variantExtensions?.FLOWSERVE as FlowserveExtensionData | undefined
@@ -107,7 +109,7 @@ export function ExamenMedicoVariantAppendixPages({ data }: { data: ExamenMedicoP
         <Text>{v(ext.declaracion_protesta)}</Text>
 
         <Text style={styles.footer} fixed>
-          Anexo Flowserve · Administración Médica Industrial
+          Anexo Flowserve · {SME_LEGAL_NAME}
         </Text>
       </Page>
 
@@ -134,7 +136,7 @@ export function ExamenMedicoVariantAppendixPages({ data }: { data: ExamenMedicoP
           )
         })}
         <Text style={styles.footer} fixed>
-          Cuestionario Nórdico · Anexo Flowserve · Administración Médica Industrial
+          Cuestionario Nórdico · Anexo Flowserve · {SME_LEGAL_NAME}
         </Text>
       </Page>
       </>

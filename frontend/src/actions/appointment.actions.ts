@@ -45,7 +45,12 @@ import {
   todayAgendaDateString,
   isAppointmentScheduleInPast,
 } from '@/lib/appointment-scheduling'
-import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
+import {
+  appointmentCapacityUserMessage,
+  checkBranchHourCapacity,
+} from '@/lib/appointment-capacity'
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -85,19 +90,31 @@ export async function createAppointment(data: {
       ? new Date(data.scheduledAt)
       : data.scheduledAt
 
+    const normalizedNotes =
+      data.notes != null && data.notes.trim().length > 0
+        ? applySentenceCaseIfAllCaps(data.notes.trim())
+        : undefined
+
     if (Number.isNaN(scheduledDate.getTime())) {
       return { success: false, error: 'Fecha u hora inválida' }
     }
     if (isAppointmentScheduleInPast(scheduledDate)) {
-      return { success: false, error: 'APPOINTMENT_IN_PAST' }
+      return {
+        success: false,
+        error: appointmentCapacityUserMessage({
+          ok: false,
+          count: 0,
+          capacity: 0,
+          reason: 'APPOINTMENT_IN_PAST',
+        }),
+      }
     }
 
     const capacityCheck = await checkBranchHourCapacity(prisma, data.branchId, scheduledDate)
     if (!capacityCheck.ok) {
       return {
         success: false,
-        error: 'BRANCH_HOUR_FULL',
-        capacity: capacityCheck,
+        error: appointmentCapacityUserMessage(capacityCheck),
       }
     }
 
@@ -167,7 +184,7 @@ export async function createAppointment(data: {
         companyId: data.companyId,
         branchId: data.branchId,
         scheduledAt: scheduledDate,
-        notes: data.notes || null,
+        notes: normalizedNotes ?? null,
         source: data.source || 'SUCURSAL',
         status: 'SCHEDULED',
         expedientId,
@@ -200,9 +217,12 @@ export async function createAppointment(data: {
     revalidatePath('/appointments')
     revalidatePath('/dashboard')
 
+    const whatsApp = await sendAppointmentPassWhatsApp(appointment.id)
+
     return {
       success: true,
       appointment,
+      whatsApp,
     }
   } catch (error) {
     console.error('[CREATE APPOINTMENT ERROR]:', error)
@@ -994,21 +1014,48 @@ function lastAgendaDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`
 }
 
+export type AttendedAppointmentsBranchCount = {
+  branchId: string
+  branchName: string
+  count: number
+}
+
 /** Citas con estatus COMPLETED cuya fecha de agenda es hoy o anterior. */
 export async function getAttendedAppointmentsCount() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user) return { success: false as const, error: 'No autenticado', count: 0 }
+    if (!session?.user) {
+      return { success: false as const, error: 'No autenticado', count: 0, byBranch: [] as AttendedAppointmentsBranchCount[] }
+    }
     const { lte } = agendaDayUtcRange(todayAgendaDateString())
-    const count = await prisma.appointment.count({
-      where: { status: 'COMPLETED', scheduledAt: { lte } },
+    const where = { status: 'COMPLETED' as const, scheduledAt: { lte } }
+    const [count, grouped] = await Promise.all([
+      prisma.appointment.count({ where }),
+      prisma.appointment.groupBy({
+        by: ['branchId'],
+        where,
+        _count: { _all: true },
+      }),
+    ])
+    const branchRows = await prisma.branch.findMany({
+      where: { id: { in: grouped.map((g) => g.branchId) } },
+      select: { id: true, name: true },
     })
-    return { success: true as const, count }
+    const nameById = new Map(branchRows.map((b) => [b.id, b.name]))
+    const byBranch: AttendedAppointmentsBranchCount[] = grouped
+      .map((g) => ({
+        branchId: g.branchId,
+        branchName: nameById.get(g.branchId) ?? 'Sucursal',
+        count: g._count._all,
+      }))
+      .sort((a, b) => a.branchName.localeCompare(b.branchName, 'es'))
+    return { success: true as const, count, byBranch }
   } catch (error) {
     return {
       success: false as const,
       error: error instanceof Error ? error.message : 'No se pudo contar las citas atendidas',
       count: 0,
+      byBranch: [] as AttendedAppointmentsBranchCount[],
     }
   }
 }
@@ -1026,9 +1073,10 @@ export async function getAttendedAppointmentsForMonth(year: number, month: numbe
     const { lte } = agendaDayUtcRange(lastAgendaDayOfMonth(parsed.data.year, parsed.data.month))
     const appointments = await prisma.appointment.findMany({
       where: { status: 'COMPLETED', scheduledAt: { gte, lte } },
-      include: {
-        worker: { select: { firstName: true, lastName: true } },
-        company: { select: { name: true } },
+      select: {
+        id: true,
+        scheduledAt: true,
+        branchId: true,
         branch: { select: { id: true, name: true } },
       },
       orderBy: { scheduledAt: 'asc' },

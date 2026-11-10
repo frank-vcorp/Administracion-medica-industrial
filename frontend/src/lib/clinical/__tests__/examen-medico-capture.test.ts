@@ -9,7 +9,7 @@ describe('examen-medico-capture', () => {
   it('excluye somato/agudeza del checkout si hay examen médico', () => {
     const tests = [
       { id: '1', status: 'COMPLETED', testNameSnapshot: 'Somatometría' },
-      { id: '2', status: 'PENDING', testNameSnapshot: 'Examen Médico AMI' },
+      { id: '2', status: 'PENDING', testNameSnapshot: 'Examen Médico General' },
       { id: '3', status: 'COMPLETED', testNameSnapshot: 'Agudeza Visual' },
     ]
     const filtered = filterEventTestsForCheckout(tests)

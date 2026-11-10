@@ -58,8 +58,6 @@ export function VitalSignsPrediagnosisPanel({
     fc_min: vitals.fc_min,
     temperatura: vitals.temperatura,
     fr_min: vitals.fr_min,
-    perimetro_cintura: vitals.perimetro_cintura,
-    perimetro_cadera: vitals.perimetro_cadera,
     sexo,
   })
 

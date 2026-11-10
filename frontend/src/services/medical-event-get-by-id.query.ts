@@ -1,5 +1,10 @@
 import prisma from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
+import {
+  branchScalarSelectWithoutWeeklySchedule,
+  withBranchWeeklyScheduleDefault,
+  type BranchWithoutWeeklyScheduleRow,
+} from '@/lib/prisma/branch-scalar-select'
 
 /** Relaciones compartidas entre la query completa y la compatible sin columnas de cancelación. */
 export const medicalEventByIdRelations = {
@@ -118,16 +123,20 @@ export type MedicalEventByIdResult = Prisma.MedicalEventGetPayload<{
   include: typeof medicalEventByIdRelations
 }>
 
-/** Rellena columnas de cancelación cuando la BD aún no tiene la migración 20261028170000. */
-function withCancellationDefaults(
+/** Rellena columnas opcionales cuando la BD aún no tiene migraciones recientes. */
+function withOptionalMigrationDefaults(
   row: Record<string, unknown> & {
     appointment?: Record<string, unknown> | null
+    branch?: Record<string, unknown> | null
   },
 ): MedicalEventByIdResult {
   return {
     ...row,
     cancellationReason: null,
     cancelledAt: null,
+    branch: row.branch
+      ? withBranchWeeklyScheduleDefault(row.branch as BranchWithoutWeeklyScheduleRow)
+      : null,
     appointment: row.appointment
       ? {
           ...row.appointment,
@@ -140,7 +149,7 @@ function withCancellationDefaults(
 
 export async function queryMedicalEventById(
   id: string,
-  mode: 'full' | 'withoutCancellationColumns',
+  mode: 'full' | 'withoutOptionalMigrationColumns',
 ): Promise<MedicalEventByIdResult | null> {
   if (mode === 'full') {
     return prisma.medicalEvent.findUnique({
@@ -154,7 +163,7 @@ export async function queryMedicalEventById(
     select: {
       ...medicalEventScalarSelectWithoutCancellation,
       worker: medicalEventByIdRelations.worker,
-      branch: medicalEventByIdRelations.branch,
+      branch: { select: branchScalarSelectWithoutWeeklySchedule },
       exam: medicalEventByIdRelations.exam,
       appointment: {
         select: appointmentScalarSelectWithoutCancellation,
@@ -165,5 +174,5 @@ export async function queryMedicalEventById(
   })
 
   if (!row) return null
-  return withCancellationDefaults(row)
+  return withOptionalMigrationDefaults(row)
 }

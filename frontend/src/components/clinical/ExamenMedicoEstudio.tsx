@@ -60,8 +60,24 @@ import {
 // auto-poblamiento para las recomendaciones del dictamen (catalogo
 // hallazgo → recomendacion + edicion manual).
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
+import {
+  buildImpresionDiagnosticaFromAntecedentesYExamen,
+  examForHallazgosFromForm,
+} from '@/lib/clinical/impresion-diagnostica'
 import { formatMedicoNombreYCedula } from "@/lib/clinical/medico-display"
+import {
+  medicoLineFromProfile,
+  prepareExamenMedicoPayloadForSave,
+} from '@/lib/clinical/examen-medico-payload'
+import {
+  examFieldRingClass,
+  type ExamenMedicoSaveNavigation,
+} from '@/lib/clinical/examen-medico-save-errors'
+import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
+import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCallout"
 import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
+import { mapMedicalExamActionFailure, parseMedicalExamZodIssues } from "@/lib/medical-exam-action-errors"
+import { splitUserFacingMessageLines, type UserFacingError } from "@/lib/user-facing-error"
 import {
   deriveAgudezaVisualResumen,
   VISION_SNELLEN_NO_APLICA,
@@ -70,6 +86,7 @@ import {
 import { FlowserveExtension } from "@/components/clinical/examen-medico/FlowserveExtension"
 import { SodexoExtension } from "@/components/clinical/examen-medico/SodexoExtension"
 import {
+  isDefaultExamenMedicoVariant,
   resolveExamenMedicoVariant,
   examenMedicoVariantLabel,
   type ExamenMedicoVariant,
@@ -354,7 +371,7 @@ export default function ExamenMedicoEstudio({
   somatometryEventTestId,
   agudezaEventTestId,
   hasMedicalVerdict = false,
-  testNameSnapshot = 'Examen Médico AMI',
+  testNameSnapshot = 'Examen Médico General',
   papeletaLayout = false,
   onPapeletaActiveSectionChange,
 }: ExamenMedicoEstudioProps) {
@@ -419,7 +436,13 @@ export default function ExamenMedicoEstudio({
   const [isPending, startTransition] = useTransition()
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string[]>>({})
   const [aiWarning, setAiWarning] = useState('')
+  /** DA-2: no sobrescribir impresión diagnóstica tras edición manual del médico. */
+  const impresionDiagnosticaManualRef = useRef(
+    typeof physicalExamData.impresion_diagnostica === 'string' &&
+      physicalExamData.impresion_diagnostica.trim().length > 0,
+  )
 
   // Estado Módulo 1
   const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
@@ -576,10 +599,36 @@ export default function ExamenMedicoEstudio({
   }, [canAccessExamen, outerTab])
 
   useEffect(() => {
-    if (activeInnerTab === 'extension' && examVariant === 'AMI') {
+    if (activeInnerTab === 'extension' && isDefaultExamenMedicoVariant(examVariant)) {
       setActiveInnerTab('impresion')
     }
   }, [activeInnerTab, examVariant])
+
+  const impresionDiagnosticaPropuesta = useMemo(
+    () =>
+      buildImpresionDiagnosticaFromAntecedentesYExamen({
+        antecedentes: antecedentesCaptured,
+        exam: examForHallazgosFromForm(form),
+        especifiquePositivos: form.especifique_positivos ?? null,
+      }),
+    [antecedentesCaptured, form],
+  )
+
+  useEffect(() => {
+    if (readonly) return
+    if (activeInnerTab !== 'impresion') return
+    if (impresionDiagnosticaManualRef.current) return
+    const propuesta = impresionDiagnosticaPropuesta.trim()
+    if (!propuesta) return
+    setForm(prev => {
+      if ((prev.impresion_diagnostica ?? '').trim()) return prev
+      const next = { ...prev, impresion_diagnostica: propuesta }
+      if (!(prev.examen_medico_texto ?? '').trim()) {
+        next.examen_medico_texto = propuesta
+      }
+      return next
+    })
+  }, [activeInnerTab, impresionDiagnosticaPropuesta, readonly])
 
   useEffect(() => {
     const section = examenMedicoNavSectionFromTabs(outerTab, activeInnerTab)
@@ -671,7 +720,7 @@ export default function ExamenMedicoEstudio({
   const innerTabs: { id: InnerTab; label: string; icon: string; done: boolean }[] = [
     { id: 'antecedentes', label: 'Antecedentes', icon: '🩺', done: hasAntecedentes },
     { id: 'exploracion', label: 'Exploración Física', icon: '🩻', done: hasPhysicalExam },
-    ...(examVariant !== 'AMI'
+    ...( !isDefaultExamenMedicoVariant(examVariant)
       ? [{
           id: 'extension' as const,
           label: examenMedicoVariantLabel(examVariant),
@@ -686,8 +735,33 @@ export default function ExamenMedicoEstudio({
   function setM1Field(key: string, value: string) {
     setModulo1(prev => ({ ...prev, [key]: value }))
   }
+  function clearFieldSaveError(fieldKey: string) {
+    setSaveFieldErrors(prev => {
+      if (!prev[fieldKey]) return prev
+      const next = { ...prev }
+      delete next[fieldKey]
+      return next
+    })
+  }
+
   function handleField(name: string, value: string) {
+    clearFieldSaveError(name)
     setForm(prev => ({ ...prev, [name]: value }))
+  }
+
+  function examSaveErr(fieldKey: string): string | undefined {
+    return saveFieldErrors[fieldKey]?.[0]
+  }
+
+  function applySaveFailure(
+    error: string,
+    fieldErrors?: Record<string, string[]>,
+    navigation?: ExamenMedicoSaveNavigation,
+  ) {
+    setSaveError(error)
+    setSaveFieldErrors(fieldErrors ?? {})
+    if (navigation?.outerTab) setOuterTab(navigation.outerTab)
+    if (navigation?.innerTab) setActiveInnerTab(navigation.innerTab)
   }
 
   const sessionMedicoLine = useMemo(
@@ -807,7 +881,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setSomaSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Somatometría (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setSomaSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingSoma(false)
   }
@@ -831,7 +914,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setVitalsSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Signos vitales (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setVitalsSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingVitals(false)
   }
@@ -855,7 +947,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setAgudezaSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Agudeza visual (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setAgudezaSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingAgudeza(false)
   }
@@ -881,18 +982,38 @@ export default function ExamenMedicoEstudio({
   function handleSave(markComplete: boolean) {
     setSaveMsg('')
     setSaveError('')
+    setSaveFieldErrors({})
     setAiWarning('')
     startTransition(async () => {
-      const medicoPatch = await resolveMedicoLinesForSave()
-      if (Object.keys(medicoPatch).length > 0) {
-        setForm(prev => ({ ...prev, ...medicoPatch }))
+      const profileRes = await getCurrentDoctorProfile()
+      const medicoLine = profileRes.success
+        ? medicoLineFromProfile(
+            profileRes.profile.fullName,
+            profileRes.profile.professionalLicense,
+          )
+        : sessionMedicoLine
+
+      const rawPayload = buildPayload()
+      const prepared = prepareExamenMedicoPayloadForSave(rawPayload, { medicoLine })
+
+      const formPatch: Record<string, string> = {}
+      for (const [key, value] of Object.entries(prepared)) {
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          formPatch[key] = String(value)
+        }
       }
-      const payload = {
-        ...buildPayload(),
-        ...medicoPatch,
+      if (Object.keys(formPatch).length > 0) {
+        setForm(prev => ({ ...prev, ...formPatch }))
       }
-      const res = await saveExamenMedicoPapeleta(eventId, eventTestId, payload, markComplete)
+
+      const res = await saveExamenMedicoPapeleta(
+        eventId,
+        eventTestId,
+        prepared,
+        markComplete,
+      )
       if (res.success) {
+        setSaveFieldErrors({})
         // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / FND-20260825-22):
         // cuando se marca como completado, el Event pasa a `VALIDATING` y
         // se muestra el flujo "Firmar y Emitir Dictamen" en el workspace.
@@ -909,7 +1030,11 @@ export default function ExamenMedicoEstudio({
         // status sólo si cambió — null en borrador).
         onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED')
       } else {
-        setSaveError(res.error ?? 'Error al guardar')
+        applySaveFailure(
+          res.error ?? 'Error al guardar',
+          'fieldErrors' in res ? res.fieldErrors : undefined,
+          'navigation' in res ? res.navigation : undefined,
+        )
       }
     })
   }
@@ -950,7 +1075,13 @@ export default function ExamenMedicoEstudio({
       false,
       { autosave: true },
     )
-    return res.success
+    if (res.success) return true
+    return {
+      ok: false,
+      message: res.error,
+      error: parseMedicalExamZodIssues(res.technicalDetail) ?? res.technicalDetail,
+      context: 'Examen médico (autoguardado)',
+    }
   }, [
     eventId,
     eventTestId,
@@ -965,7 +1096,7 @@ export default function ExamenMedicoEstudio({
     sessionMedicoLine,
   ])
 
-  const { statusLabel: autosaveStatusLabel } = useExamenMedicoAutosave({
+  const { statusLabel: autosaveStatusLabel, userFacingError: autosaveExamError } = useExamenMedicoAutosave({
     enabled: !readonly,
     eventId,
     eventTestId,
@@ -1102,17 +1233,12 @@ export default function ExamenMedicoEstudio({
       </div>
       )}
 
-      {!readonly && autosaveStatusLabel && (
-        <p
-          className={`text-[11px] px-3 py-1.5 rounded-lg border ${
-            autosaveStatusLabel.includes('Error')
-              ? 'bg-red-50 border-red-200 text-red-700'
-              : 'bg-slate-50 border-slate-200 text-slate-600'
-          }`}
-          aria-live="polite"
-        >
-          {autosaveStatusLabel}
-        </p>
+      {!readonly && (
+        <ClinicalAutosaveIndicator
+          label={autosaveStatusLabel}
+          error={autosaveExamError}
+          className="text-[11px] px-3 py-1.5 rounded-lg border bg-slate-50 border-slate-200"
+        />
       )}
 
       {/* Banner de bloqueo visible cuando el médico intenta ir a Examen Médico sin completar prereqs.
@@ -1147,22 +1273,40 @@ export default function ExamenMedicoEstudio({
               <input
                 type="number" step="0.1" min={0} max={500}
                 value={somaForm.peso_kg || ''}
-                onChange={e => setSomaForm(prev => ({ ...prev, peso_kg: e.target.value }))}
+                onChange={e => {
+                  clearFieldSaveError('peso_kg')
+                  setSomaForm(prev => ({ ...prev, peso_kg: e.target.value }))
+                }}
                 disabled={readonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60"
+                className={examFieldRingClass(
+                  Boolean(examSaveErr('peso_kg')),
+                  'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60',
+                )}
                 placeholder="Ej: 75.5"
               />
+              {examSaveErr('peso_kg') && (
+                <p className="text-[10px] text-red-600 mt-1">{examSaveErr('peso_kg')}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (Metros)</label>
               <input
                 type="number" step="0.01" min={0} max={3}
                 value={somaForm.talla_m || ''}
-                onChange={e => setSomaForm(prev => ({ ...prev, talla_m: e.target.value }))}
+                onChange={e => {
+                  clearFieldSaveError('talla_m')
+                  setSomaForm(prev => ({ ...prev, talla_m: e.target.value }))
+                }}
                 disabled={readonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60"
+                className={examFieldRingClass(
+                  Boolean(examSaveErr('talla_m')),
+                  'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60',
+                )}
                 placeholder="Ej: 1.75"
               />
+              {examSaveErr('talla_m') && (
+                <p className="text-[10px] text-red-600 mt-1">{examSaveErr('talla_m')}</p>
+              )}
             </div>
             <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
               <div>
@@ -1756,10 +1900,17 @@ export default function ExamenMedicoEstudio({
               ← Antecedentes
             </button>
             <button
-              onClick={() => setActiveInnerTab(examVariant !== 'AMI' ? 'extension' : 'impresion')}
+              onClick={() =>
+                setActiveInnerTab(
+                  !isDefaultExamenMedicoVariant(examVariant) ? 'extension' : 'impresion',
+                )
+              }
               className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
             >
-              Continuar → {examVariant !== 'AMI' ? examenMedicoVariantLabel(examVariant) : 'Impresión'}
+              Continuar →{' '}
+              {!isDefaultExamenMedicoVariant(examVariant)
+                ? examenMedicoVariantLabel(examVariant)
+                : 'Impresión'}
             </button>
           </div>
         </div>
@@ -1854,6 +2005,7 @@ export default function ExamenMedicoEstudio({
                     : isPresionArterial
                     ? PRESION_ARTERIAL_RESUMEN_VALUES
                     : null
+                  const fieldErr = examSaveErr(field)
                   return (
                   <div key={field}>
                     <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
@@ -1862,7 +2014,10 @@ export default function ExamenMedicoEstudio({
                         value={form[field] ?? ''}
                         onChange={e => handleField(field, e.target.value)}
                         disabled={readonly}
-                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                        className={examFieldRingClass(
+                          Boolean(fieldErr),
+                          'w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
+                        )}
                       >
                         <option value="">—</option>
                         {comboValues.map(v => (
@@ -1875,9 +2030,13 @@ export default function ExamenMedicoEstudio({
                         value={form[field] ?? ''}
                         onChange={e => handleField(field, e.target.value)}
                         disabled={readonly}
-                        className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                        className={examFieldRingClass(
+                          Boolean(fieldErr),
+                          'w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
+                        )}
                       />
                     )}
+                    {fieldErr && <p className="text-[10px] text-red-600 mt-0.5">{fieldErr}</p>}
                   </div>
                   )
                 })}
@@ -1886,18 +2045,50 @@ export default function ExamenMedicoEstudio({
 
           {/* Impresión Diagnóstica */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <label className="block">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Impresión diagnóstica
               </span>
+              {!readonly && impresionDiagnosticaPropuesta.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    impresionDiagnosticaManualRef.current = false
+                    const propuesta = impresionDiagnosticaPropuesta.trim()
+                    handleField('impresion_diagnostica', propuesta)
+                    if (!(form.examen_medico_texto ?? '').trim()) {
+                      handleField('examen_medico_texto', propuesta)
+                    }
+                  }}
+                  className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline"
+                  title="Generar texto desde antecedentes patológicos SÍ y hallazgos del examen"
+                >
+                  ↻ Generar desde antecedentes y examen
+                </button>
+              )}
+            </div>
+            <label className="block">
               <textarea
                 rows={4}
                 value={form.impresion_diagnostica ?? ''}
-                onChange={e => handleField('impresion_diagnostica', e.target.value)}
+                onChange={e => {
+                  impresionDiagnosticaManualRef.current = true
+                  handleField('impresion_diagnostica', e.target.value)
+                }}
                 disabled={readonly}
-                placeholder="Describe los diagnósticos principales o hallazgos clínicos relevantes..."
-                className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                placeholder={
+                  impresionDiagnosticaPropuesta.trim()
+                    ? 'Se auto-completa al abrir esta pestaña si hay antecedentes patológicos en SÍ (editable).'
+                    : 'Opcional: con APP en SÍ se propone texto desde el examen; si no, se completa al guardar.'
+                }
+                className={examFieldRingClass(
+                  Boolean(examSaveErr('impresion_diagnostica')),
+                  'mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
+                )}
               />
+              {examSaveErr('impresion_diagnostica') && (
+                <p className="text-[10px] text-red-600 mt-1">{examSaveErr('impresion_diagnostica')}</p>
+              )}
             </label>
 
             <label className="block">
@@ -1968,11 +2159,20 @@ export default function ExamenMedicoEstudio({
               <textarea
                 rows={6}
                 value={recomendaciones}
-                onChange={e => setRecomendaciones(e.target.value)}
+                onChange={e => {
+                  clearFieldSaveError('recomendaciones_clinicas')
+                  setRecomendaciones(e.target.value)
+                }}
                 disabled={readonly}
                 placeholder="1.- Recomendación uno. 2.- Recomendación dos. (auto-poblado desde hallazgos)"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                className={examFieldRingClass(
+                  Boolean(examSaveErr('recomendaciones_clinicas')),
+                  'w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
+                )}
               />
+              {examSaveErr('recomendaciones_clinicas') && (
+                <p className="text-[10px] text-red-600">{examSaveErr('recomendaciones_clinicas')}</p>
+              )}
               <p className="text-[10px] text-slate-400 italic">
                 Auto-poblado desde hallazgos del examen (caries, sobrepeso,
                 agudeza visual, presión arterial, etc). Puedes editar, agregar
@@ -2010,46 +2210,14 @@ export default function ExamenMedicoEstudio({
             </div>
           </div>
 
-          {/* Médicos firmantes — auto desde sesión / aptitud */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Médicos firmantes
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Médico evaluador (nombre y cédula)
-                </span>
-                <input
-                  type="text"
-                  value={form.medico_evaluador ?? ''}
-                  onChange={e => handleField('medico_evaluador', e.target.value)}
-                  disabled={readonly}
-                  className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                  placeholder="Se completa con tu cuenta al abrir esta pestaña"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">
-                  Desde el perfil del usuario que captura el examen.
-                </p>
-              </label>
-              <label className="block">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Médico revisor (nombre y cédula)
-                </span>
-                <input
-                  type="text"
-                  value={form.medico_revisor ?? ''}
-                  onChange={e => handleField('medico_revisor', e.target.value)}
-                  disabled={readonly}
-                  className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                  placeholder="Se completa al elegir aptitud laboral"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">
-                  Quien selecciona la aptitud laboral (misma cuenta en sesión).
-                </p>
-              </label>
-            </div>
-          </div>
+          <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 leading-snug">
+            Al guardar y al generar PDFs se usan automáticamente el{' '}
+            <strong>nombre, cédula y firma</strong> de tu cuenta (
+            <a href="/profile" className="text-teal-700 underline font-medium">
+              Mi perfil
+            </a>
+            ). No hace falta capturarlos aquí.
+          </p>
 
           {/* Mensajes de resultado */}
           {saveMsg && (
@@ -2058,8 +2226,17 @@ export default function ExamenMedicoEstudio({
             </div>
           )}
           {saveError && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 font-medium">
-              ❌ {saveError}
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 font-medium space-y-2">
+              <p>❌ {saveError}</p>
+              {Object.keys(saveFieldErrors).length > 0 && (
+                <ul className="text-xs font-normal list-disc pl-4 space-y-0.5">
+                  {Object.entries(saveFieldErrors).map(([key, messages]) => (
+                    <li key={key}>
+                      <span className="font-semibold">{key}</span>: {messages[0]}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {aiWarning && (
@@ -2156,19 +2333,9 @@ export default function ExamenMedicoEstudio({
               </button>
               <button
                 onClick={() => handleSave(true)}
-                disabled={
-                  isPending ||
-                  !(form.impresion_diagnostica ?? '').trim() ||
-                  !recomendaciones.trim()
-                }
+                disabled={isPending || !recomendaciones.trim()}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={
-                  !(form.impresion_diagnostica ?? '').trim()
-                    ? 'Agrega impresión diagnóstica'
-                    : !recomendaciones.trim()
-                      ? 'Ingresa recomendaciones'
-                      : ''
-                }
+                title={!recomendaciones.trim() ? 'Ingresa recomendaciones' : ''}
               >
                 {isPending ? 'Guardando...' : '📋 Guardar para revisión'}
               </button>

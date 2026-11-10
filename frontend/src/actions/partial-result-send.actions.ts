@@ -19,6 +19,7 @@ import { buildNotPerformedTestIdSet } from '@/lib/clinical/reception-checkout'
 import { buildStudyInterpretationFromSnapshot } from '@/lib/clinical/study-status-display'
 import { tryReadSourceFromBackend } from '@/lib/zip-cierre-clinico'
 import prisma from '@/lib/prisma'
+import { SME_LEGAL_NAME } from '@/lib/brand-constants'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -284,7 +285,7 @@ async function dispatchPartialResultEmail(args: {
       `Paciente: ${args.patientName}\n` +
       `Folio de expediente: ${args.eventId}\n\n` +
       `Este envío no sustituye el dictamen final de aptitud. Recibirá el cierre clínico cuando todos los estudios estén completos.\n\n` +
-      `Administración Médica Industrial`,
+      `${SME_LEGAL_NAME}`,
     attachments: args.attachments.map((a) => ({
       filename: a.filename,
       content: a.content,

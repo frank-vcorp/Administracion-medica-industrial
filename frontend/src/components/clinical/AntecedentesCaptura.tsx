@@ -47,10 +47,13 @@
  */
 
 import { useEffect, useState } from 'react'
+import HistoriaLaboralFactoresRiesgoReferencia from '@/components/clinical/HistoriaLaboralFactoresRiesgoReferencia'
 import {
   DATOS_PERSONALES_CAMPOS,
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
   HISTORIA_LABORAL_EXPOSICIONES,
+  HISTORIA_LABORAL_EXPOSICION_AGENTES,
+  HISTORIA_LABORAL_RIESGOS_TRABAJO,
   HEREDOFAMILIARES_DESCRIPCIONES,
   emptyHeredoFamiliaresRecord,
   heredoFamiliaresEspecifiqueKey,
@@ -68,16 +71,25 @@ import {
   SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
 import {
+  ClinicalFreeTextInput,
+  ClinicalTextarea,
+} from '@/components/clinical/ClinicalFreeTextControls'
+import { HeredofamiliaresRelacionMultiSelect } from '@/components/clinical/HeredofamiliaresRelacionMultiSelect'
+import {
+  patologiaEspecificacionPlaceholder,
+  patologiaRequiresEspecificacion,
+} from '@/lib/patologia-especificacion-fields'
+import { ANTECEDENTES_SECTION_LEGEND, antecedentesTabIntro } from '@/lib/antecedentes-section-ui'
+import {
   GINE_FIELDS,
   M1_SEX_OPTIONS,
   REPRO_FIELDS,
   VACUNAS_CAPTURE_LIST,
-  VAC_SI_NO_VALUES,
+  VAC_IMMUNIZATION_VALUES,
   type Modulo1FieldDef,
 } from '@/lib/modulo1-capture-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
 import {
-  HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
 } from '@/schemas/clinical/exam.schema'
 import {
@@ -203,6 +215,7 @@ function buildEmptySections(): {
     exposicion_quimica_especifique: '',
     exposicion_fisica_especifique: '',
     exposicion_biologica_especifique: '',
+    exposicion_psicosocial_especifique: '',
     exposicion_ergonomica_especifique: '',
     accidentes_descripcion: '',
     enfermedades_descripcion: '',
@@ -266,6 +279,8 @@ function coercePatologiaEntry(v: unknown): PatologiaEntry {
           desde_cuando:  typeof v.detalle.desde_cuando  === 'string' ? v.detalle.desde_cuando  : '',
           tratamiento:   typeof v.detalle.tratamiento   === 'string' ? v.detalle.tratamiento   : '',
           observaciones: typeof v.detalle.observaciones === 'string' ? v.detalle.observaciones : '',
+          especificacion:
+            typeof v.detalle.especificacion === 'string' ? v.detalle.especificacion : '',
         }
       : undefined
     return { estado: v.estado, detalle }
@@ -568,6 +583,11 @@ export function AntecedentesCaptura({
         </a>
       )}
 
+      <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+        <strong>AHF</strong> (Familiares) = en parientes · <strong>APP</strong> (Personales) = en el
+        trabajador · <strong>ANP</strong> (Hábitos) = tabaco, alcohol, etc.
+      </p>
+
       {/* ── Grid 3 columnas: DP | HL | HF ───────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Datos Personales */}
@@ -644,9 +664,39 @@ export function AntecedentesCaptura({
                   ))}
               </div>
             ))}
-            <div className="pt-2 border-t border-slate-100 space-y-2">
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Exposición / Antecedentes</p>
-              {HISTORIA_LABORAL_EXPOSICIONES.map(exp => (
+            <div className="pt-2 border-t border-slate-100 space-y-3">
+              <p className="text-[10px] font-bold text-slate-500 uppercase">
+                Factores de riesgo en el trabajo
+              </p>
+              <HistoriaLaboralFactoresRiesgoReferencia compact />
+              {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(exp => (
+                <div key={exp.key}>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={form.historia_laboral[exp.key] === 'true' || form.historia_laboral[exp.key] === 'SI'}
+                      onChange={e => setField('historia_laboral', exp.key, e.target.checked ? 'true' : 'false')}
+                      disabled={readonly}
+                      className="rounded border-slate-300 text-teal-600"
+                    />
+                    <span className="font-medium text-slate-700">{exp.label}</span>
+                  </label>
+                  {(form.historia_laboral[exp.key] === 'true' || form.historia_laboral[exp.key] === 'SI') && (
+                    <input
+                      type="text"
+                      value={form.historia_laboral[exp.descKey] ?? ''}
+                      onChange={e => setField('historia_laboral', exp.descKey, e.target.value)}
+                      disabled={readonly}
+                      placeholder="Especifique…"
+                      className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    />
+                  )}
+                </div>
+              ))}
+              <p className="text-[10px] font-bold text-slate-500 uppercase pt-2 border-t border-slate-100">
+                Accidente laboral y enfermedad profesional
+              </p>
+              {HISTORIA_LABORAL_RIESGOS_TRABAJO.map(exp => (
                 <div key={exp.key}>
                   <label className="flex items-center gap-2 text-xs">
                     <input
@@ -675,22 +725,22 @@ export function AntecedentesCaptura({
         </fieldset>
 
         {/* Heredo-Familiares */}
-        <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
-            Heredo-Familiares
+        <fieldset className="border border-violet-100 rounded-xl p-3 bg-violet-50/30">
+          <legend className="text-xs font-bold text-violet-900 uppercase tracking-wider px-1">
+            {ANTECEDENTES_SECTION_LEGEND.heredo_familiares}
           </legend>
+          <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
+            {antecedentesTabIntro('heredofamiliares')}
+          </p>
           <div className="space-y-3 mt-2">
             {HEREDOFAMILIARES_DESCRIPCIONES.map(item => {
               // IMPL-20260817-01-C2: 7 campos con HEREDOFAMILIARES_VALUES (8 opciones),
               // `mentales` con HEREDOFAMILIARES_MENTALES_VALUES (3 opciones),
               // `otras` con combo + input "Especifique" condicional. DA-6 espejo AntecedentesForm.
               const isMentales = item.field === 'mentales'
-              const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
               const currentValue = form.heredo_familiares[item.field] ?? ''
               const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-              const showEspecifique =
-                (!isMentales && currentValue === 'OTROS') ||
-                (isMentales && currentValue === 'SI')
+              const showEspecifiqueMentales = isMentales && currentValue === 'SI'
               return (
                 <FieldRow
                   key={item.field}
@@ -698,28 +748,32 @@ export function AntecedentesCaptura({
                   help={item.help}
                   modified={modified.has(`heredo_familiares.${item.field}`)}
                 >
-                  <select
-                    value={currentValue}
-                    onChange={e => setField('heredo_familiares', item.field, e.target.value)}
-                    disabled={readonly}
-                    className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                  >
-                    <option value="">—</option>
-                    {zinValues.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                  {showEspecifique && (
+                  {isMentales ? (
+                    <select
+                      value={currentValue}
+                      onChange={e => setField('heredo_familiares', item.field, e.target.value)}
+                      disabled={readonly}
+                      className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    >
+                      <option value="">—</option>
+                      {HEREDOFAMILIARES_MENTALES_VALUES.map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <HeredofamiliaresRelacionMultiSelect
+                      value={currentValue}
+                      onChange={(next) => setField('heredo_familiares', item.field, next)}
+                      disabled={readonly}
+                    />
+                  )}
+                  {showEspecifiqueMentales && (
                     <input
                       type="text"
                       value={form.heredo_familiares[especifiqueKey] ?? ''}
                       onChange={e => setField('heredo_familiares', especifiqueKey, e.target.value)}
                       disabled={readonly}
-                      placeholder={
-                        isMentales
-                          ? 'Especificación (ej: depresión materna, esquizofrenia paterna)'
-                          : 'Especifique (ej: TÍO PATERNO, cáncer de mama)'
-                      }
+                      placeholder="Especificación (ej: depresión materna, esquizofrenia paterna)"
                       className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                     />
                   )}
@@ -733,8 +787,11 @@ export function AntecedentesCaptura({
       {/* ── Fila 2: No Patológicos ──────────────────────────────────────── */}
       <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
         <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
-          No Patológicos / Toxicomanías
+          {ANTECEDENTES_SECTION_LEGEND.no_patologicos}
         </legend>
+        <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
+          {antecedentesTabIntro('no_patologicos')}
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
           {NO_PATOLOGICOS_DESCRIPCIONES.map(item => {
             const active = form.no_patologicos[item.key] === 'SI'
@@ -874,12 +931,13 @@ export function AntecedentesCaptura({
       </fieldset>
 
       {/* ── Fila 3: Patológicos ─────────────────────────────────────────── */}
-      <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-        <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
-          Patológicos
+      <fieldset className="border border-amber-100 rounded-xl p-3 bg-amber-50/30">
+        <legend className="text-xs font-bold text-amber-900 uppercase tracking-wider px-1">
+          {ANTECEDENTES_SECTION_LEGEND.patologicos}
         </legend>
-        <p className="text-[10px] text-slate-500 mt-1 mb-3">
-          Por defecto NEGADO. Si marca <strong>SÍ</strong>, complete desde cuándo, tratamiento y observaciones (sin acordeón).
+        <p className="text-[10px] text-slate-600 mt-1 mb-3 leading-snug">
+          {antecedentesTabIntro('patologicos')} Por defecto NEGADO; con SÍ complete desde cuándo,
+          tratamiento y observaciones.
         </p>
         {PATOLOGICOS_GROUP_ORDER.map(group => (
           <div key={group} className="mb-4 last:mb-0">
@@ -890,7 +948,7 @@ export function AntecedentesCaptura({
               {PATOLOGICOS_DESCRIPCIONES[group].map(item => {
                 const entry = form.patologicos[item.field] ?? emptyPatologia()
                 const detalle = entry.detalle ?? emptyDetalle()
-                const isExantematicas = item.field === 'exantematicas'
+                const needsEspecificacion = patologiaRequiresEspecificacion(item.field)
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
@@ -913,34 +971,34 @@ export function AntecedentesCaptura({
                     </select>
                     {entry.estado === 'SI' && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
-                        {isExantematicas && (
-                          <input
+                        {needsEspecificacion && (
+                          <ClinicalFreeTextInput
                             type="text"
                             value={detalle.especificacion ?? ''}
-                            onChange={e => updatePatologia(item.field, {
-                              detalle: { ...detalle, especificacion: e.target.value },
+                            onChange={especificacion => updatePatologia(item.field, {
+                              detalle: { ...detalle, especificacion },
                             })}
                             disabled={readonly}
-                            placeholder="Especificación (ej: varicela infantil, sarampión)"
+                            placeholder={patologiaEspecificacionPlaceholder(item.field)}
                             maxLength={500}
                             className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                           />
                         )}
-                        <input
+                        <ClinicalFreeTextInput
                           type="text"
                           value={detalle.desde_cuando}
-                          onChange={e => updatePatologia(item.field, {
-                            detalle: { ...detalle, desde_cuando: e.target.value },
+                          onChange={desde_cuando => updatePatologia(item.field, {
+                            detalle: { ...detalle, desde_cuando },
                           })}
                           disabled={readonly}
                           placeholder="Desde cuándo"
                           maxLength={200}
                           className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                         />
-                        <textarea
+                        <ClinicalTextarea
                           value={detalle.tratamiento}
-                          onChange={e => updatePatologia(item.field, {
-                            detalle: { ...detalle, tratamiento: e.target.value },
+                          onChange={tratamiento => updatePatologia(item.field, {
+                            detalle: { ...detalle, tratamiento },
                           })}
                           disabled={readonly}
                           placeholder="Tratamiento"
@@ -948,10 +1006,10 @@ export function AntecedentesCaptura({
                           maxLength={500}
                           className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60 resize-none"
                         />
-                        <textarea
+                        <ClinicalTextarea
                           value={detalle.observaciones}
-                          onChange={e => updatePatologia(item.field, {
-                            detalle: { ...detalle, observaciones: e.target.value },
+                          onChange={observaciones => updatePatologia(item.field, {
+                            detalle: { ...detalle, observaciones },
                           })}
                           disabled={readonly}
                           placeholder="Observaciones"
@@ -1023,7 +1081,9 @@ export function AntecedentesCaptura({
         </legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
           {VACUNAS_CAPTURE_LIST.map(({ key, label }) => {
-            const estado = modulo1[key] ?? 'NEGADO'
+            const rawEstado = modulo1[key] ?? 'NEGADO'
+            const estado =
+              rawEstado === 'NO APLICA' ? 'DESCONOCE' : rawEstado
             const especifiqueKey = `${key}_especifique`
             const especifique = modulo1[especifiqueKey] ?? ''
             return (
@@ -1035,7 +1095,7 @@ export function AntecedentesCaptura({
                   disabled={readonly}
                   className="w-full text-xs px-2 py-1 border border-slate-200 rounded-lg mt-1 focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                 >
-                  {VAC_SI_NO_VALUES.map(opt => (
+                  {VAC_IMMUNIZATION_VALUES.map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>
@@ -1092,7 +1152,8 @@ export function AntecedentesCaptura({
         </div>
       ) : (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700">
-          💾 Los cambios se guardan con el botón &ldquo;Guardar borrador&rdquo; en Exploración o Impresión.
+          💾 Autoguardado cada 7 s mientras capturas (consulta, certificado o examen médico). También
+          puedes usar &ldquo;Guardar borrador&rdquo; en cualquier momento.
         </div>
       )}
 

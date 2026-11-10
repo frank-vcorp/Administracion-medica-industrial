@@ -33,7 +33,10 @@
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { ExamenMedicoVariantAppendixPages } from '@/components/pdf/ExamenMedicoVariantAppendix'
-import { examenMedicoVariantLabel } from '@/lib/clinical/examen-medico-variant'
+import {
+  examenMedicoVariantLabel,
+  normalizeExamenMedicoVariant,
+} from '@/lib/clinical/examen-medico-variant'
 import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 import { SUPLEMENTOS_COMPLEMENTOS_LABEL } from '@/lib/antecedentes-fields'
@@ -313,7 +316,7 @@ export interface ExamenMedicoPDFData {
     labs: Array<{ serviceName: string; extractedData: unknown | null }>
   }>
   /** Variante corporativa del examen médico (AMI | SODEXO | FLOWSERVE). */
-  variant?: 'AMI' | 'SODEXO' | 'FLOWSERVE'
+  variant?: 'SME' | 'SODEXO' | 'FLOWSERVE' | 'AMI'
   variantExtensions?: {
     FLOWSERVE?: Record<string, unknown>
     SODEXO?: Record<string, unknown>
@@ -351,7 +354,7 @@ const statusLabel = (s: ExamenMedicoPDFData['status']) => {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }) => {
-  const variant = data.variant ?? 'AMI'
+  const variant = normalizeExamenMedicoVariant(data.variant)
   const variantLabel = examenMedicoVariantLabel(variant)
   return (
   <Document

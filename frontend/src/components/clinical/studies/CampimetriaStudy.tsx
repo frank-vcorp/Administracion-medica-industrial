@@ -8,10 +8,14 @@
  */
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveCampimetriaQuestionnaire } from '@/actions/campimetria-questionnaire.actions'
 import { updateEventTestStatus } from '@/actions/event-test.actions'
+import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
+import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import {
   CONFRONTACION_VALUES,
   EXPLORACION_OJO_FIELDS,
@@ -100,6 +104,7 @@ export default function CampimetriaStudy({
   const [message, setMessage] = useState('')
   const [aiWarning, setAiWarning] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
+  const [saveMappedError, setSaveMappedError] = useState<UserFacingError | null>(null)
 
   const acuity = useMemo(
     () => inheritAcuityFromExam(examData?.eyeAcuityData),
@@ -234,13 +239,9 @@ export default function CampimetriaStudy({
 
   const ishiharaDerived = deriveIshiharaResultado(form.ishihara)
 
-  const save = async (complete: boolean) => {
-    setSaving(true)
-    setMessage('')
-    setAiWarning('')
-    setFieldErrors({})
+  const buildQuestionnairePayload = useCallback((): CampimetriaQuestionnairePayload => {
     const acuityLive = inheritAcuityFromExam(examData?.eyeAcuityData)
-    const payload: CampimetriaQuestionnairePayload = {
+    return {
       ...form,
       ishihara: applyIshiharaDerivation(form.ishihara),
       agudeza_heredada: acuityLive.pending
@@ -248,15 +249,73 @@ export default function CampimetriaStudy({
         : acuityToCampimetriaPayloadSnapshot(acuityLive),
       capturedAt: new Date().toISOString(),
     }
+  }, [form, examData?.eyeAcuityData])
+
+  const snapshotKey = useMemo(() => {
+    const acuityLive = inheritAcuityFromExam(examData?.eyeAcuityData)
+    return JSON.stringify({
+      ...form,
+      ishihara: applyIshiharaDerivation(form.ishihara),
+      agudeza_heredada: acuityLive.pending
+        ? null
+        : acuityToCampimetriaPayloadSnapshot(acuityLive),
+    })
+  }, [form, examData?.eyeAcuityData])
+
+  const persistDraft = useCallback(async () => {
+    const res = await saveCampimetriaQuestionnaire(
+      eventTestId,
+      buildQuestionnairePayload(),
+      eventId,
+      { triggerPrediagnosis: false },
+    )
+    if (res.success) {
+      setForm(res.payload)
+      return true
+    }
+    return {
+      ok: false,
+      message: res.error,
+      fieldErrors: res.fieldErrors,
+      technicalDetail: res.technicalDetail,
+      context: 'Campimetría (autoguardado)',
+    } as const
+  }, [eventTestId, eventId, buildQuestionnairePayload])
+
+  const { statusLabel: autosaveLabel, markSaved, userFacingError: campimetriaAutosaveError } =
+    useClinicalIntervalAutosave({
+    enabled: !readonly,
+    snapshotKey,
+    save: persistDraft,
+  })
+
+  const save = async (complete: boolean) => {
+    setSaving(true)
+    setMessage('')
+    setAiWarning('')
+    setFieldErrors({})
+    setSaveMappedError(null)
+    const payload = buildQuestionnairePayload()
     const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId, {
       triggerPrediagnosis: complete,
     })
     if (!res.success) {
       setFieldErrors(res.fieldErrors ?? {})
-      setMessage(res.error)
+      setSaveMappedError(
+        mapSaveClinicalFailure(
+          {
+            success: false,
+            error: res.error,
+            fieldErrors: res.fieldErrors,
+            technicalDetail: res.technicalDetail,
+          },
+          { context: complete ? 'Campimetría (completar)' : 'Campimetría (borrador)' },
+        ),
+      )
       setSaving(false)
       return
     }
+    markSaved()
     setForm(res.payload)
     const status = complete ? 'COMPLETED' : 'RESULT_REGISTERED'
     await updateEventTestStatus(
@@ -285,6 +344,9 @@ export default function CampimetriaStudy({
 
   return (
     <div className="space-y-4">
+        {!readonly && (
+          <ClinicalAutosaveIndicator label={autosaveLabel} error={campimetriaAutosaveError} />
+        )}
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
           <p className="text-sm font-bold text-violet-900">Campimetría — captura manual</p>
           <p className="text-xs text-violet-700 mt-0.5">
@@ -631,10 +693,11 @@ export default function CampimetriaStudy({
           </p>
         )}
 
-        {message && (
-          <p className={`text-sm font-medium ${message.includes('inválid') || message.includes('Error') || fieldErrors && Object.keys(fieldErrors).length ? 'text-red-600' : 'text-teal-700'}`}>
-            {message}
-          </p>
+        {saveMappedError && (
+          <UserFacingErrorCallout mapped={saveMappedError} className="border-red-200 bg-red-50/90" />
+        )}
+        {message && !saveMappedError && (
+          <p className="text-sm font-medium text-teal-700">{message}</p>
         )}
         {aiWarning && (
           <p className="text-sm font-medium text-amber-700">{aiWarning}</p>

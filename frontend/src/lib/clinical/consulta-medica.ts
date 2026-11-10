@@ -1,9 +1,9 @@
 import {
+  CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS,
   CONSULTA_MEDICA_SCHEMA_VERSION,
-  ConsultaMedicaDraftSchema,
-  ConsultaMedicaPayloadSchema,
+  CONSULTA_MEDICA_SCHEMA_VERSION_V1,
   type ConsultaMedicaPayload,
-} from '@/schemas/clinical/consulta-medica.schema'
+} from '@/schemas/clinical/consulta-medica.constants'
 
 export function isConsultaMedicaTestName(name: string): boolean {
   const n = name.trim().toLowerCase()
@@ -13,14 +13,23 @@ export function isConsultaMedicaTestName(name: string): boolean {
   return /consulta\s+m[eé]dica/.test(n) || n === 'atencion medica'
 }
 
+/** Restaura borrador en UI sin ejecutar Zod (el catálogo CIE-10 es solo servidor). */
 export function parseConsultaMedicaClinicalContext(
   raw: unknown,
 ): Partial<ConsultaMedicaPayload> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const v = (raw as { schemaVersion?: string }).schemaVersion
-  if (v !== CONSULTA_MEDICA_SCHEMA_VERSION) return null
-  const full = ConsultaMedicaPayloadSchema.safeParse(raw)
-  if (full.success) return full.data
-  const draft = ConsultaMedicaDraftSchema.safeParse(raw)
-  return draft.success ? (draft.data as Partial<ConsultaMedicaPayload>) : null
+  if (
+    !v ||
+    !(CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS as readonly string[]).includes(v)
+  ) {
+    return null
+  }
+  return raw as Partial<ConsultaMedicaPayload>
+}
+
+export {
+  CONSULTA_MEDICA_SCHEMA_VERSION,
+  CONSULTA_MEDICA_SCHEMA_VERSION_V1,
+  type ConsultaMedicaPayload,
 }

@@ -5,7 +5,7 @@
  *
  * GUARDRAILS:
  *   - NO copia el diagnóstico nosológico ni la recomendación textual del
- *     PDF AMI como salida de IA (SPEC §3). La impresión diagnóstica del
+ *     PDF fuente como salida de IA (SPEC §3). La impresión diagnóstica del
  *     PDF refleja la decisión del médico firmante (`doctorDiagnosis`),
  *     no el texto del documento fuente.
  *   - El PDF conserva explícitamente TRES secciones de contenido + una
@@ -37,6 +37,7 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
+import { SME_LEGAL_NAME, SME_PDF_FOOTER } from '@/lib/brand-constants'
 
 const styles = StyleSheet.create({
   page: { padding: 36, fontFamily: 'Helvetica', fontSize: 10, color: '#0f172a' },
@@ -244,7 +245,7 @@ export const AudiometriaValidatedPDF = ({
       {/* MEMBRETE SUPERIOR (capa NOM) */}
       <View style={styles.header} fixed>
         <View style={styles.headerLeft}>
-          <Text style={styles.brand}>Administración Médica Industrial</Text>
+          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
           <Text style={styles.brandSub}>
             Evaluaciones médicas · Outsourcing · Capacitación
           </Text>
@@ -354,7 +355,7 @@ export const AudiometriaValidatedPDF = ({
 
       {/* PIE INSTITUCIONAL AMI */}
       <Text style={styles.footer} fixed>
-        Administración Médica Industrial — Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro — (442) 225-52-67 — www.medicaindustrial.com
+        {SME_PDF_FOOTER}
         {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
         {'\n'}Este documento es un reporte clínico validado por el médico firmante. Queda prohibida su alteración o reproducción no autorizada.
       </Text>

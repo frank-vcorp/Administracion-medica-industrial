@@ -40,10 +40,10 @@ test.describe('SPEC ARCH-20260921-01 — Clínica · checkout · encuesta · val
     const { checkoutEventId } = loadFixtures()
     await page.goto(`/feedback/satisfaction?event=${checkoutEventId}&mode=kiosk`)
 
-    await expect(page.getByTestId('ami-satisfaction-form')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('sme-satisfaction-form')).toBeVisible({ timeout: 15000 })
     await page.getByTestId('satisfaction-turno').fill('Matutino E2E')
 
-    const form = page.getByTestId('ami-satisfaction-form')
+    const form = page.getByTestId('sme-satisfaction-form')
     const pickScore = async (legend: string) => {
       const field = form.getByRole('group', { name: legend })
       await field.getByRole('button', { name: '5 de 5' }).click()

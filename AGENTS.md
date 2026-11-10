@@ -2,7 +2,7 @@
 
 ## Project Identity
 - **Name**: Administracion-medica-industrial
-- **Description**: Sistema de gestión médica industrial con Historial Clínico, Triaje y Gestión de Trabajadores.
+- **Description**: Soluciones Medico Empresariales (SME) — sistema clínico con Historial Clínico, Triaje y Gestión de Trabajadores.
 
 ## Tech Stack & Versioning (CRITICAL)
 - **Framework**: Next.js **16.1.6** (App Router)
@@ -29,3 +29,9 @@
 ## Workflow
 - **Spec First**: All changes must follow defined SPECs.
 - **Audit**: Verify `await params` in all new dynamic routes.
+
+## Development environment (human + agents)
+
+- **Default:** implement and verify via **Cursor Cloud Agents** and the linked **Project**; production deploy is **git push → Vercel (frontend) + Railway (backend, DB, WhatsApp)** — not a self-hosted VPS.
+- **Optional local stack:** `docker compose up` from repo root for Postgres + backend + frontend when someone needs a full stack on a machine.
+- **Do not** assume Contabo, Hermes sync, or Coolify as part of this repo’s deploy path; any mentions in `context/` or comments are historical or generic FS notes only.

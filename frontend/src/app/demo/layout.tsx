@@ -11,7 +11,7 @@
 import { ReactNode } from 'react'
 
 export const metadata = {
-  title: 'Demo Reportes Masivos UMM | AMI',
+  title: 'Demo Reportes Masivos UMM | SME',
   description: 'Demo navegable del Módulo de Reportes Masivos (datos estáticos).',
   robots: 'noindex, nofollow',
 }

@@ -21,7 +21,6 @@ const freshDraft = {
     complexion: '',
   },
   exploracion_fisica: '',
-  diagnostico_sistema: '',
   diagnostico_unificado: '',
   diagnostico_especifico: '',
   incapacidad_aplica: false,
@@ -75,6 +74,24 @@ describe('O9-03 antecedentes del perfil', () => {
       { datos_personales: { puesto_actual: 'Perfil' } },
     )
     expect(merged.datos_personales).toEqual({ puesto_actual: 'Capturado en consulta' })
+  })
+
+  it('mezcla por campo: consulta vacía + historial con patológicos', () => {
+    const merged = mergeProfileAntecedentesIntoConsulta(
+      { datos_personales: { puesto_actual: '', turno: 'MATUTINO' } },
+      {
+        datos_personales: { puesto_actual: 'Operador', area_departamento: 'Planta' },
+        patologicos: { diabetes: { estado: 'SI', detalle: { observaciones: 'controlada' } } },
+      },
+    )
+    expect(merged.datos_personales).toMatchObject({
+      puesto_actual: 'Operador',
+      area_departamento: 'Planta',
+      turno: 'MATUTINO',
+    })
+    expect(merged.patologicos).toEqual({
+      diabetes: { estado: 'SI', detalle: { observaciones: 'controlada' } },
+    })
   })
 })
 

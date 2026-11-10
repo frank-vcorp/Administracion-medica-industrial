@@ -8,31 +8,30 @@ import {
 } from '../antecedentes-fields'
 import { HeredoFamiliaresSchema } from '@/schemas/clinical/history.schema'
 
-describe('heredo-familiares OTROS + especifique', () => {
+describe('heredo-familiares multiselect (F-23)', () => {
   it('genera key especifique por campo', () => {
     expect(heredoFamiliaresEspecifiqueKey('cancer')).toBe('cancer_especifique')
   })
 
-  it('formatea OTROS con detalle para PDF', () => {
-    expect(formatHeredoFamiliaresValor('OTROS', 'TÍO PATERNO')).toBe('OTROS (TÍO PATERNO)')
+  it('formatea varios parentescos para PDF', () => {
+    expect(formatHeredoFamiliaresValor('PADRE, HERMANOS', '')).toBe('PADRE, HERMANOS')
     expect(formatHeredoFamiliaresValor('PADRE', '')).toBe('PADRE')
   })
 
-  it('lee display desde snapshot con cancer_especifique', () => {
-    const text = readHeredoFamiliaresDisplay(
-      { cancer: 'OTROS', cancer_especifique: 'Mama — abuela materna' },
-      'cancer',
-    )
-    expect(text).toBe('OTROS (Mama — abuela materna)')
+  it('formatea mentales SI con especificación', () => {
+    expect(formatHeredoFamiliaresValor('SI', 'depresión materna')).toBe('SI (depresión materna)')
   })
 
-  it('schema acepta cancer_especifique independiente del select', () => {
+  it('lee display desde snapshot multiselect', () => {
+    const text = readHeredoFamiliaresDisplay({ cancer: 'PADRE, AB MATERNO' }, 'cancer')
+    expect(text).toBe('PADRE, AB MATERNO')
+  })
+
+  it('schema acepta cancer multiselect', () => {
     const parsed = HeredoFamiliaresSchema.parse({
-      cancer: 'OTROS',
-      cancer_especifique: 'Próstata — padre',
+      cancer: 'PADRE, HERMANOS',
     })
-    expect(parsed.cancer).toBe('OTROS')
-    expect(parsed.cancer_especifique).toBe('Próstata — padre')
+    expect(parsed.cancer).toBe('PADRE, HERMANOS')
   })
 })
 

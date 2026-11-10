@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
 import { ClinicalHistoryDataSchema } from '@/schemas/clinical/history.schema'
 
 export const CERTIFICADO_MEDICO_SCHEMA_VERSION = 'certificado-medico-v1' as const
@@ -29,8 +30,12 @@ export const DEFAULT_DICTAMEN_LABORAL_TEXTO: Record<DictamenLaboralValue, string
 
 export const DEFAULT_LUGAR_EXPEDICION = 'Santiago de Querétaro, Querétaro'
 
-const cleanString = z.string().trim()
-const optionalString = cleanString.max(8000).optional().or(z.literal(''))
+const freeText = (max: number, min = 0) =>
+  z.string().trim().min(min).max(max).transform(applySentenceCaseIfAllCaps)
+const plainString = z.string().trim()
+const optionalString = z
+  .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCaseIfAllCaps)])
+  .optional()
 
 export const SignosVitalesCertificadoSchema = z.object({
   peso_kg: optionalString,
@@ -51,21 +56,21 @@ export const SignosVitalesCertificadoSchema = z.object({
 
 export const CertificadoMedicoPayloadSchema = z.object({
   schemaVersion: z.literal(CERTIFICADO_MEDICO_SCHEMA_VERSION),
-  lugar_expedicion: cleanString.min(3).max(200),
+  lugar_expedicion: freeText(200, 3),
   hora_atencion: optionalString,
   sexo_atencion: optionalString,
   domicilio_atencion: optionalString,
   identificacion_tipo: optionalString,
   identificacion_folio: optionalString,
-  medico_nombre: cleanString.min(1).max(200),
-  medico_cedula: cleanString.min(1).max(50),
+  medico_nombre: freeText(200, 1),
+  medico_cedula: plainString.min(1).max(50),
   medico_titulo: optionalString,
   medico_universidad: optionalString,
   signos_vitales: SignosVitalesCertificadoSchema,
-  exploracion_fisica: cleanString.min(10).max(12000),
-  integracion_diagnostica: cleanString.min(3).max(4000),
+  exploracion_fisica: freeText(12000, 10),
+  integracion_diagnostica: freeText(4000, 3),
   dictamen_laboral: z.enum(DICTAMEN_LABORAL_VALUES),
-  dictamen_laboral_texto: cleanString.min(3).max(2000),
+  dictamen_laboral_texto: freeText(2000, 3),
   antecedentes: ClinicalHistoryDataSchema.optional(),
   cerrada_at: z.string().datetime().optional(),
 })

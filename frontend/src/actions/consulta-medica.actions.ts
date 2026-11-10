@@ -3,12 +3,14 @@
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth/next'
 import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { authOptions } from '@/auth'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { validateConsultaMedicaPayload } from '@/lib/clinical/consulta-medica-validate'
 import type { ConsultaMedicaPayload } from '@/schemas/clinical/consulta-medica.schema'
 import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
+import { searchCie10Catalog, type Cie10Entry } from '@/lib/clinical/cie-10-catalog'
 
 const CLINICAL_ROLES = new Set([
   'SUPERADMIN',
@@ -21,7 +23,7 @@ const CLINICAL_ROLES = new Set([
 
 export type SaveConsultaMedicaResult =
   | { success: true; payload: ConsultaMedicaPayload; updatedAt: string }
-  | { success: false; error: string; fieldErrors?: Record<string, string[]> }
+  | { success: false; error: string; fieldErrors?: Record<string, string[]>; technicalDetail?: string }
 
 async function assertClinicalAccess(): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
   const session = await getServerSession(authOptions)
@@ -32,6 +34,44 @@ async function assertClinicalAccess(): Promise<{ ok: true; userId: string } | { 
     return { ok: false, error: 'No tienes permisos para capturar consulta médica.' }
   }
   return { ok: true, userId: session.user.id }
+}
+
+export async function searchCie10ForConsulta(query: string): Promise<Cie10Entry[]> {
+  const access = await assertClinicalAccess()
+  if (!access.ok) return []
+  return searchCie10Catalog(query, 25)
+}
+
+/**
+ * Enlace opcional. Si la cita no existe, el id no es UUID o la columna aún
+ * no está migrada, la consulta igual queda guardada en clinicalContext.
+ */
+async function syncFollowUpAppointmentLink(
+  eventId: string,
+  workerId: string,
+  appointmentId: string | undefined,
+): Promise<void> {
+  const id = appointmentId?.trim() ?? ''
+  if (id && !z.string().uuid().safeParse(id).success) return
+  try {
+    if (!id) {
+      await prisma.appointment.updateMany({
+        where: { followUpFromMedicalEventId: eventId },
+        data: { followUpFromMedicalEventId: null },
+      })
+      return
+    }
+    await prisma.appointment.updateMany({
+      where: { followUpFromMedicalEventId: eventId, NOT: { id } },
+      data: { followUpFromMedicalEventId: null },
+    })
+    await prisma.appointment.updateMany({
+      where: { id, workerId },
+      data: { followUpFromMedicalEventId: eventId },
+    })
+  } catch {
+    console.error('[saveConsultaMedica] follow-up link', eventId)
+  }
 }
 
 export async function saveConsultaMedica(
@@ -104,6 +144,11 @@ export async function saveConsultaMedica(
       },
       select: { updatedAt: true },
     })
+    await syncFollowUpAppointmentLink(
+      eventId,
+      workerId,
+      toStore.proxima_cita_appointment_id,
+    )
     revalidatePath(`/events/${eventId}`)
     return {
       success: true,
@@ -112,6 +157,10 @@ export async function saveConsultaMedica(
     }
   } catch (err) {
     console.error('[saveConsultaMedica]', err)
-    return { success: false, error: 'No se pudo guardar la consulta.' }
+    return {
+      success: false,
+      error: 'No se pudo guardar la consulta por un problema del servidor o de red.',
+      technicalDetail: err instanceof Error ? err.message : 'unknown_error',
+    }
   }
 }

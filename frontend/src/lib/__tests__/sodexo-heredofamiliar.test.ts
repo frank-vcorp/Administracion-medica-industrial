@@ -40,12 +40,12 @@ describe('sodexo-heredofamiliar', () => {
       heredo_familiares: {
         diabetes: 'NEGADOS',
         has: 'PADRE',
-        cancer: 'OTROS',
-        cancer_especifique: 'MAMA',
+        cancer: 'AB MATERNO',
+        cancer_especifique: '',
       },
     })
     expect(map.diabetes?.respuesta).toBe('NO')
     expect(map.cardiovascular?.respuesta).toBe('SI')
-    expect(map.cancer?.parentesco).toContain('MAMA')
+    expect(map.cancer?.parentesco).toContain('AB MATERNO')
   })
 })

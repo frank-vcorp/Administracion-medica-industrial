@@ -8,9 +8,14 @@
  */
 "use client"
 
-import { useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { updateSomatometria } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
+import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
+import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCallout"
+import { useClinicalIntervalAutosave } from "@/lib/hooks/useClinicalIntervalAutosave"
+import { mapMedicalExamActionFailure, parseMedicalExamZodIssues } from "@/lib/medical-exam-action-errors"
+import { splitUserFacingMessageLines, type UserFacingError } from "@/lib/user-facing-error"
 
 interface SomatometriaStudyProps {
   eventId: string
@@ -35,6 +40,7 @@ export default function SomatometriaStudy({
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [aiWarning, setAiWarning] = useState("")
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -49,13 +55,41 @@ export default function SomatometriaStudy({
   else if (parseFloat(imc) > 24.9) complexion = "SOBREPESO"
   else if (parseFloat(imc) < 18.5 && parseFloat(imc) > 0) complexion = "BAJO PESO"
 
+  const buildPayload = useCallback(
+    () => ({ ...formData, imc: parseFloat(imc), complexion }),
+    [formData, imc, complexion],
+  )
+
+  const snapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
+
+  const persistDraft = useCallback(async () => {
+    const res = await updateSomatometria(eventId, buildPayload(), { autosave: true })
+    if (!res.success) {
+      return {
+        ok: false,
+        message: res.error,
+        error: parseMedicalExamZodIssues(res.technicalDetail) ?? res.technicalDetail,
+        context: 'Somatometría (autoguardado)',
+      } as const
+    }
+    return true
+  }, [eventId, buildPayload])
+
+  const { statusLabel: autosaveLabel, markSaved, userFacingError: autosaveError } = useClinicalIntervalAutosave({
+    enabled: !readonly,
+    snapshotKey,
+    save: persistDraft,
+  })
+
   const handleSave = async (markComplete: boolean) => {
     setIsSaving(true)
     setMessage("")
     setAiWarning("")
-    const payload = { ...formData, imc: parseFloat(imc), complexion }
+    setSaveError(null)
+    const payload = buildPayload()
     const res = await updateSomatometria(eventId, payload)
     if (res.success) {
+      markSaved()
       const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
       await updateEventTestStatus(
         eventTestId,
@@ -68,13 +102,25 @@ export default function SomatometriaStudy({
         setAiWarning(`La captura clínica se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`)
       }
     } else {
-      setMessage("❌ Error: " + res.error)
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: res.technicalDetail,
+        },
+        markComplete ? 'Somatometría (completar)' : 'Somatometría (guardado)',
+      )
+      setSaveError(mapped)
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setMessage(`❌ ${mapped.title}: ${line}`)
     }
     setIsSaving(false)
   }
 
   return (
     <div className="space-y-6">
+      {!readonly && <ClinicalAutosaveIndicator label={autosaveLabel} error={autosaveError} />}
+      {saveError && <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />}
       {/* Peso, Talla e IMC */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div>

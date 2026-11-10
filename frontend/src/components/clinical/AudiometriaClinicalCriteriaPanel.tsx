@@ -12,6 +12,10 @@
  *   - PTA calculado (PTA3) por oído: `(TA500 + TA1000 + TA2000) / 3`. Se
  *     muestra la ECUACIÓN, sus TRES ENTRADAS, el resultado, la fuente del
  *     cálculo y el `pta_fuente` del documento por separado.
+ *   - Índice de Fletcher (bilateral): a partir de los dos PTA3 completos,
+ *     oído menos afectado = menor dB HL, oído más afectado = mayor dB HL:
+ *     `((PTA_menor × 7) + (PTA_mayor × 1)) / 8`. Si falta PTA3 en algún
+ *     oído, no se calcula (no se interpola).
  *   - Criterio AMI de normalidad: ≤ 25 dB → normal.
  *   - Clasificación por patrón (graves vs agudas) + PTA/criterio AMI. Si
  *     hay umbrales en huecos AMI, la clasificación se marca
@@ -47,7 +51,7 @@ export const FRECUENCIAS_GRAVES_HZ = [250, 500, 1000] as const
 export const FRECUENCIAS_AGUDAS_HZ = [2000, 3000, 4000, 6000, 8000] as const
 
 // ──────────────────────────────────────────────────────────────────────────
-// FND-20260825-12 — Referencia del programa audiométrico AMI.
+// FND-20260825-12 — Referencia del programa audiométrico SME.
 //
 // Estas constantes representan la TABLA DE REFERENCIA del criterio
 // audiométrico AMI (BR-20260825-04 / DEC-20260825-05). NO son resultados
@@ -252,6 +256,7 @@ export interface OidoInterpretacion {
 
 export interface ResolvedAudiometriaCriteria {
   readonly oidos: ReadonlyArray<OidoInterpretacion>
+  readonly indiceFletcher: IndiceFletcherResultado
   readonly bilateral: {
     readonly estado: 'NORMAL_BILATERAL' | 'ALTERADO_BILATERAL' | 'ASIMETRIA' | 'NO_CONCLUYENTE'
     readonly nota: string
@@ -348,6 +353,70 @@ export function calcularPTA3(
   return { promedio, completo: true, valores }
 }
 
+export type IndiceFletcherResultado = {
+  valor: number | null
+  completo: boolean
+  /** Menor PTA3 (dB HL) = oído menos afectado. */
+  oidoMenosAfectado: 'OD' | 'OI' | null
+  /** Mayor PTA3 (dB HL) = oído más afectado. */
+  oidoMasAfectado: 'OD' | 'OI' | null
+  ptaMenor: number | null
+  ptaMayor: number | null
+}
+
+/**
+ * Índice de Fletcher (audiometría): media ponderada bilateral usando los
+ * PTA3 por oído. Oído **menos afectado** = menor umbral en dB HL; **más
+ * afectado** = mayor dB HL.
+ * Fórmula: `((PTA_menor × 7) + (PTA_mayor × 1)) / 8`.
+ * Si empatan, el resultado es el mismo PTA y se etiqueta OD como menor y OI
+ * como mayor solo para mostrar la sustitución (la expresión es simétrica).
+ */
+export function calcularIndiceFletcher(
+  ptaOd: number | null,
+  ptaOi: number | null,
+): IndiceFletcherResultado {
+  if (ptaOd === null || ptaOi === null) {
+    return {
+      valor: null,
+      completo: false,
+      oidoMenosAfectado: null,
+      oidoMasAfectado: null,
+      ptaMenor: null,
+      ptaMayor: null,
+    }
+  }
+  let oidoMenosAfectado: 'OD' | 'OI'
+  let oidoMasAfectado: 'OD' | 'OI'
+  let ptaMenor: number
+  let ptaMayor: number
+  if (ptaOd < ptaOi) {
+    oidoMenosAfectado = 'OD'
+    oidoMasAfectado = 'OI'
+    ptaMenor = ptaOd
+    ptaMayor = ptaOi
+  } else if (ptaOi < ptaOd) {
+    oidoMenosAfectado = 'OI'
+    oidoMasAfectado = 'OD'
+    ptaMenor = ptaOi
+    ptaMayor = ptaOd
+  } else {
+    oidoMenosAfectado = 'OD'
+    oidoMasAfectado = 'OI'
+    ptaMenor = ptaOd
+    ptaMayor = ptaOi
+  }
+  const valor = Math.round(((ptaMenor * 7 + ptaMayor * 1) / 8) * 10) / 10
+  return {
+    valor,
+    completo: true,
+    oidoMenosAfectado,
+    oidoMasAfectado,
+    ptaMenor,
+    ptaMayor,
+  }
+}
+
 /**
  * Clasifica el patrón audiométrico (graves vs agudas) usando el peor
  * umbral TA en cada grupo. Si el grupo no tiene umbrales en el documento,
@@ -413,6 +482,7 @@ export function resolveAudiometriaCriteria(
 
   const ptaOd = calcularPTA3(od.va)
   const ptaOi = calcularPTA3(oi.va)
+  const indiceFletcher = calcularIndiceFletcher(ptaOd.promedio, ptaOi.promedio)
 
   const advertencias: string[] = []
   if (!ptaOd.completo) {
@@ -423,6 +493,11 @@ export function resolveAudiometriaCriteria(
   if (!ptaOi.completo) {
     advertencias.push(
       'OI: PTA3 incompleto (faltan TA500/TA1000/TA2000). Mostrando valores disponibles.',
+    )
+  }
+  if (!indiceFletcher.completo) {
+    advertencias.push(
+      'Índice de Fletcher: no calculable hasta tener PTA3 completo en ambos oídos.',
     )
   }
 
@@ -489,7 +564,7 @@ export function resolveAudiometriaCriteria(
   ) {
     bilateralEstado = 'NO_CONCLUYENTE'
     bilateralNota =
-      'Al menos un oído no es concluyente para clasificación AMI (faltan TA500/TA1000/TA2000 o patrón incompleto).'
+      'Al menos un oído no es concluyente para clasificación audiométrica (faltan TA500/TA1000/TA2000 o patrón incompleto).'
   } else if (odEstado === oiEstado) {
     bilateralEstado =
       odEstado === 'NORMAL' ? 'NORMAL_BILATERAL' : 'ALTERADO_BILATERAL'
@@ -521,11 +596,30 @@ export function resolveAudiometriaCriteria(
 
   return {
     oidos,
+    indiceFletcher,
     bilateral: { estado: bilateralEstado, nota: bilateralNota },
     completitudDocumental: completitud,
     frecuenciasDetectadas,
     advertencias,
   }
+}
+
+function resolvedAudiometriaHasRenderable(
+  resolved: ResolvedAudiometriaCriteria,
+): boolean {
+  if (resolved.frecuenciasDetectadas.length > 0) return true
+  return resolved.oidos.some((o) => o.ptaFuente !== null)
+}
+
+/**
+ * Hay algo que mostrar en la papeleta (umbrales y/o PTA del documento).
+ * Evita un panel vacío cuando el snapshot existe pero aún no trae extracción.
+ */
+export function hasRenderableAudiometriaCriteria(
+  extractedData: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!extractedData || typeof extractedData !== 'object') return false
+  return resolvedAudiometriaHasRenderable(resolveAudiometriaCriteria(extractedData))
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -543,13 +637,13 @@ function LayerBadge({
   children,
 }: {
   label: string
-  tone: 'nom' | 'ami' | 'fuente' | 'derivada'
+  tone: 'nom' | 'sme' | 'fuente' | 'derivada'
   children: ReactNode
 }) {
   const cls =
     tone === 'nom'
       ? 'bg-slate-100 text-slate-700 border-slate-300'
-      : tone === 'ami'
+      : tone === 'sme'
         ? 'bg-amber-50 text-amber-800 border-amber-300'
         : tone === 'fuente'
           ? 'bg-sky-50 text-sky-800 border-sky-300'
@@ -610,7 +704,9 @@ export default function AudiometriaClinicalCriteriaPanel({
   extractedData,
   version,
 }: AudiometriaClinicalCriteriaPanelProps) {
+  if (!extractedData || typeof extractedData !== 'object') return null
   const resolved = resolveAudiometriaCriteria(extractedData)
+  if (!resolvedAudiometriaHasRenderable(resolved)) return null
   const od = resolved.oidos.find((o) => o.oido === 'OD') ?? null
   const oi = resolved.oidos.find((o) => o.oido === 'OI') ?? null
 
@@ -643,7 +739,7 @@ export default function AudiometriaClinicalCriteriaPanel({
       <p className="text-[11px] text-slate-500">
         Capas diferenciadas:{' '}
         <LayerBadge label="NOM" tone="nom"> referencia regulatoria</LayerBadge>{' '}
-        <LayerBadge label="AMI" tone="ami"> criterio audiométrico</LayerBadge>{' '}
+        <LayerBadge label="SME" tone="sme"> criterio audiométrico</LayerBadge>{' '}
         <LayerBadge label="Fuente" tone="fuente"> datos del documento</LayerBadge>{' '}
         <LayerBadge label="Derivada" tone="derivada"> cálculo del sistema</LayerBadge>
       </p>
@@ -733,6 +829,8 @@ export default function AudiometriaClinicalCriteriaPanel({
         <PTACard oidoLabel="OI" interpretacion={oi} va={oi_va} />
       </div>
 
+      <FletcherCard indice={resolved.indiceFletcher} />
+
       {/* Estado bilateral */}
       <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
         <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
@@ -767,12 +865,12 @@ export default function AudiometriaClinicalCriteriaPanel({
         </p>
       </div>
 
-      {/* FND-20260825-12 — Criterio audiométrico AMI (referencia).
+      {/* FND-20260825-12 — Criterio audiométrico SME (referencia).
           Sección explícita y legible, SEPARADA del resultado derivado
           (arriba) y de la decisión médica (abajo, fuera del panel).
           El médico y el programa consultan esta tabla para emitir la
           impresión diagnóstica. */}
-      <AMIReferenceSection />
+      <SmeAudiometryReferenceSection />
 
       {/* Guardia clínica: el panel NO copia diagnóstico ni recomendación
           textual del PDF AMI como salida de IA (SPEC §3). */}
@@ -839,34 +937,34 @@ function readOidoVo(
 // también desde el PDF validado.
 // ──────────────────────────────────────────────────────────────────────────
 
-function AMIReferenceSection() {
+function SmeAudiometryReferenceSection() {
   return (
     <details
       className="bg-slate-50 border border-slate-300 rounded-lg overflow-hidden group"
-      data-testid="audiometria-ami-reference-section"
-      aria-label="Criterio audiométrico AMI (referencia)"
+      data-testid="audiometria-sme-reference-section"
+      aria-label="Criterio audiométrico SME (referencia)"
     >
       <summary
         className="cursor-pointer select-none px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-100 transition-colors [&::-webkit-details-marker]:hidden"
-        data-testid="audiometria-ami-reference-summary"
+        data-testid="audiometria-sme-reference-summary"
       >
         <div className="flex items-center gap-2">
           <span aria-hidden="true">📖</span>
           <p className="text-sm font-bold text-slate-800">
-            Criterio audiométrico AMI (referencia)
+            Criterio audiométrico SME (referencia)
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span
             className="text-[10px] font-bold uppercase tracking-wider text-slate-500 border border-slate-300 rounded px-2 py-0.5 bg-white"
-            data-testid="audiometria-ami-reference-tag"
+            data-testid="audiometria-sme-reference-tag"
           >
             Referencia operativa
           </span>
           <span
             aria-hidden="true"
             className="text-slate-500 text-xs transition-transform group-open:rotate-90"
-            data-testid="audiometria-ami-reference-toggle"
+            data-testid="audiometria-sme-reference-toggle"
           >
             ▶
           </span>
@@ -874,21 +972,21 @@ function AMIReferenceSection() {
       </summary>
       <div
         className="px-3 py-3 space-y-3 border-t border-slate-200"
-        data-testid="audiometria-ami-reference-body"
+        data-testid="audiometria-sme-reference-body"
         role="region"
-        aria-label="Contenido de la referencia audiométrica AMI"
+        aria-label="Contenido de la referencia audiométrica SME"
       >
         <p className="text-[11px] text-slate-600">
-          Tabla administrativa del programa audiométrico AMI. Esta sección
+          Tabla administrativa del programa audiométrico SME. Esta sección
           es de <strong>consulta</strong>: el resultado derivado del paciente
           (PTA, criterio, patrón) está arriba; la impresión diagnóstica la
           emite el médico firmante.
         </p>
 
         {/* 1. Normalidad */}
-        <div data-testid="audiometria-ami-ref-normalidad">
+        <div data-testid="audiometria-sme-ref-normalidad">
           <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-            1. Normalidad (umbral AMI)
+            1. Normalidad (umbral del programa)
           </p>
           <p className="text-xs text-slate-700 font-mono">
             PTA ≤ {AMI_NORMALIDAD_DB} dB HL → Normal
@@ -896,7 +994,7 @@ function AMIReferenceSection() {
         </div>
 
         {/* 2. Patrones nosológicos operativos */}
-        <div data-testid="audiometria-ami-ref-patrones">
+        <div data-testid="audiometria-sme-ref-patrones">
           <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
             2. Patrón nosológico operativo
           </p>
@@ -917,7 +1015,7 @@ function AMIReferenceSection() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {AMI_PATRONES_REFERENCIA.map(p => (
-                  <tr key={p.id} data-testid={`audiometria-ami-ref-patron-${p.id.toLowerCase()}`}>
+                  <tr key={p.id} data-testid={`audiometria-sme-ref-patron-${p.id.toLowerCase()}`}>
                     <td className="px-2 py-1 font-medium text-slate-700">
                       {p.etiqueta}
                     </td>
@@ -935,7 +1033,7 @@ function AMIReferenceSection() {
         </div>
 
         {/* 3. Severidad */}
-        <div data-testid="audiometria-ami-ref-severidad">
+        <div data-testid="audiometria-sme-ref-severidad">
           <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
             3. Severidad (por peor PTA, dB HL)
           </p>
@@ -958,7 +1056,7 @@ function AMIReferenceSection() {
                 {AMI_SEVERIDAD_REFERENCIA.map(s => (
                   <tr
                     key={s.id}
-                    data-testid={`audiometria-ami-ref-severidad-${s.id.toLowerCase()}`}
+                    data-testid={`audiometria-sme-ref-severidad-${s.id.toLowerCase()}`}
                   >
                     <td className="px-2 py-1 font-medium text-slate-700">
                       {s.etiqueta}
@@ -977,16 +1075,16 @@ function AMIReferenceSection() {
         </div>
 
         {/* 4. Categorías etiológicas */}
-        <div data-testid="audiometria-ami-ref-etiologias">
+        <div data-testid="audiometria-sme-ref-etiologias">
           <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-            4. Categorías etiológicas AMI (referencia administrativa)
+            4. Categorías etiológicas (referencia administrativa)
           </p>
           <ul className="space-y-1">
             {AMI_ETIOLOGIAS_REFERENCIA.map(e => (
               <li
                 key={e.id}
                 className="bg-white border border-slate-200 rounded px-2 py-1"
-                data-testid={`audiometria-ami-ref-etiologia-${e.id.toLowerCase()}`}
+                data-testid={`audiometria-sme-ref-etiologia-${e.id.toLowerCase()}`}
               >
                 <span className="text-xs font-bold text-slate-700">
                   {e.etiqueta}
@@ -998,6 +1096,58 @@ function AMIReferenceSection() {
         </div>
       </div>
     </details>
+  )
+}
+
+function FletcherCard({ indice }: { indice: IndiceFletcherResultado }) {
+  const {
+    valor,
+    completo,
+    oidoMenosAfectado,
+    oidoMasAfectado,
+    ptaMenor,
+    ptaMayor,
+  } = indice
+  const sustitucion =
+    completo &&
+    ptaMenor !== null &&
+    ptaMayor !== null &&
+    oidoMenosAfectado &&
+    oidoMasAfectado
+      ? `((PTA ${oidoMenosAfectado} ${ptaMenor} × 7) + (PTA ${oidoMasAfectado} ${ptaMayor} × 1)) ÷ 8 = ${valor} dB`
+      : null
+  return (
+    <div
+      className="bg-violet-50 border border-violet-200 rounded-lg p-3"
+      data-testid="audiometria-fletcher-card"
+    >
+      <p className="text-xs font-bold text-violet-900 mb-1">Índice de Fletcher</p>
+      <p className="text-[11px] text-violet-800 font-mono">
+        ((PTA oído menos afectado × 7) + (PTA oído más afectado × 1)) ÷ 8
+      </p>
+      <p className="text-[10px] text-violet-700 mt-1">
+        Menos afectado = menor PTA3 (dB HL); más afectado = mayor PTA3. Entradas: PTA3 por oído
+        (TA500+TA1000+TA2000)÷3.
+      </p>
+      {sustitucion && (
+        <p
+          className="text-[11px] text-violet-900 font-mono mt-2"
+          data-testid="audiometria-fletcher-sustitucion"
+        >
+          Sustitución: {sustitucion}
+        </p>
+      )}
+      {!completo && (
+        <p className="text-[11px] text-orange-700 mt-2" data-testid="audiometria-fletcher-incompleto">
+          Requiere PTA3 completo en OD y en OI.
+        </p>
+      )}
+      {completo && valor !== null && (
+        <p className="text-sm font-bold text-violet-950 mt-2" data-testid="audiometria-fletcher-valor">
+          {valor} dB HL
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -1016,6 +1166,15 @@ function PTACard({
   const ta500 = va[500] ?? null
   const ta1000 = va[1000] ?? null
   const ta2000 = va[2000] ?? null
+  const subNum = (v: number | null) => (v === null ? '—' : String(v))
+  const sustitucion =
+    ptaCalculadoCompleto &&
+    ptaCalculado !== null &&
+    ta500 !== null &&
+    ta1000 !== null &&
+    ta2000 !== null
+      ? `(${subNum(ta500)} + ${subNum(ta1000)} + ${subNum(ta2000)}) ÷ 3 = ${ptaCalculado} dB`
+      : `(${subNum(ta500)} + ${subNum(ta1000)} + ${subNum(ta2000)}) ÷ 3`
   return (
     <div
       className="bg-white border border-slate-200 rounded-lg p-3"
@@ -1032,6 +1191,12 @@ function PTACard({
         data-testid={`audiometria-pta-equation-${oidoLabel.toLowerCase()}`}
       >
         PTA3 = (TA500 + TA1000 + TA2000) / 3
+      </p>
+      <p
+        className="text-[11px] text-slate-700 font-mono mt-0.5"
+        data-testid={`audiometria-pta-sustitucion-${oidoLabel.toLowerCase()}`}
+      >
+        Sustitución: {sustitucion}
       </p>
       <p
         className="text-[11px] text-slate-700 mt-1"

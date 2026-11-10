@@ -1,9 +1,23 @@
 'use client'
 
-import { useCallback, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
+import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
 import { saveCertificadoMedico } from '@/actions/certificado-medico.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
+import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import {
+  ClinicalFreeTextInput,
+  ClinicalTextarea,
+} from '@/components/clinical/ClinicalFreeTextControls'
+import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
+import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
+import {
+  defaultHoraAtencionMexico,
+  mergeCertificadoSignosPrefill,
+  prefillCertificadoPatientFields,
+} from '@/lib/clinical/certificado-medico-prefill'
 import { parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
 import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
 import {
@@ -51,32 +65,54 @@ export default function CertificadoMedicoEstudio({
   eventId,
   eventTestId,
   workerId,
+  workerNationalId = null,
   initialClinicalContext,
   longitudinalData,
+  somatometryData = null,
+  eyeAcuityData = null,
   readonly = false,
 }: {
   eventId: string
   eventTestId: string
   workerId: string
+  workerNationalId?: string | null
   initialClinicalContext: unknown
   longitudinalData?: Record<string, unknown> | null
+  somatometryData?: Record<string, unknown> | null
+  eyeAcuityData?: Record<string, unknown> | null
   readonly?: boolean
 }) {
   const { data: session } = useSession()
   const parsed = parseCertificadoMedicoClinicalContext(initialClinicalContext)
 
+  const patientPrefill = useMemo(
+    () =>
+      prefillCertificadoPatientFields({
+        parsedFolio: parsed?.identificacion_folio,
+        workerNationalId,
+        parsedSexo: parsed?.sexo_atencion,
+        parsedDomicilio: parsed?.domicilio_atencion,
+        longitudinalData: longitudinalData ?? null,
+      }),
+    [parsed, workerNationalId, longitudinalData],
+  )
+
   const [activeTab, setActiveTab] = useState<TabId>('antecedentes')
   const [saveMsg, setSaveMsg] = useState('')
-  const [saveError, setSaveError] = useState('')
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const [lugar, setLugar] = useState(parsed?.lugar_expedicion ?? DEFAULT_LUGAR_EXPEDICION)
-  const [horaAtencion, setHoraAtencion] = useState(parsed?.hora_atencion ?? '')
-  const [sexoAtencion, setSexoAtencion] = useState(parsed?.sexo_atencion ?? '')
-  const [domicilioAtencion, setDomicilioAtencion] = useState(parsed?.domicilio_atencion ?? '')
+  const [horaAtencion, setHoraAtencion] = useState(
+    parsed?.hora_atencion?.trim() || defaultHoraAtencionMexico(),
+  )
+  const [sexoAtencion, setSexoAtencion] = useState(patientPrefill.sexo_atencion)
+  const [domicilioAtencion, setDomicilioAtencion] = useState(patientPrefill.domicilio_atencion)
   const [idTipo, setIdTipo] = useState(parsed?.identificacion_tipo ?? 'INE')
-  const [idFolio, setIdFolio] = useState(parsed?.identificacion_folio ?? '')
-  const [signos, setSignos] = useState(parsed?.signos_vitales ?? emptySignosVitalesCertificado())
+  const [idFolio, setIdFolio] = useState(patientPrefill.identificacion_folio)
+  const [signos, setSignos] = useState(() =>
+    mergeCertificadoSignosPrefill(parsed?.signos_vitales, somatometryData, eyeAcuityData),
+  )
   const [exploracion, setExploracion] = useState(
     parsed?.exploracion_fisica ?? buildDefaultExploracionCertificado(),
   )
@@ -98,6 +134,19 @@ export default function CertificadoMedicoEstudio({
     ...(parsed?.antecedentes ?? {}),
   }))
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
+
+  useEffect(() => {
+    let cancelled = false
+    void getCurrentDoctorProfile().then((res) => {
+      if (cancelled || !res.success) return
+      const { fullName, professionalLicense } = res.profile
+      setMedicoNombre((prev) => (prev.trim() ? prev : fullName))
+      setMedicoCedula((prev) => (prev.trim() ? prev : professionalLicense ?? ''))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const imc = useMemo(() => {
     const p = parseFloat(signos.peso_kg ?? '')
@@ -166,8 +215,38 @@ export default function CertificadoMedicoEstudio({
     cerradaAt,
   ])
 
+  const certificadoSnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
+
+  const persistCertificadoDraft = useCallback(async () => {
+    const res = await saveCertificadoMedico(
+      eventTestId,
+      eventId,
+      workerId,
+      buildPayload(),
+      { finalize: false },
+    )
+    if (!res.success) {
+      return {
+        ok: false,
+        message: res.error,
+        fieldErrors: res.fieldErrors,
+        technicalDetail: res.technicalDetail,
+        context: 'Certificado médico (autoguardado)',
+      } as const
+    }
+    return true
+  }, [eventTestId, eventId, workerId, buildPayload])
+
+  const autosaveEnabled = !readonly && !cerradaAt
+  const { statusLabel: autosaveLabel, markSaved: markCertificadoSaved, userFacingError: certAutosaveError } =
+    useClinicalIntervalAutosave({
+    enabled: autosaveEnabled,
+    snapshotKey: certificadoSnapshotKey,
+    save: persistCertificadoDraft,
+  })
+
   const runSave = (finalize: boolean) => {
-    setSaveError('')
+    setSaveError(null)
     setSaveMsg('')
     startTransition(async () => {
       const res = await saveCertificadoMedico(
@@ -178,12 +257,23 @@ export default function CertificadoMedicoEstudio({
         { finalize },
       )
       if (!res.success) {
-        setSaveError(res.error)
+        setSaveError(
+          mapSaveClinicalFailure(
+            {
+              success: false,
+              error: res.error,
+              fieldErrors: res.fieldErrors,
+              technicalDetail: res.technicalDetail,
+            },
+            { context: finalize ? 'Certificado médico (cierre)' : 'Certificado médico (borrador)' },
+          ),
+        )
         return
       }
       if (finalize && res.payload.cerrada_at) {
         setCerradaAt(res.payload.cerrada_at)
       }
+      markCertificadoSaved()
       setSaveMsg(finalize ? 'Certificado cerrado y guardado.' : 'Borrador guardado.')
     })
   }
@@ -195,6 +285,10 @@ export default function CertificadoMedicoEstudio({
 
   return (
     <div className="space-y-4">
+      <ClinicalAutosaveIndicator
+        label={autosaveEnabled ? autosaveLabel : null}
+        error={autosaveEnabled ? certAutosaveError : null}
+      />
       <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">
         {TABS.map((t) => (
           <button
@@ -229,6 +323,10 @@ export default function CertificadoMedicoEstudio({
 
       {activeTab === 'vitales' && (
         <section className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-white border border-slate-200 rounded-xl p-4">
+          <p className="col-span-2 sm:col-span-3 text-xs text-slate-500">
+            Se precargan peso, talla, TA, FC, FR, temperatura, SpO₂ y agudeza desde somatometría y
+            agudeza visual del evento cuando aún no hay captura en el certificado.
+          </p>
           {(
             [
               ['peso_kg', 'Peso (kg)'],
@@ -264,10 +362,10 @@ export default function CertificadoMedicoEstudio({
       {activeTab === 'exploracion' && (
         <section className="bg-white border border-slate-200 rounded-xl p-4">
           <label className="text-[10px] font-bold text-slate-400 uppercase">Exploración física (V)</label>
-          <textarea
+          <ClinicalTextarea
             className={`${inputClass} min-h-[200px]`}
             value={exploracion}
-            onChange={(e) => setExploracion(e.target.value)}
+            onChange={setExploracion}
             disabled={readonly}
           />
         </section>
@@ -279,10 +377,10 @@ export default function CertificadoMedicoEstudio({
             <label className="text-[10px] font-bold text-slate-400 uppercase">
               Integración diagnóstica (VI)
             </label>
-            <textarea
+            <ClinicalTextarea
               className={`${inputClass} min-h-[80px]`}
               value={integracion}
-              onChange={(e) => setIntegracion(e.target.value)}
+              onChange={setIntegracion}
               placeholder="Diagnóstico o integración clínica en prosa breve"
               disabled={readonly}
             />
@@ -306,10 +404,10 @@ export default function CertificadoMedicoEstudio({
             <label className="text-[10px] font-bold text-slate-400 uppercase">
               Frase para el PDF
             </label>
-            <textarea
+            <ClinicalTextarea
               className={`${inputClass} min-h-[72px]`}
               value={dictamenTexto}
-              onChange={(e) => setDictamenTexto(e.target.value)}
+              onChange={setDictamenTexto}
               disabled={readonly}
             />
           </div>
@@ -321,10 +419,10 @@ export default function CertificadoMedicoEstudio({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Lugar de expedición</label>
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 value={lugar}
-                onChange={(e) => setLugar(e.target.value)}
+                onChange={setLugar}
                 disabled={readonly}
               />
             </div>
@@ -340,56 +438,56 @@ export default function CertificadoMedicoEstudio({
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Sexo (PDF)</label>
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 value={sexoAtencion}
-                onChange={(e) => setSexoAtencion(e.target.value)}
+                onChange={setSexoAtencion}
                 placeholder="Opcional si está en historial"
                 disabled={readonly}
               />
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Domicilio (PDF)</label>
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 value={domicilioAtencion}
-                onChange={(e) => setDomicilioAtencion(e.target.value)}
+                onChange={setDomicilioAtencion}
                 disabled={readonly}
               />
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Identificación</label>
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 value={idTipo}
-                onChange={(e) => setIdTipo(e.target.value)}
+                onChange={setIdTipo}
                 disabled={readonly}
               />
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Folio / CURP</label>
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 value={idFolio}
-                onChange={(e) => setIdFolio(e.target.value)}
+                onChange={setIdFolio}
                 disabled={readonly}
               />
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Médico</label>
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 value={medicoNombre}
-                onChange={(e) => setMedicoNombre(e.target.value)}
+                onChange={setMedicoNombre}
                 disabled={readonly}
               />
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Cédula profesional</label>
-              <input
+              <ClinicalFreeTextInput
                 className={inputClass}
                 value={medicoCedula}
-                onChange={(e) => setMedicoCedula(e.target.value)}
+                onChange={setMedicoCedula}
                 disabled={readonly}
               />
             </div>
@@ -444,7 +542,15 @@ export default function CertificadoMedicoEstudio({
             Cerrar certificado
           </button>
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
-          {saveError && <span className="text-xs text-red-600 font-medium">{saveError}</span>}
+          {saveError && (
+            <div className="w-full min-w-[220px]">
+              <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
+            </div>
+          )}
+          <ClinicalAutosaveIndicator
+            label={autosaveEnabled ? autosaveLabel : null}
+            error={autosaveEnabled ? certAutosaveError : null}
+          />
         </div>
       )}
     </div>

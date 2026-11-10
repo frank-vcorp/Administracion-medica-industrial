@@ -40,6 +40,7 @@ export function hasDetalleContent(d: DetalleTriple | undefined): boolean {
   return Boolean(
     (d.desde_cuando && d.desde_cuando.trim()) ||
     (d.tratamiento && d.tratamiento.trim()) ||
-    (d.observaciones && d.observaciones.trim()),
+    (d.observaciones && d.observaciones.trim()) ||
+    (d.especificacion && d.especificacion.trim()),
   )
 }

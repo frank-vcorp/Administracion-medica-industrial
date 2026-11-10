@@ -1,6 +1,14 @@
 import { Document, Image, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { SME_BRAND_LINE, SME_LEGAL_NAME, SME_LOGO_FALLBACK_TEXT } from '@/lib/brand-constants'
+import {
+  buildDiagnosticoRecetaDisplay,
+  SME_PDF_FOOTER,
+} from '@/lib/clinical/consulta-receta-pdf-format'
+import { CONSULTA_ANTECEDENTES_RUBROS } from '@/lib/clinical/consulta-antecedentes-resumen'
+import { formatProximaCitaLine } from '@/lib/clinical/consulta-seguimiento'
 import {
   TIPO_CONSULTA_LABELS,
+  TIPO_INCAPACIDAD_CONSULTA_LABELS,
   type ConsultaMedicaPayload,
   type RecetaLinea,
   type TipoConsultaValue,
@@ -34,6 +42,152 @@ const styles = StyleSheet.create({
   colDur: { width: '24%' },
 })
 
+const recetaStyles = StyleSheet.create({
+  page: { padding: 36, paddingBottom: 72, fontFamily: 'Helvetica', fontSize: 10, color: '#0f172a' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    borderBottomWidth: 2,
+    borderBottomColor: '#0d9488',
+    paddingBottom: 10,
+  },
+  headerLeft: { flex: 1, paddingRight: 12 },
+  brand: { fontSize: 15, fontWeight: 'bold', color: '#0f766e' },
+  brandSub: { fontSize: 8, color: '#475569', marginTop: 3, lineHeight: 1.35 },
+  headerRight: { width: 132, alignItems: 'flex-end' },
+  logoImage: { width: 128, height: 46, objectFit: 'contain' },
+  logoFallback: {
+    width: 128,
+    height: 46,
+    borderWidth: 1,
+    borderColor: '#99f6e4',
+    backgroundColor: '#f0fdfa',
+    textAlign: 'center',
+    paddingTop: 14,
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#0f766e',
+  },
+  docTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: '#0f766e',
+    letterSpacing: 1.2,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    fontSize: 8,
+    color: '#64748b',
+  },
+  fechaLegal: {
+    fontSize: 10,
+    color: '#0f172a',
+    marginBottom: 12,
+    lineHeight: 1.45,
+    textAlign: 'right',
+    fontStyle: 'italic',
+  },
+  patientCard: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 4,
+    padding: 10,
+    marginBottom: 14,
+    backgroundColor: '#f8fafc',
+  },
+  patientTitle: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#0f766e',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  row: { flexDirection: 'row', marginBottom: 3 },
+  label: { width: 108, fontSize: 9, fontWeight: 'bold', color: '#475569' },
+  value: { flex: 1, fontSize: 9, color: '#0f172a' },
+  rpTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#0f766e',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#0d9488',
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+  },
+  tableHeaderText: { fontSize: 8, fontWeight: 'bold', color: '#ffffff' },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+    backgroundColor: '#ffffff',
+  },
+  tableRowAlt: { backgroundColor: '#f0fdfa' },
+  colMed: { width: '32%' },
+  colPres: { width: '14%' },
+  colDosis: { width: '18%' },
+  colFreq: { width: '18%' },
+  colDur: { width: '18%' },
+  cell: { fontSize: 9, color: '#0f172a', lineHeight: 1.35 },
+  emptyRx: {
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderStyle: 'dashed',
+    borderRadius: 4,
+    fontSize: 9,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  indicaciones: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: '#fffbeb',
+    borderLeftWidth: 3,
+    borderLeftColor: '#f59e0b',
+  },
+  indicacionesTitle: { fontSize: 9, fontWeight: 'bold', color: '#92400e', marginBottom: 4 },
+  paragraph: { fontSize: 9, lineHeight: 1.5, color: '#0f172a' },
+  signatureArea: { marginTop: 28, flexDirection: 'row', justifyContent: 'flex-end' },
+  signatureBox: { width: 260, alignItems: 'center' },
+  signatureImage: { width: 200, height: 64, objectFit: 'contain', marginBottom: 4 },
+  signatureLine: {
+    width: 200,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0f172a',
+    marginBottom: 6,
+    height: 48,
+  },
+  signName: { fontSize: 10, fontWeight: 'bold', color: '#0f172a', textAlign: 'center' },
+  signLicense: { fontSize: 9, color: '#475569', marginTop: 2, textAlign: 'center' },
+  signRole: { fontSize: 8, color: '#64748b', marginTop: 4, textAlign: 'center' },
+  footer: {
+    position: 'absolute',
+    bottom: 22,
+    left: 36,
+    right: 36,
+    textAlign: 'center',
+    fontSize: 7,
+    color: '#94a3b8',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    paddingTop: 6,
+    lineHeight: 1.35,
+  },
+})
+
 export interface ConsultaMedicaPdfPatient {
   nombre: string
   telefono?: string | null
@@ -42,6 +196,10 @@ export interface ConsultaMedicaPdfPatient {
   empresa?: string | null
   departamento?: string | null
   fecha: string
+  /** «Sucursal …, a 9 de noviembre de 2026» */
+  fechaLegal?: string
+  lugar?: string
+  folio?: string
 }
 
 export interface ConsultaMedicaPrescriptor {
@@ -54,6 +212,7 @@ export interface ConsultaMedicaPdfInput {
   patient: ConsultaMedicaPdfPatient
   consulta: ConsultaMedicaPayload
   prescriptor?: ConsultaMedicaPrescriptor
+  logoUrl?: string
 }
 
 function v(s: string | null | undefined): string {
@@ -129,6 +288,25 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
           <Text style={styles.paragraph}>{c.motivo_consulta}</Text>
         </View>
 
+        {c.antecedentes_consulta &&
+        CONSULTA_ANTECEDENTES_RUBROS.some(({ key }) =>
+          String(c.antecedentes_consulta?.[key] ?? '').trim(),
+        ) ? (
+          <View style={styles.block}>
+            <Text style={styles.title}>ANTECEDENTES PERSONALES</Text>
+            {CONSULTA_ANTECEDENTES_RUBROS.map(({ key, label }) => {
+              const text = String(c.antecedentes_consulta?.[key] ?? '').trim()
+              if (!text) return null
+              return (
+                <View key={key} style={{ marginBottom: 6 }}>
+                  <Text style={styles.label}>{label}:</Text>
+                  <Text style={styles.paragraph}>{text}</Text>
+                </View>
+              )
+            })}
+          </View>
+        ) : null}
+
         <View style={styles.block}>
           <Text style={styles.title}>EXPLORACIÓN FÍSICA</Text>
           <Text style={styles.paragraph}>{c.exploracion_fisica}</Text>
@@ -137,27 +315,29 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
         <View style={styles.block}>
           <Text style={styles.title}>DIAGNÓSTICO</Text>
           <View style={styles.row}>
-            <Text style={styles.label}>Sistema:</Text>
-            <Text style={styles.value}>{c.diagnostico_sistema}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Diagnóstico unificado:</Text>
+            <Text style={styles.label}>Diagnóstico CIE-10:</Text>
             <Text style={styles.value}>{c.diagnostico_unificado}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Incapacidad:</Text>
+            <Text style={styles.label}>¿Requiere incapacidad?:</Text>
             <Text style={styles.value}>{c.otorga_incapacidad}</Text>
           </View>
           {c.otorga_incapacidad === 'SI' ? (
             <>
               <View style={styles.row}>
-                <Text style={styles.label}>Días:</Text>
-                <Text style={styles.value}>{String(c.dias_incapacidad ?? 0)}</Text>
+                <Text style={styles.label}>Tipo:</Text>
+                <Text style={styles.value}>
+                  {c.tipo_incapacidad
+                    ? TIPO_INCAPACIDAD_CONSULTA_LABELS[c.tipo_incapacidad]
+                    : '—'}
+                </Text>
               </View>
-              <View style={styles.row}>
-                <Text style={styles.label}>Pase de salida:</Text>
-                <Text style={styles.value}>{c.pase_salida ?? 'NO'}</Text>
-              </View>
+              {c.tipo_incapacidad === 'INTERNA_SME' ? (
+                <View style={styles.row}>
+                  <Text style={styles.label}>Días (interna SME):</Text>
+                  <Text style={styles.value}>{String(c.dias_incapacidad ?? 0)}</Text>
+                </View>
+              ) : null}
             </>
           ) : null}
           <View style={styles.row}>
@@ -173,10 +353,17 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
           </View>
         ) : null}
 
-        {c.indicaciones_generales?.trim() ? (
+        {c.indicaciones_generales?.trim() || formatProximaCitaLine(c) ? (
           <View style={styles.block}>
             <Text style={styles.title}>TRATAMIENTO / INDICACIONES</Text>
-            <Text style={styles.paragraph}>{c.indicaciones_generales}</Text>
+            {c.indicaciones_generales?.trim() ? (
+              <Text style={styles.paragraph}>{c.indicaciones_generales}</Text>
+            ) : null}
+            {formatProximaCitaLine(c) ? (
+              <Text style={styles.paragraph}>
+                Próxima cita de seguimiento: {formatProximaCitaLine(c)}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -192,102 +379,163 @@ export function ConsultaMedicaNotaPDF({ data }: { data: ConsultaMedicaPdfInput }
 }
 
 export function ConsultaMedicaRecetaPDF({ data }: { data: ConsultaMedicaPdfInput }) {
-  const { patient, consulta: c, prescriptor } = data
+  const { patient, consulta: c, prescriptor, logoUrl } = data
   const lineas: RecetaLinea[] = c.receta_lineas ?? []
   const medicoNombre = prescriptor?.nombre?.trim() || c.medico_nombre
   const medicoCedula = prescriptor?.cedula?.trim() || c.medico_cedula
   const firmaUrl = prescriptor?.firmaUrl?.trim() || ''
+  const diagnostico = buildDiagnosticoRecetaDisplay(c)
+  const fechaLugar =
+    patient.fechaLegal?.trim() ||
+    (patient.lugar && patient.fecha
+      ? `${patient.lugar}, a ${patient.fecha}`
+      : patient.fecha)
 
   return (
-    <Document>
-      <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.brand}>RECETA MÉDICA</Text>
-          <Text style={styles.sub}>Soluciones Médico Empresariales · Medicina laboral</Text>
+    <Document
+      title={`Receta-${patient.folio ?? 'consulta'}`}
+      author={`Dr(a). ${medicoNombre}`}
+      subject="Receta médica — medicina laboral"
+    >
+      <Page size="A4" style={recetaStyles.page}>
+        <View style={recetaStyles.header} fixed>
+          <View style={recetaStyles.headerLeft}>
+            <Text style={recetaStyles.brand}>{SME_LEGAL_NAME}</Text>
+            <Text style={recetaStyles.brandSub}>{SME_BRAND_LINE}</Text>
+            <Text style={recetaStyles.brandSub}>
+              Circuito del Mesón #135, Col. Del Prado, C.P. 76030, Santiago de Querétaro
+            </Text>
+            <Text style={recetaStyles.brandSub}>Tel. (442) 225-52-67 · www.medicaindustrial.com</Text>
+          </View>
+          <View style={recetaStyles.headerRight}>
+            {logoUrl ? (
+              // eslint-disable-next-line jsx-a11y/alt-text
+              <Image style={recetaStyles.logoImage} src={logoUrl} />
+            ) : (
+              <Text style={recetaStyles.logoFallback}>{SME_LOGO_FALLBACK_TEXT}</Text>
+            )}
+          </View>
         </View>
 
-        <View style={styles.block}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Médico:</Text>
-            <Text style={styles.value}>{medicoNombre}</Text>
+        <Text style={recetaStyles.docTitle}>Receta médica</Text>
+
+        <View style={recetaStyles.metaRow}>
+          <Text>Folio: {v(patient.folio)}</Text>
+          <Text>Fecha de emisión: {patient.fecha}</Text>
+        </View>
+
+        <Text style={recetaStyles.fechaLegal}>{fechaLugar}</Text>
+
+        <View style={recetaStyles.patientCard}>
+          <Text style={recetaStyles.patientTitle}>Datos del paciente</Text>
+          <View style={recetaStyles.row}>
+            <Text style={recetaStyles.label}>Nombre:</Text>
+            <Text style={recetaStyles.value}>{patient.nombre}</Text>
           </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Cédula profesional:</Text>
-            <Text style={styles.value}>{v(medicoCedula)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Paciente:</Text>
-            <Text style={styles.value}>{patient.nombre}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Edad / sexo:</Text>
-            <Text style={styles.value}>
+          <View style={recetaStyles.row}>
+            <Text style={recetaStyles.label}>Edad / sexo:</Text>
+            <Text style={recetaStyles.value}>
               {v(patient.edad)} · {v(patient.sexo)}
             </Text>
           </View>
           {patient.telefono ? (
-            <View style={styles.row}>
-              <Text style={styles.label}>Teléfono:</Text>
-              <Text style={styles.value}>{patient.telefono}</Text>
+            <View style={recetaStyles.row}>
+              <Text style={recetaStyles.label}>Teléfono:</Text>
+              <Text style={recetaStyles.value}>{patient.telefono}</Text>
             </View>
           ) : null}
-          <View style={styles.row}>
-            <Text style={styles.label}>Empresa:</Text>
-            <Text style={styles.value}>{v(patient.empresa)}</Text>
+          <View style={recetaStyles.row}>
+            <Text style={recetaStyles.label}>Empresa:</Text>
+            <Text style={recetaStyles.value}>{v(patient.empresa)}</Text>
           </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Fecha:</Text>
-            <Text style={styles.value}>{patient.fecha}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Diagnóstico:</Text>
-            <Text style={styles.value}>{v(c.diagnostico_especifico)}</Text>
+          <View style={recetaStyles.row}>
+            <Text style={recetaStyles.label}>Diagnóstico:</Text>
+            <Text style={recetaStyles.value}>{diagnostico}</Text>
           </View>
         </View>
 
-        <Text style={styles.title}>Rp.</Text>
+        <View style={recetaStyles.row}>
+          <Text style={recetaStyles.label}>Médico tratante:</Text>
+          <Text style={recetaStyles.value}>{medicoNombre}</Text>
+        </View>
+        <View style={recetaStyles.row}>
+          <Text style={recetaStyles.label}>Cédula profesional:</Text>
+          <Text style={recetaStyles.value}>{v(medicoCedula)}</Text>
+        </View>
+
+        <Text style={recetaStyles.rpTitle}>Rp. / Prescripción</Text>
 
         {lineas.length > 0 ? (
-          <View style={styles.block}>
-            <View style={styles.tableHeader}>
-              <Text style={styles.colMed}>Medicamento</Text>
-              <Text style={styles.colDosis}>Dosis</Text>
-              <Text style={styles.colFreq}>Frecuencia</Text>
-              <Text style={styles.colDur}>Duración</Text>
+          <View>
+            <View style={recetaStyles.tableHeader}>
+              <Text style={[recetaStyles.colMed, recetaStyles.tableHeaderText]}>Medicamento</Text>
+              <Text style={[recetaStyles.colPres, recetaStyles.tableHeaderText]}>Present.</Text>
+              <Text style={[recetaStyles.colDosis, recetaStyles.tableHeaderText]}>Dosis</Text>
+              <Text style={[recetaStyles.colFreq, recetaStyles.tableHeaderText]}>Frecuencia</Text>
+              <Text style={[recetaStyles.colDur, recetaStyles.tableHeaderText]}>Duración</Text>
             </View>
             {lineas.map((line, i) => (
-              <View key={i} style={styles.tableRow}>
-                <Text style={styles.colMed}>
-                  {line.medicamento}
-                  {line.presentacion?.trim() ? ` (${line.presentacion})` : ''}
+              <View
+                key={i}
+                style={
+                  i % 2 === 1
+                    ? [recetaStyles.tableRow, recetaStyles.tableRowAlt]
+                    : recetaStyles.tableRow
+                }
+              >
+                <Text style={[recetaStyles.colMed, recetaStyles.cell]}>{line.medicamento}</Text>
+                <Text style={[recetaStyles.colPres, recetaStyles.cell]}>
+                  {v(line.presentacion)}
                 </Text>
-                <Text style={styles.colDosis}>{line.dosis}</Text>
-                <Text style={styles.colFreq}>{line.frecuencia}</Text>
-                <Text style={styles.colDur}>{line.duracion}</Text>
+                <Text style={[recetaStyles.colDosis, recetaStyles.cell]}>{line.dosis}</Text>
+                <Text style={[recetaStyles.colFreq, recetaStyles.cell]}>{line.frecuencia}</Text>
+                <Text style={[recetaStyles.colDur, recetaStyles.cell]}>{line.duracion}</Text>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.paragraph}>Sin medicamentos prescritos en esta consulta.</Text>
+          <Text style={recetaStyles.emptyRx}>
+            Sin medicamentos prescritos en esta consulta. Indique tratamiento en la pestaña Medicamento
+            antes de imprimir.
+          </Text>
         )}
 
-        {c.indicaciones_generales?.trim() ? (
-          <View style={styles.block}>
-            <Text style={styles.title}>INDICACIONES</Text>
-            <Text style={styles.paragraph}>{c.indicaciones_generales}</Text>
+        {c.indicaciones_generales?.trim() || formatProximaCitaLine(c) ? (
+          <View style={recetaStyles.indicaciones}>
+            {c.indicaciones_generales?.trim() ? (
+              <>
+                <Text style={recetaStyles.indicacionesTitle}>Indicaciones generales</Text>
+                <Text style={recetaStyles.paragraph}>{c.indicaciones_generales}</Text>
+              </>
+            ) : null}
+            {formatProximaCitaLine(c) ? (
+              <Text style={recetaStyles.paragraph}>
+                Próxima cita de seguimiento: {formatProximaCitaLine(c)}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
-        <View style={styles.signBlock}>
-          {firmaUrl ? (
-            // Imagen de react-pdf, no un <img> HTML.
-            // eslint-disable-next-line jsx-a11y/alt-text
-            <Image src={firmaUrl} style={styles.signature} />
-          ) : null}
-          <Text style={styles.signName}>{medicoNombre}</Text>
-          <Text>Cédula profesional: {v(medicoCedula)}</Text>
-          <Text style={styles.footer}>Firma de quien capturó la consulta o tenía la sesión abierta.</Text>
+        <View style={recetaStyles.signatureArea}>
+          <View style={recetaStyles.signatureBox}>
+            {firmaUrl ? (
+              // eslint-disable-next-line jsx-a11y/alt-text
+              <Image src={firmaUrl} style={recetaStyles.signatureImage} />
+            ) : (
+              <View style={recetaStyles.signatureLine} />
+            )}
+            <Text style={recetaStyles.signName}>Dr(a). {medicoNombre}</Text>
+            <Text style={recetaStyles.signLicense}>Cédula profesional: {v(medicoCedula)}</Text>
+            <Text style={recetaStyles.signRole}>Médico responsable del tratamiento</Text>
+          </View>
         </View>
+
+        <Text style={recetaStyles.footer} fixed>
+          {SME_PDF_FOOTER}
+          {'\n'}
+          Documento generado electrónicamente por {SME_LEGAL_NAME}. Válido con firma autógrafa del
+          médico tratante.
+        </Text>
       </Page>
     </Document>
   )

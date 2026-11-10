@@ -3,6 +3,12 @@ import {
   isConsultaMedicaTestName,
   parseConsultaMedicaClinicalContext,
 } from '@/lib/clinical/consulta-medica'
+import { normalizeConsultaClinicalContext } from '@/lib/clinical/consulta-medica-validate'
+import {
+  buildFechaLugarReceta,
+  buildLugarReceta,
+  formatFechaRecetaCorta,
+} from '@/lib/clinical/consulta-receta-pdf-format'
 import type { ConsultaMedicaPdfInput } from '@/lib/consulta-medica-pdf'
 import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
@@ -16,6 +22,7 @@ export async function loadConsultaMedicaPdfInput(
   const event = await prisma.medicalEvent.findUnique({
     where: { id: eventId },
     include: {
+      branch: { select: { name: true, address: true } },
       worker: {
         select: {
           firstName: true,
@@ -50,43 +57,67 @@ export async function loadConsultaMedicaPdfInput(
     return { ok: false, status: 404, message: 'La consulta médica aún no tiene captura.' }
   }
 
+  const normalized = normalizeConsultaClinicalContext(stored as Record<string, unknown>)
+
+  const recetaRaw = normalized.receta_lineas ?? stored.receta_lineas
+  const recetaLineasArray = Array.isArray(recetaRaw) ? recetaRaw : []
+
+  const antecedentesRaw = normalized.antecedentes ?? stored.antecedentes
+  const antecedentesPayload =
+    antecedentesRaw &&
+    typeof antecedentesRaw === 'object' &&
+    !Array.isArray(antecedentesRaw)
+      ? (antecedentesRaw as ConsultaMedicaPayload['antecedentes'])
+      : undefined
+
   const consulta: ConsultaMedicaPayload = {
     schemaVersion: CONSULTA_MEDICA_SCHEMA_VERSION,
-    tipo_consulta: stored.tipo_consulta ?? 'ENFERMEDAD_GENERAL',
-    motivo_consulta: stored.motivo_consulta ?? '',
-    signos_vitales: stored.signos_vitales ?? emptySignosVitalesConsulta(),
-    exploracion_fisica: stored.exploracion_fisica ?? '',
-    diagnostico_sistema: stored.diagnostico_sistema ?? '',
-    diagnostico_unificado: stored.diagnostico_unificado ?? '',
-    diagnostico_especifico: stored.diagnostico_especifico ?? '',
-    incapacidad_aplica: stored.incapacidad_aplica ?? false,
-    otorga_incapacidad: stored.otorga_incapacidad ?? 'NO',
-    dias_incapacidad: stored.dias_incapacidad,
-    pase_salida: stored.pase_salida,
-    material_medico: stored.material_medico,
-    indicaciones_generales: stored.indicaciones_generales,
-    receta_lineas: (stored.receta_lineas ?? [])
-      .filter((line) => (line.medicamento ?? '').trim().length > 0)
-      .map((line) => ({
+    tipo_consulta: (normalized.tipo_consulta as ConsultaMedicaPayload['tipo_consulta']) ?? 'ENFERMEDAD_GENERAL',
+    motivo_consulta: String(normalized.motivo_consulta ?? ''),
+    signos_vitales: (normalized.signos_vitales as ConsultaMedicaPayload['signos_vitales']) ?? emptySignosVitalesConsulta(),
+    exploracion_fisica: String(normalized.exploracion_fisica ?? ''),
+    diagnostico_unificado: String(normalized.diagnostico_unificado ?? ''),
+    diagnostico_especifico: String(normalized.diagnostico_especifico ?? ''),
+    incapacidad_aplica: Boolean(normalized.incapacidad_aplica),
+    otorga_incapacidad: (normalized.otorga_incapacidad as 'SI' | 'NO') ?? 'NO',
+    tipo_incapacidad: normalized.tipo_incapacidad as ConsultaMedicaPayload['tipo_incapacidad'],
+    dias_incapacidad: normalized.dias_incapacidad as number | undefined,
+    material_medico: normalized.material_medico as string | undefined,
+    indicaciones_generales: normalized.indicaciones_generales as string | undefined,
+    proxima_cita_fecha: (normalized.proxima_cita_fecha as string | undefined) ?? stored.proxima_cita_fecha,
+    proxima_cita_hora: (normalized.proxima_cita_hora as string | undefined) ?? stored.proxima_cita_hora,
+    proxima_cita_appointment_id:
+      (normalized.proxima_cita_appointment_id as string | undefined) ??
+      stored.proxima_cita_appointment_id,
+    receta_lineas: recetaLineasArray
+      .filter((line: { medicamento?: string }) => (line.medicamento ?? '').trim().length > 0)
+      .map((line: {
+        medicamento?: string
+        presentacion?: string
+        dosis?: string
+        frecuencia?: string
+        duracion?: string
+      }) => ({
         medicamento: line.medicamento ?? '',
         presentacion: line.presentacion,
         dosis: line.dosis?.trim() || '—',
         frecuencia: line.frecuencia?.trim() || '—',
         duracion: line.duracion?.trim() || '—',
       })),
-    medico_nombre: stored.medico_nombre?.trim() || 'Médico',
-    medico_cedula: stored.medico_cedula?.trim() || '—',
-    antecedentes: stored.antecedentes,
-    modulo1: stored.modulo1,
-    cerrada_at: stored.cerrada_at,
+    medico_nombre: String(normalized.medico_nombre ?? stored.medico_nombre ?? '').trim() || 'Médico',
+    medico_cedula: String(normalized.medico_cedula ?? stored.medico_cedula ?? '').trim() || '—',
+    antecedentes: antecedentesPayload,
+    antecedentes_consulta: normalized.antecedentes_consulta as ConsultaMedicaPayload['antecedentes_consulta'] ?? stored.antecedentes_consulta,
+    modulo1: (normalized.modulo1 as ConsultaMedicaPayload['modulo1']) ?? stored.modulo1,
+    cerrada_at: (normalized.cerrada_at as string | undefined) ?? stored.cerrada_at,
   }
 
-  const eventDateRaw = event.checkInDate ?? event.createdAt
-  const fecha = new Intl.DateTimeFormat('es-MX', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(eventDateRaw)
+  const eventDateRaw = stored.cerrada_at
+    ? new Date(stored.cerrada_at)
+    : (event.checkInDate ?? event.createdAt)
+  const lugar = buildLugarReceta(event.branch)
+  const fecha = formatFechaRecetaCorta(eventDateRaw)
+  const fechaLegal = buildFechaLugarReceta(lugar, eventDateRaw)
 
   let edad: string | null = null
   if (event.worker.dob) {
@@ -106,6 +137,9 @@ export async function loadConsultaMedicaPdfInput(
       empresa: event.worker.company?.name ?? null,
       departamento: null,
       fecha,
+      fechaLegal,
+      lugar,
+      folio: event.id.slice(0, 8).toUpperCase(),
     },
     consulta,
   }

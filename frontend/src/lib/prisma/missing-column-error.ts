@@ -6,12 +6,18 @@ export const CANCELLATION_REASON_COLUMNS = [
   'cancelledAt',
 ] as const
 
+/** Columnas de migraciones recientes que el código tolera ausentes (expediente / citas). */
+export const OPTIONAL_MIGRATION_COLUMN_HINTS = [
+  ...CANCELLATION_REASON_COLUMNS,
+  'weeklySchedule',
+] as const
+
 /**
  * Prisma P2022 cuando el schema del cliente incluye columnas que la BD aún no tiene.
  */
 export function isPrismaMissingColumnError(
   error: unknown,
-  columnHints: readonly string[] = CANCELLATION_REASON_COLUMNS,
+  columnHints: readonly string[] = OPTIONAL_MIGRATION_COLUMN_HINTS,
 ): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code !== 'P2022') return false

@@ -1,8 +1,15 @@
 import { z } from 'zod';
+import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case';
 import { ClinicalHistoryDataSchema } from './history.schema';
 import { tolerantZinEnum } from './zin.helper';
 
 const cleanString = z.string().trim().max(1000).optional();
+const freeTextOptional = z
+  .string()
+  .trim()
+  .max(1000)
+  .transform(applySentenceCaseIfAllCaps)
+  .optional();
 const cleanNum = z.coerce.number().nonnegative().optional();
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -106,7 +113,7 @@ export type TestIshiharaValue = (typeof TEST_ISHIHARA_VALUES)[number]
 // @spec SPEC_ARCH-20260817-01 §4.2-§4.4
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Heredo-Familiares — 7 campos con catálogo ZIN canónico (NEGADOS/OTROS). */
+/** Heredo-Familiares — parentesco ZIN (F-23: sin OTROS; multiselect en UI). */
 export const HEREDOFAMILIARES_VALUES = [
   'NEGADOS',
   'PADRE',
@@ -115,7 +122,6 @@ export const HEREDOFAMILIARES_VALUES = [
   'HERMANOS',
   'AB PATERNO',
   'AB MATERNO',
-  'OTROS',
 ] as const
 
 export type HeredofamiliaresValue = (typeof HEREDOFAMILIARES_VALUES)[number]
@@ -431,10 +437,15 @@ export const AR_MPF_VALUES = [
 
 export type ArMpfValue = (typeof AR_MPF_VALUES)[number]
 
-/** Módulo 1 — Vacunas — acordeón Sí/No/No aplica (alias semántico de SI_NO_NA_VALUES). */
-export const VAC_SI_NO_VALUES = SI_NO_NA_VALUES
+/** Módulo 1 — Inmunizaciones (minuta F-19: negado / sí / desconoce). Legacy `NO APLICA` se tolera al leer. */
+export const VAC_IMMUNIZATION_VALUES = ['NEGADO', 'SI', 'DESCONOCE'] as const
 
-export type VacSiNoValue = (typeof VAC_SI_NO_VALUES)[number]
+export type VacImmunizationValue = (typeof VAC_IMMUNIZATION_VALUES)[number]
+
+/** @deprecated Usar `VAC_IMMUNIZATION_VALUES`. */
+export const VAC_SI_NO_VALUES = VAC_IMMUNIZATION_VALUES
+
+export type VacSiNoValue = VacImmunizationValue
 
 /**
  * Plantillas ZIN literales — Exploración Física (16 textos).
@@ -684,17 +695,17 @@ export const ImpresiónAptitudSchema = z.object({
   // DA-1: los 5 slots son `.optional()` para preservar registros legacy
   // con `impresion_diagnostica` consolidado. Helpers deben preferir el
   // slot nuevo si existe, con fallback al legacy.
-  examen_medico_texto: cleanString.optional(),
-  audiometria_texto: cleanString.optional(),
-  espirometria_texto: cleanString.optional(),
-  laboratorios_texto: cleanString.optional(),
-  radiografia_texto: cleanString.optional(),
+  examen_medico_texto: freeTextOptional,
+  audiometria_texto: freeTextOptional,
+  espirometria_texto: freeTextOptional,
+  laboratorios_texto: freeTextOptional,
+  radiografia_texto: freeTextOptional,
 
   // === LEGACY (DA-1) ===
   // IMPL-20260817-12-C1: campo antiguo consolidado, ahora opcional para
   // retrocompatibilidad. Los nuevos slots por prueba son la fuente de
   // verdad; este se conserva solo para parsear datos legacy sin migración.
-  impresion_diagnostica: cleanString.optional(),
+  impresion_diagnostica: freeTextOptional,
 
   // === RESUMEN EJECUTIVO (auto-poblado por buildExamSummary) ===
   // Campos faltantes identificados en ARCH-20260325-09
@@ -710,10 +721,10 @@ export const ImpresiónAptitudSchema = z.object({
   // IMPL-20260817-08-C1 (ARCH-20260817-02 DA-1): enum de aptitud pasa de 4 a 5
   // valores del PDF canónico. Schema tolerante preserva legacy `'NO APTO'`.
   aptitud: aptitudSchema.optional(),
-  restricciones: cleanString,
-  observaciones_finales: cleanString,
-  medico_evaluador: cleanString,
-  medico_revisor: cleanString,
+  restricciones: freeTextOptional,
+  observaciones_finales: freeTextOptional,
+  medico_evaluador: freeTextOptional,
+  medico_revisor: freeTextOptional,
 });
 
 // ----------------------------------------------------------------------
@@ -756,8 +767,8 @@ export const ExamenMedicoCompletoSchema = ExploracionFisicaSchema
      * Opcional: exámenes existentes sin este campo siguen parseando OK.
      */
     antecedentes_captured: AntecedentesCapturaSchema.optional(),
-    /** Variante de formato: AMI | SODEXO | FLOWSERVE (snapshot al guardar). */
-    exam_variant: z.enum(['AMI', 'SODEXO', 'FLOWSERVE']).optional(),
+    /** Variante de formato: SME | SODEXO | FLOWSERVE (`AMI` legado al leer). */
+    exam_variant: z.enum(['SME', 'SODEXO', 'FLOWSERVE', 'AMI']).optional(),
     /** Campos adicionales por variante corporativa. */
     variant_extensions: z
       .object({

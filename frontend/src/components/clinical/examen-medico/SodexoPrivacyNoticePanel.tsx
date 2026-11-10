@@ -1,6 +1,6 @@
 'use client'
 
-const PRIVACY_PDF_URL = '/legal/aviso-privacidad-salud-ocupacional-fy27.pdf'
+import { OCCUPATIONAL_PRIVACY_PDF_FILENAME, OCCUPATIONAL_PRIVACY_PDF_URL } from '@/lib/legal/occupational-privacy-notice'
 
 type Props = {
   informedConsentSignedAt?: string | Date | null
@@ -31,7 +31,7 @@ export function SodexoPrivacyNoticePanel({
         </p>
         <div className="flex flex-wrap gap-2">
           <a
-            href={PRIVACY_PDF_URL}
+            href={OCCUPATIONAL_PRIVACY_PDF_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2"
@@ -39,8 +39,8 @@ export function SodexoPrivacyNoticePanel({
             📄 Ver aviso de privacidad (PDF)
           </a>
           <a
-            href={PRIVACY_PDF_URL}
-            download="aviso-privacidad-salud-ocupacional-fy27.pdf"
+            href={OCCUPATIONAL_PRIVACY_PDF_URL}
+            download={OCCUPATIONAL_PRIVACY_PDF_FILENAME}
             className="inline-flex items-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-4 py-2"
           >
             ⬇ Descargar
@@ -58,7 +58,7 @@ export function SodexoPrivacyNoticePanel({
         )}
         <iframe
           title="Vista previa aviso de privacidad"
-          src={PRIVACY_PDF_URL}
+          src={OCCUPATIONAL_PRIVACY_PDF_URL}
           className="w-full h-64 rounded-lg border border-slate-200 bg-slate-50"
         />
       </div>

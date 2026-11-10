@@ -3,7 +3,7 @@
  * @id IMPL-FEATURE-20260825-01 / QA-20260825-01 P1-B
  * @backup context/SPECs/SPEC-FEATURE-20260825-01-PDF-ESPIROMETRIA-VALIDADA.md
  *
- * Acceso: SUPERADMIN / DOCTOR_GENERAL / DOCTOR_VALIDATOR.
+ * Acceso: cualquier usuario AMI autenticado (personal staff, no portal B2B).
  *
  * QA-20260825-01 P1-B: movido FUERA de `/admin/*` porque el middleware
  * rechaza cualquier path `/admin/*` para roles no-admin (sólo

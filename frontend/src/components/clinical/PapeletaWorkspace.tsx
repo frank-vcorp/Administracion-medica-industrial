@@ -56,14 +56,17 @@ import { StudyMenuIcon } from "@/components/clinical/StudyMenuIcon"
 // mostrados en la columna derecha entre el visor y el panel IA. Sólo
 // presentación; consume el snapshot ya extraído sin recalcular ni reinterpretar.
 import EspirometriaClinicalCriteriaPanel from "@/components/clinical/EspirometriaClinicalCriteriaPanel"
+import AudiometriaClinicalCriteriaPanel from "@/components/clinical/AudiometriaClinicalCriteriaPanel"
 // IMPL-FEATURE-20260824-02: modal emergente del cuestionario de Espirometría
 // (Completar/Editar) y resumen compacto. Predominantemente seleccionable;
 // persiste en EventTest.clinicalContext vía server action atómica.
 import EspirometriaQuestionnaireModal from "@/components/clinical/EspirometriaQuestionnaireModal"
 import EspirometriaQuestionnaireSummary from "@/components/clinical/EspirometriaQuestionnaireSummary"
+import EspirometriaVitalsDisplay from "@/components/clinical/EspirometriaVitalsDisplay"
 import type {
   EspirometriaQuestionnairePayload,
 } from "@/schemas/clinical/espirometria-questionnaire.schema"
+import { getEspirometriaDisplayVitals } from '@/lib/espirometria-display-vitals'
 import { ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/espirometria-questionnaire.schema"
 // IMPL-FEATURE-20260825-02: cuestionario auditivo de Audiometría + panel
 // clínico audiométrico (PTA3, ecuación, PTA fuente, capas NOM/AMI/fuente).
@@ -181,6 +184,7 @@ type WorkerInfo = {
   tenureLabel?: string | null
   occupationalLine?: string | null
   visitDurationLabel?: string | null
+  nationalId?: string | null
 }
 
 type MedicalExamData = {
@@ -1455,6 +1459,19 @@ function StudyPanel({
   const resultTracked = ['RESULT_REGISTERED', 'COMPLETED'].includes(test.status)
   const allowAdminStatusCorrection = isAdminLike(reviewerRole)
 
+  const espiroPayloadForDisplayVitals: EspirometriaQuestionnairePayload | null =
+    getCanonicalAIStudyType(test) === 'Espirometria' &&
+    test.clinicalContext &&
+    typeof test.clinicalContext === 'object' &&
+    (test.clinicalContext as { schemaVersion?: string }).schemaVersion ===
+      ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION
+      ? (test.clinicalContext as EspirometriaQuestionnairePayload)
+      : null
+  const espirometriaDisplayVitals = getEspirometriaDisplayVitals(
+    espiroPayloadForDisplayVitals,
+    examData?.somatometryData ?? null,
+  )
+
   return (
     <div className="space-y-4">
 
@@ -1737,8 +1754,11 @@ function StudyPanel({
           eventId={eventId}
           eventTestId={test.id}
           workerId={workerId}
+          workerNationalId={workerInfo.nationalId ?? null}
           initialClinicalContext={test.clinicalContext}
           longitudinalData={longitudinalData ?? null}
+          somatometryData={(examData?.somatometryData as Record<string, unknown>) ?? null}
+          eyeAcuityData={(examData?.eyeAcuityData as Record<string, unknown>) ?? null}
           readonly={readonly}
         />
       )}
@@ -1762,6 +1782,7 @@ function StudyPanel({
             {getCanonicalAIStudyType(test) === 'Espirometria' && (
               <EspirometriaQuestionnaireSection
                 test={test}
+                displayVitals={espirometriaDisplayVitals}
                 readonly={readonly}
                 onOpenModal={onOpenQuestionnaire}
               />
@@ -2037,6 +2058,10 @@ function StudyPanel({
           {/* ===== COLUMNA DERECHA: EVIDENCIA DOCUMENTAL + Prediagnóstico IA ===== */}
           <div className="space-y-3 lg:sticky lg:top-4 self-start">
 
+            {getCanonicalAIStudyType(test) === 'Espirometria' ? (
+              <EspirometriaVitalsDisplay vitals={espirometriaDisplayVitals} variant="slate" />
+            ) : null}
+
             {/* Archivo vinculado + visor embebido */}
             {test.fileUrl ? (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
@@ -2064,6 +2089,14 @@ function StudyPanel({
                 (PTA3, ecuación, PTA fuente, capas NOM/AMI/fuente). */}
             {getCanonicalAIStudyType(test) === 'Espirometria' && test.extractionSnapshot ? (
               <EspirometriaClinicalCriteriaPanel
+                extractedData={
+                  (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined) ?? null
+                }
+                version={test.extractionSnapshot.version}
+              />
+            ) : null}
+            {getCanonicalAIStudyType(test) === 'Audiometria' && test.extractionSnapshot ? (
+              <AudiometriaClinicalCriteriaPanel
                 extractedData={
                   (test.extractionSnapshot.extractedData as Record<string, unknown> | null | undefined) ?? null
                 }
@@ -2156,10 +2189,12 @@ function StudyPanel({
 
 function EspirometriaQuestionnaireSection({
   test,
+  displayVitals,
   readonly,
   onOpenModal,
 }: {
   test: StudyTest
+  displayVitals: ReturnType<typeof getEspirometriaDisplayVitals>
   readonly: boolean
   onOpenModal: () => void
 }) {
@@ -2173,6 +2208,7 @@ function EspirometriaQuestionnaireSection({
     return (
       <EspirometriaQuestionnaireSummary
         payload={test.clinicalContext as EspirometriaQuestionnairePayload}
+        displayVitals={displayVitals}
         onEdit={onOpenModal}
       />
     )
@@ -2193,6 +2229,7 @@ function EspirometriaQuestionnaireSection({
         contestar — el sistema seguirá funcionando, pero la IA recibirá
         menos contexto.
       </p>
+      <EspirometriaVitalsDisplay vitals={displayVitals} variant="amber" />
       {!readonly && (
         <button
           type="button"

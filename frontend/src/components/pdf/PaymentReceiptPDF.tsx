@@ -3,6 +3,7 @@
  * @id IMPL-20260630-01
  */
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { SME_LEGAL_NAME } from '@/lib/brand-constants'
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10, color: '#0f172a' },
@@ -88,7 +89,7 @@ export const PaymentReceiptPDF = ({ data }: { data: ReceiptPDFData }) => {
           <View>
             <Text style={styles.brand}>RECIBO DE PAGO</Text>
             <Text style={styles.subBrand}>
-              Administración Médica Industrial (AMI)
+              {SME_LEGAL_NAME}
             </Text>
           </View>
           <View style={styles.meta}>
@@ -169,7 +170,7 @@ export const PaymentReceiptPDF = ({ data }: { data: ReceiptPDFData }) => {
         </View>
 
         <Text style={styles.footer}>
-          Este documento es un comprobante interno de pago emitido por AMI.
+          Este documento es un comprobante interno de pago emitido por {SME_LEGAL_NAME}.
           Para factura, contacte a su ejecutivo de cuenta en un plazo máximo de 72 horas.
         </Text>
       </Page>

@@ -29,12 +29,17 @@
  * Click en otra enfermedad colapsa la actual automáticamente. Estado
  * NEGADO/NO APLICA → card pequeño sin campos. Sin botón "Confirmar".
  */
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
+import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import HistoriaLaboralFactoresRiesgoReferencia from '@/components/clinical/HistoriaLaboralFactoresRiesgoReferencia'
+import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import {
   DATOS_PERSONALES_CAMPOS,
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
   HISTORIA_LABORAL_EXPOSICIONES,
+  HISTORIA_LABORAL_EXPOSICION_AGENTES,
+  HISTORIA_LABORAL_RIESGOS_TRABAJO,
   HEREDOFAMILIARES_DESCRIPCIONES,
   emptyHeredoFamiliaresRecord,
   heredoFamiliaresEspecifiqueKey,
@@ -47,9 +52,22 @@ import {
   SUPLEMENTOS_COMPLEMENTOS_HELP,
   SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
+import {
+  ANTECEDENTES_SECTION_LEGEND,
+  ANTECEDENTES_TABS,
+  antecedentesTabIntro,
+} from '@/lib/antecedentes-section-ui'
+import {
+  ClinicalFreeTextInput,
+  ClinicalTextarea,
+} from '@/components/clinical/ClinicalFreeTextControls'
+import { HeredofamiliaresRelacionMultiSelect } from '@/components/clinical/HeredofamiliaresRelacionMultiSelect'
+import {
+  patologiaEspecificacionPlaceholder,
+  patologiaRequiresEspecificacion,
+} from '@/lib/patologia-especificacion-fields'
 import { hasDetalleContent } from '@/lib/patologicos-accordion'
 import {
-  HEREDOFAMILIARES_VALUES,
   HEREDOFAMILIARES_MENTALES_VALUES,
 } from '@/schemas/clinical/exam.schema'
 import {
@@ -79,7 +97,12 @@ type PatologiaEntry = {
   detalle: DetalleTriple | undefined
 }
 
-const emptyDetalle = (): DetalleTriple => ({ desde_cuando: '', tratamiento: '', observaciones: '' })
+const emptyDetalle = (): DetalleTriple => ({
+  desde_cuando: '',
+  tratamiento: '',
+  observaciones: '',
+  especificacion: '',
+})
 const emptyPatologia = (): PatologiaEntry => ({ estado: 'NEGADO', detalle: undefined })
 
 function isSnaValue(v: unknown): v is SnaValue {
@@ -107,6 +130,8 @@ function coercePatologiaEntry(v: unknown): PatologiaEntry {
           desde_cuando:  typeof v.detalle.desde_cuando  === 'string' ? v.detalle.desde_cuando  : '',
           tratamiento:   typeof v.detalle.tratamiento   === 'string' ? v.detalle.tratamiento   : '',
           observaciones: typeof v.detalle.observaciones === 'string' ? v.detalle.observaciones : '',
+          especificacion:
+            typeof v.detalle.especificacion === 'string' ? v.detalle.especificacion : '',
         }
       : undefined
     return { estado: v.estado, detalle }
@@ -139,9 +164,10 @@ export function AntecedentesForm({
   const [historiaLaboral, setHistoriaLaboral] = useState<Record<string, string | boolean>>({
     empresa_anterior_1: '', puesto_anterior_1: '', tiempo_anterior_1: '',
     empresa_anterior_2: '', puesto_anterior_2: '', tiempo_anterior_2: '',
+    exposicion_fisica: false, exposicion_fisica_especifique: '',
     exposicion_quimica: false, exposicion_quimica_especifique: '',
-    exposicion_fisica: false,  exposicion_fisica_especifique: '',
     exposicion_biologica: false, exposicion_biologica_especifique: '',
+    exposicion_psicosocial: false, exposicion_psicosocial_especifique: '',
     exposicion_ergonomica: false, exposicion_ergonomica_especifique: '',
     accidentes_trabajo: false, accidentes_descripcion: '',
     enfermedades_trabajo: false, enfermedades_descripcion: '',
@@ -250,23 +276,48 @@ export function AntecedentesForm({
     })
   }
 
+  const buildPayload = useCallback(
+    () => ({
+      datos_personales: datosPersonales,
+      historia_laboral: historiaLaboral,
+      heredo_familiares: heredofamiliares,
+      no_patologicos: noPatologicos,
+      patologicos: patologicos,
+    }),
+    [datosPersonales, historiaLaboral, heredofamiliares, noPatologicos, patologicos],
+  )
+
+  const historySnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
+
+  const persistHistory = useCallback(async () => {
+    const result = await upsertWorkerClinicalHistory(workerId, buildPayload())
+    if (!result.success) {
+      return {
+        ok: false,
+        message: result.error,
+        context: 'Historial clínico (autoguardado)',
+      } as const
+    }
+    return true
+  }, [workerId, buildPayload])
+
+  const { statusLabel: autosaveLabel, markSaved: markHistorySaved, userFacingError: historyAutosaveError } =
+    useClinicalIntervalAutosave({
+    enabled: true,
+    snapshotKey: historySnapshotKey,
+    save: persistHistory,
+  })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
 
     try {
-      const payload = {
-        datos_personales:  datosPersonales,
-        historia_laboral:  historiaLaboral,
-        heredo_familiares: heredofamiliares,
-        no_patologicos:    noPatologicos,
-        patologicos:       patologicos,
-      }
-
-      const result = await upsertWorkerClinicalHistory(workerId, payload)
+      const result = await upsertWorkerClinicalHistory(workerId, buildPayload())
 
       if (result.success) {
+        markHistorySaved()
         setMessage({
           type: 'success',
           text: 'Historial clínico guardado exitosamente'
@@ -298,6 +349,7 @@ export function AntecedentesForm({
         <p className="text-gray-600">
           <strong>Paciente:</strong> {workerName} (ID: {workerId})
         </p>
+        <ClinicalAutosaveIndicator label={autosaveLabel} error={historyAutosaveError} className="mt-2" />
       </div>
 
       {/* Messages */}
@@ -315,17 +367,12 @@ export function AntecedentesForm({
 
       {/* Tabs — 5 secciones longitudinales ARCH-20260326-06 */}
       <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 mb-6">
-        {([
-          ['datos_personales', '👤', 'Datos Personales'],
-          ['historia_laboral', '🏭', 'Historia Laboral'],
-          ['heredofamiliares', '🧬', 'Heredo-Familiares'],
-          ['no_patologicos',   '🍺', 'No Patológicos'],
-          ['patologicos',      '🏥', 'Patológicos'],
-        ] as [string, string, string][]).map(([id, icon, label]) => (
+        {ANTECEDENTES_TABS.map(({ id, icon, label }) => (
           <button
             key={id}
             type="button"
             onClick={() => setActiveTab(id as ActiveTab)}
+            title={antecedentesTabIntro(id)}
             className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold transition ${
               activeTab === id
                 ? 'bg-white shadow text-blue-700'
@@ -343,8 +390,8 @@ export function AntecedentesForm({
         {/* ── DATOS PERSONALES ────────────────────────────────────────────── */}
         {activeTab === 'datos_personales' && (
           <div className="space-y-6">
-            <p className="text-sm text-gray-600">
-              ℹ️ Datos declarativos del trabajador — sirven como base longitudinal reutilizable entre citas.
+            <p className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              ℹ️ {antecedentesTabIntro('datos_personales')}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {DATOS_PERSONALES_CAMPOS.filter(c => c.kind === 'text' || c.kind === 'number').map(campo => (
@@ -387,6 +434,9 @@ export function AntecedentesForm({
         {/* ── HISTORIA LABORAL ───────────────────────────────────────────── */}
         {activeTab === 'historia_laboral' && (
           <div className="space-y-6">
+            <p className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              ℹ️ {antecedentesTabIntro('historia_laboral')}
+            </p>
             <fieldset className="border border-gray-200 rounded-lg p-4">
               <legend className="text-base font-semibold text-gray-900 px-2">Empleos Anteriores</legend>
               <div className="space-y-4 mt-3">
@@ -410,9 +460,43 @@ export function AntecedentesForm({
               </div>
             </fieldset>
             <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-base font-semibold text-gray-900 px-2">Exposición a Riesgos y Antecedentes</legend>
+              <legend className="text-base font-semibold text-gray-900 px-2">
+                Factores de riesgo en el trabajo
+              </legend>
+              <div className="mb-4">
+                <HistoriaLaboralFactoresRiesgoReferencia />
+              </div>
               <div className="space-y-3 mt-3">
-                {HISTORIA_LABORAL_EXPOSICIONES.map(({ key, label, descKey }) => (
+                {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(({ key, label, descKey }) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={!!historiaLaboral[key]}
+                        onChange={e => setHistoriaLaboral(p => ({ ...p, [key]: e.target.checked }))}
+                        className="rounded border-gray-300 text-blue-600"
+                      />
+                      <span className="text-sm font-medium text-gray-700 w-44">{label}</span>
+                    </label>
+                    {historiaLaboral[key] && (
+                      <input
+                        type="text"
+                        value={String(historiaLaboral[descKey] ?? '')}
+                        onChange={e => setHistoriaLaboral(p => ({ ...p, [descKey]: e.target.value }))}
+                        placeholder="Especifique…"
+                        className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="border border-gray-200 rounded-lg p-4">
+              <legend className="text-base font-semibold text-gray-900 px-2">
+                Accidente laboral y enfermedad profesional
+              </legend>
+              <div className="space-y-3 mt-3">
+                {HISTORIA_LABORAL_RIESGOS_TRABAJO.map(({ key, label, descKey }) => (
                   <div key={key} className="flex items-center gap-3">
                     <label className="flex items-center gap-2 cursor-pointer shrink-0">
                       <input
@@ -442,12 +526,12 @@ export function AntecedentesForm({
         {/* SECCIÓN: ANTECEDENTES PATOLÓGICOS — IMPL-20260817-04 acordeón */}
         {activeTab === 'patologicos' && (
           <div className="space-y-6">
-            <p className="text-sm text-gray-600 mb-4">
-              ℹ️ Por defecto, todos los campos están configurados como &quot;NEGADO&quot;. Cambiar solo si aplica.
-              <br />
-              <span className="text-gray-500">Auto: conteste lo que recuerde. No es necesario que sea un diagnóstico médico formal.</span>
-              <br />
-              <span className="text-gray-500">Al marcar <strong>SÍ</strong> aparecen 3 campos: desde cuándo, tratamiento y observaciones.</span>
+            <p className="text-sm text-gray-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
+              ℹ️ {antecedentesTabIntro('patologicos')}
+              <span className="block text-gray-500 mt-2 text-xs">
+                Por defecto NEGADO. Al marcar SÍ complete desde cuándo, tratamiento y observaciones. No
+                requiere diagnóstico formal escrito.
+              </span>
             </p>
 
             {(
@@ -507,6 +591,9 @@ export function AntecedentesForm({
                               <span className="text-emerald-600 ml-auto text-xs">click para editar</span>
                             </div>
                             <div className="text-gray-600 space-y-0.5">
+                              {detalle.especificacion && (
+                                <p><span className="font-medium">Especificación:</span> {detalle.especificacion}</p>
+                              )}
                               {detalle.desde_cuando && (
                                 <p><span className="font-medium">Desde:</span> {detalle.desde_cuando}</p>
                               )}
@@ -521,15 +608,32 @@ export function AntecedentesForm({
                         )}
                         {showInputs && (
                           <div className="mt-3 space-y-2 p-3 bg-white border border-gray-200 rounded-lg">
+                            {patologiaRequiresEspecificacion(item.field) && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  Especificación
+                                </label>
+                                <ClinicalFreeTextInput
+                                  type="text"
+                                  value={detalle.especificacion ?? ''}
+                                  onChange={especificacion => handlePatologiaPatch(item.field, {
+                                    detalle: { ...detalle, especificacion },
+                                  })}
+                                  placeholder={patologiaEspecificacionPlaceholder(item.field)}
+                                  maxLength={500}
+                                  className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                            )}
                             <div>
                               <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Desde cuándo
                               </label>
-                              <input
+                              <ClinicalFreeTextInput
                                 type="text"
                                 value={detalle.desde_cuando}
-                                onChange={e => handlePatologiaPatch(item.field, {
-                                  detalle: { ...detalle, desde_cuando: e.target.value },
+                                onChange={desde_cuando => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, desde_cuando },
                                 })}
                                 placeholder="ej: 15 años, 2019"
                                 maxLength={200}
@@ -540,10 +644,10 @@ export function AntecedentesForm({
                               <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Tratamiento
                               </label>
-                              <textarea
+                              <ClinicalTextarea
                                 value={detalle.tratamiento}
-                                onChange={e => handlePatologiaPatch(item.field, {
-                                  detalle: { ...detalle, tratamiento: e.target.value },
+                                onChange={tratamiento => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, tratamiento },
                                 })}
                                 placeholder="ej: Metformina 500mg cada 24h"
                                 rows={2}
@@ -555,10 +659,10 @@ export function AntecedentesForm({
                               <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Observaciones
                               </label>
-                              <textarea
+                              <ClinicalTextarea
                                 value={detalle.observaciones}
-                                onChange={e => handlePatologiaPatch(item.field, {
-                                  detalle: { ...detalle, observaciones: e.target.value },
+                                onChange={observaciones => handlePatologiaPatch(item.field, {
+                                  detalle: { ...detalle, observaciones },
                                 })}
                                 placeholder="ej: HbA1c 6.5%, sin complicaciones"
                                 rows={3}
@@ -580,15 +684,17 @@ export function AntecedentesForm({
         {/* PESTAÑA: ANTECEDENTES HEREDO-FAMILIARES */}
         {activeTab === 'heredofamiliares' && (
           <div className="space-y-6">
-            <p className="text-sm text-gray-600 mb-4">
-              ℹ️ Indique familiares con antecedentes de estas enfermedades (ej: &quot;PADRE&quot;, &quot;ABUELO&quot;, &quot;ABUELA MATERNA&quot;, etc.)
-              <br />
-              <span className="text-gray-500">Auto: si no recuerda el familiar exacto, deje el campo en blanco. Solo anote lo que recuerde con seguridad.</span>
+            <p className="text-sm text-gray-600 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2 mb-4">
+              ℹ️ {antecedentesTabIntro('heredofamiliares')}
+              <span className="block text-gray-500 mt-2 text-xs">
+                Indique el parentesco cuando aplique (puede marcar más de un familiar). Solo anote lo
+                que recuerde con seguridad.
+              </span>
             </p>
 
             <fieldset className="border border-gray-200 rounded-lg p-4">
               <legend className="text-lg font-semibold text-gray-900 px-2">
-                Antecedentes en Familia
+                {ANTECEDENTES_SECTION_LEGEND.heredo_familiares}
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 {HEREDOFAMILIARES_DESCRIPCIONES.map((item) => {
@@ -597,38 +703,39 @@ export function AntecedentesForm({
                   // `mentales` con SI/NO/NO APLICA, `otras` con combo + input "Especifique"
                   // condicional cuando value === 'OTROS'. Ver SPEC §4.4.
                   const isMentales = item.field === 'mentales'
-                  const zinValues = isMentales ? HEREDOFAMILIARES_MENTALES_VALUES : HEREDOFAMILIARES_VALUES
                   const currentValue = heredofamiliares[item.field as keyof typeof heredofamiliares] ?? ''
                   const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-                  const showEspecifique =
-                    (!isMentales && currentValue === 'OTROS') ||
-                    (isMentales && currentValue === 'SI')
+                  const showEspecifiqueMentales = isMentales && currentValue === 'SI'
                   return (
                     <div key={item.field}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         {item.label}
                       </label>
                       <p className="text-xs text-gray-500 mb-2">{item.help}</p>
-                      <select
-                        value={currentValue}
-                        onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">— Seleccionar —</option>
-                        {zinValues.map(v => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
-                      {showEspecifique && (
+                      {isMentales ? (
+                        <select
+                          value={currentValue}
+                          onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">— Seleccionar —</option>
+                          {HEREDOFAMILIARES_MENTALES_VALUES.map(v => (
+                            <option key={v} value={v}>{v}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <HeredofamiliaresRelacionMultiSelect
+                          value={currentValue}
+                          onChange={(next) => handleHeredofamiliaresChange(item.field, next)}
+                          itemClassName="flex items-center gap-2 text-sm text-gray-700"
+                        />
+                      )}
+                      {showEspecifiqueMentales && (
                         <input
                           type="text"
                           value={heredofamiliares[especifiqueKey] ?? ''}
                           onChange={(e) => handleHeredofamiliaresChange(especifiqueKey, e.target.value)}
-                          placeholder={
-                            isMentales
-                              ? 'Especificación (ej: depresión materna)'
-                              : 'Especifique (ej: TÍO PATERNO, cáncer de mama)'
-                          }
+                          placeholder="Especificación (ej: depresión materna)"
                           className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                         />
                       )}
@@ -643,10 +750,11 @@ export function AntecedentesForm({
         {/* ── NO PATOLÓGICOS / TOXICOMANÍAS ───────────────────────────────────── */}
         {activeTab === 'no_patologicos' && (
           <div className="space-y-6">
-            <p className="text-sm text-gray-600">
-              ℹ️ Indique SI o NEGADO para cada hábito. Si aplica, complete los detalles adicionales.
-              <br />
-              <span className="text-gray-500">Auto: conteste lo que recuerde. Aproxime las cantidades si no las sabe exactas (ej: &quot;3-4 por semana&quot;).</span>
+            <p className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              ℹ️ {antecedentesTabIntro('no_patologicos')}
+              <span className="block text-gray-500 mt-2 text-xs">
+                Indique SI o NEGADO por hábito. Aproxime cantidades si no las sabe (ej. 3–4 por semana).
+              </span>
             </p>
             {NO_PATOLOGICOS_DESCRIPCIONES.map((item) => (
               <div key={item.key} className="border border-gray-200 rounded-lg p-4">
@@ -773,6 +881,7 @@ export function AntecedentesForm({
           >
             {loading ? 'Guardando...' : 'Guardar Historial Clínico'}
           </button>
+          <ClinicalAutosaveIndicator label={autosaveLabel} error={historyAutosaveError} />
         </div>
       </form>
     </div>

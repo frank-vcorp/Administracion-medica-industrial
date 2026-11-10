@@ -69,7 +69,7 @@ export function GlobalSearchLauncher() {
         aria-label="Abrir búsqueda general"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-ami-primary bg-ami-primary text-2xl text-white shadow-[0_4px_12px_#00afaa4d] transition hover:bg-ami-primary-hover hover:shadow-[0_6px_16px_#00afaa66] focus:outline-none focus:ring-2 focus:ring-ami-primary focus:ring-offset-2 sm:bottom-6 sm:right-6"
+        className="fixed bottom-4 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-sme-primary bg-sme-primary text-2xl text-white shadow-[0_4px_12px_#00afaa4d] transition hover:bg-sme-primary-hover hover:shadow-[0_6px_16px_#00afaa66] focus:outline-none focus:ring-2 focus:ring-sme-primary focus:ring-offset-2 sm:bottom-6 sm:right-6"
       >
         {open ? <X className="h-5 w-5 stroke-[1.5]" /> : <Search className="h-5 w-5 stroke-[1.5]" />}
       </button>

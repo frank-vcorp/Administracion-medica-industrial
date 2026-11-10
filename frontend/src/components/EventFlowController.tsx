@@ -346,13 +346,13 @@ export default function EventFlowController({
                             <div className="mt-2 pt-4 border-t border-slate-200 space-y-2">
                                 <p className="text-xs text-slate-500">
                                     <strong>¿Necesitas re-emitir el dictamen?</strong>{' '}
-                                    El renderer AMI vigente actualiza el PDF con el formato
+                                    El renderer SME vigente actualiza el PDF con el formato
                                     canónico (4 bloques) y la consolidación por atención/cita.
                                     La versión firmada anterior queda sustituida en la descarga.
                                 </p>
                                 <button
                                     onClick={() => {
-                                        if (!confirm('¿Re-emitir el dictamen general con el renderer AMI? Esta acción sustituye la versión descargable.')) return
+                                        if (!confirm('¿Re-emitir el dictamen general con el renderer SME? Esta acción sustituye la versión descargable.')) return
                                         startTransition(async () => {
                                             try {
                                                 const result = await reemitSignedDictamen(eventId)
@@ -377,7 +377,7 @@ export default function EventFlowController({
                                     data-implementacion="IMPL-20260826-08"
                                     className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-6 py-3 rounded-xl font-semibold transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 mx-auto"
                                 >
-                                    {isPending ? 'Re-emitiendo…' : '🔄 Re-emitir Dictamen General (formato AMI)'}
+                                    {isPending ? 'Re-emitiendo…' : '🔄 Re-emitir Dictamen General (formato SME)'}
                                 </button>
                                 {reemitInfo && (
                                     <div

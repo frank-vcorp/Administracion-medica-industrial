@@ -364,7 +364,7 @@ export async function signMedicalDictamPDF(eventId: string) {
         body: JSON.stringify({
           input_pdf: inputFileName,
           output_pdf: expectedSignedFileName,
-          reason: 'Dictamen Médico AMI',
+          reason: 'Dictamen Médico SME',
           password: process.env.PDF_SIGN_PASSWORD || 'default1234',
         }),
       })
@@ -427,7 +427,7 @@ export async function signMedicalDictamPDF(eventId: string) {
             pdfBuffer: patientBuffer,
             inputFileName: patientInputName,
             expectedSignedFileName: patientSignedName,
-            reason: 'Dictamen de salud para el paciente AMI',
+            reason: 'Dictamen de salud para el paciente SME',
           })
           if (patientSigned.success && patientSigned.signedKey) {
             patientPdfUrl = patientSigned.signedKey
@@ -721,7 +721,7 @@ export async function reemitSignedDictamen(
         body: JSON.stringify({
           input_pdf: inputFileName,
           output_pdf: expectedSignedFileName,
-          reason: 'Re-emisión Dictamen General AMI',
+          reason: 'Re-emisión Dictamen General SME',
           password: process.env.PDF_SIGN_PASSWORD || 'default1234',
         }),
       })
@@ -787,7 +787,7 @@ export async function reemitSignedDictamen(
     return {
       success: true,
       message:
-        'Re-emisión exitosa con el renderer AMI vigente. Esta versión sustituye a la anterior versión descargable.',
+        'Re-emisión exitosa con el renderer SME vigente. Esta versión sustituye a la anterior versión descargable.',
       fileName: signedKey,
       pdfUrl: `/api/pdf/${eventId}`,
       reemittedAt,

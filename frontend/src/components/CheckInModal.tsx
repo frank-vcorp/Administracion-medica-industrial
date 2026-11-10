@@ -9,7 +9,11 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { createEvent, createExternalWalkInEvent } from '@/actions/event.actions'
+import {
+    createReceptionWalkInEvent,
+    type ReceptionWalkInIntakeSource,
+} from '@/actions/event.actions'
+import { ReceptionInformedConsentStep } from '@/components/reception/ReceptionInformedConsentStep'
 import { createExternalWorkerIntake, searchExternalIntakeCandidates } from '@/actions/worker.actions'
 
 interface Worker {
@@ -59,6 +63,14 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
     const [hasExternalSearch, setHasExternalSearch] = useState(false)
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const lastSearchRequestRef = useRef(0)
+    const [step, setStep] = useState<1 | 2>(1)
+    const [walkInDraft, setWalkInDraft] = useState<{
+        workerId: string
+        branchId: string | null
+        patientName: string
+        intakeSource: ReceptionWalkInIntakeSource
+        redirectToEvent?: boolean
+    } | null>(null)
 
     const resetExternalState = () => {
         if (searchTimeoutRef.current) {
@@ -129,21 +141,21 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
 
         const formData = new FormData(e.currentTarget)
         const workerId = formData.get('workerId') as string
+        const branchId = (formData.get('branchId') as string) || null
 
         if (!workerId) {
             setError('Selecciona un trabajador')
             return
         }
 
-        startTransition(async () => {
-            const result = await createEvent(formData)
-            if (result.success) {
-                setOpen(false)
-                router.refresh()
-            } else {
-                setError(result.error || 'Error al crear el expediente')
-            }
+        const worker = workers.find((w) => w.id === workerId)
+        setWalkInDraft({
+            workerId,
+            branchId,
+            patientName: worker ? `${worker.firstName} ${worker.lastName}` : 'Paciente',
+            intakeSource: 'DIRECT_RECEPTION',
         })
+        setStep(2)
     }
 
     async function handleExternalSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -182,14 +194,42 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                 workerId = created.workerId
             }
 
-            const eventResult = await createExternalWalkInEvent({ workerId, branchId })
-            if (!eventResult.success || !eventResult.eventId) {
-                setError(eventResult.error || 'No se pudo registrar el ingreso externo.')
+            const matched = externalCandidates.find((x) => x.id === workerId)
+            const patientName = matched
+                ? `${matched.firstName} ${matched.lastName}`
+                : `${String(formData.get('firstName') || '').trim()} ${String(formData.get('lastName') || '').trim()}`.trim()
+
+            setWalkInDraft({
+                workerId,
+                branchId,
+                patientName: patientName || 'Paciente externo',
+                intakeSource: 'EXTERNAL_WALK_IN',
+                redirectToEvent: true,
+            })
+            setStep(2)
+        })
+    }
+
+    const finalizeWalkInWithConsent = (signatureDataUrl: string) => {
+        if (!walkInDraft) return
+        setError(null)
+        startTransition(async () => {
+            const result = await createReceptionWalkInEvent({
+                workerId: walkInDraft.workerId,
+                branchId: walkInDraft.branchId,
+                intakeSource: walkInDraft.intakeSource,
+                informedConsentSignatureDataUrl: signatureDataUrl,
+            })
+            if (!result.success) {
+                setError(result.error || 'No se pudo registrar el ingreso.')
                 return
             }
-
             setOpen(false)
-            router.push(`/events/${eventResult.eventId}`)
+            setStep(1)
+            setWalkInDraft(null)
+            if (walkInDraft.redirectToEvent && result.eventId) {
+                router.push(`/events/${result.eventId}`)
+            }
             router.refresh()
         })
     }
@@ -200,6 +240,8 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                 onClick={() => {
                     setMode('existing')
                     setError(null)
+                    setStep(1)
+                    setWalkInDraft(null)
                     resetExternalState()
                     setOpen(true)
                 }}
@@ -210,16 +252,36 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
 
             {open && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-                    <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+                    <div className={`bg-white p-6 rounded-xl shadow-2xl w-full ${step === 2 ? 'max-w-2xl' : 'max-w-md'}`}>
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold">Ingreso de Paciente</h3>
+                            <h3 className="text-lg font-bold">
+                                {step === 2 ? 'Consentimiento informado' : 'Ingreso de Paciente'}
+                            </h3>
                             <button
-                                onClick={() => setOpen(false)}
+                                onClick={() => {
+                                    setOpen(false)
+                                    setStep(1)
+                                    setWalkInDraft(null)
+                                }}
                                 className="text-slate-400 hover:text-red-500 font-bold"
                             >
                                 ✕
                             </button>
                         </div>
+                        {step === 2 && walkInDraft ? (
+                            <ReceptionInformedConsentStep
+                                patientFullName={walkInDraft.patientName}
+                                onBack={() => {
+                                    setStep(1)
+                                    setWalkInDraft(null)
+                                    setError(null)
+                                }}
+                                onConfirm={finalizeWalkInWithConsent}
+                                isPending={isPending}
+                                error={error}
+                            />
+                        ) : (
+                        <>
                         <div className="mb-4 inline-flex rounded-xl border border-slate-200 bg-white p-1">
                             <button
                                 type="button"
@@ -283,7 +345,7 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                                         disabled={isPending}
                                         className="bg-slate-900 text-white px-4 py-2 rounded shadow hover:bg-slate-800 font-medium w-full disabled:opacity-50 disabled:cursor-wait"
                                     >
-                                        {isPending ? '⏳ Registrando...' : 'Confirmar Check-In 🏥'}
+                                        {isPending ? '⏳...' : 'Continuar al consentimiento →'}
                                     </button>
                                 </div>
                             </form>
@@ -393,10 +455,12 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                                         disabled={isPending}
                                         className="w-full rounded bg-blue-600 px-4 py-2 font-medium text-white shadow transition-colors hover:bg-blue-700 disabled:cursor-wait disabled:opacity-50"
                                     >
-                                        {isPending ? '⏳ Registrando externo...' : 'Confirmar ingreso externo'}
+                                        {isPending ? '⏳...' : 'Continuar al consentimiento →'}
                                     </button>
                                 </div>
                             </form>
+                        )}
+                        </>
                         )}
                     </div>
                 </div>

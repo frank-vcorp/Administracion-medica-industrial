@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 export function AmiMirrorBanner({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-600 leading-relaxed">
-      <span className="font-bold text-slate-800">Papeleta AMI — </span>
+      <span className="font-bold text-slate-800">Papeleta SME — </span>
       {children}
     </div>
   )
@@ -27,7 +27,7 @@ export function AmiMirrorTable({
       <thead className="bg-slate-100">
         <tr>
           <th className="text-left p-2 font-semibold text-slate-600 w-1/3">Campo</th>
-          <th className="text-left p-2 font-semibold text-slate-600">Valor capturado (AMI)</th>
+          <th className="text-left p-2 font-semibold text-slate-600">Valor capturado (SME)</th>
         </tr>
       </thead>
       <tbody>

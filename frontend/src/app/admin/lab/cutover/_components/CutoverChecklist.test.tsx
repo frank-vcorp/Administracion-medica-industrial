@@ -75,7 +75,7 @@ describe("CutoverChecklist", () => {
     };
     const html = _render({ status: readyStatus });
     expect(html).toContain("READY");
-    expect(html).toContain("AMI es el sistema único");
+    expect(html).toContain("SME es el sistema único");
     // No debe haber next-actions-list cuando no hay pendientes
     expect(html).not.toContain("data-testid=\"next-actions-list\"");
   });

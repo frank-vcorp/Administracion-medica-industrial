@@ -6,17 +6,21 @@
  *   - Fecha de captura (capturedAt).
  *   - Botón Editar cuestionario (reabre el modal).
  *
- * NO emite diagnóstico, NO muestra datos sensibles crudos. Sólo metadatos
- * del snapshot y conteos de respuestas Sí/No para feedback rápido.
+ * Incluye lectura de peso/talla/TA usados al valorar el estudio (misma
+ * fusión que el modal: guardado gana, si no hay somatometría).
  *
  * @id IMPL-FEATURE-20260824-02
  */
 'use client'
 
 import type { EspirometriaQuestionnairePayload } from '@/schemas/clinical/espirometria-questionnaire.schema'
+import type { EspirometriaDisplayVitals } from '@/lib/espirometria-display-vitals'
+import EspirometriaVitalsDisplay from '@/components/clinical/EspirometriaVitalsDisplay'
 
 export type EspirometriaQuestionnaireSummaryProps = {
   payload: EspirometriaQuestionnairePayload | null
+  /** Valores efectivos (cuestionario + herencia somatometría) para lectura en papeleta. */
+  displayVitals: EspirometriaDisplayVitals
   onEdit: () => void
 }
 
@@ -56,6 +60,7 @@ function countSi(antecedentes: EspirometriaQuestionnairePayload['antecedentes'])
 
 export default function EspirometriaQuestionnaireSummary({
   payload,
+  displayVitals,
   onEdit,
 }: EspirometriaQuestionnaireSummaryProps) {
   if (!payload) {
@@ -89,6 +94,7 @@ export default function EspirometriaQuestionnaireSummary({
           Editar cuestionario
         </button>
       </div>
+      <EspirometriaVitalsDisplay vitals={displayVitals} variant="teal" />
       <p className="text-[11px] text-teal-700">
         Antecedentes: {counts.si} respuestas «Sí» y {counts.no} «No» de{' '}
         {counts.total} preguntas Sí/No. Este contexto se envía al

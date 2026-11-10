@@ -60,7 +60,7 @@ import { GlobalSearchLauncher } from '@/components/GlobalSearchLauncher'
 
 type Icon = ComponentType<LucideProps>
 
-const SIDEBAR_COLLAPSED_KEY = 'ami-sidebar-collapsed'
+const SIDEBAR_COLLAPSED_KEY = 'sme-sidebar-collapsed'
 
 function NavItem({
   href,
@@ -108,12 +108,12 @@ function NavItem({
 
 function NavSection({ label, collapsed }: { label: string; collapsed?: boolean }) {
   if (collapsed) {
-    return <div className="mx-3 my-2 border-t border-ami-secondary/10" />
+    return <div className="mx-3 my-2 border-t border-sme-secondary/10" />
   }
 
   return (
     <div className="pt-5 pb-1.5">
-      <p className="text-[10px] uppercase text-ami-gray/70 font-semibold px-3 tracking-[0.14em]">{label}</p>
+      <p className="text-[10px] uppercase text-sme-gray/70 font-semibold px-3 tracking-[0.14em]">{label}</p>
     </div>
   )
 }
@@ -129,8 +129,8 @@ function SidebarAccount({
 }) {
   if (collapsed) {
     const account = (
-      <div className="px-2 pb-3 pt-2 border-t border-ami-secondary/10">
-        <div className="w-10 h-10 mx-auto rounded-xl bg-ami-secondary/10 flex items-center justify-center text-xs font-bold text-ami-secondary">
+      <div className="px-2 pb-3 pt-2 border-t border-sme-secondary/10">
+        <div className="w-10 h-10 mx-auto rounded-xl bg-sme-secondary/10 flex items-center justify-center text-xs font-bold text-sme-secondary">
           {(fullName || 'U').trim().charAt(0).toUpperCase()}
         </div>
       </div>
@@ -139,15 +139,15 @@ function SidebarAccount({
   }
 
   const account = (
-    <div className="px-4 pb-4 pt-3 border-t border-ami-secondary/10">
-      <p className="text-[10px] uppercase tracking-wider text-ami-gray/70 font-semibold">Cuenta</p>
-      <div className={`mt-2 flex items-center gap-3 rounded-xl bg-ami-surface border border-ami-secondary/10 px-3 py-2 ${profileHref ? 'hover:border-ami-secondary/25 transition-colors cursor-pointer' : ''}`}>
-        <div className="w-9 h-9 rounded-lg bg-ami-secondary/10 text-ami-secondary flex items-center justify-center text-sm font-bold shrink-0">
+    <div className="px-4 pb-4 pt-3 border-t border-sme-secondary/10">
+      <p className="text-[10px] uppercase tracking-wider text-sme-gray/70 font-semibold">Cuenta</p>
+      <div className={`mt-2 flex items-center gap-3 rounded-xl bg-sme-surface border border-sme-secondary/10 px-3 py-2 ${profileHref ? 'hover:border-sme-secondary/25 transition-colors cursor-pointer' : ''}`}>
+        <div className="w-9 h-9 rounded-lg bg-sme-secondary/10 text-sme-secondary flex items-center justify-center text-sm font-bold shrink-0">
           {(fullName || 'U').trim().charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ami-secondary truncate">{fullName || 'Usuario'}</p>
-          <p className="text-xs text-ami-gray">Sesión activa</p>
+          <p className="text-sm font-medium text-sme-secondary truncate">{fullName || 'Usuario'}</p>
+          <p className="text-xs text-sme-gray">Sesión activa</p>
         </div>
       </div>
     </div>
@@ -182,9 +182,7 @@ function ShellNavigation({
 
           <NavSection label="Médico" collapsed={collapsed} />
           <NavItem href="/validation" icon={BadgeCheck} label="Validación" collapsed={collapsed} onNavigate={onNavigate} />
-          {(role === 'SUPERADMIN' || role === 'DOCTOR_GENERAL' || role === 'DOCTOR_VALIDATOR') && (
-            <NavItem href="/profile" icon={UserRoundPen} label="Mi perfil médico" collapsed={collapsed} onNavigate={onNavigate} />
-          )}
+          <NavItem href="/profile" icon={UserRoundPen} label="Mi perfil" collapsed={collapsed} onNavigate={onNavigate} />
 
           <NavSection label="Empresas" collapsed={collapsed} />
           <NavItem href="/companies" icon={Building2} label="Empresas Cliente" collapsed={collapsed} onNavigate={onNavigate} />
@@ -198,8 +196,8 @@ function ShellNavigation({
       {showAdminItems && (
         <>
           <NavSection label="Administración" collapsed={collapsed} />
-          <NavItem href="/branches" icon={MapPin} label="Sucursales AMI" collapsed={collapsed} onNavigate={onNavigate} />
-          <NavItem href="/admin/users" icon={UserCog} label="Personal AMI" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/branches" icon={MapPin} label="Sucursales SME" collapsed={collapsed} onNavigate={onNavigate} />
+          <NavItem href="/admin/users" icon={UserCog} label="Personal SME" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/admin/services" icon={FlaskConical} label="Catálogo de Pruebas" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/admin/lab/catalogs?mod=unidades" icon={TestTubes} label="Módulo de Laboratorios" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/admin/lab/migration" icon={RefreshCw} label="Migración NOVA" secondary collapsed={collapsed} onNavigate={onNavigate} />
@@ -249,7 +247,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const showAdminItems = isAdmin
   const showPortalItems = isCompanyClient
   const showGlobalSearch = showStaffItems && !isCompanyClient
-  const canEditProfile = Boolean(role)
+  /** Cuenta → /profile (O9-09): firma en lienzo o imagen para todo el personal AMI. */
+  const canEditProfile = showStaffItems && Boolean(role)
   const isEventWorkspace = /^\/events\/[^/]+$/.test(pathname || '')
   const handleSignOut = () => {
     void signOut({ callbackUrl: '/login' })
@@ -293,7 +292,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, [mobileNavOpen])
 
   return (
-    <div className="relative flex h-screen bg-ami-surface">
+    <div className="relative flex h-screen bg-sme-surface">
       <aside
         className={`${
           sidebarCollapsed ? 'w-[4.5rem]' : 'w-64'
@@ -352,7 +351,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             aria-label="Cerrar menú"
-            className="absolute inset-0 bg-ami-secondary/40"
+            className="absolute inset-0 bg-sme-secondary/40"
             onClick={closeMobileNav}
           />
           <aside className="relative z-10 flex h-full w-[min(100%,20rem)] flex-col bg-white text-[#636569] shadow-2xl border-l-[3px] border-l-[#592c82]">
@@ -362,7 +361,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 type="button"
                 aria-label="Cerrar menú de navegación"
                 onClick={closeMobileNav}
-                className="rounded-lg p-2 text-ami-secondary hover:bg-ami-secondary/5"
+                className="rounded-lg p-2 text-sme-secondary hover:bg-sme-secondary/5"
               >
                 <X className="h-5 w-5 stroke-[1.5]" />
               </button>
@@ -378,7 +377,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               />
             </nav>
 
-            <div className="border-t border-ami-secondary/10 p-4 space-y-3">
+            <div className="border-t border-sme-secondary/10 p-4 space-y-3">
               <SidebarAccount
                 fullName={session?.user?.fullName}
                 profileHref={canEditProfile ? '/profile' : undefined}
@@ -386,7 +385,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="w-full rounded-full border border-ami-secondary/20 px-4 py-2.5 text-sm font-medium text-ami-secondary hover:bg-ami-secondary/5"
+                className="w-full rounded-full border border-sme-secondary/20 px-4 py-2.5 text-sm font-medium text-sme-secondary hover:bg-sme-secondary/5"
               >
                 Cerrar sesión
               </button>
@@ -397,13 +396,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <main className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden">
         <AmiCornerWaveAccent />
-        <header className="relative z-[1] flex h-14 flex-shrink-0 items-center justify-between border-b border-ami-secondary/15 bg-white px-4 md:hidden">
+        <header className="relative z-[1] flex h-14 flex-shrink-0 items-center justify-between border-b border-sme-secondary/15 bg-white px-4 md:hidden">
           <button
             type="button"
             aria-label="Abrir menú de navegación"
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen(true)}
-            className="rounded-lg p-2 text-ami-secondary hover:bg-ami-secondary/5"
+            className="rounded-lg p-2 text-sme-secondary hover:bg-sme-secondary/5"
           >
             <Menu className="h-5 w-5 stroke-[1.5]" />
           </button>
@@ -414,19 +413,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
         {!isEventWorkspace && (
           <header className="relative z-[1] hidden h-16 flex-shrink-0 items-center justify-between border-b-[3px] border-b-[#00afaa] bg-white px-8 md:flex">
             <div>
-              <h2 className="text-lg font-semibold text-ami-secondary">Panel de Control</h2>
+              <h2 className="text-lg font-semibold text-sme-secondary">Panel de Control</h2>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-ami-gray">
+              <span className="text-sm text-sme-gray">
                 {session?.user?.fullName || 'Usuario'}
               </span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ami-secondary/10 text-xs font-bold text-ami-secondary">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sme-secondary/10 text-xs font-bold text-sme-secondary">
                 {(session?.user?.fullName || 'U').trim().charAt(0).toUpperCase()}
               </div>
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="text-sm font-medium text-ami-secondary hover:text-ami-primary transition-colors px-4 py-1.5 rounded-full border border-ami-secondary/15 hover:border-ami-secondary/40"
+                className="text-sm font-medium text-sme-secondary hover:text-sme-primary transition-colors px-4 py-1.5 rounded-full border border-sme-secondary/15 hover:border-sme-secondary/40"
                 aria-label="Cerrar sesión"
               >
                 Cerrar sesión

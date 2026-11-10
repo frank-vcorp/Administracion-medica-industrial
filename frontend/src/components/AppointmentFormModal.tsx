@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import WorkerFormModal, { type WorkerCreatedPayload } from '@/components/WorkerFormModal'
 import { parseAppointmentLocalDateTime, todayAgendaDateString } from '@/lib/appointment-scheduling'
 import AppointmentWhatsAppSuccess from '@/components/AppointmentWhatsAppSuccess'
+import type { AppointmentPassWhatsAppResult } from '@/actions/appointment-pass-whatsapp.actions'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
@@ -62,6 +63,7 @@ interface AppointmentResult {
         scheduledAt: Date | string
     }
     error?: string
+    whatsApp?: AppointmentPassWhatsAppResult
 }
 
 export default function AppointmentFormModal({
@@ -88,8 +90,28 @@ export default function AppointmentFormModal({
     const [preselectedCompanyId, setPreselectedCompanyId] = useState<string | null>(null)
     const [workerQuickOpen, setWorkerQuickOpen] = useState(false)
     const [allMedicalProfiles, setAllMedicalProfiles] = useState<MedicalProfileOption[]>([])
+    const [appointmentDate, setAppointmentDate] = useState(() => todayAgendaDateString())
+    const [appointmentTime, setAppointmentTime] = useState('08:00')
+    const [appointmentSource, setAppointmentSource] = useState('SUCURSAL')
+    const [appointmentNotes, setAppointmentNotes] = useState('')
     const router = useRouter()
     const searchParams = useSearchParams()
+
+    const resetAppointmentFormDraft = () => {
+        setSelectedCompanyId('')
+        setSelectedWorker(null)
+        setWorkers([])
+        setProfiles([])
+        setSelectedProfileId('')
+        setSelectedBranchId('')
+        setWorkerSearchQuery('')
+        setWorkerSearchResults([])
+        setAppointmentDate(todayAgendaDateString())
+        setAppointmentTime('08:00')
+        setAppointmentSource('SUCURSAL')
+        setAppointmentNotes('')
+        setError(null)
+    }
 
     const companySpecificProfiles = useMemo(
         () => profiles.filter((p) => p.companyId === selectedCompanyId),
@@ -270,17 +292,18 @@ export default function AppointmentFormModal({
         })
     }
 
-    async function handleSubmit(formData: FormData) {
+    function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault()
         startTransition(async () => {
             setError(null)
-            
-            const workerId = formData.get('workerId') as string
-            const branchId = formData.get('branchId') as string
-            const date = formData.get('date') as string
-            const time = formData.get('time') as string
-            const notes = formData.get('notes') as string
-            const source = formData.get('source') as string
-            const serviceProfileId = formData.get('serviceProfileId') as string | null
+
+            const workerId = selectedWorker?.id ?? ''
+            const branchId = selectedBranchId
+            const date = appointmentDate
+            const time = appointmentTime
+            const notes = appointmentNotes
+            const source = appointmentSource
+            const serviceProfileId = selectedProfileId || null
 
             if (!workerId || !branchId || !date || !time) {
                 setError('Todos los campos son obligatorios')
@@ -316,7 +339,9 @@ export default function AppointmentFormModal({
 
                 if (result.success) {
                     setSuccessData(result)
-                    void sendAppointmentPassEmail(result.appointment.id)
+                    if (result.appointment?.id) {
+                        void sendAppointmentPassEmail(result.appointment.id)
+                    }
                     router.refresh()
                     onSuccess?.({ branchId, date })
                 } else {
@@ -335,7 +360,9 @@ export default function AppointmentFormModal({
         const cleanPhone = rawPhone.replace(/\D/g, '');
         const hasValidPhone = cleanPhone.length >= 10;
         
-        const message = `Hola ${apt.worker?.firstName}, tu cita médica en AMI está confirmada para el ${new Date(apt.scheduledAt).toLocaleDateString('es-ES')} a las ${new Date(apt.scheduledAt).toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'})}. Tu número de expediente es: ${apt.expedientId}. Por favor presenta este mensaje en recepción.`;
+        const message =
+            successData.whatsApp?.messageText ??
+            `Hola ${apt.worker?.firstName}, tu cita médica en AMI está confirmada para el ${new Date(apt.scheduledAt).toLocaleDateString('es-ES')} a las ${new Date(apt.scheduledAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}. Tu número de expediente es: ${apt.expedientId}. Por favor presenta este mensaje en recepción.`
 
         return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
@@ -374,6 +401,7 @@ export default function AppointmentFormModal({
                                 phone={rawPhone}
                                 message={message}
                                 appointmentId={apt.id}
+                                whatsApp={successData.whatsApp}
                             />
                         ) : (
                             <div className="bg-slate-100 text-slate-500 py-3 rounded-xl font-medium text-xs px-4">
@@ -396,13 +424,7 @@ export default function AppointmentFormModal({
         <>
             <button
                 onClick={() => {
-                    setSelectedCompanyId('')
-                    setSelectedWorker(null)
-                    setWorkers([])
-                    setProfiles([])
-                    setSelectedProfileId('')
-                    setSelectedBranchId('')
-                    setError(null)
+                    resetAppointmentFormDraft()
                     setIsOpen(true)
                 }}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-200 flex items-center gap-2"
@@ -420,12 +442,19 @@ export default function AppointmentFormModal({
                                 <h3 className="text-xl font-black text-slate-800">Agendar Cita</h3>
                                 <p className="text-[10px] text-slate-400 uppercase font-extrabold tracking-widest mt-1">Nuevo Ingreso Programado</p>
                             </div>
-                            <button onClick={() => setIsOpen(false)} className="text-slate-300 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-full">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsOpen(false)
+                                    resetAppointmentFormDraft()
+                                }}
+                                className="text-slate-300 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-full"
+                            >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                         </div>
 
-                        <form action={handleSubmit} className="space-y-4">
+                        <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal</label>
                                 <select
@@ -642,32 +671,35 @@ export default function AppointmentFormModal({
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Fecha</label>
-                                    <input 
-                                        type="date" 
-                                        name="date" 
-                                        required 
-                                        defaultValue={todayAgendaDateString()}
-                                        className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none" 
+                                    <input
+                                        type="date"
+                                        name="date"
+                                        required
+                                        value={appointmentDate}
+                                        onChange={(e) => setAppointmentDate(e.target.value)}
+                                        className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
                                     />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Hora</label>
-                                    <input 
-                                        type="time" 
-                                        name="time" 
-                                        required 
-                                        defaultValue="08:00"
-                                        className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none" 
+                                    <input
+                                        type="time"
+                                        name="time"
+                                        required
+                                        value={appointmentTime}
+                                        onChange={(e) => setAppointmentTime(e.target.value)}
+                                        className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
                                     />
                                 </div>
                             </div>
 
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Origen de la Cita</label>
-                                <select 
-                                    name="source" 
-                                    required 
-                                    defaultValue="SUCURSAL"
+                                <select
+                                    name="source"
+                                    required
+                                    value={appointmentSource}
+                                    onChange={(e) => setAppointmentSource(e.target.value)}
                                     className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none"
                                 >
                                     <option value="SUCURSAL">En Sucursal (Presencial)</option>
@@ -680,12 +712,14 @@ export default function AppointmentFormModal({
 
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Notas (Opcional)</label>
-                                <textarea 
-                                    name="notes" 
+                                <textarea
+                                    name="notes"
                                     rows={2}
+                                    value={appointmentNotes}
+                                    onChange={(e) => setAppointmentNotes(e.target.value)}
                                     placeholder="Instrucciones especiales..."
                                     className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm transition-all outline-none resize-none"
-                                ></textarea>
+                                />
                             </div>
 
                             {error && <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-lg border border-red-100 animate-shake">⚠️ {error}</p>}

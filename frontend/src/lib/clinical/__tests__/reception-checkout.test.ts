@@ -55,7 +55,7 @@ describe('reception-checkout (SPEC ARCH-20260921-01 §4.4)', () => {
       getCheckoutEligibility({
         dischargedAt: null,
         eventTests: [
-          { id: 'em', status: 'IN_PROGRESS', testNameSnapshot: 'Examen Médico AMI', examenCaptureClosed: false },
+          { id: 'em', status: 'IN_PROGRESS', testNameSnapshot: 'Examen Médico General', examenCaptureClosed: false },
           { id: 'lab', status: 'IN_PROGRESS', testNameSnapshot: 'Laboratorio' },
         ],
       }),
@@ -70,7 +70,7 @@ describe('reception-checkout (SPEC ARCH-20260921-01 §4.4)', () => {
           {
             id: 'em',
             status: 'RESULT_REGISTERED',
-            testNameSnapshot: 'Examen Médico AMI',
+            testNameSnapshot: 'Examen Médico General',
             examenCaptureClosed: true,
           },
           { id: 'soma', status: 'COMPLETED', testNameSnapshot: 'Somatometría' },

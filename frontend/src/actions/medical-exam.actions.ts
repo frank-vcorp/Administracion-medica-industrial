@@ -1,6 +1,7 @@
 "use server"
 
 import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { triggerStructuredStudyAIPrediagnosis } from "./ai-prediagnosis.actions"
@@ -15,6 +16,19 @@ import {
 import { deriveAgudezaVisualResumen } from "@/lib/clinical/agudeza-visual"
 import { assertExamenMedicoReadyToClose } from "@/lib/clinical/examen-medico-capture"
 import { mergeVariantExtensionsForPersist } from '@/lib/sodexo-extension-persist'
+import {
+  formatExamenMedicoZodError,
+  medicoLineFromProfile,
+  prepareExamenMedicoPayloadForSave,
+  zodErrorToFieldErrors,
+} from '@/lib/clinical/examen-medico-payload'
+import {
+  mapExamenMedicoGateError,
+  resolveExamenMedicoSaveNavigation,
+  type ExamenMedicoSaveNavigation,
+} from '@/lib/clinical/examen-medico-save-errors'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/auth'
 
 /**
  * @id ARCH-20260326-01
@@ -23,6 +37,10 @@ import { mergeVariantExtensionsForPersist } from '@/lib/sodexo-extension-persist
 export type MedicalExamPersistOptions = {
   /** Guardado en segundo plano: solo persiste datos, sin IA ni cronograma. */
   autosave?: boolean
+}
+
+function zodIssuesForClient(err: z.ZodError) {
+  return { issues: err.issues }
 }
 
 function buildStructuredAIResultNote(input: { success: boolean; studyLabel: string; summary?: string | null; clinicalState?: string | null; error?: string | null }) {
@@ -109,8 +127,20 @@ export async function updateSomatometria(
     }
     return { success: true, aiWarning }
   } catch (error: unknown) {
-    console.error("Error updating somatometry:", error)
-    return { success: false, error: "Datos de somatometría inválidos o error de servidor" }
+    if (error instanceof z.ZodError) {
+      console.error('Error updating somatometry (validation)')
+      return {
+        success: false,
+        error: 'Revisa somatometría y signos vitales: hay datos que no coinciden con lo esperado.',
+        technicalDetail: JSON.stringify(zodIssuesForClient(error)),
+      }
+    }
+    console.error('Error updating somatometry:', error)
+    return {
+      success: false,
+      error: 'No se pudo guardar por un problema del servidor o de red.',
+      technicalDetail: error instanceof Error ? error.message : 'unknown_error',
+    }
   }
 }
 
@@ -188,8 +218,20 @@ export async function updateAgudezaVisual(
     }
     return { success: true, aiWarning }
   } catch (error: unknown) {
-    console.error("Error updating visual acuity:", error)
-    return { success: false, error: "Datos de agudeza visual inválidos o error de servidor" }
+    if (error instanceof z.ZodError) {
+      console.error('Error updating visual acuity (validation)')
+      return {
+        success: false,
+        error: 'Revisa agudeza visual: hay datos que no coinciden con lo esperado.',
+        technicalDetail: JSON.stringify(zodIssuesForClient(error)),
+      }
+    }
+    console.error('Error updating visual acuity:', error)
+    return {
+      success: false,
+      error: 'No se pudo guardar por un problema del servidor o de red.',
+      technicalDetail: error instanceof Error ? error.message : 'unknown_error',
+    }
   }
 }
 
@@ -242,7 +284,29 @@ export async function saveExamenMedicoPapeleta(
 
   try {
     const autosave = options?.autosave === true
-    const data = ExamenMedicoCompletoSchema.parse(rawData)
+    const session = await getServerSession(authOptions)
+    let medicoLine: string | null = null
+    if (session?.user?.id) {
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { fullName: true, professionalLicense: true },
+      })
+      medicoLine = user
+        ? medicoLineFromProfile(user.fullName, user.professionalLicense)
+        : null
+    }
+    const prepared = prepareExamenMedicoPayloadForSave(rawData, { medicoLine })
+    const parsed = ExamenMedicoCompletoSchema.safeParse(prepared)
+    if (!parsed.success) {
+      const fieldErrors = zodErrorToFieldErrors(parsed.error)
+      return {
+        success: false as const,
+        error: formatExamenMedicoZodError(parsed.error),
+        fieldErrors,
+        navigation: resolveExamenMedicoSaveNavigation(fieldErrors),
+      }
+    }
+    const data = parsed.data
 
     const priorExam = await prisma.medicalExam.findUnique({
       where: { eventId },
@@ -272,7 +336,13 @@ export async function saveExamenMedicoPapeleta(
         physicalExamData: physicalPayload,
       })
       if (gateError) {
-        return { success: false, error: gateError }
+        const mapped = mapExamenMedicoGateError(gateError)
+        return {
+          success: false as const,
+          error: gateError,
+          fieldErrors: mapped.fieldErrors,
+          navigation: mapped.navigation,
+        }
       }
       // O9-23: cerrar revisión clínica del estudio sin bloquear edición (no examen_capture_closed).
     } else if (priorPhysical.examen_capture_closed === true) {
@@ -349,9 +419,19 @@ export async function saveExamenMedicoPapeleta(
       aiWarning,
     }
   } catch (error: unknown) {
-    console.error("Error saving examen médico papeleta:", error)
-    return { success: false, error: "Error al guardar Examen Médico" }
+    console.error('Error saving examen médico papeleta:', error)
+    return {
+      success: false as const,
+      error: formatExamenMedicoZodError(error),
+    }
   }
+}
+
+export type SaveExamenMedicoFailure = {
+  success: false
+  error: string
+  fieldErrors?: Record<string, string[]>
+  navigation?: ExamenMedicoSaveNavigation
 }
 
 /**
