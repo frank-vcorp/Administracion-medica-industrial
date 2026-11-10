@@ -74,7 +74,10 @@ import {
   type ExamenMedicoSaveNavigation,
 } from '@/lib/clinical/examen-medico-save-errors'
 import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
+import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCallout"
 import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
+import { mapMedicalExamActionFailure, parseMedicalExamZodIssues } from "@/lib/medical-exam-action-errors"
+import { splitUserFacingMessageLines, type UserFacingError } from "@/lib/user-facing-error"
 import {
   deriveAgudezaVisualResumen,
   VISION_SNELLEN_NO_APLICA,
@@ -878,7 +881,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setSomaSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Somatometría (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setSomaSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingSoma(false)
   }
@@ -902,7 +914,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setVitalsSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Signos vitales (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setVitalsSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingVitals(false)
   }
@@ -926,7 +947,16 @@ export default function ExamenMedicoEstudio({
         )
       }
     } else {
-      setAgudezaSaveMsg('❌ Error: ' + (res.error ?? 'Error al guardar'))
+      const mapped = mapMedicalExamActionFailure(
+        {
+          success: false,
+          error: res.error ?? 'No se pudo guardar',
+          technicalDetail: 'technicalDetail' in res ? res.technicalDetail : undefined,
+        },
+        'Agudeza visual (guardado manual)',
+      )
+      const line = splitUserFacingMessageLines(mapped.userMessage)[0] ?? mapped.userMessage
+      setAgudezaSaveMsg(`❌ ${mapped.title}: ${line}`)
     }
     setIsSavingAgudeza(false)
   }
@@ -1045,7 +1075,13 @@ export default function ExamenMedicoEstudio({
       false,
       { autosave: true },
     )
-    return res.success
+    if (res.success) return true
+    return {
+      ok: false,
+      message: res.error,
+      error: parseMedicalExamZodIssues(res.technicalDetail) ?? res.technicalDetail,
+      context: 'Examen médico (autoguardado)',
+    }
   }, [
     eventId,
     eventTestId,
@@ -1060,7 +1096,7 @@ export default function ExamenMedicoEstudio({
     sessionMedicoLine,
   ])
 
-  const { statusLabel: autosaveStatusLabel } = useExamenMedicoAutosave({
+  const { statusLabel: autosaveStatusLabel, userFacingError: autosaveExamError } = useExamenMedicoAutosave({
     enabled: !readonly,
     eventId,
     eventTestId,
@@ -1200,6 +1236,7 @@ export default function ExamenMedicoEstudio({
       {!readonly && (
         <ClinicalAutosaveIndicator
           label={autosaveStatusLabel}
+          error={autosaveExamError}
           className="text-[11px] px-3 py-1.5 rounded-lg border bg-slate-50 border-slate-200"
         />
       )}
