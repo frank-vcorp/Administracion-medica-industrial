@@ -7,6 +7,10 @@ import prisma from '@/lib/prisma'
 import { authOptions } from '@/auth'
 import { logAudit } from '@/actions/audit.actions'
 import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
+import {
+  CONSULTA_DERIVADOS_SOURCE,
+  consultaDerivadoAuditMatches,
+} from '@/lib/clinical/consulta-derivados'
 
 const CLINICAL_ROLES = new Set([
   'SUPERADMIN',
@@ -43,6 +47,25 @@ const AddDerivadosSchema = z.object({
   consultaEventTestId: z.string().min(1),
   medicalTestIds: z.array(z.string().uuid()).min(1, 'Selecciona al menos una prueba.').max(25),
 })
+
+const RemoveDerivadoSchema = z.object({
+  eventId: z.string().min(1),
+  consultaEventTestId: z.string().min(1),
+  eventTestId: z.string().min(1),
+  reason: z
+    .string()
+    .trim()
+    .min(3, 'Escribe el motivo (mínimo 3 caracteres).')
+    .max(500, 'El motivo no puede pasar de 500 caracteres.'),
+})
+
+export type ConsultaDerivadoAddedItem = {
+  id: string
+  name: string
+  code: string | null
+  status: string
+  hasCapture: boolean
+}
 
 /**
  * Catálogo de MedicalTest aún no presentes en la papeleta del evento
@@ -189,7 +212,7 @@ export async function addConsultaDerivadosStudies(input: {
     for (const row of created) {
       await logAudit('CREATE', 'EventTest', row.id, {
         eventId,
-        source: 'consulta_derivados',
+        source: CONSULTA_DERIVADOS_SOURCE,
         consultaEventTestId,
         workerId: medicalEvent.workerId,
       })
@@ -204,5 +227,154 @@ export async function addConsultaDerivadosStudies(input: {
   } catch (err) {
     console.error('[addConsultaDerivadosStudies]', err)
     return { success: false, error: 'No se pudieron agregar los estudios a la papeleta.' }
+  }
+}
+
+/**
+ * Estudios extra creados desde esta consulta. Los del perfil o del check-in no entran.
+ */
+export async function listConsultaDerivadosAdded(
+  eventId: string,
+  consultaEventTestId: string,
+): Promise<{
+  success: boolean
+  studies?: ConsultaDerivadoAddedItem[]
+  error?: string
+}> {
+  const access = await assertClinicalAccess()
+  if (!access.ok) return { success: false, error: access.error }
+  if (!eventId || !consultaEventTestId) {
+    return { success: false, error: 'Faltan datos de la consulta.' }
+  }
+
+  const audits = await prisma.auditLog.findMany({
+    where: {
+      action: 'CREATE',
+      entity: 'EventTest',
+      details: {
+        path: ['consultaEventTestId'],
+        equals: consultaEventTestId,
+      },
+    },
+    select: { entityId: true, details: true },
+  })
+  const ids = [
+    ...new Set(
+      audits
+        .filter(
+          (row) =>
+            row.entityId &&
+            consultaDerivadoAuditMatches(row.details, eventId, consultaEventTestId),
+        )
+        .map((row) => row.entityId as string),
+    ),
+  ]
+  if (ids.length === 0) return { success: true, studies: [] }
+
+  const studies = await prisma.eventTest.findMany({
+    where: { id: { in: ids }, eventId },
+    select: {
+      id: true,
+      testNameSnapshot: true,
+      status: true,
+      fileUrl: true,
+      test: { select: { code: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  return {
+    success: true,
+    studies: studies.map((row) => ({
+      id: row.id,
+      name: row.testNameSnapshot,
+      code: row.test?.code ?? null,
+      status: row.status,
+      hasCapture: row.status !== 'PENDING' || Boolean(row.fileUrl),
+    })),
+  }
+}
+
+/**
+ * Quita un estudio adicional de esta consulta. Exige motivo.
+ * No borra estudios que ya venían en la papeleta.
+ */
+export async function removeConsultaDerivadoStudy(input: {
+  eventId: string
+  consultaEventTestId: string
+  eventTestId: string
+  reason: string
+}): Promise<{ success: boolean; error?: string }> {
+  const access = await assertClinicalAccess()
+  if (!access.ok) return { success: false, error: access.error }
+
+  const parsed = RemoveDerivadoSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'Datos inválidos.',
+    }
+  }
+  const { eventId, consultaEventTestId, eventTestId, reason } = parsed.data
+
+  if (eventTestId === consultaEventTestId) {
+    return { success: false, error: 'La consulta médica no se puede quitar desde aquí.' }
+  }
+
+  const consultaEt = await prisma.eventTest.findUnique({
+    where: { id: consultaEventTestId },
+    select: { id: true, eventId: true, testNameSnapshot: true },
+  })
+  if (!consultaEt || consultaEt.eventId !== eventId) {
+    return { success: false, error: 'La consulta médica no pertenece a este evento.' }
+  }
+  if (!isConsultaMedicaTestName(consultaEt.testNameSnapshot)) {
+    return { success: false, error: 'El estudio indicado no es consulta médica.' }
+  }
+
+  const target = await prisma.eventTest.findUnique({
+    where: { id: eventTestId },
+    select: {
+      id: true,
+      eventId: true,
+      testNameSnapshot: true,
+      status: true,
+      fileUrl: true,
+    },
+  })
+  if (!target || target.eventId !== eventId) {
+    return { success: false, error: 'Ese estudio no está en esta papeleta.' }
+  }
+
+  const audits = await prisma.auditLog.findMany({
+    where: { action: 'CREATE', entity: 'EventTest', entityId: eventTestId },
+    select: { details: true },
+  })
+  const allowed = audits.some((row) =>
+    consultaDerivadoAuditMatches(row.details, eventId, consultaEventTestId),
+  )
+  if (!allowed) {
+    return {
+      success: false,
+      error: 'Solo se pueden quitar los estudios agregados desde esta consulta.',
+    }
+  }
+
+  try {
+    await prisma.eventTest.delete({ where: { id: eventTestId } })
+    await logAudit('DELETE', 'EventTest', eventTestId, {
+      eventId,
+      source: CONSULTA_DERIVADOS_SOURCE,
+      consultaEventTestId,
+      reason,
+      testNameSnapshot: target.testNameSnapshot,
+      status: target.status,
+      hadFile: Boolean(target.fileUrl),
+    })
+    revalidatePath(`/events/${eventId}`)
+    return { success: true }
+  } catch (err) {
+    console.error('[removeConsultaDerivadoStudy]', err)
+    return { success: false, error: 'No se pudo quitar el estudio de la papeleta.' }
   }
 }
