@@ -10,6 +10,10 @@ export const CANCELLATION_REASON_COLUMNS = [
 export const OPTIONAL_MIGRATION_COLUMN_HINTS = [
   ...CANCELLATION_REASON_COLUMNS,
   'weeklySchedule',
+  // 20261106171000_appointment_follow_up_from_consult
+  'followUpFromMedicalEventId',
+  // 20261028190000_medical_verdict_patient_pdf
+  'patientPdfUrl',
 ] as const
 
 /**

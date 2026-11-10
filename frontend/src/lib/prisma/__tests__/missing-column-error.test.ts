@@ -34,6 +34,21 @@ describe('isPrismaMissingColumnError', () => {
     ).toBe(true)
   })
 
+  it('detecta P2022 por patientPdfUrl y followUpFromMedicalEventId', () => {
+    const patientPdf = new Prisma.PrismaClientKnownRequestError('x', {
+      code: 'P2022',
+      clientVersion: '5.22.0',
+      meta: { column: 'medical_verdicts.patientPdfUrl' },
+    })
+    const followUp = new Prisma.PrismaClientKnownRequestError('x', {
+      code: 'P2022',
+      clientVersion: '5.22.0',
+      meta: { column: 'appointments.followUpFromMedicalEventId' },
+    })
+    expect(isPrismaMissingColumnError(patientPdf)).toBe(true)
+    expect(isPrismaMissingColumnError(followUp)).toBe(true)
+  })
+
   it('ignora P2022 de otra columna', () => {
     const error = new Prisma.PrismaClientKnownRequestError('x', {
       code: 'P2022',

@@ -28,7 +28,8 @@ export const getEventById = async (id: string) => {
     try {
         return await queryMedicalEventById(id, 'full')
     } catch (error) {
-        // Migración 20261028170000_cancellation_reason: prod puede desplegar código antes que `migrate deploy`.
+        // Prod puede desplegar código antes que `migrate deploy`
+        // (cancelación, horario, patientPdfUrl, followUpFromMedicalEventId).
         if (!isPrismaMissingColumnError(error)) throw error
         return await queryMedicalEventById(id, 'withoutOptionalMigrationColumns')
     }

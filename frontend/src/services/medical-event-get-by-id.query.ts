@@ -119,6 +119,20 @@ const appointmentScalarSelectWithoutCancellation = {
   },
 } as const satisfies Prisma.AppointmentSelect
 
+/** Sin `patientPdfUrl` (migración 20261028190000 puede no estar aplicada). */
+const verdictScalarSelectWithoutPatientPdf = {
+  id: true,
+  eventId: true,
+  finalDiagnosis: true,
+  recommendations: true,
+  validatorId: true,
+  signedAt: true,
+  signatureHash: true,
+  pdfUrl: true,
+  createdAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.MedicalVerdictSelect
+
 export type MedicalEventByIdResult = Prisma.MedicalEventGetPayload<{
   include: typeof medicalEventByIdRelations
 }>
@@ -128,6 +142,7 @@ function withOptionalMigrationDefaults(
   row: Record<string, unknown> & {
     appointment?: Record<string, unknown> | null
     branch?: Record<string, unknown> | null
+    verdict?: Record<string, unknown> | null
   },
 ): MedicalEventByIdResult {
   return {
@@ -142,6 +157,13 @@ function withOptionalMigrationDefaults(
           ...row.appointment,
           cancellationReason: null,
           cancelledAt: null,
+          followUpFromMedicalEventId: null,
+        }
+      : null,
+    verdict: row.verdict
+      ? {
+          ...row.verdict,
+          patientPdfUrl: null,
         }
       : null,
   } as MedicalEventByIdResult
@@ -169,7 +191,7 @@ export async function queryMedicalEventById(
         select: appointmentScalarSelectWithoutCancellation,
       },
       eventTests: medicalEventByIdRelations.eventTests,
-      verdict: medicalEventByIdRelations.verdict,
+      verdict: { select: verdictScalarSelectWithoutPatientPdf },
     },
   })
 
