@@ -3,6 +3,8 @@ import { applyExploracionFisicaDefaults } from '@/schemas/clinical/exam.schema'
 import { buildExamSummary, type ExamSnapshot } from '@/lib/clinical/exam-summary'
 import {
   buildImpresionDiagnosticaFromAntecedentesYExamen,
+  IMPRESION_DIAGNOSTICA_PENDIENTE,
+  isImpresionDiagnosticaPlaceholder,
   examForHallazgosFromForm,
   hasPatologicoSi,
 } from '@/lib/clinical/impresion-diagnostica'
@@ -95,7 +97,7 @@ export function prepareExamenMedicoPayloadForSave(
       : null
 
   if (
-    !String(next.impresion_diagnostica ?? '').trim() &&
+    isImpresionDiagnosticaPlaceholder(next.impresion_diagnostica) &&
     hasPatologicoSi(antecedentesCaptured)
   ) {
     const examFormSlice: Record<string, string> = {}
@@ -127,9 +129,8 @@ export function prepareExamenMedicoPayloadForSave(
     else if (autoImpresion) next.examen_medico_texto = autoImpresion
   }
 
-  if (!String(next.impresion_diagnostica ?? '').trim()) {
-    const fallback =
-      'Trabajador evaluado; impresión clínica pendiente de correlación con hallazgos del examen.'
+  if (isImpresionDiagnosticaPlaceholder(next.impresion_diagnostica)) {
+    const fallback = IMPRESION_DIAGNOSTICA_PENDIENTE
     next.impresion_diagnostica = fallback
     if (!String(next.examen_medico_texto ?? '').trim()) {
       next.examen_medico_texto = fallback

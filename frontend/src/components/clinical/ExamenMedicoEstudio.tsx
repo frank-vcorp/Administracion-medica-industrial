@@ -62,6 +62,7 @@ import {
 import { buildRecommendationsFromExam } from "@/lib/clinical/recommendations"
 import {
   buildImpresionDiagnosticaFromAntecedentesYExamen,
+  isImpresionDiagnosticaPlaceholder,
   examForHallazgosFromForm,
 } from '@/lib/clinical/impresion-diagnostica'
 import { formatMedicoNombreYCedula } from "@/lib/clinical/medico-display"
@@ -440,9 +441,9 @@ export default function ExamenMedicoEstudio({
   const [aiWarning, setAiWarning] = useState('')
   /** DA-2: no sobrescribir impresión diagnóstica tras edición manual del médico. */
   const impresionDiagnosticaManualRef = useRef(
-    typeof physicalExamData.impresion_diagnostica === 'string' &&
-      physicalExamData.impresion_diagnostica.trim().length > 0,
+    !isImpresionDiagnosticaPlaceholder(physicalExamData.impresion_diagnostica),
   )
+  const lastAutoImpresionRef = useRef('')
 
   // Estado Módulo 1
   const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
@@ -621,8 +622,15 @@ export default function ExamenMedicoEstudio({
     const propuesta = impresionDiagnosticaPropuesta.trim()
     if (!propuesta) return
     setForm((prev) => {
-      if ((prev.impresion_diagnostica ?? '').trim()) return prev
-      const syncExamenTexto = !(prev.examen_medico_texto ?? '').trim()
+      const current = (prev.impresion_diagnostica ?? '').trim()
+      const lastAuto = lastAutoImpresionRef.current
+      const replaceable =
+        isImpresionDiagnosticaPlaceholder(current) || (lastAuto !== '' && current === lastAuto)
+      if (!replaceable || current === propuesta) return prev
+      lastAutoImpresionRef.current = propuesta
+      const examen = (prev.examen_medico_texto ?? '').trim()
+      const syncExamenTexto =
+        isImpresionDiagnosticaPlaceholder(examen) || examen === current || examen === lastAuto
       return {
         ...prev,
         impresion_diagnostica: propuesta,

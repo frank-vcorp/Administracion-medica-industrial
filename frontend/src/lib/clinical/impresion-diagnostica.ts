@@ -33,6 +33,15 @@ export type BuildImpresionDiagnosticaInput = {
   especifiquePositivos?: string | null
 }
 
+/** Texto de relleno cuando aún no hay APP en SÍ. No cuenta como captura del médico. */
+export const IMPRESION_DIAGNOSTICA_PENDIENTE =
+  'Trabajador evaluado; impresión clínica pendiente de correlación con hallazgos del examen.'
+
+export function isImpresionDiagnosticaPlaceholder(value: unknown): boolean {
+  const text = String(value ?? '').trim()
+  return text.length === 0 || text === IMPRESION_DIAGNOSTICA_PENDIENTE
+}
+
 const PATOLOGICO_LABEL_BY_FIELD: Record<string, string> = (() => {
   const map: Record<string, string> = {}
   for (const groupKey of PATOLOGICOS_GROUP_ORDER) {

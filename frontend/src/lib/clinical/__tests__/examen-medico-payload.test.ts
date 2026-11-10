@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ExamenMedicoCompletoSchema } from '@/schemas/clinical/exam.schema'
 import { prepareExamenMedicoPayloadForSave } from '@/lib/clinical/examen-medico-payload'
+import { IMPRESION_DIAGNOSTICA_PENDIENTE } from '@/lib/clinical/impresion-diagnostica'
 
 describe('prepareExamenMedicoPayloadForSave', () => {
   it('aplica defaults de exploración y permite parse Zod', () => {
@@ -29,5 +30,19 @@ describe('prepareExamenMedicoPayloadForSave', () => {
     })
     expect(String(prepared.impresion_diagnostica ?? '')).toContain('Diabetes')
     expect(String(prepared.impresion_diagnostica ?? '')).toContain('Sobrepeso')
+  })
+
+  it('F04: el texto pendiente no bloquea el jalado cuando hay APP SÍ', () => {
+    const prepared = prepareExamenMedicoPayloadForSave({
+      antecedentes_captured: {
+        patologicos: { diabetes: { estado: 'SI', detalle: { tratamiento: 'Metformina' } } },
+      },
+      estado_nutricional: 'SOBREPESO',
+      impresion_diagnostica: IMPRESION_DIAGNOSTICA_PENDIENTE,
+    })
+    const text = String(prepared.impresion_diagnostica ?? '')
+    expect(text).toContain('Diabetes')
+    expect(text).toContain('Sobrepeso')
+    expect(text).not.toBe(IMPRESION_DIAGNOSTICA_PENDIENTE)
   })
 })
