@@ -23,7 +23,7 @@ const CLINICAL_ROLES = new Set([
 
 export type SaveConsultaMedicaResult =
   | { success: true; payload: ConsultaMedicaPayload; updatedAt: string }
-  | { success: false; error: string; fieldErrors?: Record<string, string[]> }
+  | { success: false; error: string; fieldErrors?: Record<string, string[]>; technicalDetail?: string }
 
 async function assertClinicalAccess(): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
   const session = await getServerSession(authOptions)
@@ -157,6 +157,10 @@ export async function saveConsultaMedica(
     }
   } catch (err) {
     console.error('[saveConsultaMedica]', err)
-    return { success: false, error: 'No se pudo guardar la consulta.' }
+    return {
+      success: false,
+      error: 'No se pudo guardar la consulta por un problema del servidor o de red.',
+      technicalDetail: err instanceof Error ? err.message : 'unknown_error',
+    }
   }
 }

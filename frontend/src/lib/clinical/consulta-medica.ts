@@ -1,6 +1,7 @@
 import {
   CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS,
   CONSULTA_MEDICA_SCHEMA_VERSION,
+  CONSULTA_MEDICA_SCHEMA_VERSION_V1,
   type ConsultaMedicaPayload,
 } from '@/schemas/clinical/consulta-medica.constants'
 
@@ -27,4 +28,8 @@ export function parseConsultaMedicaClinicalContext(
   return raw as Partial<ConsultaMedicaPayload>
 }
 
-export { CONSULTA_MEDICA_SCHEMA_VERSION, type ConsultaMedicaPayload }
+export {
+  CONSULTA_MEDICA_SCHEMA_VERSION,
+  CONSULTA_MEDICA_SCHEMA_VERSION_V1,
+  type ConsultaMedicaPayload,
+}

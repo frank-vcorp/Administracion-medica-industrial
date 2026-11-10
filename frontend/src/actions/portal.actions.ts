@@ -160,6 +160,44 @@ export async function getCompanyMonthlyAttendedStats() {
   }
 }
 
+/** Citas agendadas (futuras) y canceladas recientes para hero del portal B2B. */
+export async function getPortalAppointmentSummary() {
+  try {
+    const { companyId } = await resolvePortalCompanyAccess()
+    const now = new Date()
+    const yearAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0, 0)
+
+    const [proximasCitadas, canceladas12m] = await Promise.all([
+      prisma.appointment.count({
+        where: {
+          companyId,
+          status: { in: ['SCHEDULED', 'CONFIRMED'] },
+          scheduledAt: { gte: now },
+        },
+      }),
+      prisma.appointment.count({
+        where: {
+          companyId,
+          status: 'CANCELLED',
+          OR: [{ cancelledAt: { gte: yearAgo } }, { updatedAt: { gte: yearAgo } }],
+        },
+      }),
+    ])
+
+    return {
+      success: true as const,
+      proximasCitadas,
+      canceladas12m,
+    }
+  } catch (error) {
+    console.error(
+      'Error fetching portal appointment summary:',
+      error instanceof Error ? error.message : 'Unknown error',
+    )
+    return { success: false as const, error: 'No se pudo cargar el resumen de citas.' }
+  }
+}
+
 /**
  * Obtiene la lista de trabajadores de una empresa con su último estatus médico
  * Solo retorna datos de la empresa del usuario logueado

@@ -359,7 +359,7 @@ test.describe('Flujo End-to-End Completo', () => {
     const fullName = `${TRABAJADOR.firstName} ${TRABAJADOR.lastName}`;
     const appointmentCard = authenticatedPage.locator('div.group').filter({ hasText: fullName }).first();
     await expect(appointmentCard).toBeVisible({ timeout: 15000 });
-    await appointmentCard.getByRole('button', { name: /doy mi consentimiento/i }).click();
+    await appointmentCard.getByRole('button', { name: /^ingresar$/i }).click();
 
     const corroborationModal = authenticatedPage
       .locator('div.fixed.inset-0')

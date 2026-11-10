@@ -21,7 +21,7 @@ const CLINICAL_ROLES = new Set([
 
 export type SaveCertificadoMedicoResult =
   | { success: true; payload: CertificadoMedicoPayload; updatedAt: string }
-  | { success: false; error: string; fieldErrors?: Record<string, string[]> }
+  | { success: false; error: string; fieldErrors?: Record<string, string[]>; technicalDetail?: string }
 
 async function assertClinicalAccess(): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await getServerSession(authOptions)
@@ -115,6 +115,10 @@ export async function saveCertificadoMedico(
     }
   } catch (err) {
     console.error('[saveCertificadoMedico]', err)
-    return { success: false, error: 'No se pudo guardar el certificado.' }
+    return {
+      success: false,
+      error: 'No se pudo guardar el certificado por un problema del servidor o de red.',
+      technicalDetail: err instanceof Error ? err.message : 'unknown_error',
+    }
   }
 }

@@ -32,6 +32,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import HistoriaLaboralFactoresRiesgoReferencia from '@/components/clinical/HistoriaLaboralFactoresRiesgoReferencia'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import {
   DATOS_PERSONALES_CAMPOS,
@@ -163,9 +164,10 @@ export function AntecedentesForm({
   const [historiaLaboral, setHistoriaLaboral] = useState<Record<string, string | boolean>>({
     empresa_anterior_1: '', puesto_anterior_1: '', tiempo_anterior_1: '',
     empresa_anterior_2: '', puesto_anterior_2: '', tiempo_anterior_2: '',
+    exposicion_fisica: false, exposicion_fisica_especifique: '',
     exposicion_quimica: false, exposicion_quimica_especifique: '',
-    exposicion_fisica: false,  exposicion_fisica_especifique: '',
     exposicion_biologica: false, exposicion_biologica_especifique: '',
+    exposicion_psicosocial: false, exposicion_psicosocial_especifique: '',
     exposicion_ergonomica: false, exposicion_ergonomica_especifique: '',
     accidentes_trabajo: false, accidentes_descripcion: '',
     enfermedades_trabajo: false, enfermedades_descripcion: '',
@@ -287,12 +289,20 @@ export function AntecedentesForm({
 
   const historySnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
 
-  const persistHistory = useCallback(async (): Promise<boolean> => {
+  const persistHistory = useCallback(async () => {
     const result = await upsertWorkerClinicalHistory(workerId, buildPayload())
-    return result.success
+    if (!result.success) {
+      return {
+        ok: false,
+        message: result.error,
+        context: 'Historial clínico (autoguardado)',
+      } as const
+    }
+    return true
   }, [workerId, buildPayload])
 
-  const { statusLabel: autosaveLabel, markSaved: markHistorySaved } = useClinicalIntervalAutosave({
+  const { statusLabel: autosaveLabel, markSaved: markHistorySaved, userFacingError: historyAutosaveError } =
+    useClinicalIntervalAutosave({
     enabled: true,
     snapshotKey: historySnapshotKey,
     save: persistHistory,
@@ -339,7 +349,7 @@ export function AntecedentesForm({
         <p className="text-gray-600">
           <strong>Paciente:</strong> {workerName} (ID: {workerId})
         </p>
-        <ClinicalAutosaveIndicator label={autosaveLabel} className="mt-2" />
+        <ClinicalAutosaveIndicator label={autosaveLabel} error={historyAutosaveError} className="mt-2" />
       </div>
 
       {/* Messages */}
@@ -450,7 +460,12 @@ export function AntecedentesForm({
               </div>
             </fieldset>
             <fieldset className="border border-gray-200 rounded-lg p-4">
-              <legend className="text-base font-semibold text-gray-900 px-2">Exposición a agentes</legend>
+              <legend className="text-base font-semibold text-gray-900 px-2">
+                Factores de riesgo en el trabajo
+              </legend>
+              <div className="mb-4">
+                <HistoriaLaboralFactoresRiesgoReferencia />
+              </div>
               <div className="space-y-3 mt-3">
                 {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(({ key, label, descKey }) => (
                   <div key={key} className="flex items-center gap-3">
@@ -866,7 +881,7 @@ export function AntecedentesForm({
           >
             {loading ? 'Guardando...' : 'Guardar Historial Clínico'}
           </button>
-          <ClinicalAutosaveIndicator label={autosaveLabel} />
+          <ClinicalAutosaveIndicator label={autosaveLabel} error={historyAutosaveError} />
         </div>
       </form>
     </div>

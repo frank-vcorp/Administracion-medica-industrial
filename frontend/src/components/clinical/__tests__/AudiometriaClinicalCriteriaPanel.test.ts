@@ -28,7 +28,9 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import AudiometriaClinicalCriteriaPanel from '../AudiometriaClinicalCriteriaPanel'
 import {
   calcularPTA3,
+  calcularIndiceFletcher,
   resolveAudiometriaCriteria,
+  hasRenderableAudiometriaCriteria,
   AMI_NORMALIDAD_DB,
   FRECUENCIAS_GRAVES_HZ,
   FRECUENCIAS_AGUDAS_HZ,
@@ -261,6 +263,82 @@ describe('FND-20260825-12: constantes de referencia AMI', () => {
     expect(
       AMI_SEVERIDAD_REFERENCIA.find(s => s.id === 'NO_APLICA'),
     ).toBeDefined()
+  })
+})
+
+describe('hasRenderableAudiometriaCriteria', () => {
+  it('sin datos → no renderiza panel', () => {
+    expect(hasRenderableAudiometriaCriteria(null)).toBe(false)
+    expect(hasRenderableAudiometriaCriteria({})).toBe(false)
+    expect(
+      renderToStaticMarkup(
+        createElement(AudiometriaClinicalCriteriaPanel, {
+          extractedData: {},
+          version: 1,
+        }),
+      ),
+    ).toBe('')
+  })
+
+  it('PTA del documento sin umbrales TA → sí muestra (p. ej. sólo pta_visible)', () => {
+    const data = { oido_derecho: { pta_visible: 18 } }
+    expect(hasRenderableAudiometriaCriteria(data)).toBe(true)
+  })
+})
+
+describe('PTACard: línea de sustitución PTA3', () => {
+  it('muestra (TA500 + TA1000 + TA2000) ÷ 3 con valores y resultado', () => {
+    const html = renderToStaticMarkup(
+      createElement(AudiometriaClinicalCriteriaPanel, {
+        extractedData: {
+          oido_derecho: { va: { 500: 20, 1000: 25, 2000: 30 } },
+          oido_izquierdo: { va: { 500: 20, 1000: 25, 2000: 30 } },
+        },
+        version: 1,
+      }),
+    )
+    expect(html).toContain('audiometria-pta-sustitucion-od')
+    expect(html).toContain('Sustitución: (20 + 25 + 30) ÷ 3 = 25 dB')
+  })
+})
+
+describe('calcularIndiceFletcher', () => {
+  it('((PTA menor × 7) + (PTA mayor × 1)) ÷ 8 con OD mejor que OI', () => {
+    const r = calcularIndiceFletcher(10, 50)
+    expect(r.completo).toBe(true)
+    expect(r.oidoMenosAfectado).toBe('OD')
+    expect(r.oidoMasAfectado).toBe('OI')
+    expect(r.valor).toBe(15)
+  })
+
+  it('no calcula si falta un PTA3', () => {
+    const r = calcularIndiceFletcher(10, null)
+    expect(r.completo).toBe(false)
+    expect(r.valor).toBe(null)
+  })
+
+  it('empates: mismo índice y etiqueta OD/OI para sustitución', () => {
+    const r = calcularIndiceFletcher(25, 25)
+    expect(r.completo).toBe(true)
+    expect(r.valor).toBe(25)
+    expect(r.oidoMenosAfectado).toBe('OD')
+    expect(r.oidoMasAfectado).toBe('OI')
+  })
+})
+
+describe('FletcherCard en panel', () => {
+  it('muestra sustitución con PTA OD 10 y OI 50 → 15 dB', () => {
+    const html = renderToStaticMarkup(
+      createElement(AudiometriaClinicalCriteriaPanel, {
+        extractedData: {
+          oido_derecho: { va: { 500: 0, 1000: 10, 2000: 20 } },
+          oido_izquierdo: { va: { 500: 50, 1000: 50, 2000: 50 } },
+        },
+        version: 1,
+      }),
+    )
+    expect(html).toContain('data-testid="audiometria-fletcher-sustitucion"')
+    expect(html).toContain('((PTA OD 10 × 7) + (PTA OI 50 × 1)) ÷ 8 = 15 dB')
   })
 })
 

@@ -7,11 +7,14 @@ import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ConsultaAntecedentesResumen } from '@/components/clinical/ConsultaAntecedentesResumen'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
 import {
   ClinicalFreeTextInput,
   ClinicalTextarea,
 } from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
+import ConsultaDerivadosStudiesPicker from '@/components/clinical/ConsultaDerivadosStudiesPicker'
+import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
 import { buildProximaCitaFields } from '@/lib/clinical/consulta-seguimiento'
@@ -31,11 +34,14 @@ import {
   CONSULTA_MEDICA_SCHEMA_VERSION,
   TIPO_CONSULTA_VALUES,
   TIPO_CONSULTA_LABELS,
+  TIPO_INCAPACIDAD_CONSULTA_VALUES,
+  TIPO_INCAPACIDAD_CONSULTA_LABELS,
   buildDefaultExploracionPlantilla,
   emptySignosVitalesConsulta,
   type ConsultaMedicaPayload,
   type RecetaLinea,
   type TipoConsultaValue,
+  type TipoIncapacidadConsultaValue,
 } from '@/schemas/clinical/consulta-medica.constants'
 import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
 
@@ -46,6 +52,7 @@ type TabId =
   | 'exploracion'
   | 'diagnostico'
   | 'tratamiento'
+  | 'derivados'
   | 'cierre'
 
 const TABS: { id: TabId; label: string }[] = [
@@ -55,6 +62,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'exploracion', label: 'Exploración' },
   { id: 'diagnostico', label: 'Diagnóstico' },
   { id: 'tratamiento', label: 'Tratamiento' },
+  { id: 'derivados', label: 'Estudios derivados' },
   { id: 'cierre', label: 'Cierre' },
 ]
 
@@ -88,7 +96,7 @@ export default function ConsultaMedicaEstudio({
 
   const [activeTab, setActiveTab] = useState<TabId>('motivo')
   const [saveMsg, setSaveMsg] = useState('')
-  const [saveError, setSaveError] = useState('')
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const [tipoConsulta, setTipoConsulta] = useState<TipoConsultaValue>(
@@ -104,8 +112,18 @@ export default function ConsultaMedicaEstudio({
   })
   const [diagEspecifico, setDiagEspecifico] = useState(parsed?.diagnostico_especifico ?? '')
   const [otorgaIncap, setOtorgaIncap] = useState<'SI' | 'NO'>(parsed?.otorga_incapacidad ?? 'NO')
+  const [tipoIncap, setTipoIncap] = useState<TipoIncapacidadConsultaValue>(() => {
+    const t = parsed?.tipo_incapacidad
+    if (t && TIPO_INCAPACIDAD_CONSULTA_VALUES.includes(t)) return t
+    if (parsed?.otorga_incapacidad === 'SI') {
+      if (parsed?.pase_salida === 'SI') return 'PASE_SALIDA'
+      const d = parsed?.dias_incapacidad
+      if (typeof d === 'number' && d > 0) return 'INTERNA_SME'
+      return 'IMSS'
+    }
+    return 'NINGUNA'
+  })
   const [diasIncap, setDiasIncap] = useState(String(parsed?.dias_incapacidad ?? ''))
-  const [paseSalida, setPaseSalida] = useState<'SI' | 'NO'>(parsed?.pase_salida ?? 'NO')
   const [materialMedico, setMaterialMedico] = useState(parsed?.material_medico ?? '')
   const [indicaciones, setIndicaciones] = useState(parsed?.indicaciones_generales ?? '')
   const [proximaCitaFecha, setProximaCitaFecha] = useState(parsed?.proxima_cita_fecha ?? '')
@@ -185,9 +203,15 @@ export default function ConsultaMedicaEstudio({
       diagnostico_especifico: diagEspecifico.trim(),
       incapacidad_aplica: otorgaIncap === 'SI',
       otorga_incapacidad: otorgaIncap,
+      tipo_incapacidad:
+        otorgaIncap === 'SI' && tipoIncap !== 'NINGUNA' ? tipoIncap : undefined,
       dias_incapacidad:
-        otorgaIncap === 'SI' ? Math.max(0, parseInt(diasIncap, 10) || 0) : undefined,
-      pase_salida: otorgaIncap === 'SI' ? paseSalida : undefined,
+        otorgaIncap === 'SI' && tipoIncap === 'INTERNA_SME'
+          ? (() => {
+              const n = parseInt(diasIncap.trim(), 10)
+              return Number.isFinite(n) && n >= 1 ? n : undefined
+            })()
+          : undefined,
       material_medico: materialMedico.trim() || undefined,
       indicaciones_generales: indicaciones.trim() || undefined,
       ...buildProximaCitaFields({
@@ -213,8 +237,8 @@ export default function ConsultaMedicaEstudio({
     diagCie,
     diagEspecifico,
     otorgaIncap,
+    tipoIncap,
     diasIncap,
-    paseSalida,
     materialMedico,
     indicaciones,
     proximaCitaFecha,
@@ -231,9 +255,18 @@ export default function ConsultaMedicaEstudio({
     session?.user?.name,
   ])
 
+  useEffect(() => {
+    if (otorgaIncap === 'NO') {
+      setTipoIncap('NINGUNA')
+      setDiasIncap('')
+      return
+    }
+    setTipoIncap((prev) => (prev === 'NINGUNA' ? 'IMSS' : prev))
+  }, [otorgaIncap])
+
   const consultaSnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
 
-  const persistConsultaDraft = useCallback(async (): Promise<boolean> => {
+  const persistConsultaDraft = useCallback(async () => {
     const res = await saveConsultaMedica(
       eventTestId,
       eventId,
@@ -241,20 +274,29 @@ export default function ConsultaMedicaEstudio({
       buildPayload(),
       { finalize: false },
     )
-    if (!res.success) return false
+    if (!res.success) {
+      return {
+        ok: false,
+        message: res.error,
+        fieldErrors: res.fieldErrors,
+        technicalDetail: res.technicalDetail,
+        context: 'Consulta médica (autoguardado)',
+      } as const
+    }
     setHasPersisted(true)
     return true
   }, [eventTestId, eventId, workerId, buildPayload])
 
   const autosaveEnabled = !readonly && !cerradaAt
-  const { statusLabel: autosaveLabel, markSaved: markConsultaSaved } = useClinicalIntervalAutosave({
+  const { statusLabel: autosaveLabel, markSaved: markConsultaSaved, userFacingError: consultaAutosaveError } =
+    useClinicalIntervalAutosave({
     enabled: autosaveEnabled,
     snapshotKey: consultaSnapshotKey,
     save: persistConsultaDraft,
   })
 
   const runSave = (finalize: boolean) => {
-    setSaveError('')
+    setSaveError(null)
     setSaveMsg('')
     startTransition(async () => {
       const res = await saveConsultaMedica(
@@ -265,7 +307,17 @@ export default function ConsultaMedicaEstudio({
         { finalize },
       )
       if (!res.success) {
-        setSaveError(res.error)
+        setSaveError(
+          mapSaveClinicalFailure(
+            {
+              success: false,
+              error: res.error,
+              fieldErrors: res.fieldErrors,
+              technicalDetail: res.technicalDetail,
+            },
+            { context: finalize ? 'Consulta médica (cierre)' : 'Consulta médica (borrador)' },
+          ),
+        )
         return
       }
       if (finalize && res.payload.cerrada_at) {
@@ -290,7 +342,11 @@ export default function ConsultaMedicaEstudio({
             Nota clínica + receta · Borrador con autoguardado cada 7 s (incluye antecedentes en el
             perfil del paciente)
           </p>
-          <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} className="mt-1" />
+          <ClinicalAutosaveIndicator
+            label={autosaveEnabled ? autosaveLabel : null}
+            error={autosaveEnabled ? consultaAutosaveError : null}
+            className="mt-1"
+          />
         </div>
       </div>
 
@@ -478,26 +534,45 @@ export default function ConsultaMedicaEstudio({
               ))}
             </div>
             {otorgaIncap === 'SI' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  className={inputClass}
-                  type="number"
-                  min={0}
-                  max={365}
-                  placeholder="Días (incapacidad interna SME)"
-                  value={diasIncap}
-                  onChange={(e) => setDiasIncap(e.target.value)}
-                  disabled={readonly}
-                />
-                <select
-                  className={inputClass}
-                  value={paseSalida}
-                  onChange={(e) => setPaseSalida(e.target.value as 'SI' | 'NO')}
-                  disabled={readonly}
-                >
-                  <option value="NO">Sin pase de salida</option>
-                  <option value="SI">Con pase de salida (IMSS u otro)</option>
-                </select>
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Tipo</span>
+                  <select
+                    className={`${inputClass} mt-1`}
+                    value={tipoIncap}
+                    onChange={(e) =>
+                      setTipoIncap(e.target.value as TipoIncapacidadConsultaValue)
+                    }
+                    disabled={readonly}
+                  >
+                    {(['PASE_SALIDA', 'INTERNA_SME', 'IMSS'] as const).map((k) => (
+                      <option key={k} value={k}>
+                        {TIPO_INCAPACIDAD_CONSULTA_LABELS[k]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-[10px] text-slate-500">
+                  Pase de salida e IMSS no llevan días aquí. Solo incapacidad interna (SME) pide número
+                  de días.
+                </p>
+                {tipoIncap === 'INTERNA_SME' && (
+                  <label className="block">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">
+                      Días (incapacidad interna SME)
+                    </span>
+                    <input
+                      className={`${inputClass} mt-1`}
+                      type="number"
+                      min={1}
+                      max={365}
+                      placeholder="Ej. 3"
+                      value={diasIncap}
+                      onChange={(e) => setDiasIncap(e.target.value)}
+                      disabled={readonly}
+                    />
+                  </label>
+                )}
               </div>
             )}
           </div>
@@ -653,6 +728,19 @@ export default function ConsultaMedicaEstudio({
         </section>
       )}
 
+      {activeTab === 'derivados' && (
+        <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            Estudios derivados (catálogo)
+          </p>
+          <ConsultaDerivadosStudiesPicker
+            eventId={eventId}
+            consultaEventTestId={eventTestId}
+            readonly={readonly}
+          />
+        </section>
+      )}
+
       {activeTab === 'cierre' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -717,8 +805,15 @@ export default function ConsultaMedicaEstudio({
             Cerrar consulta
           </button>
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
-          {saveError && <span className="text-xs text-red-600 font-medium">{saveError}</span>}
-          <ClinicalAutosaveIndicator label={autosaveEnabled ? autosaveLabel : null} />
+          {saveError && (
+            <div className="w-full min-w-[220px]">
+              <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
+            </div>
+          )}
+          <ClinicalAutosaveIndicator
+            label={autosaveEnabled ? autosaveLabel : null}
+            error={autosaveEnabled ? consultaAutosaveError : null}
+          />
         </div>
       )}
     </div>

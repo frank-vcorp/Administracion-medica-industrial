@@ -1,4 +1,4 @@
-/** Borradores guardados antes de próxima cita. El parser los sigue leyendo (DA-1). */
+/** Borradores v1 y v2. El parser acepta ambos (DA-1). */
 export const CONSULTA_MEDICA_SCHEMA_VERSION_V1 = 'consulta-medica-v1' as const
 
 export const CONSULTA_MEDICA_SCHEMA_VERSION = 'consulta-medica-v2' as const
@@ -7,6 +7,23 @@ export const CONSULTA_MEDICA_ACCEPTED_SCHEMA_VERSIONS = [
   CONSULTA_MEDICA_SCHEMA_VERSION_V1,
   CONSULTA_MEDICA_SCHEMA_VERSION,
 ] as const
+
+/** Incapacidad / documentación cuando aplica (Frank — nov 2026). */
+export const TIPO_INCAPACIDAD_CONSULTA_VALUES = [
+  'NINGUNA',
+  'PASE_SALIDA',
+  'INTERNA_SME',
+  'IMSS',
+] as const
+
+export type TipoIncapacidadConsultaValue = (typeof TIPO_INCAPACIDAD_CONSULTA_VALUES)[number]
+
+export const TIPO_INCAPACIDAD_CONSULTA_LABELS: Record<TipoIncapacidadConsultaValue, string> = {
+  NINGUNA: 'No aplica',
+  PASE_SALIDA: 'Pase de salida',
+  INTERNA_SME: 'Incapacidad interna (SME)',
+  IMSS: 'IMSS',
+}
 
 export const TIPO_CONSULTA_VALUES = [
   'ENFERMEDAD_GENERAL',
@@ -68,7 +85,10 @@ export type ConsultaMedicaPayload = {
   diagnostico_especifico: string
   incapacidad_aplica: boolean
   otorga_incapacidad: 'SI' | 'NO'
+  /** Presente desde v2; v1 se migra en `prepareConsultaRaw`. */
+  tipo_incapacidad?: TipoIncapacidadConsultaValue
   dias_incapacidad?: number
+  /** Solo v1 / compat; v2 usa `tipo_incapacidad`. */
   pase_salida?: 'SI' | 'NO'
   material_medico?: string
   indicaciones_generales?: string

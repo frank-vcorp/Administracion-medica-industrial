@@ -47,6 +47,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import HistoriaLaboralFactoresRiesgoReferencia from '@/components/clinical/HistoriaLaboralFactoresRiesgoReferencia'
 import {
   DATOS_PERSONALES_CAMPOS,
   HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS,
@@ -214,6 +215,7 @@ function buildEmptySections(): {
     exposicion_quimica_especifique: '',
     exposicion_fisica_especifique: '',
     exposicion_biologica_especifique: '',
+    exposicion_psicosocial_especifique: '',
     exposicion_ergonomica_especifique: '',
     accidentes_descripcion: '',
     enfermedades_descripcion: '',
@@ -663,7 +665,10 @@ export function AntecedentesCaptura({
               </div>
             ))}
             <div className="pt-2 border-t border-slate-100 space-y-3">
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Exposición a agentes</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">
+                Factores de riesgo en el trabajo
+              </p>
+              <HistoriaLaboralFactoresRiesgoReferencia compact />
               {HISTORIA_LABORAL_EXPOSICION_AGENTES.map(exp => (
                 <div key={exp.key}>
                   <label className="flex items-center gap-2 text-xs">

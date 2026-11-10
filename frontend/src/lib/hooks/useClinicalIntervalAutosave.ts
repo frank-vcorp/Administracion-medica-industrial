@@ -1,23 +1,66 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  mapUserFacingError,
+  splitUserFacingMessageLines,
+  type UserFacingError,
+} from '@/lib/user-facing-error'
 
 /** Intervalo estándar de autoguardado clínico en todo el sistema (borrador). */
 export const CLINICAL_AUTOSAVE_INTERVAL_MS = 7_000
 
 export type ClinicalAutosaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
+/** Resultado de `save` para mapear fallos a mensajes claros (validación vs técnico). */
+export type ClinicalAutosaveSaveOutcome =
+  | boolean
+  | {
+      ok: boolean
+      error?: unknown
+      message?: string
+      fieldErrors?: Record<string, string[]>
+      technicalDetail?: string
+      context?: string
+    }
+
+export async function normalizeClinicalAutosaveOutcome(
+  out: ClinicalAutosaveSaveOutcome,
+): Promise<{ ok: true } | { ok: false; mapped: UserFacingError }> {
+  if (typeof out === 'boolean') {
+    if (out) return { ok: true }
+    return {
+      ok: false,
+      mapped: mapUserFacingError({ context: 'autosave' }),
+    }
+  }
+  if (out.ok) return { ok: true }
+    return {
+      ok: false,
+      mapped: mapUserFacingError({
+        error: out.error,
+        message: out.message,
+        fieldErrors: out.fieldErrors,
+        serverTechnicalDetail: out.technicalDetail,
+        context: out.context ?? 'autosave',
+      }),
+    }
+}
+
 export function clinicalAutosaveStatusLabel(
   status: ClinicalAutosaveStatus,
-  errorDetail: string | null,
+  error: UserFacingError | null,
 ): string | null {
   switch (status) {
     case 'saving':
       return 'Guardando automáticamente…'
     case 'saved':
       return 'Guardado automáticamente'
-    case 'error':
-      return errorDetail ?? 'Error al guardar automáticamente'
+    case 'error': {
+      if (!error) return '❌ No se pudo guardar automáticamente'
+      const first = splitUserFacingMessageLines(error.userMessage)[0] ?? error.userMessage
+      return `❌ ${error.title}: ${first}`
+    }
     case 'dirty':
       return 'Cambios pendientes (autoguardado cada 7 s)…'
     default:
@@ -32,7 +75,7 @@ export function clinicalAutosaveStatusLabel(
 export function useClinicalIntervalAutosave(params: {
   enabled: boolean
   snapshotKey: string
-  save: () => Promise<boolean>
+  save: () => Promise<ClinicalAutosaveSaveOutcome>
   intervalMs?: number
   onSaved?: () => void
 }) {
@@ -46,12 +89,12 @@ export function useClinicalIntervalAutosave(params: {
   const baselineRef = useRef<string | null>(null)
   const inFlightRef = useRef(false)
   const [status, setStatus] = useState<ClinicalAutosaveStatus>('idle')
-  const [errorDetail, setErrorDetail] = useState<string | null>(null)
+  const [userFacingError, setUserFacingError] = useState<UserFacingError | null>(null)
 
   const markSaved = useCallback(() => {
     baselineRef.current = snapshotKey
     setStatus('saved')
-    setErrorDetail(null)
+    setUserFacingError(null)
   }, [snapshotKey])
 
   useEffect(() => {
@@ -85,22 +128,23 @@ export function useClinicalIntervalAutosave(params: {
 
       inFlightRef.current = true
       setStatus('saving')
-      setErrorDetail(null)
+      setUserFacingError(null)
 
       void (async () => {
         try {
-          const ok = await saveRef.current()
-          if (ok) {
+          const raw = await saveRef.current()
+          const normalized = await normalizeClinicalAutosaveOutcome(raw)
+          if (normalized.ok) {
             baselineRef.current = snapshotKey
             onSavedRef.current?.()
             setStatus('saved')
           } else {
             setStatus('error')
-            setErrorDetail('No se pudo guardar automáticamente')
+            setUserFacingError(normalized.mapped)
           }
-        } catch {
+        } catch (err: unknown) {
           setStatus('error')
-          setErrorDetail('No se pudo guardar automáticamente')
+          setUserFacingError(mapUserFacingError({ error: err, context: 'autosave' }))
         } finally {
           inFlightRef.current = false
         }
@@ -111,7 +155,7 @@ export function useClinicalIntervalAutosave(params: {
     return () => window.clearInterval(id)
   }, [enabled, intervalMs, snapshotKey])
 
-  const statusLabel = clinicalAutosaveStatusLabel(status, errorDetail)
+  const statusLabel = clinicalAutosaveStatusLabel(status, userFacingError)
 
-  return { status, statusLabel, markSaved, errorDetail }
+  return { status, statusLabel, markSaved, userFacingError }
 }

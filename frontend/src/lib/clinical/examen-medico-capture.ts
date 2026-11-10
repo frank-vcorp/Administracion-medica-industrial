@@ -58,9 +58,11 @@ export function assertExamenMedicoReadyToClose(input: {
   if (Object.keys(eye).length === 0) {
     return 'Completa agudeza visual antes de cerrar la captura.'
   }
-  const impresion = String(input.physicalExamData.impresion_diagnostica ?? '').trim()
+  const impresion =
+    String(input.physicalExamData.examen_medico_texto ?? '').trim() ||
+    String(input.physicalExamData.impresion_diagnostica ?? '').trim()
   if (!impresion) {
-    return 'Agrega impresión diagnóstica antes de cerrar la captura.'
+    return 'Completa la impresión clínica (se puede auto-llenar desde hallazgos al guardar).'
   }
   const recomendaciones = String(
     input.physicalExamData.recomendaciones_clinicas ?? '',

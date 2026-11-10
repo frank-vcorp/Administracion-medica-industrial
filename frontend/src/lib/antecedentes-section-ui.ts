@@ -13,7 +13,7 @@ export const ANTECEDENTES_TABS = [
     icon: '🏭',
     label: 'Historia laboral',
     intro:
-      'Empleos anteriores, exposiciones a riesgos y accidentes o enfermedades relacionadas con el trabajo.',
+      'Empleos anteriores; exposición a agentes en el trabajo (química, física, biológica, ergonómica); y en un apartado distinto, antecedentes de accidente laboral o de enfermedad profesional.',
   },
   {
     id: 'heredofamiliares',
