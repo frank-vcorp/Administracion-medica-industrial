@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildPapeletaUrl,
   examenMedicoNavSectionFromTabs,
   parseExamenMedicoNavSection,
   patchPapeletaSearchParams,
@@ -39,5 +40,13 @@ describe('papeleta-navigation', () => {
     expect(next.get('foo')).toBe('1')
     expect(next.get('eventTest')).toBe('abc-123')
     expect(next.get('emSection')).toBe('extension')
+  })
+
+  it('buildPapeletaUrl cambia el estudio y conserva view', () => {
+    expect(
+      buildPapeletaUrl('/events/evt-1', '?view=IN_PROGRESS&eventTest=old', {
+        eventTest: 'new-id',
+      }),
+    ).toBe('/events/evt-1?view=IN_PROGRESS&eventTest=new-id')
   })
 })

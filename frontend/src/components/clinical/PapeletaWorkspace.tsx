@@ -30,8 +30,8 @@
 "use client"
 
 import { useCallback, useEffect, useState, useTransition } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { patchPapeletaSearchParams } from '@/lib/clinical/papeleta-navigation'
+import { useRouter } from "next/navigation"
+import { replacePapeletaQuery } from '@/lib/clinical/papeleta-navigation'
 import type { StudyPresentationSchema } from "@/types/calibration"
 import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
@@ -386,24 +386,14 @@ export default function PapeletaWorkspace({
   initialEventTestId = null,
 }: PapeletaWorkspaceProps) {
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
   const [activeTestId, setActiveTestIdInternal] = useState<string | null>(
     () => initialEventTestId ?? null,
   )
 
-  const setActiveTestId = useCallback(
-    (testId: string | null) => {
-      setActiveTestIdInternal(testId)
-      const next = patchPapeletaSearchParams(
-        new URLSearchParams(searchParams.toString()),
-        { eventTest: testId },
-      )
-      const qs = next.toString()
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-    },
-    [pathname, router, searchParams],
-  )
+  const setActiveTestId = useCallback((testId: string | null) => {
+    setActiveTestIdInternal(testId)
+    replacePapeletaQuery({ eventTest: testId })
+  }, [])
   const [localTests, setLocalTests] = useState<StudyTest[]>(eventTests)
   const [isPending, startTransition] = useTransition()
   const [uploadError, setUploadError] = useState('')

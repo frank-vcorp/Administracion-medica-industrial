@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { getCurrentDoctorProfile } from "@/actions/doctor-profile.actions"
@@ -100,7 +100,8 @@ import { loadSodexoExtensionFromStorage } from '@/lib/sodexo-extension-validatio
 import {
   examenMedicoNavSectionFromTabs,
   parseExamenMedicoNavSection,
-  patchPapeletaSearchParams,
+  readPapeletaQueryParam,
+  replacePapeletaQuery,
 } from '@/lib/clinical/papeleta-navigation'
 import {
   emptyFlowserveExtension,
@@ -375,10 +376,9 @@ export default function ExamenMedicoEstudio({
   papeletaLayout = false,
   onPapeletaActiveSectionChange,
 }: ExamenMedicoEstudioProps) {
-  const router = useRouter()
-  const pathname = usePathname()
   const searchParams = useSearchParams()
-  const emNavFromUrl = parseExamenMedicoNavSection(searchParams.get('emSection'))
+  const emSectionRaw = readPapeletaQueryParam('emSection', searchParams.get('emSection'))
+  const emNavFromUrl = parseExamenMedicoNavSection(emSectionRaw)
   const physicalExamData = (examData?.physicalExamData ?? {}) as Record<string, unknown>
   const examVariant: ExamenMedicoVariant = resolveExamenMedicoVariant(
     testNameSnapshot,
@@ -631,15 +631,13 @@ export default function ExamenMedicoEstudio({
     })
   }, [activeInnerTab, impresionDiagnosticaPropuesta, readonly])
 
+  const emSectionInUrl = useRef(emSectionRaw)
   useEffect(() => {
     const section = examenMedicoNavSectionFromTabs(outerTab, activeInnerTab)
-    if (searchParams.get('emSection') === section) return
-    const next = patchPapeletaSearchParams(
-      new URLSearchParams(searchParams.toString()),
-      { emSection: section },
-    )
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
-  }, [activeInnerTab, outerTab, pathname, router, searchParams])
+    if (emSectionInUrl.current === section) return
+    emSectionInUrl.current = section
+    replacePapeletaQuery({ emSection: section })
+  }, [activeInnerTab, outerTab])
 
   useEffect(() => {
     if (!papeletaLayout || !onPapeletaActiveSectionChange) return
