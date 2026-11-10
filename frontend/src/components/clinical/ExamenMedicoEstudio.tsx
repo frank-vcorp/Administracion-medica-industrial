@@ -620,13 +620,14 @@ export default function ExamenMedicoEstudio({
     if (impresionDiagnosticaManualRef.current) return
     const propuesta = impresionDiagnosticaPropuesta.trim()
     if (!propuesta) return
-    setForm(prev => {
+    setForm((prev) => {
       if ((prev.impresion_diagnostica ?? '').trim()) return prev
-      const next = { ...prev, impresion_diagnostica: propuesta }
-      if (!(prev.examen_medico_texto ?? '').trim()) {
-        next.examen_medico_texto = propuesta
+      const syncExamenTexto = !(prev.examen_medico_texto ?? '').trim()
+      return {
+        ...prev,
+        impresion_diagnostica: propuesta,
+        ...(syncExamenTexto ? { examen_medico_texto: propuesta } : {}),
       }
-      return next
     })
   }, [activeInnerTab, impresionDiagnosticaPropuesta, readonly])
 
@@ -1076,10 +1077,16 @@ export default function ExamenMedicoEstudio({
       { autosave: true },
     )
     if (res.success) return true
+    const detail =
+      res.fieldErrors && Object.keys(res.fieldErrors).length > 0
+        ? Object.entries(res.fieldErrors)
+            .map(([k, msgs]) => `${k}: ${msgs[0] ?? ''}`)
+            .join('\n')
+        : res.error
     return {
       ok: false,
       message: res.error,
-      error: parseMedicalExamZodIssues(res.technicalDetail) ?? res.technicalDetail,
+      error: detail,
       context: 'Examen médico (autoguardado)',
     }
   }, [

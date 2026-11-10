@@ -327,7 +327,7 @@ export async function createPortalClientAppointment(input: {
         error: 'BRANCH_HOUR_FULL',
         userMessage:
           'Este horario ya alcanzó el límite de citas por hora. Use la solicitud personalizada e indique cuántas citas necesita.',
-        capacity: result.capacity ?? capacityCheck,
+        capacity: capacityCheck,
       }
     }
     return {

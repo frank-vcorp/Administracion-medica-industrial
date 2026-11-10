@@ -122,7 +122,9 @@ function collectHistoriaLaboralLines(historia: Record<string, unknown>): string[
 }
 
 function collectHallazgosExamenLines(exam: ExamForHallazgos): string[] {
-  return detectHallazgosFromExam(exam).map(h => h.texto)
+  return detectHallazgosFromExam(exam)
+    .map((h) => h.texto)
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
 }
 
 function joinSentences(parts: string[]): string {
