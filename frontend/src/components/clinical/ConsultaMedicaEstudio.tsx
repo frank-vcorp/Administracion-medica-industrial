@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { saveConsultaMedica, scheduleConsultaSeguimiento } from '@/actions/consulta-medica.actions'
+import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
+import ConsultaSeguimientoAgenda from '@/components/clinical/ConsultaSeguimientoAgenda'
 import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ConsultaAntecedentesResumen } from '@/components/clinical/ConsultaAntecedentesResumen'
@@ -54,6 +55,7 @@ type TabId =
   | 'diagnostico'
   | 'tratamiento'
   | 'derivados'
+  | 'seguimiento'
   | 'cierre'
 
 const TABS: { id: TabId; label: string }[] = [
@@ -64,6 +66,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'diagnostico', label: 'Diagnóstico' },
   { id: 'tratamiento', label: 'Tratamiento' },
   { id: 'derivados', label: 'Estudios derivados' },
+  { id: 'seguimiento', label: 'Seguimiento' },
   { id: 'cierre', label: 'Cierre' },
 ]
 
@@ -132,10 +135,6 @@ export default function ConsultaMedicaEstudio({
   const [proximaCitaAppointmentId, setProximaCitaAppointmentId] = useState(
     parsed?.proxima_cita_appointment_id ?? '',
   )
-  const [seguimientoFechaInput, setSeguimientoFechaInput] = useState('')
-  const [seguimientoHoraInput, setSeguimientoHoraInput] = useState('')
-  const [scheduleError, setScheduleError] = useState('')
-  const [schedulePending, setSchedulePending] = useState(false)
   const [recetaLineas, setRecetaLineas] = useState<RecetaLinea[]>(
     parsed?.receta_lineas?.length ? parsed.receta_lineas : [emptyRecetaLine()],
   )
@@ -349,37 +348,6 @@ export default function ConsultaMedicaEstudio({
       setHasPersisted(true)
       setSaveMsg(finalize ? 'Consulta cerrada y guardada.' : 'Borrador guardado.')
     })
-  }
-
-  async function agendarSeguimiento() {
-    setScheduleError('')
-    if (!seguimientoFechaInput || !seguimientoHoraInput) {
-      setScheduleError('Indica la fecha y la hora de la consulta de seguimiento.')
-      return
-    }
-    setSchedulePending(true)
-    try {
-      const res = await scheduleConsultaSeguimiento({
-        eventId,
-        eventTestId,
-        workerId,
-        date: seguimientoFechaInput,
-        time: seguimientoHoraInput,
-        existingAppointmentId: proximaCitaAppointmentId,
-      })
-      if (!res.success) {
-        setScheduleError(res.error)
-        return
-      }
-      setProximaCitaFecha(res.fecha)
-      setProximaCitaHora(res.hora)
-      setProximaCitaAppointmentId(res.appointmentId)
-      setSeguimientoFechaInput(res.dateInput)
-      setSeguimientoHoraInput(res.timeInput)
-      setHasPersisted(true)
-    } finally {
-      setSchedulePending(false)
-    }
   }
 
   const inputClass =
@@ -750,61 +718,30 @@ export default function ConsultaMedicaEstudio({
         </section>
       )}
 
+      {activeTab === 'seguimiento' && (
+        <ConsultaSeguimientoAgenda
+          eventId={eventId}
+          eventTestId={eventTestId}
+          workerId={workerId}
+          readonly={readonly}
+          scheduledLabel={seguimientoAgendado}
+          existingAppointmentId={proximaCitaAppointmentId}
+          onScheduled={(scheduled) => {
+            setProximaCitaFecha(scheduled.fecha)
+            setProximaCitaHora(scheduled.hora)
+            setProximaCitaAppointmentId(scheduled.appointmentId)
+            setHasPersisted(true)
+          }}
+        />
+      )}
+
       {activeTab === 'cierre' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Consulta de seguimiento</p>
+          {!cerradaAt && (
             <p className="text-xs text-slate-500">
-              Elige fecha y hora. La cita queda en la agenda de la sucursal y se imprime en la nota
-              y la receta.
+              La nota y la receta se imprimen aquí al cerrar la consulta.
             </p>
-            {seguimientoAgendado ? (
-              <p className="text-sm font-semibold text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
-                Agendada: {seguimientoAgendado}
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500">Aún no hay consulta de seguimiento.</p>
-            )}
-            {!readonly && (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Fecha</span>
-                    <input
-                      className={`${inputClass} mt-1`}
-                      type="date"
-                      value={seguimientoFechaInput}
-                      onChange={(e) => setSeguimientoFechaInput(e.target.value)}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Hora</span>
-                    <input
-                      className={`${inputClass} mt-1`}
-                      type="time"
-                      value={seguimientoHoraInput}
-                      onChange={(e) => setSeguimientoHoraInput(e.target.value)}
-                    />
-                  </label>
-                </div>
-                <button
-                  type="button"
-                  disabled={schedulePending}
-                  onClick={() => void agendarSeguimiento()}
-                  className="bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl disabled:opacity-50"
-                >
-                  {schedulePending
-                    ? 'Agendando…'
-                    : proximaCitaAppointmentId
-                      ? 'Reagendar consulta de seguimiento'
-                      : 'Agendar consulta de seguimiento'}
-                </button>
-                {scheduleError ? (
-                  <p className="text-xs text-red-600">{scheduleError}</p>
-                ) : null}
-              </>
-            )}
-          </div>
+          )}
           {Boolean(cerradaAt) && (
             <div className="flex flex-wrap gap-3 pt-2">
               <a

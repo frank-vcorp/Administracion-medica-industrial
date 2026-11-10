@@ -3,6 +3,8 @@ import {
   AMI_APPOINTMENT_TIMEZONE,
   formatAppointmentAgendaDateString,
   formatAppointmentAgendaTime,
+  isAppointmentScheduleInPast,
+  parseAppointmentLocalDateTime,
 } from '@/lib/appointment-scheduling'
 
 export type ProximaCitaFields = Pick<
@@ -55,4 +57,25 @@ export function formatScheduledFollowUp(scheduledAt: Date): {
     year: 'numeric',
   }).format(scheduledAt)
   return { fecha, hora: timeInput, dateInput, timeInput }
+}
+
+/** Horas del calendario de citas que aún tienen cupo y no están en el pasado. */
+export function listOpenAgendaHourSlots(input: {
+  hours: number[]
+  counts: ReadonlyMap<number, number>
+  capacity: number
+  date: string
+  now?: Date
+}): { time: string; hour: number; count: number; capacity: number }[] {
+  const now = input.now ?? new Date()
+  const slots: { time: string; hour: number; count: number; capacity: number }[] = []
+  for (const hour of input.hours) {
+    const time = `${String(hour).padStart(2, '0')}:00`
+    const at = parseAppointmentLocalDateTime(input.date, time)
+    if (isAppointmentScheduleInPast(at, now)) continue
+    const count = input.counts.get(hour) ?? 0
+    if (count >= input.capacity) continue
+    slots.push({ time, hour, count, capacity: input.capacity })
+  }
+  return slots
 }

@@ -6,6 +6,7 @@ import {
   buildProximaCitaFields,
   formatProximaCitaLine,
   formatScheduledFollowUp,
+  listOpenAgendaHourSlots,
 } from '@/lib/clinical/consulta-seguimiento'
 import { validateConsultaMedicaPayload } from '@/lib/clinical/consulta-medica-validate'
 import {
@@ -114,5 +115,22 @@ describe('próxima cita de seguimiento', () => {
       dateInput: '2026-12-12',
       timeInput: '10:30',
     })
+  })
+
+  it('lista solo horas de agenda con cupo y que no pasaron', () => {
+    const now = parseAppointmentLocalDateTime('2026-12-12', '09:30')
+    const counts = new Map<number, number>([
+      [10, 0],
+      [11, 2],
+    ])
+    expect(
+      listOpenAgendaHourSlots({
+        hours: [8, 9, 10, 11],
+        counts,
+        capacity: 2,
+        date: '2026-12-12',
+        now,
+      }).map((slot) => slot.time),
+    ).toEqual(['10:00'])
   })
 })

@@ -11,17 +11,27 @@ import { createAppointment } from '@/actions/appointment.actions'
 import { validateConsultaMedicaPayload } from '@/lib/clinical/consulta-medica-validate'
 import type { ConsultaMedicaPayload } from '@/schemas/clinical/consulta-medica.schema'
 import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
-import { formatScheduledFollowUp } from '@/lib/clinical/consulta-seguimiento'
+import { formatScheduledFollowUp, listOpenAgendaHourSlots } from '@/lib/clinical/consulta-seguimiento'
 import { searchCie10Catalog, type Cie10Entry } from '@/lib/clinical/cie-10-catalog'
 import {
+  addAgendaDays,
   appointmentAgendaHour,
   formatAppointmentAgendaDateString,
+  getAgendaWeekStartMonday,
   parseAppointmentLocalDateTime,
+  todayAgendaDateString,
 } from '@/lib/appointment-scheduling'
 import {
   appointmentCapacityUserMessage,
   checkBranchHourCapacity,
+  computeBranchDayAvailabilityForDates,
+  countAppointmentsByHourForDay,
+  type BranchDayAvailability,
 } from '@/lib/appointment-capacity'
+import {
+  branchOperatingHoursForDate,
+  parseBranchWeeklySchedule,
+} from '@/lib/branch-weekly-schedule'
 import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
 
 const CLINICAL_ROLES = new Set([
@@ -251,6 +261,144 @@ export async function scheduleConsultaSeguimiento(input: {
   revalidatePath(`/events/${input.eventId}`)
   revalidatePath('/appointments')
   return { success: true, appointmentId, ...formatted }
+}
+
+export type ConsultaSeguimientoAgendaDay = Pick<
+  BranchDayAvailability,
+  'date' | 'status' | 'openHourSlots'
+>
+
+export type ConsultaSeguimientoAgendaSlot = {
+  time: string
+  count: number
+  capacity: number
+}
+
+/**
+ * Semana y horas libres de la sucursal del expediente.
+ * Usa el mismo cupo y horario que Gestión de citas.
+ */
+export async function getConsultaSeguimientoAgenda(input: {
+  eventId: string
+  weekStart?: string
+  date?: string
+}): Promise<
+  | {
+      success: true
+      branchName: string
+      weekStart: string
+      days: ConsultaSeguimientoAgendaDay[]
+      date: string | null
+      closed: boolean
+      slots: ConsultaSeguimientoAgendaSlot[]
+    }
+  | { success: false; error: string }
+> {
+  const access = await assertClinicalAccess()
+  if (!access.ok) return { success: false, error: access.error }
+
+  const event = await prisma.medicalEvent.findUnique({
+    where: { id: input.eventId },
+    select: { id: true, branchId: true },
+  })
+  if (!event) return { success: false, error: 'Evento no encontrado.' }
+
+  const branchSelect = {
+    id: true,
+    name: true,
+    hourlyCapacity: true,
+    openingTime: true,
+    closingTime: true,
+    isActive: true,
+  } as const
+
+  let branch: {
+    id: string
+    name: string
+    hourlyCapacity: number | null
+    openingTime: string
+    closingTime: string
+    isActive: boolean
+    weeklySchedule: unknown
+  } | null = null
+  try {
+    branch = await prisma.branch.findUnique({
+      where: { id: event.branchId },
+      select: { ...branchSelect, weeklySchedule: true },
+    })
+  } catch (err) {
+    if (!isPrismaMissingColumnError(err)) throw err
+    const fallback = await prisma.branch.findUnique({
+      where: { id: event.branchId },
+      select: branchSelect,
+    })
+    branch = fallback ? { ...fallback, weeklySchedule: null } : null
+  }
+  if (!branch?.isActive) {
+    return { success: false, error: 'La sucursal de este expediente no está activa.' }
+  }
+
+  const anchor =
+    input.weekStart && /^\d{4}-\d{2}-\d{2}$/.test(input.weekStart)
+      ? input.weekStart
+      : todayAgendaDateString()
+  const weekStart = getAgendaWeekStartMonday(anchor)
+  const dateStrings = Array.from({ length: 7 }, (_, i) => addAgendaDays(weekStart, i))
+  const capacity = branch.hourlyCapacity ?? 15
+  const meta = {
+    hourlyCapacity: capacity,
+    openingTime: branch.openingTime,
+    closingTime: branch.closingTime,
+    weeklySchedule: branch.weeklySchedule,
+  }
+  const days = await computeBranchDayAvailabilityForDates(
+    prisma,
+    branch.id,
+    dateStrings,
+    meta,
+    todayAgendaDateString(),
+  )
+
+  const date =
+    input.date && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : null
+  let slots: ConsultaSeguimientoAgendaSlot[] = []
+  let closed = false
+  if (date) {
+    const hours = branchOperatingHoursForDate(
+      date,
+      meta,
+      parseBranchWeeklySchedule(branch.weeklySchedule),
+    )
+    if (hours.length === 0) {
+      closed = true
+    } else {
+      const byHour = await countAppointmentsByHourForDay(prisma, branch.id, date)
+      slots = listOpenAgendaHourSlots({
+        hours,
+        counts: byHour,
+        capacity,
+        date,
+      }).map((slot) => ({
+        time: slot.time,
+        count: slot.count,
+        capacity: slot.capacity,
+      }))
+    }
+  }
+
+  return {
+    success: true,
+    branchName: branch.name,
+    weekStart,
+    days: days.map((day) => ({
+      date: day.date,
+      status: day.status,
+      openHourSlots: day.openHourSlots,
+    })),
+    date,
+    closed,
+    slots,
+  }
 }
 
 export async function saveConsultaMedica(
