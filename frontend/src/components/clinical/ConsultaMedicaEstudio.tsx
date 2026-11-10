@@ -12,6 +12,7 @@ import {
   ClinicalTextarea,
 } from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
+import ConsultaDerivadosStudiesPicker from '@/components/clinical/ConsultaDerivadosStudiesPicker'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
 import {
@@ -48,6 +49,7 @@ type TabId =
   | 'exploracion'
   | 'diagnostico'
   | 'tratamiento'
+  | 'derivados'
   | 'cierre'
 
 const TABS: { id: TabId; label: string }[] = [
@@ -57,6 +59,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'exploracion', label: 'Exploración' },
   { id: 'diagnostico', label: 'Diagnóstico' },
   { id: 'tratamiento', label: 'Tratamiento' },
+  { id: 'derivados', label: 'Estudios derivados' },
   { id: 'cierre', label: 'Cierre' },
 ]
 
@@ -634,6 +637,19 @@ export default function ConsultaMedicaEstudio({
           ) : (
             <p className="text-xs text-slate-500">Guarda la consulta para imprimir el medicamento.</p>
           )}
+        </section>
+      )}
+
+      {activeTab === 'derivados' && (
+        <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            Estudios derivados (catálogo)
+          </p>
+          <ConsultaDerivadosStudiesPicker
+            eventId={eventId}
+            consultaEventTestId={eventTestId}
+            readonly={readonly}
+          />
         </section>
       )}
 
