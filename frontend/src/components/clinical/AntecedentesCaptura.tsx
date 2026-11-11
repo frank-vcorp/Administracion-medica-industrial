@@ -129,6 +129,8 @@ interface AntecedentesCapturaProps {
   onAntecedentesMedicoChange?: (value: string) => void
   /** Hint si hay datos del portal pre-cita. */
   portalPrefillHint?: boolean
+  /** Certificado: AHF/APP/ANP sin datos personales laborales ni historia laboral (SME-127). */
+  captureLayout?: 'examen' | 'certificado'
 }
 
 type SectionKey = 'datos_personales' | 'historia_laboral' | 'heredo_familiares' | 'no_patologicos' | 'patologicos'
@@ -452,7 +454,9 @@ export function AntecedentesCaptura({
   antecedentesMedico = '',
   onAntecedentesMedicoChange,
   portalPrefillHint = false,
+  captureLayout = 'examen',
 }: AntecedentesCapturaProps) {
+  const certificadoLayout = captureLayout === 'certificado'
   const [form, setForm] = useState(() => sectionsFromValue(value))
   const [modified, setModified] = useState<Set<string>>(new Set())
 
@@ -623,10 +627,15 @@ export function AntecedentesCaptura({
         <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5 flex-1">
           <span className="text-teal-600">📋</span>
           <div>
-            <p className="text-xs font-bold text-teal-800">Antecedentes — Captura por cita</p>
+            <p className="text-xs font-bold text-teal-800">
+              {certificadoLayout
+                ? 'Antecedentes — Certificado médico'
+                : 'Antecedentes — Captura por cita'}
+            </p>
             <p className="text-[10px] text-teal-600 mt-0.5">
-              Cuestionario del paciente + gineco/reproductivos e inmunizaciones para esta cita.
-              Se guarda junto con el resto del Examen Médico.
+              {certificadoLayout
+                ? 'AHF, APP y hábitos para las secciones I–III del PDF. Sin puesto, turno ni historia laboral.'
+                : 'Cuestionario del paciente + gineco/reproductivos e inmunizaciones para esta cita. Se guarda junto con el resto del Examen Médico.'}
               {portalPrefillHint && (
                 <span className="ml-1 text-emerald-700 font-semibold">
                   Snapshot del portal disponible.
@@ -661,9 +670,15 @@ export function AntecedentesCaptura({
         trabajador · <strong>ANP</strong> (Hábitos) = tabaco, alcohol, etc.
       </p>
 
-      {/* ── Grid 3 columnas: DP | HL | HF ───────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Datos Personales */}
+      {/* ── Grid 3 columnas: DP | HL | HF (certificado: solo HF) ─────────── */}
+      <div
+        className={
+          certificadoLayout
+            ? 'grid grid-cols-1 gap-4'
+            : 'grid grid-cols-1 md:grid-cols-3 gap-4'
+        }
+      >
+        {!certificadoLayout && (
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
           <legend className="text-xs font-bold text-slate-600 px-1">
             Datos Personales
@@ -712,8 +727,9 @@ export function AntecedentesCaptura({
             ))}
           </div>
         </fieldset>
+        )}
 
-        {/* Historia Laboral */}
+        {!certificadoLayout && (
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
           <legend className="text-xs font-bold text-slate-600 px-1">
             Historia Laboral
@@ -800,6 +816,7 @@ export function AntecedentesCaptura({
             </div>
           </div>
         </fieldset>
+        )}
 
         {/* Heredo-Familiares */}
         <fieldset className="border border-violet-100 rounded-xl p-3 bg-violet-50/30">

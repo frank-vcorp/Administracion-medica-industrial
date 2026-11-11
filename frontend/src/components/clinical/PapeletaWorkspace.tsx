@@ -192,6 +192,7 @@ type WorkerInfo = {
   profile: string
   ageYears?: number | null
   eventDate?: string
+  eventAtIso?: string
   workArea?: string | null
   tenureLabel?: string | null
   occupationalLine?: string | null
@@ -1816,6 +1817,7 @@ function StudyPanel({
           eventTestId={test.id}
           workerId={workerId}
           workerNationalId={workerInfo.nationalId ?? null}
+          eventAtIso={workerInfo.eventAtIso ?? null}
           initialClinicalContext={test.clinicalContext}
           longitudinalData={longitudinalData ?? null}
           somatometryData={(examData?.somatometryData as Record<string, unknown>) ?? null}

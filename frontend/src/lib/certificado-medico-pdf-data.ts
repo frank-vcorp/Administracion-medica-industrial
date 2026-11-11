@@ -4,6 +4,7 @@ import {
   parseCertificadoMedicoClinicalContext,
 } from '@/lib/clinical/certificado-medico'
 import type { CertificadoMedicoPdfInput } from '@/lib/certificado-medico-pdf'
+import { resolveCertificadoMedicoMetadata } from '@/lib/clinical/certificado-medico-metadata'
 
 function formatLongDate(d: Date): string {
   return new Intl.DateTimeFormat('es-MX', {
@@ -64,11 +65,11 @@ export async function loadCertificadoMedicoPdfInput(
     return { ok: false, status: 400, message: 'El estudio no es un certificado médico.' }
   }
 
-  const certificado = parseCertificadoMedicoClinicalContext(eventTest.clinicalContext)
-  if (!certificado) {
+  const certificadoRaw = parseCertificadoMedicoClinicalContext(eventTest.clinicalContext)
+  if (!certificadoRaw) {
     return { ok: false, status: 404, message: 'El certificado aún no tiene captura.' }
   }
-  if (!certificado.cerrada_at) {
+  if (!certificadoRaw.cerrada_at) {
     return { ok: false, status: 403, message: 'El certificado debe estar cerrado para generar PDF.' }
   }
 
@@ -78,19 +79,17 @@ export async function loadCertificadoMedicoPdfInput(
   const hist = worker.clinicalHistory?.data
   const histObj =
     hist && typeof hist === 'object' && !Array.isArray(hist) ? (hist as Record<string, unknown>) : null
-  const dp = histObj?.datos_personales as Record<string, unknown> | undefined
 
-  const sexo =
-    certificado.sexo_atencion?.trim() ||
-    (typeof dp?.sexo === 'string' ? dp.sexo : null) ||
-    (typeof dp?.genero === 'string' ? dp.genero : null) ||
-    null
+  const metadata = resolveCertificadoMedicoMetadata({
+    parsed: certificadoRaw,
+    workerNationalId: worker.nationalId,
+    longitudinalData: histObj,
+    eventAt: eventDateRaw,
+  })
+  const certificado = { ...certificadoRaw, ...metadata }
 
-  const domicilio =
-    certificado.domicilio_atencion?.trim() ||
-    (typeof dp?.direccion === 'string' ? dp.direccion : null) ||
-    (typeof dp?.domicilio === 'string' ? dp.domicilio : null) ||
-    null
+  const sexo = certificado.sexo_atencion?.trim() || null
+  const domicilio = certificado.domicilio_atencion?.trim() || null
 
   const edadNum = worker.dob ? computeEdad(worker.dob, eventDateRaw) : null
 

@@ -1,24 +1,27 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
 import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
 import { saveCertificadoMedico } from '@/actions/certificado-medico.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
+import {
+  ClinicalSomaSignosVitalesCapture,
+  type SomaSignosVitalesValue,
+} from '@/components/clinical/ClinicalSomaSignosVitalesCapture'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
 import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
-import {
-  ClinicalFreeTextInput,
-  ClinicalTextarea,
-} from '@/components/clinical/ClinicalFreeTextControls'
+import { ClinicalTextarea } from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
-import {
-  defaultHoraAtencionMexico,
-  mergeCertificadoSignosPrefill,
-  prefillCertificadoPatientFields,
-} from '@/lib/clinical/certificado-medico-prefill'
+import { mergeCertificadoSignosPrefill } from '@/lib/clinical/certificado-medico-prefill'
+import { resolveCertificadoMedicoMetadata } from '@/lib/clinical/certificado-medico-metadata'
 import { parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
+import {
+  buildIntegracionDiagnosticaCertificado,
+  isIntegracionDiagnosticaPlaceholder,
+} from '@/lib/clinical/certificado-integracion-diagnostica'
+import { computeBmi, complexionFromImc } from '@/lib/clinical/talla-meters'
 import {
   clinicalCaptureReadonlyBannerText,
   resolveClinicalStudyReadonly,
@@ -27,7 +30,6 @@ import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/c
 import {
   CERTIFICADO_MEDICO_SCHEMA_VERSION,
   DEFAULT_DICTAMEN_LABORAL_TEXTO,
-  DEFAULT_LUGAR_EXPEDICION,
   DICTAMEN_LABORAL_VALUES,
   DICTAMEN_LABORAL_LABELS,
   buildDefaultExploracionCertificado,
@@ -36,28 +38,38 @@ import {
   type DictamenLaboralValue,
 } from '@/schemas/clinical/certificado-medico.schema'
 
-type TabId = 'antecedentes' | 'vitales' | 'exploracion' | 'dictamen' | 'cierre'
+type TabId = 'antecedentes' | 'vitales' | 'exploracion' | 'dictamen'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'antecedentes', label: 'Antecedentes' },
   { id: 'vitales', label: 'Signos vitales' },
   { id: 'exploracion', label: 'Exploración' },
   { id: 'dictamen', label: 'Dictamen' },
-  { id: 'cierre', label: 'Cierre' },
 ]
+
+function CertificadoPdfLink({ href, prominent }: { href: string; prominent?: boolean }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={
+        prominent
+          ? 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md transition-colors'
+          : 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors'
+      }
+    >
+      📄 Generar / descargar certificado (PDF)
+    </a>
+  )
+}
 
 function mergeLongitudinalAntecedentes(
   longitudinal: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
   if (!longitudinal || typeof longitudinal !== 'object') return {}
   const out: Record<string, unknown> = {}
-  for (const key of [
-    'datos_personales',
-    'historia_laboral',
-    'heredo_familiares',
-    'no_patologicos',
-    'patologicos',
-  ]) {
+  for (const key of ['heredo_familiares', 'no_patologicos', 'patologicos']) {
     if (longitudinal[key] && typeof longitudinal[key] === 'object') {
       out[key] = longitudinal[key]
     }
@@ -65,11 +77,29 @@ function mergeLongitudinalAntecedentes(
   return out
 }
 
+function signosToSomaVitalsValue(
+  signos: CertificadoMedicoPayload['signos_vitales'],
+): SomaSignosVitalesValue {
+  return {
+    peso_kg: signos.peso_kg ?? '',
+    talla_m: signos.talla_m ?? '',
+    imc: signos.imc,
+    complexion: signos.complexion,
+    ta_sistolica: signos.ta_sistolica ?? '',
+    ta_diastolica: signos.ta_diastolica ?? '',
+    fc_min: signos.fc_min ?? '',
+    fr_min: signos.fr_min ?? '',
+    temperatura: signos.temperatura ?? '',
+    spo2: signos.spo2_pct ?? '',
+  }
+}
+
 export default function CertificadoMedicoEstudio({
   eventId,
   eventTestId,
   workerId,
   workerNationalId = null,
+  eventAtIso = null,
   initialClinicalContext,
   longitudinalData,
   somatometryData = null,
@@ -80,6 +110,7 @@ export default function CertificadoMedicoEstudio({
   eventTestId: string
   workerId: string
   workerNationalId?: string | null
+  eventAtIso?: string | null
   initialClinicalContext: unknown
   longitudinalData?: Record<string, unknown> | null
   somatometryData?: Record<string, unknown> | null
@@ -89,31 +120,16 @@ export default function CertificadoMedicoEstudio({
   const { data: session } = useSession()
   const parsed = parseCertificadoMedicoClinicalContext(initialClinicalContext)
 
-  const patientPrefill = useMemo(
-    () =>
-      prefillCertificadoPatientFields({
-        parsedFolio: parsed?.identificacion_folio,
-        workerNationalId,
-        parsedSexo: parsed?.sexo_atencion,
-        parsedDomicilio: parsed?.domicilio_atencion,
-        longitudinalData: longitudinalData ?? null,
-      }),
-    [parsed, workerNationalId, longitudinalData],
-  )
+  const [doctorProfile, setDoctorProfile] = useState<{
+    fullName: string
+    professionalLicense: string | null
+  } | null>(null)
 
   const [activeTab, setActiveTab] = useState<TabId>('antecedentes')
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  const [lugar, setLugar] = useState(parsed?.lugar_expedicion ?? DEFAULT_LUGAR_EXPEDICION)
-  const [horaAtencion, setHoraAtencion] = useState(
-    parsed?.hora_atencion?.trim() || defaultHoraAtencionMexico(),
-  )
-  const [sexoAtencion, setSexoAtencion] = useState(patientPrefill.sexo_atencion)
-  const [domicilioAtencion, setDomicilioAtencion] = useState(patientPrefill.domicilio_atencion)
-  const [idTipo, setIdTipo] = useState(parsed?.identificacion_tipo ?? 'INE')
-  const [idFolio, setIdFolio] = useState(patientPrefill.identificacion_folio)
   const [signos, setSignos] = useState(() =>
     mergeCertificadoSignosPrefill(parsed?.signos_vitales, somatometryData, eyeAcuityData),
   )
@@ -121,18 +137,14 @@ export default function CertificadoMedicoEstudio({
     parsed?.exploracion_fisica ?? buildDefaultExploracionCertificado(),
   )
   const [integracion, setIntegracion] = useState(parsed?.integracion_diagnostica ?? '')
+  const integracionManualRef = useRef(false)
+  const lastAutoIntegracionRef = useRef('')
   const [dictamen, setDictamen] = useState<DictamenLaboralValue>(
     parsed?.dictamen_laboral ?? 'APTO',
   )
   const [dictamenTexto, setDictamenTexto] = useState(
     parsed?.dictamen_laboral_texto ?? DEFAULT_DICTAMEN_LABORAL_TEXTO.APTO,
   )
-  const [medicoNombre, setMedicoNombre] = useState(
-    parsed?.medico_nombre ?? session?.user?.name ?? '',
-  )
-  const [medicoCedula, setMedicoCedula] = useState(parsed?.medico_cedula ?? '')
-  const [medicoTitulo, setMedicoTitulo] = useState(parsed?.medico_titulo ?? 'Médico General')
-  const [medicoUniversidad, setMedicoUniversidad] = useState(parsed?.medico_universidad ?? '')
   const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() => ({
     ...mergeLongitudinalAntecedentes(longitudinalData),
     ...(parsed?.antecedentes ?? {}),
@@ -153,30 +165,72 @@ export default function CertificadoMedicoEstudio({
     let cancelled = false
     void getCurrentDoctorProfile().then((res) => {
       if (cancelled || !res.success) return
-      const { fullName, professionalLicense } = res.profile
-      setMedicoNombre((prev) => (prev.trim() ? prev : fullName))
-      setMedicoCedula((prev) => (prev.trim() ? prev : professionalLicense ?? ''))
+      setDoctorProfile({
+        fullName: res.profile.fullName,
+        professionalLicense: res.profile.professionalLicense,
+      })
     })
     return () => {
       cancelled = true
     }
   }, [])
 
-  const imc = useMemo(() => {
-    const p = parseFloat(signos.peso_kg ?? '')
-    const t = parseFloat(signos.talla_m ?? '')
-    if (!p || !t) return ''
-    return (p / (t * t)).toFixed(2)
-  }, [signos.peso_kg, signos.talla_m])
+  const { imc, imcValue } = useMemo(
+    () => computeBmi(signos.peso_kg, signos.talla_m),
+    [signos.peso_kg, signos.talla_m],
+  )
+  const complexion = useMemo(() => complexionFromImc(imcValue), [imcValue])
 
-  const complexion = useMemo(() => {
-    const v = parseFloat(imc)
-    if (!v) return signos.complexion ?? ''
-    if (v > 29.9) return 'OBESIDAD'
-    if (v > 24.9) return 'SOBREPESO'
-    if (v < 18.5) return 'BAJO PESO'
-    return 'NORMAL'
-  }, [imc, signos.complexion])
+  const integracionPropuesta = useMemo(
+    () =>
+      buildIntegracionDiagnosticaCertificado({
+        antecedentes,
+        signos: {
+          ...signos,
+          imc: imc || signos.imc,
+          complexion: complexion || signos.complexion,
+        },
+      }),
+    [antecedentes, signos, imc, complexion],
+  )
+
+  useEffect(() => {
+    if (formReadonly) return
+    if (integracionManualRef.current) return
+    const propuesta = integracionPropuesta.trim()
+    if (!propuesta) return
+    setIntegracion((current) => {
+      const trimmed = current.trim()
+      const lastAuto = lastAutoIntegracionRef.current
+      const replaceable =
+        isIntegracionDiagnosticaPlaceholder(trimmed) ||
+        (lastAuto !== '' && trimmed === lastAuto)
+      if (!replaceable || trimmed === propuesta) return current
+      lastAutoIntegracionRef.current = propuesta
+      return propuesta
+    })
+  }, [integracionPropuesta, formReadonly])
+
+  const resolvedMetadata = useMemo(
+    () =>
+      resolveCertificadoMedicoMetadata({
+        parsed,
+        workerNationalId,
+        longitudinalData: longitudinalData ?? null,
+        doctorFullName: doctorProfile?.fullName ?? null,
+        doctorLicense: doctorProfile?.professionalLicense ?? null,
+        sessionUserName: session?.user?.name ?? null,
+        eventAt: eventAtIso,
+      }),
+    [
+      parsed,
+      workerNationalId,
+      longitudinalData,
+      doctorProfile,
+      session?.user?.name,
+      eventAtIso,
+    ],
+  )
 
   const onDictamenChange = (value: DictamenLaboralValue) => {
     setDictamen(value)
@@ -189,16 +243,7 @@ export default function CertificadoMedicoEstudio({
     const sv = { ...signos, imc: imc || signos.imc, complexion: complexion || signos.complexion }
     return {
       schemaVersion: CERTIFICADO_MEDICO_SCHEMA_VERSION,
-      lugar_expedicion: lugar.trim() || DEFAULT_LUGAR_EXPEDICION,
-      hora_atencion: horaAtencion.trim() || undefined,
-      sexo_atencion: sexoAtencion.trim() || undefined,
-      domicilio_atencion: domicilioAtencion.trim() || undefined,
-      identificacion_tipo: idTipo.trim() || undefined,
-      identificacion_folio: idFolio.trim() || undefined,
-      medico_nombre: medicoNombre.trim() || 'Médico',
-      medico_cedula: medicoCedula.trim() || '—',
-      medico_titulo: medicoTitulo.trim() || undefined,
-      medico_universidad: medicoUniversidad.trim() || undefined,
+      ...resolvedMetadata,
       signos_vitales: sv,
       exploracion_fisica: exploracion.trim(),
       integracion_diagnostica: integracion.trim(),
@@ -208,12 +253,7 @@ export default function CertificadoMedicoEstudio({
       cerrada_at: cerradaAt || undefined,
     }
   }, [
-    lugar,
-    horaAtencion,
-    sexoAtencion,
-    domicilioAtencion,
-    idTipo,
-    idFolio,
+    resolvedMetadata,
     signos,
     imc,
     complexion,
@@ -221,10 +261,6 @@ export default function CertificadoMedicoEstudio({
     integracion,
     dictamen,
     dictamenTexto,
-    medicoNombre,
-    medicoCedula,
-    medicoTitulo,
-    medicoUniversidad,
     antecedentes,
     cerradaAt,
   ])
@@ -303,19 +339,22 @@ export default function CertificadoMedicoEstudio({
         label={autosaveEnabled ? autosaveLabel : null}
         error={autosaveEnabled ? certAutosaveError : null}
       />
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setActiveTab(t.id)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
-              activeTab === t.id ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+        <div className="flex flex-wrap gap-1">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+                activeTab === t.id ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {Boolean(cerradaAt) && <CertificadoPdfLink href={pdfHref} prominent />}
       </div>
 
       {activeTab === 'antecedentes' && (
@@ -329,6 +368,7 @@ export default function CertificadoMedicoEstudio({
             onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
             workerId={workerId}
             readonly={formReadonly}
+            captureLayout="certificado"
             modulo1={{}}
             onModulo1Change={() => {}}
           />
@@ -336,39 +376,53 @@ export default function CertificadoMedicoEstudio({
       )}
 
       {activeTab === 'vitales' && (
-        <section className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-white border border-slate-200 rounded-xl p-4">
-          <p className="col-span-2 sm:col-span-3 text-xs text-slate-500">
-            Se precargan peso, talla, TA, FC, FR, temperatura, SpO₂ y agudeza desde somatometría y
-            agudeza visual del evento cuando aún no hay captura en el certificado.
+        <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
+          <p className="text-xs text-slate-500">
+            Mismos campos de somatometría y signos vitales que el examen médico. Se precargan desde
+            los estudios del evento cuando aún no hay captura en el certificado.
           </p>
-          {(
-            [
-              ['peso_kg', 'Peso (kg)'],
-              ['talla_m', 'Talla (m)'],
-              ['ta_sistolica', 'TA sistólica'],
-              ['ta_diastolica', 'TA diastólica'],
-              ['fc_min', 'FC (lpm)'],
-              ['fr_min', 'FR (rpm)'],
-              ['temperatura', 'Temperatura (°C)'],
-              ['spo2_pct', 'SpO₂ (%)'],
-              ['agudeza_vl', 'Agudeza VL'],
-              ['agudeza_vlc', 'Agudeza VLC'],
-              ['agudeza_vc', 'Agudeza VC'],
-              ['agudeza_vcc', 'Agudeza VCC'],
-            ] as const
-          ).map(([key, label]) => (
-            <div key={key}>
-              <label className="text-[10px] font-semibold text-slate-500">{label}</label>
-              <input
-                className={inputClass}
-                value={signos[key]}
-                onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
-                disabled={formReadonly}
-              />
-            </div>
-          ))}
-          <div className="col-span-2 sm:col-span-3 text-xs text-slate-500">
-            IMC calculado: {imc || '—'} {complexion ? `· ${complexion}` : ''}
+          <ClinicalSomaSignosVitalesCapture
+            value={signosToSomaVitalsValue(signos)}
+            onChange={(next) =>
+              setSignos((s) => ({
+                ...s,
+                peso_kg: next.peso_kg,
+                talla_m: next.talla_m,
+                ta_sistolica: next.ta_sistolica,
+                ta_diastolica: next.ta_diastolica,
+                fc_min: next.fc_min,
+                fr_min: next.fr_min,
+                temperatura: next.temperatura,
+                spo2_pct: next.spo2,
+              }))
+            }
+            readonly={formReadonly}
+            spo2Field="spo2_pct"
+            sexoForPrediagnosis={resolvedMetadata.sexo_atencion?.trim() || undefined}
+            inputClass={inputClass}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+            <p className="sm:col-span-2 text-[10px] font-semibold text-slate-500">
+              Agudeza visual (PDF)
+            </p>
+            {(
+              [
+                ['agudeza_vl', 'Agudeza VL'],
+                ['agudeza_vlc', 'Agudeza VLC'],
+                ['agudeza_vc', 'Agudeza VC'],
+                ['agudeza_vcc', 'Agudeza VCC'],
+              ] as const
+            ).map(([key, label]) => (
+              <div key={key}>
+                <label className="text-[10px] font-semibold text-slate-500">{label}</label>
+                <input
+                  className={inputClass}
+                  value={signos[key]}
+                  onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
+                  disabled={formReadonly}
+                />
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -394,10 +448,27 @@ export default function CertificadoMedicoEstudio({
             <ClinicalTextarea
               className={`${inputClass} min-h-[80px]`}
               value={integracion}
-              onChange={setIntegracion}
+              onChange={(v) => {
+                integracionManualRef.current = true
+                setIntegracion(v)
+              }}
               placeholder="Diagnóstico o integración clínica en prosa breve"
               disabled={formReadonly}
             />
+            {!formReadonly && integracionPropuesta.trim() && (
+              <button
+                type="button"
+                className="mt-2 text-xs font-bold text-teal-700 underline"
+                onClick={() => {
+                  integracionManualRef.current = false
+                  const p = integracionPropuesta.trim()
+                  lastAutoIntegracionRef.current = p
+                  setIntegracion(p)
+                }}
+              >
+                Regenerar desde antecedentes y signos vitales
+              </button>
+            )}
           </div>
           <div>
             <label className="text-[10px] font-semibold text-slate-500">Dictamen laboral</label>
@@ -425,114 +496,14 @@ export default function CertificadoMedicoEstudio({
               disabled={formReadonly}
             />
           </div>
-        </section>
-      )}
-
-      {activeTab === 'cierre' && (
-        <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Lugar de expedición</label>
-              <ClinicalFreeTextInput
-                className={inputClass}
-                value={lugar}
-                onChange={setLugar}
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Hora de atención</label>
-              <input
-                className={inputClass}
-                value={horaAtencion}
-                onChange={(e) => setHoraAtencion(e.target.value)}
-                placeholder="12:00"
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Sexo (PDF)</label>
-              <ClinicalFreeTextInput
-                className={inputClass}
-                value={sexoAtencion}
-                onChange={setSexoAtencion}
-                placeholder="Opcional si está en historial"
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Domicilio (PDF)</label>
-              <ClinicalFreeTextInput
-                className={inputClass}
-                value={domicilioAtencion}
-                onChange={setDomicilioAtencion}
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Identificación</label>
-              <ClinicalFreeTextInput
-                className={inputClass}
-                value={idTipo}
-                onChange={setIdTipo}
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Folio / CURP</label>
-              <ClinicalFreeTextInput
-                className={inputClass}
-                value={idFolio}
-                onChange={setIdFolio}
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Médico</label>
-              <ClinicalFreeTextInput
-                className={inputClass}
-                value={medicoNombre}
-                onChange={setMedicoNombre}
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Cédula profesional</label>
-              <ClinicalFreeTextInput
-                className={inputClass}
-                value={medicoCedula}
-                onChange={setMedicoCedula}
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Título</label>
-              <input
-                className={inputClass}
-                value={medicoTitulo}
-                onChange={(e) => setMedicoTitulo(e.target.value)}
-                disabled={formReadonly}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500">Universidad (opcional)</label>
-              <input
-                className={inputClass}
-                value={medicoUniversidad}
-                onChange={(e) => setMedicoUniversidad(e.target.value)}
-                disabled={formReadonly}
-              />
-            </div>
-          </div>
           {Boolean(cerradaAt) && (
-            <a
-              href={pdfHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
-            >
-              📄 Certificado médico (PDF)
-            </a>
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 items-center">
+              <CertificadoPdfLink href={pdfHref} prominent />
+              <p className="text-[10px] text-slate-500">
+                El certificado está cerrado. Lugar, hora, datos del paciente y del médico se tomaron
+                del expediente y del evento al guardar.
+              </p>
+            </div>
           )}
         </section>
       )}
@@ -548,25 +519,30 @@ export default function CertificadoMedicoEstudio({
           {readonlyBanner}
         </div>
       )}
-      {!formReadonly && (
-        <div className="flex flex-wrap gap-2 items-center sticky bottom-0 bg-white/95 backdrop-blur border-t border-slate-200 py-3 -mx-1 px-1">
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => runSave(false)}
-            className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-          >
-            Guardar borrador
-          </button>
-          {!cerradaAt && (
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => runSave(true)}
-              className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-            >
-              Cerrar certificado
-            </button>
+      {(Boolean(cerradaAt) || !formReadonly) && (
+        <div className="flex flex-wrap gap-2 items-center sticky bottom-0 bg-white/95 backdrop-blur border-t border-slate-200 py-3 -mx-1 px-1 z-10">
+          {Boolean(cerradaAt) && <CertificadoPdfLink href={pdfHref} prominent />}
+          {!formReadonly && (
+            <>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => runSave(false)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+              >
+                Guardar borrador
+              </button>
+              {!cerradaAt && (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => runSave(true)}
+                  className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+                >
+                  Cerrar certificado
+                </button>
+              )}
+            </>
           )}
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
           {saveError && (
@@ -574,10 +550,12 @@ export default function CertificadoMedicoEstudio({
               <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
             </div>
           )}
-          <ClinicalAutosaveIndicator
-            label={autosaveEnabled ? autosaveLabel : null}
-            error={autosaveEnabled ? certAutosaveError : null}
-          />
+          {!formReadonly && (
+            <ClinicalAutosaveIndicator
+              label={autosaveEnabled ? autosaveLabel : null}
+              error={autosaveEnabled ? certAutosaveError : null}
+            />
+          )}
         </div>
       )}
     </div>
