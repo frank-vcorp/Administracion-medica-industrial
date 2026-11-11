@@ -113,7 +113,7 @@ function NavSection({ label, collapsed }: { label: string; collapsed?: boolean }
 
   return (
     <div className="pt-5 pb-1.5">
-      <p className="text-[10px] uppercase text-sme-gray/70 font-semibold px-3 tracking-[0.14em]">{label}</p>
+      <p className="text-[10px] text-sme-gray/70 font-semibold px-3 tracking-[0.14em]">{label}</p>
     </div>
   )
 }
@@ -140,7 +140,7 @@ function SidebarAccount({
 
   const account = (
     <div className="px-4 pb-4 pt-3 border-t border-sme-secondary/10">
-      <p className="text-[10px] uppercase tracking-wider text-sme-gray/70 font-semibold">Cuenta</p>
+      <p className="text-[10px] tracking-wider text-sme-gray/70 font-semibold">Cuenta</p>
       <div className={`mt-2 flex items-center gap-3 rounded-xl bg-sme-surface border border-sme-secondary/10 px-3 py-2 ${profileHref ? 'hover:border-sme-secondary/25 transition-colors cursor-pointer' : ''}`}>
         <div className="w-9 h-9 rounded-lg bg-sme-secondary/10 text-sme-secondary flex items-center justify-center text-sm font-bold shrink-0">
           {(fullName || 'U').trim().charAt(0).toUpperCase()}

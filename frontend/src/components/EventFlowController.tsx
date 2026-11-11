@@ -224,7 +224,7 @@ export default function EventFlowController({
 
                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Diagnóstico Final</label>
+                                <label className="block text-xs font-bold text-slate-400 mb-1">Diagnóstico Final</label>
                                 <textarea
                                     ref={diagRef}
                                     className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none min-h-[100px]"
@@ -234,7 +234,7 @@ export default function EventFlowController({
                                 ></textarea>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Recomendaciones</label>
+                                <label className="block text-xs font-bold text-slate-400 mb-1">Recomendaciones</label>
                                 <textarea
                                     ref={recRef}
                                     className="w-full min-h-[480px] border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-y"

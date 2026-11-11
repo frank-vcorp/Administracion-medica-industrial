@@ -212,7 +212,7 @@ export default function CompanyMedicalProfilesPanel({
 
                 {profile.reportEmails && profile.reportEmails.length > 0 && (
                   <div className="rounded-lg bg-amber-50 border border-amber-100 p-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-1">
+                    <p className="text-[11px] font-semibold tracking-wide text-amber-700 mb-1">
                       📬 {profile.reportEmails.length} correo(s) de envío
                     </p>
                     <div className="flex flex-wrap gap-1">
@@ -233,7 +233,7 @@ export default function CompanyMedicalProfilesPanel({
 
                 {profile.specialNotes && (
                   <div className="rounded-lg bg-purple-50 border border-purple-100 p-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 mb-1">
+                    <p className="text-[11px] font-semibold tracking-wide text-purple-700 mb-1">
                       📝 Comentarios
                     </p>
                     <p className="text-xs text-purple-800 whitespace-pre-line line-clamp-3">
@@ -414,7 +414,7 @@ function ProfileTestsSummary({ tests }: { tests: CompanyMedicalProfile['tests'] 
     <div className="space-y-2">
       {Object.entries(groupedTests).map(([categoryName, categoryTests]) => (
         <div key={categoryName} className="rounded-lg bg-slate-50 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-semibold tracking-wide text-slate-500">
             {categoryName}
           </p>
           <p className="mt-1 text-sm text-slate-700">
@@ -634,7 +634,7 @@ function ProfileModal({
               <div className="max-h-[30vh] overflow-y-auto divide-y divide-slate-100">
                 {Object.entries(testsByCategory).map(([categoryName, categoryTests]) => (
                   <div key={categoryName}>
-                    <div className="sticky top-0 bg-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <div className="sticky top-0 bg-slate-100 px-4 py-2 text-xs font-semibold tracking-wide text-slate-500">
                       {categoryName}
                     </div>
                     {categoryTests.map((test) => {
@@ -655,7 +655,7 @@ function ProfileModal({
                           </span>
                           <span className="text-sm text-slate-700">{test.name}</span>
                           {isSelected && (
-                            <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                            <span className="ml-auto text-[10px] font-bold tracking-wider text-blue-700">
                               ✓
                             </span>
                           )}

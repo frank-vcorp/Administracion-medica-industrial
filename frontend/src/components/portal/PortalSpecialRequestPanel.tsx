@@ -59,13 +59,13 @@ export default function PortalSpecialRequestPanel({
       className="rounded-xl border border-violet-200 bg-violet-50/80 p-4 space-y-3"
     >
       <div>
-        <p className="text-xs font-bold uppercase tracking-wider text-violet-800">{title}</p>
+        <p className="text-xs font-bold tracking-wider text-violet-800">{title}</p>
         <p className="text-sm text-violet-950 mt-1">{description}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="text-xs font-bold uppercase text-slate-500">Cantidad de citas *</span>
+          <span className="text-xs font-bold text-slate-500">Cantidad de citas *</span>
           <input
             type="number"
             min={1}
@@ -78,7 +78,7 @@ export default function PortalSpecialRequestPanel({
         </label>
 
         <label className="block text-sm">
-          <span className="text-xs font-bold uppercase text-slate-500">Teléfono de contacto *</span>
+          <span className="text-xs font-bold text-slate-500">Teléfono de contacto *</span>
           <input
             type="tel"
             required
@@ -90,7 +90,7 @@ export default function PortalSpecialRequestPanel({
         </label>
 
         <label className="block text-sm sm:col-span-2">
-          <span className="text-xs font-bold uppercase text-slate-500">Comentario (opcional)</span>
+          <span className="text-xs font-bold text-slate-500">Comentario (opcional)</span>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}

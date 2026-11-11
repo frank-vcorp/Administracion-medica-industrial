@@ -54,7 +54,7 @@ export default async function PortalEventsPage(props: {
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
         <table className="w-full text-left text-sm text-slate-600 min-w-[880px]">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+          <thead className="bg-slate-50 text-xs text-slate-500 font-semibold border-b border-slate-200">
             <tr>
               <th className="px-4 py-3">Fecha</th>
               <th className="px-4 py-3">Folio papeleta</th>

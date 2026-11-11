@@ -74,7 +74,7 @@ export default function MobileUnitOperationsPanel({
             const count = statusCounts[s] ?? 0
             return (
               <div key={s} className={`border rounded-lg p-3 ${meta.color}`}>
-                <p className="text-xs uppercase tracking-wide opacity-80">{meta.label}</p>
+                <p className="text-xs tracking-wide opacity-80">{meta.label}</p>
                 <p className="text-2xl font-bold">{count}</p>
               </div>
             )

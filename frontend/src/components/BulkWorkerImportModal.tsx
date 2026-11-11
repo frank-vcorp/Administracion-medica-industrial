@@ -441,7 +441,7 @@ export default function BulkWorkerImportModal({
                 <div className="space-y-4">
                   {!lockProjectContext && (
                     <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Modo de captura</p>
+                      <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500">Modo de captura</p>
                       <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
                         <button
                           type="button"
@@ -578,7 +578,7 @@ export default function BulkWorkerImportModal({
                   ) : (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lote rápido (máximo {MAX_QUICK_ROWS})</p>
+                        <p className="text-xs font-semibold tracking-wide text-slate-500">Lote rápido (máximo {MAX_QUICK_ROWS})</p>
                         <button
                           type="button"
                           onClick={addQuickRow}

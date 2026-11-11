@@ -233,7 +233,7 @@ export function LabAnalyteEditor({ testId, initialAnalytes }: Props) {
                     }}
                     className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                  <span className="text-[10px] tracking-wide text-slate-400">
                     {a.dataType}
                   </span>
                   {a.defaultUnitCode && (

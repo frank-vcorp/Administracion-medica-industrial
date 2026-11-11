@@ -36,7 +36,7 @@ export default function PortalEventsFilterBar({ initialFrom, initialTo, initialQ
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
       <div className="flex flex-col gap-1 min-w-[140px]">
-        <label htmlFor="portal-events-from" className="text-[10px] font-bold uppercase text-slate-500">
+        <label htmlFor="portal-events-from" className="text-[10px] font-bold text-slate-500">
           Desde
         </label>
         <input
@@ -48,7 +48,7 @@ export default function PortalEventsFilterBar({ initialFrom, initialTo, initialQ
         />
       </div>
       <div className="flex flex-col gap-1 min-w-[140px]">
-        <label htmlFor="portal-events-to" className="text-[10px] font-bold uppercase text-slate-500">
+        <label htmlFor="portal-events-to" className="text-[10px] font-bold text-slate-500">
           Hasta
         </label>
         <input
@@ -60,7 +60,7 @@ export default function PortalEventsFilterBar({ initialFrom, initialTo, initialQ
         />
       </div>
       <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-        <label htmlFor="portal-events-q" className="text-[10px] font-bold uppercase text-slate-500">
+        <label htmlFor="portal-events-q" className="text-[10px] font-bold text-slate-500">
           Trabajador
         </label>
         <input

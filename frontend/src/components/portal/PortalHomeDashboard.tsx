@@ -34,7 +34,7 @@ export default function PortalHomeDashboard({
         <div className="absolute -bottom-20 -left-10 h-48 w-48 rounded-full bg-sky-200/25 blur-3xl" aria-hidden />
         <div className="relative grid gap-6 p-6 md:p-8 md:grid-cols-[1fr,220px] md:items-center">
           <div className="space-y-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-700/90">
+            <p className="text-[10px] font-black tracking-[0.2em] text-teal-700/90">
               {copy.eyebrow}
             </p>
             <h1 className="text-2xl md:text-3xl font-black text-slate-900 leading-tight">
@@ -94,7 +94,7 @@ export default function PortalHomeDashboard({
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-black uppercase tracking-wide text-slate-700 mb-1">
+        <h2 className="text-sm font-black tracking-wide text-slate-700 mb-1">
           {copy.chartTitle}
         </h2>
         <p className="text-xs text-slate-500 mb-4">{copy.chartSubtitle}</p>
@@ -127,7 +127,7 @@ export default function PortalHomeDashboard({
 function PortalKpiCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-[10px] font-black tracking-widest text-slate-400">{label}</p>
       <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
     </div>
   )

@@ -110,7 +110,7 @@ export default function CompanyPortalAccessPanel({
   return (
     <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
       <div>
-        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+        <h2 className="text-sm font-bold text-slate-800 tracking-wider">
           Portal cliente (usuario único)
         </h2>
         <p className="text-sm text-slate-500 mt-1">

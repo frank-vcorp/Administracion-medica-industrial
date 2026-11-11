@@ -125,7 +125,7 @@ export default function CatalogTable({
                 <th
                   key={col.key}
                   scope="col"
-                  className="px-4 py-2 text-left text-xs font-medium text-slate-600 uppercase tracking-wider cursor-pointer select-none"
+                  className="px-4 py-2 text-left text-xs font-medium text-slate-600 tracking-wider cursor-pointer select-none"
                   onClick={() => col.sortable !== false && handleSort(idx)}
                 >
                   <span className="inline-flex items-center gap-1">
@@ -136,7 +136,7 @@ export default function CatalogTable({
                   </span>
                 </th>
               ))}
-              <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-slate-600 uppercase tracking-wider">
+              <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-slate-600 tracking-wider">
                 Acciones
               </th>
             </tr>

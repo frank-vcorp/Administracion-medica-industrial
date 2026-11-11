@@ -26,7 +26,7 @@ export function InformedConsentDocument({ patientFullName, dateLabel }: Props) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 text-sm text-slate-800 leading-relaxed max-h-[min(52vh,420px)] overflow-y-auto shadow-inner">
       <header className="text-center border-b border-slate-100 pb-4 mb-4">
-        <h3 className="text-base font-black uppercase tracking-wide text-slate-900">
+        <h3 className="text-base font-black tracking-wide text-slate-900">
           {INFORMED_CONSENT_TITLE}
         </h3>
         <p className="mt-2 text-sm">
@@ -44,7 +44,7 @@ export function InformedConsentDocument({ patientFullName, dateLabel }: Props) {
       </p>
 
       <section className="space-y-3 border-t border-slate-100 pt-4">
-        <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+        <h4 className="text-xs font-black tracking-wider text-slate-700">
           {INFORMED_CONSENT_PRIVACY_TITLE}
         </h4>
         {privacyParagraphs.map((paragraph) => (

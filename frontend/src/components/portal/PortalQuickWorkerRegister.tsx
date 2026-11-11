@@ -116,7 +116,7 @@ export default function PortalQuickWorkerRegister({
     <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-sky-900">
+          <p className="text-xs font-bold tracking-wide text-sky-900">
             Alta rápida de trabajadores
           </p>
           <p className="text-sm text-sky-950 mt-1">
@@ -178,7 +178,7 @@ export default function PortalQuickWorkerRegister({
           {rows.map((row, index) => (
             <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto] items-end">
               <label className="block text-xs">
-                <span className="font-bold uppercase text-slate-500">Nombre</span>
+                <span className="font-bold text-slate-500">Nombre</span>
                 <input
                   value={row.firstName}
                   onChange={(e) => updateRow(index, { firstName: e.target.value })}
@@ -187,7 +187,7 @@ export default function PortalQuickWorkerRegister({
                 />
               </label>
               <label className="block text-xs">
-                <span className="font-bold uppercase text-slate-500">Apellidos</span>
+                <span className="font-bold text-slate-500">Apellidos</span>
                 <input
                   value={row.lastName}
                   onChange={(e) => updateRow(index, { lastName: e.target.value })}
@@ -196,7 +196,7 @@ export default function PortalQuickWorkerRegister({
                 />
               </label>
               <label className="block text-xs">
-                <span className="font-bold uppercase text-slate-500">Teléfono</span>
+                <span className="font-bold text-slate-500">Teléfono</span>
                 <input
                   type="tel"
                   value={row.phone}

@@ -45,7 +45,7 @@ export default async function PortalWorkerDetailPage(props: { params: Promise<{ 
       </div>
 
       <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Perfil e identificación</h2>
+        <h2 className="text-xs font-bold tracking-wider text-slate-500">Perfil e identificación</h2>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div>
             <dt className="text-slate-500">Perfil médico habitual</dt>
@@ -103,7 +103,7 @@ export default async function PortalWorkerDetailPage(props: { params: Promise<{ 
       </section>
 
       <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 px-5 pt-5 pb-2">
+        <h2 className="text-xs font-bold tracking-wider text-slate-500 px-5 pt-5 pb-2">
           Citas y atenciones
         </h2>
         <ul className="divide-y divide-slate-100">

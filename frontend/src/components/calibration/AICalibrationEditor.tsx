@@ -456,7 +456,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
 
       {/* ── General ─────────────────────────────────────────────────────────── */}
       <div className="space-y-3">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">General</p>
+        <p className="text-xs font-semibold text-slate-600 tracking-wide">General</p>
 
         <div className="flex items-center gap-3">
           <input
@@ -489,7 +489,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
       {/* ── Extracción documental — Gemini / MiniMax M3 ────────────────────── */}
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Extracción documental</p>
+          <p className="text-xs font-semibold text-blue-700 tracking-wide">Extracción documental</p>
           {/*
             ARCH-20260809-02: badge dinámico según el proveedor seleccionado.
             Si es M3, mostramos "M3" con la misma paleta para mantener coherencia visual.
@@ -580,11 +580,11 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-lg border border-blue-200 bg-white p-3">
-            <p className="mb-2 text-xs font-semibold text-blue-700 uppercase tracking-wide">Plantilla sugerida</p>
+            <p className="mb-2 text-xs font-semibold text-blue-700 tracking-wide">Plantilla sugerida</p>
             <pre className="whitespace-pre-wrap text-[11px] leading-5 text-slate-600 font-mono">{EXTRACTION_PROMPT_TEMPLATE}</pre>
           </div>
           <div className="rounded-lg border border-blue-200 bg-white p-3">
-            <p className="mb-2 text-xs font-semibold text-blue-700 uppercase tracking-wide">Qué pedirle a Copilot</p>
+            <p className="mb-2 text-xs font-semibold text-blue-700 tracking-wide">Qué pedirle a Copilot</p>
             <pre className="whitespace-pre-wrap text-[11px] leading-5 text-slate-600 font-mono">{CALIBRATION_REQUEST_TEMPLATE}</pre>
           </div>
         </div>
@@ -596,7 +596,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
       {sections.showClinicalCriteria && (
         <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl space-y-3" data-testid="ai-calibration-clinical-section">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Diagnóstico clínico</p>
+            <p className="text-xs font-semibold text-violet-700 tracking-wide">Diagnóstico clínico</p>
             <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MedGemma</span>
           </div>
           <p className="text-xs text-violet-600">Prompt y versión que MedGemma usa para interpretar los datos y generar el prediagnóstico.</p>
@@ -634,7 +634,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
       {/* ── Acción ──────────────────────────────────────────────────────────── */}
       {/* ARCH-20260820-01 Fase 2B (AC-2B.4): selección de status al guardar. */}
       <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Guardar como</p>
+        <p className="text-xs font-semibold text-slate-600 tracking-wide">Guardar como</p>
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
             <input

@@ -134,7 +134,7 @@ export default function CompanyActionsPanel({
 
   return (
     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-      <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+      <h2 className="text-sm font-bold text-slate-700 tracking-wider">
         Acciones
       </h2>
 
@@ -206,7 +206,7 @@ export default function CompanyActionsPanel({
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
             <h3 className="text-lg font-black text-slate-800">Cambiar vendedor</h3>
             <div>
-              <label className="text-[11px] font-bold text-slate-500 uppercase">
+              <label className="text-[11px] font-bold text-slate-500">
                 Nuevo vendedor
               </label>
               <select
@@ -223,7 +223,7 @@ export default function CompanyActionsPanel({
               </select>
             </div>
             <div>
-              <label className="text-[11px] font-bold text-slate-500 uppercase">
+              <label className="text-[11px] font-bold text-slate-500">
                 Motivo (opcional)
               </label>
               <input
@@ -269,7 +269,7 @@ export default function CompanyActionsPanel({
               se habilitará para operar.
             </p>
             <div>
-              <label className="text-[11px] font-bold text-slate-500 uppercase">
+              <label className="text-[11px] font-bold text-slate-500">
                 Vendedor a asignar
               </label>
               <select

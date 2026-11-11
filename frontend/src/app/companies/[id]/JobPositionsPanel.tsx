@@ -179,7 +179,7 @@ function JobPositionsList({
         </div>
       ) : (
         <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+          <thead className="bg-slate-50 text-xs text-slate-500 font-semibold border-b border-slate-200">
             <tr>
               <th className="px-6 py-3">Nombre del Puesto</th>
               <th className="px-6 py-3">Descripción</th>

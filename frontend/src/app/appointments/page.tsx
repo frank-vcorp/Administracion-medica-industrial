@@ -408,7 +408,7 @@ export default function AppointmentsPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm">
-                <label htmlFor="agenda-patient-search" className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">
+                <label htmlFor="agenda-patient-search" className="text-xs font-bold text-slate-500 tracking-wider shrink-0">
                     Buscar en agenda
                 </label>
                 <div className="flex flex-1 items-center gap-2 min-w-0">
@@ -521,7 +521,7 @@ export default function AppointmentsPage() {
                             >
                                 ✕
                             </button>
-                            <p className="text-violet-200 text-xs font-bold uppercase tracking-widest">Portal de Prellenado</p>
+                            <p className="text-violet-200 text-xs font-bold tracking-widest">Portal de Prellenado</p>
                             <h2 className="text-xl font-black mt-1">Enlace de Invitación</h2>
                         </div>
                         <div className="p-7 space-y-5">
@@ -611,14 +611,14 @@ export default function AppointmentsPage() {
                             <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
                                 🏢
                             </div>
-                            <h2 className="text-xl font-black uppercase tracking-widest">Pase de Entrada</h2>
+                            <h2 className="text-xl font-black tracking-widest">Pase de Entrada</h2>
                             <p className="text-blue-100 text-xs font-bold mt-1 opacity-80">{selectedApt.branch?.name || 'Clínica AMI'}</p>
                         </div>
 
                         {/* Ticket Body */}
                         <div className="p-8 space-y-6">
                             <div className="text-center space-y-1">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Expediente No.</p>
+                                <p className="text-[10px] font-black text-slate-400 tracking-tighter">Expediente No.</p>
                                 <p className="text-2xl font-black text-slate-800 tracking-tight">{selectedApt.expedientId}</p>
                             </div>
 
@@ -634,7 +634,7 @@ export default function AppointmentsPage() {
                                         className="w-40 h-40 opacity-90 group-hover:opacity-100 transition-opacity"
                                     />
                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                        <span className="bg-blue-600 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase">Skanami 🔒</span>
+                                        <span className="bg-blue-600 text-white text-[8px] font-black px-2 py-1 rounded-full">Skanami 🔒</span>
                                     </div>
                                 </div>
                             </div>
@@ -642,7 +642,7 @@ export default function AppointmentsPage() {
                             {/* QR OPERATIVO MÍNIMO — IMPL-20260519-10 */}
                             {selectedApt.qrOperativo && (
                                 <div className="border-t border-dashed border-slate-100 pt-4">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-2">QR Operativo · Recaptura en Estaciones</p>
+                                    <p className="text-[9px] font-black text-slate-400 tracking-widest text-center mb-2">QR Operativo · Recaptura en Estaciones</p>
                                     <div className="flex justify-center">
                                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
                                             <Image
@@ -664,11 +664,11 @@ export default function AppointmentsPage() {
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
                                     <div>
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Trabajador</p>
+                                        <p className="text-[9px] font-bold text-slate-400">Trabajador</p>
                                         <p className="text-xs font-black text-slate-700">{selectedApt.worker?.firstName} {selectedApt.worker?.lastName}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Hora</p>
+                                        <p className="text-[9px] font-bold text-slate-400">Hora</p>
                                         <p className="text-xs font-black text-slate-700">
                                             {formatAppointmentAgendaTime(selectedApt.scheduledAt)}
                                         </p>
@@ -836,13 +836,13 @@ function StatCard({
 
     const content = (
         <>
-            <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">{label}</p>
+            <p className="text-[10px] font-black tracking-widest opacity-70 mb-1">{label}</p>
             <p className="text-3xl font-black">{value}</p>
             {detail && (
                 <p className="mt-2 text-[10px] font-bold leading-snug opacity-80">{detail}</p>
             )}
             {hint && onClick && (
-                <p className="mt-2 text-[10px] font-bold uppercase tracking-wide opacity-60">{hint}</p>
+                <p className="mt-2 text-[10px] font-bold tracking-wide opacity-60">{hint}</p>
             )}
         </>
     )
@@ -871,7 +871,7 @@ function StatusBadge({ status }: { status: string }) {
     const current = variants[status] || variants.SCHEDULED
 
     return (
-        <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-tighter ${current.bg} ${current.text}`}>
+        <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black tracking-tighter ${current.bg} ${current.text}`}>
             <span>{current.icon}</span>
             {current.label}
         </span>

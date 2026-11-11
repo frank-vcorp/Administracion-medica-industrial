@@ -58,7 +58,7 @@ export default function WorkerSatisfactionCard({
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-slate-900">Encuestas de satisfacción</h3>
         {surveys.length > 0 && (
-          <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-2 py-1 rounded-full font-bold uppercase tracking-widest">
+          <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-2 py-1 rounded-full font-bold tracking-widest">
             {surveys.length}
           </span>
         )}

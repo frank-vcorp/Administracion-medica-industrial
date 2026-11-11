@@ -18,7 +18,7 @@ export function PublicPortalChrome({
         <div className="border-t-2 border-[#592c82] border-b-[6px] border-b-[#00afaa]">
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
             <BrandLogo className="h-14 w-auto max-h-14" />
-            <span className="rounded-full bg-[#592c82]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[#592c82]">
+            <span className="rounded-full bg-[#592c82]/10 px-3 py-1 text-[10px] font-bold tracking-wide text-[#592c82]">
               Portal público
             </span>
           </div>

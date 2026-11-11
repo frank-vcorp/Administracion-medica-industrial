@@ -133,7 +133,7 @@ export default function DeleteCompaniesButton({ selectedNames, onClearSelection 
             </div>
 
             <label className="block mb-4">
-              <span className="text-xs font-bold text-slate-600 uppercase">
+              <span className="text-xs font-bold text-slate-600">
                 Razón de la eliminación (opcional, se registra en audit)
               </span>
               <input

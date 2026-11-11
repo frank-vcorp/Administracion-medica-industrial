@@ -273,7 +273,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 </button>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                <p className="text-[10px] font-bold text-slate-500 tracking-widest">
                   Identificación previa del paciente
                 </p>
                 <p className="text-xs text-slate-700 truncate">
@@ -299,22 +299,22 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
 
           {/* Datos del evento */}
           <section className="bg-slate-50 rounded-2xl p-5 space-y-3 border border-slate-100">
-            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Evento</p>
+            <p className="text-[10px] font-bold text-slate-400 tracking-widest">Evento</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Empresa</p>
+                <p className="text-[10px] font-bold text-slate-400">Empresa</p>
                 <p className="text-sm font-medium text-slate-700">{worker.company?.name || '—'}</p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Perfil médico</p>
+                <p className="text-[10px] font-bold text-slate-400">Perfil médico</p>
                 <p className="text-sm font-medium text-slate-700">{worker.medicalProfile?.name || '—'}</p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Expediente</p>
+                <p className="text-[10px] font-bold text-slate-400">Expediente</p>
                 <p className="text-sm font-mono font-bold text-slate-700">{appointment.expedientId || '—'}</p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Hora Cita</p>
+                <p className="text-[10px] font-bold text-slate-400">Hora Cita</p>
                 <p className="text-sm font-medium text-slate-700">
                   {formatAppointmentAgendaTime(appointment.scheduledAt)}
                 </p>
@@ -325,7 +325,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
           {/* Corrección de nombre */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+              <p className="text-[10px] font-bold text-slate-400 tracking-widest">
                 Identidad — corrobora contra identificación presentada
               </p>
               {nameChanged && (
@@ -358,7 +358,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
             </div>
             <div className="bg-slate-100 rounded-xl p-3 ring-1 ring-slate-200 flex gap-6">
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Fecha de Nacimiento</p>
+                <p className="text-[10px] font-bold text-slate-400 mb-0.5">Fecha de Nacimiento</p>
                 <p className="text-sm font-medium text-slate-700">
                   {worker.dob
                     ? new Date(worker.dob).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -367,7 +367,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
               </div>
               {worker.universalId && (
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">ID</p>
+                  <p className="text-[10px] font-bold text-slate-400 mb-0.5">ID</p>
                   <p className="text-xs font-mono text-slate-500">{worker.universalId}</p>
                 </div>
               )}
@@ -376,7 +376,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
 
           {/* Modo de evidencia */}
           <section className="space-y-3">
-            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Evidencia de identificación</p>
+            <p className="text-[10px] font-bold text-slate-400 tracking-widest">Evidencia de identificación</p>
             <div className="grid grid-cols-3 gap-2">
               {([
                 { mode: 'NEW_CAPTURE' as IdentityEvidenceMode, icon: '📷', label: 'Captura nueva', disabled: false },
@@ -483,12 +483,12 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 <p className="text-xs font-bold text-blue-700">Última identificación válida disponible</p>
                 <div className="flex gap-3">
                   <div>
-                    <p className="text-[10px] text-blue-500 font-bold uppercase">Tipo</p>
+                    <p className="text-[10px] text-blue-500 font-bold">Tipo</p>
                     <p className="text-sm font-medium text-blue-800">{DOC_TYPE_LABELS[worker.lastIdentityDocumentType ?? ''] ?? worker.lastIdentityDocumentType ?? '—'}</p>
                   </div>
                   {worker.lastIdentityVerifiedAt && (
                     <div>
-                      <p className="text-[10px] text-blue-500 font-bold uppercase">Verificada</p>
+                      <p className="text-[10px] text-blue-500 font-bold">Verificada</p>
                       <p className="text-sm font-medium text-blue-800">
                         {new Date(worker.lastIdentityVerifiedAt).toLocaleDateString('es-MX')}
                       </p>
@@ -561,7 +561,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
           {step === 2 && (
             <section className="space-y-5">
               <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-2">
+                <p className="text-[10px] font-bold text-slate-400 tracking-widest mb-2">
                   Lea y confirme el documento
                 </p>
                 <InformedConsentDocument

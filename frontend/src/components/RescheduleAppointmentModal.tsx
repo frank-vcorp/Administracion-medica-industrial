@@ -77,7 +77,7 @@ export default function RescheduleAppointmentModal({ appointment, onClose, onSuc
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Nueva fecha</label>
+              <label className="text-[10px] font-bold text-slate-400 ml-1">Nueva fecha</label>
               <input
                 type="date"
                 value={date}
@@ -87,7 +87,7 @@ export default function RescheduleAppointmentModal({ appointment, onClose, onSuc
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Nueva hora</label>
+              <label className="text-[10px] font-bold text-slate-400 ml-1">Nueva hora</label>
               <input
                 type="time"
                 value={time}

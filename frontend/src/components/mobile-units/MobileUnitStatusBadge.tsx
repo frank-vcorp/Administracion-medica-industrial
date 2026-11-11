@@ -5,7 +5,7 @@
  *
  * Componente presentacional sin estado. Paridad con BranchStatusBadge:
  *   - rounded-full (píldora, no cuadrado con borde)
- *   - text-[10px] uppercase font-bold
+ *   - text-[10px] font-bold
  *   - colores suaves sin borde (bg-*-100 text-*-700)
  *
  * Si llega un status desconocido, fallback a slate-200 text-slate-600.
@@ -19,7 +19,7 @@ export function MobileUnitStatusBadge({ status }: { status: string }) {
   }
   return (
     <span
-      className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${meta.classes}`}
+      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${meta.classes}`}
     >
       {meta.label}
     </span>

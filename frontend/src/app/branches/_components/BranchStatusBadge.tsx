@@ -13,7 +13,7 @@
 export function BranchStatusBadge({ isActive }: { isActive: boolean }) {
   return (
     <span
-      className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
         isActive
           ? 'bg-emerald-100 text-emerald-700'
           : 'bg-slate-200 text-slate-600'

@@ -40,7 +40,7 @@ export default function WorkerInformedConsentCard({
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-slate-900">Consentimiento informado</h3>
         {hasConsents && (
-          <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-2 py-1 rounded-full font-bold uppercase tracking-widest">
+          <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-2 py-1 rounded-full font-bold tracking-widest">
             {consents.length} {consents.length === 1 ? 'firma' : 'firmas'}
           </span>
         )}

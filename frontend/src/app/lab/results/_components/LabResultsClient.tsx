@@ -159,7 +159,7 @@ export function LabResultsClient({ initialStatus }: Props) {
       {/* Tabla */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-700 text-xs uppercase tracking-wider">
+          <thead className="bg-slate-50 text-slate-700 text-xs tracking-wider">
             <tr>
               <th className="px-3 py-2 text-left">Estado</th>
               <th className="px-3 py-2 text-left">Analito</th>

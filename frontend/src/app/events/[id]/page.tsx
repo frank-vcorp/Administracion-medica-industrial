@@ -156,15 +156,15 @@ function EventView({ data }: EventViewProps) {
 
         <div className="mb-3 grid gap-2 md:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Origen de ingreso</p>
+            <p className="text-[10px] font-black tracking-[0.18em] text-slate-400">Origen de ingreso</p>
             <p className="mt-1 text-sm font-semibold text-slate-700">{intakeSourceLabel}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Proyecto</p>
+            <p className="text-[10px] font-black tracking-[0.18em] text-slate-400">Proyecto</p>
             <p className="mt-1 text-sm font-semibold text-slate-700">{projectRef ? `${projectRef.name} · ${projectRef.id.slice(0, 8)}` : 'Sin proyecto'}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Cita asociada</p>
+            <p className="text-[10px] font-black tracking-[0.18em] text-slate-400">Cita asociada</p>
             <p className="mt-1 text-sm font-semibold text-slate-700">{eventWithIntake.appointmentId ? eventWithIntake.appointmentId.slice(0, 8) : 'Sin cita'}</p>
             {intakeCreator && (
               <p className="mt-1 text-[11px] text-slate-500">Admisión por {intakeCreator.fullName}</p>

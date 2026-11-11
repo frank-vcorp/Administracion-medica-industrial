@@ -77,7 +77,7 @@ function MetricPill({
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-mono ${toneCls[tone]}`}
     >
-      <span className="font-sans font-semibold uppercase tracking-wide opacity-70">{label}</span>
+      <span className="font-sans font-semibold tracking-wide opacity-70">{label}</span>
       <span className="font-semibold">{value}</span>
     </span>
   )
@@ -171,7 +171,7 @@ export default function CalibrationTestResults({ results }: CalibrationTestResul
     >
       <header className="space-y-2">
         <div className="flex items-baseline justify-between gap-2 flex-wrap">
-          <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+          <p className="text-xs font-semibold text-slate-700 tracking-wide">
             Resultados de la prueba
           </p>
           <p className="text-xs text-slate-400 font-mono">
@@ -203,7 +203,7 @@ export default function CalibrationTestResults({ results }: CalibrationTestResul
         {activeTab === "extraccion" && (
           <div className="space-y-2">
             <div className="flex items-baseline justify-between text-xs text-slate-500">
-              <span className="font-semibold uppercase tracking-wide">Datos extraídos</span>
+              <span className="font-semibold tracking-wide">Datos extraídos</span>
               <span className="font-mono">{extractionBytes.toLocaleString("es-MX")} bytes</span>
             </div>
             <JsonBlock data={extractionData} />
@@ -213,7 +213,7 @@ export default function CalibrationTestResults({ results }: CalibrationTestResul
         {activeTab === "prediagnostico" && (
           <div className="space-y-2">
             <div className="flex items-baseline justify-between text-xs text-slate-500">
-              <span className="font-semibold uppercase tracking-wide">Interpretación IA</span>
+              <span className="font-semibold tracking-wide">Interpretación IA</span>
               <span className="font-mono">{predxBytes.toLocaleString("es-MX")} bytes</span>
             </div>
             <JsonBlock data={prediagnosisData} />

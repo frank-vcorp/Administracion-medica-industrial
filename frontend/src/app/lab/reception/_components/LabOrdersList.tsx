@@ -134,19 +134,19 @@ export function LabOrdersList() {
         <table className="w-full text-xs text-slate-700">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 tracking-wider">
                 Folio
               </th>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 tracking-wider">
                 Paciente
               </th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 tracking-wider">
                 Total
               </th>
-              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 tracking-wider">
                 Estado
               </th>
-              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 tracking-wider">
                 Acciones
               </th>
             </tr>

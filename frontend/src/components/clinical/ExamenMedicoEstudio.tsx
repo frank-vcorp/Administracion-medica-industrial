@@ -21,6 +21,7 @@ import {
   resolveClinicalStudyReadonly,
 } from '@/lib/clinical/papeleta-readonly'
 import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } from "@/actions/medical-exam.actions"
+import { getCatalogEnumDisplayLabel } from '@/lib/clinical/enum-display-labels'
 import { getCurrentDoctorProfile } from "@/actions/doctor-profile.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
@@ -1693,7 +1694,7 @@ export default function ExamenMedicoEstudio({
                     )}
                   >
                     {visionFieldSelectOptions(f.name, agudezaForm[f.name]).map(v => (
-                      <option key={v} value={v}>{v}</option>
+                      <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
                     ))}
                   </select>
                 </div>
@@ -1730,7 +1731,7 @@ export default function ExamenMedicoEstudio({
                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm disabled:opacity-60"
                   >
                     {options.map(v => (
-                      <option key={v} value={v}>{v}</option>
+                      <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
                     ))}
                   </select>
                 </div>
@@ -1893,7 +1894,7 @@ export default function ExamenMedicoEstudio({
                         >
                           <option value="">— Seleccionar —</option>
                           {SALUD_BUCAL_VALUES.map(v => (
-                            <option key={v} value={v}>{v}</option>
+                            <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
                           ))}
                         </select>
                       </div>
@@ -1958,7 +1959,7 @@ export default function ExamenMedicoEstudio({
                               >
                                 <option value="">— Seleccionar —</option>
                                 {TEST_ADAM_LATERAL_VALUES.map(v => (
-                                  <option key={v} value={v}>{v}</option>
+                                  <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
                                 ))}
                               </select>
                             </div>
@@ -2003,7 +2004,7 @@ export default function ExamenMedicoEstudio({
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                       >
                         {QUISTE_SINOVIAL_CAPTURA_VALUES.map(v => (
-                          <option key={v} value={v}>{v}</option>
+                          <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
                         ))}
                       </select>
                       {quisteEstado === 'POSITIVO' && (
@@ -2044,7 +2045,7 @@ export default function ExamenMedicoEstudio({
                       >
                         <option value="">— Seleccionar —</option>
                         {field.values.map(v => (
-                          <option key={v} value={v}>{v}</option>
+                          <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
                         ))}
                       </select>
                     </div>
@@ -2237,7 +2238,7 @@ export default function ExamenMedicoEstudio({
                       >
                         <option value="">—</option>
                         {comboValues.map(v => (
-                          <option key={v} value={v}>{v}</option>
+                          <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
                         ))}
                       </select>
                     ) : (

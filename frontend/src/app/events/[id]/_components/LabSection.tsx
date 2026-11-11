@@ -93,7 +93,7 @@ export async function LabSection({ medicalEventId, workerId: _workerId }: Props)
                       {et.test?.code ?? et.testNameSnapshot}
                     </span>
                     <span className="text-slate-500">{et.test?.name}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                    <span className="text-[10px] tracking-wide text-slate-400">
                       {String(et.status)}
                     </span>
                   </div>

@@ -555,7 +555,7 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-      <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">{title}</h2>
+      <h2 className="text-sm font-bold text-slate-700 tracking-wider">{title}</h2>
       {children}
     </section>
   )
@@ -572,7 +572,7 @@ function Field({
 }) {
   return (
     <div className={`space-y-1 ${full ? 'md:col-span-2' : ''}`}>
-      <label className="text-[10px] font-bold text-slate-500 uppercase">{label}</label>
+      <label className="text-[10px] font-bold text-slate-500">{label}</label>
       {children}
     </div>
   )

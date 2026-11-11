@@ -139,7 +139,7 @@ export default function PartialResultSendModal({
               </p>
 
               <div className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Pruebas</p>
+                <p className="text-[10px] font-bold text-slate-400">Pruebas</p>
                 <ul className="space-y-2">
                   {offer.labOptions.map((opt) => (
                     <li key={opt.id}>
@@ -158,7 +158,7 @@ export default function PartialResultSendModal({
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">
+                <label className="text-[10px] font-bold text-slate-400">
                   Correo destinatario
                 </label>
                 {offer.defaultEmails.length > 1 && (

@@ -199,7 +199,7 @@ export default function CalibrationTestUpload({
   return (
     <div className="space-y-3">
       <div className="flex items-baseline justify-between">
-        <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+        <p className="text-xs font-semibold text-slate-700 tracking-wide">
           Subir archivo de prueba
         </p>
         <p className="text-xs text-slate-400 font-mono">

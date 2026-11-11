@@ -103,7 +103,7 @@ export default function ProjectsTable({ projects, companies, branches }: Project
     <>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+          <thead className="bg-slate-50 text-slate-500 text-xs tracking-wide">
             <tr>
               <th className="px-4 py-3 text-left">Proyecto</th>
               <th className="px-4 py-3 text-left">Empresa</th>

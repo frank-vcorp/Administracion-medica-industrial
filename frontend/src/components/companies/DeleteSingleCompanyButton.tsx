@@ -82,7 +82,7 @@ export default function DeleteSingleCompanyButton({
             </div>
 
             <label className="block mb-4">
-              <span className="text-xs font-bold text-slate-600 uppercase">
+              <span className="text-xs font-bold text-slate-600">
                 Razón (opcional, audit)
               </span>
               <input

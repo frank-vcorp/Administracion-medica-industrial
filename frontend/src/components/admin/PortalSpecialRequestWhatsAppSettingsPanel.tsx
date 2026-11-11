@@ -88,7 +88,7 @@ export default function PortalSpecialRequestWhatsAppSettingsPanel() {
       ) : (
         <form onSubmit={handleSave} className="space-y-4">
           <div className="space-y-2">
-            <span className="text-xs font-bold uppercase text-slate-500">Números de logística (hasta {MAX_PHONES})</span>
+            <span className="text-xs font-bold text-slate-500">Números de logística (hasta {MAX_PHONES})</span>
             {phones.map((p, i) => (
               <div key={i} className="flex gap-2 items-center">
                 <input

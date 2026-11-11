@@ -134,7 +134,7 @@ function Lane({ title, count, children, color, borderColor, icon }: { title: str
             <div className="flex justify-between items-center mb-6 relative z-10">
                 <div className="flex items-center gap-2">
                     <span className="text-lg">{icon}</span>
-                    <h3 className="font-black text-slate-400 text-[10px] tracking-[0.2em] uppercase">{title}</h3>
+                    <h3 className="font-black text-slate-400 text-[10px] tracking-[0.2em]">{title}</h3>
                 </div>
                 <span className="bg-white text-slate-800 px-3 py-1 rounded-full text-xs font-black shadow-sm border border-slate-50">{count}</span>
             </div>
@@ -168,7 +168,7 @@ function PatientCard({ event, status, nextStatus }: {
             <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-bl-full"></div>
 
             <div className="flex justify-between items-start mb-2">
-                <span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{workerName}</span>
+                <span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors tracking-tight">{workerName}</span>
                 <span className="text-[10px] font-black text-slate-300 font-mono">#{event.id.slice(0, 4)}</span>
             </div>
             <p className="text-[11px] font-bold text-slate-400 mb-1">{companyName}</p>
@@ -179,7 +179,7 @@ function PatientCard({ event, status, nextStatus }: {
                 </p>
             )}
             <div className="mb-4">
-                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${intakeBadge.tone}`}>
+                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black tracking-[0.14em] ${intakeBadge.tone}`}>
                     {intakeBadge.label}
                 </span>
             </div>
@@ -207,7 +207,7 @@ function PatientCard({ event, status, nextStatus }: {
                     <Link
                         href={`/events/${event.id}?view=IN_PROGRESS`}
                         prefetch={true}
-                        className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all"
+                        className="text-[10px] font-black text-indigo-500 tracking-widest flex items-center gap-1 hover:gap-2 transition-all"
                     >
                         Papeleta <span className="text-xs">→</span>
                     </Link>

@@ -61,7 +61,7 @@ export default function ReceptionCheckoutModal({ patient, onClose }: Props) {
     >
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl">
         <div className="border-b border-slate-100 px-6 py-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-teal-600">
+          <p className="text-[10px] font-bold tracking-widest text-teal-600">
             Salida del paciente
           </p>
           <h2 id="reception-checkout-title" className="mt-1 text-xl font-black text-slate-900">

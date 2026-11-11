@@ -168,7 +168,7 @@ export const CATALOGO_RECOMENDACIONES: Record<string, string[]> = {
 // ─── Detección de hallazgos ───────────────────────────────────────────────────
 
 /**
- * Normaliza un valor (trim + uppercase) para matching tolerante.
+ * Normaliza un valor (trim +) para matching tolerante.
  * "sobrepeso" === "SOBREPESO" === " Sobrepeso ".
  */
 function norm(v: string | null | undefined): string {

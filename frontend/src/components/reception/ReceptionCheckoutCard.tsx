@@ -42,7 +42,7 @@ export default function ReceptionCheckoutCard({ event, intakeBadge }: Props) {
       <div className="relative overflow-hidden rounded-xl border border-amber-100 bg-white p-3 shadow-sm transition-all duration-200 hover:border-amber-200 hover:shadow-md">
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="truncate text-xs font-bold uppercase tracking-tight text-slate-800">
+            <p className="truncate text-xs font-bold tracking-tight text-slate-800">
               {workerName}
             </p>
             <p className="truncate text-[10px] font-medium text-slate-500">
@@ -52,7 +52,7 @@ export default function ReceptionCheckoutCard({ event, intakeBadge }: Props) {
             </p>
           </div>
           <span
-            className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-wide ${intakeBadge.tone}`}
+            className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black tracking-wide ${intakeBadge.tone}`}
           >
             {intakeBadge.label}
           </span>
@@ -76,7 +76,7 @@ export default function ReceptionCheckoutCard({ event, intakeBadge }: Props) {
               })
             }
             data-testid={`reception-checkout-open-${event.id.slice(0, 8)}`}
-            className="rounded-md bg-amber-500 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-white transition-all hover:bg-amber-600"
+            className="rounded-md bg-amber-500 px-3 py-1 text-[9px] font-black tracking-widest text-white transition-all hover:bg-amber-600"
           >
             Dar salida →
           </button>

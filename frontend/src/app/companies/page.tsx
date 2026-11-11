@@ -134,7 +134,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         <div>
           <label
             htmlFor="filter-estado"
-            className="text-[11px] font-bold text-slate-500 uppercase"
+            className="text-[11px] font-bold text-slate-500"
           >
             Estado
           </label>
@@ -153,7 +153,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         <div>
           <label
             htmlFor="filter-origen"
-            className="text-[11px] font-bold text-slate-500 uppercase"
+            className="text-[11px] font-bold text-slate-500"
           >
             Origen
           </label>
@@ -171,7 +171,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         <div>
           <label
             htmlFor="filter-seller"
-            className="text-[11px] font-bold text-slate-500 uppercase"
+            className="text-[11px] font-bold text-slate-500"
           >
             Vendedor
           </label>
@@ -192,7 +192,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         <div>
           <label
             htmlFor="filter-q"
-            className="text-[11px] font-bold text-slate-500 uppercase"
+            className="text-[11px] font-bold text-slate-500"
           >
             Buscar
           </label>

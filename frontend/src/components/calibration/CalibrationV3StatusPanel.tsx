@@ -105,7 +105,7 @@ export default function CalibrationV3StatusPanel({
     >
       {/* ── operationMode ──────────────────────────────────────────────────── */}
       <header className="flex items-center gap-2 flex-wrap">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+        <p className="text-xs font-semibold text-slate-600 tracking-wide">
           Estado V3
         </p>
         <span
@@ -133,13 +133,13 @@ export default function CalibrationV3StatusPanel({
       {/* ── Estado de publicación ──────────────────────────────────────────── */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs text-slate-500 uppercase tracking-wide">Draft</p>
+          <p className="text-xs text-slate-500 tracking-wide">Draft</p>
           <p className="mt-1 font-mono font-semibold text-slate-700" data-testid="calibration-v3-draft-status">
             {state.draftStatus ?? "—"}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs text-slate-500 uppercase tracking-wide">Versión publicada</p>
+          <p className="text-xs text-slate-500 tracking-wide">Versión publicada</p>
           {state.currentPublishedVersion ? (
             <p className="mt-1 font-mono font-semibold text-slate-700" data-testid="calibration-v3-published-version">
               v{state.currentPublishedVersion.versionNumber} · {state.currentPublishedVersion.label}
@@ -152,7 +152,7 @@ export default function CalibrationV3StatusPanel({
           )}
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs text-slate-500 uppercase tracking-wide">Histórico superseded</p>
+          <p className="text-xs text-slate-500 tracking-wide">Histórico superseded</p>
           <p className="mt-1 font-mono font-semibold text-slate-700">{state.supersededCount}</p>
         </div>
       </section>
@@ -225,7 +225,7 @@ function PublishSection({
   return (
     <section className="space-y-3 border-t border-slate-200 pt-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+        <p className="text-xs font-semibold text-slate-600 tracking-wide">
           Publicar calibración
         </p>
         {canPublish ? (

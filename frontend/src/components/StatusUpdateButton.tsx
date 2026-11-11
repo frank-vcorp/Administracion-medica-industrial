@@ -36,7 +36,7 @@ export default function StatusUpdateButton({ eventId, nextStatus }: { eventId: s
             <button 
                 onClick={handleClick}
                 disabled={isPending}
-                className={`text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all bg-emerald-50 px-2 py-1 rounded-md hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`text-[10px] font-black text-emerald-500 tracking-widest flex items-center gap-1 hover:gap-2 transition-all bg-emerald-50 px-2 py-1 rounded-md hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed`}
             >
                 {isPending ? 'Moviendo...' : (nextStatus === 'IN_PROGRESS' ? 'A Consultorio' : 'A Validar')} <span className="text-xs">→</span>
             </button>

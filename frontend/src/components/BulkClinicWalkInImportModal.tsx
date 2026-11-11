@@ -231,7 +231,7 @@ export default function BulkClinicWalkInImportModal({
                 <>
                   {/* Selector de sucursal */}
                   <div>
-                    <label htmlFor="clinic-branch" className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                    <label htmlFor="clinic-branch" className="block text-xs font-semibold tracking-wide text-slate-500 mb-1">
                       Sucursal (opcional)
                     </label>
                     <select
@@ -255,7 +255,7 @@ export default function BulkClinicWalkInImportModal({
                   {/* Tabla de captura rápida */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <p className="text-xs font-semibold tracking-wide text-slate-500">
                         Pacientes (máximo {MAX_ROWS})
                       </p>
                       <button
