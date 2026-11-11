@@ -9,7 +9,8 @@ import { authOptions } from '@/auth'
 import { createAppointment } from '@/actions/appointment.actions'
 import { validateConsultaMedicaPayload } from '@/lib/clinical/consulta-medica-validate'
 import type { ConsultaMedicaPayload } from '@/schemas/clinical/consulta-medica.schema'
-import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
+import { isConsultaMedicaTestName, parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
+import { denyIfClosedCaptureUnauthorized } from '@/lib/clinical/papeleta-readonly'
 import { formatScheduledFollowUp, listOpenAgendaHourSlots } from '@/lib/clinical/consulta-seguimiento'
 import { searchCie10Catalog, type Cie10Entry } from '@/lib/clinical/cie-10-catalog'
 import {
@@ -46,15 +47,17 @@ export type SaveConsultaMedicaResult =
   | { success: true; payload: ConsultaMedicaPayload; updatedAt: string }
   | { success: false; error: string; fieldErrors?: Record<string, string[]>; technicalDetail?: string }
 
-async function assertClinicalAccess(): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+async function assertClinicalAccess():
+  Promise<{ ok: true; userId: string; role: string } | { ok: false; error: string }> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return { ok: false, error: 'No autenticado.' }
   }
-  if (!CLINICAL_ROLES.has(session.user.role ?? '')) {
+  const role = session.user.role ?? ''
+  if (!CLINICAL_ROLES.has(role)) {
     return { ok: false, error: 'No tienes permisos para capturar consulta médica.' }
   }
-  return { ok: true, userId: session.user.id }
+  return { ok: true, userId: session.user.id, role }
 }
 
 export async function searchCie10ForConsulta(query: string): Promise<Cie10Entry[]> {
@@ -410,22 +413,13 @@ export async function saveConsultaMedica(
   const access = await assertClinicalAccess()
   if (!access.ok) return { success: false, error: access.error }
 
-  const validation = validateConsultaMedicaPayload(rawPayload, options.finalize ? 'final' : 'draft')
-  if (!validation.valid) {
-    return {
-      success: false,
-      error: validation.error,
-      fieldErrors: validation.fieldErrors,
-    }
-  }
-  const payload = validation.payload
-
   const eventTest = await prisma.eventTest.findUnique({
     where: { id: eventTestId },
     select: {
       id: true,
       eventId: true,
       testNameSnapshot: true,
+      clinicalContext: true,
       event: { select: { workerId: true } },
     },
   })
@@ -442,9 +436,33 @@ export async function saveConsultaMedica(
     return { success: false, error: 'Este estudio no es una consulta médica.' }
   }
 
+  const priorClosed = Boolean(
+    parseConsultaMedicaClinicalContext(eventTest.clinicalContext)?.cerrada_at?.trim(),
+  )
+  const closedGuard = denyIfClosedCaptureUnauthorized(priorClosed, access.role)
+  if (!closedGuard.ok) return { success: false, error: closedGuard.error }
+
+  const validation = validateConsultaMedicaPayload(
+    rawPayload,
+    priorClosed || !options.finalize ? 'draft' : 'final',
+  )
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: validation.error,
+      fieldErrors: validation.fieldErrors,
+    }
+  }
+  const payload = validation.payload
+
+  const priorCerradaAt = parseConsultaMedicaClinicalContext(eventTest.clinicalContext)?.cerrada_at
   const toStore: ConsultaMedicaPayload = {
     ...payload,
-    cerrada_at: options.finalize ? new Date().toISOString() : payload.cerrada_at,
+    cerrada_at: priorClosed
+      ? (payload.cerrada_at ?? priorCerradaAt)
+      : options.finalize
+        ? new Date().toISOString()
+        : payload.cerrada_at,
   }
 
   try {

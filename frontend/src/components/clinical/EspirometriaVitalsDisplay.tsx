@@ -10,19 +10,19 @@ import { hasAnyEspirometriaDisplayVital } from '@/lib/espirometria-display-vital
 const VARIANT_CLASS: Record<'teal' | 'amber' | 'slate', { wrap: string; title: string; dt: string; dd: string }> = {
   teal: {
     wrap: 'mt-3 pt-3 border-t border-teal-200',
-    title: 'text-[10px] font-bold text-teal-800 uppercase tracking-wider',
+    title: 'text-[10px] font-semibold text-teal-800',
     dt: 'text-[10px] text-teal-600',
     dd: 'text-xs font-semibold text-teal-900',
   },
   amber: {
     wrap: 'mt-3 pt-3 border-t border-amber-200',
-    title: 'text-[10px] font-bold text-amber-800 uppercase tracking-wider',
+    title: 'text-[10px] font-semibold text-amber-800',
     dt: 'text-[10px] text-amber-600',
     dd: 'text-xs font-semibold text-amber-900',
   },
   slate: {
     wrap: 'rounded-lg border border-slate-200 bg-slate-50 p-3',
-    title: 'text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2',
+    title: 'text-[10px] font-semibold text-slate-600 tracking-wider mb-2',
     dt: 'text-[10px] text-slate-500',
     dd: 'text-xs font-semibold text-slate-800',
   },

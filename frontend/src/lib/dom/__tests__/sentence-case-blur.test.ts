@@ -39,6 +39,12 @@ describe('shouldApplySentenceCaseOnBlur', () => {
     el.readOnly = true
     expect(shouldApplySentenceCaseOnBlur(el)).toBe(false)
   })
+
+  it('omite controles clínicos React (data-sentence-case-managed)', () => {
+    const el = document.createElement('textarea')
+    el.dataset.sentenceCaseManaged = 'react'
+    expect(shouldApplySentenceCaseOnBlur(el)).toBe(false)
+  })
 })
 
 describe('applySentenceCaseToControl', () => {

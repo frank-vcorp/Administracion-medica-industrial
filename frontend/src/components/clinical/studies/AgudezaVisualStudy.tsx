@@ -155,11 +155,11 @@ export default function AgudezaVisualStudy({
       {saveError && <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />}
       {/* Campo Visual */}
       <div>
-        <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Campo Visual</h4>
+        <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Campo Visual</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {VISUAL_FIELDS.map(f => (
             <div key={f.name}>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{f.label}</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">{f.label}</label>
               <select
                 value={formData[f.name] || NO_APLICA}
                 onChange={e => handleChange(f.name, e.target.value)}
@@ -174,7 +174,7 @@ export default function AgudezaVisualStudy({
           ))}
         </div>
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500">
+          <p className="text-[10px] font-bold text-blue-500">
             Clasificación agudeza visual (automática)
           </p>
           <p className="mt-1 text-sm font-semibold text-blue-900">
@@ -185,10 +185,10 @@ export default function AgudezaVisualStudy({
 
       {/* Pruebas Complementarias */}
       <div>
-        <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Pruebas Complementarias</h4>
+        <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Pruebas Complementarias</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Campimetría</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Campimetría</label>
             <select
               value={formData.campimetria || CAMPIMETRIA_VALUES[0]}
               onChange={e => handleChange('campimetria', e.target.value)}
@@ -201,7 +201,7 @@ export default function AgudezaVisualStudy({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Test Ishihara</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Test Ishihara</label>
             <select
               value={formData.test_ishihara || TEST_ISHIHARA_VALUES[0]}
               onChange={e => handleChange('test_ishihara', e.target.value)}
@@ -214,7 +214,7 @@ export default function AgudezaVisualStudy({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Reflejos</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Reflejos</label>
             <select
               value={formData.reflejos || REFLEJOS_VALUES[0]}
               onChange={e => handleChange('reflejos', e.target.value)}

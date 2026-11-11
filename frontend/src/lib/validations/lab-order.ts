@@ -8,6 +8,7 @@
  * Cambios en uno deben replicarse en el otro.
  */
 import { z } from "zod";
+import { zFreeTextMax, zFreeTextMaxNullable } from "@/lib/text/zod-free-text";
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -45,10 +46,7 @@ export const createLabOrderSchema = z.object({
   medicalEventId: z.string().min(1).optional().nullable(),
   companyId: z.string().min(1).optional().nullable(),
   classificationId: z.string().min(1).optional().nullable(),
-  doctorName: z
-    .string()
-    .min(2, "Mínimo 2 caracteres")
-    .max(120, "Máximo 120 caracteres"),
+  doctorName: zFreeTextMax(120, 2),
   doctorClave: z.string().max(40).optional().nullable(),
   patientDiscountPct: z.number().min(0).max(100).default(0),
   doctorDiscountPct: z.number().min(0).max(100).default(0),
@@ -66,7 +64,7 @@ export const createLabOrderSchema = z.object({
     .regex(/^\d{2}:\d{2}$/, "Formato HH:MM")
     .optional()
     .nullable(),
-  observations: z.string().max(2000).optional().nullable(),
+  observations: zFreeTextMaxNullable(2000),
   isCourtesy: z.boolean().default(false),
   courtesyType: z.string().max(120).optional().nullable(),
   items: z
@@ -82,7 +80,7 @@ export type UpdateLabOrderInput = z.infer<typeof updateLabOrderSchema>;
 // Soft-delete payload
 // ---------------------------------------------------------------------------
 export const cancelLabOrderSchema = z.object({
-  motivo: z.string().min(3, "Mínimo 3 caracteres").max(500, "Máximo 500 caracteres"),
+  motivo: zFreeTextMax(500, 3),
 });
 export type CancelLabOrderInput = z.infer<typeof cancelLabOrderSchema>;
 

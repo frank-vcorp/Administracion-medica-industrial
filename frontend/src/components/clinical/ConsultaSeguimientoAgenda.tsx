@@ -159,7 +159,7 @@ export default function ConsultaSeguimientoAgenda({
   return (
     <section className="space-y-3 bg-white border border-slate-200 rounded-xl p-4">
       <div>
-        <p className="text-[10px] font-bold text-slate-400 uppercase">Consulta de seguimiento</p>
+        <p className="text-[10px] font-semibold text-slate-500">Consulta de seguimiento</p>
         <p className="text-xs text-slate-500 mt-1">
           Horarios con cupo de {branchName || 'la sucursal'}, los mismos de Gestión de citas.
         </p>
@@ -224,7 +224,7 @@ export default function ConsultaSeguimientoAgenda({
                       : 'border-slate-100 bg-slate-50'
                 }`}
               >
-                <span className="block text-[10px] uppercase text-slate-400">{bits.weekday}</span>
+                <span className="block text-[10px] text-slate-500">{bits.weekday}</span>
                 <span className="block text-sm font-bold text-slate-800">{bits.number}</span>
                 <span className="block text-[10px] text-slate-500">
                   {day.status === 'past'
@@ -241,7 +241,7 @@ export default function ConsultaSeguimientoAgenda({
 
       {selectedDate && !loadingWeek && (
         <div className="space-y-2">
-          <p className="text-[10px] font-bold text-slate-400 uppercase">Horarios disponibles</p>
+          <p className="text-[10px] font-semibold text-slate-500">Horarios disponibles</p>
           {loadingSlots ? (
             <p className="text-xs text-slate-500">Cargando horarios…</p>
           ) : closed ? (

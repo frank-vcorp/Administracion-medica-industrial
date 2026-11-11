@@ -10,6 +10,7 @@ import {
   type ConsultaDerivadoAddedItem,
   type ConsultaDerivadosCatalogItem,
 } from '@/actions/consulta-derivados.actions'
+import { ClinicalTextarea } from '@/components/clinical/ClinicalFreeTextControls'
 
 const ADDED_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Pendiente',
@@ -164,7 +165,7 @@ export default function ConsultaDerivadosStudiesPicker({
       </p>
 
       <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+        <p className="text-[10px] font-semibold text-slate-500">
           Agregados desde esta consulta
         </p>
         {addedError && <p className="text-xs text-red-600">{addedError}</p>}
@@ -218,16 +219,16 @@ export default function ConsultaDerivadosStudiesPicker({
                         ? ' Ya tiene avance o resultado, y ese contenido también se elimina.'
                         : ''}
                     </p>
-                    <label className="block text-[10px] font-bold uppercase text-slate-500">
+                    <label className="block text-[10px] font-semibold text-slate-500">
                       Motivo
                     </label>
-                    <textarea
+                    <ClinicalTextarea
                       required
                       minLength={3}
                       maxLength={500}
                       rows={2}
                       value={removeReason}
-                      onChange={(event) => setRemoveReason(event.target.value)}
+                      onChange={setRemoveReason}
                       className={inputClass}
                       placeholder="Indica por qué se quita"
                     />
@@ -281,7 +282,7 @@ export default function ConsultaDerivadosStudiesPicker({
       <div className="max-h-[min(420px,50vh)] overflow-y-auto space-y-4 pr-1">
         {Object.entries(byCategory).map(([category, tests]) => (
           <div key={category}>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+            <p className="text-[10px] font-semibold text-slate-500 mb-2">
               {category}
             </p>
             <ul className="space-y-1">

@@ -29,6 +29,7 @@ import {
 } from '@/lib/clinical/examen-medico-save-errors'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
+import { denyIfClosedCaptureUnauthorized } from '@/lib/clinical/papeleta-readonly'
 
 /**
  * @id ARCH-20260326-01
@@ -285,6 +286,7 @@ export async function saveExamenMedicoPapeleta(
   try {
     const autosave = options?.autosave === true
     const session = await getServerSession(authOptions)
+    const sessionRole = session?.user?.role
     let medicoLine: string | null = null
     if (session?.user?.id) {
       const user = await prisma.user.findUnique({
@@ -318,6 +320,18 @@ export async function saveExamenMedicoPapeleta(
     })
     const priorPhysical =
       (priorExam?.physicalExamData as Record<string, unknown> | undefined) ?? {}
+
+    const priorCaptureClosed = priorPhysical.examen_capture_closed === true
+    const closedGuard = denyIfClosedCaptureUnauthorized(priorCaptureClosed, sessionRole)
+    if (!closedGuard.ok) {
+      return { success: false as const, error: closedGuard.error }
+    }
+    if (priorCaptureClosed && markComplete) {
+      return {
+        success: false as const,
+        error: 'La captura ya está cerrada; usa borrador para correcciones de texto.',
+      }
+    }
 
     const physicalPayload: Record<string, unknown> = { ...data }
 
@@ -370,7 +384,8 @@ export async function saveExamenMedicoPapeleta(
     }
 
     let aiWarning: string | undefined
-    if (!autosave) {
+    const postCloseCorrection = priorCaptureClosed && !markComplete
+    if (!autosave && !postCloseCorrection) {
       const aiResult = await triggerStructuredStudyAIPrediagnosis({
         eventTestId,
         eventId,
