@@ -5,8 +5,15 @@ export const PATOLOGIA_ESPECIFICACION_FIELDS = new Set([
   'otras',
 ])
 
+/** Especificación visible siempre (campo abierto), no solo al marcar SÍ. */
+export const PATOLOGIA_ESPECIFICACION_SIEMPRE_VISIBLE = new Set(['exantematicas'])
+
 export function patologiaRequiresEspecificacion(field: string): boolean {
   return PATOLOGIA_ESPECIFICACION_FIELDS.has(field)
+}
+
+export function patologiaEspecificacionSiempreVisible(field: string): boolean {
+  return PATOLOGIA_ESPECIFICACION_SIEMPRE_VISIBLE.has(field)
 }
 
 export function patologiaEspecificacionPlaceholder(field: string): string {

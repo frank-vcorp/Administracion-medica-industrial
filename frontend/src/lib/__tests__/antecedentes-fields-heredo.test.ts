@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatHeredoFamiliaresValor,
+  formatMentalesDisplay,
   heredoFamiliaresEspecifiqueKey,
   readHeredoFamiliaresDisplay,
+  readMentalesCampoAbierto,
   readTatuajesDisplay,
   readTratamientoMedicoActualDisplay,
+  writeMentalesCampoAbierto,
 } from '../antecedentes-fields'
 import { HeredoFamiliaresSchema } from '@/schemas/clinical/history.schema'
 
@@ -20,6 +23,23 @@ describe('heredo-familiares multiselect (F-23)', () => {
 
   it('formatea mentales SI con especificación', () => {
     expect(formatHeredoFamiliaresValor('SI', 'depresión materna')).toBe('SI (depresión materna)')
+  })
+
+  it('mentales campo abierto: lectura/escritura y display legacy', () => {
+    expect(
+      readMentalesCampoAbierto({ mentales: 'SI', mentales_especifique: 'depresión materna' }),
+    ).toBe('depresión materna')
+    expect(writeMentalesCampoAbierto('Ansiedad en hermano')).toEqual({
+      mentales: 'Ansiedad en hermano',
+      mentales_especifique: '',
+    })
+    expect(writeMentalesCampoAbierto('')).toEqual({ mentales: 'NEGADO', mentales_especifique: '' })
+    expect(
+      formatMentalesDisplay({ mentales: 'Depresión familiar', mentales_especifique: '' }),
+    ).toBe('Depresión familiar')
+    expect(readHeredoFamiliaresDisplay({ mentales: 'Depresión familiar' }, 'mentales')).toBe(
+      'Depresión familiar',
+    )
   })
 
   it('lee display desde snapshot multiselect', () => {
