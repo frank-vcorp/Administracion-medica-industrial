@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   addConsultaDerivadosStudies,
   getConsultaDerivadosCatalog,
@@ -10,6 +9,7 @@ import {
   type ConsultaDerivadoAddedItem,
   type ConsultaDerivadosCatalogItem,
 } from '@/actions/consulta-derivados.actions'
+import type { PapeletaEventTestSeed } from '@/lib/clinical/papeleta-event-tests'
 import { ClinicalTextarea } from '@/components/clinical/ClinicalFreeTextControls'
 
 const ADDED_STATUS_LABEL: Record<string, string> = {
@@ -26,12 +26,16 @@ export default function ConsultaDerivadosStudiesPicker({
   eventId,
   consultaEventTestId,
   readonly = false,
+  onPapeletaEventTestsInserted,
+  onPapeletaEventTestRemoved,
 }: {
   eventId: string
   consultaEventTestId: string
   readonly?: boolean
+  /** Actualiza la lista lateral sin `router.refresh()` (preserva estudio activo en URL). */
+  onPapeletaEventTestsInserted?: (rows: PapeletaEventTestSeed[]) => void
+  onPapeletaEventTestRemoved?: (eventTestId: string) => void
 }) {
-  const router = useRouter()
   const [catalog, setCatalog] = useState<ConsultaDerivadosCatalogItem[]>([])
   const [loadError, setLoadError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -124,7 +128,23 @@ export default function ConsultaDerivadosStudiesPicker({
       )
       await loadCatalog()
       await loadAdded()
-      router.refresh()
+      if (res.createdStudies?.length) {
+        onPapeletaEventTestsInserted?.(
+          res.createdStudies.map((row) => ({
+            id: row.id,
+            testNameSnapshot: row.testNameSnapshot,
+            status: row.status,
+            fileUrl: row.fileUrl,
+            resultNotes: row.resultNotes,
+            test: row.test
+              ? {
+                  code: row.test.code,
+                  category: row.test.category ?? undefined,
+                }
+              : null,
+          })),
+        )
+      }
     })
   }
 
@@ -150,7 +170,7 @@ export default function ConsultaDerivadosStudiesPicker({
       setActionMsg('Estudio quitado de la papeleta.')
       await loadCatalog()
       await loadAdded()
-      router.refresh()
+      onPapeletaEventTestRemoved?.(eventTestId)
     })
   }
 

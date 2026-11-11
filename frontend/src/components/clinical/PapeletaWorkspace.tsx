@@ -38,6 +38,11 @@ import {
   replacePapeletaQuery,
   resolveActiveEventTestAfterRefresh,
 } from '@/lib/clinical/papeleta-navigation'
+import {
+  appendPapeletaEventTests,
+  removePapeletaEventTestById,
+  type PapeletaEventTestSeed,
+} from '@/lib/clinical/papeleta-event-tests'
 import type { StudyPresentationSchema } from "@/types/calibration"
 import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
@@ -465,6 +470,20 @@ export default function PapeletaWorkspace({
       return true
     },
     [activeTestId, setActiveTestId],
+  )
+
+  const handlePapeletaEventTestsInserted = useCallback((seeds: PapeletaEventTestSeed[]) => {
+    setLocalTests((prev) => appendPapeletaEventTests(prev, seeds))
+  }, [])
+
+  const handlePapeletaEventTestRemoved = useCallback(
+    (eventTestId: string) => {
+      setLocalTests((prev) => removePapeletaEventTestById(prev, eventTestId))
+      if (activeTestId === eventTestId) {
+        navigateToStudy(null, { skipGuard: true })
+      }
+    },
+    [activeTestId, navigateToStudy],
   )
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
@@ -978,6 +997,8 @@ export default function PapeletaWorkspace({
               // BR-20260825-20): gate del CTA PDF/ZIP dentro de
               // ExamenMedicoEstudio. Verdict emitido → CTA visible.
               hasMedicalVerdict={hasMedicalVerdict}
+              onPapeletaEventTestsInserted={handlePapeletaEventTestsInserted}
+              onPapeletaEventTestRemoved={handlePapeletaEventTestRemoved}
               onDictamenLabInclusionSaved={(eventTestId, includeInDictamenGeneral) => {
                 setLocalTests((prev) =>
                   prev.map((t) =>
@@ -1413,6 +1434,8 @@ function StudyPanel({
   // gate del CTA PDF/ZIP dentro de ExamenMedicoEstudio.
   hasMedicalVerdict,
   onDictamenLabInclusionSaved,
+  onPapeletaEventTestsInserted,
+  onPapeletaEventTestRemoved,
   registerStudyLeaveGuard,
 }: {
   test: StudyTest
@@ -1457,6 +1480,8 @@ function StudyPanel({
     eventTestId: string,
     includeInDictamenGeneral: boolean,
   ) => void
+  onPapeletaEventTestsInserted?: (rows: PapeletaEventTestSeed[]) => void
+  onPapeletaEventTestRemoved?: (eventTestId: string) => void
   registerStudyLeaveGuard?: (fn: StudyLeaveGuardFn | null) => void
 }) {
   // ARCH-20260518-04: confirmación local antes de ejecutar la limpieza destructiva
@@ -1808,6 +1833,8 @@ function StudyPanel({
               | undefined) ?? null
           }
           readonly={readonly}
+          onPapeletaEventTestsInserted={onPapeletaEventTestsInserted}
+          onPapeletaEventTestRemoved={onPapeletaEventTestRemoved}
         />
       )}
 

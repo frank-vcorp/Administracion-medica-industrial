@@ -125,6 +125,17 @@ export async function addConsultaDerivadosStudies(input: {
   success: boolean
   added?: number
   createdEventTestIds?: string[]
+  createdStudies?: Array<{
+    id: string
+    testNameSnapshot: string
+    status: string
+    fileUrl: string | null
+    resultNotes: string | null
+    test: {
+      code: string | null
+      category: { name: string } | null
+    } | null
+  }>
   error?: string
 }> {
   const access = await assertClinicalAccess()
@@ -215,11 +226,42 @@ export async function addConsultaDerivadosStudies(input: {
       })
     }
 
+    const createdStudies = await prisma.eventTest.findMany({
+      where: { id: { in: created.map((r) => r.id) } },
+      select: {
+        id: true,
+        testNameSnapshot: true,
+        status: true,
+        fileUrl: true,
+        resultNotes: true,
+        test: {
+          select: {
+            code: true,
+            category: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+
     revalidatePath(`/events/${eventId}`)
     return {
       success: true,
       added: created.length,
       createdEventTestIds: created.map((r) => r.id),
+      createdStudies: createdStudies.map((row) => ({
+        id: row.id,
+        testNameSnapshot: row.testNameSnapshot,
+        status: String(row.status),
+        fileUrl: row.fileUrl,
+        resultNotes: row.resultNotes,
+        test: row.test
+          ? {
+              code: row.test.code,
+              category: row.test.category ? { name: row.test.category.name } : null,
+            }
+          : null,
+      })),
     }
   } catch (err) {
     console.error('[addConsultaDerivadosStudies]', err)
