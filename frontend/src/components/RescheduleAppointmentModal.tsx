@@ -6,6 +6,8 @@ import {
   formatAppointmentAgendaDateString,
   formatAppointmentAgendaTime,
 } from '@/lib/appointment-scheduling'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import { mapSaveActionFailure, type UserFacingError } from '@/lib/user-facing-error'
 
 interface AppointmentToReschedule {
   id: string
@@ -31,19 +33,28 @@ function toTimeInputValue(scheduledAt: Date | string): string {
 export default function RescheduleAppointmentModal({ appointment, onClose, onSuccess }: Props) {
   const [date, setDate] = useState(toDateInputValue(appointment.scheduledAt))
   const [time, setTime] = useState(toTimeInputValue(appointment.scheduledAt))
-  const [error, setError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError(null)
+    setSaveError(null)
     startTransition(async () => {
       const result = await rescheduleAppointment(appointment.id, { date, time })
       if (result.success) {
         onSuccess?.(date)
         onClose()
       } else {
-        setError(result.error || 'No se pudo reagendar')
+        setSaveError(
+          mapSaveActionFailure(
+            {
+              error: result.error || 'No se pudo reagendar',
+              fieldErrors: 'fieldErrors' in result ? result.fieldErrors : undefined,
+              technicalDetail: 'technicalDetail' in result ? result.technicalDetail : undefined,
+            },
+            { context: 'rescheduleAppointment' },
+          ),
+        )
       }
     })
   }
@@ -87,10 +98,8 @@ export default function RescheduleAppointmentModal({ appointment, onClose, onSuc
             </div>
           </div>
 
-          {error && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-              ⚠️ {error}
-            </p>
+          {saveError && (
+            <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
           )}
 
           <div className="flex gap-3 pt-2">

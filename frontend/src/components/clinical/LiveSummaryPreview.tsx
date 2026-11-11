@@ -86,7 +86,7 @@ export default function LiveSummaryPreview({
       className="bg-white border border-slate-200 rounded-xl p-4 space-y-3"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+        <p className="text-xs font-bold text-slate-700">
           Resumen ejecutivo (auto-poblado)
         </p>
         <span className="text-[10px] text-slate-400 italic">
@@ -112,7 +112,7 @@ export default function LiveSummaryPreview({
               data-testid={`live-summary-field-${key}`}
               className={`flex flex-col gap-0.5 ${isWide ? 'md:col-span-2' : ''}`}
             >
-              <dt className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              <dt className="text-[10px] font-semibold text-slate-500 tracking-wider">
                 {label}
               </dt>
               <dd

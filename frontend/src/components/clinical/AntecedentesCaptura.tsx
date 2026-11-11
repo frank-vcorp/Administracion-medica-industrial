@@ -95,6 +95,13 @@ import {
   GRUPO_RH_VALUES,
   type DetalleTriple,
 } from '@/schemas/clinical/history.schema'
+import {
+  OTRAS_ENFERMEDADES_KEY,
+  hydrateOtrasEnfermedadesFromPatologicos,
+  isPatologicosMetaKey,
+  otrasEnfermedadesForPersist,
+  syncOtrasEspecificacion,
+} from '@/lib/otras-enfermedades'
 
 interface AntecedentesCapturaProps {
   /** Estado actual del snapshot (resuelto por el padre). Componente controlado. */
@@ -192,7 +199,7 @@ function stripEmptyEnumKeys<T extends Record<string, string>>(
 }
 
 /** Construye un estado interno vacío a partir de los shapes conocidos. */
-function buildEmptySections(): {
+type AntecedentesFormSections = {
   datos_personales: Record<string, string>
   historia_laboral: Record<string, string>
   heredo_familiares: Record<string, string>
@@ -202,7 +209,11 @@ function buildEmptySections(): {
    * 3 campos). La forma legacy `{ diabetes: 'SI' }` se normaliza al cargar
    * (ver `sectionsFromValue`). */
   patologicos: Record<string, PatologiaEntry>
-} {
+  /** Texto libre: varias «otras enfermedades» (persistido en patologicos.otras_enfermedades). */
+  otrasEnfermedades: string[]
+}
+
+function buildEmptySections(): AntecedentesFormSections {
   const dp: Record<string, string> = {
     puesto_actual: '', area_departamento: '', turno: '',
     antiguedad_anios: '', antiguedad_meses: '', estado_civil: '',
@@ -245,7 +256,43 @@ function buildEmptySections(): {
     heredo_familiares: hf,
     no_patologicos: np,
     patologicos: pt,
+    otrasEnfermedades: [],
   }
+}
+
+function syncOtrasEntryInForm(form: AntecedentesFormSections): AntecedentesFormSections {
+  const otrasSynced = syncOtrasEspecificacion(form.otrasEnfermedades, form.patologicos.otras)
+  if (!otrasSynced) return form
+  return {
+    ...form,
+    patologicos: { ...form.patologicos, otras: otrasSynced },
+  }
+}
+
+function patologicosPayloadFromForm(form: AntecedentesFormSections): Record<string, unknown> {
+  const synced = syncOtrasEntryInForm(form)
+  const persisted = otrasEnfermedadesForPersist(synced.otrasEnfermedades)
+  const base: Record<string, unknown> = { ...synced.patologicos }
+  if (persisted.length > 0) {
+    base[OTRAS_ENFERMEDADES_KEY] = persisted
+  }
+  return base
+}
+
+function emitAntecedentesPayload(nextForm: AntecedentesFormSections): AntecedentesCaptura {
+  const payload: AntecedentesCaptura = {
+    datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
+    historia_laboral: { ...nextForm.historia_laboral },
+    heredo_familiares: { ...nextForm.heredo_familiares },
+    no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
+    patologicos: patologicosPayloadFromForm(nextForm),
+  } as unknown as AntecedentesCaptura
+  for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
+    const v = nextForm.historia_laboral[exp.key]
+    ;(payload.historia_laboral as Record<string, unknown>)[exp.key] =
+      v === 'true' || v === 'SI'
+  }
+  return payload
 }
 
 function isPlainRecord(v: unknown): v is Record<string, unknown> {
@@ -288,19 +335,18 @@ function coercePatologiaEntry(v: unknown): PatologiaEntry {
 }
 
 /** Inicializa el estado local de edición desde `value` (objeto resolvido por el padre). */
-function sectionsFromValue(value: Record<string, unknown>): {
-  datos_personales: Record<string, string>
-  historia_laboral: Record<string, string>
-  heredo_familiares: Record<string, string>
-  no_patologicos: Record<string, string>
-  patologicos: Record<string, PatologiaEntry>
-} {
+function sectionsFromValue(value: Record<string, unknown>): AntecedentesFormSections {
   const empty = buildEmptySections()
+  const patSection = value.patologicos
+  if (isPlainRecord(patSection)) {
+    empty.otrasEnfermedades = hydrateOtrasEnfermedadesFromPatologicos(patSection)
+  }
   for (const key of Object.keys(empty) as SectionKey[]) {
     const section = value[key]
     if (!isPlainRecord(section)) continue
     for (const [k, v] of Object.entries(section)) {
       if (key === 'patologicos') {
+        if (isPatologicosMetaKey(k)) continue
         // IMPL-20260817-04 — el section patologicos maneja la forma objeto;
         // `coercePatologiaEntry` acepta strings legacy o el nuevo objeto.
         empty.patologicos[k] = coercePatologiaEntry(v)
@@ -330,7 +376,7 @@ function renderModulo1Fields(
         if (field.kind === 'select' && field.values) {
           return (
             <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{field.label}</label>
               <select
                 value={currentValue}
                 onChange={e => setM1Field(field.name, e.target.value)}
@@ -348,7 +394,7 @@ function renderModulo1Fields(
         if (field.kind === 'number') {
           return (
             <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{field.label}</label>
               <input
                 type="number"
                 min={field.min}
@@ -364,7 +410,7 @@ function renderModulo1Fields(
         if (field.kind === 'date') {
           return (
             <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{field.label}</label>
               <input
                 type="text"
                 value={currentValue}
@@ -378,7 +424,7 @@ function renderModulo1Fields(
         }
         return (
           <div key={field.name} className={field.name.includes('doc_prost') ? 'col-span-full' : undefined}>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+            <label className="text-[10px] font-semibold text-slate-500">{field.label}</label>
             <input
               type="text"
               value={currentValue}
@@ -470,25 +516,46 @@ export function AntecedentesCaptura({
             ? patch.detalle
             : current.detalle,
     }
-    const nextForm = {
+    let nextForm: AntecedentesFormSections = {
       ...form,
       patologicos: { ...form.patologicos, [field]: next },
     }
+    if (field === 'otras' && next.estado === 'SI' && nextForm.otrasEnfermedades.length === 0) {
+      const seed =
+        next.detalle?.especificacion?.trim() ||
+        form.otrasEnfermedades[0]?.trim() ||
+        ''
+      nextForm = { ...nextForm, otrasEnfermedades: [seed] }
+    }
+    if (field === 'otras' && next.estado !== 'SI') {
+      nextForm = { ...nextForm, otrasEnfermedades: [] }
+    }
     setForm(nextForm)
     markModified(`patologicos.${field}`)
-    const payload: AntecedentesCaptura = {
-      datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
-      historia_laboral: { ...nextForm.historia_laboral },
-      heredo_familiares: { ...nextForm.heredo_familiares },
-      no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
-      patologicos: { ...nextForm.patologicos },
-    } as unknown as AntecedentesCaptura
-    for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
-      const v = nextForm.historia_laboral[exp.key]
-      ;(payload.historia_laboral as Record<string, unknown>)[exp.key] =
-        v === 'true' || v === 'SI'
-    }
-    onChange(payload)
+    onChange(emitAntecedentesPayload(nextForm))
+  }
+
+  function setOtrasEnfermedades(nextList: string[]) {
+    const nextForm: AntecedentesFormSections = { ...form, otrasEnfermedades: nextList }
+    setForm(nextForm)
+    markModified('patologicos.otras_enfermedades')
+    onChange(emitAntecedentesPayload(nextForm))
+  }
+
+  function updateOtrasEnfermedadLine(index: number, text: string) {
+    const next = [...form.otrasEnfermedades]
+    while (next.length <= index) next.push('')
+    next[index] = text
+    setOtrasEnfermedades(next)
+  }
+
+  function addOtrasEnfermedadLine() {
+    setOtrasEnfermedades([...form.otrasEnfermedades, ''])
+  }
+
+  function removeOtrasEnfermedadLine(index: number) {
+    const next = form.otrasEnfermedades.filter((_, i) => i !== index)
+    setOtrasEnfermedades(next.length > 0 ? next : [''])
   }
 
   function setMentalesCampoAbierto(text: string) {
@@ -529,19 +596,7 @@ export function AntecedentesCaptura({
     // literales SI/NEGADO. Construimos el payload como `Record<string, unknown>`
     // y dejamos que la validación Zod del action (`ExamenMedicoCompletoSchema`)
     // haga el enforcement final — mismo patrón que IMPL-20260809-01 v1.
-    const payload: AntecedentesCaptura = {
-      datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
-      historia_laboral: { ...nextForm.historia_laboral },
-      heredo_familiares: { ...nextForm.heredo_familiares },
-      no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
-      patologicos: { ...nextForm.patologicos },
-    } as unknown as AntecedentesCaptura
-    for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
-      const v = nextForm.historia_laboral[exp.key]
-      ;(payload.historia_laboral as Record<string, unknown>)[exp.key] =
-        v === 'true' || v === 'SI'
-    }
-    onChange(payload)
+    onChange(emitAntecedentesPayload(nextForm))
   }
 
   const provenanceSource = initialProvenance?.source ?? 'none'
@@ -609,7 +664,7 @@ export function AntecedentesCaptura({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Datos Personales */}
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-slate-600 px-1">
             Datos Personales
           </legend>
           <div className="space-y-3 mt-2">
@@ -655,13 +710,13 @@ export function AntecedentesCaptura({
 
         {/* Historia Laboral */}
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-slate-600 px-1">
             Historia Laboral
           </legend>
           <div className="space-y-3 mt-2">
             {(['1', '2'] as const).map(n => (
               <div key={n} className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Empleo {n}</p>
+                <p className="text-[10px] font-semibold text-slate-500">Empleo {n}</p>
                 {HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS
                   .filter(([field]) => field.endsWith(`_${n}`))
                   .map(([field, label]) => (
@@ -682,7 +737,7 @@ export function AntecedentesCaptura({
               </div>
             ))}
             <div className="pt-2 border-t border-slate-100 space-y-3">
-              <p className="text-[10px] font-bold text-slate-500 uppercase">
+              <p className="text-[10px] font-semibold text-slate-500">
                 Factores de riesgo en el trabajo
               </p>
               <HistoriaLaboralFactoresRiesgoReferencia compact />
@@ -710,7 +765,7 @@ export function AntecedentesCaptura({
                   )}
                 </div>
               ))}
-              <p className="text-[10px] font-bold text-slate-500 uppercase pt-2 border-t border-slate-100">
+              <p className="text-[10px] font-semibold text-slate-500 pt-2 border-t border-slate-100">
                 Accidente laboral y enfermedad profesional
               </p>
               {HISTORIA_LABORAL_RIESGOS_TRABAJO.map(exp => (
@@ -743,7 +798,7 @@ export function AntecedentesCaptura({
 
         {/* Heredo-Familiares */}
         <fieldset className="border border-violet-100 rounded-xl p-3 bg-violet-50/30">
-          <legend className="text-xs font-bold text-violet-900 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-violet-900 px-1">
             {ANTECEDENTES_SECTION_LEGEND.heredo_familiares}
           </legend>
           <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
@@ -786,7 +841,7 @@ export function AntecedentesCaptura({
 
       {/* ── Fila 2: No Patológicos ──────────────────────────────────────── */}
       <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-        <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+        <legend className="text-xs font-bold text-slate-600 px-1">
           {ANTECEDENTES_SECTION_LEGEND.no_patologicos}
         </legend>
         <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
@@ -837,7 +892,7 @@ export function AntecedentesCaptura({
         {/* Alimentación / Suplementos / Grupo RH / Tatuajes */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100">
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Alimentación</label>
+            <label className="block text-[10px] font-semibold text-slate-500 mb-1">Alimentación</label>
             <select
               value={form.no_patologicos.alimentacion ?? 'BUENA'}
               onChange={e => setField('no_patologicos', 'alimentacion', e.target.value)}
@@ -848,7 +903,7 @@ export function AntecedentesCaptura({
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+            <label className="block text-[10px] font-semibold text-slate-500 mb-1">
               {SUPLEMENTOS_COMPLEMENTOS_LABEL}
             </label>
             <p className="text-[9px] text-slate-400 mb-1">{SUPLEMENTOS_COMPLEMENTOS_HELP}</p>
@@ -866,7 +921,7 @@ export function AntecedentesCaptura({
             </div>
             {form.no_patologicos.tratamiento_medico_actual === 'SI' && (
               <div className="mt-2">
-                <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
                   Especifique
                 </label>
                 <input
@@ -882,7 +937,7 @@ export function AntecedentesCaptura({
             )}
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Grupo y RH</label>
+            <label className="block text-[10px] font-semibold text-slate-500 mb-1">Grupo y RH</label>
             <select
               value={form.no_patologicos.grupo_y_rh ?? ''}
               onChange={e => setField('no_patologicos', 'grupo_y_rh', e.target.value)}
@@ -896,7 +951,7 @@ export function AntecedentesCaptura({
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tatuajes</label>
+            <label className="block text-[10px] font-semibold text-slate-500 mb-1">Tatuajes</label>
             <p className="text-[9px] text-slate-400 mb-1">Indique si tiene tatuajes visibles. Algunos puestos lo requieren declarar.</p>
             <div className="flex gap-1">
               {SI_NEGADO.map(opt => (
@@ -912,7 +967,7 @@ export function AntecedentesCaptura({
             </div>
             {form.no_patologicos.tatuajes === 'SI' && (
               <div className="mt-2">
-                <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
                   Ubicación
                 </label>
                 <input
@@ -932,7 +987,7 @@ export function AntecedentesCaptura({
 
       {/* ── Fila 3: Patológicos ─────────────────────────────────────────── */}
       <fieldset className="border border-amber-100 rounded-xl p-3 bg-amber-50/30">
-        <legend className="text-xs font-bold text-amber-900 uppercase tracking-wider px-1">
+        <legend className="text-xs font-bold text-amber-900 px-1">
           {ANTECEDENTES_SECTION_LEGEND.patologicos}
         </legend>
         <p className="text-[10px] text-slate-600 mt-1 mb-3 leading-snug">
@@ -941,7 +996,7 @@ export function AntecedentesCaptura({
         </p>
         {PATOLOGICOS_GROUP_ORDER.map(group => (
           <div key={group} className="mb-4 last:mb-0">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+            <p className="text-[10px] font-semibold text-slate-500 mb-2">
               {PATOLOGICOS_GROUP_TITLES[group]}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -952,7 +1007,7 @@ export function AntecedentesCaptura({
                 const especSiempre = patologiaEspecificacionSiempreVisible(item.field)
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
-                    <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
+                    <label className="block text-[10px] font-semibold text-slate-600">{item.label}</label>
                     <p className="text-[9px] text-slate-400 mb-1">{item.help}</p>
                     <select
                       value={entry.estado}
@@ -991,7 +1046,48 @@ export function AntecedentesCaptura({
                     )}
                     {entry.estado === 'SI' && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
-                        {needsEspecificacion && !especSiempre && (
+                        {needsEspecificacion && item.field === 'otras' ? (
+                          <div className="space-y-2">
+                            <p className="text-[9px] text-slate-500">
+                              Indique cada enfermedad u otra condición no listada arriba.
+                            </p>
+                            {(form.otrasEnfermedades.length > 0
+                              ? form.otrasEnfermedades
+                              : ['']
+                            ).map((line, idx) => (
+                              <div key={idx} className="flex gap-1 items-center">
+                                <ClinicalFreeTextInput
+                                  type="text"
+                                  value={line}
+                                  onChange={text => updateOtrasEnfermedadLine(idx, text)}
+                                  disabled={readonly}
+                                  placeholder={patologiaEspecificacionPlaceholder('otras')}
+                                  maxLength={500}
+                                  className="flex-1 text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                                />
+                                {!readonly && form.otrasEnfermedades.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeOtrasEnfermedadLine(idx)}
+                                    className="text-[10px] text-rose-600 font-bold px-1 shrink-0"
+                                    aria-label="Quitar enfermedad"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            {!readonly && (
+                              <button
+                                type="button"
+                                onClick={addOtrasEnfermedadLine}
+                                className="text-[10px] font-bold text-teal-700"
+                              >
+                                + Agregar otra enfermedad
+                              </button>
+                            )}
+                          </div>
+                        ) : needsEspecificacion && !especSiempre ? (
                           <ClinicalFreeTextInput
                             type="text"
                             value={detalle.especificacion ?? ''}
@@ -1003,7 +1099,7 @@ export function AntecedentesCaptura({
                             maxLength={500}
                             className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                           />
-                        )}
+                        ) : null}
                         <ClinicalFreeTextInput
                           type="text"
                           value={detalle.desde_cuando}
@@ -1049,11 +1145,11 @@ export function AntecedentesCaptura({
 
       {/* ── Sexo, gineco/repro e inmunizaciones (antes “Módulo 1”) ─────── */}
       <fieldset className="border border-teal-200 rounded-xl p-3 bg-teal-50/30">
-        <legend className="text-xs font-bold text-teal-800 uppercase tracking-wider px-1">
+        <legend className="text-xs font-semibold text-teal-800 px-1">
           Sexo, antecedentes ginecológicos/reproductivos e inmunizaciones
         </legend>
       <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4 mt-2">
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Sexo</span>
+        <span className="text-xs font-bold text-slate-500 shrink-0">Sexo</span>
         <div className="flex gap-2">
           {M1_SEX_OPTIONS.map(opt => (
             <button
@@ -1075,7 +1171,7 @@ export function AntecedentesCaptura({
 
       {modulo1.m1_sexo === 'Femenino' && (
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-slate-600 px-1">
             Antecedentes ginecológicos
           </legend>
           <div className="mt-2">
@@ -1086,7 +1182,7 @@ export function AntecedentesCaptura({
 
       {modulo1.m1_sexo === 'Masculino' && (
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-slate-600 px-1">
             Antecedentes reproductivos — salud prostática
           </legend>
           <div className="mt-2">
@@ -1096,7 +1192,7 @@ export function AntecedentesCaptura({
       )}
 
       <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-        <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+        <legend className="text-xs font-bold text-slate-600 px-1">
           Inmunizaciones
         </legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
@@ -1108,7 +1204,7 @@ export function AntecedentesCaptura({
             const especifique = modulo1[especifiqueKey] ?? ''
             return (
               <div key={key} className="border border-slate-100 rounded-lg p-2">
-                <label className="block text-[10px] font-bold text-slate-600 uppercase">{label}</label>
+                <label className="block text-[10px] font-semibold text-slate-600">{label}</label>
                 <select
                   value={estado}
                   onChange={e => setM1Field(key, e.target.value)}
@@ -1135,7 +1231,7 @@ export function AntecedentesCaptura({
           })}
         </div>
         <div className="mt-3">
-          <label className="text-[10px] font-bold text-slate-400 uppercase">Próxima dosis / esquema completo</label>
+          <label className="text-[10px] font-semibold text-slate-500">Próxima dosis / esquema completo</label>
           <input
             type="text"
             value={modulo1.m1_vac_proxima_dosis ?? ''}
@@ -1150,7 +1246,7 @@ export function AntecedentesCaptura({
       {onAntecedentesMedicoChange && (
         <div className="bg-white border border-slate-200 rounded-xl p-3">
           <label className="block">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500">
               Nota del médico — resumen de antecedentes
             </span>
             <textarea
@@ -1212,7 +1308,7 @@ function FieldRow({
   return (
     <div>
       <label className="flex items-center justify-between mb-0.5">
-        <span className="block text-[10px] font-bold text-slate-500 uppercase">{label}</span>
+        <span className="block text-[10px] font-semibold text-slate-500">{label}</span>
         {modified && (
           <span className="text-[9px] text-amber-700 font-bold" title="Editado en esta consulta">
             ✏️ modificado

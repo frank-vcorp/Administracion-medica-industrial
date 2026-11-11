@@ -96,8 +96,11 @@ function buildFormData(
   }> = {},
 ): FormData {
   const fd = new FormData()
-  fd.set('eventTestId', overrides.eventTestId ?? 'et-disabled-1')
-  fd.set('eventId', overrides.eventId ?? 'ev-1')
+  fd.set(
+    'eventTestId',
+    overrides.eventTestId ?? '00000000-0000-4000-8000-000000000001',
+  )
+  fd.set('eventId', overrides.eventId ?? '00000000-0000-4000-8000-000000000002')
   fd.set('triggeredByUserId', overrides.triggeredByUserId ?? 'user-1')
   const file = new File(
     ['dummy'],

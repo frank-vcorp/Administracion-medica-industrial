@@ -36,7 +36,7 @@ export function StudyStepChips({
 
   if (visible === 'E') {
     return (
-      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-600">
+      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">
         E · No realizado
       </span>
     )
@@ -44,7 +44,7 @@ export function StudyStepChips({
 
   if (visible === 'INVALID') {
     return (
-      <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-red-700">
+      <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-700">
         Incidencia requerida
       </span>
     )

@@ -1,13 +1,15 @@
 import { z } from 'zod'
 import { applySentenceCase } from '@/lib/text/sentence-case'
 
-const cleanString = z.string().trim().optional().nullable()
 const freeTextString = z
   .string()
   .trim()
   .transform(applySentenceCase)
   .optional()
   .nullable()
+
+/** Campos de extensión SME/Sodexo/Flowserve (texto libre o numérico sin CIE). */
+const cleanString = freeTextString
 
 export const INTERROGATORIO_SISTEMAS = [
   'cardiovascular',

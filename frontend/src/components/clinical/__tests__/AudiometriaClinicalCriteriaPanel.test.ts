@@ -30,6 +30,7 @@ import {
   calcularPTA3,
   calcularIndiceFletcher,
   resolveAudiometriaCriteria,
+  resolverCriterioAmiCombinado,
   hasRenderableAudiometriaCriteria,
   AMI_NORMALIDAD_DB,
   FRECUENCIAS_GRAVES_HZ,
@@ -95,15 +96,43 @@ describe('resolveAudiometriaCriteria (helper puro)', () => {
     expect(r.advertencias.some((a) => a.includes('4 frecuencias'))).toBe(true)
   })
 
-  it('AC-5: criterio AMI = NORMAL cuando PTA ≤ 25 dB', () => {
+  it('AC-5: criterio AMI = NORMAL cuando PTA ≤ 25 dB y patrón sin compromiso', () => {
     const data = {
-      oido_derecho: { va: { 500: 20, 1000: 25, 2000: 30 } }, // promedio = 25
-      oido_izquierdo: { va: { 500: 20, 1000: 25, 2000: 30 } },
+      oido_derecho: { va: { 500: 20, 1000: 20, 2000: 20, 3000: 15 } },
+      oido_izquierdo: { va: { 500: 20, 1000: 20, 2000: 20, 3000: 15 } },
     }
     const r = resolveAudiometriaCriteria(data)
     const od = r.oidos.find((o) => o.oido === 'OD')
     expect(od?.criterioAmi).toBe('NORMAL')
     expect(AMI_NORMALIDAD_DB).toBe(25)
+  })
+
+  it('DEC-20260825-03: PTA3 ≤25 con patrón agudas alterado → criterio ALTERADO (FND-20260825-09)', () => {
+    const data = {
+      oido_derecho: {
+        va: { 250: 5, 500: 5, 1000: 5, 2000: 20, 3000: 35 },
+        pta_visible: 14,
+      },
+      oido_izquierdo: {
+        va: { 500: 20, 1000: 10, 2000: 25, 3000: 30 },
+        pta_visible: 21,
+      },
+    }
+    const r = resolveAudiometriaCriteria(data)
+    expect(r.oidos.find((o) => o.oido === 'OD')?.ptaCalculado).toBe(10)
+    expect(r.oidos.find((o) => o.oido === 'OD')?.criterioAmi).toBe('ALTERADO')
+    expect(r.oidos.find((o) => o.oido === 'OD')?.patronAmi).toBe('AGUDAS')
+    expect(r.oidos.find((o) => o.oido === 'OI')?.criterioAmi).toBe('ALTERADO')
+  })
+
+  it('resolverCriterioAmiCombinado: no NORMAL si patrón patológico aunque PTA3 ≤25', () => {
+    expect(
+      resolverCriterioAmiCombinado(
+        { promedio: 10, completo: true },
+        'AGUDAS',
+        [5, 5, 20, 35],
+      ),
+    ).toBe('ALTERADO')
   })
 
   it('AC-5: criterio AMI = ALTERADO cuando PTA > 25 dB', () => {
@@ -125,7 +154,8 @@ describe('resolveAudiometriaCriteria (helper puro)', () => {
     const r = resolveAudiometriaCriteria(data)
     const od = r.oidos.find((o) => o.oido === 'OD')
     expect(od?.patronAmi).toBe('NO_CONCLUYENTE')
-    expect(od?.criterioAmi).toBe('NO_CONCLUYENTE')
+    // Umbrales >25 sin patrón bilateral concluyente → ALTERADO (no enmascarar pérdida)
+    expect(od?.criterioAmi).toBe('ALTERADO')
   })
 
   it('AC-2: `pta_fuente` se conserva por separado del calculado', () => {
@@ -249,11 +279,9 @@ describe('FND-20260825-12: constantes de referencia AMI', () => {
   })
 
   it('Las constantes de referencia no alteran la derivación (separación FND-20260825-12)', () => {
-    // Mismo payload con PTA ≤ 25 → derivado NORMAL y NO_APLICA en severidad.
-    // La referencia NO convierte el resultado en impresión diagnóstica.
     const data = {
-      oido_derecho: { va: { 500: 20, 1000: 25, 2000: 30 } }, // PTA 25
-      oido_izquierdo: { va: { 500: 20, 1000: 25, 2000: 30 } },
+      oido_derecho: { va: { 500: 20, 1000: 20, 2000: 20, 3000: 15 } },
+      oido_izquierdo: { va: { 500: 20, 1000: 20, 2000: 20, 3000: 15 } },
     }
     const r = resolveAudiometriaCriteria(data)
     expect(r.oidos.find(o => o.oido === 'OD')?.criterioAmi).toBe('NORMAL')

@@ -480,7 +480,11 @@ notas de calidad y gráficas.
                 if pta_coerced is not None and not normalized_ear_flat:
                     result[ear_key] = {"va": {}, "pta": pta_coerced, "pta_visible": pta_coerced}
                 else:
-                    result[ear_key] = normalized_ear_flat
+                    nested_flat: Dict[str, Any] = {"va": normalized_ear_flat}
+                    if pta_coerced is not None:
+                        nested_flat["pta"] = pta_coerced
+                        nested_flat["pta_visible"] = pta_coerced
+                    result[ear_key] = nested_flat
                 ear_freq_maps[ear_key] = normalized_ear_flat
 
         # 2. Derivar frecuencias_detectadas si null o si contiene nulos/no-canónicos

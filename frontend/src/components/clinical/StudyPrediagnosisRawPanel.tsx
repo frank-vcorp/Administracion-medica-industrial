@@ -52,7 +52,7 @@ export default function StudyPrediagnosisRawPanel({ inputDebug }: StudyPrediagno
         <summary className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer select-none text-slate-200 hover:bg-slate-800 transition-colors list-none">
           <div className="flex items-center gap-2">
             <span className="text-slate-400 text-sm">🔬</span>
-            <span className="text-xs font-bold font-mono uppercase tracking-wider">
+            <span className="text-xs font-bold font-mono">
               Raw de entrada clínica
             </span>
             <span className="text-[10px] font-mono text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">
@@ -102,7 +102,7 @@ export default function StudyPrediagnosisRawPanel({ inputDebug }: StudyPrediagno
       <summary className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer select-none text-slate-200 hover:bg-slate-800 transition-colors list-none">
         <div className="flex items-center gap-2">
           <span className="text-slate-400 text-sm">🔬</span>
-          <span className="text-xs font-bold font-mono uppercase tracking-wider">
+          <span className="text-xs font-bold font-mono">
             Raw de entrada clínica
           </span>
           {inputDebug.clinical_provider && (
@@ -122,7 +122,7 @@ export default function StudyPrediagnosisRawPanel({ inputDebug }: StudyPrediagno
         {/* ── extracted_data ── */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <p className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-wider">
+            <p className="text-[10px] font-bold font-mono text-slate-500">
               extracted_data
             </p>
             <button
@@ -141,7 +141,7 @@ export default function StudyPrediagnosisRawPanel({ inputDebug }: StudyPrediagno
         {calibrationJson && (
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-wider">
+              <p className="text-[10px] font-bold font-mono text-slate-500">
                 medical_calibration
               </p>
               <button
@@ -163,7 +163,7 @@ export default function StudyPrediagnosisRawPanel({ inputDebug }: StudyPrediagno
             <button
               type="button"
               onClick={() => setShowPrompt((v) => !v)}
-              className="flex items-center gap-1.5 text-[10px] font-bold font-mono text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors mb-1"
+              className="flex items-center gap-1.5 text-[10px] font-bold font-mono text-slate-500 hover:text-slate-300 transition-colors mb-1"
             >
               <span className={`inline-block transition-transform ${showPrompt ? 'rotate-90' : ''}`}>▶</span>
               <span>rendered_prompt</span>

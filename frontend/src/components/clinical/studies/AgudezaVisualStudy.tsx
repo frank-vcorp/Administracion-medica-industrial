@@ -13,8 +13,21 @@ import { updateAgudezaVisual } from "@/actions/medical-exam.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
 import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
 import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCallout"
+import {
+  StudyCaptureFieldLabel,
+  StudyCaptureMissingBanner,
+  studyCaptureInputClass,
+} from "@/components/clinical/studies/StudyCaptureUi"
+import { useStudyLeaveGuard } from "@/components/clinical/studies/useStudyLeaveGuard"
+import type { StudyLeaveGuardFn } from "@/components/clinical/studies/useStudyLeaveGuard"
 import { useClinicalIntervalAutosave } from "@/lib/hooks/useClinicalIntervalAutosave"
 import { mapMedicalExamActionFailure, parseMedicalExamZodIssues } from "@/lib/medical-exam-action-errors"
+import {
+  formatStudyMissingFieldsSpanish,
+  isStudyRequiredField,
+  studyValidationToFieldErrors,
+  validateStudyCaptureForComplete,
+} from "@/lib/clinical/study-required-fields"
 import { splitUserFacingMessageLines, type UserFacingError } from "@/lib/user-facing-error"
 // IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): se adopta el catálogo ZIN
 // para los 8 campos de visión (Snellen) + 3 pruebas complementarias.
@@ -49,6 +62,7 @@ interface AgudezaVisualStudyProps {
   initialData?: Record<string, unknown> | null
   readonly?: boolean
   onStatusChange?: (status: string) => void
+  registerLeaveGuard?: (fn: StudyLeaveGuardFn | null) => void
 }
 
 export default function AgudezaVisualStudy({
@@ -57,6 +71,7 @@ export default function AgudezaVisualStudy({
   initialData = null,
   readonly = false,
   onStatusChange,
+  registerLeaveGuard,
 }: AgudezaVisualStudyProps) {
   const [formData, setFormData] = useState<Record<string, string>>(() => {
     const base: Record<string, string> = {
@@ -77,6 +92,8 @@ export default function AgudezaVisualStudy({
   const [message, setMessage] = useState("")
   const [aiWarning, setAiWarning] = useState("")
   const [saveError, setSaveError] = useState<UserFacingError | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
+  const [completeBanner, setCompleteBanner] = useState("")
 
   const derivedResumen = useMemo(
     () =>
@@ -89,7 +106,21 @@ export default function AgudezaVisualStudy({
 
   const handleChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }))
+    setFieldErrors(prev => {
+      if (!prev[name]) return prev
+      const next = { ...prev }
+      delete next[name]
+      return next
+    })
+    setCompleteBanner("")
   }
+
+  const evaluateComplete = useCallback(
+    () => validateStudyCaptureForComplete('AgudezaVisual', formData),
+    [formData],
+  )
+
+  useStudyLeaveGuard(registerLeaveGuard, evaluateComplete, !readonly)
 
   const snapshotKey = useMemo(() => JSON.stringify(formData), [formData])
 
@@ -112,22 +143,44 @@ export default function AgudezaVisualStudy({
     save: persistDraft,
   })
 
+  const err = (field: string) => fieldErrors[field]?.[0]
+
   const handleSave = async (markComplete: boolean) => {
     setIsSaving(true)
     setMessage("")
     setAiWarning("")
     setSaveError(null)
+    setCompleteBanner("")
+
+    if (markComplete) {
+      const gate = evaluateComplete()
+      if (!gate.ok) {
+        setFieldErrors(studyValidationToFieldErrors(gate))
+        setCompleteBanner(formatStudyMissingFieldsSpanish(gate.missing))
+        setMessage("❌ No se puede completar el estudio.")
+        setIsSaving(false)
+        return
+      }
+    }
+
     const res = await updateAgudezaVisual(eventId, formData)
     if (res.success) {
       markSaved()
-      const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
-      await updateEventTestStatus(
-        eventTestId,
-        newStatus as Parameters<typeof updateEventTestStatus>[1],
-        eventId
-      )
-      onStatusChange?.(newStatus)
-      setMessage(markComplete ? "🏁 Agudeza Visual completada." : "✅ Datos guardados.")
+      if (markComplete) {
+        const statusRes = await updateEventTestStatus(eventTestId, 'COMPLETED', eventId)
+        if (!statusRes.success) {
+          setCompleteBanner(statusRes.error ?? 'No se pudo cerrar el estudio.')
+          setMessage("❌ No se pudo completar.")
+          setIsSaving(false)
+          return
+        }
+        onStatusChange?.('COMPLETED')
+        setMessage("🏁 Agudeza Visual completada.")
+      } else {
+        await updateEventTestStatus(eventTestId, 'RESULT_REGISTERED', eventId)
+        onStatusChange?.('RESULT_REGISTERED')
+        setMessage("✅ Datos guardados.")
+      }
       if (res.aiWarning) {
         setAiWarning(`La captura clínica se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`)
       }
@@ -153,28 +206,38 @@ export default function AgudezaVisualStudy({
         <ClinicalAutosaveIndicator label={autosaveLabel} error={autosaveError} />
       )}
       {saveError && <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />}
+      <StudyCaptureMissingBanner message={completeBanner} />
+      <p className="text-[11px] text-slate-500">
+        Los campos con <span className="text-red-500">*</span> son obligatorios para completar la prueba.
+      </p>
       {/* Campo Visual */}
       <div>
-        <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Campo Visual</h4>
+        <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Campo Visual</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {VISUAL_FIELDS.map(f => (
             <div key={f.name}>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{f.label}</label>
+              <StudyCaptureFieldLabel required={isStudyRequiredField('AgudezaVisual', f.name)}>
+                {f.label}
+              </StudyCaptureFieldLabel>
               <select
                 value={formData[f.name] || NO_APLICA}
                 onChange={e => handleChange(f.name, e.target.value)}
                 disabled={readonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:opacity-60"
+                className={studyCaptureInputClass(
+                  Boolean(err(f.name)),
+                  'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:opacity-60',
+                )}
               >
                 {visionFieldSelectOptions(f.name, formData[f.name]).map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
+              {err(f.name) && <p className="text-[10px] text-red-600 mt-1">{err(f.name)}</p>}
             </div>
           ))}
         </div>
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500">
+          <p className="text-[10px] font-bold text-blue-500">
             Clasificación agudeza visual (automática)
           </p>
           <p className="mt-1 text-sm font-semibold text-blue-900">
@@ -185,10 +248,10 @@ export default function AgudezaVisualStudy({
 
       {/* Pruebas Complementarias */}
       <div>
-        <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Pruebas Complementarias</h4>
+        <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Pruebas Complementarias</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Campimetría</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Campimetría</label>
             <select
               value={formData.campimetria || CAMPIMETRIA_VALUES[0]}
               onChange={e => handleChange('campimetria', e.target.value)}
@@ -201,7 +264,7 @@ export default function AgudezaVisualStudy({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Test Ishihara</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Test Ishihara</label>
             <select
               value={formData.test_ishihara || TEST_ISHIHARA_VALUES[0]}
               onChange={e => handleChange('test_ishihara', e.target.value)}
@@ -214,7 +277,7 @@ export default function AgudezaVisualStudy({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Reflejos</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Reflejos</label>
             <select
               value={formData.reflejos || REFLEJOS_VALUES[0]}
               onChange={e => handleChange('reflejos', e.target.value)}
@@ -242,6 +305,7 @@ export default function AgudezaVisualStudy({
         {!readonly && (
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => handleSave(false)}
               disabled={isSaving}
               className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-5 rounded-xl transition-all disabled:opacity-50 text-sm"
@@ -249,6 +313,7 @@ export default function AgudezaVisualStudy({
               {isSaving ? "Guardando..." : "Guardar borrador"}
             </button>
             <button
+              type="button"
               onClick={() => handleSave(true)}
               disabled={isSaving}
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition-all disabled:opacity-50 text-sm"

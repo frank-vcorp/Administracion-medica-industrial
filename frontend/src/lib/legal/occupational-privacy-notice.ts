@@ -1,4 +1,6 @@
-/** Aviso de privacidad salud ocupacional (FY27) — mismo PDF que Sodexo REG-SO-01. */
-export const OCCUPATIONAL_PRIVACY_PDF_URL = '/legal/aviso-privacidad-salud-ocupacional-fy27.pdf'
+import { SODEXO_OCCUPATIONAL_PRIVACY_PDF } from '@/lib/legal/check-in-privacy-notice'
 
-export const OCCUPATIONAL_PRIVACY_PDF_FILENAME = 'aviso-privacidad-salud-ocupacional-fy27.pdf'
+/** Aviso de privacidad salud ocupacional (FY27) — exclusivo variante Sodexo / REG-SO-01. */
+export const OCCUPATIONAL_PRIVACY_PDF_URL = SODEXO_OCCUPATIONAL_PRIVACY_PDF.url
+
+export const OCCUPATIONAL_PRIVACY_PDF_FILENAME = SODEXO_OCCUPATIONAL_PRIVACY_PDF.filename

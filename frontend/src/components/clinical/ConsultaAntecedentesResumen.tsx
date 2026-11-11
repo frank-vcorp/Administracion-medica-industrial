@@ -32,7 +32,7 @@ export function ConsultaAntecedentesResumen({
       <ol className="space-y-3 list-none">
         {CONSULTA_ANTECEDENTES_RUBROS.map(({ key, label, hint }, idx) => (
           <li key={key}>
-            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wide">
+            <label className="block text-[10px] font-semibold text-slate-600 tracking-wide">
               {idx + 1}. {label}
             </label>
             <p className="text-[10px] text-slate-500 mb-0.5">{hint}</p>
