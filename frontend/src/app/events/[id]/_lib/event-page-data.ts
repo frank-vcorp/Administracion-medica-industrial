@@ -319,6 +319,7 @@ export async function fetchEventPageData(input: {
     profile: appointmentWithProfile?.serviceProfile?.name || '',
     ageYears,
     eventDate: eventDateLabel,
+    eventAtIso: eventDateRaw.toISOString(),
     workArea: occupational.workArea,
     tenureLabel: occupational.tenureLabel,
     occupationalLine: formatOccupationalIdentificationLine(occupational),

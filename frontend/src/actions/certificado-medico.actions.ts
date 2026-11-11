@@ -10,6 +10,7 @@ import { validateCertificadoMedicoPayload } from '@/lib/clinical/certificado-med
 import type { CertificadoMedicoPayload } from '@/schemas/clinical/certificado-medico.schema'
 import { isCertificadoMedicoTestName, parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
 import { denyIfClosedCaptureUnauthorized } from '@/lib/clinical/papeleta-readonly'
+import { resolveCertificadoMedicoMetadata } from '@/lib/clinical/certificado-medico-metadata'
 
 const CLINICAL_ROLES = new Set([
   'SUPERADMIN',
@@ -47,6 +48,8 @@ export async function saveCertificadoMedico(
   const access = await assertClinicalAccess()
   if (!access.ok) return { success: false, error: access.error }
 
+  const session = await getServerSession(authOptions)
+
   const eventTest = await prisma.eventTest.findUnique({
     where: { id: eventTestId },
     select: {
@@ -54,7 +57,19 @@ export async function saveCertificadoMedico(
       eventId: true,
       testNameSnapshot: true,
       clinicalContext: true,
-      event: { select: { workerId: true } },
+      event: {
+        select: {
+          workerId: true,
+          checkInDate: true,
+          createdAt: true,
+          worker: {
+            select: {
+              nationalId: true,
+              clinicalHistory: { select: { data: true } },
+            },
+          },
+        },
+      },
     },
   })
   if (!eventTest) {
@@ -89,7 +104,37 @@ export async function saveCertificadoMedico(
       fieldErrors: validation.fieldErrors,
     }
   }
-  const payload = validation.payload
+  let payload = validation.payload
+
+  let doctorFullName: string | null = null
+  let doctorLicense: string | null = null
+  if (session?.user?.id) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { fullName: true, professionalLicense: true },
+    })
+    doctorFullName = user?.fullName ?? null
+    doctorLicense = user?.professionalLicense ?? null
+  }
+
+  const longitudinalData =
+    eventTest.event.worker.clinicalHistory?.data &&
+    typeof eventTest.event.worker.clinicalHistory.data === 'object' &&
+    !Array.isArray(eventTest.event.worker.clinicalHistory.data)
+      ? (eventTest.event.worker.clinicalHistory.data as Record<string, unknown>)
+      : null
+
+  const eventAt = eventTest.event.checkInDate ?? eventTest.event.createdAt
+  const metadata = resolveCertificadoMedicoMetadata({
+    parsed: payload,
+    workerNationalId: eventTest.event.worker.nationalId,
+    longitudinalData,
+    doctorFullName,
+    doctorLicense,
+    sessionUserName: session?.user?.name ?? null,
+    eventAt,
+  })
+  payload = { ...payload, ...metadata }
 
   const antecedentesPayload = payload.antecedentes
   const hasAntecedentes =
