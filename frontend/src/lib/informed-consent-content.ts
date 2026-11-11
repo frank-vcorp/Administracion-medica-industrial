@@ -3,6 +3,11 @@
  * Fuente: public/templates/consentimiento-informado.pdf
  */
 
+import {
+  getCheckInPrivacyNoticeConfig,
+  type CheckInPrivacyNoticeKey,
+} from '@/lib/legal/check-in-privacy-notice'
+
 export function formatInformedConsentDate(date: Date): string {
   return date.toLocaleDateString('es-MX', {
     year: 'numeric',
@@ -18,8 +23,7 @@ export const INFORMED_CONSENT_BODY_INTRO =
 
 export const INFORMED_CONSENT_PRIVACY_TITLE = 'Aviso de privacidad'
 
-export const INFORMED_CONSENT_PRIVACY_PARAGRAPHS = [
-  'Soluciones Médico Empresariales S de RL de CV. con fundamento en los artículos 15 y 16 de la Ley Federal de protección de datos personales en posesión de particulares se compromete a asegurar la confidencialidad/privacidad de la información personal obtenida al realizar las pruebas médicas que ha solicitado.',
+const INFORMED_CONSENT_PRIVACY_BODY_SHARED = [
   'Su información personal será utilizada para las siguientes finalidades: proveer la información que nuestro cliente solicita respecto a su Expediente Clínico, informarle sobre cambios en los mismos y evaluar la calidad del servicio que le brindamos y en general, para dar cumplimiento a las obligaciones que hemos contraído con nuestros clientes.',
   'Para las finalidades antes mencionadas requerimos obtener los siguientes datos personales:',
 ] as const
@@ -37,3 +41,18 @@ export const INFORMED_CONSENT_PRIVACY_FOOTER =
   'Es importante informarle que usted tiene derecho al acceso, rectificación y cancelación de sus datos personales, a oponerse al tratamiento de los mismos o a revocar el consentimiento que para dicho fin nos haya otorgado. Para ello es necesario que envíe la solicitud en los términos que marca la Ley en su artículo 29 vía correo electrónico a: calidad@medicaindustrial.com o bien que se comunique al teléfono (442) 480 05 48. Ext. 105.'
 
 export const INFORMED_CONSENT_FORMAT_CODE = 'Formato autorizado 005-18'
+
+function privacyIntroParagraph(legalName: string): string {
+  return `${legalName} con fundamento en los artículos 15 y 16 de la Ley Federal de protección de datos personales en posesión de particulares se compromete a asegurar la confidencialidad/privacidad de la información personal obtenida al realizar las pruebas médicas que ha solicitado.`
+}
+
+/** Párrafos del aviso corto en check-in, según responsable (SME / Sodexo / Realso). */
+export function getInformedConsentPrivacyParagraphs(
+  noticeKey: CheckInPrivacyNoticeKey = 'SME',
+): readonly string[] {
+  const { legalName } = getCheckInPrivacyNoticeConfig(noticeKey)
+  return [privacyIntroParagraph(legalName), ...INFORMED_CONSENT_PRIVACY_BODY_SHARED]
+}
+
+/** @deprecated Usar getInformedConsentPrivacyParagraphs('SME') */
+export const INFORMED_CONSENT_PRIVACY_PARAGRAPHS = getInformedConsentPrivacyParagraphs('SME')
