@@ -1,8 +1,16 @@
 /**
  * Cierre de captura del Examen Médico (formulario multi-fase) vs checkout en recepción.
  */
-import { isExamenMedicoTestName } from '@/lib/clinical/examen-medico-variant'
-import { validateSodexoExtensionForClinicalClose } from '@/lib/sodexo-extension-validation'
+import {
+  isExamenMedicoTestName,
+  resolveExamenMedicoVariant,
+} from '@/lib/clinical/examen-medico-variant'
+import {
+  formatStudyMissingFieldsSpanish,
+  validateExamenMedicoForClinicalClose,
+  type ExamenMedicoValidationInput,
+} from '@/lib/clinical/examen-medico-required-fields'
+import { emptyFlowserveExtension } from '@/schemas/clinical/examen-medico-variant.schema'
 
 export const EXAMEN_CAPTURE_CLOSED_KEY = 'examen_capture_closed'
 
@@ -42,44 +50,79 @@ export function isExamenMedicoCaptureClosed(
   return physicalExamData?.[EXAMEN_CAPTURE_CLOSED_KEY] === true
 }
 
+function primitiveFormFromPhysical(data: Record<string, unknown>): Record<string, string> {
+  const isPrimitive = (v: unknown) =>
+    v === null || v === undefined || typeof v === 'string' ||
+    typeof v === 'number' || typeof v === 'boolean'
+  return Object.fromEntries(
+    Object.entries(data)
+      .filter(([, v]) => isPrimitive(v))
+      .map(([k, v]) => [k, String(v ?? '')]),
+  )
+}
+
+function buildCloseValidationInput(input: {
+  somatometryData?: Record<string, unknown> | null
+  eyeAcuityData?: Record<string, unknown> | null
+  physicalExamData: Record<string, unknown>
+}): ExamenMedicoValidationInput {
+  const soma = input.somatometryData ?? {}
+  const somaStrings = Object.fromEntries(
+    Object.entries(soma).map(([k, v]) => [k, String(v ?? '')]),
+  )
+  const eye = input.eyeAcuityData ?? {}
+  const agudezaForm = Object.fromEntries(
+    Object.entries(eye).map(([k, v]) => [k, String(v ?? '')]),
+  )
+  const physical = input.physicalExamData
+  const modulo1Raw = physical.modulo1
+  const modulo1 =
+    modulo1Raw && typeof modulo1Raw === 'object' && !Array.isArray(modulo1Raw)
+      ? Object.fromEntries(
+          Object.entries(modulo1Raw as Record<string, unknown>).map(([k, v]) => [
+            k,
+            String(v ?? ''),
+          ]),
+        )
+      : {}
+  const antecedentesCaptured =
+    physical.antecedentes_captured &&
+    typeof physical.antecedentes_captured === 'object' &&
+    !Array.isArray(physical.antecedentes_captured)
+      ? (physical.antecedentes_captured as Record<string, unknown>)
+      : {}
+  const variantExtensions =
+    (physical.variant_extensions as Record<string, unknown> | undefined) ?? {}
+  const examVariant = resolveExamenMedicoVariant(physical.exam_variant)
+  const flowserveRaw = variantExtensions.FLOWSERVE
+  const flowserveExt =
+    flowserveRaw && typeof flowserveRaw === 'object' && !Array.isArray(flowserveRaw)
+      ? ({ ...emptyFlowserveExtension(), ...flowserveRaw } as ExamenMedicoValidationInput['flowserveExt'])
+      : emptyFlowserveExtension()
+  const sodexoExt = variantExtensions.SODEXO as ExamenMedicoValidationInput['sodexoExt']
+
+  return {
+    somaForm: somaStrings,
+    vitalsForm: somaStrings,
+    agudezaForm,
+    form: primitiveFormFromPhysical(physical),
+    modulo1,
+    antecedentesCaptured,
+    examVariant,
+    flowserveExt,
+    sodexoExt,
+    recomendaciones: String(physical.recomendaciones_clinicas ?? ''),
+  }
+}
+
 export function assertExamenMedicoReadyToClose(input: {
   somatometryData?: Record<string, unknown> | null
   eyeAcuityData?: Record<string, unknown> | null
   physicalExamData: Record<string, unknown>
 }): string | null {
-  const soma = input.somatometryData ?? {}
-  if (!String(soma.peso_kg ?? '').trim() || !String(soma.talla_m ?? '').trim()) {
-    return 'Completa somatometría (peso y talla) antes de cerrar la captura.'
+  const gate = validateExamenMedicoForClinicalClose(buildCloseValidationInput(input))
+  if (!gate.ok) {
+    return formatStudyMissingFieldsSpanish(gate.missing)
   }
-  if (!String(soma.ta_sistolica ?? '').trim() && !String(soma.fc_min ?? '').trim()) {
-    return 'Completa signos vitales antes de cerrar la captura.'
-  }
-  const eye = input.eyeAcuityData ?? {}
-  if (Object.keys(eye).length === 0) {
-    return 'Completa agudeza visual antes de cerrar la captura.'
-  }
-  const impresion =
-    String(input.physicalExamData.examen_medico_texto ?? '').trim() ||
-    String(input.physicalExamData.impresion_diagnostica ?? '').trim()
-  if (!impresion) {
-    return 'Completa la impresión clínica (se puede auto-llenar desde hallazgos al guardar).'
-  }
-  const recomendaciones = String(
-    input.physicalExamData.recomendaciones_clinicas ?? '',
-  ).trim()
-  if (!recomendaciones) {
-    return 'Ingresa recomendaciones antes de cerrar la captura.'
-  }
-
-  const variant = String(input.physicalExamData.exam_variant ?? '').toUpperCase()
-  if (variant === 'SODEXO') {
-    const ext = (input.physicalExamData.variant_extensions as Record<string, unknown> | undefined)
-      ?.SODEXO
-    const sodexo = validateSodexoExtensionForClinicalClose(ext)
-    if (!sodexo.ok) {
-      return `Extensión Sodexo incompleta: ${sodexo.errors.join(' ')}`
-    }
-  }
-
   return null
 }

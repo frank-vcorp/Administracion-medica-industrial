@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { applyExploracionFisicaDefaults } from '@/schemas/clinical/exam.schema'
 import {
   filterEventTestsForCheckout,
   isExamenMedicoCaptureClosed,
@@ -25,10 +26,23 @@ describe('examen-medico-capture', () => {
     expect(
       assertExamenMedicoReadyToClose({
         somatometryData: { peso_kg: '80', talla_m: '1.75', ta_sistolica: '120' },
-        eyeAcuityData: { vision_lejana_od: '20/20' },
+        eyeAcuityData: { vision_lejana_od: '20/20', vision_lejana_oi: '20/20' },
         physicalExamData: {
           impresion_diagnostica: 'Normal',
           recomendaciones_clinicas: '1.- Control anual',
+          estado_nutricional: 'NORMAL',
+          salud_bucal: 'SIN DATOS',
+          agudeza_visual_resumen: 'NORMAL',
+          presion_arterial_resumen: 'NORMAL',
+          modulo1: { m1_sexo: 'Masculino' },
+          antecedentes_captured: {
+            datos_personales: { nombre: 'Test' },
+            historia_laboral: { puesto: 'Op' },
+            heredo_familiares: { diabetes: 'NEGADO' },
+            no_patologicos: { tabaco: 'NEGADO' },
+            patologicos: { diabetes: 'NEGADO' },
+          },
+          ...applyExploracionFisicaDefaults({}),
         },
       }),
     ).toBeNull()
@@ -38,6 +52,6 @@ describe('examen-medico-capture', () => {
         eyeAcuityData: {},
         physicalExamData: {},
       }),
-    ).toMatch(/somatometría/i)
+    ).toMatch(/Falta:/i)
   })
 })
