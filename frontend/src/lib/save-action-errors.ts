@@ -1,4 +1,5 @@
 import { ZodError } from 'zod'
+import { formatZodIssueMessage } from '@/lib/zod-user-messages'
 
 /** Falla estándar de server actions con `success: false`. */
 export type SaveActionFailure = {
@@ -22,7 +23,7 @@ export function zodErrorToFieldErrors(error: ZodError): Record<string, string[]>
   for (const issue of error.issues) {
     const key = issue.path.length > 0 ? issue.path.map(String).join('.') : '_form'
     if (!fieldErrors[key]) fieldErrors[key] = []
-    fieldErrors[key].push(issue.message)
+    fieldErrors[key].push(formatZodIssueMessage(issue))
   }
   return fieldErrors
 }

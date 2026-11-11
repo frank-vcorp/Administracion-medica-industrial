@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatCatalogEnumListDisplay,
+  formatPapeletaStudyTitle,
   getCatalogEnumDisplayLabel,
 } from '@/lib/clinical/enum-display-labels'
 
@@ -23,6 +24,13 @@ describe('getCatalogEnumDisplayLabel', () => {
 
   it('deja códigos mixtos intactos', () => {
     expect(getCatalogEnumDisplayLabel('O+')).toBe('O+')
+  })
+})
+
+describe('formatPapeletaStudyTitle', () => {
+  it('normaliza estudios de consulta y certificado en MAYÚSCULAS', () => {
+    expect(formatPapeletaStudyTitle('CONSULTA MÉDICA')).toBe('Consulta médica')
+    expect(formatPapeletaStudyTitle('CERTIFICADO MEDICO')).toBe('Certificado médico')
   })
 })
 

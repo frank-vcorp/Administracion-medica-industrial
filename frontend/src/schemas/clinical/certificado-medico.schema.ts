@@ -31,7 +31,15 @@ export const DEFAULT_DICTAMEN_LABORAL_TEXTO: Record<DictamenLaboralValue, string
 export const DEFAULT_LUGAR_EXPEDICION = 'Santiago de Querétaro, Querétaro'
 
 const freeText = (max: number, min = 0) =>
-  z.string().trim().min(min).max(max).transform(applySentenceCase)
+  z
+    .string()
+    .trim()
+    .min(min, min <= 1 ? 'Campo obligatorio.' : `Debe tener al menos ${min} caracteres.`)
+    .max(max, `Debe tener como máximo ${max} caracteres.`)
+    .transform(applySentenceCase)
+
+const draftText = (max: number) =>
+  z.string().trim().max(max).transform(applySentenceCase)
 const plainString = z.string().trim()
 const optionalString = z
   .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCase)])
@@ -77,8 +85,29 @@ export const CertificadoMedicoPayloadSchema = z.object({
 
 export type CertificadoMedicoPayload = z.infer<typeof CertificadoMedicoPayloadSchema>
 
-export const CertificadoMedicoDraftSchema = CertificadoMedicoPayloadSchema.partial().required({
-  schemaVersion: true,
+/**
+ * Borrador / autoguardado: solo exige `schemaVersion`.
+ * `.partial()` no basta: si el campo viene como "" Zod sigue aplicando `.min()` del schema final.
+ */
+export const CertificadoMedicoDraftSchema = z.object({
+  schemaVersion: z.literal(CERTIFICADO_MEDICO_SCHEMA_VERSION),
+  lugar_expedicion: draftText(200).optional(),
+  hora_atencion: optionalString,
+  sexo_atencion: optionalString,
+  domicilio_atencion: optionalString,
+  identificacion_tipo: optionalString,
+  identificacion_folio: optionalString,
+  medico_nombre: draftText(200).optional(),
+  medico_cedula: plainString.max(50).optional(),
+  medico_titulo: optionalString,
+  medico_universidad: optionalString,
+  signos_vitales: SignosVitalesCertificadoSchema.optional(),
+  exploracion_fisica: draftText(12000).optional(),
+  integracion_diagnostica: draftText(4000).optional(),
+  dictamen_laboral: z.enum(DICTAMEN_LABORAL_VALUES).optional(),
+  dictamen_laboral_texto: draftText(2000).optional(),
+  antecedentes: ClinicalHistoryDataSchema.optional(),
+  cerrada_at: z.string().datetime().optional(),
 })
 
 export function emptySignosVitalesCertificado(): z.infer<typeof SignosVitalesCertificadoSchema> {
