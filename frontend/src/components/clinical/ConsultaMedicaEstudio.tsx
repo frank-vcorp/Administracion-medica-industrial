@@ -21,6 +21,7 @@ import {
   clinicalCaptureReadonlyBannerText,
   resolveClinicalStudyReadonly,
 } from '@/lib/clinical/papeleta-readonly'
+import type { PapeletaEventTestSeed } from '@/lib/clinical/papeleta-event-tests'
 import { buildProximaCitaFields, formatProximaCitaLine } from '@/lib/clinical/consulta-seguimiento'
 import {
   formatCie10Unified,
@@ -83,6 +84,8 @@ export default function ConsultaMedicaEstudio({
   longitudinalData,
   profileAntecedentes,
   readonly = false,
+  onPapeletaEventTestsInserted,
+  onPapeletaEventTestRemoved,
 }: {
   eventId: string
   eventTestId: string
@@ -92,6 +95,8 @@ export default function ConsultaMedicaEstudio({
   /** Snapshot de antecedentes del examen de esta visita, si el perfil aplica. */
   profileAntecedentes?: Record<string, unknown> | null
   readonly?: boolean
+  onPapeletaEventTestsInserted?: (rows: PapeletaEventTestSeed[]) => void
+  onPapeletaEventTestRemoved?: (eventTestId: string) => void
 }) {
   const { data: session } = useSession()
   const parsed = parseConsultaMedicaClinicalContext(initialClinicalContext)
@@ -702,6 +707,8 @@ export default function ConsultaMedicaEstudio({
             eventId={eventId}
             consultaEventTestId={eventTestId}
             readonly={formReadonly}
+            onPapeletaEventTestsInserted={onPapeletaEventTestsInserted}
+            onPapeletaEventTestRemoved={onPapeletaEventTestRemoved}
           />
         </section>
       )}
