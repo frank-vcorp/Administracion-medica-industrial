@@ -99,8 +99,8 @@ import {
 } from "@/lib/clinical/examen-medico-variant"
 import { EXAMEN_CAPTURE_CLOSED_KEY } from "@/lib/clinical/examen-medico-capture"
 import {
-  antecedentesCapturedIsEmpty,
-  mergePortalPrefillIntoAntecedentes,
+  antecedentesSnapshotComparable,
+  mergeExamAntecedentesPrefill,
 } from '@/lib/clinical/prefill-portal-merge'
 import { loadSodexoExtensionFromStorage } from '@/lib/sodexo-extension-validation'
 import {
@@ -478,19 +478,21 @@ export default function ExamenMedicoEstudio({
   // `saveExamenMedicoPapeleta`.
   const [antecedentesCaptured, setAntecedentesCaptured] = useState<Record<string, unknown>>(() => {
     const existing = physicalExamData.antecedentes_captured
-    return existing && typeof existing === 'object' && !Array.isArray(existing)
-      ? (existing as Record<string, unknown>)
-      : {}
+    const saved =
+      existing && typeof existing === 'object' && !Array.isArray(existing)
+        ? (existing as Record<string, unknown>)
+        : {}
+    return mergeExamAntecedentesPrefill(saved, longitudinalData, prefilledData)
   })
-  const prefillPortalMerged = useRef(false)
+  const antecedentesHydratedRef = useRef(false)
+  const prefillPersistRef = useRef(false)
   useEffect(() => {
-    if (formReadonly || prefillPortalMerged.current || !prefilledData) return
-    prefillPortalMerged.current = true
-    setAntecedentesCaptured((prev) => {
-      if (!antecedentesCapturedIsEmpty(prev)) return prev
-      return mergePortalPrefillIntoAntecedentes(prev, prefilledData)
-    })
-  }, [formReadonly, prefilledData])
+    if (formReadonly || antecedentesHydratedRef.current) return
+    antecedentesHydratedRef.current = true
+    setAntecedentesCaptured((prev) =>
+      mergeExamAntecedentesPrefill(prev, longitudinalData, prefilledData),
+    )
+  }, [formReadonly, longitudinalData, prefilledData])
 
   const [flowserveExt, setFlowserveExt] = useState<FlowserveExtensionData>(() => {
     const raw = variantExtensionsStored.FLOWSERVE
@@ -1124,6 +1126,20 @@ export default function ExamenMedicoEstudio({
     sessionMedicoLine,
   ])
 
+  // SME-111: persistir prefill en BD para que consulta/certificado hereden `antecedentes_captured`.
+  useEffect(() => {
+    if (formReadonly || prefillPersistRef.current) return
+    const persisted = physicalExamData.antecedentes_captured
+    if (
+      antecedentesSnapshotComparable(antecedentesCaptured) ===
+      antecedentesSnapshotComparable(persisted)
+    ) {
+      return
+    }
+    prefillPersistRef.current = true
+    void onAutosaveExam()
+  }, [formReadonly, antecedentesCaptured, onAutosaveExam, physicalExamData.antecedentes_captured])
+
   const { statusLabel: autosaveStatusLabel, userFacingError: autosaveExamError } = useExamenMedicoAutosave({
     enabled: !formReadonly && !captureClosed,
     eventId,
@@ -1650,9 +1666,10 @@ export default function ExamenMedicoEstudio({
               value={antecedentesCaptured}
               onChange={setAntecedentesCaptured}
               initialProvenance={
-                (physicalExamData.antecedentes_captured as
-                  | { _provenance?: Record<string, unknown> }
-                  | undefined)?._provenance as
+                (antecedentesCaptured._provenance ??
+                  (physicalExamData.antecedentes_captured as
+                    | { _provenance?: Record<string, unknown> }
+                    | undefined)?._provenance) as
                   | Parameters<typeof AntecedentesCaptura>[0]['initialProvenance']
                   | undefined
               }
@@ -1662,7 +1679,7 @@ export default function ExamenMedicoEstudio({
               onModulo1Change={setModulo1}
               antecedentesMedico={form.antecedentes_medico ?? ''}
               onAntecedentesMedicoChange={v => handleField('antecedentes_medico', v)}
-              portalPrefillHint={Boolean(prefilledData)}
+              portalPrefillHint={Boolean(prefilledData || longitudinalData)}
               onContinue={() => setActiveInnerTab('exploracion')}
             />
           )}
