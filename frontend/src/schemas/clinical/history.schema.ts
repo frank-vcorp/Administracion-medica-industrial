@@ -31,6 +31,21 @@ export const DetalleTripleSchema = z.object({
 })
 export type DetalleTriple = z.infer<typeof DetalleTripleSchema>
 
+/** Varias «otras enfermedades» (texto libre). Acepta string único legacy → array. */
+export const OtrasEnfermedadesListSchema = z.preprocess(
+  (raw) => {
+    if (raw === undefined || raw === null) return []
+    if (typeof raw === 'string') {
+      const t = raw.trim()
+      return t ? [t] : []
+    }
+    if (Array.isArray(raw)) return raw
+    return []
+  },
+  z.array(z.string().trim().max(500)).default([]),
+)
+export type OtrasEnfermedadesList = z.infer<typeof OtrasEnfermedadesListSchema>
+
 /**
  * Una enfermedad patológica con estado Sí/Negado/No Aplica + detalle
  * condicional. Acepta el formato legacy (string suelto) Y el nuevo
@@ -233,6 +248,31 @@ export const PatologicosSchema = z.object({
   migrana:               PatologiaConDetalleSchema,
 
   otras:                 PatologiaConDetalleSchema,
+  /** Nombres adicionales (texto libre) cuando «Otras enfermedades» = SÍ. */
+  otras_enfermedades:    OtrasEnfermedadesListSchema,
+}).transform((data) => {
+  let list = data.otras_enfermedades ?? []
+  const otras = data.otras
+  if (list.length === 0 && otras.estado === 'SI') {
+    const esp = otras.detalle?.especificacion?.trim()
+    if (esp) list = [esp]
+  } else if (list.length > 0 && otras.estado === 'SI') {
+    const det = otras.detalle ?? {
+      desde_cuando: '',
+      tratamiento: '',
+      observaciones: '',
+      especificacion: '',
+    }
+    return {
+      ...data,
+      otras: {
+        ...otras,
+        detalle: { ...det, especificacion: list[0] },
+      },
+      otras_enfermedades: list,
+    }
+  }
+  return { ...data, otras_enfermedades: list }
 });
 
 // ----------------------------------------------------------------------
