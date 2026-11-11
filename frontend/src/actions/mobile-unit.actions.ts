@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { isAdminLike } from '@/lib/auth/roles'
+import { zFreeTextMax, zFreeTextMaxNullable } from '@/lib/text/zod-free-text'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ const STATUS_VALUES = [
 ] as const
 
 const CreateMobileUnitSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: zFreeTextMax(100).min(1),
   plate: z.string().max(20).optional().nullable(),
   vin: z.string().max(50).optional().nullable(),
   year: z.number().int().min(1900).max(2100).optional().nullable(),
@@ -33,7 +34,7 @@ const CreateMobileUnitSchema = z.object({
   economicNumber: z.string().max(50).optional().nullable(),
   status: z.enum(STATUS_VALUES).optional(),
   equipment: z.record(z.string(), z.boolean()).optional().nullable(),
-  notes: z.string().max(2000).optional().nullable(),
+  notes: zFreeTextMaxNullable(2000),
   imageUrl: z.string().url().optional().nullable(),
 })
 

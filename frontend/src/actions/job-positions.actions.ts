@@ -9,14 +9,15 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
+import { zFreeTextMax, zFreeTextMaxOptional } from '@/lib/text/zod-free-text'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMAS ZOD
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CreateJobPositionSchema = z.object({
-  name: z.string().min(1, 'El nombre es obligatorio').max(150),
-  description: z.string().max(500).optional(),
+  name: zFreeTextMax(150).min(1, 'El nombre es obligatorio'),
+  description: zFreeTextMaxOptional(500),
   companyId: z.string().uuid('ID de empresa inválido'),
   defaultProfileId: z.string().uuid('ID de perfil inválido').optional().nullable(),
 })

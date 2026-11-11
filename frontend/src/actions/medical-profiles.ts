@@ -22,6 +22,7 @@ import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
+import { zFreeTextMaxNullable } from '@/lib/text/zod-free-text'
 import {
   buildPbProfileNameFromTests,
   ensurePbProfileName,
@@ -54,7 +55,7 @@ const MedicalProfileSchema = z.object({
     .array(z.string().uuid('ID de prueba inválido'))
     .min(1, 'Debe seleccionar al menos una prueba médica'),
   // ARCH-20260708-01: Comentarios especiales (firma autógrafa, cédula, pruebas excluidas)
-  specialNotes: z.string().max(2000).nullable().optional(),
+  specialNotes: zFreeTextMaxNullable(2000),
 })
 
 // ARCH-20260708-01: Schema Zod para correos configurados por perfil médico
