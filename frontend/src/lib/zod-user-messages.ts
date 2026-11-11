@@ -21,31 +21,30 @@ export function formatZodIssueMessage(issue: ZodIssue): string {
   const raw = typeof issue.message === 'string' ? issue.message.trim() : ''
   if (raw && isLikelySpanishMessage(raw)) return raw
 
-  if (issue.code === 'too_small') {
-    if (issue.type === 'string') {
+  if (issue.code === 'too_small' && 'origin' in issue) {
+    const origin = issue.origin
+    if (origin === 'string') {
       const min = typeof issue.minimum === 'number' ? issue.minimum : 1
       if (min <= 1) return 'Campo obligatorio.'
       return `Debe tener al menos ${min} caracteres.`
     }
-    if (issue.type === 'number' || issue.type === 'bigint') {
-      const min = issue.minimum
-      return `El valor debe ser al menos ${String(min)}.`
+    if (origin === 'number' || origin === 'int' || origin === 'bigint') {
+      return `El valor debe ser al menos ${String(issue.minimum)}.`
     }
-    if (issue.type === 'array') {
+    if (origin === 'array' || origin === 'set') {
       return 'Faltan elementos obligatorios en la lista.'
     }
   }
 
-  if (issue.code === 'too_big' && issue.type === 'string') {
-    const max = issue.maximum
-    return `Debe tener como máximo ${String(max)} caracteres.`
+  if (issue.code === 'too_big' && 'origin' in issue && issue.origin === 'string') {
+    return `Debe tener como máximo ${String(issue.maximum)} caracteres.`
   }
 
   if (issue.code === 'invalid_type') {
     return 'El valor no tiene el formato esperado.'
   }
 
-  if (issue.code === 'invalid_enum_value') {
+  if (issue.code === 'invalid_value') {
     return 'Selecciona una opción válida.'
   }
 
