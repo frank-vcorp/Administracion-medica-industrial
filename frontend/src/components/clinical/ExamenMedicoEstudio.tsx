@@ -22,6 +22,7 @@ import { updateEventTestStatus } from "@/actions/event-test.actions"
 // IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
 // PRIMERA sub-pestaña dentro de "Examen Médico" (componente controlado).
 import { AntecedentesCaptura } from "@/components/clinical/AntecedentesCaptura"
+import { ClinicalTextarea } from "@/components/clinical/ClinicalFreeTextControls"
 import { VitalSignsPrediagnosisPanel } from "@/components/clinical/VitalSignsPrediagnosisPanel"
 // IMPL-20260817-01-C1 (ARCH-20260817-01 corte 1): catálogos ZIN para los
 // 8 campos de visión + 3 pruebas complementarias en pestaña 3 "Agudeza
@@ -1282,7 +1283,7 @@ export default function ExamenMedicoEstudio({
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Peso (KG)</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Peso (KG)</label>
               <input
                 type="number" step="0.1" min={0} max={500}
                 value={somaForm.peso_kg || ''}
@@ -1302,7 +1303,7 @@ export default function ExamenMedicoEstudio({
               )}
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (Metros)</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Talla (Metros)</label>
               <input
                 type="number" step="0.01" min={0} max={3}
                 value={somaForm.talla_m || ''}
@@ -1323,7 +1324,7 @@ export default function ExamenMedicoEstudio({
             </div>
             <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold text-slate-400 uppercase">IMC Calculado</p>
+                <p className="text-xs font-semibold text-slate-500">IMC Calculado</p>
                 <div className="text-3xl font-black text-slate-700">{imc}</div>
               </div>
               <div className={`px-4 py-2 rounded-lg font-bold text-sm ${
@@ -1393,7 +1394,7 @@ export default function ExamenMedicoEstudio({
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Cardiaca</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Frec. Cardiaca</label>
               <input
                 type="number" min={0} max={300}
                 value={vitalsForm.fc_min || ''}
@@ -1404,7 +1405,7 @@ export default function ExamenMedicoEstudio({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Temperatura</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Temperatura</label>
               <input
                 type="number" step="0.1" min={30} max={45}
                 value={vitalsForm.temperatura || ''}
@@ -1415,7 +1416,7 @@ export default function ExamenMedicoEstudio({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Respiratoria</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Frec. Respiratoria</label>
               <input
                 type="number" min={0} max={80}
                 value={vitalsForm.fr_min || ''}
@@ -1426,7 +1427,7 @@ export default function ExamenMedicoEstudio({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Sat. Oxígeno (%)</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Sat. Oxígeno (%)</label>
               <input
                 type="number" min={0} max={100}
                 value={vitalsForm.saturacion_oxigeno || ''}
@@ -1479,11 +1480,11 @@ export default function ExamenMedicoEstudio({
 
           {/* Campo Visual — lejana Snellen; cercana decimal legacy AMI */}
           <div>
-            <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Campo Visual</h4>
+            <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Campo Visual</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {VISUAL_FIELDS.map(f => (
                 <div key={f.name}>
-                  <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{f.label}</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2">{f.label}</label>
                   <select
                     value={agudezaForm[f.name] || NO_APLICA}
                     onChange={e => handleAgudezaField(f.name, e.target.value)}
@@ -1498,7 +1499,7 @@ export default function ExamenMedicoEstudio({
               ))}
             </div>
             <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+              <p className="text-[10px] font-bold text-indigo-500">
                 Clasificación agudeza visual (automática)
               </p>
               <p className="mt-1 text-sm font-semibold text-indigo-900">
@@ -1512,7 +1513,7 @@ export default function ExamenMedicoEstudio({
 
           {/* Pruebas Complementarias */}
           <div>
-            <h4 className="text-sm font-bold text-slate-600 mb-3 uppercase border-b pb-2">Pruebas Complementarias</h4>
+            <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Pruebas Complementarias</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {([
                 { name: 'campimetria', label: 'Campimetría', options: CAMPIMETRIA_VALUES },
@@ -1520,7 +1521,7 @@ export default function ExamenMedicoEstudio({
                 { name: 'reflejos', label: 'Reflejos', options: REFLEJOS_VALUES },
               ] as { name: string; label: string; options: readonly string[] }[]).map(({ name, label, options }) => (
                 <div key={name}>
-                  <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{label}</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2">{label}</label>
                   <select
                     value={agudezaForm[name] || options[0]}
                     onChange={e => handleAgudezaField(name, e.target.value)}
@@ -1656,7 +1657,7 @@ export default function ExamenMedicoEstudio({
           {activeInnerTab === 'exploracion' && (
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
+            <p className="text-xs font-bold text-slate-500 mb-4">
               Hallazgos por aparato y sistema
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1667,7 +1668,7 @@ export default function ExamenMedicoEstudio({
                 if (field.name === 'boca_estado') {
                   return (
                     <div key="cavidad_bucal" className="sm:col-span-2 lg:col-span-1 border border-slate-100 rounded-lg p-3 bg-white">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                      <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
                         Cavidad Bucal
                       </label>
                       <input
@@ -1679,7 +1680,7 @@ export default function ExamenMedicoEstudio({
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                       />
                       <div className="mt-3 pt-3 border-t border-slate-100">
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">
                           Salud bucal
                         </label>
                         <select
@@ -1703,7 +1704,7 @@ export default function ExamenMedicoEstudio({
                   const testAdamEstado = normalizeTestAdamEstado(form.test_adam)
                   return (
                     <div key={field.name} className="sm:col-span-2 lg:col-span-1 border border-slate-100 rounded-lg p-3 bg-white">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                      <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
                         {field.label}
                       </label>
                       <input
@@ -1714,7 +1715,7 @@ export default function ExamenMedicoEstudio({
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                       />
                       <div className="mt-3 pt-3 border-t border-slate-100">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Test Adam</p>
+                        <p className="text-[10px] font-semibold text-slate-500 mb-2">Test Adam</p>
                         <div className="flex gap-1 mb-2">
                           {(['NEGADO', 'SI'] as const).map(opt => (
                             <button
@@ -1744,7 +1745,7 @@ export default function ExamenMedicoEstudio({
                         {testAdamEstado === 'SI' && (
                           <div className="space-y-2">
                             <div>
-                              <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                              <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
                                 Lateralidad
                               </label>
                               <select
@@ -1760,7 +1761,7 @@ export default function ExamenMedicoEstudio({
                               </select>
                             </div>
                             <div>
-                              <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                              <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
                                 Otros
                               </label>
                               <input
@@ -1785,7 +1786,7 @@ export default function ExamenMedicoEstudio({
                   const quisteEstado = normalizeQuisteEstado(form.presencia_quiste_sinovial)
                   return (
                     <div key={field.name} className="border border-slate-100 rounded-lg p-3 bg-white">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                      <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
                         {field.label}
                       </label>
                       <select
@@ -1805,7 +1806,7 @@ export default function ExamenMedicoEstudio({
                       </select>
                       {quisteEstado === 'POSITIVO' && (
                         <div className="mt-2">
-                          <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                          <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
                             Especifique
                           </label>
                           <input
@@ -1830,7 +1831,7 @@ export default function ExamenMedicoEstudio({
                 if (field.kind === 'select' && field.values) {
                   return (
                     <div key={field.name}>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                      <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
                         {field.label}
                       </label>
                       <select
@@ -1850,7 +1851,7 @@ export default function ExamenMedicoEstudio({
                 // `plantilla` o `text` → input text (valor ya prellenado en `form`).
                 return (
                   <div key={field.name}>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                    <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
                       {field.label}
                     </label>
                     <input
@@ -1873,7 +1874,7 @@ export default function ExamenMedicoEstudio({
           {hasPositiveEF && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
               <label className="block">
-                <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                <span className="text-xs font-semibold text-amber-800">
                   ⚠️ Especifique hallazgos positivos
                 </span>
                 <p className="text-[10px] text-amber-700 mt-0.5 mb-2">
@@ -1882,10 +1883,10 @@ export default function ExamenMedicoEstudio({
                   <code>prueba_finkelstein</code>, <code>signo_tinel</code>,{' '}
                   <code>prueba_phanel</code>, <code>prueba_lasegue</code>.
                 </p>
-                <textarea
+                <ClinicalTextarea
                   rows={3}
                   value={form.especifique_positivos ?? ''}
-                  onChange={e => handleField('especifique_positivos', e.target.value)}
+                  onChange={(v) => handleField('especifique_positivos', v)}
                   disabled={readonly}
                   placeholder="Detalle los hallazgos positivos observados..."
                   className="w-full bg-white border border-amber-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-amber-500 outline-none disabled:opacity-60"
@@ -1998,7 +1999,7 @@ export default function ExamenMedicoEstudio({
         <div className="space-y-4">
           {/* Resumen Clínico por Sistema — ARCH-20260325-09 */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Resumen Clínico por Sistema</p>
+            <p className="text-xs font-bold text-slate-500">Resumen Clínico por Sistema</p>
             <div className="grid grid-cols-2 gap-3">
                 {RESUMEN_CLINICO_FIELDS.map(([field, label]) => {
                   // IMPL-20260817-01-C2: estado_nutricional + salud_bucal
@@ -2021,7 +2022,7 @@ export default function ExamenMedicoEstudio({
                   const fieldErr = examSaveErr(field)
                   return (
                   <div key={field}>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
+                    <label className="text-[10px] font-semibold text-slate-500">{label}</label>
                     {comboValues ? (
                       <select
                         value={form[field] ?? ''}
@@ -2059,7 +2060,7 @@ export default function ExamenMedicoEstudio({
           {/* Impresión Diagnóstica */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <span className="text-xs font-bold text-slate-500">
                 Impresión diagnóstica
               </span>
               {!readonly && impresionDiagnosticaPropuesta.trim() && (
@@ -2081,12 +2082,12 @@ export default function ExamenMedicoEstudio({
               )}
             </div>
             <label className="block">
-              <textarea
+              <ClinicalTextarea
                 rows={4}
                 value={form.impresion_diagnostica ?? ''}
-                onChange={e => {
+                onChange={(v) => {
                   impresionDiagnosticaManualRef.current = true
-                  handleField('impresion_diagnostica', e.target.value)
+                  handleField('impresion_diagnostica', v)
                 }}
                 disabled={readonly}
                 placeholder={
@@ -2105,13 +2106,13 @@ export default function ExamenMedicoEstudio({
             </label>
 
             <label className="block">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <span className="text-xs font-bold text-slate-500">
                 Restricciones / condicionantes
               </span>
-              <textarea
+              <ClinicalTextarea
                 rows={3}
                 value={form.restricciones ?? ''}
-                onChange={e => handleField('restricciones', e.target.value)}
+                onChange={(v) => handleField('restricciones', v)}
                 disabled={readonly}
                 placeholder="Si aplica, detalla las restricciones o condicionantes laborales..."
                 className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
@@ -2119,13 +2120,13 @@ export default function ExamenMedicoEstudio({
             </label>
 
             <label className="block">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <span className="text-xs font-bold text-slate-500">
                 Observaciones finales
               </span>
-              <textarea
+              <ClinicalTextarea
                 rows={2}
                 value={form.observaciones_finales ?? ''}
-                onChange={e => handleField('observaciones_finales', e.target.value)}
+                onChange={(v) => handleField('observaciones_finales', v)}
                 disabled={readonly}
                 placeholder="Observaciones adicionales para el expediente..."
                 className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
@@ -2149,7 +2150,7 @@ export default function ExamenMedicoEstudio({
             */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <span className="text-xs font-bold text-slate-500">
                   Recomendaciones
                 </span>
                 {!readonly && (
@@ -2169,12 +2170,12 @@ export default function ExamenMedicoEstudio({
                   </button>
                 )}
               </div>
-              <textarea
+              <ClinicalTextarea
                 rows={6}
                 value={recomendaciones}
-                onChange={e => {
+                onChange={(v) => {
                   clearFieldSaveError('recomendaciones_clinicas')
-                  setRecomendaciones(e.target.value)
+                  setRecomendaciones(v)
                 }}
                 disabled={readonly}
                 placeholder="1.- Recomendación uno. 2.- Recomendación dos. (auto-poblado desde hallazgos)"
@@ -2196,7 +2197,7 @@ export default function ExamenMedicoEstudio({
 
           {/* Aptitud laboral — decisión de cierre (V3), no de captura del examen */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <p className="text-xs font-bold text-slate-500">
               Aptitud laboral (dictamen)
             </p>
             <p className="text-[11px] text-slate-500 leading-snug">

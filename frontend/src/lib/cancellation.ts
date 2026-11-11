@@ -1,10 +1,7 @@
 import { z } from 'zod'
+import { zFreeTextMax } from '@/lib/text/zod-free-text'
 
-export const cancellationReasonSchema = z
-  .string()
-  .trim()
-  .min(3, 'Escribe el motivo de la cancelación (mínimo 3 caracteres).')
-  .max(500, 'El motivo no puede pasar de 500 caracteres.')
+export const cancellationReasonSchema = zFreeTextMax(500, 3)
 
 export const cancelAppointmentInputSchema = z.object({
   appointmentId: z.string().uuid('Cita no válida.'),

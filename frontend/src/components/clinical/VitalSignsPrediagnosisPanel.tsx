@@ -32,7 +32,7 @@ function FindingRow({ finding }: { finding: VitalSignFinding }) {
   return (
     <li className="flex items-start gap-2 text-xs">
       <span
-        className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded font-bold uppercase text-[10px] ${style.badge}`}
+        className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded font-semibold text-[10px] ${style.badge}`}
       >
         {finding.severity === 'normal' ? 'OK' : finding.severity === 'warning' ? '!' : '!!'}
       </span>
@@ -84,7 +84,7 @@ export function VitalSignsPrediagnosisPanel({
     >
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <span className="text-sm font-bold">Prediagnóstico orientativo</span>
-        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${style.badge}`}>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${style.badge}`}>
           {style.label}
         </span>
       </div>

@@ -45,7 +45,7 @@ export default function ExtractedPatientIdentityBanner({
       }`}
       data-testid="extracted-patient-identity-banner"
     >
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+      <p className="text-[10px] font-bold text-slate-500">
         Identificación en documento
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">

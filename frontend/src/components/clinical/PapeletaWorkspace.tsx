@@ -801,7 +801,7 @@ export default function PapeletaWorkspace({
 
       {/* Selector compacto móvil */}
       <div className="md:hidden border-b border-slate-200 px-4 py-3 bg-slate-50">
-        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+        <label className="block text-[10px] font-semibold text-slate-500 mb-1">
           Estudio activo
         </label>
         <select
@@ -825,7 +825,7 @@ export default function PapeletaWorkspace({
 
         {/* Sidebar de navegación lateral (solo desktop) */}
         <nav className="hidden md:flex flex-col w-52 border-r border-slate-200 bg-slate-50 pt-2 pb-3 shrink-0">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1.5">
+          <p className="text-[10px] font-semibold text-slate-500 px-3 mb-1.5">
             Estudios
           </p>
           {visibleTests.map((t) => (
@@ -1035,7 +1035,7 @@ function ExtractedDataRows({ data, depth = 0 }: { data: Record<string, unknown>;
         if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
           return (
             <div key={key} className={depth > 0 ? 'pl-3' : ''}>
-              <p className="text-[10px] font-bold text-sky-700 uppercase tracking-wider py-1.5 pt-2">
+              <p className="text-[10px] font-semibold text-sky-700 py-1.5 pt-2">
                 {formatFieldLabel(key)}
               </p>
               <ExtractedDataRows data={value as Record<string, unknown>} depth={depth + 1} />
@@ -1050,7 +1050,7 @@ function ExtractedDataRows({ data, depth = 0 }: { data: Record<string, unknown>;
         ) {
           return (
             <div key={key} className={depth > 0 ? 'pl-3' : ''}>
-              <p className="text-[10px] font-bold text-sky-700 uppercase tracking-wider py-1.5 pt-2">
+              <p className="text-[10px] font-semibold text-sky-700 py-1.5 pt-2">
                 {formatFieldLabel(key)}
               </p>
               {value.map((item, idx) => (
@@ -1519,7 +1519,7 @@ function StudyPanel({
       {/* IMPL-20260326-04: Ocultar Trazabilidad IA cuando ya existe aiSnapshot (el panel reemplaza este aviso) */}
       {test.resultNotes && !test.aiSnapshot && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
-          <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Trazabilidad IA</p>
+          <p className="text-xs font-semibold text-amber-800">Trazabilidad IA</p>
           <p className="text-sm text-amber-900 mt-1">{test.resultNotes}</p>
           {hasCampiCapture && !readonly && (
             <div className="pt-1">
@@ -1990,7 +1990,7 @@ function StudyPanel({
             {/* Acciones de estado */}
             {!readonly && (
               <div className="bg-slate-50 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-xs font-bold text-slate-500">
                   Cambiar estado
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -2055,7 +2055,7 @@ function StudyPanel({
             {/* Archivo vinculado + visor embebido */}
             {test.fileUrl ? (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Archivo vinculado</p>
+                <p className="text-xs font-semibold text-emerald-700">Archivo vinculado</p>
                 <StudyDocumentViewer
                   fileUrl={`${apiUrl}${test.fileUrl}`}
                   fileName={test.fileUrl.split('/').pop() || 'archivo'}
@@ -2121,7 +2121,7 @@ function StudyPanel({
       {/* Acciones y badge para estudios de formulario (Médico, Somatometría, Agudeza Visual) */}
       {(isMedico || isSomato || isAgudeza) && !readonly && (
         <div className="bg-slate-50 rounded-xl p-4 space-y-3">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+          <p className="text-xs font-bold text-slate-500">
             Cambiar estado
           </p>
           <div className="flex flex-wrap gap-2">

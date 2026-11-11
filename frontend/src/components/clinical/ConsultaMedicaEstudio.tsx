@@ -395,7 +395,7 @@ export default function ConsultaMedicaEstudio({
 
       {activeTab === 'motivo' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          <p className="text-[10px] font-semibold text-slate-500">
             Tipo de consulta
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -413,7 +413,7 @@ export default function ConsultaMedicaEstudio({
             ))}
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+            <label className="text-[10px] font-semibold text-slate-500 block mb-2">
               Motivo de la consulta
             </label>
             <ClinicalTextarea
@@ -441,7 +441,7 @@ export default function ConsultaMedicaEstudio({
             ] as const
           ).map(([key, label]) => (
             <div key={key}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{label}</label>
               <input
                 className={inputClass}
                 value={signos[key] ?? ''}
@@ -451,11 +451,11 @@ export default function ConsultaMedicaEstudio({
             </div>
           ))}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">IMC</label>
+            <label className="text-[10px] font-semibold text-slate-500">IMC</label>
             <input className={inputClass} value={imc} readOnly />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">Complexión</label>
+            <label className="text-[10px] font-semibold text-slate-500">Complexión</label>
             <input className={inputClass} value={complexion} readOnly />
           </div>
         </section>
@@ -505,7 +505,7 @@ export default function ConsultaMedicaEstudio({
       {activeTab === 'exploracion' && (
         <section className="space-y-2 bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex justify-between items-center gap-2 flex-wrap">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <p className="text-[10px] font-semibold text-slate-500">
               Exploración física
             </p>
             {!readonly && (
@@ -544,7 +544,7 @@ export default function ConsultaMedicaEstudio({
             spellCheck
           />
           <div className="border-t border-slate-100 pt-3 space-y-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Incapacidad</p>
+            <p className="text-[10px] font-semibold text-slate-500">Incapacidad</p>
             <p className="text-xs text-slate-500">¿Requiere incapacidad?</p>
             <div className="flex gap-4">
               {(['SI', 'NO'] as const).map((v) => (
@@ -562,7 +562,7 @@ export default function ConsultaMedicaEstudio({
             {otorgaIncap === 'SI' && (
               <div className="space-y-3">
                 <label className="block">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Tipo</span>
+                  <span className="text-[10px] font-semibold text-slate-500">Tipo</span>
                   <select
                     className={`${inputClass} mt-1`}
                     value={tipoIncap}
@@ -584,7 +584,7 @@ export default function ConsultaMedicaEstudio({
                 </p>
                 {tipoIncap === 'INTERNA_SME' && (
                   <label className="block">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">
+                    <span className="text-[10px] font-semibold text-slate-500">
                       Días (incapacidad interna SME)
                     </span>
                     <input
@@ -621,7 +621,7 @@ export default function ConsultaMedicaEstudio({
             onChange={setIndicaciones}
             disabled={readonly}
           />
-          <p className="text-[10px] font-bold text-slate-400 uppercase">Medicamento</p>
+          <p className="text-[10px] font-semibold text-slate-500">Medicamento</p>
           {recetaLineas.map((line, idx) => (
             <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3">
               <ClinicalFreeTextInput
@@ -707,7 +707,7 @@ export default function ConsultaMedicaEstudio({
 
       {activeTab === 'derivados' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          <p className="text-[10px] font-semibold text-slate-500">
             Estudios derivados (catálogo)
           </p>
           <ConsultaDerivadosStudiesPicker

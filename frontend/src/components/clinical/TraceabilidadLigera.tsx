@@ -213,7 +213,7 @@ export default function TraceabilidadLigera({
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="text-sm leading-none shrink-0">📍</span>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-tight">
+            <p className="text-[10px] font-semibold text-slate-500 tracking-wider leading-tight">
               Estado del evento
             </p>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -251,7 +251,7 @@ export default function TraceabilidadLigera({
       {/* ── Resumen compacto: último movimiento + siguiente paso ─────────── */}
       <div className="px-4 pb-3 grid grid-cols-2 gap-2">
         <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+          <p className="text-[9px] font-bold text-slate-400 mb-1">
             Último movimiento
           </p>
           {ultimoMovimiento ? (
@@ -272,7 +272,7 @@ export default function TraceabilidadLigera({
         </div>
 
         <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+          <p className="text-[9px] font-bold text-slate-400 mb-1">
             Siguiente paso
           </p>
           {siguientePaso ? (
@@ -339,7 +339,7 @@ export default function TraceabilidadLigera({
 
           {/* Timeline operativa */}
           <div className="px-4 py-3">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+            <p className="text-[10px] font-semibold text-slate-500 mb-2.5">
               Actividad operativa
             </p>
             <div className="space-y-2">
@@ -365,7 +365,7 @@ export default function TraceabilidadLigera({
           {!readonly && (
             <div className="border-t border-slate-100 px-4 py-3">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <p className="text-[10px] font-semibold text-slate-500">
                   Incidencias operativas
                 </p>
                 {!showForm && (
