@@ -6,8 +6,8 @@
  * @backup context/checkpoints/CHK_IMPL-ARCH-20260326-06.md
  *
  * IMPL-20260817-01-C2 (ARCH-20260817-01 corte 2): heredo-familiares adoptan
- * los catálogos ZIN (8 opciones para los 7 campos canónicos + 3 opciones para
- * `mentales`). El campo `otras` muestra un input "Especifique" condicional
+ * los catálogos ZIN (8 opciones para los 7 campos canónicos). `mentales`
+ * (Trastornos mentales, solo AHF) es campo abierto. El campo `otras` muestra un input "Especifique" condicional
  * cuando value === 'OTROS'. DA-1: schema sigue tolerante — legacy libre
  * parsea sin error (ver SPEC §4.4).
  *
