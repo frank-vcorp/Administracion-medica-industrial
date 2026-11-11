@@ -1735,6 +1735,7 @@ function StudyPanel({
               hasMedicalVerdict={hasMedicalVerdict}
               papeletaLayout
               onPapeletaActiveSectionChange={setExamenMedicoActiveSection}
+              registerLeaveGuard={registerStudyLeaveGuard}
             />
             {showExamenMedicoPrediagnosis && (
             <div className="space-y-3 lg:sticky lg:top-4 self-start">
