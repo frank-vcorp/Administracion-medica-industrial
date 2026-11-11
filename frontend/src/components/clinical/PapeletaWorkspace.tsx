@@ -93,6 +93,11 @@ import {
   type DictamenLabClinicalContext,
 } from '@/lib/clinical/dictamen-lab-papeleta'
 import type { PatientNameWarning } from '@/lib/clinical/patient-name-match'
+import {
+  getAcceptAttributeForStudyType,
+  getUploadHintForStudyType,
+  validateEventTestUploadFileAsync,
+} from '@/lib/clinical/event-test-file-validation'
 
 // --- Tipos locales ---
 
@@ -522,10 +527,24 @@ export default function PapeletaWorkspace({
   // IMPL-20260516-04: Avance progresivo de etapas mientras corre el pipeline IA
   // FIX-20260516-01: try/catch/finally robusto — sin promesas sin capturar ante ERR_NETWORK_CHANGED
   const handleFileUpload = async (testId: string, file: File) => {
-    let currentStage: UploadStageId | null = 'uploading'
-    setIsUploading(true)
     setUploadError('')
     setUploadMismatch(null)
+    const targetTestForValidation = localTests.find(t => t.id === testId)
+    const studyTypeForFile =
+      (targetTestForValidation
+        ? getCanonicalAIStudyType(targetTestForValidation)
+        : null) ?? 'Otro'
+    const fileValidation = await validateEventTestUploadFileAsync(file, studyTypeForFile)
+    if (!fileValidation.valid) {
+      setUploadError(
+        fileValidation.message ??
+          'Formato incorrecto: el archivo no es adecuado para este tipo de prueba.',
+      )
+      return
+    }
+
+    let currentStage: UploadStageId | null = 'uploading'
+    setIsUploading(true)
     setUploadStage('uploading')
     const t1 = setTimeout(() => { currentStage = 'classifying';   setUploadStage('classifying') },   3000)
     const t2 = setTimeout(() => { currentStage = 'extracting';    setUploadStage('extracting') },    7000)
@@ -1836,11 +1855,15 @@ function StudyPanel({
                       {test.fileUrl ? 'Reemplazar archivo' : 'Subir resultado'}
                     </span>
                     <span className="block text-xs text-slate-400 mt-1">
-                      PDF, PNG o JPG — máx. 20MB
+                      {getUploadHintForStudyType(
+                        getCanonicalAIStudyType(test) ?? 'Otro',
+                      )}
                     </span>
                     <input
                       type="file"
-                      accept=".pdf,.png,.jpg,.jpeg"
+                      accept={getAcceptAttributeForStudyType(
+                        getCanonicalAIStudyType(test) ?? 'Otro',
+                      )}
                       className="hidden"
                       disabled={isUploading}
                       onChange={(e) => {
