@@ -7,9 +7,10 @@ export const zTrimmedString = z.string().trim()
 /** Texto libre clínico / citas: trim + modo oración (es). */
 export const zFreeTextString = zTrimmedString.transform(applySentenceCase)
 
-/** Texto libre con longitud máxima y transform opcional. */
-export function zFreeTextMax(max: number) {
-  return z.string().trim().max(max).transform(applySentenceCase)
+/** Texto libre con longitud máxima (y mínima opcional) + modo oración. */
+export function zFreeTextMax(max: number, min = 0) {
+  const base = z.string().trim().max(max, `Máximo ${max} caracteres`)
+  return (min > 0 ? base.min(min) : base).transform(applySentenceCase)
 }
 
 export function zFreeTextMaxOptional(max: number) {

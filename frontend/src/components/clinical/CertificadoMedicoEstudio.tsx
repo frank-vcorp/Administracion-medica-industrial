@@ -344,7 +344,7 @@ export default function CertificadoMedicoEstudio({
             ] as const
           ).map(([key, label]) => (
             <div key={key}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{label}</label>
               <input
                 className={inputClass}
                 value={signos[key]}
@@ -361,7 +361,7 @@ export default function CertificadoMedicoEstudio({
 
       {activeTab === 'exploracion' && (
         <section className="bg-white border border-slate-200 rounded-xl p-4">
-          <label className="text-[10px] font-bold text-slate-400 uppercase">Exploración física (V)</label>
+          <label className="text-[10px] font-semibold text-slate-500">Exploración física (V)</label>
           <ClinicalTextarea
             className={`${inputClass} min-h-[200px]`}
             value={exploracion}
@@ -374,7 +374,7 @@ export default function CertificadoMedicoEstudio({
       {activeTab === 'dictamen' && (
         <section className="space-y-3 bg-white border border-slate-200 rounded-xl p-4">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">
+            <label className="text-[10px] font-semibold text-slate-500">
               Integración diagnóstica (VI)
             </label>
             <ClinicalTextarea
@@ -386,7 +386,7 @@ export default function CertificadoMedicoEstudio({
             />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">Dictamen laboral</label>
+            <label className="text-[10px] font-semibold text-slate-500">Dictamen laboral</label>
             <select
               className={inputClass}
               value={dictamen}
@@ -401,7 +401,7 @@ export default function CertificadoMedicoEstudio({
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">
+            <label className="text-[10px] font-semibold text-slate-500">
               Frase para el PDF
             </label>
             <ClinicalTextarea
@@ -418,7 +418,7 @@ export default function CertificadoMedicoEstudio({
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Lugar de expedición</label>
+              <label className="text-[10px] font-semibold text-slate-500">Lugar de expedición</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={lugar}
@@ -427,7 +427,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Hora de atención</label>
+              <label className="text-[10px] font-semibold text-slate-500">Hora de atención</label>
               <input
                 className={inputClass}
                 value={horaAtencion}
@@ -437,7 +437,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Sexo (PDF)</label>
+              <label className="text-[10px] font-semibold text-slate-500">Sexo (PDF)</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={sexoAtencion}
@@ -447,7 +447,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Domicilio (PDF)</label>
+              <label className="text-[10px] font-semibold text-slate-500">Domicilio (PDF)</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={domicilioAtencion}
@@ -456,7 +456,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Identificación</label>
+              <label className="text-[10px] font-semibold text-slate-500">Identificación</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={idTipo}
@@ -465,7 +465,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Folio / CURP</label>
+              <label className="text-[10px] font-semibold text-slate-500">Folio / CURP</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={idFolio}
@@ -474,7 +474,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Médico</label>
+              <label className="text-[10px] font-semibold text-slate-500">Médico</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={medicoNombre}
@@ -483,7 +483,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Cédula profesional</label>
+              <label className="text-[10px] font-semibold text-slate-500">Cédula profesional</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={medicoCedula}
@@ -492,7 +492,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Título</label>
+              <label className="text-[10px] font-semibold text-slate-500">Título</label>
               <input
                 className={inputClass}
                 value={medicoTitulo}
@@ -501,7 +501,7 @@ export default function CertificadoMedicoEstudio({
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Universidad (opcional)</label>
+              <label className="text-[10px] font-semibold text-slate-500">Universidad (opcional)</label>
               <input
                 className={inputClass}
                 value={medicoUniversidad}

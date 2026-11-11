@@ -331,7 +331,7 @@ function renderModulo1Fields(
         if (field.kind === 'select' && field.values) {
           return (
             <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{field.label}</label>
               <select
                 value={currentValue}
                 onChange={e => setM1Field(field.name, e.target.value)}
@@ -349,7 +349,7 @@ function renderModulo1Fields(
         if (field.kind === 'number') {
           return (
             <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{field.label}</label>
               <input
                 type="number"
                 min={field.min}
@@ -365,7 +365,7 @@ function renderModulo1Fields(
         if (field.kind === 'date') {
           return (
             <div key={field.name}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{field.label}</label>
               <input
                 type="text"
                 value={currentValue}
@@ -379,7 +379,7 @@ function renderModulo1Fields(
         }
         return (
           <div key={field.name} className={field.name.includes('doc_prost') ? 'col-span-full' : undefined}>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label}</label>
+            <label className="text-[10px] font-semibold text-slate-500">{field.label}</label>
             <input
               type="text"
               value={currentValue}
@@ -592,7 +592,7 @@ export function AntecedentesCaptura({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Datos Personales */}
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-slate-600 px-1">
             Datos Personales
           </legend>
           <div className="space-y-3 mt-2">
@@ -638,13 +638,13 @@ export function AntecedentesCaptura({
 
         {/* Historia Laboral */}
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-slate-600 px-1">
             Historia Laboral
           </legend>
           <div className="space-y-3 mt-2">
             {(['1', '2'] as const).map(n => (
               <div key={n} className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Empleo {n}</p>
+                <p className="text-[10px] font-semibold text-slate-500">Empleo {n}</p>
                 {HISTORIA_LABORAL_EMPLEOS_ANTERIORES_FIELDS
                   .filter(([field]) => field.endsWith(`_${n}`))
                   .map(([field, label]) => (
@@ -665,7 +665,7 @@ export function AntecedentesCaptura({
               </div>
             ))}
             <div className="pt-2 border-t border-slate-100 space-y-3">
-              <p className="text-[10px] font-bold text-slate-500 uppercase">
+              <p className="text-[10px] font-semibold text-slate-500">
                 Factores de riesgo en el trabajo
               </p>
               <HistoriaLaboralFactoresRiesgoReferencia compact />
@@ -693,7 +693,7 @@ export function AntecedentesCaptura({
                   )}
                 </div>
               ))}
-              <p className="text-[10px] font-bold text-slate-500 uppercase pt-2 border-t border-slate-100">
+              <p className="text-[10px] font-semibold text-slate-500 pt-2 border-t border-slate-100">
                 Accidente laboral y enfermedad profesional
               </p>
               {HISTORIA_LABORAL_RIESGOS_TRABAJO.map(exp => (
@@ -726,7 +726,7 @@ export function AntecedentesCaptura({
 
         {/* Heredo-Familiares */}
         <fieldset className="border border-violet-100 rounded-xl p-3 bg-violet-50/30">
-          <legend className="text-xs font-bold text-violet-900 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-violet-900 px-1">
             {ANTECEDENTES_SECTION_LEGEND.heredo_familiares}
           </legend>
           <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
@@ -786,7 +786,7 @@ export function AntecedentesCaptura({
 
       {/* ── Fila 2: No Patológicos ──────────────────────────────────────── */}
       <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-        <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+        <legend className="text-xs font-bold text-slate-600 px-1">
           {ANTECEDENTES_SECTION_LEGEND.no_patologicos}
         </legend>
         <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
@@ -837,7 +837,7 @@ export function AntecedentesCaptura({
         {/* Alimentación / Suplementos / Grupo RH / Tatuajes */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100">
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Alimentación</label>
+            <label className="block text-[10px] font-semibold text-slate-500 mb-1">Alimentación</label>
             <select
               value={form.no_patologicos.alimentacion ?? 'BUENA'}
               onChange={e => setField('no_patologicos', 'alimentacion', e.target.value)}
@@ -848,7 +848,7 @@ export function AntecedentesCaptura({
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+            <label className="block text-[10px] font-semibold text-slate-500 mb-1">
               {SUPLEMENTOS_COMPLEMENTOS_LABEL}
             </label>
             <p className="text-[9px] text-slate-400 mb-1">{SUPLEMENTOS_COMPLEMENTOS_HELP}</p>
@@ -866,7 +866,7 @@ export function AntecedentesCaptura({
             </div>
             {form.no_patologicos.tratamiento_medico_actual === 'SI' && (
               <div className="mt-2">
-                <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
                   Especifique
                 </label>
                 <input
@@ -882,7 +882,7 @@ export function AntecedentesCaptura({
             )}
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Grupo y RH</label>
+            <label className="block text-[10px] font-semibold text-slate-500 mb-1">Grupo y RH</label>
             <select
               value={form.no_patologicos.grupo_y_rh ?? ''}
               onChange={e => setField('no_patologicos', 'grupo_y_rh', e.target.value)}
@@ -896,7 +896,7 @@ export function AntecedentesCaptura({
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tatuajes</label>
+            <label className="block text-[10px] font-semibold text-slate-500 mb-1">Tatuajes</label>
             <p className="text-[9px] text-slate-400 mb-1">Indique si tiene tatuajes visibles. Algunos puestos lo requieren declarar.</p>
             <div className="flex gap-1">
               {SI_NEGADO.map(opt => (
@@ -912,7 +912,7 @@ export function AntecedentesCaptura({
             </div>
             {form.no_patologicos.tatuajes === 'SI' && (
               <div className="mt-2">
-                <label className="block text-[9px] font-medium text-slate-500 uppercase mb-0.5">
+                <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
                   Ubicación
                 </label>
                 <input
@@ -932,7 +932,7 @@ export function AntecedentesCaptura({
 
       {/* ── Fila 3: Patológicos ─────────────────────────────────────────── */}
       <fieldset className="border border-amber-100 rounded-xl p-3 bg-amber-50/30">
-        <legend className="text-xs font-bold text-amber-900 uppercase tracking-wider px-1">
+        <legend className="text-xs font-bold text-amber-900 px-1">
           {ANTECEDENTES_SECTION_LEGEND.patologicos}
         </legend>
         <p className="text-[10px] text-slate-600 mt-1 mb-3 leading-snug">
@@ -941,7 +941,7 @@ export function AntecedentesCaptura({
         </p>
         {PATOLOGICOS_GROUP_ORDER.map(group => (
           <div key={group} className="mb-4 last:mb-0">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+            <p className="text-[10px] font-semibold text-slate-500 mb-2">
               {PATOLOGICOS_GROUP_TITLES[group]}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -951,7 +951,7 @@ export function AntecedentesCaptura({
                 const needsEspecificacion = patologiaRequiresEspecificacion(item.field)
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
-                    <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
+                    <label className="block text-[10px] font-semibold text-slate-600">{item.label}</label>
                     <p className="text-[9px] text-slate-400 mb-1">{item.help}</p>
                     <select
                       value={entry.estado}
@@ -1029,11 +1029,11 @@ export function AntecedentesCaptura({
 
       {/* ── Sexo, gineco/repro e inmunizaciones (antes “Módulo 1”) ─────── */}
       <fieldset className="border border-teal-200 rounded-xl p-3 bg-teal-50/30">
-        <legend className="text-xs font-bold text-teal-800 uppercase tracking-wider px-1">
+        <legend className="text-xs font-semibold text-teal-800 px-1">
           Sexo, antecedentes ginecológicos/reproductivos e inmunizaciones
         </legend>
       <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4 mt-2">
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Sexo</span>
+        <span className="text-xs font-bold text-slate-500 shrink-0">Sexo</span>
         <div className="flex gap-2">
           {M1_SEX_OPTIONS.map(opt => (
             <button
@@ -1055,7 +1055,7 @@ export function AntecedentesCaptura({
 
       {modulo1.m1_sexo === 'Femenino' && (
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-slate-600 px-1">
             Antecedentes ginecológicos
           </legend>
           <div className="mt-2">
@@ -1066,7 +1066,7 @@ export function AntecedentesCaptura({
 
       {modulo1.m1_sexo === 'Masculino' && (
         <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+          <legend className="text-xs font-bold text-slate-600 px-1">
             Antecedentes reproductivos — salud prostática
           </legend>
           <div className="mt-2">
@@ -1076,7 +1076,7 @@ export function AntecedentesCaptura({
       )}
 
       <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-        <legend className="text-xs font-bold text-slate-600 uppercase tracking-wider px-1">
+        <legend className="text-xs font-bold text-slate-600 px-1">
           Inmunizaciones
         </legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
@@ -1088,7 +1088,7 @@ export function AntecedentesCaptura({
             const especifique = modulo1[especifiqueKey] ?? ''
             return (
               <div key={key} className="border border-slate-100 rounded-lg p-2">
-                <label className="block text-[10px] font-bold text-slate-600 uppercase">{label}</label>
+                <label className="block text-[10px] font-semibold text-slate-600">{label}</label>
                 <select
                   value={estado}
                   onChange={e => setM1Field(key, e.target.value)}
@@ -1115,7 +1115,7 @@ export function AntecedentesCaptura({
           })}
         </div>
         <div className="mt-3">
-          <label className="text-[10px] font-bold text-slate-400 uppercase">Próxima dosis / esquema completo</label>
+          <label className="text-[10px] font-semibold text-slate-500">Próxima dosis / esquema completo</label>
           <input
             type="text"
             value={modulo1.m1_vac_proxima_dosis ?? ''}
@@ -1130,7 +1130,7 @@ export function AntecedentesCaptura({
       {onAntecedentesMedicoChange && (
         <div className="bg-white border border-slate-200 rounded-xl p-3">
           <label className="block">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500">
               Nota del médico — resumen de antecedentes
             </span>
             <textarea
@@ -1192,7 +1192,7 @@ function FieldRow({
   return (
     <div>
       <label className="flex items-center justify-between mb-0.5">
-        <span className="block text-[10px] font-bold text-slate-500 uppercase">{label}</span>
+        <span className="block text-[10px] font-semibold text-slate-500">{label}</span>
         {modified && (
           <span className="text-[9px] text-amber-700 font-bold" title="Editado en esta consulta">
             ✏️ modificado

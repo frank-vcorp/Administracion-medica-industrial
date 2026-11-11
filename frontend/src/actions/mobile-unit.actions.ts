@@ -26,7 +26,7 @@ const STATUS_VALUES = [
 ] as const
 
 const CreateMobileUnitSchema = z.object({
-  name: zFreeTextMax(100).min(1),
+  name: zFreeTextMax(100, 1),
   plate: z.string().max(20).optional().nullable(),
   vin: z.string().max(50).optional().nullable(),
   year: z.number().int().min(1900).max(2100).optional().nullable(),

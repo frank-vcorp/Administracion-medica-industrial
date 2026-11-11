@@ -53,8 +53,7 @@ const RemoveDerivadoSchema = z.object({
   eventId: z.string().min(1),
   consultaEventTestId: z.string().min(1),
   eventTestId: z.string().min(1),
-  reason: zFreeTextMax(500)
-    .min(3, 'Escribe el motivo (mínimo 3 caracteres).'),
+  reason: zFreeTextMax(500, 3),
 })
 
 export type ConsultaDerivadoAddedItem = {

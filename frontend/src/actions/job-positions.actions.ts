@@ -16,7 +16,7 @@ import { zFreeTextMax, zFreeTextMaxOptional } from '@/lib/text/zod-free-text'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CreateJobPositionSchema = z.object({
-  name: zFreeTextMax(150).min(1, 'El nombre es obligatorio'),
+  name: zFreeTextMax(150, 1),
   description: zFreeTextMaxOptional(500),
   companyId: z.string().uuid('ID de empresa inválido'),
   defaultProfileId: z.string().uuid('ID de perfil inválido').optional().nullable(),

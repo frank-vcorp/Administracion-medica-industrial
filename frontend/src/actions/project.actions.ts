@@ -21,7 +21,7 @@ import { zFreeTextMax, zFreeTextMaxOptional } from '@/lib/text/zod-free-text'
 
 const CreateProjectSchema = z
   .object({
-    name: zFreeTextMax(200).min(1),
+    name: zFreeTextMax(200, 1),
     companyId: z.string().uuid(),
     startDate: z.string().datetime(),
     endDate: z.string().datetime(),
@@ -44,7 +44,7 @@ const CreateProjectSchema = z
 
 const UpdateProjectSchema = z
   .object({
-    name: zFreeTextMax(200).min(1).optional(),
+    name: zFreeTextMax(200, 1).optional(),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
     branchId: z.string().uuid().optional().or(z.literal('').transform(() => undefined)),

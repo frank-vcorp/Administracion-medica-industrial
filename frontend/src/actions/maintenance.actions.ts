@@ -33,7 +33,7 @@ const CreateMaintenanceSchema = z.object({
   mobileUnitId: z.string().min(1),
   type: z.enum(TYPE_VALUES),
   scheduledDate: z.string().datetime(),
-  description: zFreeTextMax(2000).min(1),
+  description: zFreeTextMax(2000, 1),
   technician: zFreeTextMaxOptional(200),
   cost: z.number().min(0).optional(),
   nextDueDate: z.string().datetime().optional(),
@@ -47,7 +47,7 @@ const CreateMaintenanceSchema = z.object({
 const UpdateMaintenanceSchema = z.object({
   type: z.enum(TYPE_VALUES).optional(),
   scheduledDate: z.string().datetime().optional(),
-  description: zFreeTextMax(2000).min(1).optional(),
+  description: zFreeTextMax(2000, 1).optional(),
   technician: zFreeTextMaxOptional(200),
   cost: z.number().min(0).optional(),
   nextDueDate: z.string().datetime().optional().nullable(),

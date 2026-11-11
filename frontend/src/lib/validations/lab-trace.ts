@@ -7,6 +7,7 @@
  * Cambios aquí deben replicarse en backend.
  */
 import { z } from "zod";
+import { zFreeTextMaxNullable, zFreeTextMaxOptional } from "@/lib/text/zod-free-text";
 
 // ---------------------------------------------------------------------------
 // Enum de eventos
@@ -33,7 +34,7 @@ export const LAB_TRACE_EVENT_TYPES: LabTraceEventType[] = [
 // ---------------------------------------------------------------------------
 export const recordTraceEventSchema = z.object({
   event: labTraceEventTypeSchema,
-  notes: z.string().max(1000).optional().nullable(),
-  location: z.string().max(200).optional().nullable(),
+  notes: zFreeTextMaxNullable(1000),
+  location: zFreeTextMaxOptional(200),
 });
 export type RecordTraceEventInput = z.infer<typeof recordTraceEventSchema>;
