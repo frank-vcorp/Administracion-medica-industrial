@@ -111,7 +111,7 @@ function hasPositiveNumber(raw: string | undefined): boolean {
   return Number.isFinite(n) && n > 0
 }
 
-function hasNonEmpty(raw: string | undefined): boolean {
+function hasNonEmpty(raw: string | null | undefined): boolean {
   return String(raw ?? '').trim().length > 0
 }
 

@@ -1845,7 +1845,7 @@ export default function ExamenMedicoEstudio({
                   | undefined
               }
               workerId={workerId}
-              formReadonly={formReadonly}
+              readonly={formReadonly}
               modulo1={modulo1}
               onModulo1Change={setModulo1}
               antecedentesMedico={form.antecedentes_medico ?? ''}
@@ -2135,7 +2135,7 @@ export default function ExamenMedicoEstudio({
       {/* ── Sub-tab extensión corporativa (Flowserve / Sodexo) ───────── */}
       {activeInnerTab === 'extension' && examVariant === 'FLOWSERVE' && (
         <div className="space-y-4">
-          <FlowserveExtension value={flowserveExt} onChange={setFlowserveExt} formReadonly={formReadonly} />
+          <FlowserveExtension value={flowserveExt} onChange={setFlowserveExt} readonly={formReadonly} />
           <div className="flex gap-2">
             <button
               onClick={() => requestInnerTabChange('exploracion')}
@@ -2158,7 +2158,7 @@ export default function ExamenMedicoEstudio({
           <SodexoExtension
             value={sodexoExt}
             onChange={handleSodexoExtChange}
-            formReadonly={formReadonly}
+            readonly={formReadonly}
             sodexoPdfUrl={examenMedicoSodexoPdfUrl(eventId)}
             sodexoPreviewApiUrl={examenMedicoSodexoPreviewApiUrl(eventId)}
             showSodexoPdfDownload={shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)}

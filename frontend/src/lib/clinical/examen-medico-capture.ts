@@ -93,7 +93,9 @@ function buildCloseValidationInput(input: {
       : {}
   const variantExtensions =
     (physical.variant_extensions as Record<string, unknown> | undefined) ?? {}
-  const examVariant = resolveExamenMedicoVariant(physical.exam_variant)
+  const examVariant = resolveExamenMedicoVariant(
+    physical.exam_variant as string | null | undefined,
+  )
   const flowserveRaw = variantExtensions.FLOWSERVE
   const flowserveExt =
     flowserveRaw && typeof flowserveRaw === 'object' && !Array.isArray(flowserveRaw)
