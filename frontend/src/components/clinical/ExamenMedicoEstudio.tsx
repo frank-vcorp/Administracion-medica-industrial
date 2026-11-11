@@ -99,6 +99,12 @@ import {
 } from "@/lib/clinical/examen-medico-variant"
 import { EXAMEN_CAPTURE_CLOSED_KEY } from "@/lib/clinical/examen-medico-capture"
 import {
+  computeBmi,
+  complexionFromImc,
+  formatTallaMetersForDisplay,
+  formatTallaMetersWhileTyping,
+} from '@/lib/clinical/talla-meters'
+import {
   antecedentesSnapshotComparable,
   mergeExamAntecedentesPrefill,
 } from '@/lib/clinical/prefill-portal-merge'
@@ -677,13 +683,11 @@ export default function ExamenMedicoEstudio({
   ])
 
   // ── Cálculos derivados Somatometría ───────────────────────────────────────
-  const peso = parseFloat(somaForm.peso_kg) || 0
-  const talla = parseFloat(somaForm.talla_m) || 0
-  const imc = peso > 0 && talla > 0 ? (peso / (talla * talla)).toFixed(2) : '0.00'
-  let complexion = 'NORMAL'
-  if (parseFloat(imc) > 29.9) complexion = 'OBESIDAD'
-  else if (parseFloat(imc) > 24.9) complexion = 'SOBREPESO'
-  else if (parseFloat(imc) < 18.5 && parseFloat(imc) > 0) complexion = 'BAJO PESO'
+  const { imc, imcValue } = useMemo(
+    () => computeBmi(somaForm.peso_kg, somaForm.talla_m),
+    [somaForm.peso_kg, somaForm.talla_m],
+  )
+  const complexion = useMemo(() => complexionFromImc(imcValue), [imcValue])
 
   // ── Indicadores de completitud para ExamenMedico (pestaña 4) ─────────────
   const hasPhysicalExam = Object.keys(physicalExamData).some(k => physicalExamData[k] !== null && physicalExamData[k] !== '')
@@ -1333,20 +1337,32 @@ export default function ExamenMedicoEstudio({
               )}
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-2">Talla (Metros)</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Talla (metros)</label>
               <input
-                type="number" step="0.01" min={0} max={3}
+                type="text"
+                inputMode="decimal"
                 value={somaForm.talla_m || ''}
                 onChange={e => {
                   clearFieldSaveError('talla_m')
-                  setSomaForm(prev => ({ ...prev, talla_m: e.target.value }))
+                  const v = e.target.value
+                  const next =
+                    v.includes('.') || v.includes(',')
+                      ? v.replace(',', '.')
+                      : formatTallaMetersWhileTyping(v)
+                  setSomaForm(prev => ({ ...prev, talla_m: next }))
+                }}
+                onBlur={e => {
+                  const formatted = formatTallaMetersForDisplay(e.target.value)
+                  if (formatted !== e.target.value.trim()) {
+                    setSomaForm(prev => ({ ...prev, talla_m: formatted }))
+                  }
                 }}
                 disabled={formReadonly}
                 className={examFieldRingClass(
                   Boolean(examSaveErr('talla_m')),
                   'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60',
                 )}
-                placeholder="Ej: 1.75"
+                placeholder="Ej: 1,75 o 175"
               />
               {examSaveErr('talla_m') && (
                 <p className="text-[10px] text-red-600 mt-1">{examSaveErr('talla_m')}</p>
