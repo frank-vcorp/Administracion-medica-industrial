@@ -28,6 +28,7 @@ import { updateCompanyAllowedBranches as _updateCompanyAllowedBranches } from '.
 import type { CompanyStatus, CompanyOrigin } from '@prisma/client'
 import { updateCompanySchema } from '@/lib/schemas/company-update'
 import { isAdminLike, isSellerLike } from '@/lib/auth/roles'
+import { failureFromZod } from '@/lib/save-action-errors'
 
 // --------------------------------------------------------------------------
 // Read-only: APIs existentes (compatibilidad)
@@ -372,10 +373,13 @@ export async function updateCompanyAction(
 
   const parsed = updateCompanySchema.safeParse(data)
   if (!parsed.success) {
+    const zodFail = failureFromZod(parsed.error, { summary: 'Revisa los datos de la empresa.' })
     return {
       ok: false as const,
       code: 'INVALID_PAYLOAD' as const,
-      error: parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+      error: zodFail.error,
+      fieldErrors: zodFail.fieldErrors,
+      technicalDetail: zodFail.technicalDetail,
     }
   }
 

@@ -1,6 +1,9 @@
 /** Razón social / marca principal en UI, PDFs y correos. */
 export const SME_LEGAL_NAME = 'Soluciones Medico Empresariales'
 
+/** Razón social fiscal completa (consentimiento informado, avisos legales en check-in). */
+export const SME_LEGAL_NAME_FULL = 'Soluciones Médico Empresariales, S. de R.L. de C.V.'
+
 /** Marca clínica — minuta AMI-SR F-017 #1. */
 export const SME_BRAND_LINE = `${SME_LEGAL_NAME} / Medicina Laboral`
 

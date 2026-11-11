@@ -211,7 +211,7 @@ export default function PapeletaCronograma({
           className="flex min-w-0 flex-1 items-center gap-2 text-left rounded-md py-0.5 -my-0.5 hover:bg-amber-100/80 transition-colors"
           aria-expanded={expanded}
         >
-          <span className="text-amber-600 font-bold text-[11px] uppercase tracking-wide shrink-0">
+          <span className="text-amber-600 font-bold text-[11px] shrink-0">
             🗂 Cronograma operativo
           </span>
           <span className="bg-amber-200 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0">
@@ -242,23 +242,23 @@ export default function PapeletaCronograma({
       {entries.length > 0 && (
         <div className="px-4 py-2 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-2">
           <div className="text-center">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wide">Inicio</div>
+            <div className="text-[10px] text-slate-500">Inicio</div>
             <div className="text-[11px] font-semibold text-slate-700">
               {firstEntry ? formatTime(firstEntry.occurredAt) : '—'}
             </div>
           </div>
           <div className="text-center">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wide">Último mov.</div>
+            <div className="text-[10px] text-slate-500">Último mov.</div>
             <div className="text-[11px] font-semibold text-slate-700">
               {lastEntry ? formatTime(lastEntry.occurredAt) : '—'}
             </div>
           </div>
           <div className="text-center">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wide">Completados</div>
+            <div className="text-[10px] text-slate-500">Completados</div>
             <div className="text-[11px] font-semibold text-emerald-700">{completedCount}</div>
           </div>
           <div className="text-center">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wide">Incidencias</div>
+            <div className="text-[10px] text-slate-500">Incidencias</div>
             <div className={`text-[11px] font-semibold ${incidenceCount > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
               {incidenceCount}
             </div>
@@ -330,7 +330,7 @@ export default function PapeletaCronograma({
       {/* Filtros */}
       {entries.length > 1 && (
         <div className="px-4 py-2 border-b border-slate-100 flex flex-wrap gap-2 items-center">
-          <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Filtrar:</span>
+          <span className="text-[10px] text-slate-400 font-medium">Filtrar:</span>
           <select
             value={filterType}
             onChange={e => setFilterType(e.target.value as TimelineEntryType | 'ALL')}

@@ -8,7 +8,8 @@ import { authOptions } from '@/auth'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { validateCertificadoMedicoPayload } from '@/lib/clinical/certificado-medico-validate'
 import type { CertificadoMedicoPayload } from '@/schemas/clinical/certificado-medico.schema'
-import { isCertificadoMedicoTestName } from '@/lib/clinical/certificado-medico'
+import { isCertificadoMedicoTestName, parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
+import { denyIfClosedCaptureUnauthorized } from '@/lib/clinical/papeleta-readonly'
 
 const CLINICAL_ROLES = new Set([
   'SUPERADMIN',
@@ -23,15 +24,17 @@ export type SaveCertificadoMedicoResult =
   | { success: true; payload: CertificadoMedicoPayload; updatedAt: string }
   | { success: false; error: string; fieldErrors?: Record<string, string[]>; technicalDetail?: string }
 
-async function assertClinicalAccess(): Promise<{ ok: true } | { ok: false; error: string }> {
+async function assertClinicalAccess():
+  Promise<{ ok: true; role: string } | { ok: false; error: string }> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return { ok: false, error: 'No autenticado.' }
   }
-  if (!CLINICAL_ROLES.has(session.user.role ?? '')) {
+  const role = session.user.role ?? ''
+  if (!CLINICAL_ROLES.has(role)) {
     return { ok: false, error: 'No tienes permisos para capturar certificado médico.' }
   }
-  return { ok: true }
+  return { ok: true, role }
 }
 
 export async function saveCertificadoMedico(
@@ -44,25 +47,13 @@ export async function saveCertificadoMedico(
   const access = await assertClinicalAccess()
   if (!access.ok) return { success: false, error: access.error }
 
-  const validation = validateCertificadoMedicoPayload(
-    rawPayload,
-    options.finalize ? 'final' : 'draft',
-  )
-  if (!validation.valid) {
-    return {
-      success: false,
-      error: validation.error,
-      fieldErrors: validation.fieldErrors,
-    }
-  }
-  const payload = validation.payload
-
   const eventTest = await prisma.eventTest.findUnique({
     where: { id: eventTestId },
     select: {
       id: true,
       eventId: true,
       testNameSnapshot: true,
+      clinicalContext: true,
       event: { select: { workerId: true } },
     },
   })
@@ -78,6 +69,27 @@ export async function saveCertificadoMedico(
   if (!isCertificadoMedicoTestName(eventTest.testNameSnapshot)) {
     return { success: false, error: 'Este estudio no es un certificado médico.' }
   }
+
+  const priorClosed = Boolean(
+    parseCertificadoMedicoClinicalContext(eventTest.clinicalContext)?.cerrada_at?.trim(),
+  )
+  const closedGuard = denyIfClosedCaptureUnauthorized(priorClosed, access.role)
+  if (!closedGuard.ok) return { success: false, error: closedGuard.error }
+
+  const validationMode =
+    priorClosed || !options.finalize
+      ? 'draft'
+      : 'final'
+
+  const validation = validateCertificadoMedicoPayload(rawPayload, validationMode)
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: validation.error,
+      fieldErrors: validation.fieldErrors,
+    }
+  }
+  const payload = validation.payload
 
   const antecedentesPayload = payload.antecedentes
   const hasAntecedentes =
@@ -95,7 +107,11 @@ export async function saveCertificadoMedico(
 
   const toStore: CertificadoMedicoPayload = {
     ...payload,
-    cerrada_at: options.finalize ? new Date().toISOString() : payload.cerrada_at,
+    cerrada_at: priorClosed
+      ? (payload.cerrada_at ?? parseCertificadoMedicoClinicalContext(eventTest.clinicalContext)?.cerrada_at)
+      : options.finalize
+        ? new Date().toISOString()
+        : payload.cerrada_at,
   }
 
   try {

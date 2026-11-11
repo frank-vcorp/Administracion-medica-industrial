@@ -21,11 +21,13 @@ import { useRouter } from 'next/navigation'
 import { updateBranch } from '@/actions/branch.actions'
 import { branchUpdateSchema } from '@/lib/schemas/branch'
 import type { BranchDetail } from './BranchDetailTabs'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import { mapSaveActionFailure, mapUserFacingError, type UserFacingError } from '@/lib/user-facing-error'
 
 export function BranchEditForm({ branch }: { branch: BranchDetail }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [success, setSuccess] = useState(false)
 
   const handleSubmit = async (formData: FormData) => {
@@ -37,11 +39,16 @@ export function BranchEditForm({ branch }: { branch: BranchDetail }) {
     }
     const parsed = branchUpdateSchema.safeParse(raw)
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
+      setSaveError(
+        mapUserFacingError({
+          error: parsed.error,
+          message: 'Revisa los datos de la sucursal.',
+        }),
+      )
       setSuccess(false)
       return
     }
-    setError(null)
+    setSaveError(null)
     setSuccess(false)
     startTransition(async () => {
       const result = await updateBranch(branch.id, parsed.data)
@@ -49,17 +56,24 @@ export function BranchEditForm({ branch }: { branch: BranchDetail }) {
         setSuccess(true)
         router.refresh()
       } else {
-        setError(result.error)
+        setSaveError(
+          mapSaveActionFailure(
+            {
+              error: result.error,
+              fieldErrors: 'fieldErrors' in result ? result.fieldErrors : undefined,
+              technicalDetail: 'technicalDetail' in result ? result.technicalDetail : undefined,
+            },
+            { context: 'updateBranch' },
+          ),
+        )
       }
     })
   }
 
   return (
     <form action={handleSubmit} className="space-y-4 max-w-2xl">
-      {error && (
-        <div role="alert" className="bg-red-50 text-red-700 p-3 rounded text-sm">
-          {error}
-        </div>
+      {saveError && (
+        <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
       )}
       {success && (
         <div className="bg-emerald-50 text-emerald-700 p-3 rounded text-sm">

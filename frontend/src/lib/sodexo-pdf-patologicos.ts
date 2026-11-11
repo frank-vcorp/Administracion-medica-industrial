@@ -9,6 +9,7 @@ import {
   type SodexoPatologicoCatalogEntry,
 } from '@/lib/sodexo-patologicos-catalog'
 import type { SodexoPatologicoExtensionRow } from '@/lib/sodexo-patologicos-prefill'
+import { isPatologicosMetaKey } from '@/lib/otras-enfermedades'
 
 type PdfForm = ReturnType<PDFDocument['getForm']>
 
@@ -48,7 +49,12 @@ export function parsePatologiaEntry(raw: unknown): PatologiaParsed {
   if (typeof raw === 'object' && raw !== null && 'estado' in raw) {
     const estado = String((raw as { estado?: string }).estado ?? 'NEGADO').toUpperCase()
     const det = (raw as { detalle?: Record<string, string> }).detalle
-    const descripcion = [det?.desde_cuando, det?.tratamiento, det?.observaciones]
+    const descripcion = [
+      det?.especificacion,
+      det?.desde_cuando,
+      det?.tratamiento,
+      det?.observaciones,
+    ]
       .map((x) => (x ?? '').trim())
       .filter(Boolean)
       .join('; ')
@@ -136,6 +142,7 @@ export function fillSodexoPatologicos(
   }
   for (const [key, raw] of Object.entries(record)) {
     if (usedAmiKeys.has(key)) continue
+    if (isPatologicosMetaKey(key)) continue
     if ((SODEXO_PATOLOGICOS_EXTRA_KEYS as readonly string[]).includes(key)) continue
     const p = parsePatologiaEntry(raw)
     if (p.si) extras.push(`${key.replace(/_/g, ' ')}: ${p.descripcion || 'Sí'}`)

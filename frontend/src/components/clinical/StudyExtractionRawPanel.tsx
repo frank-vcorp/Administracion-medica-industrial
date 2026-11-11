@@ -39,7 +39,7 @@ export default function StudyExtractionRawPanel({
       <summary className="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer select-none text-slate-200 hover:bg-slate-800 transition-colors list-none">
         <div className="flex items-center gap-2">
           <span className="text-slate-400 text-sm">🔩</span>
-          <span className="text-xs font-bold font-mono uppercase tracking-wider">Raw de extracción</span>
+          <span className="text-xs font-bold font-mono">Raw de extracción</span>
           {version !== undefined && (
             <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
               v{version}
