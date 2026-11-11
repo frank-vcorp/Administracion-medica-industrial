@@ -1,10 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
 import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
 import { saveCertificadoMedico } from '@/actions/certificado-medico.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
+import {
+  ClinicalSomaSignosVitalesCapture,
+  type SomaSignosVitalesValue,
+} from '@/components/clinical/ClinicalSomaSignosVitalesCapture'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
 import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
 import {
@@ -19,6 +23,11 @@ import {
   prefillCertificadoPatientFields,
 } from '@/lib/clinical/certificado-medico-prefill'
 import { parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
+import {
+  buildIntegracionDiagnosticaCertificado,
+  isIntegracionDiagnosticaPlaceholder,
+} from '@/lib/clinical/certificado-integracion-diagnostica'
+import { computeBmi, complexionFromImc } from '@/lib/clinical/talla-meters'
 import {
   clinicalCaptureReadonlyBannerText,
   resolveClinicalStudyReadonly,
@@ -51,18 +60,29 @@ function mergeLongitudinalAntecedentes(
 ): Record<string, unknown> {
   if (!longitudinal || typeof longitudinal !== 'object') return {}
   const out: Record<string, unknown> = {}
-  for (const key of [
-    'datos_personales',
-    'historia_laboral',
-    'heredo_familiares',
-    'no_patologicos',
-    'patologicos',
-  ]) {
+  for (const key of ['heredo_familiares', 'no_patologicos', 'patologicos']) {
     if (longitudinal[key] && typeof longitudinal[key] === 'object') {
       out[key] = longitudinal[key]
     }
   }
   return out
+}
+
+function signosToSomaVitalsValue(
+  signos: CertificadoMedicoPayload['signos_vitales'],
+): SomaSignosVitalesValue {
+  return {
+    peso_kg: signos.peso_kg ?? '',
+    talla_m: signos.talla_m ?? '',
+    imc: signos.imc,
+    complexion: signos.complexion,
+    ta_sistolica: signos.ta_sistolica ?? '',
+    ta_diastolica: signos.ta_diastolica ?? '',
+    fc_min: signos.fc_min ?? '',
+    fr_min: signos.fr_min ?? '',
+    temperatura: signos.temperatura ?? '',
+    spo2: signos.spo2_pct ?? '',
+  }
 }
 
 export default function CertificadoMedicoEstudio({
@@ -121,6 +141,8 @@ export default function CertificadoMedicoEstudio({
     parsed?.exploracion_fisica ?? buildDefaultExploracionCertificado(),
   )
   const [integracion, setIntegracion] = useState(parsed?.integracion_diagnostica ?? '')
+  const integracionManualRef = useRef(false)
+  const lastAutoIntegracionRef = useRef('')
   const [dictamen, setDictamen] = useState<DictamenLaboralValue>(
     parsed?.dictamen_laboral ?? 'APTO',
   )
@@ -162,21 +184,41 @@ export default function CertificadoMedicoEstudio({
     }
   }, [])
 
-  const imc = useMemo(() => {
-    const p = parseFloat(signos.peso_kg ?? '')
-    const t = parseFloat(signos.talla_m ?? '')
-    if (!p || !t) return ''
-    return (p / (t * t)).toFixed(2)
-  }, [signos.peso_kg, signos.talla_m])
+  const { imc, imcValue } = useMemo(
+    () => computeBmi(signos.peso_kg, signos.talla_m),
+    [signos.peso_kg, signos.talla_m],
+  )
+  const complexion = useMemo(() => complexionFromImc(imcValue), [imcValue])
 
-  const complexion = useMemo(() => {
-    const v = parseFloat(imc)
-    if (!v) return signos.complexion ?? ''
-    if (v > 29.9) return 'OBESIDAD'
-    if (v > 24.9) return 'SOBREPESO'
-    if (v < 18.5) return 'BAJO PESO'
-    return 'NORMAL'
-  }, [imc, signos.complexion])
+  const integracionPropuesta = useMemo(
+    () =>
+      buildIntegracionDiagnosticaCertificado({
+        antecedentes,
+        signos: {
+          ...signos,
+          imc: imc || signos.imc,
+          complexion: complexion || signos.complexion,
+        },
+      }),
+    [antecedentes, signos, imc, complexion],
+  )
+
+  useEffect(() => {
+    if (formReadonly) return
+    if (integracionManualRef.current) return
+    const propuesta = integracionPropuesta.trim()
+    if (!propuesta) return
+    setIntegracion((current) => {
+      const trimmed = current.trim()
+      const lastAuto = lastAutoIntegracionRef.current
+      const replaceable =
+        isIntegracionDiagnosticaPlaceholder(trimmed) ||
+        (lastAuto !== '' && trimmed === lastAuto)
+      if (!replaceable || trimmed === propuesta) return current
+      lastAutoIntegracionRef.current = propuesta
+      return propuesta
+    })
+  }, [integracionPropuesta, formReadonly])
 
   const onDictamenChange = (value: DictamenLaboralValue) => {
     setDictamen(value)
@@ -329,6 +371,7 @@ export default function CertificadoMedicoEstudio({
             onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
             workerId={workerId}
             readonly={formReadonly}
+            captureLayout="certificado"
             modulo1={{}}
             onModulo1Change={() => {}}
           />
@@ -336,39 +379,53 @@ export default function CertificadoMedicoEstudio({
       )}
 
       {activeTab === 'vitales' && (
-        <section className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-white border border-slate-200 rounded-xl p-4">
-          <p className="col-span-2 sm:col-span-3 text-xs text-slate-500">
-            Se precargan peso, talla, TA, FC, FR, temperatura, SpO₂ y agudeza desde somatometría y
-            agudeza visual del evento cuando aún no hay captura en el certificado.
+        <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
+          <p className="text-xs text-slate-500">
+            Mismos campos de somatometría y signos vitales que el examen médico. Se precargan desde
+            los estudios del evento cuando aún no hay captura en el certificado.
           </p>
-          {(
-            [
-              ['peso_kg', 'Peso (kg)'],
-              ['talla_m', 'Talla (m)'],
-              ['ta_sistolica', 'TA sistólica'],
-              ['ta_diastolica', 'TA diastólica'],
-              ['fc_min', 'FC (lpm)'],
-              ['fr_min', 'FR (rpm)'],
-              ['temperatura', 'Temperatura (°C)'],
-              ['spo2_pct', 'SpO₂ (%)'],
-              ['agudeza_vl', 'Agudeza VL'],
-              ['agudeza_vlc', 'Agudeza VLC'],
-              ['agudeza_vc', 'Agudeza VC'],
-              ['agudeza_vcc', 'Agudeza VCC'],
-            ] as const
-          ).map(([key, label]) => (
-            <div key={key}>
-              <label className="text-[10px] font-semibold text-slate-500">{label}</label>
-              <input
-                className={inputClass}
-                value={signos[key]}
-                onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
-                disabled={formReadonly}
-              />
-            </div>
-          ))}
-          <div className="col-span-2 sm:col-span-3 text-xs text-slate-500">
-            IMC calculado: {imc || '—'} {complexion ? `· ${complexion}` : ''}
+          <ClinicalSomaSignosVitalesCapture
+            value={signosToSomaVitalsValue(signos)}
+            onChange={(next) =>
+              setSignos((s) => ({
+                ...s,
+                peso_kg: next.peso_kg,
+                talla_m: next.talla_m,
+                ta_sistolica: next.ta_sistolica,
+                ta_diastolica: next.ta_diastolica,
+                fc_min: next.fc_min,
+                fr_min: next.fr_min,
+                temperatura: next.temperatura,
+                spo2_pct: next.spo2,
+              }))
+            }
+            readonly={formReadonly}
+            spo2Field="spo2_pct"
+            sexoForPrediagnosis={sexoAtencion.trim() || undefined}
+            inputClass={inputClass}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+            <p className="sm:col-span-2 text-[10px] font-semibold text-slate-500">
+              Agudeza visual (PDF)
+            </p>
+            {(
+              [
+                ['agudeza_vl', 'Agudeza VL'],
+                ['agudeza_vlc', 'Agudeza VLC'],
+                ['agudeza_vc', 'Agudeza VC'],
+                ['agudeza_vcc', 'Agudeza VCC'],
+              ] as const
+            ).map(([key, label]) => (
+              <div key={key}>
+                <label className="text-[10px] font-semibold text-slate-500">{label}</label>
+                <input
+                  className={inputClass}
+                  value={signos[key]}
+                  onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
+                  disabled={formReadonly}
+                />
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -394,10 +451,27 @@ export default function CertificadoMedicoEstudio({
             <ClinicalTextarea
               className={`${inputClass} min-h-[80px]`}
               value={integracion}
-              onChange={setIntegracion}
+              onChange={(v) => {
+                integracionManualRef.current = true
+                setIntegracion(v)
+              }}
               placeholder="Diagnóstico o integración clínica en prosa breve"
               disabled={formReadonly}
             />
+            {!formReadonly && integracionPropuesta.trim() && (
+              <button
+                type="button"
+                className="mt-2 text-xs font-bold text-teal-700 underline"
+                onClick={() => {
+                  integracionManualRef.current = false
+                  const p = integracionPropuesta.trim()
+                  lastAutoIntegracionRef.current = p
+                  setIntegracion(p)
+                }}
+              >
+                Regenerar desde antecedentes y signos vitales
+              </button>
+            )}
           </div>
           <div>
             <label className="text-[10px] font-semibold text-slate-500">Dictamen laboral</label>
