@@ -16,7 +16,8 @@
  *     oído menos afectado = menor dB HL, oído más afectado = mayor dB HL:
  *     `((PTA_menor × 7) + (PTA_mayor × 1)) / 8`. Si falta PTA3 en algún
  *     oído, no se calcula (no se interpola).
- *   - Criterio AMI de normalidad: ≤ 25 dB → normal.
+ *   - Criterio AMI: combina PTA3 y patrón por grupos (DEC-20260825-03); ≤25 dB
+ *     en PTA3 no fuerza NORMAL si hay patrón patológico.
  *   - Clasificación por patrón (graves vs agudas) + PTA/criterio AMI. Si
  *     hay umbrales en huecos AMI, la clasificación se marca
  *     `NO_CONCLUYENTE_PARA_CLASIFICACION`.
@@ -37,8 +38,18 @@ import type { ReactNode } from 'react'
 // Tipos públicos y constantes
 // ──────────────────────────────────────────────────────────────────────────
 
+import { normalizeAudiometriaSnapshot } from '@/lib/normalize-audiometria-snapshot'
+
 /** Umbral de normalidad audiométrica AMI (BR-20260825-04 / DEC-20260825-05). */
 export const AMI_NORMALIDAD_DB = 25
+
+/** Huecos sin clasificación explícita en escala AMI (BR-20260825-04). */
+export const AMI_HUECOS_DB: ReadonlyArray<readonly [number, number]> = [
+  [41, 44],
+  [56, 59],
+  [71, 74],
+  [91, 94],
+] as const
 
 /**
  * Frecuencias canónicas de PTA3 (BR-20260825-04). Graves 250/500/1000;
@@ -372,6 +383,52 @@ export type IndiceFletcherResultado = {
  * Si empatan, el resultado es el mismo PTA y se etiqueta OD como menor y OI
  * como mayor solo para mostrar la sustitución (la expresión es simétrica).
  */
+export function umbralEnHuecoAmi(db: number): boolean {
+  return AMI_HUECOS_DB.some(([lo, hi]) => db >= lo && db <= hi)
+}
+
+/**
+ * Combina patrón por grupos de frecuencia y PTA3 (DEC-20260825-03, BR-20260825-04,
+ * SPEC-FEATURE-20260825-02 §4.3, SPEC_ARCH-20260518-15 §7.4). No fuerza NORMAL
+ * sólo porque PTA3 ≤ 25 si el patrón operativo indica compromiso.
+ */
+export function resolverCriterioAmiCombinado(
+  pta: { promedio: number | null; completo: boolean },
+  patronAmi: OidoInterpretacion['patronAmi'],
+  umbralesVa: number[],
+): OidoInterpretacion['criterioAmi'] {
+  if (umbralesVa.some((db) => umbralEnHuecoAmi(db))) {
+    return 'NO_CONCLUYENTE'
+  }
+
+  const patronPatologico =
+    patronAmi === 'GRAVES' || patronAmi === 'AGUDAS' || patronAmi === 'MIXTA'
+
+  if (!pta.completo || pta.promedio === null) {
+    if (patronPatologico) return 'ALTERADO'
+    if (patronAmi === 'NO_CONCLUYENTE') {
+      if (umbralesVa.length > 0 && Math.max(...umbralesVa) > AMI_NORMALIDAD_DB) {
+        return 'ALTERADO'
+      }
+      return 'NO_CONCLUYENTE'
+    }
+    return 'NO_CONCLUYENTE'
+  }
+
+  const ptaAlterado = pta.promedio > AMI_NORMALIDAD_DB
+
+  if (patronAmi === 'NO_CONCLUYENTE') {
+    if (ptaAlterado) return 'ALTERADO'
+    if (umbralesVa.length > 0 && Math.max(...umbralesVa) > AMI_NORMALIDAD_DB) {
+      return 'ALTERADO'
+    }
+    return 'NO_CONCLUYENTE'
+  }
+
+  if (patronPatologico || ptaAlterado) return 'ALTERADO'
+  return 'NORMAL'
+}
+
 export function calcularIndiceFletcher(
   ptaOd: number | null,
   ptaOi: number | null,
@@ -476,7 +533,9 @@ function clasificarPatron(
 export function resolveAudiometriaCriteria(
   extractedData: Record<string, unknown> | null | undefined,
 ): ResolvedAudiometriaCriteria {
-  const data = (extractedData ?? {}) as Record<string, unknown>
+  const data = normalizeAudiometriaSnapshot(
+    (extractedData ?? {}) as Record<string, unknown>,
+  )
   const od = readOido(data, 'oido_derecho')
   const oi = readOido(data, 'oido_izquierdo')
 
@@ -507,21 +566,10 @@ export function resolveAudiometriaCriteria(
     oido: { va: Record<number, number>; ptaVisible: number | null },
   ): OidoInterpretacion {
     const patron = clasificarPatron(oido.va, pta.completo, pta.promedio)
-    // Criterio AMI: normalidad ≤ 25 dB. Sólo aplica cuando PTA está
-    // completo y dentro del patrón. Si el patrón es NO_CONCLUYENTE, el
-    // criterio AMI también lo es.
-    let criterioAmi: OidoInterpretacion['criterioAmi']
-    if (!pta.completo || pta.promedio === null) {
-      criterioAmi = 'NO_CONCLUYENTE'
-    } else if (pta.promedio <= AMI_NORMALIDAD_DB) {
-      criterioAmi = 'NORMAL'
-    } else {
-      criterioAmi = 'ALTERADO'
-    }
-    // Si el patrón dice NO_CONCLUYENTE, el criterio AMI también.
-    if (patron === 'NO_CONCLUYENTE' && criterioAmi !== 'NORMAL') {
-      criterioAmi = 'NO_CONCLUYENTE'
-    }
+    const umbralesVa = Object.values(oido.va).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    )
+    const criterioAmi = resolverCriterioAmiCombinado(pta, patron, umbralesVa)
     // pta_fuente: se conserva tal cual aparece en el documento. null si
     // no está visible.
     const ptaFuente = oido.ptaVisible

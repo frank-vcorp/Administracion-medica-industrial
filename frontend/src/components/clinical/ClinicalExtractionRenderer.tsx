@@ -21,6 +21,7 @@ import {
   type BilateralFrequencyTableSection,
   type ClinicalPresentationSection,
 } from "./extraction-presentation-schemas"
+import { normalizeAudiometriaSnapshot } from "@/lib/normalize-audiometria-snapshot"
 
 // --- Helpers de formato ---
 
@@ -75,34 +76,7 @@ function hasRenderableValue(value: unknown): boolean {
  * @id IMPL-20260519-03
  */
 function normalizeAudiometriaData(data: Record<string, unknown>): Record<string, unknown> {
-  const normalized: Record<string, unknown> = { ...data }
-
-    // Normalizar oídos:
-    //  - via_aerea → va, via_osea → vo (solo si la alias destino no existe)
-    //  - formato plano {"500": 5, "1000": 5} → envolver en va: {"500": 5, "1000": 5}
-    for (const earKey of ["oido_derecho", "oido_izquierdo"]) {
-      const ear = normalized[earKey]
-      if (ear && typeof ear === "object" && !Array.isArray(ear)) {
-        const earObj = ear as Record<string, unknown>
-        const earNorm: Record<string, unknown> = { ...earObj }
-        if (!("va" in earNorm) && "via_aerea" in earNorm) earNorm.va = earNorm.via_aerea
-        if (!("vo" in earNorm) && "via_osea" in earNorm) earNorm.vo = earNorm.via_osea
-        if (!("va" in earNorm) || typeof earNorm.va !== "object" || earNorm.va === null) {
-          const directFreqs: Record<string, unknown> = {}
-          for (const [k, v] of Object.entries(earObj)) {
-            if (/^\d+$/.test(k.trim()) && v !== null && v !== undefined && typeof v !== "object") {
-              directFreqs[k.trim()] = v
-            }
-          }
-          if (Object.keys(directFreqs).length > 0) {
-            earNorm.va = directFreqs
-          }
-        }
-        // IMPL-20260519-04 — normalizar pta → pta_visible
-        if (!("pta_visible" in earNorm) && "pta" in earNorm) earNorm.pta_visible = earNorm.pta
-        normalized[earKey] = earNorm
-      }
-    }
+  const normalized = normalizeAudiometriaSnapshot(data)
 
     // Normalizar paciente raíz → paciente_detalle.nombre_completo si falta
     if (
