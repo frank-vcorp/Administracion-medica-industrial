@@ -1,12 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
-import Link from 'next/link'
 import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import ConsultaSeguimientoAgenda from '@/components/clinical/ConsultaSeguimientoAgenda'
 import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
-import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ConsultaAntecedentesResumen } from '@/components/clinical/ConsultaAntecedentesResumen'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
 import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
@@ -25,6 +23,7 @@ import {
   parseDiagnosticoUnificadoDisplay,
 } from '@/lib/clinical/cie-10-format'
 import {
+  antecedentesRecordHasContent,
   mergeProfileAntecedentesIntoConsulta,
   modulo1Record,
 } from '@/lib/clinical/consulta-antecedentes'
@@ -45,8 +44,6 @@ import {
   type TipoConsultaValue,
   type TipoIncapacidadConsultaValue,
 } from '@/schemas/clinical/consulta-medica.constants'
-import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
-
 type TabId =
   | 'motivo'
   | 'vitales'
@@ -81,7 +78,6 @@ export default function ConsultaMedicaEstudio({
   initialClinicalContext,
   longitudinalData,
   profileAntecedentes,
-  profileModulo1,
   readonly = false,
 }: {
   eventId: string
@@ -91,8 +87,6 @@ export default function ConsultaMedicaEstudio({
   longitudinalData?: Record<string, unknown> | null
   /** Snapshot de antecedentes del examen de esta visita, si el perfil aplica. */
   profileAntecedentes?: Record<string, unknown> | null
-  /** Módulo 1 (gineco / vacunas) del examen, ya viviendo dentro de antecedentes. */
-  profileModulo1?: Record<string, string> | null
   readonly?: boolean
 }) {
   const { data: session } = useSession()
@@ -142,7 +136,7 @@ export default function ConsultaMedicaEstudio({
     parsed?.medico_nombre ?? session?.user?.fullName ?? session?.user?.name ?? '',
   )
   const [medicoCedula, setMedicoCedula] = useState(parsed?.medico_cedula ?? '')
-  const initialAntecedentesMerged = useMemo(
+  const structuredAntecedentesForPrefill = useMemo(
     () =>
       mergeProfileAntecedentesIntoConsulta(
         parsed?.antecedentes,
@@ -152,29 +146,24 @@ export default function ConsultaMedicaEstudio({
     [parsed?.antecedentes, longitudinalData, profileAntecedentes],
   )
 
-  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(
-    () => initialAntecedentesMerged,
-  )
-
   const [antecedentesConsulta, setAntecedentesConsulta] = useState(() =>
     mergeAntecedentesConsultaResumen(
       parsed?.antecedentes_consulta,
-      suggestAntecedentesConsultaFromProfile(initialAntecedentesMerged),
+      suggestAntecedentesConsultaFromProfile(structuredAntecedentesForPrefill),
     ),
   )
-  const antecedentesHydratedRef = useRef(false)
-  useEffect(() => {
-    if (antecedentesHydratedRef.current) return
-    antecedentesHydratedRef.current = true
-    setAntecedentes((prev) =>
-      mergeProfileAntecedentesIntoConsulta(parsed?.antecedentes ?? prev, longitudinalData, profileAntecedentes),
-    )
-  }, [longitudinalData, profileAntecedentes, parsed?.antecedentes])
-  const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
+
+  const legacyAntecedentesPayload = useMemo(() => {
+    const saved = parsed?.antecedentes
+    if (!antecedentesRecordHasContent(saved)) return undefined
+    return saved as ConsultaMedicaPayload['antecedentes']
+  }, [parsed?.antecedentes])
+
+  const legacyModulo1Payload = useMemo(() => {
     const saved = modulo1Record(parsed?.modulo1)
-    if (Object.values(saved).some((value) => value.trim() !== '')) return saved
-    return modulo1Record(profileModulo1)
-  })
+    if (!Object.values(saved).some((value) => value.trim() !== '')) return undefined
+    return saved
+  }, [parsed?.modulo1])
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
   const [hasPersisted, setHasPersisted] = useState(Boolean(parsed))
 
@@ -214,7 +203,7 @@ export default function ConsultaMedicaEstudio({
   const buildPayload = useCallback((): ConsultaMedicaPayload => {
     const sv = { ...signos, imc: imc || signos.imc, complexion: complexion || signos.complexion }
     const lineas = recetaLineas.filter((l) => l.medicamento.trim())
-    return {
+    const payload: ConsultaMedicaPayload = {
       schemaVersion: CONSULTA_MEDICA_SCHEMA_VERSION,
       tipo_consulta: tipoConsulta,
       motivo_consulta: motivo.trim(),
@@ -243,11 +232,12 @@ export default function ConsultaMedicaEstudio({
       receta_lineas: lineas,
       medico_nombre: medicoNombre.trim() || session?.user?.fullName || session?.user?.name || 'Médico',
       medico_cedula: medicoCedula.trim() || '—',
-      antecedentes: antecedentes as ConsultaMedicaPayload['antecedentes'],
       antecedentes_consulta: antecedentesConsulta,
-      modulo1,
       cerrada_at: cerradaAt || undefined,
     }
+    if (legacyAntecedentesPayload) payload.antecedentes = legacyAntecedentesPayload
+    if (legacyModulo1Payload) payload.modulo1 = legacyModulo1Payload
+    return payload
   }, [
     tipoConsulta,
     motivo,
@@ -268,9 +258,9 @@ export default function ConsultaMedicaEstudio({
     recetaLineas,
     medicoNombre,
     medicoCedula,
-    antecedentes,
     antecedentesConsulta,
-    modulo1,
+    legacyAntecedentesPayload,
+    legacyModulo1Payload,
     cerradaAt,
     session?.user?.fullName,
     session?.user?.name,
@@ -365,8 +355,8 @@ export default function ConsultaMedicaEstudio({
         <div>
           <p className="text-sm font-bold text-teal-900">Consulta médica</p>
           <p className="text-xs text-teal-700">
-            Nota clínica + receta · Borrador con autoguardado cada 7 s (incluye antecedentes en el
-            perfil del paciente)
+            Nota clínica + receta · Borrador con autoguardado cada 7 s (incluye el resumen de
+            antecedentes de la nota)
           </p>
           <ClinicalAutosaveIndicator
             label={autosaveEnabled ? autosaveLabel : null}
@@ -474,31 +464,15 @@ export default function ConsultaMedicaEstudio({
                 type="button"
                 className="text-xs font-bold text-teal-700 hover:text-teal-900 underline"
                 onClick={() =>
-                  setAntecedentesConsulta(suggestAntecedentesConsultaFromProfile(antecedentes))
+                  setAntecedentesConsulta(
+                    suggestAntecedentesConsultaFromProfile(structuredAntecedentesForPrefill),
+                  )
                 }
               >
                 Precargar 6 rubros desde cuestionario estructurado
               </button>
             </div>
           )}
-          <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <AntecedentesCaptura
-            value={antecedentes as AntecedentesCapturaData}
-            onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
-            workerId={workerId}
-            readonly={readonly}
-            modulo1={modulo1}
-            onModulo1Change={setModulo1}
-          />
-          <p className="text-[10px] text-slate-500 mt-3">
-            Precarga desde historial clínico longitudinal (y examen previo si aplica). Al guardar, se
-            actualizan en{' '}
-            <Link href={`/history/${workerId}`} className="text-teal-600 underline">
-              Historia clínica del paciente
-            </Link>
-            .
-          </p>
-          </div>
         </section>
       )}
 
