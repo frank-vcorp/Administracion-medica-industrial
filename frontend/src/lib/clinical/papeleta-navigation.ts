@@ -121,3 +121,18 @@ export function replacePapeletaQuery(patch: {
   const url = buildPapeletaUrl(window.location.pathname, window.location.search, patch)
   window.history.replaceState(window.history.state, '', url)
 }
+
+/**
+ * Resuelve el EventTest activo tras `router.refresh()` leyendo solo la URL
+ * real del navegador (`replaceState`), sin reimponer `initialEventTestId` del
+ * server cuando el usuario ya cambió de estudio en cliente.
+ */
+export function resolveActiveEventTestAfterRefresh(
+  urlEventTest: string | null,
+  urlHasEventTestParam: boolean,
+  validTestIds: ReadonlySet<string>,
+): string | null | undefined {
+  if (!urlHasEventTestParam) return null
+  if (!urlEventTest) return null
+  return validTestIds.has(urlEventTest) ? urlEventTest : undefined
+}

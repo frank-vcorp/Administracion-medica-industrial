@@ -4,6 +4,7 @@ import {
   examenMedicoNavSectionFromTabs,
   parseExamenMedicoNavSection,
   patchPapeletaSearchParams,
+  resolveActiveEventTestAfterRefresh,
 } from '@/lib/clinical/papeleta-navigation'
 
 describe('papeleta-navigation', () => {
@@ -48,5 +49,24 @@ describe('papeleta-navigation', () => {
         eventTest: 'new-id',
       }),
     ).toBe('/events/evt-1?view=IN_PROGRESS&eventTest=new-id')
+  })
+
+  it('resolveActiveEventTestAfterRefresh prioriza URL del navegador', () => {
+    const valid = new Set(['consulta-id', 'nuevo-id'])
+    expect(
+      resolveActiveEventTestAfterRefresh('nuevo-id', true, valid),
+    ).toBe('nuevo-id')
+  })
+
+  it('resolveActiveEventTestAfterRefresh respeta vista resumen (param ausente)', () => {
+    const valid = new Set(['consulta-id'])
+    expect(resolveActiveEventTestAfterRefresh(null, false, valid)).toBe(null)
+  })
+
+  it('resolveActiveEventTestAfterRefresh ignora id inválido tras refresh', () => {
+    const valid = new Set(['consulta-id'])
+    expect(
+      resolveActiveEventTestAfterRefresh('desconocido', true, valid),
+    ).toBeUndefined()
   })
 })
