@@ -6,7 +6,6 @@ import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { authOptions } from '@/auth'
-import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { createAppointment } from '@/actions/appointment.actions'
 import { validateConsultaMedicaPayload } from '@/lib/clinical/consulta-medica-validate'
 import type { ConsultaMedicaPayload } from '@/schemas/clinical/consulta-medica.schema'
@@ -455,20 +454,6 @@ export async function saveConsultaMedica(
     }
   }
   const payload = validation.payload
-
-  const antecedentesPayload = payload.antecedentes
-  const hasAntecedentes =
-    antecedentesPayload &&
-    typeof antecedentesPayload === 'object' &&
-    Object.values(antecedentesPayload).some(
-      (v) => v !== null && v !== undefined && (typeof v !== 'object' || Object.keys(v as object).length > 0),
-    )
-  if (hasAntecedentes) {
-    const hc = await upsertWorkerClinicalHistory(workerId, antecedentesPayload)
-    if (!hc.success) {
-      return { success: false, error: hc.error ?? 'No se pudo actualizar el historial clínico.' }
-    }
-  }
 
   const priorCerradaAt = parseConsultaMedicaClinicalContext(eventTest.clinicalContext)?.cerrada_at
   const toStore: ConsultaMedicaPayload = {

@@ -1744,16 +1744,6 @@ function StudyPanel({
               | Record<string, unknown>
               | undefined) ?? null
           }
-          profileModulo1={
-            examData?.physicalExamData?.modulo1 &&
-            typeof examData.physicalExamData.modulo1 === 'object'
-              ? Object.fromEntries(
-                  Object.entries(
-                    examData.physicalExamData.modulo1 as Record<string, unknown>,
-                  ).map(([key, value]) => [key, value == null ? '' : String(value)]),
-                )
-              : null
-          }
           readonly={readonly}
         />
       )}
