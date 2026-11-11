@@ -393,7 +393,7 @@ export default function CampimetriaStudy({
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <h4 className="text-xs font-bold text-slate-500">
             Heredado de la papeleta
           </h4>
           <p className="text-sm text-slate-800">
@@ -437,7 +437,7 @@ export default function CampimetriaStudy({
         </section>
 
         <section className="rounded-xl border border-slate-200 p-4 space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <h4 className="text-xs font-bold text-slate-500">
             Antecedentes oftalmológicos
           </h4>
           <SiNoRow
@@ -497,7 +497,7 @@ export default function CampimetriaStudy({
 
         <section className="rounded-xl border border-slate-200 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            <h4 className="text-xs font-bold text-slate-500">
               Exploración OD / OI
             </h4>
             {!readonly && (
@@ -557,7 +557,7 @@ export default function CampimetriaStudy({
         </section>
 
         <section className="rounded-xl border border-slate-200 p-4 space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <h4 className="text-xs font-bold text-slate-500">
             Campimetría de confrontación
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -567,7 +567,7 @@ export default function CampimetriaStudy({
                 alt="Campimetría de confrontación — ojo izquierdo (referencia)"
                 className="w-full rounded-lg border border-slate-200 bg-white"
               />
-              <figcaption className="text-center text-[10px] font-bold uppercase text-slate-500">
+              <figcaption className="text-center text-[10px] font-semibold text-slate-500">
                 Ojo izquierdo
               </figcaption>
             </figure>
@@ -577,7 +577,7 @@ export default function CampimetriaStudy({
                 alt="Campimetría de confrontación — ojo derecho (referencia)"
                 className="w-full rounded-lg border border-slate-200 bg-white"
               />
-              <figcaption className="text-center text-[10px] font-bold uppercase text-slate-500">
+              <figcaption className="text-center text-[10px] font-semibold text-slate-500">
                 Ojo derecho
               </figcaption>
             </figure>
@@ -613,7 +613,7 @@ export default function CampimetriaStudy({
 
         <section className="rounded-xl border border-slate-200 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            <h4 className="text-xs font-bold text-slate-500">
               Prueba de Ishihara
             </h4>
             <div className="flex items-center gap-2 flex-wrap">

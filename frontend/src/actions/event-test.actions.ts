@@ -31,6 +31,12 @@ import {
   buildDictamenLabClinicalContext,
   isDictamenOptionalLabTest,
 } from '@/lib/clinical/dictamen-lab-papeleta'
+import {
+  isAudiometryXmlFile,
+  resolveStudyTypeForEventTestFileValidation,
+  validateEventTestUploadFileAsync,
+} from '@/lib/clinical/event-test-file-validation'
+import { eventTestUploadIdsSchema } from '@/schemas/clinical/event-test-upload.schema'
 
 async function maybeCropEspirometrySourceAfterUpload(
   eventTestId: string,
@@ -370,39 +376,6 @@ export async function updateEventTestStatus(
   }
 }
 
-/**
- * FIX-20260729-03-G-XML: Detecta si un archivo es XML del audiómetro.
- *
- * Estrategia defensiva de 3 capas (cualquiera basta):
- *   1. MIME type declarado por el navegador (`application/xml` / `text/xml`)
- *   2. Extensión `.xml` (case-insensitive)
- *   3. Magic bytes `<?xml` en los primeros 64 bytes del contenido
- *
- * Usar las 3 capas es robusto contra:
- *   - Navegadores que reportan `application/octet-stream` para archivos .xml
- *   - Archivos sin extensión explícita que aun así son XML
- *   - Falsos positivos tipo .docx (que internamente son XML pero NO son
- *     audiometría — para esos se requiere validación posterior del payload).
- */
-async function isXmlFile(file: File): Promise<boolean> {
-  const mime = (file.type || '').toLowerCase()
-  if (mime === 'application/xml' || mime === 'text/xml') return true
-
-  const name = (file.name || '').toLowerCase()
-  if (name.endsWith('.xml')) return true
-
-  try {
-    // slice(0, 64) evita cargar archivos grandes en memoria para un sniff
-    const head = await file.slice(0, 64).text()
-    const trimmed = head.trimStart().toLowerCase()
-    if (trimmed.startsWith('<?xml')) return true
-  } catch {
-    // Si file.slice falla (p.ej. entornos sin Blob), no es XML detectable
-  }
-
-  return false
-}
-
 type EventTestEligibilityRow = {
   testNameSnapshot: string
   test: {
@@ -445,7 +418,7 @@ async function allowAudiometryXmlWhenCalibrationDisabled(
     published.canonicalStudyType ?? getCanonicalAIStudyType(eventTest)
   const routed = normalizeStudyTypeForBackend(canonical ?? '')
   if (routed !== 'Audiometria') return false
-  return await isXmlFile(file)
+  return await isAudiometryXmlFile(file)
 }
 
 /**
@@ -934,6 +907,11 @@ export async function uploadEventTestFile(formData: FormData) {
     return { success: false, error: 'Faltan parámetros obligatorios' }
   }
 
+  const idsParsed = eventTestUploadIdsSchema.safeParse({ eventTestId, eventId })
+  if (!idsParsed.success) {
+    return { success: false, error: 'Parámetros de estudio inválidos' }
+  }
+
   // IMPL-20260326-18: Verificar elegibilidad IA usando la matriz central.
   // Carga el EventTest con test/categoría desde Prisma para decisión precisa.
   //
@@ -960,6 +938,23 @@ export async function uploadEventTestFile(formData: FormData) {
     })
     if (eventTest) {
       const published = await getPublishedCalibrationForEventTest(eventTestId)
+
+      const studyTypeForFile = resolveStudyTypeForEventTestFileValidation(
+        eventTest,
+        published
+          ? { enabled: published.enabled, canonicalStudyType: published.canonicalStudyType }
+          : null,
+      )
+      const fileValidation = await validateEventTestUploadFileAsync(file, studyTypeForFile)
+      if (!fileValidation.valid) {
+        return {
+          success: false,
+          error:
+            fileValidation.message ??
+            'Formato incorrecto: el archivo no es adecuado para este tipo de prueba.',
+          errorCode: fileValidation.errorCode ?? 'FILE_FORMAT_MISMATCH',
+        }
+      }
 
       if (published) {
         publishedVersionId = published.versionId
@@ -1061,7 +1056,7 @@ export async function uploadEventTestFile(formData: FormData) {
   // llamar al parser XML directo del backend y persistir los snapshots.
   if (isAIEligible && canonicalTypeForXml === 'Audiometria') {
     try {
-      const xmlDetected = await isXmlFile(file)
+      const xmlDetected = await isAudiometryXmlFile(file)
       if (xmlDetected) {
         console.log('[FIX-20260729-03-G-XML] Detectado XML de audiometría; ruteando a parser directo.')
         const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -1450,7 +1445,7 @@ export async function regenerateStudyAI(
     const calibrationVersionIdForXml =
       publishedVersionId ?? published?.versionId ?? null
 
-    if (canonicalType === 'Audiometria' && (await isXmlFile(file))) {
+    if (canonicalType === 'Audiometria' && (await isAudiometryXmlFile(file))) {
       const xmlResponse = await uploadXmlAudiometryDirect(
         apiBase,
         eventTestId,

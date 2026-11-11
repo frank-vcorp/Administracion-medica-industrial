@@ -5,6 +5,7 @@ import {
   cancelAppointment,
   cancelPapeleta,
 } from '@/actions/cancellation.actions'
+import { ClinicalTextarea } from '@/components/clinical/ClinicalFreeTextControls'
 
 type CancelWithReasonButtonProps = {
   label: string
@@ -86,15 +87,15 @@ export default function CancelWithReasonButton(props: CancelWithReasonButtonProp
         })
       }}
     >
-      <label className="block text-[10px] font-bold uppercase text-slate-500">
+      <label className="block text-[10px] font-semibold text-slate-500">
         Motivo de cancelación
       </label>
-      <textarea
+      <ClinicalTextarea
         required
         minLength={3}
         maxLength={500}
         value={reason}
-        onChange={(event) => setReason(event.target.value)}
+        onChange={setReason}
         rows={3}
         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
         placeholder="Indica por qué se cancela"

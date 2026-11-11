@@ -1,46 +1,35 @@
 'use client'
 
 import {
-  OCCUPATIONAL_PRIVACY_PDF_FILENAME,
-  OCCUPATIONAL_PRIVACY_PDF_URL,
-} from '@/lib/legal/occupational-privacy-notice'
+  CHECK_IN_PRIVACY_LEGAL_NAME,
+  CHECK_IN_PRIVACY_VERACITY_BLURB,
+} from '@/lib/legal/check-in-privacy-notice'
 
 type Props = {
   compact?: boolean
   showPreview?: boolean
 }
 
+/**
+ * Bloque de veracidad / aviso en consentimiento de check-in (siempre SME).
+ * No enlaza el PDF FY27 Sodexo (solo clínica REG-SO-01).
+ */
 export function PrivacyNoticePdfLinks({ compact = false, showPreview = false }: Props) {
+  void showPreview
+
   return (
     <div className={compact ? 'space-y-2' : 'space-y-3'}>
       <p className={`text-slate-600 leading-relaxed ${compact ? 'text-xs' : 'text-sm'}`}>
-        Aviso de privacidad integral (salud ocupacional FY27). La veracidad de los datos clínicos
-        se declara en el consentimiento informado.
+        {CHECK_IN_PRIVACY_VERACITY_BLURB}
       </p>
-      <div className="flex flex-wrap gap-2">
-        <a
-          href={OCCUPATIONAL_PRIVACY_PDF_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2"
-        >
-          Ver aviso (PDF)
+      <p className={`text-slate-500 ${compact ? 'text-[11px]' : 'text-xs'}`}>
+        Responsable: <span className="font-semibold text-slate-700">{CHECK_IN_PRIVACY_LEGAL_NAME}</span>
+        {' '}
+        · Resumen ampliado en{' '}
+        <a href="/legal/privacidad-portal" className="text-teal-700 underline font-medium">
+          aviso del portal
         </a>
-        <a
-          href={OCCUPATIONAL_PRIVACY_PDF_URL}
-          download={OCCUPATIONAL_PRIVACY_PDF_FILENAME}
-          className="inline-flex items-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2"
-        >
-          Descargar
-        </a>
-      </div>
-      {showPreview && (
-        <iframe
-          title="Vista previa aviso de privacidad FY27"
-          src={OCCUPATIONAL_PRIVACY_PDF_URL}
-          className="w-full h-40 rounded-lg border border-slate-200 bg-slate-50"
-        />
-      )}
+      </p>
     </div>
   )
 }

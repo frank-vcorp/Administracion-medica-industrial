@@ -21,6 +21,7 @@ import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { isAdminLike } from '@/lib/auth/roles'
 import { calculateNextDueDate } from './maintenance.helpers'
+import { zFreeTextMax, zFreeTextMaxOptional } from '@/lib/text/zod-free-text'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -32,8 +33,8 @@ const CreateMaintenanceSchema = z.object({
   mobileUnitId: z.string().min(1),
   type: z.enum(TYPE_VALUES),
   scheduledDate: z.string().datetime(),
-  description: z.string().min(1).max(2000),
-  technician: z.string().max(200).optional(),
+  description: zFreeTextMax(2000, 1),
+  technician: zFreeTextMaxOptional(200),
   cost: z.number().min(0).optional(),
   nextDueDate: z.string().datetime().optional(),
   attachments: z.array(z.object({
@@ -46,8 +47,8 @@ const CreateMaintenanceSchema = z.object({
 const UpdateMaintenanceSchema = z.object({
   type: z.enum(TYPE_VALUES).optional(),
   scheduledDate: z.string().datetime().optional(),
-  description: z.string().min(1).max(2000).optional(),
-  technician: z.string().max(200).optional(),
+  description: zFreeTextMax(2000, 1).optional(),
+  technician: zFreeTextMaxOptional(200),
   cost: z.number().min(0).optional(),
   nextDueDate: z.string().datetime().optional().nullable(),
 })
@@ -60,7 +61,7 @@ const CompleteMaintenanceSchema = z.object({
     type: z.string(),
     uploadedAt: z.string().datetime(),
   })).optional(),
-  notes: z.string().max(2000).optional(),
+  notes: zFreeTextMaxOptional(2000),
 })
 
 // ─── Helpers de auth ─────────────────────────────────────────────────────────

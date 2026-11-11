@@ -29,6 +29,12 @@ import {
   validateStudyCaptureForComplete,
 } from "@/lib/clinical/study-required-fields"
 import { splitUserFacingMessageLines, type UserFacingError } from "@/lib/user-facing-error"
+import {
+  computeBmi,
+  complexionFromImc,
+  formatTallaMetersForDisplay,
+  formatTallaMetersWhileTyping,
+} from '@/lib/clinical/talla-meters'
 
 interface SomatometriaStudyProps {
   eventId: string
@@ -71,14 +77,11 @@ export default function SomatometriaStudy({
     setCompleteBanner("")
   }
 
-  const peso = parseFloat(formData.peso_kg) || 0
-  const talla = parseFloat(formData.talla_m) || 0
-  const imc = peso > 0 && talla > 0 ? (peso / (talla * talla)).toFixed(2) : "0.00"
-
-  let complexion = "NORMAL"
-  if (parseFloat(imc) > 29.9) complexion = "OBESIDAD"
-  else if (parseFloat(imc) > 24.9) complexion = "SOBREPESO"
-  else if (parseFloat(imc) < 18.5 && parseFloat(imc) > 0) complexion = "BAJO PESO"
+  const { imc, imcValue } = useMemo(
+    () => computeBmi(formData.peso_kg, formData.talla_m),
+    [formData.peso_kg, formData.talla_m],
+  )
+  const complexion = useMemo(() => complexionFromImc(imcValue), [imcValue])
 
   const buildPayload = useCallback(
     () => ({ ...formData, imc: parseFloat(imc), complexion }),
@@ -208,22 +211,35 @@ export default function SomatometriaStudy({
         </div>
         <div>
           <StudyCaptureFieldLabel required={isStudyRequiredField('Somatometria', 'talla_m')}>
-            Talla (Metros)
+            Talla (metros)
           </StudyCaptureFieldLabel>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={formData.talla_m || ''}
-            onChange={e => handleChange('talla_m', e.target.value)}
+            onChange={e => {
+              const v = e.target.value
+              const next =
+                v.includes('.') || v.includes(',')
+                  ? v.replace(',', '.')
+                  : formatTallaMetersWhileTyping(v)
+              handleChange('talla_m', next)
+            }}
+            onBlur={e => {
+              const formatted = formatTallaMetersForDisplay(e.target.value)
+              if (formatted !== e.target.value.trim()) {
+                handleChange('talla_m', formatted)
+              }
+            }}
             disabled={readonly}
             className={studyCaptureInputClass(Boolean(err('talla_m')), inputBase)}
-            placeholder="Ej: 1.75"
+            placeholder="Ej: 1,75 o 175"
           />
           {err('talla_m') && <p className="text-[10px] text-red-600 mt-1">{err('talla_m')}</p>}
         </div>
         <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase">IMC Calculado</p>
+            <p className="text-xs font-semibold text-slate-500">IMC Calculado</p>
             <div className="text-3xl font-black text-slate-700">{imc}</div>
           </div>
           <div className={`px-4 py-2 rounded-lg font-bold text-sm ${
@@ -236,8 +252,8 @@ export default function SomatometriaStudy({
       </div>
 
       <div>
-        <h4 className="text-sm font-bold text-slate-600 mb-1 uppercase border-b pb-2">
-          Signos Vitales
+        <h4 className="text-sm font-semibold text-slate-600 mb-1 border-b pb-2">
+          Signos vitales
         </h4>
         <p className="text-[11px] text-slate-500 mb-4">
           Ingresa <span className="text-red-500">*</span> tensión arterial sistólica o frecuencia cardiaca.
@@ -266,7 +282,7 @@ export default function SomatometriaStudy({
             </div>
           </div>
           <div>
-            <StudyCaptureFieldLabel required>Frec. Cardiaca</StudyCaptureFieldLabel>
+            <StudyCaptureFieldLabel required>Frec. cardiaca</StudyCaptureFieldLabel>
             <input
               type="number"
               value={formData.fc_min || ''}
@@ -289,7 +305,7 @@ export default function SomatometriaStudy({
             />
           </div>
           <div>
-            <StudyCaptureFieldLabel>Frec. Respiratoria</StudyCaptureFieldLabel>
+            <StudyCaptureFieldLabel>Frec. respiratoria</StudyCaptureFieldLabel>
             <input
               type="number"
               value={formData.fr_min || ''}
@@ -300,7 +316,7 @@ export default function SomatometriaStudy({
             />
           </div>
           <div>
-            <StudyCaptureFieldLabel>Sat. Oxígeno (%)</StudyCaptureFieldLabel>
+            <StudyCaptureFieldLabel>Sat. oxígeno (%)</StudyCaptureFieldLabel>
             <input
               type="number"
               min={0}

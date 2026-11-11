@@ -1,8 +1,18 @@
 import { z } from 'zod';
+import { applySentenceCase } from '@/lib/text/sentence-case';
 import { tolerantZinEnum } from './zin.helper';
 
 const SiNegado = z.enum(['NEGADO', 'SI', 'NO APLICA']).default('NEGADO');
-const cleanStr  = z.string().trim().max(500).optional();
+
+/** Texto libre (modo oración al persistir). */
+const freeTextOpt = (max: number) =>
+  z.string().trim().max(max).transform(applySentenceCase).optional();
+
+const freeTextDefault = (max: number) =>
+  z.string().trim().max(max).transform(applySentenceCase).default('');
+
+/** Valores de catálogo ZIN / multiselect — sin normalizar casing. */
+const catalogStr = z.string().trim().max(500).optional();
 
 // ----------------------------------------------------------------------
 // IMPL-20260817-04 (junta AMI 10/ago, línea 285 — Erika): acordeón Sí/Negado/
@@ -13,13 +23,28 @@ const cleanStr  = z.string().trim().max(500).optional();
 // a la nueva forma `{ estado, detalle }`.
 // ----------------------------------------------------------------------
 export const DetalleTripleSchema = z.object({
-  desde_cuando:  z.string().trim().max(200).optional().default(''),
-  tratamiento:   z.string().trim().max(500).optional().default(''),
-  observaciones: z.string().trim().max(1500).optional().default(''),
+  desde_cuando: freeTextDefault(200),
+  tratamiento: freeTextDefault(500),
+  observaciones: freeTextDefault(1500),
   /** O9-30 — texto libre cuando aplica (p. ej. exantemáticas). */
-  especificacion: z.string().trim().max(500).optional().default(''),
+  especificacion: freeTextDefault(500),
 })
 export type DetalleTriple = z.infer<typeof DetalleTripleSchema>
+
+/** Varias «otras enfermedades» (texto libre). Acepta string único legacy → array. */
+export const OtrasEnfermedadesListSchema = z.preprocess(
+  (raw) => {
+    if (raw === undefined || raw === null) return []
+    if (typeof raw === 'string') {
+      const t = raw.trim()
+      return t ? [t] : []
+    }
+    if (Array.isArray(raw)) return raw
+    return []
+  },
+  z.array(z.string().trim().max(500)).default([]),
+)
+export type OtrasEnfermedadesList = z.infer<typeof OtrasEnfermedadesListSchema>
 
 /**
  * Una enfermedad patológica con estado Sí/Negado/No Aplica + detalle
@@ -66,13 +91,13 @@ export type GrupoYRhValue = (typeof GRUPO_RH_VALUES)[number]
 // Movido desde prefilled.schema.ts — ARCH-20260326-06
 // ─────────────────────────────────────────────────────────────────────────────
 export const DatosPersonalesModulo1Schema = z.object({
-  puesto_actual:      cleanStr,
-  area_departamento:  cleanStr,
+  puesto_actual:      freeTextOpt(500),
+  area_departamento:  freeTextOpt(500),
   turno:              z.enum(['MATUTINO', 'VESPERTINO', 'NOCTURNO', 'MIXTO']).optional(),
   antiguedad_anios:   z.coerce.number().nonnegative().max(60).optional(),
   antiguedad_meses:   z.coerce.number().nonnegative().max(11).optional(),
   estado_civil:       z.enum(['SOLTERO', 'CASADO', 'UNION_LIBRE', 'DIVORCIADO', 'VIUDO', 'OTRO']).optional(),
-  escolaridad:        cleanStr,
+  escolaridad:        freeTextOpt(500),
   numero_hijos:       z.coerce.number().nonnegative().max(30).optional(),
 });
 
@@ -83,26 +108,26 @@ export type DatosPersonalesModulo1 = z.infer<typeof DatosPersonalesModulo1Schema
 // Movido desde prefilled.schema.ts — ARCH-20260326-06
 // ─────────────────────────────────────────────────────────────────────────────
 export const HistoriaLaboralSchema = z.object({
-  empresa_anterior_1:                cleanStr,
-  puesto_anterior_1:                 cleanStr,
-  tiempo_anterior_1:                 cleanStr,
-  empresa_anterior_2:                cleanStr,
-  puesto_anterior_2:                 cleanStr,
-  tiempo_anterior_2:                 cleanStr,
+  empresa_anterior_1:                freeTextOpt(500),
+  puesto_anterior_1:                 freeTextOpt(500),
+  tiempo_anterior_1:                 freeTextOpt(500),
+  empresa_anterior_2:                freeTextOpt(500),
+  puesto_anterior_2:                 freeTextOpt(500),
+  tiempo_anterior_2:                 freeTextOpt(500),
   exposicion_quimica:                z.boolean().optional(),
-  exposicion_quimica_especifique:    cleanStr,
+  exposicion_quimica_especifique:    freeTextOpt(500),
   exposicion_fisica:                 z.boolean().optional(),
-  exposicion_fisica_especifique:     cleanStr,
+  exposicion_fisica_especifique:     freeTextOpt(500),
   exposicion_biologica:              z.boolean().optional(),
-  exposicion_biologica_especifique:  cleanStr,
+  exposicion_biologica_especifique:  freeTextOpt(500),
   exposicion_ergonomica:             z.boolean().optional(),
-  exposicion_ergonomica_especifique: cleanStr,
+  exposicion_ergonomica_especifique: freeTextOpt(500),
   exposicion_psicosocial:            z.boolean().optional(),
-  exposicion_psicosocial_especifique: cleanStr,
+  exposicion_psicosocial_especifique: freeTextOpt(500),
   accidentes_trabajo:                z.boolean().optional(),
-  accidentes_descripcion:            cleanStr,
+  accidentes_descripcion:            freeTextOpt(500),
   enfermedades_trabajo:              z.boolean().optional(),
-  enfermedades_descripcion:          cleanStr,
+  enfermedades_descripcion:          freeTextOpt(500),
 });
 
 export type HistoriaLaboral = z.infer<typeof HistoriaLaboralSchema>;
@@ -113,27 +138,27 @@ export type HistoriaLaboral = z.infer<typeof HistoriaLaboralSchema>;
 // FIX L2 (QA-20260817-01-C2): cada campo catálogo ZIN usa `{field}_especifique`
 // independiente cuando el select = OTROS (antes sólo `otras` lo tenía).
 // ----------------------------------------------------------------------
-const heredoEspecifiqueOptional = z.string().trim().max(250).optional()
+const heredoEspecifiqueOptional = freeTextOpt(250)
 
 export const HeredoFamiliaresSchema = z.object({
-  diabetes: z.string().trim().max(500).optional(),     // ej: "AB MA", "PADRE", etc.
+  diabetes: catalogStr,     // ej: "AB MA", "PADRE", etc.
   diabetes_especifique: heredoEspecifiqueOptional,
-  has: z.string().trim().max(500).optional(),          // Hipertensión
+  has: catalogStr,
   has_especifique: heredoEspecifiqueOptional,
-  epilepsia: z.string().trim().max(500).optional(),
+  epilepsia: catalogStr,
   epilepsia_especifique: heredoEspecifiqueOptional,
-  cardiopatia: z.string().trim().max(500).optional(),
+  cardiopatia: catalogStr,
   cardiopatia_especifique: heredoEspecifiqueOptional,
-  renales: z.string().trim().max(500).optional(),
+  renales: catalogStr,
   renales_especifique: heredoEspecifiqueOptional,
-  asma: z.string().trim().max(500).optional(),
+  asma: catalogStr,
   asma_especifique: heredoEspecifiqueOptional,
-  cancer: z.string().trim().max(500).optional(),
+  cancer: catalogStr,
   cancer_especifique: heredoEspecifiqueOptional,
-  mentales: z.string().trim().max(500).optional(),
+  mentales: catalogStr,
   mentales_especifique: heredoEspecifiqueOptional,
-  otras: z.string().trim().max(1000).optional(),       // Catálogo ZIN (HEREDOFAMILIARES_VALUES)
-  otras_especifique: z.string().trim().max(250).default(''),  // Texto libre condicional (FIX L2)
+  otras: z.string().trim().max(1000).optional(),
+  otras_especifique: freeTextDefault(250),
 });
 
 // ----------------------------------------------------------------------
@@ -142,37 +167,37 @@ export const HeredoFamiliaresSchema = z.object({
 export const NoPatologicosSchema = z.object({
   alcohol: SiNegado,
   alcohol_edad_comienzo: z.coerce.number().int().nonnegative().max(120).optional(),
-  alcohol_frecuencia: z.string().trim().max(200).optional(), // ej: "SEMANAL"
+  alcohol_frecuencia: freeTextOpt(200),
   alcohol_suspendido: z.enum(['NEGADO', 'SI']).optional(), // STANDARDIZADO a NEGADO/SI
-  alcohol_tiempo_suspendido: z.string().trim().max(200).optional(),
+  alcohol_tiempo_suspendido: freeTextOpt(200),
 
   tabaco: SiNegado,
   tabaco_edad_comienzo: z.coerce.number().int().nonnegative().max(120).optional(),
-  tabaco_frecuencia: z.string().trim().max(200).optional(), // ej: "QUINCENAL"
+  tabaco_frecuencia: freeTextOpt(200),
   tabaco_suspendido: z.enum(['NEGADO', 'SI']).optional(), // STANDARDIZADO a NEGADO/SI
-  tabaco_tiempo_suspendido: z.string().trim().max(200).optional(),
+  tabaco_tiempo_suspendido: freeTextOpt(200),
   tabaco_cigarros_dia: z.coerce.number().int().nonnegative().max(200).optional(),
 
   drogas_estimulantes: SiNegado,
-  drogas_especifique: z.string().trim().max(500).optional(),
-  drogas_frecuencia: z.string().trim().max(200).optional(),
-  drogas_ultimo_consumo: z.string().trim().max(200).optional(),
+  drogas_especifique: freeTextOpt(500),
+  drogas_frecuencia: freeTextOpt(200),
+  drogas_ultimo_consumo: freeTextOpt(200),
 
   ejercicio: SiNegado,
-  ejercicio_especifique: z.string().trim().max(500).optional(),
-  ejercicio_frecuencia: z.string().trim().max(200).optional(),
+  ejercicio_especifique: freeTextOpt(500),
+  ejercicio_frecuencia: freeTextOpt(200),
 
   alimentacion: z.enum(['BUENA', 'REGULAR', 'MALA']).default('BUENA'),
 
   tratamiento_medico_actual: SiNegado,
-  tratamiento_medico_actual_especifique: z.string().trim().max(500).optional(),
+  tratamiento_medico_actual_especifique: freeTextOpt(500),
 
   // IMPL-20260817-03: ZIN combo con 9 valores canónicos (select en UI).
   // DA-1: `tolerantZinEnum` sigue aceptando strings legacy no-vacíos.
   grupo_y_rh: tolerantZinEnum(GRUPO_RH_VALUES).default('DESCONOCE'),
 
   tatuajes: SiNegado,
-  tatuajes_especifique: z.string().trim().max(500).optional(),
+  tatuajes_especifique: freeTextOpt(500),
 });
 
 // ----------------------------------------------------------------------
@@ -223,6 +248,31 @@ export const PatologicosSchema = z.object({
   migrana:               PatologiaConDetalleSchema,
 
   otras:                 PatologiaConDetalleSchema,
+  /** Nombres adicionales (texto libre) cuando «Otras enfermedades» = SÍ. */
+  otras_enfermedades:    OtrasEnfermedadesListSchema,
+}).transform((data) => {
+  let list = data.otras_enfermedades ?? []
+  const otras = data.otras
+  if (list.length === 0 && otras.estado === 'SI') {
+    const esp = otras.detalle?.especificacion?.trim()
+    if (esp) list = [esp]
+  } else if (list.length > 0 && otras.estado === 'SI') {
+    const det = otras.detalle ?? {
+      desde_cuando: '',
+      tratamiento: '',
+      observaciones: '',
+      especificacion: '',
+    }
+    return {
+      ...data,
+      otras: {
+        ...otras,
+        detalle: { ...det, especificacion: list[0] },
+      },
+      otras_enfermedades: list,
+    }
+  }
+  return { ...data, otras_enfermedades: list }
 });
 
 // ----------------------------------------------------------------------

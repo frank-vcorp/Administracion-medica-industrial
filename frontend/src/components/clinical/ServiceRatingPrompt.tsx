@@ -45,7 +45,7 @@ export function ServiceRatingPrompt({
 
   return (
     <div className="mx-auto max-w-xl rounded-2xl border border-amber-200 bg-amber-50/80 p-5 text-left shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+      <p className="text-[10px] font-boldst text-amber-700">
         Calificación del servicio
       </p>
       <h4 className="mt-1 text-lg font-bold text-slate-800">
