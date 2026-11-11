@@ -258,6 +258,20 @@ export async function updateEventTestStatus(
     })
     const oldStatus = prevTest?.status
 
+    if (status === 'COMPLETED') {
+      const { assertEventTestCaptureForComplete } = await import(
+        '@/lib/clinical/study-event-complete-gate'
+      )
+      const gate = await assertEventTestCaptureForComplete(eventTestId, eventId)
+      if (!gate.ok) {
+        return {
+          success: false,
+          error: gate.error,
+          missingFields: gate.missingLabels,
+        }
+      }
+    }
+
     await prisma.eventTest.update({
       where: { id: eventTestId },
       data: { status }

@@ -29,7 +29,10 @@
  */
 "use client"
 
-import { useCallback, useEffect, useState, useTransition } from "react"
+import { useCallback, useEffect, useRef, useState, useTransition } from "react"
+import { StudyCaptureMissingBanner } from "@/components/clinical/studies/StudyCaptureUi"
+import type { StudyLeaveGuardFn } from "@/components/clinical/studies/useStudyLeaveGuard"
+import { formatStudyMissingFieldsSpanish } from "@/lib/clinical/study-required-fields"
 import { useRouter } from "next/navigation"
 import { replacePapeletaQuery } from '@/lib/clinical/papeleta-navigation'
 import type { StudyPresentationSchema } from "@/types/calibration"
@@ -431,6 +434,33 @@ export default function PapeletaWorkspace({
   const [audiometriaQuestionnaireEventTestId, setAudiometriaQuestionnaireEventTestId] =
     useState<string | null>(null)
   const [patientNameWarning, setPatientNameWarning] = useState<PatientNameWarning | null>(null)
+  const [studyNavBlockMessage, setStudyNavBlockMessage] = useState("")
+  const studyLeaveGuardRef = useRef<StudyLeaveGuardFn | null>(null)
+
+  const registerStudyLeaveGuard = useCallback((fn: StudyLeaveGuardFn | null) => {
+    studyLeaveGuardRef.current = fn
+  }, [])
+
+  const navigateToStudy = useCallback(
+    (testId: string | null, options?: { skipGuard?: boolean }) => {
+      if (
+        !options?.skipGuard &&
+        testId !== activeTestId &&
+        activeTestId &&
+        studyLeaveGuardRef.current
+      ) {
+        const gate = studyLeaveGuardRef.current()
+        if (!gate.ok) {
+          setStudyNavBlockMessage(formatStudyMissingFieldsSpanish(gate.missing))
+          return false
+        }
+      }
+      setStudyNavBlockMessage("")
+      setActiveTestId(testId)
+      return true
+    },
+    [activeTestId, setActiveTestId],
+  )
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
   const completedCount = localTests.filter(t =>
@@ -777,7 +807,7 @@ export default function PapeletaWorkspace({
             {visibleTests.map((test) => (
               <button
                 key={test.id}
-                onClick={() => setActiveTestId(test.id)}
+                onClick={() => navigateToStudy(test.id)}
                 className="w-full text-left bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-xl px-4 py-3 transition-all group"
               >
                 <div className="flex items-center justify-between gap-3">
@@ -815,7 +845,10 @@ export default function PapeletaWorkspace({
       <WorkerHeader
         completedCount={completedCount}
         totalCount={localTests.length}
-        onBack={() => { setActiveTestId(null); setUploadError('') }}
+        onBack={() => {
+          if (!navigateToStudy(null)) return
+          setUploadError('')
+        }}
       />
 
       {/* Selector compacto móvil */}
@@ -825,7 +858,10 @@ export default function PapeletaWorkspace({
         </label>
         <select
           value={activeTestId}
-          onChange={(e) => { setActiveTestId(e.target.value); setUploadError('') }}
+          onChange={(e) => {
+            if (!navigateToStudy(e.target.value)) return
+            setUploadError('')
+          }}
           className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-teal-500 outline-none"
         >
           {visibleTests.map(t => (
@@ -850,7 +886,10 @@ export default function PapeletaWorkspace({
           {visibleTests.map((t) => (
             <button
               key={t.id}
-              onClick={() => { setActiveTestId(t.id); setUploadError('') }}
+              onClick={() => {
+                if (!navigateToStudy(t.id)) return
+                setUploadError('')
+              }}
               className={`flex w-full items-start gap-2 px-2 py-2 border-l-2 transition-colors ${
                 t.id === activeTestId
                   ? 'bg-white border-[#592c82] text-[#592c82]'
@@ -874,9 +913,11 @@ export default function PapeletaWorkspace({
 
         {/* Panel principal del estudio activo */}
         <div className="flex-1 p-4 min-w-0">
+          <StudyCaptureMissingBanner message={studyNavBlockMessage} className="mb-4" />
           {activeTest && (
             <StudyPanel
               test={activeTest}
+              registerStudyLeaveGuard={registerStudyLeaveGuard}
               eventId={eventId}
               examData={examData}
               workerInfo={workerInfo}
@@ -1360,6 +1401,7 @@ function StudyPanel({
   // gate del CTA PDF/ZIP dentro de ExamenMedicoEstudio.
   hasMedicalVerdict,
   onDictamenLabInclusionSaved,
+  registerStudyLeaveGuard,
 }: {
   test: StudyTest
   eventId: string
@@ -1403,6 +1445,7 @@ function StudyPanel({
     eventTestId: string,
     includeInDictamenGeneral: boolean,
   ) => void
+  registerStudyLeaveGuard?: (fn: StudyLeaveGuardFn | null) => void
 }) {
   // ARCH-20260518-04: confirmación local antes de ejecutar la limpieza destructiva
   const [isClearConfirming, setIsClearConfirming] = useState(false)
@@ -1574,6 +1617,7 @@ function StudyPanel({
             initialData={(examData?.somatometryData as Record<string, unknown>) ?? null}
             readonly={readonly}
             onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+            registerLeaveGuard={registerStudyLeaveGuard}
           />
         </div>
       )}
@@ -1594,6 +1638,7 @@ function StudyPanel({
             initialData={(examData?.eyeAcuityData as Record<string, unknown>) ?? null}
             readonly={readonly}
             onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+            registerLeaveGuard={registerStudyLeaveGuard}
           />
         </div>
       )}
@@ -1618,6 +1663,7 @@ function StudyPanel({
             workerInfo={workerInfo}
             readonly={readonly}
             onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+            registerLeaveGuard={registerStudyLeaveGuard}
           />
           <div className="space-y-3 lg:sticky lg:top-4 self-start">
             {test.aiSnapshot ? (
