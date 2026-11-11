@@ -25,7 +25,6 @@ import IdentityLightbox from '@/components/IdentityLightbox'
 import SignaturePad, { type SignaturePadHandle } from '@/components/reception/SignaturePad'
 import { InformedConsentDocument } from '@/components/reception/InformedConsentDocument'
 import { formatAppointmentAgendaTime, todayAgendaDateString } from '@/lib/appointment-scheduling'
-import { resolveCheckInPrivacyNoticeKey } from '@/lib/legal/check-in-privacy-notice'
 
 // ── Etiquetas de catálogos ──────────────────────────────────────────────────
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -67,10 +66,6 @@ interface AppointmentData {
   worker: WorkerData
   company: { id: string; name: string } | null
   branch: { id: string; name: string } | null
-  serviceProfile?: {
-    name: string
-    tests: { test: { name: string; code: string } }[]
-  } | null
 }
 
 interface Props {
@@ -201,15 +196,6 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  })
-
-  const profileTests = appointment.serviceProfile?.tests ?? []
-  const checkInPrivacyNoticeKey = resolveCheckInPrivacyNoticeKey({
-    medicalProfileName: worker.medicalProfile?.name,
-    serviceProfileName: appointment.serviceProfile?.name,
-    testNames: profileTests.map((row) => row.test.name),
-    testCodes: profileTests.map((row) => row.test.code),
-    companyName: appointment.company?.name ?? worker.company?.name,
   })
 
   function handleGoToConsent() {
@@ -560,7 +546,6 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 <InformedConsentDocument
                   patientFullName={patientDisplayName}
                   dateLabel={consentDateLabel}
-                  noticeKey={checkInPrivacyNoticeKey}
                 />
                 <p className="text-[10px] text-slate-400 mt-2">
                   Al firmar abajo, se generará el PDF oficial (nombre, fecha y firma) y quedará guardado

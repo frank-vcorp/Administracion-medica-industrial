@@ -10,25 +10,18 @@ import {
   INFORMED_CONSENT_PRIVACY_TITLE,
   INFORMED_CONSENT_TITLE,
 } from '@/lib/informed-consent-content'
-import type { CheckInPrivacyNoticeKey } from '@/lib/legal/check-in-privacy-notice'
-
 type Props = {
   patientFullName: string
   dateLabel: string
-  noticeKey?: CheckInPrivacyNoticeKey
 }
 
 /**
  * Texto del consentimiento informado listo para leer, con nombre y fecha personalizados.
  * El PDF firmado se genera al confirmar el check-in (plantilla oficial + firma).
  */
-export function InformedConsentDocument({
-  patientFullName,
-  dateLabel,
-  noticeKey = 'SME',
-}: Props) {
+export function InformedConsentDocument({ patientFullName, dateLabel }: Props) {
   const name = patientFullName.trim() || '—'
-  const privacyParagraphs = getInformedConsentPrivacyParagraphs(noticeKey)
+  const privacyParagraphs = getInformedConsentPrivacyParagraphs()
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 text-sm text-slate-800 leading-relaxed max-h-[min(52vh,420px)] overflow-y-auto shadow-inner">
@@ -66,7 +59,7 @@ export function InformedConsentDocument({
         </ol>
         <p className="text-justify text-[13px] text-slate-700">{INFORMED_CONSENT_PRIVACY_FOOTER}</p>
         <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-3 mt-2">
-          <PrivacyNoticePdfLinks compact showPreview noticeKey={noticeKey} />
+          <PrivacyNoticePdfLinks compact showPreview />
         </div>
       </section>
 

@@ -833,16 +833,6 @@ export async function getAppointmentForCorroboration(appointmentId: string) {
         },
         company: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
-        serviceProfile: {
-          select: {
-            name: true,
-            tests: {
-              select: {
-                test: { select: { name: true, code: true } },
-              },
-            },
-          },
-        },
       }
     })
 

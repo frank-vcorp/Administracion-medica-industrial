@@ -4,8 +4,7 @@
  */
 
 import {
-  getCheckInPrivacyNoticeConfig,
-  type CheckInPrivacyNoticeKey,
+  CHECK_IN_PRIVACY_LEGAL_NAME,
 } from '@/lib/legal/check-in-privacy-notice'
 
 export function formatInformedConsentDate(date: Date): string {
@@ -42,17 +41,13 @@ export const INFORMED_CONSENT_PRIVACY_FOOTER =
 
 export const INFORMED_CONSENT_FORMAT_CODE = 'Formato autorizado 005-18'
 
-function privacyIntroParagraph(legalName: string): string {
-  return `${legalName} con fundamento en los artículos 15 y 16 de la Ley Federal de protección de datos personales en posesión de particulares se compromete a asegurar la confidencialidad/privacidad de la información personal obtenida al realizar las pruebas médicas que ha solicitado.`
+function privacyIntroParagraph(): string {
+  return `${CHECK_IN_PRIVACY_LEGAL_NAME} con fundamento en los artículos 15 y 16 de la Ley Federal de protección de datos personales en posesión de particulares se compromete a asegurar la confidencialidad/privacidad de la información personal obtenida al realizar las pruebas médicas que ha solicitado.`
 }
 
-/** Párrafos del aviso corto en check-in, según responsable (SME / Sodexo / Realso). */
-export function getInformedConsentPrivacyParagraphs(
-  noticeKey: CheckInPrivacyNoticeKey = 'SME',
-): readonly string[] {
-  const { legalName } = getCheckInPrivacyNoticeConfig(noticeKey)
-  return [privacyIntroParagraph(legalName), ...INFORMED_CONSENT_PRIVACY_BODY_SHARED]
+/** Párrafos del aviso en check-in — siempre SME. */
+export function getInformedConsentPrivacyParagraphs(): readonly string[] {
+  return [privacyIntroParagraph(), ...INFORMED_CONSENT_PRIVACY_BODY_SHARED]
 }
 
-/** @deprecated Usar getInformedConsentPrivacyParagraphs('SME') */
-export const INFORMED_CONSENT_PRIVACY_PARAGRAPHS = getInformedConsentPrivacyParagraphs('SME')
+export const INFORMED_CONSENT_PRIVACY_PARAGRAPHS = getInformedConsentPrivacyParagraphs()
