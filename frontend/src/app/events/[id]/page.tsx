@@ -22,6 +22,7 @@ import {
 } from './_lib/event-page-data'
 import { shouldRenderEventFlowController } from './_lib/event-flow-visibility'
 import { isAdminLike } from '@/lib/auth/roles'
+import { computePapeletaReadonly } from '@/lib/clinical/papeleta-readonly'
 import CancelWithReasonButton from '@/components/clinical/CancelWithReasonButton'
 
 export const dynamic = 'force-dynamic'
@@ -59,6 +60,12 @@ function EventView({ data }: EventViewProps) {
     hasMedicalVerdict,
     initialEventTestId,
   } = data
+
+  const papeletaReadonly = computePapeletaReadonly({
+    currentStep,
+    activeView,
+    userRole,
+  })
 
   return (
     <div className="space-y-3 max-w-[1500px] mx-auto pb-10 px-3 md:px-4 xl:px-5">
@@ -217,7 +224,7 @@ function EventView({ data }: EventViewProps) {
           workerId={event.worker.id}
           reviewerUserId={reviewerUserId}
           reviewerRole={userRole ?? undefined}
-          readonly={currentStep > 3}
+          readonly={papeletaReadonly}
           apiUrl={apiUrl}
           examData={serializedExam as Parameters<typeof PapeletaWorkspace>[0]['examData']}
           prefilledData={prefilledData ? JSON.parse(JSON.stringify(prefilledData)) : null}

@@ -19,6 +19,10 @@ import {
   prefillCertificadoPatientFields,
 } from '@/lib/clinical/certificado-medico-prefill'
 import { parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
+import {
+  clinicalCaptureReadonlyBannerText,
+  resolveClinicalStudyReadonly,
+} from '@/lib/clinical/papeleta-readonly'
 import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
 import {
   CERTIFICADO_MEDICO_SCHEMA_VERSION,
@@ -134,6 +138,16 @@ export default function CertificadoMedicoEstudio({
     ...(parsed?.antecedentes ?? {}),
   }))
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
+  const editorRole = session?.user?.role
+  const formReadonly = useMemo(
+    () => resolveClinicalStudyReadonly(readonly, Boolean(cerradaAt), editorRole),
+    [readonly, cerradaAt, editorRole],
+  )
+  const readonlyBanner = clinicalCaptureReadonlyBannerText(
+    formReadonly,
+    Boolean(cerradaAt),
+    editorRole,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -237,7 +251,7 @@ export default function CertificadoMedicoEstudio({
     return true
   }, [eventTestId, eventId, workerId, buildPayload])
 
-  const autosaveEnabled = !readonly && !cerradaAt
+  const autosaveEnabled = !formReadonly && !cerradaAt
   const { statusLabel: autosaveLabel, markSaved: markCertificadoSaved, userFacingError: certAutosaveError } =
     useClinicalIntervalAutosave({
     enabled: autosaveEnabled,
@@ -314,7 +328,7 @@ export default function CertificadoMedicoEstudio({
             value={antecedentes as AntecedentesCapturaData}
             onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
             workerId={workerId}
-            readonly={readonly}
+            readonly={formReadonly}
             modulo1={{}}
             onModulo1Change={() => {}}
           />
@@ -349,7 +363,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={signos[key]}
                 onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
           ))}
@@ -366,7 +380,7 @@ export default function CertificadoMedicoEstudio({
             className={`${inputClass} min-h-[200px]`}
             value={exploracion}
             onChange={setExploracion}
-            disabled={readonly}
+            disabled={formReadonly}
           />
         </section>
       )}
@@ -382,7 +396,7 @@ export default function CertificadoMedicoEstudio({
               value={integracion}
               onChange={setIntegracion}
               placeholder="Diagnóstico o integración clínica en prosa breve"
-              disabled={readonly}
+              disabled={formReadonly}
             />
           </div>
           <div>
@@ -391,7 +405,7 @@ export default function CertificadoMedicoEstudio({
               className={inputClass}
               value={dictamen}
               onChange={(e) => onDictamenChange(e.target.value as DictamenLaboralValue)}
-              disabled={readonly}
+              disabled={formReadonly}
             >
               {DICTAMEN_LABORAL_VALUES.map((v) => (
                 <option key={v} value={v}>
@@ -408,7 +422,7 @@ export default function CertificadoMedicoEstudio({
               className={`${inputClass} min-h-[72px]`}
               value={dictamenTexto}
               onChange={setDictamenTexto}
-              disabled={readonly}
+              disabled={formReadonly}
             />
           </div>
         </section>
@@ -423,7 +437,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={lugar}
                 onChange={setLugar}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -433,7 +447,7 @@ export default function CertificadoMedicoEstudio({
                 value={horaAtencion}
                 onChange={(e) => setHoraAtencion(e.target.value)}
                 placeholder="12:00"
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -443,7 +457,7 @@ export default function CertificadoMedicoEstudio({
                 value={sexoAtencion}
                 onChange={setSexoAtencion}
                 placeholder="Opcional si está en historial"
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -452,7 +466,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={domicilioAtencion}
                 onChange={setDomicilioAtencion}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -461,7 +475,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={idTipo}
                 onChange={setIdTipo}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -470,7 +484,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={idFolio}
                 onChange={setIdFolio}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -479,7 +493,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={medicoNombre}
                 onChange={setMedicoNombre}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -488,7 +502,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={medicoCedula}
                 onChange={setMedicoCedula}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -497,7 +511,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={medicoTitulo}
                 onChange={(e) => setMedicoTitulo(e.target.value)}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
@@ -506,7 +520,7 @@ export default function CertificadoMedicoEstudio({
                 className={inputClass}
                 value={medicoUniversidad}
                 onChange={(e) => setMedicoUniversidad(e.target.value)}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
           </div>
@@ -523,7 +537,18 @@ export default function CertificadoMedicoEstudio({
         </section>
       )}
 
-      {!readonly && (
+      {readonlyBanner && (
+        <div
+          className={`border rounded-xl p-3 text-xs text-center ${
+            formReadonly
+              ? 'bg-slate-50 border-slate-200 text-slate-400'
+              : 'bg-teal-50 border-teal-200 text-teal-800'
+          }`}
+        >
+          {readonlyBanner}
+        </div>
+      )}
+      {!formReadonly && (
         <div className="flex flex-wrap gap-2 items-center sticky bottom-0 bg-white/95 backdrop-blur border-t border-slate-200 py-3 -mx-1 px-1">
           <button
             type="button"
@@ -533,14 +558,16 @@ export default function CertificadoMedicoEstudio({
           >
             Guardar borrador
           </button>
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => runSave(true)}
-            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-          >
-            Cerrar certificado
-          </button>
+          {!cerradaAt && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => runSave(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+            >
+              Cerrar certificado
+            </button>
+          )}
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
           {saveError && (
             <div className="w-full min-w-[220px]">
