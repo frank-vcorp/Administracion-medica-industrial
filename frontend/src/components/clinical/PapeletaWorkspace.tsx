@@ -2304,7 +2304,7 @@ function AudiometriaQuestionnaireSection({
         Cuestionario de Audiometría pendiente
       </p>
       <p className="text-xs text-amber-700">
-        Captura antecedentes auditivos y exploración física para
+        Registra antecedentes auditivos y exploración física para
         enriquecer el prediagnóstico IA. Puedes subir el PDF sin
         contestar — el sistema seguirá funcionando, pero la IA recibirá
         menos contexto.
