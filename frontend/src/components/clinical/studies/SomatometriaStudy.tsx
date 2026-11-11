@@ -16,6 +16,12 @@ import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCal
 import { useClinicalIntervalAutosave } from "@/lib/hooks/useClinicalIntervalAutosave"
 import { mapMedicalExamActionFailure, parseMedicalExamZodIssues } from "@/lib/medical-exam-action-errors"
 import { splitUserFacingMessageLines, type UserFacingError } from "@/lib/user-facing-error"
+import {
+  computeBmi,
+  complexionFromImc,
+  formatTallaMetersForDisplay,
+  formatTallaMetersWhileTyping,
+} from '@/lib/clinical/talla-meters'
 
 interface SomatometriaStudyProps {
   eventId: string
@@ -46,14 +52,11 @@ export default function SomatometriaStudy({
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const peso = parseFloat(formData.peso_kg) || 0
-  const talla = parseFloat(formData.talla_m) || 0
-  const imc = peso > 0 && talla > 0 ? (peso / (talla * talla)).toFixed(2) : "0.00"
-
-  let complexion = "NORMAL"
-  if (parseFloat(imc) > 29.9) complexion = "OBESIDAD"
-  else if (parseFloat(imc) > 24.9) complexion = "SOBREPESO"
-  else if (parseFloat(imc) < 18.5 && parseFloat(imc) > 0) complexion = "BAJO PESO"
+  const { imc, imcValue } = useMemo(
+    () => computeBmi(formData.peso_kg, formData.talla_m),
+    [formData.peso_kg, formData.talla_m],
+  )
+  const complexion = useMemo(() => complexionFromImc(imcValue), [imcValue])
 
   const buildPayload = useCallback(
     () => ({ ...formData, imc: parseFloat(imc), complexion }),
@@ -136,15 +139,28 @@ export default function SomatometriaStudy({
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (Metros)</label>
+          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (m)</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={formData.talla_m || ''}
-            onChange={e => handleChange('talla_m', e.target.value)}
+            onChange={e => {
+              const v = e.target.value
+              const next =
+                v.includes('.') || v.includes(',')
+                  ? v.replace(',', '.')
+                  : formatTallaMetersWhileTyping(v)
+              handleChange('talla_m', next)
+            }}
+            onBlur={e => {
+              const formatted = formatTallaMetersForDisplay(e.target.value)
+              if (formatted !== e.target.value.trim()) {
+                handleChange('talla_m', formatted)
+              }
+            }}
             disabled={readonly}
             className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60"
-            placeholder="Ej: 1.75"
+            placeholder="Ej: 1,75 o 175"
           />
         </div>
         <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">

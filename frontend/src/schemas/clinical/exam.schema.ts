@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import { applySentenceCase } from '@/lib/text/sentence-case';
+import {
+  computeBmi,
+  complexionFromImc,
+  normalizeTallaMetersToNumber,
+  TALLA_METERS_MAX,
+} from '@/lib/clinical/talla-meters';
 import { ClinicalHistoryDataSchema } from './history.schema';
 import { tolerantZinEnum } from './zin.helper';
 
@@ -590,20 +596,44 @@ export const ReproductivosInmunizacionesSchema = z.object({
 // ----------------------------------------------------------------------
 // 7. SOMATOMETRÍA / SIGNOS VITALES (Imagen 6)
 // ----------------------------------------------------------------------
-export const SomatometriaVitalesSchema = z.object({
-  ta_sistolica: cleanNum,
-  ta_diastolica: cleanNum,
-  fc_min: cleanNum,
-  peso_kg: cleanNum,
-  perimetro_cintura: cleanNum,
-  talla_m: cleanNum,
-  perimetro_cadera: cleanNum,
-  fr_min: cleanNum,
-  saturacion_oxigeno: cleanNum,
-  temperatura: z.coerce.number().gt(30).lt(45).optional(),
-  imc: cleanNum,               
-  complexion: z.enum(['BAJO PESO', 'NORMAL', 'SOBREPESO', 'OBESIDAD', 'OBESIDAD SEVERA']).optional()
-});
+const tallaMetersField = z.preprocess(
+  (val) => normalizeTallaMetersToNumber(val),
+  z.number().positive().max(TALLA_METERS_MAX).optional(),
+);
+
+export const SomatometriaVitalesSchema = z
+  .object({
+    ta_sistolica: cleanNum,
+    ta_diastolica: cleanNum,
+    fc_min: cleanNum,
+    peso_kg: cleanNum,
+    perimetro_cintura: cleanNum,
+    talla_m: tallaMetersField,
+    perimetro_cadera: cleanNum,
+    fr_min: cleanNum,
+    saturacion_oxigeno: cleanNum,
+    temperatura: z.coerce.number().gt(30).lt(45).optional(),
+    imc: cleanNum,
+    complexion: z
+      .enum(['BAJO PESO', 'NORMAL', 'SOBREPESO', 'OBESIDAD', 'OBESIDAD SEVERA'])
+      .optional(),
+  })
+  .transform((data) => {
+    const { imcValue, tallaM } = computeBmi(data.peso_kg, data.talla_m);
+    if (imcValue <= 0) return data;
+    const complexion = complexionFromImc(imcValue) as
+      | 'BAJO PESO'
+      | 'NORMAL'
+      | 'SOBREPESO'
+      | 'OBESIDAD'
+      | undefined;
+    return {
+      ...data,
+      talla_m: tallaM > 0 ? tallaM : data.talla_m,
+      imc: imcValue,
+      complexion: complexion ?? data.complexion,
+    };
+  });
 
 // ----------------------------------------------------------------------
 // 8. AGUDEZA VISUAL (Imagen 7)
