@@ -1,7 +1,13 @@
 /**
  * Fusiona snapshot del portal de prellenado (Módulo 1) en antecedentes del examen.
  * O9-28 — datos del enlace deben reflejarse en captura clínica/tests.
+ * SME-111 — examen médico: historial longitudinal + portal con paridad a consulta.
  */
+
+import {
+  antecedentesSectionHasContent,
+  mergeProfileAntecedentesIntoConsulta,
+} from '@/lib/clinical/consulta-antecedentes'
 
 const PORTAL_SECTIONS = [
   'datos_personales',
@@ -45,4 +51,84 @@ export function mergePortalPrefillIntoAntecedentes(
 export function antecedentesCapturedIsEmpty(captured: Record<string, unknown> | null | undefined): boolean {
   if (!captured) return true
   return PORTAL_SECTIONS.every((sec) => isEmptySection(captured[sec]))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function stripProvenance(snapshot: Record<string, unknown>): Record<string, unknown> {
+  const { _provenance: _ignored, ...rest } = snapshot
+  return rest
+}
+
+type ProvenanceSource = 'portal' | 'longitudinal' | 'captured' | 'mixed'
+
+function inferAntecedentesProvenance(args: {
+  savedSections: Record<string, unknown>
+  merged: Record<string, unknown>
+  hadLongitudinal: boolean
+  hadPortal: boolean
+  existing?: unknown
+}): { source: ProvenanceSource; updatedAt: string } | undefined {
+  if (isRecord(args.existing) && typeof args.existing.source === 'string') {
+    return args.existing as { source: ProvenanceSource; updatedAt: string }
+  }
+  const savedHadContent = PORTAL_SECTIONS.some((sec) =>
+    antecedentesSectionHasContent(args.savedSections[sec]),
+  )
+  const usedPrefill = args.hadLongitudinal || args.hadPortal
+  if (!usedPrefill) return undefined
+
+  let source: ProvenanceSource = 'longitudinal'
+  if (savedHadContent) source = 'mixed'
+  else if (args.hadPortal && args.hadLongitudinal) source = 'mixed'
+  else if (args.hadPortal) source = 'portal'
+
+  return { source, updatedAt: new Date().toISOString() }
+}
+
+/**
+ * Mezcla snapshot persistido + historial longitudinal + portal (cita con cita previa).
+ * Prioridad por campo: lo ya capturado en el examen gana; vacíos se llenan desde
+ * historial maestro y luego enlace del paciente (misma regla que consulta médica).
+ */
+export function mergeExamAntecedentesPrefill(
+  captured: Record<string, unknown> | null | undefined,
+  longitudinal: Record<string, unknown> | null | undefined,
+  portal: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const saved = isRecord(captured) ? { ...captured } : {}
+  const existingProvenance = saved._provenance
+  const savedSections = stripProvenance(saved)
+
+  const mergedSections = mergeProfileAntecedentesIntoConsulta(
+    savedSections,
+    longitudinal ?? {},
+    portal ?? {},
+  )
+
+  const hadLongitudinal = isRecord(longitudinal) && PORTAL_SECTIONS.some((sec) =>
+    antecedentesSectionHasContent(longitudinal[sec]),
+  )
+  const hadPortal = isRecord(portal) && PORTAL_SECTIONS.some((sec) =>
+    antecedentesSectionHasContent(portal[sec]),
+  )
+
+  const out: Record<string, unknown> = { ...mergedSections }
+  const provenance = inferAntecedentesProvenance({
+    savedSections,
+    merged: out,
+    hadLongitudinal,
+    hadPortal,
+    existing: existingProvenance,
+  })
+  if (provenance) out._provenance = provenance
+  return out
+}
+
+/** Comparación estable para decidir si hace falta persistir prefill en examen. */
+export function antecedentesSnapshotComparable(data: unknown): string {
+  if (!isRecord(data)) return '{}'
+  return JSON.stringify(stripProvenance(data))
 }
