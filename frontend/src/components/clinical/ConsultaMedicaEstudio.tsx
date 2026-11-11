@@ -1,12 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
-import Link from 'next/link'
 import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import ConsultaSeguimientoAgenda from '@/components/clinical/ConsultaSeguimientoAgenda'
 import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
-import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import { ConsultaAntecedentesResumen } from '@/components/clinical/ConsultaAntecedentesResumen'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
 import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
@@ -19,12 +17,17 @@ import ConsultaDerivadosStudiesPicker from '@/components/clinical/ConsultaDeriva
 import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import { Cie10Autocomplete, type Cie10Selection } from '@/components/clinical/Cie10Autocomplete'
 import { parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
+import {
+  clinicalCaptureReadonlyBannerText,
+  resolveClinicalStudyReadonly,
+} from '@/lib/clinical/papeleta-readonly'
 import { buildProximaCitaFields, formatProximaCitaLine } from '@/lib/clinical/consulta-seguimiento'
 import {
   formatCie10Unified,
   parseDiagnosticoUnificadoDisplay,
 } from '@/lib/clinical/cie-10-format'
 import {
+  antecedentesRecordHasContent,
   mergeProfileAntecedentesIntoConsulta,
   modulo1Record,
 } from '@/lib/clinical/consulta-antecedentes'
@@ -45,8 +48,6 @@ import {
   type TipoConsultaValue,
   type TipoIncapacidadConsultaValue,
 } from '@/schemas/clinical/consulta-medica.constants'
-import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
-
 type TabId =
   | 'motivo'
   | 'vitales'
@@ -81,7 +82,6 @@ export default function ConsultaMedicaEstudio({
   initialClinicalContext,
   longitudinalData,
   profileAntecedentes,
-  profileModulo1,
   readonly = false,
 }: {
   eventId: string
@@ -91,8 +91,6 @@ export default function ConsultaMedicaEstudio({
   longitudinalData?: Record<string, unknown> | null
   /** Snapshot de antecedentes del examen de esta visita, si el perfil aplica. */
   profileAntecedentes?: Record<string, unknown> | null
-  /** Módulo 1 (gineco / vacunas) del examen, ya viviendo dentro de antecedentes. */
-  profileModulo1?: Record<string, string> | null
   readonly?: boolean
 }) {
   const { data: session } = useSession()
@@ -142,7 +140,7 @@ export default function ConsultaMedicaEstudio({
     parsed?.medico_nombre ?? session?.user?.fullName ?? session?.user?.name ?? '',
   )
   const [medicoCedula, setMedicoCedula] = useState(parsed?.medico_cedula ?? '')
-  const initialAntecedentesMerged = useMemo(
+  const structuredAntecedentesForPrefill = useMemo(
     () =>
       mergeProfileAntecedentesIntoConsulta(
         parsed?.antecedentes,
@@ -152,30 +150,35 @@ export default function ConsultaMedicaEstudio({
     [parsed?.antecedentes, longitudinalData, profileAntecedentes],
   )
 
-  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(
-    () => initialAntecedentesMerged,
-  )
-
   const [antecedentesConsulta, setAntecedentesConsulta] = useState(() =>
     mergeAntecedentesConsultaResumen(
       parsed?.antecedentes_consulta,
-      suggestAntecedentesConsultaFromProfile(initialAntecedentesMerged),
+      suggestAntecedentesConsultaFromProfile(structuredAntecedentesForPrefill),
     ),
   )
-  const antecedentesHydratedRef = useRef(false)
-  useEffect(() => {
-    if (antecedentesHydratedRef.current) return
-    antecedentesHydratedRef.current = true
-    setAntecedentes((prev) =>
-      mergeProfileAntecedentesIntoConsulta(parsed?.antecedentes ?? prev, longitudinalData, profileAntecedentes),
-    )
-  }, [longitudinalData, profileAntecedentes, parsed?.antecedentes])
-  const [modulo1, setModulo1] = useState<Record<string, string>>(() => {
+
+  const legacyAntecedentesPayload = useMemo(() => {
+    const saved = parsed?.antecedentes
+    if (!antecedentesRecordHasContent(saved)) return undefined
+    return saved as ConsultaMedicaPayload['antecedentes']
+  }, [parsed?.antecedentes])
+
+  const legacyModulo1Payload = useMemo(() => {
     const saved = modulo1Record(parsed?.modulo1)
-    if (Object.values(saved).some((value) => value.trim() !== '')) return saved
-    return modulo1Record(profileModulo1)
-  })
+    if (!Object.values(saved).some((value) => value.trim() !== '')) return undefined
+    return saved
+  }, [parsed?.modulo1])
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
+  const editorRole = session?.user?.role
+  const formReadonly = useMemo(
+    () => resolveClinicalStudyReadonly(readonly, Boolean(cerradaAt), editorRole),
+    [readonly, cerradaAt, editorRole],
+  )
+  const readonlyBanner = clinicalCaptureReadonlyBannerText(
+    formReadonly,
+    Boolean(cerradaAt),
+    editorRole,
+  )
   const [hasPersisted, setHasPersisted] = useState(Boolean(parsed))
 
   useEffect(() => {
@@ -214,7 +217,7 @@ export default function ConsultaMedicaEstudio({
   const buildPayload = useCallback((): ConsultaMedicaPayload => {
     const sv = { ...signos, imc: imc || signos.imc, complexion: complexion || signos.complexion }
     const lineas = recetaLineas.filter((l) => l.medicamento.trim())
-    return {
+    const payload: ConsultaMedicaPayload = {
       schemaVersion: CONSULTA_MEDICA_SCHEMA_VERSION,
       tipo_consulta: tipoConsulta,
       motivo_consulta: motivo.trim(),
@@ -243,11 +246,12 @@ export default function ConsultaMedicaEstudio({
       receta_lineas: lineas,
       medico_nombre: medicoNombre.trim() || session?.user?.fullName || session?.user?.name || 'Médico',
       medico_cedula: medicoCedula.trim() || '—',
-      antecedentes: antecedentes as ConsultaMedicaPayload['antecedentes'],
       antecedentes_consulta: antecedentesConsulta,
-      modulo1,
       cerrada_at: cerradaAt || undefined,
     }
+    if (legacyAntecedentesPayload) payload.antecedentes = legacyAntecedentesPayload
+    if (legacyModulo1Payload) payload.modulo1 = legacyModulo1Payload
+    return payload
   }, [
     tipoConsulta,
     motivo,
@@ -268,9 +272,9 @@ export default function ConsultaMedicaEstudio({
     recetaLineas,
     medicoNombre,
     medicoCedula,
-    antecedentes,
     antecedentesConsulta,
-    modulo1,
+    legacyAntecedentesPayload,
+    legacyModulo1Payload,
     cerradaAt,
     session?.user?.fullName,
     session?.user?.name,
@@ -308,7 +312,7 @@ export default function ConsultaMedicaEstudio({
     return true
   }, [eventTestId, eventId, workerId, buildPayload])
 
-  const autosaveEnabled = !readonly && !cerradaAt
+  const autosaveEnabled = !formReadonly && !cerradaAt
   const { statusLabel: autosaveLabel, markSaved: markConsultaSaved, userFacingError: consultaAutosaveError } =
     useClinicalIntervalAutosave({
     enabled: autosaveEnabled,
@@ -365,8 +369,8 @@ export default function ConsultaMedicaEstudio({
         <div>
           <p className="text-sm font-bold text-teal-900">Consulta médica</p>
           <p className="text-xs text-teal-700">
-            Nota clínica + receta · Borrador con autoguardado cada 7 s (incluye antecedentes en el
-            perfil del paciente)
+            Nota clínica + receta · Borrador con autoguardado cada 7 s (incluye el resumen de
+            antecedentes de la nota)
           </p>
           <ClinicalAutosaveIndicator
             label={autosaveEnabled ? autosaveLabel : null}
@@ -395,7 +399,7 @@ export default function ConsultaMedicaEstudio({
 
       {activeTab === 'motivo' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          <p className="text-[10px] font-semibold text-slate-500">
             Tipo de consulta
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -406,21 +410,21 @@ export default function ConsultaMedicaEstudio({
                   name="tipo_consulta"
                   checked={tipoConsulta === v}
                   onChange={() => setTipoConsulta(v)}
-                  disabled={readonly}
+                  disabled={formReadonly}
                 />
                 {TIPO_CONSULTA_LABELS[v]}
               </label>
             ))}
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+            <label className="text-[10px] font-semibold text-slate-500 block mb-2">
               Motivo de la consulta
             </label>
             <ClinicalTextarea
               className={`${inputClass} min-h-[140px]`}
               value={motivo}
               onChange={setMotivo}
-              disabled={readonly}
+              disabled={formReadonly}
               placeholder="Padecimiento actual, síntomas, evolución…"
             />
           </div>
@@ -441,21 +445,21 @@ export default function ConsultaMedicaEstudio({
             ] as const
           ).map(([key, label]) => (
             <div key={key}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{label}</label>
               <input
                 className={inputClass}
                 value={signos[key] ?? ''}
                 onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
           ))}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">IMC</label>
+            <label className="text-[10px] font-semibold text-slate-500">IMC</label>
             <input className={inputClass} value={imc} readOnly />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">Complexión</label>
+            <label className="text-[10px] font-semibold text-slate-500">Complexión</label>
             <input className={inputClass} value={complexion} readOnly />
           </div>
         </section>
@@ -466,49 +470,33 @@ export default function ConsultaMedicaEstudio({
           <ConsultaAntecedentesResumen
             value={antecedentesConsulta}
             onChange={setAntecedentesConsulta}
-            readonly={readonly}
+            readonly={formReadonly}
           />
-          {!readonly && (
+          {!formReadonly && (
             <div className="flex justify-end">
               <button
                 type="button"
                 className="text-xs font-bold text-teal-700 hover:text-teal-900 underline"
                 onClick={() =>
-                  setAntecedentesConsulta(suggestAntecedentesConsultaFromProfile(antecedentes))
+                  setAntecedentesConsulta(
+                    suggestAntecedentesConsultaFromProfile(structuredAntecedentesForPrefill),
+                  )
                 }
               >
                 Precargar 6 rubros desde cuestionario estructurado
               </button>
             </div>
           )}
-          <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <AntecedentesCaptura
-            value={antecedentes as AntecedentesCapturaData}
-            onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
-            workerId={workerId}
-            readonly={readonly}
-            modulo1={modulo1}
-            onModulo1Change={setModulo1}
-          />
-          <p className="text-[10px] text-slate-500 mt-3">
-            Precarga desde historial clínico longitudinal (y examen previo si aplica). Al guardar, se
-            actualizan en{' '}
-            <Link href={`/history/${workerId}`} className="text-teal-600 underline">
-              Historia clínica del paciente
-            </Link>
-            .
-          </p>
-          </div>
         </section>
       )}
 
       {activeTab === 'exploracion' && (
         <section className="space-y-2 bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex justify-between items-center gap-2 flex-wrap">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <p className="text-[10px] font-semibold text-slate-500">
               Exploración física
             </p>
-            {!readonly && (
+            {!formReadonly && (
               <button
                 type="button"
                 className="text-xs text-teal-700 font-semibold underline"
@@ -522,7 +510,7 @@ export default function ConsultaMedicaEstudio({
             className={`${inputClass} min-h-[200px]`}
             value={exploracion}
             onChange={setExploracion}
-            disabled={readonly}
+            disabled={formReadonly}
           />
         </section>
       )}
@@ -532,7 +520,7 @@ export default function ConsultaMedicaEstudio({
           <Cie10Autocomplete
             value={diagCie}
             onChange={setDiagCie}
-            disabled={readonly}
+            disabled={formReadonly}
             inputClassName={inputClass}
           />
           <ClinicalTextarea
@@ -540,11 +528,11 @@ export default function ConsultaMedicaEstudio({
             placeholder="Diagnóstico específico"
             value={diagEspecifico}
             onChange={setDiagEspecifico}
-            disabled={readonly}
+            disabled={formReadonly}
             spellCheck
           />
           <div className="border-t border-slate-100 pt-3 space-y-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Incapacidad</p>
+            <p className="text-[10px] font-semibold text-slate-500">Incapacidad</p>
             <p className="text-xs text-slate-500">¿Requiere incapacidad?</p>
             <div className="flex gap-4">
               {(['SI', 'NO'] as const).map((v) => (
@@ -553,7 +541,7 @@ export default function ConsultaMedicaEstudio({
                     type="radio"
                     checked={otorgaIncap === v}
                     onChange={() => setOtorgaIncap(v)}
-                    disabled={readonly}
+                    disabled={formReadonly}
                   />
                   {v === 'SI' ? 'Sí' : 'No'}
                 </label>
@@ -562,14 +550,14 @@ export default function ConsultaMedicaEstudio({
             {otorgaIncap === 'SI' && (
               <div className="space-y-3">
                 <label className="block">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Tipo</span>
+                  <span className="text-[10px] font-semibold text-slate-500">Tipo</span>
                   <select
                     className={`${inputClass} mt-1`}
                     value={tipoIncap}
                     onChange={(e) =>
                       setTipoIncap(e.target.value as TipoIncapacidadConsultaValue)
                     }
-                    disabled={readonly}
+                    disabled={formReadonly}
                   >
                     {(['PASE_SALIDA', 'INTERNA_SME', 'IMSS'] as const).map((k) => (
                       <option key={k} value={k}>
@@ -584,7 +572,7 @@ export default function ConsultaMedicaEstudio({
                 </p>
                 {tipoIncap === 'INTERNA_SME' && (
                   <label className="block">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">
+                    <span className="text-[10px] font-semibold text-slate-500">
                       Días (incapacidad interna SME)
                     </span>
                     <input
@@ -595,7 +583,7 @@ export default function ConsultaMedicaEstudio({
                       placeholder="Ej. 3"
                       value={diasIncap}
                       onChange={(e) => setDiasIncap(e.target.value)}
-                      disabled={readonly}
+                      disabled={formReadonly}
                     />
                   </label>
                 )}
@@ -612,16 +600,16 @@ export default function ConsultaMedicaEstudio({
             placeholder="Material médico utilizado"
             value={materialMedico}
             onChange={setMaterialMedico}
-            disabled={readonly}
+            disabled={formReadonly}
           />
           <ClinicalTextarea
             className={`${inputClass} min-h-[80px]`}
             placeholder="Indicaciones generales (dieta, reposo…)"
             value={indicaciones}
             onChange={setIndicaciones}
-            disabled={readonly}
+            disabled={formReadonly}
           />
-          <p className="text-[10px] font-bold text-slate-400 uppercase">Medicamento</p>
+          <p className="text-[10px] font-semibold text-slate-500">Medicamento</p>
           {recetaLineas.map((line, idx) => (
             <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3">
               <ClinicalFreeTextInput
@@ -633,7 +621,7 @@ export default function ConsultaMedicaEstudio({
                   next[idx] = { ...line, medicamento }
                   setRecetaLineas(next)
                 }}
-                disabled={readonly}
+                disabled={formReadonly}
               />
               <ClinicalFreeTextInput
                 className={inputClass}
@@ -644,7 +632,7 @@ export default function ConsultaMedicaEstudio({
                   next[idx] = { ...line, presentacion }
                   setRecetaLineas(next)
                 }}
-                disabled={readonly}
+                disabled={formReadonly}
               />
               <ClinicalFreeTextInput
                 className={inputClass}
@@ -655,7 +643,7 @@ export default function ConsultaMedicaEstudio({
                   next[idx] = { ...line, dosis }
                   setRecetaLineas(next)
                 }}
-                disabled={readonly}
+                disabled={formReadonly}
               />
               <ClinicalFreeTextInput
                 className={inputClass}
@@ -666,7 +654,7 @@ export default function ConsultaMedicaEstudio({
                   next[idx] = { ...line, frecuencia }
                   setRecetaLineas(next)
                 }}
-                disabled={readonly}
+                disabled={formReadonly}
               />
               <ClinicalFreeTextInput
                 className={inputClass}
@@ -677,11 +665,11 @@ export default function ConsultaMedicaEstudio({
                   next[idx] = { ...line, duracion }
                   setRecetaLineas(next)
                 }}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
           ))}
-          {!readonly && (
+          {!formReadonly && (
             <button
               type="button"
               className="text-xs font-bold text-teal-700"
@@ -707,13 +695,13 @@ export default function ConsultaMedicaEstudio({
 
       {activeTab === 'derivados' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          <p className="text-[10px] font-semibold text-slate-500">
             Estudios derivados (catálogo)
           </p>
           <ConsultaDerivadosStudiesPicker
             eventId={eventId}
             consultaEventTestId={eventTestId}
-            readonly={readonly}
+            readonly={formReadonly}
           />
         </section>
       )}
@@ -723,7 +711,7 @@ export default function ConsultaMedicaEstudio({
           eventId={eventId}
           eventTestId={eventTestId}
           workerId={workerId}
-          readonly={readonly}
+          readonly={formReadonly}
           scheduledLabel={seguimientoAgendado}
           existingAppointmentId={proximaCitaAppointmentId}
           onScheduled={(scheduled) => {
@@ -765,7 +753,18 @@ export default function ConsultaMedicaEstudio({
         </section>
       )}
 
-      {!readonly && (
+      {readonlyBanner && (
+        <div
+          className={`border rounded-xl p-3 text-xs text-center ${
+            formReadonly
+              ? 'bg-slate-50 border-slate-200 text-slate-400'
+              : 'bg-teal-50 border-teal-200 text-teal-800'
+          }`}
+        >
+          {readonlyBanner}
+        </div>
+      )}
+      {!formReadonly && (
         <div className="flex flex-wrap gap-2 items-center sticky bottom-0 bg-white/95 backdrop-blur border-t border-slate-200 py-3 -mx-1 px-1">
           <button
             type="button"
@@ -775,14 +774,16 @@ export default function ConsultaMedicaEstudio({
           >
             Guardar borrador
           </button>
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => runSave(true)}
-            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-          >
-            Cerrar consulta
-          </button>
+          {!cerradaAt && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => runSave(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+            >
+              Cerrar consulta
+            </button>
+          )}
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
           {saveError && (
             <div className="w-full min-w-[220px]">

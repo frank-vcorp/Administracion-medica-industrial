@@ -165,6 +165,7 @@ DR7_MODEL    = os.environ.get("DR7_MODEL", "medgemma-4b-it").strip()
 M3_API_KEY = os.environ.get("M3_API_KEY", "").strip()
 M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
 from app.services.ai.m3_model import M3_MODEL_LEGACY, resolve_m3_model
+from app.audiometry_criteria import enrich_audiometry_extracted_data
 
 M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_LEGACY).strip() or M3_MODEL_LEGACY
 # Con razonamiento bajo la llamada debe cerrar pronto. 90s deja margen
@@ -1299,7 +1300,13 @@ Responde en JSON con esta estructura exacta:
             "",
         ).replace(
             "{extracted_json}",
-            json.dumps(extracted_data, ensure_ascii=False, indent=2),
+            json.dumps(
+                enrich_audiometry_extracted_data(extracted_data)
+                if study_type == "Audiometria"
+                else extracted_data,
+                ensure_ascii=False,
+                indent=2,
+            ),
         )
 
         # IMPL-FEATURE-20260824-02 (gap fix): inyectar el cuestionario

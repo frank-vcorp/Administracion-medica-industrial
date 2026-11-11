@@ -18,7 +18,12 @@
  */
 /// <reference types="vitest/globals" />
 
-import { isAdminLike, isSellerLike, isSuperAdmin } from '@/lib/auth/roles'
+import {
+  canEditClosedClinicalCapture,
+  isAdminLike,
+  isSellerLike,
+  isSuperAdmin,
+} from '@/lib/auth/roles'
 
 describe('isAdminLike', () => {
   it('SUPERADMIN tiene permisos de admin (hereda de ADMIN)', () => {
@@ -70,4 +75,20 @@ describe('isSuperAdmin', () => {
   it('ADMIN NO tiene permisos destructivos exclusivos (separación de poderes)', () => {
     expect(isSuperAdmin('ADMIN')).toBe(false)
   })
+})
+
+describe('canEditClosedClinicalCapture (SME-109)', () => {
+  it.each(['SUPERADMIN', 'ADMIN', 'DOCTOR_GENERAL', 'DOCTOR_VALIDATOR'] as const)(
+    '%s puede editar captura cerrada',
+    (role) => {
+      expect(canEditClosedClinicalCapture(role)).toBe(true)
+    },
+  )
+
+  it.each(['RECEPTIONIST', 'CAPTURIST', 'VENDEDOR', 'COMPANY_CLIENT'] as const)(
+    '%s no puede editar captura cerrada',
+    (role) => {
+      expect(canEditClosedClinicalCapture(role)).toBe(false)
+    },
+  )
 })

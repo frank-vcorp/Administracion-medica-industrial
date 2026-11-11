@@ -19,6 +19,10 @@ import {
   prefillCertificadoPatientFields,
 } from '@/lib/clinical/certificado-medico-prefill'
 import { parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
+import {
+  clinicalCaptureReadonlyBannerText,
+  resolveClinicalStudyReadonly,
+} from '@/lib/clinical/papeleta-readonly'
 import type { AntecedentesCaptura as AntecedentesCapturaData } from '@/schemas/clinical/exam.schema'
 import {
   CERTIFICADO_MEDICO_SCHEMA_VERSION,
@@ -134,6 +138,16 @@ export default function CertificadoMedicoEstudio({
     ...(parsed?.antecedentes ?? {}),
   }))
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
+  const editorRole = session?.user?.role
+  const formReadonly = useMemo(
+    () => resolveClinicalStudyReadonly(readonly, Boolean(cerradaAt), editorRole),
+    [readonly, cerradaAt, editorRole],
+  )
+  const readonlyBanner = clinicalCaptureReadonlyBannerText(
+    formReadonly,
+    Boolean(cerradaAt),
+    editorRole,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -237,7 +251,7 @@ export default function CertificadoMedicoEstudio({
     return true
   }, [eventTestId, eventId, workerId, buildPayload])
 
-  const autosaveEnabled = !readonly && !cerradaAt
+  const autosaveEnabled = !formReadonly && !cerradaAt
   const { statusLabel: autosaveLabel, markSaved: markCertificadoSaved, userFacingError: certAutosaveError } =
     useClinicalIntervalAutosave({
     enabled: autosaveEnabled,
@@ -314,7 +328,7 @@ export default function CertificadoMedicoEstudio({
             value={antecedentes as AntecedentesCapturaData}
             onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
             workerId={workerId}
-            readonly={readonly}
+            readonly={formReadonly}
             modulo1={{}}
             onModulo1Change={() => {}}
           />
@@ -344,12 +358,12 @@ export default function CertificadoMedicoEstudio({
             ] as const
           ).map(([key, label]) => (
             <div key={key}>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
+              <label className="text-[10px] font-semibold text-slate-500">{label}</label>
               <input
                 className={inputClass}
                 value={signos[key]}
                 onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
           ))}
@@ -361,12 +375,12 @@ export default function CertificadoMedicoEstudio({
 
       {activeTab === 'exploracion' && (
         <section className="bg-white border border-slate-200 rounded-xl p-4">
-          <label className="text-[10px] font-bold text-slate-400 uppercase">Exploración física (V)</label>
+          <label className="text-[10px] font-semibold text-slate-500">Exploración física (V)</label>
           <ClinicalTextarea
             className={`${inputClass} min-h-[200px]`}
             value={exploracion}
             onChange={setExploracion}
-            disabled={readonly}
+            disabled={formReadonly}
           />
         </section>
       )}
@@ -374,7 +388,7 @@ export default function CertificadoMedicoEstudio({
       {activeTab === 'dictamen' && (
         <section className="space-y-3 bg-white border border-slate-200 rounded-xl p-4">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">
+            <label className="text-[10px] font-semibold text-slate-500">
               Integración diagnóstica (VI)
             </label>
             <ClinicalTextarea
@@ -382,16 +396,16 @@ export default function CertificadoMedicoEstudio({
               value={integracion}
               onChange={setIntegracion}
               placeholder="Diagnóstico o integración clínica en prosa breve"
-              disabled={readonly}
+              disabled={formReadonly}
             />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">Dictamen laboral</label>
+            <label className="text-[10px] font-semibold text-slate-500">Dictamen laboral</label>
             <select
               className={inputClass}
               value={dictamen}
               onChange={(e) => onDictamenChange(e.target.value as DictamenLaboralValue)}
-              disabled={readonly}
+              disabled={formReadonly}
             >
               {DICTAMEN_LABORAL_VALUES.map((v) => (
                 <option key={v} value={v}>
@@ -401,14 +415,14 @@ export default function CertificadoMedicoEstudio({
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase">
+            <label className="text-[10px] font-semibold text-slate-500">
               Frase para el PDF
             </label>
             <ClinicalTextarea
               className={`${inputClass} min-h-[72px]`}
               value={dictamenTexto}
               onChange={setDictamenTexto}
-              disabled={readonly}
+              disabled={formReadonly}
             />
           </div>
         </section>
@@ -418,95 +432,95 @@ export default function CertificadoMedicoEstudio({
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Lugar de expedición</label>
+              <label className="text-[10px] font-semibold text-slate-500">Lugar de expedición</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={lugar}
                 onChange={setLugar}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Hora de atención</label>
+              <label className="text-[10px] font-semibold text-slate-500">Hora de atención</label>
               <input
                 className={inputClass}
                 value={horaAtencion}
                 onChange={(e) => setHoraAtencion(e.target.value)}
                 placeholder="12:00"
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Sexo (PDF)</label>
+              <label className="text-[10px] font-semibold text-slate-500">Sexo (PDF)</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={sexoAtencion}
                 onChange={setSexoAtencion}
                 placeholder="Opcional si está en historial"
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Domicilio (PDF)</label>
+              <label className="text-[10px] font-semibold text-slate-500">Domicilio (PDF)</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={domicilioAtencion}
                 onChange={setDomicilioAtencion}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Identificación</label>
+              <label className="text-[10px] font-semibold text-slate-500">Identificación</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={idTipo}
                 onChange={setIdTipo}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Folio / CURP</label>
+              <label className="text-[10px] font-semibold text-slate-500">Folio / CURP</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={idFolio}
                 onChange={setIdFolio}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Médico</label>
+              <label className="text-[10px] font-semibold text-slate-500">Médico</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={medicoNombre}
                 onChange={setMedicoNombre}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Cédula profesional</label>
+              <label className="text-[10px] font-semibold text-slate-500">Cédula profesional</label>
               <ClinicalFreeTextInput
                 className={inputClass}
                 value={medicoCedula}
                 onChange={setMedicoCedula}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Título</label>
+              <label className="text-[10px] font-semibold text-slate-500">Título</label>
               <input
                 className={inputClass}
                 value={medicoTitulo}
                 onChange={(e) => setMedicoTitulo(e.target.value)}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Universidad (opcional)</label>
+              <label className="text-[10px] font-semibold text-slate-500">Universidad (opcional)</label>
               <input
                 className={inputClass}
                 value={medicoUniversidad}
                 onChange={(e) => setMedicoUniversidad(e.target.value)}
-                disabled={readonly}
+                disabled={formReadonly}
               />
             </div>
           </div>
@@ -523,7 +537,18 @@ export default function CertificadoMedicoEstudio({
         </section>
       )}
 
-      {!readonly && (
+      {readonlyBanner && (
+        <div
+          className={`border rounded-xl p-3 text-xs text-center ${
+            formReadonly
+              ? 'bg-slate-50 border-slate-200 text-slate-400'
+              : 'bg-teal-50 border-teal-200 text-teal-800'
+          }`}
+        >
+          {readonlyBanner}
+        </div>
+      )}
+      {!formReadonly && (
         <div className="flex flex-wrap gap-2 items-center sticky bottom-0 bg-white/95 backdrop-blur border-t border-slate-200 py-3 -mx-1 px-1">
           <button
             type="button"
@@ -533,14 +558,16 @@ export default function CertificadoMedicoEstudio({
           >
             Guardar borrador
           </button>
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => runSave(true)}
-            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-          >
-            Cerrar certificado
-          </button>
+          {!cerradaAt && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => runSave(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+            >
+              Cerrar certificado
+            </button>
+          )}
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
           {saveError && (
             <div className="w-full min-w-[220px]">

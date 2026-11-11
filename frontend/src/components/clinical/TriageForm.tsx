@@ -112,18 +112,18 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
         <div>
-          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Peso (KG)</label>
+          <label className="block text-xs font-semibold text-slate-500 mb-2">Peso (KG)</label>
           <input type="number" step="0.1" value={formData.peso_kg || ''} onChange={e => handleChange('peso_kg', e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300" placeholder="Ej: 75.5" />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (Metros)</label>
+          <label className="block text-xs font-semibold text-slate-500 mb-2">Talla (Metros)</label>
           <input type="number" step="0.01" value={formData.talla_m || ''} onChange={e => handleChange('talla_m', e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300" placeholder="Ej: 1.75" />
         </div>
         <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
             <div>
-                <p className="text-xs font-bold text-slate-400 uppercase">IMC Calculado</p>
+                <p className="text-xs font-semibold text-slate-500">IMC Calculado</p>
                 <div className="text-3xl font-black text-slate-700">{imc}</div>
             </div>
             <div className={`px-4 py-2 rounded-lg font-bold text-sm ${
@@ -135,7 +135,7 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
         </div>
       </div>
 
-      <h4 className="text-sm font-bold text-slate-600 mb-4 uppercase border-b pb-2">Signos Vitales</h4>
+      <h4 className="text-sm font-semibold text-slate-600 mb-4 border-b pb-2">Signos Vitales</h4>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
          <div className="col-span-2">
           <label className="block text-xs font-bold text-slate-500 mb-2">TENSIÓN ARTERIAL (Sist / Diast)</label>
@@ -148,12 +148,12 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
           </div>
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Cardiaca</label>
+          <label className="block text-xs font-semibold text-slate-500 mb-2">Frec. Cardiaca</label>
           <input type="number" value={formData.fc_min || ''} onChange={e => handleChange('fc_min', e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-center font-mono" placeholder="BPM" />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Temperatura</label>
+          <label className="block text-xs font-semibold text-slate-500 mb-2">Temperatura</label>
           <input type="number" step="0.1" value={formData.temperatura || ''} onChange={e => handleChange('temperatura', e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-center font-mono" placeholder="°C" />
         </div>
@@ -192,7 +192,7 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
             { name: 'cercana_corregida_oi', label: 'Cercana Corregida OI' },
           ].map(f => (
             <div key={f.name}>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{f.label}</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">{f.label}</label>
               <input
                 type="text"
                 name={f.name}
@@ -206,17 +206,17 @@ export default function TriageForm({ eventId, initialData = {}, readonly = false
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Campimetría</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Campimetría</label>
             <input type="text" name="campimetria" value={formVisual.campimetria || ''} onChange={handleVisualChange}
                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Test Ishihara</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Test Ishihara</label>
             <input type="text" name="test_ishihara" value={formVisual.test_ishihara || ''} onChange={handleVisualChange}
                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Reflejos</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Reflejos</label>
             <input type="text" name="reflejos" value={formVisual.reflejos || ''} onChange={handleVisualChange}
                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" />
           </div>

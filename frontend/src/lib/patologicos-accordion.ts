@@ -35,7 +35,7 @@ import type { DetalleTriple } from '@/schemas/clinical/history.schema'
  *   hasDetalleContent({ desde_cuando: '   ', tratamiento: '', observaciones: '' })  // false
  *   hasDetalleContent(undefined)  // false
  */
-export function hasDetalleContent(d: DetalleTriple | undefined): boolean {
+export function hasDetalleContent(d: Partial<DetalleTriple> | undefined): boolean {
   if (!d) return false
   return Boolean(
     (d.desde_cuando && d.desde_cuando.trim()) ||

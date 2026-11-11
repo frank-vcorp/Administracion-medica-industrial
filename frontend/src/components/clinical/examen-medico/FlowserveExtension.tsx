@@ -101,7 +101,7 @@ export function FlowserveExtension({ value, onChange, readonly = false }: Props)
       </section>
 
       <section>
-        <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Higiene (× semana)</h3>
+        <h3 className="text-xs font-bold text-slate-500">Higiene (× semana)</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Baño" value={value.higiene_bano ?? ''} onChange={(v) => set('higiene_bano', v)} readonly={readonly} />
           <Field label="Aseo bucal" value={value.higiene_aseo_bucal ?? ''} onChange={(v) => set('higiene_aseo_bucal', v)} readonly={readonly} />
@@ -140,7 +140,7 @@ export function FlowserveExtension({ value, onChange, readonly = false }: Props)
       </section>
 
       <section>
-        <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Test de Ruffier</h3>
+        <h3 className="text-xs font-bold text-slate-500">Test de Ruffier</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="FC inicial" value={value.ruffier_fc_inicial ?? ''} onChange={(v) => set('ruffier_fc_inicial', v)} readonly={readonly} />
           <Field label="FC flexiones" value={value.ruffier_fc_flexiones ?? ''} onChange={(v) => set('ruffier_fc_flexiones', v)} readonly={readonly} />
@@ -152,7 +152,7 @@ export function FlowserveExtension({ value, onChange, readonly = false }: Props)
       <Field label="Nivel de salud" value={value.nivel_salud ?? ''} onChange={(v) => set('nivel_salud', v)} readonly={readonly} />
 
       <section>
-        <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Interrogatorio por aparatos y sistemas</h3>
+        <h3 className="text-xs font-bold text-slate-500">Interrogatorio por aparatos y sistemas</h3>
         <div className="space-y-3">
           {INTERROGATORIO_SISTEMAS.map((sistema) => {
             const row = value.interrogatorio?.[sistema] ?? { estado: 'SIN_SINTOMAS', especifique: '' }
@@ -191,7 +191,7 @@ export function FlowserveExtension({ value, onChange, readonly = false }: Props)
         </div>
         <div className="overflow-x-auto border border-slate-200 rounded-lg">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-100 text-xs uppercase text-slate-600">
+            <thead className="bg-slate-100 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="text-left p-2 font-bold">Región</th>
                 <th className="text-left p-2 font-bold">Molestias 12 meses</th>

@@ -127,7 +127,7 @@ export default function SomatometriaStudy({
       {/* Peso, Talla e IMC */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div>
-          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Peso (KG)</label>
+          <label className="block text-xs font-semibold text-slate-500 mb-2">Peso (KG)</label>
           <input
             type="number"
             step="0.1"
@@ -139,7 +139,7 @@ export default function SomatometriaStudy({
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Talla (m)</label>
+          <label className="block text-xs font-semibold text-slate-500 mb-2">Talla (metros)</label>
           <input
             type="text"
             inputMode="decimal"
@@ -165,7 +165,7 @@ export default function SomatometriaStudy({
         </div>
         <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase">IMC Calculado</p>
+            <p className="text-xs font-semibold text-slate-500">IMC Calculado</p>
             <div className="text-3xl font-black text-slate-700">{imc}</div>
           </div>
           <div className={`px-4 py-2 rounded-lg font-bold text-sm ${
@@ -179,7 +179,7 @@ export default function SomatometriaStudy({
 
       {/* Signos Vitales */}
       <div>
-        <h4 className="text-sm font-bold text-slate-600 mb-4 uppercase border-b pb-2">Signos Vitales</h4>
+        <h4 className="text-sm font-semibold text-slate-600 mb-4 border-b pb-2">Signos Vitales</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="col-span-2">
             <label className="block text-xs font-bold text-slate-500 mb-2">TENSIÓN ARTERIAL (Sist / Diast)</label>
@@ -204,7 +204,7 @@ export default function SomatometriaStudy({
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Cardiaca</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Frec. Cardiaca</label>
             <input
               type="number"
               value={formData.fc_min || ''}
@@ -215,7 +215,7 @@ export default function SomatometriaStudy({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Temperatura</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Temperatura</label>
             <input
               type="number"
               step="0.1"
@@ -227,7 +227,7 @@ export default function SomatometriaStudy({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Frec. Respiratoria</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Frec. Respiratoria</label>
             <input
               type="number"
               value={formData.fr_min || ''}
@@ -238,7 +238,7 @@ export default function SomatometriaStudy({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Sat. Oxígeno (%)</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2">Sat. Oxígeno (%)</label>
             <input
               type="number"
               min={0}

@@ -19,6 +19,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateCompanyAction } from '@/actions/company.actions'
 import { SAT_CFDI_USO_DESCRIPTIONS } from '@/lib/schemas/company-full-form'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import { mapSaveActionFailure, type UserFacingError } from '@/lib/user-facing-error'
 
 interface CompanyEditFormProps {
   company: {
@@ -58,7 +60,7 @@ function asArray(value: unknown): Array<Record<string, unknown>> {
 export default function CompanyEditForm({ company, catalogos }: CompanyEditFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [rfcTouched, setRfcTouched] = useState(false)
 
@@ -144,7 +146,7 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError(null)
+    setSaveError(null)
     setSuccess(null)
 
     // Confirmación si se modificó el RFC
@@ -186,17 +188,40 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
         setTimeout(() => router.push(`/companies/${company.id}`), 800)
       } else {
         if (result.code === 'CONCURRENT_UPDATE') {
-          setError(
-            'Los datos fueron actualizados por otro usuario. Recarga la página para ver la versión más reciente.'
+          setSaveError(
+            mapSaveActionFailure(
+              {
+                error:
+                  'Los datos fueron actualizados por otro usuario. Recarga la página para ver la versión más reciente.',
+              },
+              { context: 'updateCompanyAction' },
+            ),
           )
         } else if (result.code === 'RFC_DUPLICATE') {
-          setError(
-            `El RFC ${basic.rfc} ya está registrado en otra empresa. Si crees que es un error, contacta al administrador.`
+          setSaveError(
+            mapSaveActionFailure(
+              {
+                error: `El RFC ${basic.rfc} ya está registrado en otra empresa. Si crees que es un error, contacta al administrador.`,
+                fieldErrors: { 'basic.rfc': ['RFC duplicado en otra empresa'] },
+              },
+              { context: 'updateCompanyAction' },
+            ),
           )
         } else if (result.code === 'FORBIDDEN') {
-          setError('No tienes permisos para editar esta empresa.')
+          setSaveError(
+            mapSaveActionFailure({ error: 'No tienes permisos para editar esta empresa.' }),
+          )
         } else {
-          setError(result.error || 'No se pudieron guardar los cambios.')
+          setSaveError(
+            mapSaveActionFailure(
+              {
+                error: result.error || 'No se pudieron guardar los cambios.',
+                fieldErrors: 'fieldErrors' in result ? result.fieldErrors : undefined,
+                technicalDetail: 'technicalDetail' in result ? result.technicalDetail : undefined,
+              },
+              { context: 'updateCompanyAction' },
+            ),
+          )
         }
       }
     })
@@ -493,10 +518,8 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
         </div>
       </Section>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">
-          ⚠️ {error}
-        </div>
+      {saveError && (
+        <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
       )}
       {success && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-3 rounded-lg text-sm">

@@ -25,6 +25,8 @@ import IdentityLightbox from '@/components/IdentityLightbox'
 import SignaturePad, { type SignaturePadHandle } from '@/components/reception/SignaturePad'
 import { InformedConsentDocument } from '@/components/reception/InformedConsentDocument'
 import { formatAppointmentAgendaTime, todayAgendaDateString } from '@/lib/appointment-scheduling'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import { mapSaveActionFailure, mapUserFacingError, type UserFacingError } from '@/lib/user-facing-error'
 
 // ── Etiquetas de catálogos ──────────────────────────────────────────────────
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -86,7 +88,7 @@ function fileToDataUrl(file: File): Promise<string> {
 // ── Componente principal ─────────────────────────────────────────────────────
 export default function CorroborationModal({ appointment, onClose }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [step, setStep] = useState<1 | 2>(1)
   const signaturePadRef = useRef<SignaturePadHandle>(null)
   const router = useRouter()
@@ -144,15 +146,25 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
   }
 
   function handleConfirm() {
-    setError(null)
+    setSaveError(null)
     startTransition(async () => {
       const signatureDataUrl = signaturePadRef.current?.toDataURL()
       if (!consentGiven || !consentDocumentRead || !consentDataCorrect) {
-        setError('Marca las tres confirmaciones del consentimiento antes de continuar.')
+        setSaveError(
+          mapUserFacingError({
+            message: 'Marca las tres confirmaciones del consentimiento antes de continuar.',
+            fieldErrors: { _form: ['Confirma lectura, veracidad y consentimiento'] },
+          }),
+        )
         return
       }
       if (!signatureDataUrl) {
-        setError('Debes firmar el consentimiento informado con autógrafo.')
+        setSaveError(
+          mapUserFacingError({
+            message: 'Debes firmar el consentimiento informado con autógrafo.',
+            fieldErrors: { informedConsentSignatureDataUrl: ['Firma obligatoria'] },
+          }),
+        )
         return
       }
 
@@ -176,7 +188,16 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
         router.push(`/reception?date=${todayAgendaDateString()}`)
         router.refresh()
       } else {
-        setError(result.error || 'Error en el cierre de recepción.')
+        setSaveError(
+          mapSaveActionFailure(
+            {
+              error: result.error || 'Error en el cierre de recepción.',
+              fieldErrors: 'fieldErrors' in result ? result.fieldErrors : undefined,
+              technicalDetail: 'technicalDetail' in result ? result.technicalDetail : undefined,
+            },
+            { context: 'closeReceptionCorroboration' },
+          ),
+        )
       }
     })
   }
@@ -199,7 +220,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
   })
 
   function handleGoToConsent() {
-    setError(null)
+    setSaveError(null)
     if (!canProceedToConsent) return
     setStep(2)
   }
@@ -616,10 +637,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
           )}
 
           {/* Error */}
-          {error && (
-            <p className="text-xs text-red-600 bg-red-50 p-3 rounded-xl border border-red-100 font-medium">
-              ⚠️ {error}
-            </p>
+          {saveError && (
+            <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />
           )}
         </div>
 
@@ -647,7 +666,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
               <button
                 onClick={() => {
                   setStep(1)
-                  setError(null)
+                  setSaveError(null)
                   setConsentGiven(false)
                   setConsentDocumentRead(false)
                   setConsentDataCorrect(false)

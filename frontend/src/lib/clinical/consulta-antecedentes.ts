@@ -16,6 +16,12 @@ export function antecedentesSectionHasContent(section: unknown): boolean {
   return Object.values(section).some((value) => fieldHasClinicalContent(value))
 }
 
+/** True si el snapshot guardado en consulta tiene alguna sección con dato clínico. */
+export function antecedentesRecordHasContent(saved: unknown): boolean {
+  if (!isRecord(saved)) return false
+  return SECTION_KEYS.some((key) => antecedentesSectionHasContent(saved[key]))
+}
+
 function fieldHasClinicalContent(value: unknown): boolean {
   if (value === null || value === undefined || value === '') return false
   if (typeof value === 'number') return Number.isFinite(value)

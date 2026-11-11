@@ -62,7 +62,7 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
   return (
     <div className="space-y-4">
       <div className="border border-slate-200 rounded-md overflow-hidden">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
+        <p className="text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
           Curva — región × (N normal · A aumentada · D disminuida)
         </p>
         <div className="overflow-x-auto p-2">
@@ -133,7 +133,7 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
       </div>
 
       <div className="border border-slate-200 rounded-md overflow-hidden">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
+        <p className="text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
           Escoliosis
         </p>
         <div className="overflow-x-auto p-2">
@@ -196,7 +196,7 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
       </div>
 
       <div className="border border-slate-200 rounded-md overflow-hidden">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
+        <p className="text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
           Arcos de movimiento
         </p>
         <div className="overflow-x-auto p-2">
@@ -290,7 +290,7 @@ export function SodexoColumnaVertebralSection({ value, onChange, readonly }: Pro
       </div>
 
       <div className="border border-slate-200 rounded-md p-3 bg-white">
-        <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">Observaciones</label>
+        <label className="block text-[10px] font-semibold text-slate-600 mb-1">Observaciones</label>
         <textarea
           disabled={readonly}
           rows={2}

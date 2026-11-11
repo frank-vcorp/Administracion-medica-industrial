@@ -15,6 +15,8 @@ import PublicGeneralProfilePicker, {
   type AvailableTestOption,
   type ProfileMode,
 } from '@/components/public-general/PublicGeneralProfilePicker'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import { mapSaveActionFailure, mapUserFacingError, type UserFacingError } from '@/lib/user-facing-error'
 
 interface CompanyOption {
     id: string
@@ -122,7 +124,8 @@ export default function WorkerFormModal({
 
     const [isPending, startTransition] = useTransition()
     const [successData, setSuccessData] = useState<{ success: boolean; worker?: WorkerRef } | null>(null)
-    const [error, setError] = useState<string | null>(null)
+    const [saveError, setSaveError] = useState<UserFacingError | null>(null)
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
     const [duplicateWorker, setDuplicateWorker] = useState<DuplicateWorker | null>(null)
     const [selectedCompanyId, setSelectedCompanyId] = useState('')
     const [selectedMedicalProfileId, setSelectedMedicalProfileId] = useState('')
@@ -260,7 +263,8 @@ export default function WorkerFormModal({
 
     function handleOpen() {
         setInternalOpen(true)
-        setError(null)
+        setSaveError(null)
+        setFieldErrors({})
         setDuplicateWorker(null)
         setSelectedCompanyId(defaultCompanyId ?? '')
         if (defaultCompanyId && !publicGeneralMode) {
@@ -290,34 +294,62 @@ export default function WorkerFormModal({
         } else {
             setInternalOpen(false)
             setSuccessData(null)
-            setError(null)
+            setSaveError(null)
+        setFieldErrors({})
         }
     }
 
+    const fieldHint = (path: string) => fieldErrors[path]?.[0]
+
+  function showClientSaveError(message: string, fe?: Record<string, string[]>) {
+    setFieldErrors(fe ?? {})
+    setSaveError(mapUserFacingError({ message, fieldErrors: fe }))
+  }
+
     async function handleSubmit(formData: FormData) {
         startTransition(async () => {
-            setError(null)
+            setSaveError(null)
+            setFieldErrors({})
             setDuplicateWorker(null)
             try {
                 if (workerToEdit) {
-                    const result = await updateWorker(workerToEdit.id, formData) as { success: boolean; error?: string }
+                    const result = await updateWorker(workerToEdit.id, formData) as {
+                        success: boolean
+                        error?: string
+                        fieldErrors?: Record<string, string[]>
+                        technicalDetail?: string
+                    }
                     if (result.success) {
                         router.refresh()
                         onClose?.()
                     } else {
-                        setError(result.error || 'Error al guardar')
+                        setFieldErrors(result.fieldErrors ?? {})
+                        setSaveError(
+                            mapSaveActionFailure(
+                                {
+                                    error: result.error || 'Error al guardar',
+                                    fieldErrors: result.fieldErrors,
+                                    technicalDetail: result.technicalDetail,
+                                },
+                                { context: 'updateWorker' },
+                            ),
+                        )
                     }
                 } else {
                     let submitFormData = formData
 
                     if (publicGeneralMode && defaultCompanyId) {
                         if (!selectedBranchId) {
-                            setError('Selecciona la sucursal de atención')
+                            showClientSaveError('Selecciona la sucursal de atención', {
+                                branchId: ['Selecciona la sucursal de atención'],
+                            })
                             return
                         }
                         if (pgProfileMode === 'quick') {
                             if (pgQuickTestIds.length === 0) {
-                                setError('Selecciona al menos una prueba para el perfil rápido')
+                                showClientSaveError('Selecciona al menos una prueba para el perfil rápido', {
+                                    medicalProfileId: ['Selecciona al menos una prueba'],
+                                })
                                 return
                             }
                             const profileResult = await createPublicGeneralQuickProfile({
@@ -326,11 +358,11 @@ export default function WorkerFormModal({
                                 name: pgCustomProfileName.trim() || null,
                             })
                             if (!profileResult.success) {
-                                setError(profileResult.error || 'No se pudo crear el perfil rápido')
+                                showClientSaveError(profileResult.error || 'No se pudo crear el perfil rápido')
                                 return
                             }
                             if (!profileResult.data) {
-                                setError('No se pudo crear el perfil rápido')
+                                showClientSaveError('No se pudo crear el perfil rápido')
                                 return
                             }
                             submitFormData = new FormData()
@@ -342,7 +374,9 @@ export default function WorkerFormModal({
                             submitFormData.set('medicalProfileId', profileResult.data.id)
                             setSelectedMedicalProfileId(profileResult.data.id)
                         } else if (!selectedMedicalProfileId) {
-                            setError('Selecciona un perfil médico existente')
+                            showClientSaveError('Selecciona un perfil médico existente', {
+                                medicalProfileId: ['Selecciona un perfil médico'],
+                            })
                             return
                         }
                         submitFormData = submitFormData ?? formData
@@ -364,6 +398,8 @@ export default function WorkerFormModal({
                         worker?: WorkerRef
                         existingWorker?: DuplicateWorker
                         error?: string
+                        fieldErrors?: Record<string, string[]>
+                        technicalDetail?: string
                     }
                     if (result.status === 'duplicate_found' && result.existingWorker) {
                         setDuplicateWorker(result.existingWorker)
@@ -391,11 +427,21 @@ export default function WorkerFormModal({
                         }
                         setSuccessData(result)
                     } else {
-                        setError(result.error || 'Error al guardar')
+                        setFieldErrors(result.fieldErrors ?? {})
+                        setSaveError(
+                            mapSaveActionFailure(
+                                {
+                                    error: result.error || 'Error al guardar',
+                                    fieldErrors: result.fieldErrors,
+                                    technicalDetail: result.technicalDetail,
+                                },
+                                { context: 'createWorker' },
+                            ),
+                        )
                     }
                 }
-            } catch {
-                setError('Error de conexión')
+            } catch (err) {
+                setSaveError(mapUserFacingError({ error: err, message: 'Error de conexión' }))
             }
         })
     }
@@ -581,8 +627,15 @@ export default function WorkerFormModal({
                                         placeholder="Nombre"
                                         required
                                         defaultValue={workerToEdit?.firstName || ''}
-                                        className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none"
+                                        className={`w-full bg-slate-50 border-none ring-1 ${
+                                            fieldHint('firstName')
+                                                ? 'ring-red-400 focus:ring-red-500'
+                                                : 'ring-slate-200 focus:ring-blue-500'
+                                        } p-3 rounded-xl text-sm outline-none`}
                                     />
+                                    {fieldHint('firstName') && (
+                                        <p className="text-[10px] text-red-600 ml-1">{fieldHint('firstName')}</p>
+                                    )}
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Apellidos</label>
@@ -591,8 +644,15 @@ export default function WorkerFormModal({
                                         placeholder="Apellidos"
                                         required
                                         defaultValue={workerToEdit?.lastName || ''}
-                                        className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none"
+                                        className={`w-full bg-slate-50 border-none ring-1 ${
+                                            fieldHint('lastName')
+                                                ? 'ring-red-400 focus:ring-red-500'
+                                                : 'ring-slate-200 focus:ring-blue-500'
+                                        } p-3 rounded-xl text-sm outline-none`}
                                     />
+                                    {fieldHint('lastName') && (
+                                        <p className="text-[10px] text-red-600 ml-1">{fieldHint('lastName')}</p>
+                                    )}
                                 </div>
                             </div>
 
@@ -781,8 +841,11 @@ export default function WorkerFormModal({
                                 </div>
                             )}
 
-                            {error && (
-                                <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-lg border border-red-100 italic">⚠️ {error}</p>
+                            {saveError && (
+                                <UserFacingErrorCallout
+                                    mapped={saveError}
+                                    className="border-red-200 bg-red-50/90"
+                                />
                             )}
 
                             <button

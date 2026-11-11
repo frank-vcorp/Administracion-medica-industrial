@@ -91,7 +91,7 @@ export default function DoctorExamForm({ eventId, initialData, readonly = false 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {examFields.map((field) => (
             <div key={field.name}>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">{field.label}</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">{field.label}</label>
               <input
                 type="text"
                 name={field.name}

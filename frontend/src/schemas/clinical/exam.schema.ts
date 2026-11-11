@@ -9,7 +9,6 @@ import {
 import { ClinicalHistoryDataSchema } from './history.schema';
 import { tolerantZinEnum } from './zin.helper';
 
-const cleanString = z.string().trim().max(1000).optional();
 const freeTextOptional = z
   .string()
   .trim()
@@ -341,7 +340,7 @@ export const aptitudSchema = tolerantZinEnum(APTITUD_VALUES)
 // ────────────────────────────────────────────────────────────────────────────
 // RESUMEN VISUAL + PRESIÓN ARTERIAL — enums cortos (ARCH-20260817-02 / DA-6)
 // IMPL-20260817-08-C2 — Corte 1.
-// `agudeza_visual_resumen` y `presion_arterial_resumen` pasan de `cleanString`
+// `agudeza_visual_resumen` y `presion_arterial_resumen` pasan de texto libre
 // a `tolerantZinEnum` con catálogos cortos alineados al ZIN (`ddlIDAgudezaNormal`,
 // `dllIDPresionArt`) y al PDF de referencia (`DISMINUIDA`, `NORMAL AL MOMENTO…`).
 // DA-1 (Opción A): schema tolerante preserva registros legacy.
@@ -459,7 +458,7 @@ export type VacSiNoValue = VacImmunizationValue
  * Frank: "Lo copia igualito que el ZIN" → sin paráfrasis, sin normalización.
  *
  * Se usan como valor predeterminado en Exploración Física (editable caso a caso).
- * El schema Zod sigue siendo `cleanString` (string libre).
+ * El schema Zod sigue siendo `freeTextOptional` (string libre).
  *
  * @id IMPL-20260817-01-C2
  * @spec SPEC_ARCH-20260817-01 §4.3
@@ -579,18 +578,18 @@ export function applyExploracionFisicaDefaults(
 // 6. ANTECEDENTES REPRODUCTIVOS e INMUNIZACIONES (Imágenes 4 y 5)
 // ----------------------------------------------------------------------
 export const ReproductivosInmunizacionesSchema = z.object({
-  ivs: cleanString,
-  vsa: cleanString,
-  mpf: cleanString,
-  doc_prostata: cleanString,
-  rubeola: cleanString,
-  neumococo: cleanString,
-  sarampion: cleanString,
-  influenza: cleanString,
-  toxoide_tetanico: cleanString,
-  hepatitis_b: cleanString,
-  otra_inmunizacion: cleanString,
-  proxima_dosis: cleanString
+  ivs: freeTextOptional,
+  vsa: freeTextOptional,
+  mpf: freeTextOptional,
+  doc_prostata: freeTextOptional,
+  rubeola: freeTextOptional,
+  neumococo: freeTextOptional,
+  sarampion: freeTextOptional,
+  influenza: freeTextOptional,
+  toxoide_tetanico: freeTextOptional,
+  hepatitis_b: freeTextOptional,
+  otra_inmunizacion: freeTextOptional,
+  proxima_dosis: freeTextOptional
 });
 
 // ----------------------------------------------------------------------
@@ -663,34 +662,34 @@ export const AgudezaVisualSchema = z.object({
 // 9. EXPLORACIÓN FÍSICA GENERAL (Imagen 8)
 // IMPL-20260817-01-C2: 9 campos con catálogo ZIN vía `tolerantZinEnum`
 // (DA-1). Los 16 campos con plantilla ZIN (`neurologico`, `cabeza`, etc.)
-// siguen como `cleanString` (texto libre editable, default = PLANTILLAS_EF).
+// siguen como `freeTextOptional` (texto libre editable, default = PLANTILLAS_EF).
 // Ver SPEC §4.2 (combos) + §4.3 (plantillas).
 // ----------------------------------------------------------------------
 export const ExploracionFisicaSchema = z.object({
-  neurologico: cleanString,
-  cabeza: cleanString,
-  piel_y_faneras: cleanString,
-  oidos_cad: cleanString,
-  oidos_cai: cleanString,
-  ojos: cleanString,
+  neurologico: freeTextOptional,
+  cabeza: freeTextOptional,
+  piel_y_faneras: freeTextOptional,
+  oidos_cad: freeTextOptional,
+  oidos_cai: freeTextOptional,
+  ojos: freeTextOptional,
   boca_estado: tolerantZinEnum(SALUD_BUCAL_VALUES),
-  boca_alineacion: cleanString,
-  nariz: cleanString,
-  faringe: cleanString,
-  cuello: cleanString,
-  torax: cleanString,
-  corazon: cleanString,
-  campos_pulmonares: cleanString,
-  abdomen: cleanString,
-  genitourinario: cleanString,
-  columna_vertebral: cleanString,
+  boca_alineacion: freeTextOptional,
+  nariz: freeTextOptional,
+  faringe: freeTextOptional,
+  cuello: freeTextOptional,
+  torax: freeTextOptional,
+  corazon: freeTextOptional,
+  campos_pulmonares: freeTextOptional,
+  abdomen: freeTextOptional,
+  genitourinario: freeTextOptional,
+  columna_vertebral: freeTextOptional,
   test_adam: tolerantZinEnum([...TEST_ADAM_CAPTURA_VALUES, ...TEST_ADAM_VALUES]),
   test_adam_lateral: tolerantZinEnum(TEST_ADAM_LATERAL_VALUES).optional(),
-  test_adam_otros: cleanString.optional(),
-  ms_superiores: cleanString,
-  fuerza_muscular_daniels_sup: cleanString,
-  ms_inferiores: cleanString,
-  fuerza_muscular_daniels_inf: cleanString,
+  test_adam_otros: freeTextOptional.optional(),
+  ms_superiores: freeTextOptional,
+  fuerza_muscular_daniels_sup: freeTextOptional,
+  ms_inferiores: freeTextOptional,
+  fuerza_muscular_daniels_inf: freeTextOptional,
   circulacion_venosa: tolerantZinEnum(CIRCULACION_VENOSA_VALUES),
   arco_de_movilidad: tolerantZinEnum(ARCO_MOVILIDAD_VALUES),
   tono_muscular: tolerantZinEnum(TONO_MUSCULAR_VALUES),
@@ -702,10 +701,10 @@ export const ExploracionFisicaSchema = z.object({
   prueba_phanel: tolerantZinEnum(PRUEBA_LATERALIDAD_VALUES),
   prueba_lasegue: tolerantZinEnum(PRUEBA_LATERALIDAD_VALUES),
   presencia_quiste_sinovial: tolerantZinEnum(PRESENCIA_QUISTE_SINOVIAL_VALUES),
-  especificar_quiste: cleanString,
+  especificar_quiste: freeTextOptional,
   // IMPL-20260817-01-C2: campo opcional para acordeón "Especifique hallazgos
   // positivos" (ZIN: txtEFEspecificar). Aparece cuando alguna prueba = POSITIVO.
-  especifique_positivos: cleanString,
+  especifique_positivos: freeTextOptional,
 });
 
 // ----------------------------------------------------------------------
@@ -742,7 +741,7 @@ export const ImpresiónAptitudSchema = z.object({
   estado_nutricional: tolerantZinEnum(ESTADO_NUTRICIONAL_VALUES),
   salud_bucal: tolerantZinEnum(SALUD_BUCAL_VALUES),
   // IMPL-20260817-08-C2 (ARCH-20260817-02 DA-6): enums cortos ZIN alineados al PDF.
-  // Mantener `.optional()` — el original `cleanString` lo era, y registros legacy
+  // Mantener `.optional()` — el original `freeTextOptional` lo era, y registros legacy
   // sin estos campos siguen parseando (DA-1 preserva compat).
   agudeza_visual_resumen: tolerantZinEnum(AGUDEZA_VISUAL_RESUMEN_VALUES).optional(),
   presion_arterial_resumen: tolerantZinEnum(PRESION_ARTERIAL_RESUMEN_VALUES).optional(),
@@ -789,7 +788,7 @@ export type AntecedentesCaptura = z.infer<typeof AntecedentesCapturaSchema>
 export const ExamenMedicoCompletoSchema = ExploracionFisicaSchema
   .merge(ImpresiónAptitudSchema)
   .extend({
-    antecedentes_medico: cleanString,
+    antecedentes_medico: freeTextOptional,
     /** Módulo 1 — cuestionario del paciente capturado en sala (ARCH-20260325-09) */
     modulo1: z.record(z.string(), z.any()).optional(),
     /**
@@ -807,7 +806,7 @@ export const ExamenMedicoCompletoSchema = ExploracionFisicaSchema
       })
       .optional(),
     /** Recomendaciones editables en impresión clínica (antes del cierre de captura). */
-    recomendaciones_clinicas: cleanString.optional(),
+    recomendaciones_clinicas: freeTextOptional.optional(),
     /** true tras «Cerrar captura» — habilita checkout en recepción. */
     examen_capture_closed: z.boolean().optional(),
   });

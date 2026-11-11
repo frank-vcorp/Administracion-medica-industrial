@@ -53,3 +53,13 @@ export function canEmitMedicalReview(role: UserRole | string | null | undefined)
   if (isAdminLike(role)) return true
   return (MEDICAL_REVIEWER_ROLES as readonly string[]).includes(role)
 }
+
+/**
+ * SME-109: edición de texto clínico tras cierre de captura / expediente en validación.
+ * Incluye admin-like (SUPERADMIN, ADMIN) y médicos revisor.
+ */
+export function canEditClosedClinicalCapture(role: UserRole | string | null | undefined): boolean {
+  if (!role) return false
+  if (isAdminLike(role)) return true
+  return (MEDICAL_REVIEWER_ROLES as readonly string[]).includes(role)
+}

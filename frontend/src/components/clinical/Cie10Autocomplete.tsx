@@ -102,7 +102,7 @@ export function Cie10Autocomplete({
 
   return (
     <div className="relative space-y-1" ref={ref}>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+      <p className="text-[10px] font-semibold text-slate-500">{label}</p>
       <input
         type="text"
         className={inputClassName}
