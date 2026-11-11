@@ -122,15 +122,15 @@ export function CashList() {
 
             <div className="grid grid-cols-3 gap-1 mb-2 text-center text-[10px]">
               <div className="bg-slate-50 rounded p-1">
-                <div className="text-slate-500 uppercase">Total</div>
+                <div className="text-slate-500">Total</div>
                 <div className="font-bold text-slate-800">${o.total.toFixed(2)}</div>
               </div>
               <div className="bg-emerald-50 rounded p-1">
-                <div className="text-emerald-700 uppercase">Cobrado</div>
+                <div className="text-emerald-700">Cobrado</div>
                 <div className="font-bold text-emerald-700">${o.paidTotal.toFixed(2)}</div>
               </div>
               <div className={`${o.balance > 0 ? "bg-red-50" : "bg-slate-50"} rounded p-1`}>
-                <div className={`${o.balance > 0 ? "text-red-700" : "text-slate-500"} uppercase`}>
+                <div className={`${o.balance > 0 ? "text-red-700" : "text-slate-500"}`}>
                   Pendiente
                 </div>
                 <div className={`font-bold ${o.balance > 0 ? "text-red-700" : "text-slate-800"}`}>

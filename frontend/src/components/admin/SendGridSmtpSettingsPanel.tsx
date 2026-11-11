@@ -164,7 +164,7 @@ export default function SendGridSmtpSettingsPanel() {
 
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Puerto</label>
+            <label className="block text-xs font-bold text-slate-500 mb-1">Puerto</label>
             <select
               value={port}
               onChange={(e) => setPort(Number(e.target.value))}
@@ -179,7 +179,7 @@ export default function SendGridSmtpSettingsPanel() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Usuario SMTP</label>
+            <label className="block text-xs font-bold text-slate-500 mb-1">Usuario SMTP</label>
             <input
               type="text"
               readOnly
@@ -190,7 +190,7 @@ export default function SendGridSmtpSettingsPanel() {
         </div>
 
         <div>
-          <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+          <label className="block text-xs font-bold text-slate-500 mb-1">
             API key (contraseña SMTP)
           </label>
           <input

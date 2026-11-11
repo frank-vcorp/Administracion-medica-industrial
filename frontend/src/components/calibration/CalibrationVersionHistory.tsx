@@ -55,7 +55,7 @@ function FieldDefinitionsTable({
   if (fields.length === 0) {
     return (
       <div className="space-y-1">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-2">
+        <p className="text-xs font-semibold text-slate-600 tracking-wide flex items-center gap-2">
           {title} {badge}
         </p>
         <div className="p-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400 text-center">
@@ -67,7 +67,7 @@ function FieldDefinitionsTable({
 
   return (
     <div className="space-y-1">
-      <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-2">
+      <p className="text-xs font-semibold text-slate-600 tracking-wide flex items-center gap-2">
         {title} {badge}
       </p>
       <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -220,7 +220,7 @@ export default function CalibrationVersionHistory({
       {/* Historial de versiones */}
       {versions.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+          <p className="text-xs font-semibold text-slate-600 tracking-wide">
             Historial ({versions.length} versión/es)
           </p>
           <div className="space-y-2">

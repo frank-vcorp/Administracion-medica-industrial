@@ -53,6 +53,7 @@ import {
   SUPLEMENTOS_COMPLEMENTOS_HELP,
   SUPLEMENTOS_COMPLEMENTOS_LABEL,
 } from '@/lib/antecedentes-fields'
+import { getCatalogEnumDisplayLabel } from '@/lib/clinical/enum-display-labels'
 import {
   ANTECEDENTES_SECTION_LEGEND,
   ANTECEDENTES_TABS,
@@ -447,7 +448,9 @@ export function AntecedentesForm({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 >
                   <option value="">— Seleccionar —</option>
-                  {TURNO_OPTIONS.map(o => <option key={o}>{o}</option>)}
+                  {TURNO_OPTIONS.map(o => (
+                    <option key={o} value={o}>{getCatalogEnumDisplayLabel(o)}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -458,7 +461,9 @@ export function AntecedentesForm({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 >
                   <option value="">— Seleccionar —</option>
-                  {ESTADO_CIVIL_OPTIONS.map(o => <option key={o}>{o}</option>)}
+                  {ESTADO_CIVIL_OPTIONS.map(o => (
+                    <option key={o} value={o}>{getCatalogEnumDisplayLabel(o)}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -613,7 +618,7 @@ export function AntecedentesForm({
                           }`}
                         >
                           {SNA_OPTIONS.map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
+                            <option key={opt} value={opt}>{getCatalogEnumDisplayLabel(opt)}</option>
                           ))}
                         </select>
                         {patologiaEspecificacionSiempreVisible(item.field) && (
@@ -867,7 +872,7 @@ export function AntecedentesForm({
                             ? opt === 'SI' ? 'bg-rose-100 border-rose-400 text-rose-700' : 'bg-green-50 border-green-300 text-green-700'
                             : 'bg-white border-gray-200 text-gray-500'
                         }`}
-                      >{opt}</button>
+                      >{getCatalogEnumDisplayLabel(opt)}</button>
                     ))}
                   </div>
                 </div>
@@ -898,7 +903,9 @@ export function AntecedentesForm({
                   onChange={e => setNoPatologicos(p => ({ ...p, alimentacion: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                 >
-                  {['BUENA', 'REGULAR', 'MALA'].map(o => <option key={o}>{o}</option>)}
+                  {['BUENA', 'REGULAR', 'MALA'].map(o => (
+                    <option key={o} value={o}>{getCatalogEnumDisplayLabel(o)}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -909,7 +916,7 @@ export function AntecedentesForm({
                     <button key={opt} type="button"
                       onClick={() => setNoPatologicos(p => ({ ...p, tratamiento_medico_actual: opt }))}
                       className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition ${noPatologicos.tratamiento_medico_actual === opt ? 'bg-blue-100 border-blue-400 text-blue-700' : 'bg-white border-gray-200 text-gray-500'}`}
-                    >{opt}</button>
+                    >{getCatalogEnumDisplayLabel(opt)}</button>
                   ))}
                 </div>
                 {noPatologicos.tratamiento_medico_actual === 'SI' && (
@@ -936,7 +943,7 @@ export function AntecedentesForm({
                 >
                   <option value="">— Seleccionar —</option>
                   {GRUPO_RH_VALUES.map(v => (
-                    <option key={v} value={v}>{v}</option>
+                    <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
                   ))}
                 </select>
               </div>
@@ -948,7 +955,7 @@ export function AntecedentesForm({
                     <button key={opt} type="button"
                       onClick={() => setNoPatologicos(p => ({ ...p, tatuajes: opt }))}
                       className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition ${noPatologicos.tatuajes === opt ? 'bg-blue-100 border-blue-400 text-blue-700' : 'bg-white border-gray-200 text-gray-500'}`}
-                    >{opt}</button>
+                    >{getCatalogEnumDisplayLabel(opt)}</button>
                   ))}
                 </div>
                 {noPatologicos.tatuajes === 'SI' && (

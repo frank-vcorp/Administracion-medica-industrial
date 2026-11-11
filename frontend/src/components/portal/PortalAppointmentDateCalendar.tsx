@@ -137,7 +137,7 @@ export default function PortalAppointmentDateCalendar({
     <section className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">
+          <p className="text-[10px] font-bold tracking-widest text-violet-600">
             Disponibilidad en sucursal
           </p>
           <h2 className="text-lg sm:text-xl font-black text-slate-800">Elija el día de su cita</h2>
@@ -213,7 +213,7 @@ export default function PortalAppointmentDateCalendar({
                   className={`flex min-h-[14rem] sm:min-h-[18rem] flex-col rounded-2xl border text-left transition hover:shadow-md disabled:cursor-not-allowed disabled:hover:shadow-none ${columnShell(status, selected, isToday)}`}
                 >
                   <div className="border-b border-slate-100/80 px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                    <p className="text-[10px] font-bold tracking-wide text-slate-400">
                       {DAY_LABELS[index]}
                     </p>
                     <div className="mt-1 flex items-center justify-between gap-2">
@@ -227,7 +227,7 @@ export default function PortalAppointmentDateCalendar({
                   </div>
 
                   <div className="flex flex-1 flex-col justify-center px-3 py-4 text-center">
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <p className="text-xs font-bold tracking-wide text-slate-500">
                       {statusLabel(status)}
                     </p>
                     {info && status !== 'past' && status !== 'full' && (

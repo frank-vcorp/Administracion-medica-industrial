@@ -9,7 +9,7 @@
  * Layout por sección:
  *   - Header con icono + título + descripción breve.
  *   - Grid de campos en 2 columnas (responsive: 1 col en móvil).
- *   - Cada campo: label pequeño uppercase + valor prominent.
+ *   - Cada campo: label pequeño + valor prominent.
  *   - Valores vacíos: placeholder "—" en gris claro.
  *   - Domicilio descompuesto en Calle + Int + Ext (FIX-ARCH-20260624-05).
  */
@@ -41,7 +41,7 @@ function ValueCell({
   }
   return (
     <div className={`bg-slate-50/60 rounded-lg px-4 py-3 border border-slate-100 ${className}`}>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+      <p className="text-[10px] font-bold text-slate-400 tracking-wider mb-1">
         {label}
       </p>
       <p className="text-sm font-semibold text-slate-800 break-words">{display}</p>
@@ -314,7 +314,7 @@ export default function CompanyFullFormView({
                     >
                       {d.nombre as string}
                     </a>
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    <p className="text-[10px] text-slate-500 tracking-wider">
                       {(d.extension as string) ?? '—'} · {sizeKb} KB
                     </p>
                   </div>

@@ -112,7 +112,7 @@ export default async function AdminServicesPage({
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+                    <thead className="bg-slate-50 text-xs text-slate-500 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Código</th>
                             <th className="px-6 py-4">Prueba</th>

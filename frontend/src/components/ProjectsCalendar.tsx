@@ -423,14 +423,14 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                 Mes siguiente
               </button>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Mes visible</p>
+                <p className="text-xs font-semibold tracking-wide text-slate-400">Mes visible</p>
                 <p className="text-lg font-bold capitalize text-slate-900">{formatMonthLabel(visibleMonth)}</p>
               </div>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <label className="space-y-1 text-sm text-slate-600">
-                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Empresa</span>
+                <span className="block text-xs font-semibold tracking-wide text-slate-400">Empresa</span>
                 <select
                   value={companyFilter}
                   onChange={(event) => setCompanyFilter(event.target.value)}
@@ -444,7 +444,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
               </label>
 
               <label className="space-y-1 text-sm text-slate-600">
-                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Estado</span>
+                <span className="block text-xs font-semibold tracking-wide text-slate-400">Estado</span>
                 <select
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
@@ -458,14 +458,14 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
               </label>
 
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Resumen</p>
+                <p className="text-xs font-semibold tracking-wide text-slate-400">Resumen</p>
                 <p className="text-sm font-semibold text-slate-700">{visibleProjects.length} proyectos en el mes</p>
                 <p className="text-xs text-slate-500">{filteredProjects.length} proyectos coinciden con los filtros activos</p>
               </div>
 
               {/* ARCH-20260804-03 — Fase 4 / §8.4: toggle "Solo proyectos con mantenimiento". */}
               <label className="space-y-1 text-sm text-slate-600">
-                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Vinculación</span>
+                <span className="block text-xs font-semibold tracking-wide text-slate-400">Vinculación</span>
                 <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
                   <input
                     type="checkbox"
@@ -481,7 +481,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
 
           {visibleProjects.length > 0 && (
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recepción por proyecto</p>
+              <p className="text-xs font-semibold tracking-wide text-slate-400">Recepción por proyecto</p>
               {visibleProjects.slice(0, 8).map((project) => (
                 <button
                   key={`queue-${project.id}`}
@@ -499,7 +499,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
             <div className="mt-6 space-y-3">
               <div className="grid grid-cols-7 gap-2">
                 {WEEKDAY_LABELS.map((label) => (
-                  <div key={label} className="rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500">
+                  <div key={label} className="rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-bold tracking-wide text-slate-500">
                     {label}
                   </div>
                 ))}
@@ -523,7 +523,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                           {day.getDate()}
                         </span>
                         {projectsOnDay.length > 0 && (
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          <span className="text-[11px] font-semibold tracking-wide text-slate-400">
                             {projectsOnDay.length} activos
                           </span>
                         )}
@@ -554,7 +554,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                               </div>
                               <p className="mt-1 truncate text-[11px] font-medium">{project.company?.name ?? '— sin empresa —'}</p>
                               <p className="truncate text-[11px]">{getUnitLabel(project)}</p>
-                              <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide">
+                              <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-semibold tracking-wide">
                                 <span>{STATUS_LABELS[project.status]}</span>
                                 <span>{formatRange(project.startDate, project.endDate)}</span>
                               </div>
@@ -565,7 +565,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                                 <Link
                                   href={`/admin/mobile-units/${unitId}/maintenance`}
                                   data-testid="maintenance-badge"
-                                  className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 transition-colors hover:bg-violet-100"
+                                  className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-violet-700 transition-colors hover:bg-violet-100"
                                   onClick={(event) => event.stopPropagation()}
                                 >
                                   🔧 {maintenancesInRange.length} mant.
@@ -576,7 +576,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                               <button
                                 type="button"
                                 onClick={() => setReceptionProjectId(project.id)}
-                                className="w-full rounded-lg border border-white/80 bg-white/80 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 hover:bg-white"
+                                className="w-full rounded-lg border border-white/80 bg-white/80 px-2 py-1.5 text-[10px] font-bold tracking-[0.14em] text-slate-700 hover:bg-white"
                               >
                                 Recepción
                               </button>
@@ -613,7 +613,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
           <div className="mt-6 rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-500">Panel de recepción</p>
+                <p className="text-xs font-black tracking-[0.2em] text-blue-500">Panel de recepción</p>
                 <h3 className="text-xl font-black text-slate-900">{selectedReceptionProject.name}</h3>
                 <p className="text-xs font-medium text-slate-500">
                   {selectedReceptionProject.company?.name ?? '— sin empresa —'} · {getUnitLabel(selectedReceptionProject)}
@@ -621,15 +621,15 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Pendientes</p>
+                  <p className="text-[10px] font-black tracking-[0.14em] text-slate-400">Pendientes</p>
                   <p className="text-lg font-black text-slate-700">{receptionMetrics.pending}</p>
                 </div>
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-500">Llegados</p>
+                  <p className="text-[10px] font-black tracking-[0.14em] text-amber-500">Llegados</p>
                   <p className="text-lg font-black text-amber-700">{receptionMetrics.arrived}</p>
                 </div>
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-500">Ingresados</p>
+                  <p className="text-[10px] font-black tracking-[0.14em] text-emerald-500">Ingresados</p>
                   <p className="text-lg font-black text-emerald-700">{receptionMetrics.checkedIn}</p>
                 </div>
               </div>
@@ -644,7 +644,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
             <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
               <table className="min-w-full divide-y divide-slate-100">
                 <thead className="bg-slate-50">
-                  <tr className="text-left text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                  <tr className="text-left text-[11px] font-black tracking-[0.14em] text-slate-400">
                     <th className="px-3 py-2">Trabajador</th>
                     <th className="px-3 py-2">Estado</th>
                     <th className="px-3 py-2">Llegada</th>
@@ -666,7 +666,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                           <p className="text-xs text-slate-500">#{row.worker.universalId}</p>
                         </td>
                         <td className="px-3 py-2">
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${RECEPTION_STATUS_BADGES[row.receptionStatus]}`}>
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black tracking-[0.14em] ${RECEPTION_STATUS_BADGES[row.receptionStatus]}`}>
                             {RECEPTION_STATUS_LABELS[row.receptionStatus]}
                           </span>
                         </td>

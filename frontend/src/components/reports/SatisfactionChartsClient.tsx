@@ -89,7 +89,7 @@ export default function SatisfactionChartsClient({
           applyFilters(e.currentTarget)
         }}
       >
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Desde
           <input
             type="date"
@@ -98,7 +98,7 @@ export default function SatisfactionChartsClient({
             className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
           />
         </label>
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Hasta
           <input
             type="date"
@@ -107,7 +107,7 @@ export default function SatisfactionChartsClient({
             className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
           />
         </label>
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Empresa
           <select
             name="companyId"
@@ -122,7 +122,7 @@ export default function SatisfactionChartsClient({
             ))}
           </select>
         </label>
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Sucursal
           <select
             name="branchId"
@@ -137,7 +137,7 @@ export default function SatisfactionChartsClient({
             ))}
           </select>
         </label>
-        <label className="text-xs font-bold text-slate-500 uppercase md:col-span-2">
+        <label className="text-xs font-bold text-slate-500 md:col-span-2">
           Canal
           <select
             name="channel"
@@ -169,7 +169,7 @@ export default function SatisfactionChartsClient({
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl border border-slate-100 p-5">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide mb-4">
+          <h3 className="text-sm font-black text-slate-800 tracking-wide mb-4">
             Distribución calificación general (1–5)
           </h3>
           <div className="space-y-2">
@@ -189,7 +189,7 @@ export default function SatisfactionChartsClient({
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-100 p-5">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide mb-4">
+          <h3 className="text-sm font-black text-slate-800 tracking-wide mb-4">
             Promedio mensual (overall)
           </h3>
           {monthSeries.length === 0 ? (
@@ -223,7 +223,7 @@ export default function SatisfactionChartsClient({
 function KpiCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-[10px] font-black tracking-widest text-slate-400">{label}</p>
       <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
     </div>
   )

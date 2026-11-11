@@ -79,7 +79,7 @@ export default function PublicGeneralPageClient({
 
       <div className="flex flex-col md:flex-row md:items-end gap-4 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div className="flex-1 space-y-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+          <label className="text-[10px] font-bold text-slate-400 ml-1">
             Buscar paciente
           </label>
           <input

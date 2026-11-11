@@ -149,7 +149,7 @@ export default function PortalAppointmentForm({ context }: Props) {
       )}
       <div className="space-y-4">
         <label className="block text-sm max-w-md">
-          <span className="text-xs font-bold uppercase text-slate-500">Sucursal</span>
+          <span className="text-xs font-bold text-slate-500">Sucursal</span>
           <select
             required
             value={branchId}
@@ -187,7 +187,7 @@ export default function PortalAppointmentForm({ context }: Props) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm">
-            <span className="text-xs font-bold uppercase text-slate-500">Trabajador</span>
+            <span className="text-xs font-bold text-slate-500">Trabajador</span>
             <select
               required
               value={workerId}
@@ -203,7 +203,7 @@ export default function PortalAppointmentForm({ context }: Props) {
           </label>
 
           <label className="block text-sm">
-            <span className="text-xs font-bold uppercase text-slate-500">Hora</span>
+            <span className="text-xs font-bold text-slate-500">Hora</span>
             <select
               required
               value={time}
@@ -239,7 +239,7 @@ export default function PortalAppointmentForm({ context }: Props) {
           </div>
 
           <label className="block text-sm sm:col-span-2">
-            <span className="text-xs font-bold uppercase text-slate-500">Perfil de exámenes (opcional)</span>
+            <span className="text-xs font-bold text-slate-500">Perfil de exámenes (opcional)</span>
             <select
               value={serviceProfileId}
               onChange={(e) => setServiceProfileId(e.target.value)}

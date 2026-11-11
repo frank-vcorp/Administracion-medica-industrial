@@ -94,7 +94,7 @@ export default function ReceptionEventTestsList({
           <Link
             href={papeletaHref}
             prefetch
-            className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-800"
+            className="shrink-0 text-[9px] font-black tracking-widest text-indigo-600 hover:text-indigo-800"
           >
             Papeleta →
           </Link>
@@ -115,7 +115,7 @@ export default function ReceptionEventTestsList({
                 href={papeletaHref}
                 prefetch
                 title={`${test.testNameSnapshot} — ${formatStudyStatusLine(pipeline)}`}
-                className={`max-w-[8.5rem] truncate rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-tight ${chipTone}`}
+                className={`max-w-[8.5rem] truncate rounded-md border px-1.5 py-0.5 text-[9px] font-bold tracking-tight ${chipTone}`}
               >
                 {shortStudyLabel(test.testNameSnapshot)}
               </Link>
@@ -125,7 +125,7 @@ export default function ReceptionEventTestsList({
         <button
           type="button"
           onClick={() => setDetailOpen(v => !v)}
-          className="text-[9px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600"
+          className="text-[9px] font-bold tracking-wider text-slate-400 hover:text-slate-600"
           aria-expanded={detailOpen}
         >
           {detailOpen ? '▲ Ocultar estudios' : '▼ Ver estudios'}
@@ -155,13 +155,13 @@ export default function ReceptionEventTestsList({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] font-bold tracking-wider text-slate-500">
           Estudios ({visibleTests.length})
         </span>
         <Link
           href={papeletaHref}
           prefetch
-          className="text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-800"
+          className="text-[10px] font-black tracking-widest text-indigo-600 hover:text-indigo-800"
         >
           Ver papeleta →
         </Link>
@@ -195,7 +195,7 @@ export default function ReceptionEventTestsList({
                   </span>
                 </span>
                 <span
-                  className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${badgeTone}`}
+                  className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold tracking-wide ${badgeTone}`}
                 >
                   {business}
                 </span>

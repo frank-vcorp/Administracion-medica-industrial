@@ -80,7 +80,7 @@ export default function BrandingLogoManager() {
 
       <div className="flex flex-col sm:flex-row gap-6 items-start">
         <div className="border border-slate-100 rounded-xl p-4 bg-slate-50 min-w-[220px]">
-          <p className="text-[10px] font-bold uppercase text-slate-400 mb-2">Vista previa</p>
+          <p className="text-[10px] font-bold text-slate-400 mb-2">Vista previa</p>
           {settings?.logoUrl ? (
             <Image
               src={settings.logoUrl}

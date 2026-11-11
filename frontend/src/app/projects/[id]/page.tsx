@@ -98,7 +98,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
             <span
-              className={`text-xs font-bold uppercase px-2 py-1 rounded-full border ${
+              className={`text-xs font-bold px-2 py-1 rounded-full border ${
                 project.status === 'COMPLETED'
                   ? 'bg-green-50 text-green-700 border-green-200'
                   : project.status === 'IN_PROGRESS'
@@ -178,7 +178,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-xs font-bold uppercase px-2 py-1 rounded-full border ${
+                        className={`text-xs font-bold px-2 py-1 rounded-full border ${
                           pw.receptionStatus === 'CHECKED_IN'
                             ? 'bg-green-50 text-green-700 border-green-200'
                             : pw.receptionStatus === 'ARRIVED'

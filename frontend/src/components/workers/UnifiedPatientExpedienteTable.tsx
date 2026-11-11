@@ -103,7 +103,7 @@ export default function UnifiedPatientExpedienteTable({
       <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-100 border border-slate-100 overflow-hidden">
         <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex flex-col lg:flex-row gap-3 lg:items-end">
           <div className="flex-1 space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+            <label className="text-[10px] font-bold text-slate-400 ml-1">
               Buscar
             </label>
             <input
@@ -115,7 +115,7 @@ export default function UnifiedPatientExpedienteTable({
             />
           </div>
           <div className="space-y-1 min-w-[180px]">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+            <label className="text-[10px] font-bold text-slate-400 ml-1">
               Empresa
             </label>
             <select
@@ -132,7 +132,7 @@ export default function UnifiedPatientExpedienteTable({
             </select>
           </div>
           <div className="space-y-1 min-w-[200px]">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+            <label className="text-[10px] font-bold text-slate-400 ml-1">
               Estatus
             </label>
             <select

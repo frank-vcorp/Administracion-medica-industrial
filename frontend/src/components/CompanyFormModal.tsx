@@ -307,7 +307,7 @@ export default function CompanyFormModal(props?: {
                         <div className="flex justify-between items-center mb-8">
                             <div>
                                 <h3 className="text-xl font-black text-slate-800">Registrar Convenio</h3>
-                                <p className="text-[10px] text-slate-400 uppercase font-extrabold tracking-widest mt-1">Nuevo Cliente Corporativo</p>
+                                <p className="text-[10px] text-slate-400 font-extrabold tracking-widest mt-1">Nuevo Cliente Corporativo</p>
                             </div>
                             <button onClick={() => setIsOpen(false)} className="text-slate-300 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-full">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -316,28 +316,28 @@ export default function CompanyFormModal(props?: {
 
                         <form action={handleSubmit} className="space-y-5">
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Razón Social</label>
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">Razón Social</label>
                                 <input name="name" placeholder="Ej: Aceros del Norte S.A." required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none" />
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">RFC / Tax ID</label>
-                                <input name="rfc" placeholder="ABC010101XYZ" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none uppercase font-mono" />
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">RFC / Tax ID</label>
+                                <input name="rfc" placeholder="ABC010101XYZ" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none font-mono" />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Contacto</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Contacto</label>
                                     <input name="contactName" placeholder="Nombre" className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none" />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Email</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Email</label>
                                     <input name="email" placeholder="email@ejemplo.com" type="email" className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 p-3.5 rounded-xl text-sm transition-all outline-none" />
                                 </div>
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursales permitidas</label>
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">Sucursales permitidas</label>
                                 <div className="grid grid-cols-1 gap-2">
                                     {branches.map((b) => {
                                         const checked = selectedBranchIds.has(b.id)
@@ -376,7 +376,7 @@ export default function CompanyFormModal(props?: {
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal Predeterminada</label>
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">Sucursal Predeterminada</label>
                                 <select
                                     name="defaultBranchId"
                                     value={defaultBranchId}
@@ -391,7 +391,7 @@ export default function CompanyFormModal(props?: {
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Vendedor asignado</label>
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">Vendedor asignado</label>
                                 <select
                                     name="sellerIdSelect"
                                     value={sellerId}

@@ -98,7 +98,7 @@ export function MedicalProfileNameBuilderFields({
 
       {preview && (
         <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600">Vista previa</p>
+          <p className="text-[10px] font-bold tracking-wide text-blue-600">Vista previa</p>
           <p className="mt-1 text-sm font-medium text-blue-900 break-words">{preview}</p>
         </div>
       )}

@@ -14,7 +14,7 @@ export function StudyCaptureFieldLabel({
   return (
     <label
       htmlFor={htmlFor}
-      className="block text-xs font-bold text-slate-500 mb-2 uppercase"
+      className="block text-xs font-semibold text-slate-500 mb-2"
     >
       {children}
       {required ? <span className="text-red-500 normal-case"> *</span> : null}

@@ -242,7 +242,7 @@ describe('IMPL-FEATURE-20260825-03 ronda 8: builder del dictamen general', () =>
     expect(out.consolidatedEvents).toEqual([])
   })
 
-  it('deriveEventShortId: primeros 8 chars uppercase', () => {
+  it('deriveEventShortId: primeros 8 chars', () => {
     expect(
       deriveEventShortId('7c6f1c2e-4f8b-4d2b-9b9c-1f9a4d6e7b21'),
     ).toBe('7C6F1C2E')

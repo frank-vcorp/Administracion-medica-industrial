@@ -162,11 +162,11 @@ export default async function CompanyDetailPage({ params }: PageProps) {
       {/* IMPL-20260623-03: Formulario fiscal completo (10 secciones) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+          <h2 className="text-sm font-bold text-slate-700 tracking-wider">
             Ficha fiscal completa
           </h2>
           {!canEdit && estado === 'PENDIENTE_REVISION' && (
-            <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
               Solo revisión
             </span>
           )}

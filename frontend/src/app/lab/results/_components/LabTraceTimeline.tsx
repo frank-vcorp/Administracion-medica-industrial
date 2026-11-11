@@ -73,7 +73,7 @@ export function LabTraceTimeline({ orderId, refreshKey = 0 }: Props) {
         <h3 className="text-base font-semibold text-slate-800">
           Trazabilidad operativa
         </h3>
-        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-mono">
+        <span className="text-[10px] tracking-wider text-slate-400 font-mono">
           {rows.length} evento{rows.length === 1 ? "" : "s"}
         </span>
       </div>

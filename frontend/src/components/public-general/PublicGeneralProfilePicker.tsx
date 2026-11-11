@@ -137,7 +137,7 @@ export default function PublicGeneralProfilePicker({
 
       {mode === 'existing' ? (
         <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+          <label className="text-[10px] font-bold text-slate-400 ml-1">
             Perfil médico
           </label>
           <select
@@ -157,7 +157,7 @@ export default function PublicGeneralProfilePicker({
       ) : (
         <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+            <label className="text-[10px] font-bold text-slate-400 ml-1">
               Nombre del perfil (opcional)
             </label>
             <div className="flex items-center gap-1">
@@ -183,7 +183,7 @@ export default function PublicGeneralProfilePicker({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+            <label className="text-[10px] font-bold text-slate-400 ml-1">
               Pruebas a incluir
             </label>
             <input
@@ -196,7 +196,7 @@ export default function PublicGeneralProfilePicker({
             <div className="max-h-40 overflow-y-auto rounded-xl ring-1 ring-slate-200 bg-slate-50 p-2 space-y-2">
               {Object.entries(byCategory).map(([category, tests]) => (
                 <div key={category}>
-                  <p className="text-[9px] font-black text-slate-400 uppercase px-1 mb-1">
+                  <p className="text-[9px] font-black text-slate-400 px-1 mb-1">
                     {category}
                   </p>
                   <div className="space-y-1">

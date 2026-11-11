@@ -62,7 +62,7 @@ function BranchAttendedCalendar({
         <span className="text-xs font-bold bg-white/20 rounded-lg px-2 py-0.5 shrink-0">{branchTotal}</span>
       </div>
       <div className="p-3 space-y-2">
-        <div className="grid grid-cols-7 gap-0.5 text-center text-[9px] font-black uppercase text-slate-400">
+        <div className="grid grid-cols-7 gap-0.5 text-center text-[9px] font-black text-slate-400">
           {WEEKDAYS.map((day) => (
             <div key={day}>{day}</div>
           ))}
@@ -208,7 +208,7 @@ export default function AttendedAppointmentsCalendar({
       <div className="bg-slate-50 w-full max-w-6xl rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-200 bg-white sticky top-0 z-10">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Citas atendidas</p>
+            <p className="text-[10px] font-black tracking-widest text-emerald-600">Citas atendidas</p>
             <h2 className="text-xl font-black text-slate-800 capitalize">{monthLabel}</h2>
             <p className="text-xs text-slate-500 mt-0.5">Conteo por sucursal — sin datos de pacientes</p>
           </div>

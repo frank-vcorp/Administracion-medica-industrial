@@ -125,7 +125,7 @@ export default function WorkerReportEmailsPanel({
               <div className="flex items-center gap-2 truncate">
                 <span className="truncate text-sm text-slate-700" title={row.email}>{row.email}</span>
                 {row.isPrimary && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
                     principal
                   </span>
                 )}

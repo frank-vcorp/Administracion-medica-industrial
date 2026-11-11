@@ -95,7 +95,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
     <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-100 border border-slate-100 overflow-hidden">
       <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex flex-col lg:flex-row gap-3 lg:items-end">
         <div className="flex-1 space-y-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+          <label className="text-[10px] font-bold text-slate-400 ml-1">
             Buscar
           </label>
           <input
@@ -107,7 +107,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
           />
         </div>
         <div className="space-y-1 min-w-[180px]">
-          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+          <label className="text-[10px] font-bold text-slate-400 ml-1">
             Empresa
           </label>
           <select
@@ -124,7 +124,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
           </select>
         </div>
         <div className="space-y-1 min-w-[200px]">
-          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+          <label className="text-[10px] font-bold text-slate-400 ml-1">
             Etapa
           </label>
           <select
@@ -139,7 +139,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
           </select>
         </div>
         <div className="space-y-1 min-w-[200px]">
-          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+          <label className="text-[10px] font-bold text-slate-400 ml-1">
             Semáforo
           </label>
           <select
@@ -214,14 +214,14 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                 </td>
                 <td className="px-6 py-4">
                   <span
-                    className={`px-2 py-1 rounded-full text-[10px] font-black border uppercase tracking-widest ${row.stageBadgeClass}`}
+                    className={`px-2 py-1 rounded-full text-[10px] font-black border tracking-widest ${row.stageBadgeClass}`}
                   >
                     {row.stageLabel}
                   </span>
                 </td>
                 <td className="px-6 py-4">
                   <span
-                    className={`px-2 py-1 rounded-full text-[10px] font-black border uppercase tracking-widest ${row.completenessBadgeClass}`}
+                    className={`px-2 py-1 rounded-full text-[10px] font-black border tracking-widest ${row.completenessBadgeClass}`}
                   >
                     {row.completenessLabel}
                   </span>

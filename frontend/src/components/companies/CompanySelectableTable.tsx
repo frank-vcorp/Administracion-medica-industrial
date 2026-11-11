@@ -126,7 +126,7 @@ export default function CompanySelectableTable({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-            <tr className="text-left text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+            <tr className="text-left text-[11px] font-bold text-slate-500 tracking-wide">
               {selectable && (
                 <th className="px-3 py-3 w-10">
                   <input

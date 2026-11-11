@@ -14,6 +14,11 @@
  * `frontend/src/schemas/clinical/history.schema.ts`.
  */
 
+import {
+  formatCatalogEnumListDisplay,
+  getCatalogEnumDisplayLabel,
+} from '@/lib/clinical/enum-display-labels'
+
 export interface CampoDescripcion {
   field: string
   label: string
@@ -166,14 +171,14 @@ export const ESTADO_CIVIL_OPTIONS = [
 
 /** Definición declarativa de los campos de Datos Personales. */
 export const DATOS_PERSONALES_CAMPOS: DatosPersonalesCampo[] = [
-  { field: 'puesto_actual',      label: 'Puesto Actual',       kind: 'text' },
-  { field: 'area_departamento',  label: 'Área / Departamento', kind: 'text' },
+  { field: 'puesto_actual',      label: 'Puesto actual',       kind: 'text' },
+  { field: 'area_departamento',  label: 'Área / departamento', kind: 'text' },
   { field: 'escolaridad',        label: 'Escolaridad',         kind: 'text' },
   { field: 'antiguedad_anios',   label: 'Antigüedad (años)',   kind: 'number' },
   { field: 'antiguedad_meses',   label: 'Antigüedad (meses)',  kind: 'number' },
-  { field: 'numero_hijos',       label: 'Número de Hijos',     kind: 'number' },
+  { field: 'numero_hijos',       label: 'Número de hijos',     kind: 'number' },
   { field: 'turno',              label: 'Turno',               kind: 'select-turno' },
-  { field: 'estado_civil',       label: 'Estado Civil',        kind: 'select-estado-civil' },
+  { field: 'estado_civil',       label: 'Estado civil',        kind: 'select-estado-civil' },
 ]
 
 /** Opciones de alimentación (select). */
@@ -236,11 +241,11 @@ export function writeMentalesCampoAbierto(text: string): {
 export function formatMentalesDisplay(data: Record<string, unknown>): string {
   const raw = String(data.mentales ?? '').trim()
   const esp = String(data.mentales_especifique ?? '').trim()
-  if (raw === 'SI' && esp) return `SI (${esp})`
+  if (raw === 'SI' && esp) return `Sí (${esp})`
   if (esp) return esp
-  if (raw === 'SI') return 'SI'
-  if (raw === 'NO APLICA') return 'NO APLICA'
-  if (raw === 'NEGADO' || !raw) return 'NEGADO'
+  if (raw === 'SI') return 'Sí'
+  if (raw === 'NO APLICA') return 'No aplica'
+  if (raw === 'NEGADO' || !raw) return 'Negado'
   return raw
 }
 
@@ -252,19 +257,19 @@ export function formatHeredoFamiliaresValor(
   const v = (value ?? '').trim()
   if (!v) return ''
   const e = (especifique ?? '').trim()
-  if (v === 'SI' && e) return `SI (${e})`
+  if (v === 'SI' && e) return `Sí (${e})`
   if (v.includes(',')) {
     return v
       .split(',')
       .map((part) => {
         const p = part.trim()
-        if (p === 'OTROS' && e) return `OTROS (${e})`
-        return p
+        if (p === 'OTROS' && e) return `Otros (${e})`
+        return getCatalogEnumDisplayLabel(p)
       })
       .join(', ')
   }
-  if (v === 'OTROS' && e) return `OTROS (${e})`
-  return v
+  if (v === 'OTROS' && e) return `Otros (${e})`
+  return formatCatalogEnumListDisplay(v)
 }
 
 /** Lee un campo Heredo-Familiares con su especifique opcional desde snapshot/maestro. */
@@ -359,9 +364,9 @@ export function readSiEspecifiqueDisplay(
   const estado = String(np[toggleKey] ?? '').trim()
   if (estado === 'SI') {
     const detalle = String(np[especifiqueKey] ?? '').trim()
-    return detalle ? `SI — ${detalle}` : 'SI'
+    return detalle ? `Sí — ${detalle}` : 'Sí'
   }
-  return estado || 'NEGADO'
+  return estado ? getCatalogEnumDisplayLabel(estado) : 'Negado'
 }
 
 /** Texto para PDF / dictamen desde no_patologicos.tatuajes + tatuajes_especifique. */

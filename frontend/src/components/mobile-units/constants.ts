@@ -10,7 +10,7 @@
  *   operativo. Usa bordes y colores fuertes para destacar contadores.
  *
  * - `MOBILE_UNIT_STATUS_BADGE`: versión "píldora" usada en cards de catálogo
- *   y página de detalle. Paridad con BranchStatusBadge (text-[10px] uppercase
+ *   y página de detalle. Paridad con BranchStatusBadge (text-[10px]
  *   font-bold rounded-full).
  */
 export const MOBILE_UNIT_STATUS_LABEL: Record<string, { label: string; color: string }> = {

@@ -108,7 +108,7 @@ const Props: FC<{ status: CutoverStatus }> = ({ status }) => {
         </h2>
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-sm" data-testid="slices-table">
-            <thead className="bg-slate-50 text-slate-700 text-xs uppercase">
+            <thead className="bg-slate-50 text-slate-700 text-xs">
               <tr>
                 <th className="text-left px-4 py-2">Slice</th>
                 <th className="text-left px-4 py-2">Descripción</th>

@@ -106,22 +106,22 @@ export function LabOrderStudiesTable({ items, onChange, readOnly }: Props) {
         <table className="w-full text-sm text-slate-700">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 tracking-wider">
                 Clave
               </th>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 tracking-wider">
                 Estudio
               </th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 tracking-wider">
                 Precio
               </th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 tracking-wider">
                 Dcto $
               </th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 tracking-wider">
                 Dcto %
               </th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 tracking-wider">
                 Importe
               </th>
               <th className="px-3 py-2"></th>

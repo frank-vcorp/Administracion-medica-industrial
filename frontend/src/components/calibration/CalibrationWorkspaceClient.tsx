@@ -199,7 +199,7 @@ function SnapshotsTab({
     <div className="space-y-4">
       {/* Lista de snapshots */}
       <div>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+        <p className="text-xs font-semibold text-slate-500 tracking-wide mb-2">
           Snapshots ({allSnapshots.length})
         </p>
         <div className="space-y-1.5">
@@ -239,7 +239,7 @@ function SnapshotsTab({
       {/* Detalle del snapshot seleccionado */}
       {selectedSnap && (
         <div className="space-y-3 border-t border-slate-200 pt-4">
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+          <p className="text-xs font-semibold text-slate-600 tracking-wide">
             Snapshot seleccionado
           </p>
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -257,7 +257,7 @@ function SnapshotsTab({
           )}
           {extracted !== undefined && extracted !== null ? (
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              <p className="text-xs font-semibold text-slate-600 tracking-wide">
                 Datos extraídos
               </p>
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto">
@@ -269,7 +269,7 @@ function SnapshotsTab({
           ) : null}
           {Array.isArray(missing) && missing.length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">
+              <p className="text-xs font-semibold text-red-600 tracking-wide">
                 Campos faltantes
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -447,7 +447,7 @@ export default function CalibrationWorkspaceClient({
                 snapshotCount={totalSnapshots}
               />
               <div className="border-t border-slate-200 pt-4">
-                <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-3">
+                <p className="text-xs font-semibold text-slate-700 tracking-wide mb-3">
                   Campos candidatos
                 </p>
                 <CandidateSchemaPanel
@@ -574,7 +574,7 @@ export default function CalibrationWorkspaceClient({
         <div className="h-full border-l border-slate-200 flex flex-col bg-slate-900 rounded-br-xl overflow-hidden">
           {/* Barra superior del visor */}
           <div className="shrink-0 px-4 py-2 bg-slate-800 border-b border-slate-700 flex items-center gap-2">
-            <span className="text-slate-300 text-xs font-semibold uppercase tracking-wide">
+            <span className="text-slate-300 text-xs font-semibold tracking-wide">
               Documento fuente
             </span>
             {documents.length > 0 && (

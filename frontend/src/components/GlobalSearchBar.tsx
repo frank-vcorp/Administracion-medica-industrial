@@ -282,7 +282,7 @@ export function GlobalSearchBar({
               <p className="text-xs font-medium text-slate-600">
                 Escribe al menos 2 caracteres para buscar
               </p>
-              <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+              <p className="mt-2 text-[10px] font-bold tracking-wide text-slate-400">
                 Puedes buscar por
               </p>
               <ul className="mt-1 space-y-1">
@@ -294,7 +294,7 @@ export function GlobalSearchBar({
               </ul>
               {recent.length > 0 && (
                 <>
-                  <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  <p className="mt-3 text-[10px] font-bold tracking-wide text-slate-400">
                     Recientes
                   </p>
                   <ul className="mt-1">
@@ -346,7 +346,7 @@ export function GlobalSearchBar({
             !error &&
             indexedGroups.map((group) => (
               <div key={group.type} className="px-2 py-1">
-                <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                <p className="px-2 py-1 text-[10px] font-bold tracking-wide text-slate-400">
                   {group.label}
                 </p>
                 <ul>

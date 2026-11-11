@@ -178,7 +178,7 @@ function ExtractionSnapshotDetail({
       {/* Documento fuente */}
       {fullFileUrl ? (
         <div className="space-y-1">
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Documento fuente</p>
+          <p className="text-xs font-semibold text-slate-600 tracking-wide">Documento fuente</p>
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
             <span className="text-slate-400">📎</span>
             <span className="text-xs font-mono text-slate-700 truncate flex-1">{fileName}</span>
@@ -204,7 +204,7 @@ function ExtractionSnapshotDetail({
       {/* extracted_data */}
       {extracted !== undefined && extracted !== null ? (
         <div className="space-y-1">
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Datos extraídos (extracted_data)</p>
+          <p className="text-xs font-semibold text-slate-600 tracking-wide">Datos extraídos (extracted_data)</p>
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto">
             <pre className="text-xs text-slate-800 whitespace-pre-wrap break-all">
               {JSON.stringify(extracted, null, 2)}
@@ -220,7 +220,7 @@ function ExtractionSnapshotDetail({
       {/* missing_fields */}
       {Array.isArray(missing) && missing.length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">Campos faltantes (missing_fields)</p>
+          <p className="text-xs font-semibold text-red-600 tracking-wide">Campos faltantes (missing_fields)</p>
           <div className="flex flex-wrap gap-1.5">
             {missing.map((field, i) => (
               <span key={i} className="bg-red-50 border border-red-200 text-red-700 px-2 py-0.5 rounded text-xs font-mono">
@@ -285,7 +285,7 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
           {/* Resumen IA */}
           {summaryText && (
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-xs font-semibold text-blue-700 mb-1 uppercase tracking-wide">Resumen IA</p>
+              <p className="text-xs font-semibold text-blue-700 mb-1 tracking-wide">Resumen IA</p>
               <p className="text-sm text-slate-800">{summaryText}</p>
             </div>
           )}
@@ -309,7 +309,7 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
           {/* Justificación */}
           {justificationItems.length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Justificación</p>
+              <p className="text-xs font-semibold text-slate-600 tracking-wide">Justificación</p>
               <ul className="space-y-1">
                 {justificationItems.map((j, i) => (
                   <li key={i} className="flex gap-2 text-sm text-slate-700">
@@ -324,7 +324,7 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
           {/* Limitaciones */}
           {limitationItems.length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Limitaciones</p>
+              <p className="text-xs font-semibold text-amber-700 tracking-wide">Limitaciones</p>
               <ul className="space-y-1">
                 {limitationItems.map((l, i) => (
                   <li key={i} className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">{l}</li>
@@ -336,7 +336,7 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
           {/* Red flags */}
           {redFlagItems.length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Red Flags</p>
+              <p className="text-xs font-semibold text-red-700 tracking-wide">Red Flags</p>
               <ul className="space-y-1">
                 {redFlagItems.map((f, i) => (
                   <li key={i} className="text-xs text-red-800 bg-red-50 border border-red-200 rounded px-2 py-1 font-medium">{f}</li>
@@ -356,7 +356,7 @@ function DiagnosisSnapshotDetail({ prediagnosis }: { prediagnosis: AIPrediagnosi
 
       {/* Revisión médica */}
       <div className="border-t border-slate-200 pt-4 space-y-2">
-        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Revisión médica</p>
+        <p className="text-xs font-semibold text-slate-600 tracking-wide">Revisión médica</p>
         {review ? (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-3">
@@ -474,7 +474,7 @@ export default function CalibrationTabs({ eventTests, apiUrl }: CalibrationTabsP
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
             {/* Sidebar: listado de snapshots */}
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">
+              <p className="text-xs font-semibold text-slate-500 tracking-wide px-1">
                 Snapshots disponibles ({allExtractionSnapshots.length})
               </p>
               <div className="space-y-1.5 max-h-[520px] overflow-y-auto pr-1">

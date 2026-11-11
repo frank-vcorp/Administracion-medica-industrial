@@ -49,7 +49,7 @@ export function BranchUsageStats({ branch }: { branch: BranchDetail }) {
             key={s.label}
             className="bg-white p-4 rounded-lg border border-slate-200"
           >
-            <div className="text-xs text-slate-500 uppercase tracking-wide">
+            <div className="text-xs text-slate-500 tracking-wide">
               {s.label}
             </div>
             <div className="text-3xl font-bold text-slate-800 mt-1">

@@ -86,7 +86,7 @@ export default function PresentationSchemaPanel({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Presentación</p>
+        <p className="text-xs font-semibold tracking-wide text-slate-500">Presentación</p>
         <h3 className="text-sm font-bold text-slate-800">
           {selectedSnapshot.studyType} (v{shortId})
         </h3>
@@ -106,10 +106,10 @@ export default function PresentationSchemaPanel({
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="border-b border-slate-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="border-b border-slate-200 px-4 py-2 text-left text-xs font-semibold tracking-wide text-slate-500">
                   Campo
                 </th>
-                <th className="border-b border-slate-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="border-b border-slate-200 px-4 py-2 text-left text-xs font-semibold tracking-wide text-slate-500">
                   Valor
                 </th>
               </tr>

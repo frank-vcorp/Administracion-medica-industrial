@@ -60,7 +60,7 @@ export function PendingStudiesModal({
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-amber-100 bg-amber-50 px-5 py-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+            <p className="text-[10px] font-bold tracking-widest text-amber-700">
               Pruebas pendientes
             </p>
             <h2 className="text-xl font-black text-slate-800">

@@ -254,7 +254,7 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr className="text-left text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+              <tr className="text-left text-[11px] font-bold text-slate-500 tracking-wide">
                 <th className="px-3 py-3 w-8">#</th>
                 <th className="px-3 py-3 min-w-[180px]">Perfil</th>
                 <th className="px-3 py-3 hidden md:table-cell">Empresa</th>
@@ -701,7 +701,7 @@ function ProfileModal({
             <div className="max-h-[30vh] divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
               {Object.entries(byCategory).map(([category, tests]) => (
                 <div key={category}>
-                  <div className="px-3 py-1.5 bg-slate-50 text-xs uppercase text-slate-400 font-semibold sticky top-0">
+                  <div className="px-3 py-1.5 bg-slate-50 text-xs text-slate-400 font-semibold sticky top-0">
                     {category}
                   </div>
                   {tests.map((test) => (

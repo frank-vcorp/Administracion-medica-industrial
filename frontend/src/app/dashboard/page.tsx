@@ -115,7 +115,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-sme-secondary/10">
                     <div className="w-10 h-10 bg-sme-secondary rounded-xl flex items-center justify-center text-white font-bold">A</div>
                     <div className="pr-4">
-                        <p className="text-[10px] uppercase font-bold text-slate-400 leading-none">Perfil</p>
+                        <p className="text-[10px] font-bold text-slate-400 leading-none">Perfil</p>
                         <p className="text-sm font-bold text-slate-700">Administrador</p>
                     </div>
                 </div>
@@ -220,19 +220,19 @@ export default function DashboardPage() {
                                     <p className="text-lg font-black text-slate-900">
                                         {satisfactionSummary.kpis.count}
                                     </p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Respuestas</p>
+                                    <p className="text-[10px] font-bold text-slate-400">Respuestas</p>
                                 </div>
                                 <div>
                                     <p className="text-lg font-black text-slate-900">
                                         {satisfactionSummary.kpis.avgOverall.toFixed(1)}
                                     </p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Promedio</p>
+                                    <p className="text-[10px] font-bold text-slate-400">Promedio</p>
                                 </div>
                                 <div>
                                     <p className="text-lg font-black text-slate-900">
                                         {Math.round(satisfactionSummary.kpis.recommendRate)}%
                                     </p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Recomienda</p>
+                                    <p className="text-[10px] font-bold text-slate-400">Recomienda</p>
                                 </div>
                             </div>
                             <p className="mt-4 text-xs font-semibold text-violet-700">Ver reporte y exportar Excel →</p>
@@ -291,7 +291,7 @@ function StatCard({
                     {icon}
                 </div>
                 <div className="text-right">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{title}</p>
+                    <p className="text-[10px] font-black text-slate-400 tracking-widest">{title}</p>
                     <p className="text-4xl font-black text-slate-900 mt-1">{value}</p>
                 </div>
             </div>
@@ -328,7 +328,7 @@ function StatCard({
 function InfoBox({ label, value, trend }: { label: string; value: string; trend: string }) {
     return (
         <div className="p-6 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-lg hover:shadow-slate-100 transition-all group">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">{label}</p>
+            <p className="text-xs text-slate-400 font-bold tracking-wider mb-2">{label}</p>
             <p className="text-lg font-extrabold text-slate-800">{value}</p>
             <p className="text-[10px] mt-2 text-sme-primary font-bold">{trend}</p>
         </div>

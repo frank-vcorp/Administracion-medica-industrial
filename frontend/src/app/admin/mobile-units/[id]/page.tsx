@@ -202,7 +202,7 @@ export default async function MobileUnitDetailPage({
                   </p>
                 </div>
                 <span
-                  className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                     STATUS_PILL[p.status] ?? 'bg-slate-200 text-slate-600'
                   }`}
                 >
@@ -247,7 +247,7 @@ export default async function MobileUnitDetailPage({
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white p-4 rounded-lg border border-slate-200">
-      <h4 className="text-xs uppercase font-bold tracking-wide text-slate-500 mb-2">
+      <h4 className="text-xs font-bold tracking-wide text-slate-500 mb-2">
         {title}
       </h4>
       {children}

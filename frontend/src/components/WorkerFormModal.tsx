@@ -478,11 +478,11 @@ export default function WorkerFormModal({
                         </div>
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-200 text-xs">
                             <div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Empresa</p>
+                                <p className="text-[10px] font-bold text-slate-400">Empresa</p>
                                 <p className="font-medium text-slate-700">{duplicateWorker.company?.name || '—'}</p>
                             </div>
                             <div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Teléfono</p>
+                                <p className="text-[10px] font-bold text-slate-400">Teléfono</p>
                                 <p className="font-medium text-slate-700">{duplicateWorker.phone || '—'}</p>
                             </div>
                         </div>
@@ -603,7 +603,7 @@ export default function WorkerFormModal({
                                             ? 'Alta público general'
                                             : 'Nuevo Trabajador'}
                                 </h3>
-                                <p className="text-[10px] text-slate-400 uppercase font-extrabold tracking-widest mt-1">
+                                <p className="text-[10px] text-slate-400 font-extrabold tracking-widest mt-1">
                                     {workerToEdit
                                         ? 'Actualizar datos en Padrón AMI'
                                         : publicGeneralMode
@@ -621,7 +621,7 @@ export default function WorkerFormModal({
                         <form key={workerToEdit?.id || 'new'} action={handleSubmit} className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Nombre(s)</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Nombre(s)</label>
                                     <input
                                         name="firstName"
                                         placeholder="Nombre"
@@ -638,7 +638,7 @@ export default function WorkerFormModal({
                                     )}
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Apellidos</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Apellidos</label>
                                     <input
                                         name="lastName"
                                         placeholder="Apellidos"
@@ -659,11 +659,11 @@ export default function WorkerFormModal({
                             {!workerToEdit ? (
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Fecha de Nacimiento</label>
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1">Fecha de Nacimiento</label>
                                         <input name="dob" type="date" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none" />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Género</label>
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1">Género</label>
                                         <select name="gender" required className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none appearance-none">
                                             <option value="M">Masculino</option>
                                             <option value="F">Femenino</option>
@@ -672,7 +672,7 @@ export default function WorkerFormModal({
                                 </div>
                             ) : (
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Fecha de Nacimiento</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Fecha de Nacimiento</label>
                                     <input
                                         name="dob"
                                         type="date"
@@ -689,7 +689,7 @@ export default function WorkerFormModal({
                                         Empresa fija: <strong>Público General</strong>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1">
                                             Sucursal
                                         </label>
                                         <select
@@ -743,7 +743,7 @@ export default function WorkerFormModal({
                                             </>
                                         ) : (
                                             <div className="space-y-1">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
+                                                <label className="text-[10px] font-bold text-slate-400 ml-1">Empresa</label>
                                                 <select
                                                     name="companyId"
                                                     value={selectedCompanyId}
@@ -763,7 +763,7 @@ export default function WorkerFormModal({
                                     ) : null}
 
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Perfil Médico</label>
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1">Perfil Médico</label>
                                         <select
                                             name="medicalProfileId"
                                             value={selectedMedicalProfileId}
@@ -805,7 +805,7 @@ export default function WorkerFormModal({
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Email</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Email</label>
                                     <input
                                         name="email"
                                         placeholder="email@ejemplo.com"
@@ -817,7 +817,7 @@ export default function WorkerFormModal({
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Teléfono</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Teléfono</label>
                                     <input
                                         name="phone"
                                         placeholder="10 dígitos"
@@ -834,8 +834,8 @@ export default function WorkerFormModal({
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">🆔</div>
                                         <div>
-                                            <p className="text-[10px] font-black text-blue-600 uppercase">Seguridad AMI</p>
-                                            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-tighter">ID se generará automáticamente</p>
+                                            <p className="text-[10px] font-black text-blue-600">Seguridad AMI</p>
+                                            <p className="text-[9px] text-blue-400 font-bold tracking-tighter">ID se generará automáticamente</p>
                                         </div>
                                     </div>
                                 </div>

@@ -54,7 +54,7 @@ export function ClosingReport() {
         <h2 className="text-base font-semibold text-slate-800 mb-2">Corte de caja</h2>
         <div className="flex flex-wrap items-end gap-2">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+            <label className="block text-[10px] tracking-wider text-slate-500 mb-1">
               Desde
             </label>
             <input
@@ -65,7 +65,7 @@ export function ClosingReport() {
             />
           </div>
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+            <label className="block text-[10px] tracking-wider text-slate-500 mb-1">
               Hasta
             </label>
             <input
@@ -119,7 +119,7 @@ export function ClosingReport() {
       {report && (
         <>
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">
+            <div className="text-[10px] tracking-wider text-slate-500 mb-3">
               Rango: {new Date(report.dateFrom).toLocaleString()} →{" "}
               {new Date(report.dateTo).toLocaleString()}
             </div>
@@ -198,7 +198,7 @@ function KpiCard({
   }[color];
   return (
     <div className={`${colorClass} rounded p-2 text-center`}>
-      <div className="text-[10px] uppercase tracking-wider opacity-70">{label}</div>
+      <div className="text-[10px] tracking-wider opacity-70">{label}</div>
       <div className="text-lg font-bold">{value}</div>
     </div>
   );
@@ -220,7 +220,7 @@ function MoneyCard({
   }[color];
   return (
     <div className={`${colorClass} rounded p-3`}>
-      <div className="text-[10px] uppercase tracking-wider opacity-70">{label}</div>
+      <div className="text-[10px] tracking-wider opacity-70">{label}</div>
       <div className="text-xl font-bold font-mono">${value.toFixed(2)}</div>
     </div>
   );

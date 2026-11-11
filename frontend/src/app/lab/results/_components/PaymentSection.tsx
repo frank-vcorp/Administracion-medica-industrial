@@ -83,15 +83,15 @@ export function PaymentSection({ orderId, refreshKey = 0 }: Props) {
           {/* Totales */}
           <div className="grid grid-cols-3 gap-2 mb-3 text-center">
             <div className="bg-slate-50 rounded p-2">
-              <div className="text-[10px] uppercase tracking-wider text-slate-500">Total</div>
+              <div className="text-[10px] tracking-wider text-slate-500">Total</div>
               <div className="text-sm font-bold text-slate-800">${summary.orderTotal.toFixed(2)}</div>
             </div>
             <div className="bg-emerald-50 rounded p-2">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-700">Cobrado</div>
+              <div className="text-[10px] tracking-wider text-emerald-700">Cobrado</div>
               <div className="text-sm font-bold text-emerald-700">${summary.paidTotal.toFixed(2)}</div>
             </div>
             <div className={`${summary.balance > 0 ? "bg-red-50" : "bg-slate-50"} rounded p-2`}>
-              <div className={`text-[10px] uppercase tracking-wider ${summary.balance > 0 ? "text-red-700" : "text-slate-500"}`}>
+              <div className={`text-[10px] tracking-wider ${summary.balance > 0 ? "text-red-700" : "text-slate-500"}`}>
                 Pendiente
               </div>
               <div className={`text-sm font-bold ${summary.balance > 0 ? "text-red-700" : "text-slate-800"}`}>

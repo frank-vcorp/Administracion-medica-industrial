@@ -409,7 +409,7 @@ export default function AppointmentFormModal({
 
                         <div className="mt-4 bg-slate-50 p-4 rounded-2xl text-left space-y-3 border border-slate-100 shadow-sm">
                              <div className="flex justify-between items-center border-b border-dashed border-slate-200 pb-2">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fecha</span>
+                                <span className="text-[10px] font-bold text-slate-400 tracking-wider">Fecha</span>
                                 <span className="text-xs font-black text-slate-700 capitalize">
                                     {new Date(apt.scheduledAt).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })} • {new Date(apt.scheduledAt).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}
                                 </span>
@@ -417,7 +417,7 @@ export default function AppointmentFormModal({
                              
                              {apt.branch && (
                                 <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ubicación</p>
+                                    <p className="text-[10px] font-bold text-slate-400 tracking-wider mb-1">Ubicación</p>
                                     <p className="text-xs font-black text-slate-800">{apt.branch.name}</p>
                                     {apt.branch.address && (
                                         <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
@@ -473,7 +473,7 @@ export default function AppointmentFormModal({
                         <div className="flex justify-between items-center mb-6">
                             <div>
                                 <h3 className="text-xl font-black text-slate-800">Agendar Cita</h3>
-                                <p className="text-[10px] text-slate-400 uppercase font-extrabold tracking-widest mt-1">Nuevo Ingreso Programado</p>
+                                <p className="text-[10px] text-slate-400 font-extrabold tracking-widest mt-1">Nuevo Ingreso Programado</p>
                             </div>
                             <button
                                 type="button"
@@ -489,7 +489,7 @@ export default function AppointmentFormModal({
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sucursal</label>
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">Sucursal</label>
                                 <select
                                     name="branchId"
                                     required
@@ -528,7 +528,7 @@ export default function AppointmentFormModal({
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">Empresa</label>
                                 <select
                                     name="companyId"
                                     required
@@ -552,12 +552,12 @@ export default function AppointmentFormModal({
 
                             <div className="space-y-1">
                                 <div className="flex items-center justify-between ml-1 mr-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Trabajador</label>
+                                    <label className="text-[10px] font-bold text-slate-400">Trabajador</label>
                                     {selectedCompanyId && (
                                         <button
                                             type="button"
                                             onClick={() => setWorkerQuickOpen(true)}
-                                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wide"
+                                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 tracking-wide"
                                         >
                                             + Alta rápida
                                         </button>
@@ -650,7 +650,7 @@ export default function AppointmentFormModal({
                             {/* IMPL-20260313-07: Perfil Médico auto-asignado por Puesto de Trabajo */}
                             <div className="space-y-1">
                                 <div className="flex items-center justify-between ml-1 mb-0.5">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Perfil Médico</label>
+                                    <label className="text-[10px] font-bold text-slate-400">Perfil Médico</label>
                                     {selectedWorker?.medicalProfileId && selectedProfileId === selectedWorker.medicalProfileId && (
                                         <span className="text-[9px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">
                                             ✦ Auto por paciente: {selectedWorker.medicalProfile?.name || profiles.find(p => p.id === selectedProfileId)?.name}
@@ -703,7 +703,7 @@ export default function AppointmentFormModal({
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Fecha</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Fecha</label>
                                     <input
                                         type="date"
                                         name="date"
@@ -714,7 +714,7 @@ export default function AppointmentFormModal({
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Hora</label>
+                                    <label className="text-[10px] font-bold text-slate-400 ml-1">Hora</label>
                                     <input
                                         type="time"
                                         name="time"
@@ -727,7 +727,7 @@ export default function AppointmentFormModal({
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Origen de la Cita</label>
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">Origen de la Cita</label>
                                 <select
                                     name="source"
                                     required
@@ -744,7 +744,7 @@ export default function AppointmentFormModal({
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Notas (Opcional)</label>
+                                <label className="text-[10px] font-bold text-slate-400 ml-1">Notas (Opcional)</label>
                                 <textarea
                                     name="notes"
                                     rows={2}

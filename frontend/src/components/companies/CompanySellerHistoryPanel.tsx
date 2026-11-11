@@ -40,7 +40,7 @@ export default async function CompanySellerHistoryPanel({ companyId }: PanelProp
   if (history.length === 0) {
     return (
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-bold text-slate-700 tracking-wider mb-3">
           Historial de vendedor
         </h2>
         <p className="text-sm text-slate-500">
@@ -52,7 +52,7 @@ export default async function CompanySellerHistoryPanel({ companyId }: PanelProp
 
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-      <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">
+      <h2 className="text-sm font-bold text-slate-700 tracking-wider mb-4">
         Historial de vendedor
       </h2>
       <ol className="relative border-l-2 border-slate-100 ml-3 space-y-5">

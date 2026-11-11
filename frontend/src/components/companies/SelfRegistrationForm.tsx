@@ -899,7 +899,7 @@ function SelfRegistrationFormActive({
         <div className="space-y-5">
           {form.referencias.map((r, idx) => (
             <div key={idx} className="rounded-lg border border-slate-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">
+              <p className="text-xs font-bold tracking-wide text-slate-500 mb-3">
                 Referencia #{idx + 1}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1016,7 +1016,7 @@ const inputClass = 'w-full bg-[#f9fafb] border-2 border-gray-200 focus:border-[#
 function Section({ title, required, children }: { title: string; required?: boolean; children: React.ReactNode }) {
   return (
     <section className="bg-white p-6 rounded-[24px] border border-[#592c82]/10 shadow-sm space-y-3">
-      <h2 className="text-sm font-bold text-[#592c82] uppercase tracking-wider">{title}{required && <span className="text-red-500"> *</span>}</h2>
+      <h2 className="text-sm font-bold text-[#592c82] tracking-wider">{title}{required && <span className="text-red-500"> *</span>}</h2>
       {children}
     </section>
   )
@@ -1025,7 +1025,7 @@ function Section({ title, required, children }: { title: string; required?: bool
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="text-[11px] font-bold text-[#592c82] uppercase">{label}</label>
+      <label className="text-[11px] font-bold text-[#592c82]">{label}</label>
       {children}
       {hint && <p className="text-[10px] text-[#636569]/70">{hint}</p>}
     </div>

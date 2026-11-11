@@ -159,7 +159,7 @@ export default function CalibrationAIAssistantRail({
       {/* Encabezado del rail */}
       <div className="flex items-center gap-2">
         <span className="text-base">🤖</span>
-        <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Asistente IA</p>
+        <p className="text-xs font-semibold text-slate-700 tracking-wide">Asistente IA</p>
         <span className="ml-auto px-2 py-0.5 rounded bg-violet-100 text-violet-700 text-xs font-semibold">
           {observations.length} obs.
         </span>

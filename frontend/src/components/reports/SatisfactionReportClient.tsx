@@ -62,7 +62,7 @@ export default function SatisfactionReportClient({
           applyFilters(e.currentTarget)
         }}
       >
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Desde
           <input
             type="date"
@@ -71,7 +71,7 @@ export default function SatisfactionReportClient({
             className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
           />
         </label>
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Hasta
           <input
             type="date"
@@ -80,7 +80,7 @@ export default function SatisfactionReportClient({
             className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
           />
         </label>
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Empresa
           <select
             name="companyId"
@@ -95,7 +95,7 @@ export default function SatisfactionReportClient({
             ))}
           </select>
         </label>
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Sucursal
           <select
             name="branchId"
@@ -110,7 +110,7 @@ export default function SatisfactionReportClient({
             ))}
           </select>
         </label>
-        <label className="text-xs font-bold text-slate-500 uppercase">
+        <label className="text-xs font-bold text-slate-500">
           Canal
           <select
             name="channel"
@@ -156,7 +156,7 @@ export default function SatisfactionReportClient({
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4">
-        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">
+        <h3 className="text-sm font-black text-slate-800 tracking-wide">
           Promedio por dimensión (escala 1–5)
         </h3>
         <div className="space-y-3">
@@ -231,7 +231,7 @@ export default function SatisfactionReportClient({
 function KpiCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-[10px] font-black tracking-widest text-slate-400">{label}</p>
       <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
     </div>
   )

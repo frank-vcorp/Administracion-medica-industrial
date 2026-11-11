@@ -148,7 +148,7 @@ export function WorklistTable({ item, busy, onBulkSave, onTransition }: Props) {
       </div>
 
       <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-slate-700 text-xs uppercase tracking-wider">
+        <thead className="bg-slate-50 text-slate-700 text-xs tracking-wider">
           <tr>
             <th className="px-3 py-2 text-left">Clave</th>
             <th className="px-3 py-2 text-left">Analito</th>

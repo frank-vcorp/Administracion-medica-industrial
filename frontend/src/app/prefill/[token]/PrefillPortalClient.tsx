@@ -115,7 +115,7 @@ function InputField({
 }) {
   return (
     <div className="space-y-1">
-      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">
+      <label className="block text-xs font-bold text-slate-500 tracking-widest">
         {label}
       </label>
       <input
@@ -143,7 +143,7 @@ function SelectField<T extends string>({
 }) {
   return (
     <div className="space-y-1">
-      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">
+      <label className="block text-xs font-bold text-slate-500 tracking-widest">
         {label}
       </label>
       <select
@@ -180,7 +180,7 @@ function BooleanField({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex-1">
+        <label className="text-xs font-bold text-slate-500 tracking-widest flex-1">
           {label}
         </label>
         <div className="flex gap-2">
@@ -363,14 +363,14 @@ export default function PrefillPortalClient({
         <div className="max-w-2xl mx-auto px-6 py-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-blue-200 text-xs font-bold uppercase tracking-widest">
+              <p className="text-blue-200 text-xs font-bold tracking-widest">
                 Formulario de Antecedentes Médicos
               </p>
               <h1 className="text-xl font-black mt-1">{workerName}</h1>
               <p className="text-blue-100 text-sm">{companyName}</p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">
+              <p className="text-blue-200 text-[10px] font-bold tracking-widest">
                 Cita programada
               </p>
               <p className="text-sm font-bold">{formatDateTime(scheduledAt)}</p>
@@ -514,7 +514,7 @@ export default function PrefillPortalClient({
 
             {/* Empleo anterior 1 */}
             <div className="space-y-3">
-              <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+              <p className="text-xs font-bold text-slate-600 tracking-widest">
                 Empleo anterior 1
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -542,7 +542,7 @@ export default function PrefillPortalClient({
 
             {/* Empleo anterior 2 */}
             <div className="space-y-3">
-              <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+              <p className="text-xs font-bold text-slate-600 tracking-widest">
                 Empleo anterior 2
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -570,7 +570,7 @@ export default function PrefillPortalClient({
 
             {/* Factores de riesgo — distinto de accidente laboral / enfermedad profesional */}
             <div className="space-y-4 pt-2 border-t border-slate-100">
-              <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+              <p className="text-xs font-bold text-slate-600 tracking-widest">
                 Factores de riesgo en el trabajo
               </p>
               <HistoriaLaboralFactoresRiesgoReferencia />
@@ -600,7 +600,7 @@ export default function PrefillPortalClient({
 
             {/* Accidente laboral y enfermedad profesional */}
             <div className="space-y-4 pt-2 border-t border-slate-100">
-              <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+              <p className="text-xs font-bold text-slate-600 tracking-widest">
                 Accidente laboral y enfermedad profesional
               </p>
               {HISTORIA_LABORAL_RIESGOS_TRABAJO.map(({ key, label, descKey }) => (

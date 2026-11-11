@@ -94,7 +94,7 @@ export default function MobileUnitManager({ initialUnits, readOnly = false }: Pr
         className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-3"
       >
         <div>
-          <label htmlFor="status-filter" className="text-[11px] font-bold text-slate-500 uppercase">
+          <label htmlFor="status-filter" className="text-[11px] font-bold text-slate-500">
             Estado
           </label>
           <select

@@ -82,6 +82,7 @@ import {
   patologiaRequiresEspecificacion,
 } from '@/lib/patologia-especificacion-fields'
 import { ANTECEDENTES_SECTION_LEGEND, antecedentesTabIntro } from '@/lib/antecedentes-section-ui'
+import { getCatalogEnumDisplayLabel } from '@/lib/clinical/enum-display-labels'
 import {
   GINE_FIELDS,
   M1_SEX_OPTIONS,
@@ -385,7 +386,7 @@ function renderModulo1Fields(
               >
                 <option value="">—</option>
                 {field.values.map(v => (
-                  <option key={String(v)} value={String(v)}>{String(v)}</option>
+                  <option key={String(v)} value={String(v)}>{getCatalogEnumDisplayLabel(String(v))}</option>
                 ))}
               </select>
             </div>
@@ -690,7 +691,9 @@ export function AntecedentesCaptura({
                     className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                   >
                     <option value="">—</option>
-                    {TURNO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    {TURNO_OPTIONS.map(o => (
+                      <option key={o} value={o}>{getCatalogEnumDisplayLabel(o)}</option>
+                    ))}
                   </select>
                 ) : (
                   <select
@@ -700,7 +703,9 @@ export function AntecedentesCaptura({
                     className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                   >
                     <option value="">—</option>
-                    {ESTADO_CIVIL_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    {ESTADO_CIVIL_OPTIONS.map(o => (
+                      <option key={o} value={o}>{getCatalogEnumDisplayLabel(o)}</option>
+                    ))}
                   </select>
                 )}
               </FieldRow>
@@ -865,7 +870,7 @@ export function AntecedentesCaptura({
                             ? opt === 'SI' ? 'bg-rose-100 border-rose-400 text-rose-700' : 'bg-green-50 border-green-300 text-green-700'
                             : 'bg-white border-slate-200 text-slate-500'
                         }`}
-                      >{opt}</button>
+                      >{getCatalogEnumDisplayLabel(opt)}</button>
                     ))}
                   </div>
                 </div>
@@ -899,7 +904,9 @@ export function AntecedentesCaptura({
               disabled={readonly}
               className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
             >
-              {ALIMENTACION_OPTIONS.map(o => <option key={o}>{o}</option>)}
+              {ALIMENTACION_OPTIONS.map(o => (
+                <option key={o} value={o}>{getCatalogEnumDisplayLabel(o)}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -916,7 +923,7 @@ export function AntecedentesCaptura({
                       ? 'bg-blue-100 border-blue-400 text-blue-700'
                       : 'bg-white border-slate-200 text-slate-500'
                   }`}
-                >{opt}</button>
+                >{getCatalogEnumDisplayLabel(opt)}</button>
               ))}
             </div>
             {form.no_patologicos.tratamiento_medico_actual === 'SI' && (
@@ -962,7 +969,7 @@ export function AntecedentesCaptura({
                       ? 'bg-blue-100 border-blue-400 text-blue-700'
                       : 'bg-white border-slate-200 text-slate-500'
                   }`}
-                >{opt}</button>
+                >{getCatalogEnumDisplayLabel(opt)}</button>
               ))}
             </div>
             {form.no_patologicos.tatuajes === 'SI' && (
@@ -1022,7 +1029,7 @@ export function AntecedentesCaptura({
                       }`}
                     >
                       {SNA_OPTIONS.map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
+                        <option key={opt} value={opt}>{getCatalogEnumDisplayLabel(opt)}</option>
                       ))}
                     </select>
                     {especSiempre && (
@@ -1163,7 +1170,7 @@ export function AntecedentesCaptura({
                   : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
               }`}
             >
-              {opt}
+              {getCatalogEnumDisplayLabel(opt)}
             </button>
           ))}
         </div>
@@ -1212,7 +1219,7 @@ export function AntecedentesCaptura({
                   className="w-full text-xs px-2 py-1 border border-slate-200 rounded-lg mt-1 focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                 >
                   {VAC_IMMUNIZATION_VALUES.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
+                    <option key={opt} value={opt}>{getCatalogEnumDisplayLabel(opt)}</option>
                   ))}
                 </select>
                 {estado === 'SI' && (

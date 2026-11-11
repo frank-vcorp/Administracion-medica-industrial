@@ -6,6 +6,7 @@ import {
   serializeHeredoFamiliaresSelection,
   toggleHeredoFamiliaresOption,
 } from '@/lib/heredo-familiares-multiselect'
+import { getCatalogEnumDisplayLabel } from '@/lib/clinical/enum-display-labels'
 
 type Props = {
   value: string
@@ -38,7 +39,7 @@ export function HeredofamiliaresRelacionMultiSelect({
           onChange={() => toggle('NEGADOS')}
           className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
         />
-        <span className="font-semibold">NEGADOS</span>
+        <span className="font-semibold">{getCatalogEnumDisplayLabel('NEGADOS')}</span>
       </label>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pl-1">
         {HEREDOFAMILIARES_MULTI_OPTIONS.map((option) => (
@@ -50,7 +51,7 @@ export function HeredofamiliaresRelacionMultiSelect({
               onChange={() => toggle(option)}
               className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            <span>{option}</span>
+            <span>{getCatalogEnumDisplayLabel(option)}</span>
           </label>
         ))}
       </div>

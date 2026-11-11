@@ -138,7 +138,7 @@ export default function WorkerDetailClient({
         if (entries.length === 0) return null
         return (
             <section>
-                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                <h4 className="text-[11px] font-bold text-slate-500 tracking-widest mb-2">
                     {title}
                 </h4>
                 <div className="space-y-2">
@@ -147,7 +147,7 @@ export default function WorkerDetailClient({
                             key={key}
                             className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2"
                         >
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            <p className="text-[10px] font-bold text-slate-400 tracking-widest">
                                 {key.replace(/_/g, ' ')}
                             </p>
                             <p className="text-sm text-slate-700 font-semibold mt-0.5">
@@ -220,15 +220,15 @@ export default function WorkerDetailClient({
                         <h3 className="font-semibold text-slate-900 mb-4">Información Personal</h3>
                         <div className="space-y-3 text-sm">
                             <div>
-                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Email</p>
+                                <p className="text-[11px] font-bold text-slate-500 tracking-widest">Email</p>
                                 <p className="text-sm text-slate-900 font-medium mt-0.5">{worker.email || 'N/A'}</p>
                             </div>
                             <div>
-                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Teléfono</p>
+                                <p className="text-[11px] font-bold text-slate-500 tracking-widest">Teléfono</p>
                                 <p className="text-sm text-slate-900 font-medium mt-0.5">{worker.phone || 'N/A'}</p>
                             </div>
                             <div>
-                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">ID Nacional</p>
+                                <p className="text-[11px] font-bold text-slate-500 tracking-widest">ID Nacional</p>
                                 <p className="text-sm text-slate-900 font-medium mt-0.5">{worker.nationalId || 'N/A'}</p>
                             </div>
                         </div>
@@ -269,7 +269,7 @@ export default function WorkerDetailClient({
                                     citas y sirve como referencia para cada examen médico.
                                 </p>
                             </div>
-                            <span className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 rounded-full font-bold uppercase tracking-widest flex-shrink-0">
+                            <span className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 rounded-full font-bold tracking-widest flex-shrink-0">
                                 Longitudinal
                             </span>
                         </div>

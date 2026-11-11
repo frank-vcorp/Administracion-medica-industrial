@@ -58,7 +58,7 @@ export default function WorkerIdentityCard({
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900">Identificación</h3>
           {hasEvidence && (
-            <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full font-bold uppercase tracking-widest">
+            <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full font-bold tracking-widest">
               Registrada
             </span>
           )}
@@ -68,12 +68,12 @@ export default function WorkerIdentityCard({
           <div className="space-y-4">
             <div className="space-y-3 text-sm">
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Tipo</p>
+                <p className="text-[11px] font-bold text-slate-500 tracking-widest">Tipo</p>
                 <p className="text-sm text-slate-900 font-medium mt-0.5">{docTypeLabel ?? '—'}</p>
               </div>
               {verifiedAtDate && (
                 <div>
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Verificada</p>
+                  <p className="text-[11px] font-bold text-slate-500 tracking-widest">Verificada</p>
                   <p className="text-sm text-slate-900 font-medium mt-0.5">
                     {verifiedAtDate.toLocaleDateString('es-MX', {
                       year: 'numeric',
@@ -86,7 +86,7 @@ export default function WorkerIdentityCard({
             </div>
 
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+              <p className="text-[10px] font-bold text-slate-500 tracking-widest mb-2">
                 Frente
               </p>
               <button
@@ -106,7 +106,7 @@ export default function WorkerIdentityCard({
 
             {lastIdentityBackFileUrl && (
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                <p className="text-[10px] font-bold text-slate-500 tracking-widest mb-2">
                   Reverso
                 </p>
                 <button

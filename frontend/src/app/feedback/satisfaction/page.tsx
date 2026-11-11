@@ -205,7 +205,7 @@ function SatisfactionPageShell() {
     >
       <div className={`mx-auto space-y-6 ${isKiosk ? 'max-w-2xl' : 'max-w-lg'}`}>
         <div className="text-center">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">
+          <p className="text-[10px] font-bold tracking-widest text-violet-600">
             Soluciones Médico Empresariales
           </p>
           <h1 className="text-2xl font-black text-slate-900">Tu opinión importa</h1>

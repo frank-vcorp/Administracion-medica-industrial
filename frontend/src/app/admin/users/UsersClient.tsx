@@ -10,6 +10,7 @@ type UsersClientProps = {
 }
 
 const roles: Array<{ value: UserRole; label: string }> = [
+    { value: 'SUPERADMIN', label: 'Superadministrador' },
     { value: 'ADMIN', label: 'Administrador' },
     { value: 'RECEPTIONIST', label: 'Recepcionista' },
     { value: 'DOCTOR_GENERAL', label: 'Médico General' },
@@ -107,7 +108,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+                    <thead className="bg-slate-50 text-xs text-slate-500 font-semibold border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-4">Nombre</th>
                             <th className="px-6 py-4">Correo</th>

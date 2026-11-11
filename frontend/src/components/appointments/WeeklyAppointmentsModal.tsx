@@ -145,7 +145,7 @@ export function WeeklyAppointmentsModal({
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4 sm:px-6">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">
+            <p className="text-[10px] font-bold tracking-widest text-violet-600">
               Vista semanal
             </p>
             <h2 className="text-xl font-black text-slate-800">Calendario de citas</h2>
@@ -237,7 +237,7 @@ export function WeeklyAppointmentsModal({
                       }}
                       className="border-b border-slate-100 px-3 py-3 text-left transition hover:bg-white/80"
                     >
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      <p className="text-[10px] font-bold tracking-wide text-slate-400">
                         {DAY_LABELS[index]}
                       </p>
                       <div className="mt-1 flex items-center justify-between gap-2">

@@ -112,7 +112,7 @@ export default function IdentityLightbox({
           </div>
           <div className={`p-6 grid gap-4 ${backSrc ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
             <figure className="space-y-2">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Frente</p>
+              <p className="text-[10px] font-bold text-slate-500 tracking-widest">Frente</p>
               {/* eslint-disable-next-line @next/next/no-img-element -- data URL base64 (no external); next/Image requiere hosts declarados. */}
               <img
                 src={src}
@@ -122,7 +122,7 @@ export default function IdentityLightbox({
             </figure>
             {backSrc && (
               <figure className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Reverso</p>
+                <p className="text-[10px] font-bold text-slate-500 tracking-widest">Reverso</p>
                 {/* eslint-disable-next-line @next/next/no-img-element -- data URL base64 (no external); next/Image requiere hosts declarados. */}
                 <img
                   src={backSrc}

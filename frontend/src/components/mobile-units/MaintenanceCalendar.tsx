@@ -315,7 +315,7 @@ export default function MaintenanceCalendar({
               Mes siguiente
             </button>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Mes visible</p>
+              <p className="text-xs font-semibold tracking-wide text-slate-400">Mes visible</p>
               <p className="text-lg font-bold capitalize text-slate-900">{formatMonthLabel(monthStart)}</p>
             </div>
           </div>
@@ -369,7 +369,7 @@ export default function MaintenanceCalendar({
         {/* SPEC §5.5 — Filtros + resumen */}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="space-y-1 text-sm text-slate-600">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Tipo</span>
+            <span className="block text-xs font-semibold tracking-wide text-slate-400">Tipo</span>
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
@@ -382,7 +382,7 @@ export default function MaintenanceCalendar({
             </select>
           </label>
           <label className="space-y-1 text-sm text-slate-600">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Estado</span>
+            <span className="block text-xs font-semibold tracking-wide text-slate-400">Estado</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -395,7 +395,7 @@ export default function MaintenanceCalendar({
           </label>
           {/* SPEC §6.4 — Toggle proyectos superpuestos */}
           <label className="space-y-1 text-sm text-slate-600">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Proyectos</span>
+            <span className="block text-xs font-semibold tracking-wide text-slate-400">Proyectos</span>
             <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
               <input
                 type="checkbox"
@@ -409,7 +409,7 @@ export default function MaintenanceCalendar({
           </label>
           {/* SPEC §5.5 — Card resumen */}
           <div className="rounded-2xl bg-slate-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Resumen</p>
+            <p className="text-xs font-semibold tracking-wide text-slate-400">Resumen</p>
             <p className="text-sm font-semibold text-slate-700">
               {recordsInMonth.length} mantenimientos en el mes
               {showProjects && ` · ${unitProjects.length} proyectos superpuestos`}
@@ -425,7 +425,7 @@ export default function MaintenanceCalendar({
               {WEEKDAY_LABELS.map((label) => (
                 <div
                   key={label}
-                  className="rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500"
+                  className="rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-bold tracking-wide text-slate-500"
                 >
                   {label}
                 </div>
@@ -470,7 +470,7 @@ export default function MaintenanceCalendar({
                       </span>
                       <div className="flex flex-col items-end gap-1">
                         {filteredItems.length > 0 && (
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          <span className="text-[11px] font-semibold tracking-wide text-slate-400">
                             {filteredItems.length} activos
                           </span>
                         )}
@@ -478,7 +478,7 @@ export default function MaintenanceCalendar({
                         {hasConflict && (
                           <span
                             data-testid="conflict-badge"
-                            className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700"
+                            className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-red-700"
                           >
                             ⚠️ Conflicto
                           </span>
@@ -506,7 +506,7 @@ export default function MaintenanceCalendar({
                               <div className="flex items-start justify-between gap-2">
                                 <p className="line-clamp-2 font-semibold">{TYPE_LABEL[r.type] ?? r.type}</p>
                                 <span
-                                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_PILL_COLORS[r.status] ?? 'bg-slate-100 text-slate-600'}`}
+                                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_PILL_COLORS[r.status] ?? 'bg-slate-100 text-slate-600'}`}
                                 >
                                   {r.status}
                                 </span>
@@ -535,7 +535,7 @@ export default function MaintenanceCalendar({
                               </span>
                             </div>
                             <p className="mt-1 truncate text-[11px] font-medium">{p.company?.name ?? '— sin empresa —'}</p>
-                            <div className="mt-1 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide">
+                            <div className="mt-1 flex items-center justify-between gap-2 text-[10px] font-semibold tracking-wide">
                               <span>{STATUS_LABELS[p.status]}</span>
                               <span>
                                 {toDate(p.startDate).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} -{' '}
@@ -566,7 +566,7 @@ export default function MaintenanceCalendar({
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+              <thead className="bg-slate-50 text-xs text-slate-600">
                 <tr>
                   <th className="px-3 py-2 text-left">Fecha</th>
                   <th className="px-3 py-2 text-left">Tipo</th>

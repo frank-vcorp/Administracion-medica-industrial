@@ -245,7 +245,7 @@ export default async function ValidationPage() {
             key={stage}
             className={`rounded-2xl border p-4 ${VALIDATION_STAGE_BADGE[stage]}`}
           >
-            <p className="text-[10px] font-black uppercase tracking-widest opacity-80">
+            <p className="text-[10px] font-black tracking-widest opacity-80">
               {stage}
             </p>
             <p className="mt-1 text-sm font-bold">{VALIDATION_STAGE_LABELS[stage]}</p>
