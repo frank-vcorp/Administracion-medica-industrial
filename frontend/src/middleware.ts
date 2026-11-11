@@ -27,6 +27,23 @@ export async function middleware(request: NextRequest) {
   // FIX REFERENCE: FIX-20260225-02 - Pasar secret explícito a getToken
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
 
+  const previewRawEarly = request.cookies.get(PORTAL_PREVIEW_COOKIE)?.value
+  const previewCompanyIdEarly = previewCompanyIdFromCookie(previewRawEarly)
+  const isStaffPortalPreviewEarly =
+    !!token &&
+    !!previewCompanyIdEarly &&
+    (isAdminLike(token.role as string) || isSellerLike(token.role as string))
+
+  // F34 — mismo inicio portal: cliente y staff en vista previa (no dashboard staff).
+  if (pathname === "/dashboard") {
+    if (token?.role === "COMPANY_CLIENT" || isStaffPortalPreviewEarly) {
+      return NextResponse.redirect(new URL("/portal", request.url))
+    }
+  }
+  if (token?.role === "COMPANY_CLIENT" && pathname === "/") {
+    return NextResponse.redirect(new URL("/portal", request.url))
+  }
+
   // Rutas públicas (sin protección)
   // FIX REFERENCE: FIX-20260225-02 - Evitar startsWith("/") que hace match con todo
   // IMPL-20260325-01: /prefill es portal público de prellenado (sin sesión, validado por token)

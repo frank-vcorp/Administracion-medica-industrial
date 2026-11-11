@@ -35,18 +35,23 @@ export async function resolvePortalCompanyAccess(): Promise<PortalAccessContext>
   const role = session.user.role
 
   if (role === UserRole.COMPANY_CLIENT) {
-    if (!session.user.companyId) {
+    const portalUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { companyId: true, isActive: true },
+    })
+    if (!portalUser?.isActive || !portalUser.companyId) {
       throw new Error('No autorizado: usuario CLIENT sin empresa asignada')
     }
+    const companyId = portalUser.companyId
     const company = await prisma.company.findUnique({
-      where: { id: session.user.companyId },
+      where: { id: companyId },
       select: { portalEnabled: true, estado: true },
     })
     if (!company?.portalEnabled || company.estado !== 'HABILITADO') {
       throw new Error('El portal no está habilitado para su empresa.')
     }
     return {
-      companyId: session.user.companyId,
+      companyId,
       isPreview: false,
       actorUserId: session.user.id,
       actorRole: role,

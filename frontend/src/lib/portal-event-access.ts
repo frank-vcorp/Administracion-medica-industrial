@@ -29,7 +29,12 @@ export async function canAccessPortalCompanyData(workerCompanyId: string | null)
   }
 
   if (role === UserRole.COMPANY_CLIENT) {
-    return Boolean(workerCompanyId && session.user.companyId === workerCompanyId)
+    try {
+      const access = await resolvePortalCompanyAccess()
+      return Boolean(workerCompanyId && access.companyId === workerCompanyId)
+    } catch {
+      return false
+    }
   }
 
   if (isAdminLike(role) || isSellerLike(role)) {
