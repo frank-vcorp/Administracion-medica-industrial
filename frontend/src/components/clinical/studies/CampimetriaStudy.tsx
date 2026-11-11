@@ -14,6 +14,14 @@ import { saveCampimetriaQuestionnaire } from '@/actions/campimetria-questionnair
 import { updateEventTestStatus } from '@/actions/event-test.actions'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
 import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import { StudyCaptureMissingBanner } from '@/components/clinical/studies/StudyCaptureUi'
+import { useStudyLeaveGuard } from '@/components/clinical/studies/useStudyLeaveGuard'
+import type { StudyLeaveGuardFn } from '@/components/clinical/studies/useStudyLeaveGuard'
+import {
+  formatStudyMissingFieldsSpanish,
+  studyValidationToFieldErrors,
+  validateStudyCaptureForComplete,
+} from '@/lib/clinical/study-required-fields'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import {
@@ -79,6 +87,7 @@ export default function CampimetriaStudy({
   workerInfo,
   readonly = false,
   onStatusChange,
+  registerLeaveGuard,
 }: {
   eventId: string
   eventTestId: string
@@ -91,6 +100,7 @@ export default function CampimetriaStudy({
   workerInfo: WorkerBanner
   readonly?: boolean
   onStatusChange?: (status: string) => void
+  registerLeaveGuard?: (fn: StudyLeaveGuardFn | null) => void
 }) {
   const router = useRouter()
   const [form, setForm] = useState<CampimetriaQuestionnairePayload>(() => {
@@ -105,6 +115,7 @@ export default function CampimetriaStudy({
   const [aiWarning, setAiWarning] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
   const [saveMappedError, setSaveMappedError] = useState<UserFacingError | null>(null)
+  const [completeBanner, setCompleteBanner] = useState('')
 
   const acuity = useMemo(
     () => inheritAcuityFromExam(examData?.eyeAcuityData),
@@ -251,6 +262,13 @@ export default function CampimetriaStudy({
     }
   }, [form, examData?.eyeAcuityData])
 
+  const evaluateComplete = useCallback(
+    () => validateStudyCaptureForComplete('Campimetria', buildQuestionnairePayload()),
+    [buildQuestionnairePayload],
+  )
+
+  useStudyLeaveGuard(registerLeaveGuard, evaluateComplete, !readonly)
+
   const snapshotKey = useMemo(() => {
     const acuityLive = inheritAcuityFromExam(examData?.eyeAcuityData)
     return JSON.stringify({
@@ -295,6 +313,19 @@ export default function CampimetriaStudy({
     setAiWarning('')
     setFieldErrors({})
     setSaveMappedError(null)
+    setCompleteBanner('')
+
+    if (complete) {
+      const gate = evaluateComplete()
+      if (!gate.ok) {
+        setFieldErrors(studyValidationToFieldErrors(gate))
+        setCompleteBanner(formatStudyMissingFieldsSpanish(gate.missing))
+        setMessage('❌ No se puede completar el estudio.')
+        setSaving(false)
+        return
+      }
+    }
+
     const payload = buildQuestionnairePayload()
     const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId, {
       triggerPrediagnosis: complete,
@@ -318,11 +349,17 @@ export default function CampimetriaStudy({
     markSaved()
     setForm(res.payload)
     const status = complete ? 'COMPLETED' : 'RESULT_REGISTERED'
-    await updateEventTestStatus(
+    const statusRes = await updateEventTestStatus(
       eventTestId,
       status as Parameters<typeof updateEventTestStatus>[1],
       eventId,
     )
+    if (!statusRes.success) {
+      setCompleteBanner(statusRes.error ?? 'No se pudo cerrar el estudio.')
+      setMessage('❌ No se pudo completar.')
+      setSaving(false)
+      return
+    }
     onStatusChange?.(status)
     setMessage(
       complete
@@ -347,6 +384,7 @@ export default function CampimetriaStudy({
         {!readonly && (
           <ClinicalAutosaveIndicator label={autosaveLabel} error={campimetriaAutosaveError} />
         )}
+        <StudyCaptureMissingBanner message={completeBanner} />
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
           <p className="text-sm font-bold text-violet-900">Campimetría — captura manual</p>
           <p className="text-xs text-violet-700 mt-0.5">
