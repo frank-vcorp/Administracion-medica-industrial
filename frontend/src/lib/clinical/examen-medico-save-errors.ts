@@ -1,4 +1,5 @@
 import { ZodError } from 'zod'
+import { formatZodIssueMessage } from '@/lib/zod-user-messages'
 
 export type ExamenMedicoSaveNavigation = {
   outerTab?: 'somatometria' | 'signos_vitales' | 'agudeza_visual' | 'examen_medico'
@@ -61,7 +62,7 @@ export function zodErrorToFieldErrors(error: ZodError): Record<string, string[]>
         ? issue.path.map(String).join('.')
         : '_form'
     if (!fieldErrors[key]) fieldErrors[key] = []
-    fieldErrors[key].push(issue.message)
+    fieldErrors[key].push(formatZodIssueMessage(issue))
   }
   return fieldErrors
 }

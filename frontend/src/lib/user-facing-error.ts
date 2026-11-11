@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { fieldKeyToPlainLanguage, zodPathToPlainLanguage } from '@/lib/zod-field-labels'
+import { formatZodIssueMessage, formatZodMessageString } from '@/lib/zod-user-messages'
 
 export type UserFacingErrorKind = 'validation' | 'usage' | 'technical'
 
@@ -25,59 +27,17 @@ const HTTP_STATUS_MESSAGES_ES: Partial<Record<number, string>> = {
   504: 'La operación tardó demasiado. Intenta de nuevo.',
 }
 
-/** Rutas técnicas conocidas → nombre legible en español */
-const ZOD_PATH_LABELS: Record<string, string> = {
-  peso_kg: 'Peso (kg)',
-  talla_m: 'Talla (m)',
-  ta_sistolica: 'Tensión arterial (sistólica)',
-  ta_diastolica: 'Tensión arterial (diastólica)',
-  fc_min: 'Frecuencia cardíaca',
-  vision_lejana_od: 'Agudeza visual — ojo derecho (lejana)',
-  vision_lejana_oi: 'Agudeza visual — ojo izquierdo (lejana)',
-  vision_cercana_od: 'Agudeza visual — ojo derecho (cercana)',
-  vision_cercana_oi: 'Agudeza visual — ojo izquierdo (cercana)',
-  impresion_diagnostica: 'Impresión diagnóstica',
-  recomendaciones_clinicas: 'Recomendaciones clínicas',
-  antecedentes: 'Antecedentes',
-  medico_cedula: 'Cédula profesional del médico',
-  medico_nombre: 'Nombre del médico',
-  workerId: 'Trabajador',
-  companyId: 'Empresa',
-  branchId: 'Sucursal',
-  scheduledAt: 'Fecha y hora de la cita',
-  firstName: 'Nombre(s)',
-  lastName: 'Apellidos',
-  medicalProfileId: 'Perfil médico',
-  date: 'Fecha',
-  time: 'Hora',
-  exceptionComment: 'Comentario operativo',
-  exceptionReason: 'Motivo de excepción',
-  informedConsentSignatureDataUrl: 'Firma del consentimiento',
-  frontFileDataUrl: 'Evidencia frontal del documento',
-  name: 'Nombre',
-  rfc: 'RFC',
-  basic: 'Datos básicos',
-}
-
-function pathSegmentLabel(segment: string): string {
-  if (ZOD_PATH_LABELS[segment]) return ZOD_PATH_LABELS[segment]
-  const spaced = segment.replace(/_/g, ' ')
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
-}
-
-function zodPathToPlainLanguage(path: (string | number)[]): string {
-  if (path.length === 0) return 'Formulario'
-  return path.map((p) => (typeof p === 'number' ? `Ítem ${p + 1}` : pathSegmentLabel(String(p)))).join(' · ')
-}
-
-type IssueLike = { path: PropertyKey[]; message?: unknown }
+type IssueLike = { path: PropertyKey[]; message?: unknown; code?: string }
 
 function summarizeZodIssues(issues: readonly IssueLike[]): string {
   const lines: string[] = []
   const seen = new Set<string>()
   for (const issue of issues) {
     const pathStr = zodPathToPlainLanguage(issue.path as (string | number)[])
-    const msg = typeof issue.message === 'string' ? issue.message.trim() : ''
+  const msg =
+    typeof issue.message === 'string'
+      ? formatZodIssueMessage(issue as z.ZodIssue)
+      : ''
     const line = msg ? `${pathStr}: ${msg}` : pathStr
     if (seen.has(line)) continue
     seen.add(line)
@@ -223,9 +183,9 @@ function mergeFieldErrors(fieldErrors: Record<string, string[]> | undefined): st
   if (!fieldErrors || Object.keys(fieldErrors).length === 0) return undefined
   const lines: string[] = []
   for (const [key, msgs] of Object.entries(fieldErrors)) {
-    const label = key === '_root' ? 'Formulario' : zodPathToPlainLanguage(key.split('.'))
+    const label = fieldKeyToPlainLanguage(key)
     for (const m of msgs) {
-      const line = `${label}: ${m}`
+      const line = `${label}: ${formatZodMessageString(m)}`
       if (!lines.includes(line)) lines.push(line)
       if (lines.length >= 6) return lines.join('\n')
     }

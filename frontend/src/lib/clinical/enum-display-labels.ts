@@ -74,6 +74,26 @@ export function getCatalogEnumDisplayLabel(value: string): string {
   return trimmed
 }
 
+const PAPELETA_STUDY_TITLE_OVERRIDES: Record<string, string> = {
+  'CERTIFICADO MEDICO': 'Certificado médico',
+  'CERTIFICADO MÉDICO': 'Certificado médico',
+  'CONSULTA MEDICA': 'Consulta médica',
+  'CONSULTA MÉDICA': 'Consulta médica',
+  'EXAMEN MEDICO GENERAL': 'Examen médico general',
+  'EXAMEN MÉDICO GENERAL': 'Examen médico general',
+}
+
+/** Título de estudio en papeleta (snapshot puede venir en MAYÚSCULAS del catálogo). */
+export function formatPapeletaStudyTitle(testNameSnapshot: string): string {
+  const trimmed = (testNameSnapshot ?? '').trim()
+  if (!trimmed) return trimmed
+  const override =
+    PAPELETA_STUDY_TITLE_OVERRIDES[trimmed] ??
+    PAPELETA_STUDY_TITLE_OVERRIDES[trimmed.toUpperCase()]
+  if (override) return override
+  return getCatalogEnumDisplayLabel(trimmed)
+}
+
 /** Varias opciones de catálogo separadas por coma (heredo-familiares multiselect). */
 export function formatCatalogEnumListDisplay(value: string): string {
   if (!value.includes(',')) return getCatalogEnumDisplayLabel(value)

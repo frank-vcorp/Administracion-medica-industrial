@@ -4,6 +4,12 @@ import {
   CERTIFICADO_MEDICO_SCHEMA_VERSION,
   type CertificadoMedicoPayload,
 } from '@/schemas/clinical/certificado-medico.schema'
+import { zodErrorToFieldErrors } from '@/lib/save-action-errors'
+import {
+  formatZodFieldErrorLine,
+  formatZodRequiredFieldBanner,
+  formatZodIssueMessage,
+} from '@/lib/zod-user-messages'
 
 export function validateCertificadoMedicoPayload(
   raw: unknown,
@@ -19,15 +25,21 @@ export function validateCertificadoMedicoPayload(
   const schema = mode === 'final' ? CertificadoMedicoPayloadSchema : CertificadoMedicoDraftSchema
   const parsed = schema.safeParse(withVersion)
   if (!parsed.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of parsed.error.issues) {
-      const key = issue.path.join('.') || '_root'
-      fieldErrors[key] = fieldErrors[key] ?? []
-      fieldErrors[key].push(issue.message)
-    }
+    const fieldErrors = zodErrorToFieldErrors(parsed.error)
+    const firstKey = Object.keys(fieldErrors)[0]
+    const firstIssue = parsed.error.issues[0]
+    const firstMsg = firstKey ? fieldErrors[firstKey]?.[0] : undefined
+    const error =
+      mode === 'final' && firstKey && firstKey === 'integracion_diagnostica'
+        ? formatZodRequiredFieldBanner(firstKey, 3)
+        : firstKey && firstMsg
+          ? formatZodFieldErrorLine(firstKey, firstMsg)
+          : firstIssue
+            ? formatZodIssueMessage(firstIssue)
+            : 'Datos de certificado inválidos'
     return {
       valid: false,
-      error: parsed.error.issues[0]?.message ?? 'Datos de certificado inválidos',
+      error,
       fieldErrors,
     }
   }

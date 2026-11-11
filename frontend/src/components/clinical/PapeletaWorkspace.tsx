@@ -87,6 +87,7 @@ import { AUDIOMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/aud
 import type { CampimetriaQuestionnairePayload } from "@/schemas/clinical/campimetria-questionnaire.schema"
 import { CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/campimetria-questionnaire.schema"
 import { retryCampimetriaPrediagnosis } from "@/actions/campimetria-questionnaire.actions"
+import { formatPapeletaStudyTitle } from '@/lib/clinical/enum-display-labels'
 import { buildStudyInterpretationFromSnapshot, formatStudyStatusLine } from '@/lib/clinical/study-status-display'
 import { StudyStatusBadge } from '@/components/clinical/StudyStatusBadge'
 import { StudyStepChips } from '@/components/clinical/StudyStepChips'
@@ -823,7 +824,7 @@ export default function PapeletaWorkspace({
                     <StudyMenuIcon test={test} />
                     <div className="min-w-0">
                       <p className="font-semibold text-slate-800 text-sm group-hover:text-teal-700 truncate">
-                        {test.testNameSnapshot}
+                        {formatPapeletaStudyTitle(test.testNameSnapshot)}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {test.test?.category?.name ||
@@ -874,7 +875,7 @@ export default function PapeletaWorkspace({
         >
           {visibleTests.map(t => (
             <option key={t.id} value={t.id}>
-              {t.testNameSnapshot} — {formatStudyStatusLine(
+              {formatPapeletaStudyTitle(t.testNameSnapshot)} — {formatStudyStatusLine(
                 t.status,
                 buildStudyInterpretationFromSnapshot(t.aiSnapshot),
               )}
@@ -906,7 +907,9 @@ export default function PapeletaWorkspace({
             >
               <StudyMenuIcon test={t} active={t.id === activeTestId} className="mt-0.5" />
               <div className="min-w-0 flex-1 space-y-1">
-                <p className="text-xs font-semibold truncate leading-tight">{t.testNameSnapshot}</p>
+                <p className="text-xs font-semibold truncate leading-tight">
+                  {formatPapeletaStudyTitle(t.testNameSnapshot)}
+                </p>
                 <StudyStepChips status={t.status} aiSnapshot={t.aiSnapshot} compact />
                 <StudyStatusBadge
                   status={t.status}
@@ -1538,7 +1541,9 @@ function StudyPanel({
       {/* Encabezado del estudio */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-lg font-bold text-slate-800">{test.testNameSnapshot}</h3>
+          <h3 className="text-lg font-bold text-slate-800">
+            {formatPapeletaStudyTitle(test.testNameSnapshot)}
+          </h3>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {test.test?.category?.name && (
               <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
@@ -1719,7 +1724,9 @@ function StudyPanel({
           <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
             <span className="text-blue-600 text-base">📋</span>
             <div>
-              <p className="text-sm font-bold text-blue-800">{test.testNameSnapshot} — Formulario Clínico</p>
+              <p className="text-sm font-bold text-blue-800">
+                {formatPapeletaStudyTitle(test.testNameSnapshot)} — Formulario Clínico
+              </p>
               <p className="text-xs text-blue-600">
                 Pestañas: Somatometría, Signos vitales, Agudeza (campimetría) y bloque clínico (Antecedentes → Impresión).
               </p>
