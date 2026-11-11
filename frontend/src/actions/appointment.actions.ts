@@ -51,6 +51,7 @@ import {
 } from '@/lib/appointment-capacity'
 import { applySentenceCase } from '@/lib/text/sentence-case'
 import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
+import { findManyAppointmentsResilient } from '@/lib/prisma/appointment-find-many'
 
 /**
  * Crea una nueva cita y registra en auditoría
@@ -259,7 +260,7 @@ export async function getAppointments(date?: string, branchId?: string) {
       filters.branchId = branchId
     }
 
-    const appointments = await prisma.appointment.findMany({
+    const appointments = await findManyAppointmentsResilient(prisma, {
       where: filters,
       include: {
         worker: {
@@ -944,7 +945,7 @@ export async function getAppointmentsForWeek(weekStartDate: string, branchId: st
 
     const { gte, lte } = agendaWeekUtcRange(weekStartDate)
 
-    const appointments = await prisma.appointment.findMany({
+    const appointments = await findManyAppointmentsResilient(prisma, {
       where: {
         branchId,
         scheduledAt: { gte, lte },
@@ -986,7 +987,7 @@ export async function getAppointmentsForOverview(date: string) {
 
     const { gte, lte } = agendaDayUtcRange(date)
 
-    const appointments = await prisma.appointment.findMany({
+    const appointments = await findManyAppointmentsResilient(prisma, {
       where: {
         scheduledAt: { gte, lte },
       },
