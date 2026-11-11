@@ -21,7 +21,7 @@
  * @backup context/SPECs/SPEC-FEATURE-20260824-02-CUESTIONARIO-ESPIROMETRIA.md
  */
 import { z } from 'zod'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 
 // ──────────────────────────────────────────────────────────────────────────
 // Rangos y catálogos (FEATURE-20260824-02 §Antecedentes)
@@ -92,7 +92,7 @@ const optString = z
   .string()
   .trim()
   .max(500, 'Máximo 500 caracteres')
-  .transform(applySentenceCaseIfAllCaps)
+  .transform(applySentenceCase)
   .optional()
 
 /**

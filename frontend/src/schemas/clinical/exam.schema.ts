@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case';
+import { applySentenceCase } from '@/lib/text/sentence-case';
 import { ClinicalHistoryDataSchema } from './history.schema';
 import { tolerantZinEnum } from './zin.helper';
 
@@ -8,7 +8,7 @@ const freeTextOptional = z
   .string()
   .trim()
   .max(1000)
-  .transform(applySentenceCaseIfAllCaps)
+  .transform(applySentenceCase)
   .optional();
 const cleanNum = z.coerce.number().nonnegative().optional();
 

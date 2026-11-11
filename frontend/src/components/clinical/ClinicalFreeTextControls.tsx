@@ -1,10 +1,10 @@
 'use client'
 
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react'
 
 function normalizeOnBlur(value: string, onChange: (next: string) => void) {
-  const next = applySentenceCaseIfAllCaps(value)
+  const next = applySentenceCase(value)
   if (next !== value) onChange(next)
 }
 

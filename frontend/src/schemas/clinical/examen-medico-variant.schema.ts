@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 
 const cleanString = z.string().trim().optional().nullable()
 const freeTextString = z
   .string()
   .trim()
-  .transform(applySentenceCaseIfAllCaps)
+  .transform(applySentenceCase)
   .optional()
   .nullable()
 

@@ -22,7 +22,7 @@
  *    requerido por la acción para generar PDF.
  */
 import { z } from 'zod'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 
 /**
  * Cédula profesional mexicana / equivalente.
@@ -71,7 +71,7 @@ export const doctorProfileSchema = z.object({
     .trim()
     .min(3, 'El nombre debe tener al menos 3 caracteres')
     .max(120, 'Máximo 120 caracteres')
-    .transform(applySentenceCaseIfAllCaps),
+    .transform(applySentenceCase),
   professionalLicense: professionalLicenseSchema,
   signatureImageUrl: signatureImageUrlSchema,
 })

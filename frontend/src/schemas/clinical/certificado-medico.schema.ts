@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 import { ClinicalHistoryDataSchema } from '@/schemas/clinical/history.schema'
 
 export const CERTIFICADO_MEDICO_SCHEMA_VERSION = 'certificado-medico-v1' as const
@@ -31,10 +31,10 @@ export const DEFAULT_DICTAMEN_LABORAL_TEXTO: Record<DictamenLaboralValue, string
 export const DEFAULT_LUGAR_EXPEDICION = 'Santiago de Querétaro, Querétaro'
 
 const freeText = (max: number, min = 0) =>
-  z.string().trim().min(min).max(max).transform(applySentenceCaseIfAllCaps)
+  z.string().trim().min(min).max(max).transform(applySentenceCase)
 const plainString = z.string().trim()
 const optionalString = z
-  .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCaseIfAllCaps)])
+  .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCase)])
   .optional()
 
 export const SignosVitalesCertificadoSchema = z.object({

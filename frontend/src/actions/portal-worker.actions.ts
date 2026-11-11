@@ -6,7 +6,7 @@ import { logAudit } from '@/actions/audit.actions'
 import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
 import { parseAppointmentLocalDateTime } from '@/lib/appointment-scheduling'
 import { generateUniversalId } from '@/lib/id.utils'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 import { resolvePortalCompanyAccess } from '@/lib/portal-access'
 import prisma from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
@@ -43,13 +43,13 @@ const QuickWorkerRowSchema = z.object({
     .trim()
     .min(1, 'Nombre obligatorio')
     .max(120)
-    .transform(applySentenceCaseIfAllCaps),
+    .transform(applySentenceCase),
   lastName: z
     .string()
     .trim()
     .min(1, 'Apellidos obligatorios')
     .max(120)
-    .transform(applySentenceCaseIfAllCaps),
+    .transform(applySentenceCase),
   phone: z
     .string()
     .trim()

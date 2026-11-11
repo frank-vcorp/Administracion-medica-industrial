@@ -13,10 +13,10 @@ import { logAudit } from "@/actions/audit.actions"
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 
 function normalizeStoredPersonName(raw: string): string {
-    return applySentenceCaseIfAllCaps(raw.trim())
+    return applySentenceCase(raw.trim())
 }
 
 const personNameSchema = z
@@ -24,7 +24,7 @@ const personNameSchema = z
     .trim()
     .min(1)
     .max(100)
-    .transform(applySentenceCaseIfAllCaps)
+    .transform(applySentenceCase)
 
 // Get all workers with their company name and medical profile
 // @id IMPL-20260313-07

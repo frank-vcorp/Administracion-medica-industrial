@@ -8,7 +8,9 @@
 import { SessionProvider } from 'next-auth/react'
 import type { Session } from 'next-auth'
 import { ReactNode } from 'react'
+import GlobalSentenceCaseBlur from '@/components/GlobalSentenceCaseBlur'
 import GlobalSpellCheck from '@/components/GlobalSpellCheck'
+import SpellcheckOnboardingModal from '@/components/SpellcheckOnboardingModal'
 
 /**
  * @intervention ARCH-20260326-02
@@ -18,6 +20,8 @@ export default function Providers({ children, session }: { children: ReactNode; 
     return (
         <SessionProvider session={session}>
             <GlobalSpellCheck />
+            <GlobalSentenceCaseBlur />
+            <SpellcheckOnboardingModal />
             {children}
         </SessionProvider>
     )

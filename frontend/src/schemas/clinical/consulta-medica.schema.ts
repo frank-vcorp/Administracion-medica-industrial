@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 import {
   formatCie10Unified,
   isKnownCie10Code,
@@ -29,10 +29,10 @@ export {
 } from '@/schemas/clinical/consulta-medica.constants'
 
 const freeText = (max: number, min = 0) =>
-  z.string().trim().min(min).max(max).transform(applySentenceCaseIfAllCaps)
+  z.string().trim().min(min).max(max).transform(applySentenceCase)
 const plainString = z.string().trim()
 const optionalString = z
-  .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCaseIfAllCaps)])
+  .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCase)])
   .optional()
 
 const diagnosticoUnificadoCieFinal = z
@@ -193,7 +193,7 @@ export const ConsultaMedicaPayloadSchema = z
   })
 
 const draftText = (max: number) =>
-  z.string().trim().max(max).transform(applySentenceCaseIfAllCaps)
+  z.string().trim().max(max).transform(applySentenceCase)
 
 /**
  * Borrador: solo exige la versión. Los textos vacíos y las líneas de

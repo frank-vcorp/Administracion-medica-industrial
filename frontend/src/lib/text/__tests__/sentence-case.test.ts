@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applySentenceCase,
   applySentenceCaseIfAllCaps,
   isAllCapsUserText,
 } from '@/lib/text/sentence-case'
@@ -27,22 +28,36 @@ describe('isAllCapsUserText', () => {
   })
 })
 
-describe('applySentenceCaseIfAllCaps', () => {
-  it('convierte todo MAYÚSCULAS a oración preservando acentos', () => {
-    expect(applySentenceCaseIfAllCaps('DOLOR DE CABEZA')).toBe('Dolor de cabeza')
-    expect(applySentenceCaseIfAllCaps('  MARÍA GÓMEZ  ')).toBe('María gómez')
+describe('applySentenceCase', () => {
+  it('convierte MAYÚSCULAS y mixtas a oración', () => {
+    expect(applySentenceCase('DOLOR DE CABEZA')).toBe('Dolor de cabeza')
+    expect(applySentenceCase('hello WORLD')).toBe('Hello world')
+    expect(applySentenceCase('  MARÍA GÓMEZ  ')).toBe('  María gómez  ')
   })
 
-  it('no altera texto ya mixto', () => {
-    expect(applySentenceCaseIfAllCaps('iPhone')).toBe('iPhone')
-    expect(applySentenceCaseIfAllCaps('Dolor leve')).toBe('Dolor leve')
-  })
-
-  it('respeta espacios iniciales del valor original cuando no transforma', () => {
-    expect(applySentenceCaseIfAllCaps('  mixto Case')).toBe('  mixto Case')
+  it('deja texto ya en modo oración', () => {
+    expect(applySentenceCase('Dolor de cabeza')).toBe('Dolor de cabeza')
   })
 
   it('capitaliza tras prefijo no alfabético', () => {
-    expect(applySentenceCaseIfAllCaps('123 ABC')).toBe('123 Abc')
+    expect(applySentenceCase('123 ABC')).toBe('123 Abc')
+  })
+
+  it('es idempotente', () => {
+    const once = applySentenceCase('dOLOR Mixto')
+    expect(applySentenceCase(once)).toBe(once)
+  })
+})
+
+describe('applySentenceCaseIfAllCaps (legado)', () => {
+  it('convierte solo todo MAYÚSCULAS', () => {
+    expect(applySentenceCaseIfAllCaps('DOLOR DE CABEZA')).toBe('Dolor de cabeza')
+    expect(applySentenceCaseIfAllCaps('  MARÍA GÓMEZ  ')).toBe('  María gómez  ')
+  })
+
+  it('no altera texto mixto', () => {
+    expect(applySentenceCaseIfAllCaps('iPhone')).toBe('iPhone')
+    expect(applySentenceCaseIfAllCaps('Dolor leve')).toBe('Dolor leve')
+    expect(applySentenceCaseIfAllCaps('  mixto Case')).toBe('  mixto Case')
   })
 })

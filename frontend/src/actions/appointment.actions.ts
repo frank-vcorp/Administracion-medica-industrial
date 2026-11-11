@@ -49,7 +49,7 @@ import {
   appointmentCapacityUserMessage,
   checkBranchHourCapacity,
 } from '@/lib/appointment-capacity'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
 
 /**
@@ -92,7 +92,7 @@ export async function createAppointment(data: {
 
     const normalizedNotes =
       data.notes != null && data.notes.trim().length > 0
-        ? applySentenceCaseIfAllCaps(data.notes.trim())
+        ? applySentenceCase(data.notes.trim())
         : undefined
 
     if (Number.isNaN(scheduledDate.getTime())) {

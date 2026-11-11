@@ -9,7 +9,7 @@
  * @backup context/SPECs/SPEC-FEATURE-20260914-01-CAMPIMETRIA-CUESTIONARIO.md
  */
 import { z } from 'zod'
-import { applySentenceCaseIfAllCaps } from '@/lib/text/sentence-case'
+import { applySentenceCase } from '@/lib/text/sentence-case'
 
 export const CAMPIMETRIA_QUESTIONNAIRE_SCHEMA_VERSION =
   'campimetria-questionnaire-v1' as const
@@ -110,7 +110,7 @@ const optString = z
   .string()
   .trim()
   .max(500)
-  .transform(applySentenceCaseIfAllCaps)
+  .transform(applySentenceCase)
   .optional()
 
 const ExploracionCampoSchema = z
