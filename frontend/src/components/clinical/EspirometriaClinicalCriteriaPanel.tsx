@@ -1007,7 +1007,7 @@ export default function EspirometriaClinicalCriteriaPanel({
         c.fev1ManeuverTripleNative !== null) ? (
         <div className="bg-white border border-sky-100 rounded-lg p-3 space-y-1">
           <p
-            className="text-[10px] font-bold text-sky-700 uppercase tracking-wider pb-1"
+            className="text-[10px] font-semibold text-sky-700 pb-1"
             style={headerStyle}
           >
             Repetibilidad numérica
@@ -1088,7 +1088,7 @@ export default function EspirometriaClinicalCriteriaPanel({
           data-criteria-group="boolean"
         >
           <p
-            className="text-[10px] font-bold text-sky-700 uppercase tracking-wider pb-1"
+            className="text-[10px] font-semibold text-sky-700 pb-1"
             style={headerStyle}
           >
             Indicadores de calidad
@@ -1100,7 +1100,7 @@ export default function EspirometriaClinicalCriteriaPanel({
       {/* === BLOQUE 3: pruebas aceptables, criterios, calidad === */}
       <div className="bg-white border border-sky-100 rounded-lg p-3 space-y-1">
         <p
-          className="text-[10px] font-bold text-sky-700 uppercase tracking-wider pb-1"
+          className="text-[10px] font-semibold text-sky-700 pb-1"
           style={headerStyle}
         >
           Resumen de aceptabilidad

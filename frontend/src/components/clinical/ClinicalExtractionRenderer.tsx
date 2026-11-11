@@ -166,7 +166,7 @@ function KeyValueBlock({
 
   return (
     <div>
-      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+      <h4 className="text-xs font-bold text-slate-500 mb-2">
         {section.title}
       </h4>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
@@ -210,7 +210,7 @@ function TableBlock({
 
   return (
     <div>
-      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+      <h4 className="text-xs font-bold text-slate-500 mb-2">
         {section.title}
       </h4>
       {/* overflow-x-auto para scroll horizontal controlado en móvil */}
@@ -275,7 +275,7 @@ function BadgesBlock({
 
   return (
     <div>
-      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+      <h4 className="text-xs font-bold text-slate-500 mb-2">
         {section.title}
       </h4>
       <div className="flex flex-wrap gap-2">
@@ -309,7 +309,7 @@ function NoteBlock({
 
   return (
     <div>
-      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+      <h4 className="text-xs font-bold text-slate-500 mb-1.5">
         {section.title}
       </h4>
       <p className="text-xs text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
@@ -371,7 +371,7 @@ function BilateralFrequencyTableBlock({
 
   return (
     <div>
-      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+      <h4 className="text-xs font-bold text-slate-500 mb-2">
         {section.title}
       </h4>
       {/* overflow-x-auto para scroll horizontal controlado en móvil */}

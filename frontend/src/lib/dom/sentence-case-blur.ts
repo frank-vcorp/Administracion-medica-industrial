@@ -7,6 +7,7 @@ export const SENTENCE_CASE_INPUT_DEBOUNCE_MS = 400
 export function shouldApplySentenceCaseOnBlur(
   el: HTMLInputElement | HTMLTextAreaElement,
 ): boolean {
+  if (el.dataset.sentenceCaseManaged === 'react') return false
   if (!shouldEnableSpellCheck(el)) return false
   if (el instanceof HTMLInputElement) {
     const t = (el.type || 'text').toLowerCase()

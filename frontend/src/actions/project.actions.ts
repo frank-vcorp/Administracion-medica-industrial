@@ -15,12 +15,13 @@ import prisma from '@/lib/prisma'
 import { ProjectStatus, Prisma } from '@prisma/client'
 import { createProjectReceptionEvent } from '@/actions/event.actions'
 import { summarizeConflicts } from '@/lib/calendar-utils'
+import { zFreeTextMax, zFreeTextMaxOptional } from '@/lib/text/zod-free-text'
 
 // ─── Schemas de validación ────────────────────────────────────────────────────
 
 const CreateProjectSchema = z
   .object({
-    name: z.string().min(1).max(200),
+    name: zFreeTextMax(200, 1),
     companyId: z.string().uuid(),
     startDate: z.string().datetime(),
     endDate: z.string().datetime(),
@@ -34,7 +35,7 @@ const CreateProjectSchema = z
       .optional()
       .or(z.literal('').transform(() => undefined))
       .or(z.null().transform(() => undefined)),
-    notes: z.string().max(1000).optional(),
+    notes: zFreeTextMaxOptional(1000),
   })
   .refine((d) => new Date(d.startDate) <= new Date(d.endDate), {
     message: 'La fecha de inicio debe ser anterior o igual a la fecha de fin',
@@ -43,7 +44,7 @@ const CreateProjectSchema = z
 
 const UpdateProjectSchema = z
   .object({
-    name: z.string().min(1).max(200).optional(),
+    name: zFreeTextMax(200, 1).optional(),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
     branchId: z.string().uuid().optional().or(z.literal('').transform(() => undefined)),
@@ -55,7 +56,7 @@ const UpdateProjectSchema = z
       .optional()
       .or(z.literal('').transform(() => undefined))
       .or(z.null().transform(() => undefined)),
-    notes: z.string().max(1000).optional(),
+    notes: zFreeTextMaxOptional(1000),
   })
   .refine(
     (d) =>

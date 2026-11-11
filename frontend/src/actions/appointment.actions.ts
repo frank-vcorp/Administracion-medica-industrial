@@ -1286,7 +1286,10 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
           identityVerifiedAt:       new Date(),
           identityVerifiedByUserId: session.user.id,
           identityExceptionReason:  exceptionReason ?? null,
-          identityExceptionComment: exceptionComment ?? null,
+          identityExceptionComment:
+            exceptionComment != null && exceptionComment.trim().length > 0
+              ? applySentenceCase(exceptionComment.trim())
+              : null,
           identityEvidenceMode:     evidenceMode,
           corroborationResult:      corroborationResult,
           informedConsentPdfUrl:    consentPdfKey,

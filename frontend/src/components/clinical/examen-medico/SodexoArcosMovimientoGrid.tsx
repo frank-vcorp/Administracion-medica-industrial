@@ -28,7 +28,7 @@ export function SodexoArcosMovimientoGrid({ def, value, onChange, readonly }: Pr
 
   return (
     <div className="border border-slate-200 rounded-md overflow-hidden">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
+      <p className="text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">
         {def.title}
       </p>
       <div className="overflow-x-auto">

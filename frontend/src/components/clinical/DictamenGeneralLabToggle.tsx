@@ -54,7 +54,7 @@ export default function DictamenGeneralLabToggle({
       className="rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-3 space-y-2"
       data-testid="dictamen-general-lab-toggle"
     >
-      <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700">
+      <p className="text-[10px] font-bold text-violet-700">
         Dictamen general (empresa)
       </p>
       <p className="text-xs text-violet-900/90">

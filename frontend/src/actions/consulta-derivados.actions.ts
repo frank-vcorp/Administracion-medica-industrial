@@ -11,6 +11,7 @@ import {
   CONSULTA_DERIVADOS_SOURCE,
   consultaDerivadoAuditMatches,
 } from '@/lib/clinical/consulta-derivados'
+import { zFreeTextMax } from '@/lib/text/zod-free-text'
 
 const CLINICAL_ROLES = new Set([
   'SUPERADMIN',
@@ -52,11 +53,7 @@ const RemoveDerivadoSchema = z.object({
   eventId: z.string().min(1),
   consultaEventTestId: z.string().min(1),
   eventTestId: z.string().min(1),
-  reason: z
-    .string()
-    .trim()
-    .min(3, 'Escribe el motivo (mínimo 3 caracteres).')
-    .max(500, 'El motivo no puede pasar de 500 caracteres.'),
+  reason: zFreeTextMax(500, 3),
 })
 
 export type ConsultaDerivadoAddedItem = {
