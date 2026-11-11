@@ -6,6 +6,8 @@ export type SendSmtpMailArgs = {
   to: string
   subject: string
   text: string
+  /** Cuerpo HTML (multipart/alternative junto con `text`). */
+  html?: string
   attachments?: Array<
     | { filename: string; content: Buffer }
     | { filename: string; content: string; encoding: 'base64' }
@@ -39,6 +41,7 @@ export async function sendSmtpMail(
       to: args.to,
       subject: args.subject,
       text: args.text,
+      html: args.html,
       attachments: args.attachments,
     })
 

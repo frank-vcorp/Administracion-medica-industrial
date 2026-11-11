@@ -3,7 +3,10 @@
  */
 
 import { sendSmtpMail } from '@/lib/smtp-mail'
-import { SME_LEGAL_NAME } from '@/lib/brand-constants'
+import {
+  buildPortalAccessEmailHtml,
+  buildPortalAccessEmailText,
+} from '@/lib/emails/portal-access-email-template'
 
 export async function sendPortalAccessCredentialsEmail(args: {
   to: string
@@ -16,15 +19,8 @@ export async function sendPortalAccessCredentialsEmail(args: {
     purpose: 'portal',
     to: args.to,
     subject: `Acceso al portal cliente — ${args.companyName}`,
-    text:
-      `${SME_LEGAL_NAME}\n\n` +
-      `Se habilitó el portal para ${args.companyName}.\n\n` +
-      `URL de acceso: ${args.loginUrl}\n` +
-      `Usuario: ${args.loginEmail}\n` +
-      `Contraseña temporal: ${args.temporaryPassword}\n\n` +
-      `En su primer ingreso deberá aceptar los términos y condiciones, ` +
-      `el aviso de privacidad y definir una contraseña nueva.\n\n` +
-      `No comparta estas credenciales fuera de su organización.`,
+    text: buildPortalAccessEmailText(args),
+    html: buildPortalAccessEmailHtml(args),
   })
 
   if (result.skipped) {
