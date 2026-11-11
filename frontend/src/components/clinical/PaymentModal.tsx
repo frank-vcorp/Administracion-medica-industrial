@@ -388,12 +388,12 @@ export default function PaymentModal({
         <div className="overflow-y-auto flex-1 p-8 space-y-6">
           {/* Datos del evento */}
           <section className="bg-slate-50 rounded-2xl p-5 space-y-3 border border-slate-100">
-            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+            <p className="text-[10px] font-semibold text-slate-500">
               Módulo de pruebas clínicas
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">
+                <p className="text-[10px] font-semibold text-slate-500">
                   Trabajador
                 </p>
                 <p className="text-sm font-medium text-slate-700">
@@ -402,7 +402,7 @@ export default function PaymentModal({
               </div>
               {universalId && (
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">
+                  <p className="text-[10px] font-semibold text-slate-500">
                     ID
                   </p>
                   <p className="text-xs font-mono text-slate-500">
@@ -411,7 +411,7 @@ export default function PaymentModal({
                 </div>
               )}
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">
+                <p className="text-[10px] font-semibold text-slate-500">
                   Empresa
                 </p>
                 <p className="text-sm font-medium text-slate-700">
@@ -420,7 +420,7 @@ export default function PaymentModal({
               </div>
               {branchName && (
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">
+                  <p className="text-[10px] font-semibold text-slate-500">
                     Sucursal
                   </p>
                   <p className="text-sm font-medium text-slate-700">
@@ -433,7 +433,7 @@ export default function PaymentModal({
 
           {/* Método de pago */}
           <section className="space-y-3">
-            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+            <p className="text-[10px] font-semibold text-slate-500">
               Método de pago
             </p>
             <select
@@ -453,7 +453,7 @@ export default function PaymentModal({
           {/* Tarifa catálogo (EventTests) */}
           {(catalogLoading || (suggestedCatalog && suggestedCatalog.lines.length > 0)) && (
             <section className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
-              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+              <p className="text-[10px] font-semibold text-slate-500">
                 Tarifa sugerida (catálogo)
               </p>
               {catalogLoading ? (
@@ -490,7 +490,7 @@ export default function PaymentModal({
 
           {/* Monto */}
           <section className="space-y-3">
-            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+            <p className="text-[10px] font-semibold text-slate-500">
               Monto
             </p>
             <div className="relative">
@@ -521,7 +521,7 @@ export default function PaymentModal({
 
           {/* Referencia / Nota */}
           <section className="space-y-3">
-            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+            <p className="text-[10px] font-semibold text-slate-500">
               Referencia / Nota <span className="text-slate-400 font-normal">(opcional)</span>
             </p>
             <textarea

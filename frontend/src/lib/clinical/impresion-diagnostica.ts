@@ -16,6 +16,10 @@ import {
 } from '@/lib/antecedentes-fields'
 import { parsePatologiaEntry } from '@/lib/sodexo-pdf-patologicos'
 import {
+  formatOtrasEnfermedadesDisplay,
+  isPatologicosMetaKey,
+} from '@/lib/otras-enfermedades'
+import {
   detectHallazgosFromExam,
   type ExamForHallazgos,
 } from '@/lib/clinical/recommendations'
@@ -64,10 +68,20 @@ function sectionRecord(
   return {}
 }
 
-function formatPatologicoSiLine(field: string, raw: unknown): string | null {
+function formatPatologicoSiLine(
+  field: string,
+  raw: unknown,
+  patSection?: Record<string, unknown>,
+): string | null {
   const parsed = parsePatologiaEntry(raw)
   if (!parsed.si) return null
   const label = PATOLOGICO_LABEL_BY_FIELD[field] ?? field.replace(/_/g, ' ')
+  if (field === 'otras' && patSection) {
+    const names = formatOtrasEnfermedadesDisplay(patSection)
+    const tail = parsed.descripcion
+    if (names && tail) return `${label}: ${names}; ${tail}`
+    if (names) return `${label}: ${names}`
+  }
   if (parsed.descripcion) {
     return `${label}: ${parsed.descripcion}`
   }
@@ -92,7 +106,8 @@ export function hasPatologicoSi(
 ): boolean {
   if (!antecedentes || typeof antecedentes !== 'object') return false
   const pat = sectionRecord(antecedentes, 'patologicos')
-  for (const raw of Object.values(pat)) {
+  for (const [field, raw] of Object.entries(pat)) {
+    if (isPatologicosMetaKey(field)) continue
     if (parsePatologiaEntry(raw).si) return true
   }
   return false
@@ -103,7 +118,8 @@ function collectPatologicosSiLines(
 ): string[] {
   const lines: string[] = []
   for (const [field, raw] of Object.entries(patologicos)) {
-    const line = formatPatologicoSiLine(field, raw)
+    if (isPatologicosMetaKey(field)) continue
+    const line = formatPatologicoSiLine(field, raw, patologicos)
     if (line) lines.push(line)
   }
   return lines

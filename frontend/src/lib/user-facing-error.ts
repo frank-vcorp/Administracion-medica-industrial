@@ -41,6 +41,22 @@ const ZOD_PATH_LABELS: Record<string, string> = {
   antecedentes: 'Antecedentes',
   medico_cedula: 'Cédula profesional del médico',
   medico_nombre: 'Nombre del médico',
+  workerId: 'Trabajador',
+  companyId: 'Empresa',
+  branchId: 'Sucursal',
+  scheduledAt: 'Fecha y hora de la cita',
+  firstName: 'Nombre(s)',
+  lastName: 'Apellidos',
+  medicalProfileId: 'Perfil médico',
+  date: 'Fecha',
+  time: 'Hora',
+  exceptionComment: 'Comentario operativo',
+  exceptionReason: 'Motivo de excepción',
+  informedConsentSignatureDataUrl: 'Firma del consentimiento',
+  frontFileDataUrl: 'Evidencia frontal del documento',
+  name: 'Nombre',
+  rfc: 'RFC',
+  basic: 'Datos básicos',
 }
 
 function pathSegmentLabel(segment: string): string {
@@ -346,6 +362,20 @@ export type SaveClinicalFailure = {
 
 export function mapSaveClinicalFailure(
   result: SaveClinicalFailure,
+  options?: { context?: string },
+): UserFacingError {
+  return mapSaveActionFailure(result, options)
+}
+
+/** Resultado de guardado (clínica u operaciones) con mensaje en `error`. */
+export type SaveActionFailureInput = {
+  error: string
+  fieldErrors?: Record<string, string[]>
+  technicalDetail?: string
+}
+
+export function mapSaveActionFailure(
+  result: SaveActionFailureInput,
   options?: { context?: string },
 ): UserFacingError {
   return mapUserFacingError({

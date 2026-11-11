@@ -747,15 +747,21 @@ describe('IMPL-20260817-04 acordeón Sí/Negado/No Aplica + 3 campos (Patologico
       'pat_c_vertebral','cirugias','hepatitis','exantematicas','gastritis',
       'renales','asma','cancer','traumatismos_craneales','desmayos',
       'fracturas','neumonias','enf_trans_sexual','transfusiones','psiquiatricas',
-      'migrana','otras',
+      'migrana','otras','otras_enfermedades',
     ] as const
 
     const payload: Record<string, unknown> = {}
-    for (const k of allKeys) payload[k] = 'NEGADO'
+    for (const k of allKeys) {
+      payload[k] = k === 'otras_enfermedades' ? [] : 'NEGADO'
+    }
 
     const parsed = PatologicosSchema.parse(payload)
     expect(Object.keys(parsed).sort()).toEqual([...allKeys].sort())
     for (const k of allKeys) {
+      if (k === 'otras_enfermedades') {
+        expect(parsed.otras_enfermedades).toEqual([])
+        continue
+      }
       expect(parsed[k as keyof typeof parsed].estado).toBe('NEGADO')
     }
   })

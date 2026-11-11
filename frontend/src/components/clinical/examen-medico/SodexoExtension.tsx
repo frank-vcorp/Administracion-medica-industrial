@@ -734,7 +734,7 @@ function MatrizVerticalLabel({
       : 'w-7 bg-slate-200 text-slate-700 border-r border-slate-300'
   return (
     <div className={`flex items-center justify-center px-0.5 shrink-0 self-stretch ${skin}`}>
-      <span className="text-[9px] font-bold uppercase [writing-mode:vertical-rl] rotate-180 leading-tight text-center">
+      <span className="text-[9px] font-semibold [writing-mode:vertical-rl] rotate-180 leading-tight text-center">
         {children}
       </span>
     </div>
@@ -931,7 +931,7 @@ function InmunizacionesSodexoTable({
     const descHeader = section === 'basica' ? 'Describir' : 'Describir'
     return (
       <div className="border border-slate-200 rounded-lg overflow-hidden">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+        <p className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
           {title}
         </p>
         <table className="w-full text-xs">
@@ -1154,7 +1154,7 @@ function GinecoSodexoTable({
           />
         </div>
       </div>
-      <p className="text-[10px] font-bold uppercase text-slate-500 mb-2">Tóxicos / medicamentos (rejilla impreso)</p>
+      <p className="text-[10px] font-semibold text-slate-500 mb-2">Tóxicos / medicamentos (rejilla impreso)</p>
       <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg">
         <table className="w-full text-xs">
           <thead className="bg-slate-50 sticky top-0">
@@ -1306,7 +1306,7 @@ function PatologicosSodexoColumn({
         if (groupRows.length === 0) return null
         return (
           <div key={group} className="border border-slate-200 rounded-lg overflow-hidden">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
+            <p className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100">
               {group}
             </p>
             <table className="w-full text-xs">
@@ -2035,7 +2035,7 @@ function ExamenFisicoSodexoTable({
                           className={
                             sec.id === '9.1'
                               ? 'text-[11px] font-bold text-slate-800 bg-slate-100 px-3 py-2 border-b border-slate-200'
-                              : 'text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100'
+                              : 'text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 border-b border-slate-100'
                           }
                         >
                           {group}
@@ -2091,7 +2091,7 @@ function EstilosVidaSodexoTable({
   return (
     <div className="space-y-4 text-xs">
       <div className="border border-slate-200 rounded-lg p-3 space-y-3">
-        <p className="text-[10px] font-bold uppercase text-slate-600">8.1 Tabaquismo</p>
+        <p className="text-[10px] font-semibold text-slate-600">8.1 Tabaquismo</p>
         <div className="flex flex-wrap gap-3">
           {tabacoOpciones.map(({ v, label }) => (
             <label key={v} className="inline-flex items-center gap-1">
@@ -2162,7 +2162,7 @@ function EstilosVidaSodexoTable({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="border border-slate-200 rounded-lg p-3 space-y-2">
-          <p className="text-[10px] font-bold uppercase text-slate-600">8.2 Licor</p>
+          <p className="text-[10px] font-semibold text-slate-600">8.2 Licor</p>
           <div className="flex gap-4">
             {(['NO', 'SI'] as const).map((v) => (
               <label key={v} className="inline-flex items-center gap-1">
@@ -2186,7 +2186,7 @@ function EstilosVidaSodexoTable({
           />
         </div>
         <div className="border border-slate-200 rounded-lg p-3 space-y-2">
-          <p className="text-[10px] font-bold uppercase text-slate-600">8.3 Drogadicción</p>
+          <p className="text-[10px] font-semibold text-slate-600">8.3 Drogadicción</p>
           <div className="flex gap-4">
             {(['NO', 'SI'] as const).map((v) => (
               <label key={v} className="inline-flex items-center gap-1">

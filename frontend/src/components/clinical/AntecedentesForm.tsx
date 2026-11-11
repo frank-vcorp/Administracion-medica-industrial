@@ -73,6 +73,13 @@ import {
   GRUPO_RH_VALUES,
   type DetalleTriple,
 } from '@/schemas/clinical/history.schema'
+import {
+  OTRAS_ENFERMEDADES_KEY,
+  hydrateOtrasEnfermedadesFromPatologicos,
+  isPatologicosMetaKey,
+  otrasEnfermedadesForPersist,
+  syncOtrasEspecificacion,
+} from '@/lib/otras-enfermedades'
 
 interface AntecedentesFormProps {
   workerId: string
@@ -210,6 +217,7 @@ export function AntecedentesForm({
   // significa "ninguno" — la UI entonces muestra resumen si hay contenido
   // o inputs si están vacíos.
   const [focusedPatologiaField, setFocusedPatologiaField] = useState<string | null>(null)
+  const [otrasEnfermedades, setOtrasEnfermedades] = useState<string[]>([])
 
   // ── Inicialización desde datos guardados ──────────────────────────────────────
   /* eslint-disable react-hooks/set-state-in-effect -- hidratación intencional al montar / cuando cambia initialData (editor maestro longitudinal). */
@@ -231,9 +239,11 @@ export function AntecedentesForm({
       // IMPL-20260817-04 — normaliza cada valor al shape PatologiaEntry
       // (acepta string legacy o el nuevo objeto).
       const pat = data.patologicos
+      setOtrasEnfermedades(hydrateOtrasEnfermedadesFromPatologicos(pat))
       setPatologicos(prev => {
         const next = { ...prev }
         for (const [k, v] of Object.entries(pat)) {
+          if (isPatologicosMetaKey(k)) continue
           next[k] = coercePatologiaEntry(v)
         }
         return next
@@ -262,6 +272,13 @@ export function AntecedentesForm({
   const handlePatologiaPatch = (field: string, patch: Partial<PatologiaEntry>) => {
     if (patch.estado !== undefined) {
       setFocusedPatologiaField(patch.estado === 'SI' ? field : null)
+      if (field === 'otras' && patch.estado === 'SI' && otrasEnfermedades.length === 0) {
+        const seed = patch.detalle?.especificacion?.trim() ?? ''
+        setOtrasEnfermedades([seed])
+      }
+      if (field === 'otras' && patch.estado !== undefined && patch.estado !== 'SI') {
+        setOtrasEnfermedades([])
+      }
     }
     setPatologicos(prev => {
       const current = prev[field] ?? emptyPatologia()
@@ -280,15 +297,28 @@ export function AntecedentesForm({
     })
   }
 
+  const buildPatologicosSection = useCallback(() => {
+    const syncedOtras = syncOtrasEspecificacion(otrasEnfermedades, patologicos.otras)
+    const base: Record<string, unknown> = {
+      ...patologicos,
+      ...(syncedOtras ? { otras: syncedOtras } : {}),
+    }
+    const persisted = otrasEnfermedadesForPersist(otrasEnfermedades)
+    if (persisted.length > 0) {
+      base[OTRAS_ENFERMEDADES_KEY] = persisted
+    }
+    return base
+  }, [patologicos, otrasEnfermedades])
+
   const buildPayload = useCallback(
     () => ({
       datos_personales: datosPersonales,
       historia_laboral: historiaLaboral,
       heredo_familiares: heredofamiliares,
       no_patologicos: noPatologicos,
-      patologicos: patologicos,
+      patologicos: buildPatologicosSection(),
     }),
-    [datosPersonales, historiaLaboral, heredofamiliares, noPatologicos, patologicos],
+    [datosPersonales, historiaLaboral, heredofamiliares, noPatologicos, buildPatologicosSection],
   )
 
   const historySnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])
@@ -559,7 +589,11 @@ export function AntecedentesForm({
                     const entry = patologicos[item.field] ?? emptyPatologia()
                     const detalle = entry.detalle ?? emptyDetalle()
                     const isFocused = focusedPatologiaField === item.field
-                    const showInputs = entry.estado === 'SI' && (isFocused || !hasDetalleContent(detalle))
+                    const hasOtrasNames =
+                      item.field === 'otras' && otrasEnfermedades.some(s => s.trim())
+                    const showInputs =
+                      entry.estado === 'SI' &&
+                      (isFocused || (!hasDetalleContent(detalle) && !hasOtrasNames))
                     const showSummary = entry.estado === 'SI' && !showInputs
                     return (
                       <div key={item.field} className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
@@ -619,7 +653,16 @@ export function AntecedentesForm({
                               <span className="text-emerald-600 ml-auto text-xs">click para editar</span>
                             </div>
                             <div className="text-gray-600 space-y-0.5">
-                              {detalle.especificacion && (
+                              {item.field === 'otras' &&
+                                otrasEnfermedades.filter(s => s.trim()).map((name, i) => (
+                                  <p key={i}>
+                                    <span className="font-medium">
+                                      {i === 0 ? 'Enfermedad:' : 'Otra enfermedad:'}
+                                    </span>{' '}
+                                    {name.trim()}
+                                  </p>
+                                ))}
+                              {item.field !== 'otras' && detalle.especificacion && (
                                 <p><span className="font-medium">Especificación:</span> {detalle.especificacion}</p>
                               )}
                               {detalle.desde_cuando && (
@@ -636,8 +679,49 @@ export function AntecedentesForm({
                         )}
                         {showInputs && (
                           <div className="mt-3 space-y-2 p-3 bg-white border border-gray-200 rounded-lg">
-                            {patologiaRequiresEspecificacion(item.field)
-                              && !patologiaEspecificacionSiempreVisible(item.field) && (
+                            {patologiaRequiresEspecificacion(item.field) && item.field === 'otras' ? (
+                              <div className="space-y-2">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  Otras enfermedades (texto libre)
+                                </label>
+                                {(otrasEnfermedades.length > 0 ? otrasEnfermedades : ['']).map((line, idx) => (
+                                  <div key={idx} className="flex gap-2 items-center">
+                                    <ClinicalFreeTextInput
+                                      type="text"
+                                      value={line}
+                                      onChange={text => {
+                                        const next = [...otrasEnfermedades]
+                                        while (next.length <= idx) next.push('')
+                                        next[idx] = text
+                                        setOtrasEnfermedades(next)
+                                      }}
+                                      placeholder={patologiaEspecificacionPlaceholder('otras')}
+                                      maxLength={500}
+                                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    {otrasEnfermedades.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const next = otrasEnfermedades.filter((_, i) => i !== idx)
+                                          setOtrasEnfermedades(next.length > 0 ? next : [''])
+                                        }}
+                                        className="text-xs text-rose-600 font-semibold"
+                                      >
+                                        Quitar
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => setOtrasEnfermedades([...otrasEnfermedades, ''])}
+                                  className="text-xs font-bold text-teal-700"
+                                >
+                                  + Agregar otra enfermedad
+                                </button>
+                              </div>
+                            ) : patologiaRequiresEspecificacion(item.field) ? (
                               <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">
                                   Especificación
@@ -653,7 +737,7 @@ export function AntecedentesForm({
                                   className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                                 />
                               </div>
-                            )}
+                            ) : null}
                             <div>
                               <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Desde cuándo
