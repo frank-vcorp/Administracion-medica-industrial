@@ -96,6 +96,13 @@ import {
   GRUPO_RH_VALUES,
   type DetalleTriple,
 } from '@/schemas/clinical/history.schema'
+import {
+  OTRAS_ENFERMEDADES_KEY,
+  hydrateOtrasEnfermedadesFromPatologicos,
+  isPatologicosMetaKey,
+  otrasEnfermedadesForPersist,
+  syncOtrasEspecificacion,
+} from '@/lib/otras-enfermedades'
 
 interface AntecedentesCapturaProps {
   /** Estado actual del snapshot (resuelto por el padre). Componente controlado. */
@@ -193,7 +200,7 @@ function stripEmptyEnumKeys<T extends Record<string, string>>(
 }
 
 /** Construye un estado interno vacío a partir de los shapes conocidos. */
-function buildEmptySections(): {
+type AntecedentesFormSections = {
   datos_personales: Record<string, string>
   historia_laboral: Record<string, string>
   heredo_familiares: Record<string, string>
@@ -203,7 +210,11 @@ function buildEmptySections(): {
    * 3 campos). La forma legacy `{ diabetes: 'SI' }` se normaliza al cargar
    * (ver `sectionsFromValue`). */
   patologicos: Record<string, PatologiaEntry>
-} {
+  /** Texto libre: varias «otras enfermedades» (persistido en patologicos.otras_enfermedades). */
+  otrasEnfermedades: string[]
+}
+
+function buildEmptySections(): AntecedentesFormSections {
   const dp: Record<string, string> = {
     puesto_actual: '', area_departamento: '', turno: '',
     antiguedad_anios: '', antiguedad_meses: '', estado_civil: '',
@@ -246,7 +257,43 @@ function buildEmptySections(): {
     heredo_familiares: hf,
     no_patologicos: np,
     patologicos: pt,
+    otrasEnfermedades: [],
   }
+}
+
+function syncOtrasEntryInForm(form: AntecedentesFormSections): AntecedentesFormSections {
+  const otrasSynced = syncOtrasEspecificacion(form.otrasEnfermedades, form.patologicos.otras)
+  if (!otrasSynced) return form
+  return {
+    ...form,
+    patologicos: { ...form.patologicos, otras: otrasSynced },
+  }
+}
+
+function patologicosPayloadFromForm(form: AntecedentesFormSections): Record<string, unknown> {
+  const synced = syncOtrasEntryInForm(form)
+  const persisted = otrasEnfermedadesForPersist(synced.otrasEnfermedades)
+  const base: Record<string, unknown> = { ...synced.patologicos }
+  if (persisted.length > 0) {
+    base[OTRAS_ENFERMEDADES_KEY] = persisted
+  }
+  return base
+}
+
+function emitAntecedentesPayload(nextForm: AntecedentesFormSections): AntecedentesCaptura {
+  const payload: AntecedentesCaptura = {
+    datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
+    historia_laboral: { ...nextForm.historia_laboral },
+    heredo_familiares: { ...nextForm.heredo_familiares },
+    no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
+    patologicos: patologicosPayloadFromForm(nextForm),
+  } as unknown as AntecedentesCaptura
+  for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
+    const v = nextForm.historia_laboral[exp.key]
+    ;(payload.historia_laboral as Record<string, unknown>)[exp.key] =
+      v === 'true' || v === 'SI'
+  }
+  return payload
 }
 
 function isPlainRecord(v: unknown): v is Record<string, unknown> {
@@ -289,19 +336,18 @@ function coercePatologiaEntry(v: unknown): PatologiaEntry {
 }
 
 /** Inicializa el estado local de edición desde `value` (objeto resolvido por el padre). */
-function sectionsFromValue(value: Record<string, unknown>): {
-  datos_personales: Record<string, string>
-  historia_laboral: Record<string, string>
-  heredo_familiares: Record<string, string>
-  no_patologicos: Record<string, string>
-  patologicos: Record<string, PatologiaEntry>
-} {
+function sectionsFromValue(value: Record<string, unknown>): AntecedentesFormSections {
   const empty = buildEmptySections()
+  const patSection = value.patologicos
+  if (isPlainRecord(patSection)) {
+    empty.otrasEnfermedades = hydrateOtrasEnfermedadesFromPatologicos(patSection)
+  }
   for (const key of Object.keys(empty) as SectionKey[]) {
     const section = value[key]
     if (!isPlainRecord(section)) continue
     for (const [k, v] of Object.entries(section)) {
       if (key === 'patologicos') {
+        if (isPatologicosMetaKey(k)) continue
         // IMPL-20260817-04 — el section patologicos maneja la forma objeto;
         // `coercePatologiaEntry` acepta strings legacy o el nuevo objeto.
         empty.patologicos[k] = coercePatologiaEntry(v)
@@ -471,25 +517,46 @@ export function AntecedentesCaptura({
             ? patch.detalle
             : current.detalle,
     }
-    const nextForm = {
+    let nextForm: AntecedentesFormSections = {
       ...form,
       patologicos: { ...form.patologicos, [field]: next },
     }
+    if (field === 'otras' && next.estado === 'SI' && nextForm.otrasEnfermedades.length === 0) {
+      const seed =
+        next.detalle?.especificacion?.trim() ||
+        form.otrasEnfermedades[0]?.trim() ||
+        ''
+      nextForm = { ...nextForm, otrasEnfermedades: [seed] }
+    }
+    if (field === 'otras' && next.estado !== 'SI') {
+      nextForm = { ...nextForm, otrasEnfermedades: [] }
+    }
     setForm(nextForm)
     markModified(`patologicos.${field}`)
-    const payload: AntecedentesCaptura = {
-      datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
-      historia_laboral: { ...nextForm.historia_laboral },
-      heredo_familiares: { ...nextForm.heredo_familiares },
-      no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
-      patologicos: { ...nextForm.patologicos },
-    } as unknown as AntecedentesCaptura
-    for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
-      const v = nextForm.historia_laboral[exp.key]
-      ;(payload.historia_laboral as Record<string, unknown>)[exp.key] =
-        v === 'true' || v === 'SI'
-    }
-    onChange(payload)
+    onChange(emitAntecedentesPayload(nextForm))
+  }
+
+  function setOtrasEnfermedades(nextList: string[]) {
+    const nextForm: AntecedentesFormSections = { ...form, otrasEnfermedades: nextList }
+    setForm(nextForm)
+    markModified('patologicos.otras_enfermedades')
+    onChange(emitAntecedentesPayload(nextForm))
+  }
+
+  function updateOtrasEnfermedadLine(index: number, text: string) {
+    const next = [...form.otrasEnfermedades]
+    while (next.length <= index) next.push('')
+    next[index] = text
+    setOtrasEnfermedades(next)
+  }
+
+  function addOtrasEnfermedadLine() {
+    setOtrasEnfermedades([...form.otrasEnfermedades, ''])
+  }
+
+  function removeOtrasEnfermedadLine(index: number) {
+    const next = form.otrasEnfermedades.filter((_, i) => i !== index)
+    setOtrasEnfermedades(next.length > 0 ? next : [''])
   }
 
   function setField(section: SectionKey, field: string, rawValue: string) {
@@ -512,19 +579,7 @@ export function AntecedentesCaptura({
     // literales SI/NEGADO. Construimos el payload como `Record<string, unknown>`
     // y dejamos que la validación Zod del action (`ExamenMedicoCompletoSchema`)
     // haga el enforcement final — mismo patrón que IMPL-20260809-01 v1.
-    const payload: AntecedentesCaptura = {
-      datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
-      historia_laboral: { ...nextForm.historia_laboral },
-      heredo_familiares: { ...nextForm.heredo_familiares },
-      no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
-      patologicos: { ...nextForm.patologicos },
-    } as unknown as AntecedentesCaptura
-    for (const exp of HISTORIA_LABORAL_EXPOSICIONES) {
-      const v = nextForm.historia_laboral[exp.key]
-      ;(payload.historia_laboral as Record<string, unknown>)[exp.key] =
-        v === 'true' || v === 'SI'
-    }
-    onChange(payload)
+    onChange(emitAntecedentesPayload(nextForm))
   }
 
   const provenanceSource = initialProvenance?.source ?? 'none'
@@ -971,7 +1026,48 @@ export function AntecedentesCaptura({
                     </select>
                     {entry.estado === 'SI' && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
-                        {needsEspecificacion && (
+                        {needsEspecificacion && item.field === 'otras' ? (
+                          <div className="space-y-2">
+                            <p className="text-[9px] text-slate-500">
+                              Indique cada enfermedad u otra condición no listada arriba.
+                            </p>
+                            {(form.otrasEnfermedades.length > 0
+                              ? form.otrasEnfermedades
+                              : ['']
+                            ).map((line, idx) => (
+                              <div key={idx} className="flex gap-1 items-center">
+                                <ClinicalFreeTextInput
+                                  type="text"
+                                  value={line}
+                                  onChange={text => updateOtrasEnfermedadLine(idx, text)}
+                                  disabled={readonly}
+                                  placeholder={patologiaEspecificacionPlaceholder('otras')}
+                                  maxLength={500}
+                                  className="flex-1 text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                                />
+                                {!readonly && form.otrasEnfermedades.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeOtrasEnfermedadLine(idx)}
+                                    className="text-[10px] text-rose-600 font-bold px-1 shrink-0"
+                                    aria-label="Quitar enfermedad"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            {!readonly && (
+                              <button
+                                type="button"
+                                onClick={addOtrasEnfermedadLine}
+                                className="text-[10px] font-bold text-teal-700"
+                              >
+                                + Agregar otra enfermedad
+                              </button>
+                            )}
+                          </div>
+                        ) : needsEspecificacion ? (
                           <ClinicalFreeTextInput
                             type="text"
                             value={detalle.especificacion ?? ''}
@@ -983,7 +1079,7 @@ export function AntecedentesCaptura({
                             maxLength={500}
                             className="w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                           />
-                        )}
+                        ) : null}
                         <ClinicalFreeTextInput
                           type="text"
                           value={detalle.desde_cuando}
