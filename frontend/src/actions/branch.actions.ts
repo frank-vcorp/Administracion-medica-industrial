@@ -43,6 +43,7 @@ import {
 } from '@/lib/schemas/branch'
 import type { BranchCreateInput, BranchUpdateInput } from '@/lib/schemas/branch'
 import { z } from 'zod'
+import { failureFromZodOk, zodErrorToFieldErrors } from '@/lib/save-action-errors'
 
 // --------------------------------------------------------------------------
 // Helpers de auth (locales, siguen convención de maintenance.actions.ts)
@@ -177,11 +178,7 @@ export async function createBranch(data: BranchCreateInput) {
 
   const parsed = branchCreateSchema.safeParse(data)
   if (!parsed.success) {
-    const first = parsed.error.issues[0]
-    return {
-      ok: false as const,
-      error: first?.message ?? 'Datos inválidos',
-    }
+    return failureFromZodOk(parsed.error, { summary: 'Revisa los datos de la sucursal.' })
   }
 
   const tenant = await getDefaultTenant()
@@ -222,15 +219,17 @@ export async function updateBranch(id: string, data: BranchUpdateInput) {
   if (!session) return { ok: false as const, error: 'Sin permisos' }
 
   const idParsed = branchIdSchema.safeParse(id)
-  if (!idParsed.success) return { ok: false as const, error: 'ID inválido' }
+  if (!idParsed.success) {
+    return {
+      ok: false as const,
+      error: 'ID inválido',
+      fieldErrors: zodErrorToFieldErrors(idParsed.error),
+    }
+  }
 
   const dataParsed = branchUpdateSchema.safeParse(data)
   if (!dataParsed.success) {
-    const first = dataParsed.error.issues[0]
-    return {
-      ok: false as const,
-      error: first?.message ?? 'Datos inválidos',
-    }
+    return failureFromZodOk(dataParsed.error, { summary: 'Revisa los datos de la sucursal.' })
   }
 
   // H5 — GEMINI AUD-20260730-01: validar existencia antes de update para

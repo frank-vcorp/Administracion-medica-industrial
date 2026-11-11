@@ -51,6 +51,16 @@ import {
 } from '@/lib/appointment-capacity'
 import { applySentenceCase } from '@/lib/text/sentence-case'
 import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
+import {
+  createAppointmentInputSchema,
+  rescheduleAppointmentBodySchema,
+} from '@/lib/schemas/appointment-create'
+import {
+  failureFromFieldErrors,
+  failureFromZod,
+  safeActionTechnicalDetail,
+  type SaveActionFailure,
+} from '@/lib/save-action-errors'
 import { findManyAppointmentsResilient } from '@/lib/prisma/appointment-find-many'
 
 /**
@@ -71,52 +81,69 @@ export async function createAppointment(data: {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      throw new Error('Usuario no autenticado')
+      return {
+        success: false,
+        error: 'Tu sesión expiró. Vuelve a iniciar sesión.',
+        fieldErrors: { _form: ['Usuario no autenticado'] },
+      } satisfies SaveActionFailure
     }
+
+    const parsedInput = createAppointmentInputSchema.safeParse(data)
+    if (!parsedInput.success) {
+      return failureFromZod(parsedInput.error, {
+        summary: 'Completa los datos obligatorios para agendar la cita.',
+      })
+    }
+
+    const input = parsedInput.data
 
     // IMPL-20260623-03 (GAP-4): Bloquear creación de citas para clientes
     // DESHABILITADOS o PENDIENTE_REVISION. Citas previas persisten.
-    if (data.companyId) {
-      const operativa = await isCompanyOperativa(data.companyId)
+    if (input.companyId) {
+      const operativa = await isCompanyOperativa(input.companyId)
       if (!operativa) {
-        return {
-          success: false,
-          error: 'CLIENTE_DESHABILITADO',
-        }
+        return failureFromFieldErrors(
+          { companyId: ['Este cliente está deshabilitado o pendiente de revisión'] },
+          'No se pueden agendar citas nuevas para este cliente.',
+          'CLIENTE_DESHABILITADO',
+        )
       }
     }
 
     // Convertir scheduledAt a Date si es string
-    const scheduledDate = typeof data.scheduledAt === 'string'
-      ? new Date(data.scheduledAt)
-      : data.scheduledAt
+    const scheduledDate = typeof input.scheduledAt === 'string'
+      ? new Date(input.scheduledAt)
+      : input.scheduledAt
 
     const normalizedNotes =
-      data.notes != null && data.notes.trim().length > 0
-        ? applySentenceCase(data.notes.trim())
+      input.notes != null && input.notes.trim().length > 0
+        ? applySentenceCase(input.notes.trim())
         : undefined
 
     if (Number.isNaN(scheduledDate.getTime())) {
-      return { success: false, error: 'Fecha u hora inválida' }
+      return failureFromFieldErrors(
+        { scheduledAt: ['Fecha u hora inválida'] },
+        'Revisa la fecha y hora de la cita.',
+      )
     }
     if (isAppointmentScheduleInPast(scheduledDate)) {
-      return {
-        success: false,
-        error: appointmentCapacityUserMessage({
-          ok: false,
-          count: 0,
-          capacity: 0,
-          reason: 'APPOINTMENT_IN_PAST',
-        }),
-      }
+      const msg = appointmentCapacityUserMessage({
+        ok: false,
+        count: 0,
+        capacity: 0,
+        reason: 'APPOINTMENT_IN_PAST',
+      })
+      return failureFromFieldErrors(
+        { scheduledAt: [msg] },
+        msg,
+        'APPOINTMENT_IN_PAST',
+      )
     }
 
-    const capacityCheck = await checkBranchHourCapacity(prisma, data.branchId, scheduledDate)
+    const capacityCheck = await checkBranchHourCapacity(prisma, input.branchId, scheduledDate)
     if (!capacityCheck.ok) {
-      return {
-        success: false,
-        error: appointmentCapacityUserMessage(capacityCheck),
-      }
+      const msg = appointmentCapacityUserMessage(capacityCheck)
+      return failureFromFieldErrors({ scheduledAt: [msg] }, msg, capacityCheck.reason)
     }
 
     // Generar ID de Papeleta automático (EXP-YYYYNNN)
@@ -126,7 +153,7 @@ export async function createAppointment(data: {
     // Almacenamos DataURL (Base64) directamente en DB para evitar hosting externo
     const qrData = JSON.stringify({
        exp: expedientId,
-       uid: data.workerId,
+       uid: input.workerId,
        date: scheduledDate.toISOString()
     });
     
@@ -141,10 +168,10 @@ export async function createAppointment(data: {
     });
 
     // Perfil clínico: explícito en la cita, o heredado del paciente
-    let resolvedServiceProfileId = data.serviceProfileId || null
+    let resolvedServiceProfileId = input.serviceProfileId || null
     if (!resolvedServiceProfileId) {
       const workerProfile = await prisma.worker.findUnique({
-        where: { id: data.workerId },
+        where: { id: input.workerId },
         select: { medicalProfileId: true },
       })
       resolvedServiceProfileId = workerProfile?.medicalProfileId ?? null
@@ -153,20 +180,20 @@ export async function createAppointment(data: {
     if (resolvedServiceProfileId) {
       const profileOk = await isMedicalProfileAssignableToCompany(
         resolvedServiceProfileId,
-        data.companyId,
+        input.companyId,
       )
       if (!profileOk) {
-        return {
-          success: false,
-          error: 'El perfil médico no corresponde a la empresa ni a Público General.',
-        }
+        return failureFromFieldErrors(
+          { serviceProfileId: ['El perfil no es válido para la empresa seleccionada'] },
+          'El perfil médico no corresponde a la empresa ni a Público General.',
+        )
       }
     }
 
     // IMPL-20260519-10: QR operativo mínimo — payload AMI|NOMBRE=...|FN=YYYY-MM-DD
     // Independiente del QR de check-in; orientado a recaptura en estaciones
     const workerForQr = await prisma.worker.findUnique({
-      where: { id: data.workerId },
+      where: { id: input.workerId },
       select: { firstName: true, lastName: true, dob: true }
     })
     const qrOperativoPayload = workerForQr
@@ -181,12 +208,12 @@ export async function createAppointment(data: {
 
     const appointment = await prisma.appointment.create({
       data: {
-        workerId: data.workerId,
-        companyId: data.companyId,
-        branchId: data.branchId,
+        workerId: input.workerId,
+        companyId: input.companyId,
+        branchId: input.branchId,
         scheduledAt: scheduledDate,
         notes: normalizedNotes ?? null,
-        source: data.source || 'SUCURSAL',
+        source: input.source || 'SUCURSAL',
         status: 'SCHEDULED',
         expedientId,
         qrCode,
@@ -208,11 +235,11 @@ export async function createAppointment(data: {
 
     // Registrar en auditoría
     await logAudit('CREATE', 'Appointment', appointment.id, {
-      workerId: data.workerId,
-      companyId: data.companyId,
-      branchId: data.branchId,
+      workerId: input.workerId,
+      companyId: input.companyId,
+      branchId: input.branchId,
       scheduledAt: scheduledDate,
-      source: data.source || 'SUCURSAL'
+      source: input.source || 'SUCURSAL'
     })
 
     revalidatePath('/appointments')
@@ -226,10 +253,14 @@ export async function createAppointment(data: {
       whatsApp,
     }
   } catch (error) {
-    console.error('[CREATE APPOINTMENT ERROR]:', error)
+    console.error(
+      '[CREATE APPOINTMENT ERROR]:',
+      error instanceof Error ? error.message : 'unknown',
+    )
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Error al crear cita',
+      error: 'No se pudo crear la cita. Intenta de nuevo o contacta a soporte.',
+      technicalDetail: safeActionTechnicalDetail(error),
     }
   }
 }
@@ -338,19 +369,33 @@ export async function rescheduleAppointment(
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
-      return { success: false, error: 'Usuario no autenticado' }
+      return failureFromFieldErrors(
+        { _form: ['Usuario no autenticado'] },
+        'Tu sesión expiró. Vuelve a iniciar sesión.',
+      )
     }
 
-    if (!data.date?.trim() || !data.time?.trim()) {
-      return { success: false, error: 'Fecha y hora son obligatorias' }
+    const bodyParsed = rescheduleAppointmentBodySchema.safeParse(data)
+    if (!bodyParsed.success) {
+      return failureFromZod(bodyParsed.error, { summary: 'Indica la nueva fecha y hora.' })
     }
+    const { date, time } = bodyParsed.data
 
-    const scheduledAt = parseAppointmentLocalDateTime(data.date, data.time)
+    const scheduledAt = parseAppointmentLocalDateTime(date, time)
     if (Number.isNaN(scheduledAt.getTime())) {
-      return { success: false, error: 'Fecha u hora inválida' }
+      return failureFromFieldErrors(
+        { date: ['Fecha u hora inválida'], time: ['Fecha u hora inválida'] },
+        'Revisa la fecha y hora.',
+      )
     }
     if (isAppointmentScheduleInPast(scheduledAt)) {
-      return { success: false, error: 'APPOINTMENT_IN_PAST' }
+      const msg = appointmentCapacityUserMessage({
+        ok: false,
+        count: 0,
+        capacity: 0,
+        reason: 'APPOINTMENT_IN_PAST',
+      })
+      return failureFromFieldErrors({ date: [msg], time: [msg] }, msg, 'APPOINTMENT_IN_PAST')
     }
 
     const existing = await prisma.appointment.findUnique({
@@ -1133,7 +1178,7 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
-      return { success: false, error: 'No autenticado' }
+      return failureFromFieldErrors({ _form: ['No autenticado'] }, 'Tu sesión expiró. Vuelve a iniciar sesión.')
     }
 
     const {
@@ -1152,25 +1197,40 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
     } = input
 
     if (!informedConsentSignatureDataUrl?.trim()) {
-      return { success: false, error: 'La firma del consentimiento informado es obligatoria.' }
+      return failureFromFieldErrors(
+        { informedConsentSignatureDataUrl: ['La firma del consentimiento informado es obligatoria'] },
+        'Debes firmar el consentimiento informado antes de continuar.',
+      )
     }
 
     // ── Validaciones de frontera ─────────────────────────────────────────────
     if (evidenceMode === 'EXCEPTION_WITHOUT_CAPTURE') {
       if (!exceptionReason) {
-        return { success: false, error: 'El motivo de excepción es obligatorio cuando no hay captura normal.' }
+        return failureFromFieldErrors(
+          { exceptionReason: ['Selecciona el motivo de la excepción'] },
+          'El motivo de excepción es obligatorio cuando no hay captura normal.',
+        )
       }
       if (!exceptionComment || exceptionComment.trim().length < 5) {
-        return { success: false, error: 'El comentario operativo es obligatorio y debe tener al menos 5 caracteres.' }
+        return failureFromFieldErrors(
+          { exceptionComment: ['Escribe al menos 5 caracteres de comentario operativo'] },
+          'El comentario operativo es obligatorio y debe tener al menos 5 caracteres.',
+        )
       }
     }
 
     if (evidenceMode === 'NEW_CAPTURE' && !frontFileDataUrl) {
-      return { success: false, error: 'Se requiere la evidencia frontal del documento para captura nueva.' }
+      return failureFromFieldErrors(
+        { frontFileDataUrl: ['Captura o sube la imagen frontal del documento'] },
+        'Se requiere la evidencia frontal del documento para captura nueva.',
+      )
     }
 
     if (evidenceMode === 'REUSED_PREVIOUS' && !reuseLastEvidence) {
-      return { success: false, error: 'Debes confirmar la reutilización de la última evidencia válida.' }
+      return failureFromFieldErrors(
+        { reuseLastEvidence: ['Confirma que deseas reutilizar la evidencia anterior'] },
+        'Debes confirmar la reutilización de la última evidencia válida.',
+      )
     }
 
     // ── Cargar snapshot del trabajador (última identidad) ─────────────────────
@@ -1346,10 +1406,14 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
       corroborationResult,
     }
   } catch (error) {
-    console.error('[CLOSE_RECEPTION_CORROBORATION ERROR]:', error)
+    console.error(
+      '[CLOSE_RECEPTION_CORROBORATION ERROR]:',
+      error instanceof Error ? error.message : 'unknown',
+    )
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Error al cerrar la recepción.',
+      error: 'No se pudo cerrar la recepción. Intenta de nuevo o contacta a soporte.',
+      technicalDetail: safeActionTechnicalDetail(error),
     }
   }
 }

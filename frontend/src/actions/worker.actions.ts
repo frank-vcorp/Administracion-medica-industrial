@@ -14,6 +14,12 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
 import { applySentenceCase } from '@/lib/text/sentence-case'
+import { workerFieldsFromFormData, workerFormFieldsSchema } from '@/lib/schemas/worker-save'
+import {
+  failureFromFieldErrors,
+  failureFromZod,
+  safeActionTechnicalDetail,
+} from '@/lib/save-action-errors'
 
 function normalizeStoredPersonName(raw: string): string {
     return applySentenceCase(raw.trim())
@@ -204,16 +210,31 @@ async function validateMedicalProfileForCompany(
 
 export async function createWorker(formData: FormData) {
     try {
-        const firstName = normalizeStoredPersonName(formData.get('firstName') as string)
-        const lastName = normalizeStoredPersonName(formData.get('lastName') as string)
-        const companyId = formData.get('companyId') as string
-
-        if (!firstName || !lastName) {
-            return { success: false, error: 'Nombre y apellidos son obligatorios' }
+        const fieldsParsed = workerFormFieldsSchema.safeParse(workerFieldsFromFormData(formData))
+        if (!fieldsParsed.success) {
+            return {
+                ...failureFromZod(fieldsParsed.error, {
+                    summary: 'Revisa nombre, apellidos y datos obligatorios del trabajador.',
+                }),
+                status: 'error' as const,
+            }
         }
 
-        const dob = formData.get('dob') as string
-        const gender = formData.get('gender') as string
+        const {
+            firstName,
+            lastName,
+            companyId: rawCompanyId,
+            branchId: parsedBranchId,
+            medicalProfileId: rawMedicalProfileId,
+            dob,
+            gender,
+            nationalId,
+            email,
+            phone,
+            publicGeneralAlta,
+        } = fieldsParsed.data
+
+        const companyId = rawCompanyId?.trim() || ''
 
         // IMPL-20260318-08: Detección de duplicados fuerte por nombre + apellido + fecha de nacimiento
         // Coincidencia: normalización minúsculas + trim para reducir falsos negativos por tipeo
@@ -245,13 +266,18 @@ export async function createWorker(formData: FormData) {
 
         const universalId = generateUniversalId({ firstName, lastName, dob, gender })
 
-        const medicalProfileId = formData.get('medicalProfileId') as string
-        const branchIdRaw = formData.get('branchId') as string | null
-        const branchId = branchIdRaw?.trim() || null
-        const isPublicGeneralAlta = formData.get('publicGeneralAlta') === 'true'
+        const medicalProfileId = rawMedicalProfileId?.trim() || ''
+        const branchId = parsedBranchId?.trim() || null
+        const isPublicGeneralAlta = publicGeneralAlta === 'true'
 
         if (isPublicGeneralAlta && !branchId) {
-            return { success: false, error: 'La sucursal es obligatoria para público general' }
+            return {
+                ...failureFromFieldErrors(
+                    { branchId: ['Selecciona la sucursal de atención'] },
+                    'La sucursal es obligatoria para público general',
+                ),
+                status: 'error' as const,
+            }
         }
 
         if (branchId) {
@@ -260,14 +286,26 @@ export async function createWorker(formData: FormData) {
                 select: { id: true },
             })
             if (!branch) {
-                return { success: false, error: 'La sucursal seleccionada no es válida' }
+                return {
+                    ...failureFromFieldErrors(
+                        { branchId: ['La sucursal seleccionada no existe'] },
+                        'La sucursal seleccionada no es válida',
+                    ),
+                    status: 'error' as const,
+                }
             }
         }
 
         if (companyId && medicalProfileId) {
             const valid = await validateMedicalProfileForCompany(medicalProfileId, companyId)
             if (!valid) {
-                return { success: false, error: 'El perfil médico no corresponde a la empresa seleccionada' }
+                return {
+                    ...failureFromFieldErrors(
+                        { medicalProfileId: ['Este perfil no aplica a la empresa'] },
+                        'El perfil médico no corresponde a la empresa seleccionada',
+                    ),
+                    status: 'error' as const,
+                }
             }
         }
 
@@ -277,9 +315,9 @@ export async function createWorker(formData: FormData) {
                 lastName,
                 universalId,
                 dob: dob ? new Date(dob) : null,
-                nationalId: formData.get('nationalId') as string,
-                email: formData.get('email') as string,
-                phone: formData.get('phone') as string,
+                nationalId: nationalId || null,
+                email: email || null,
+                phone: phone || null,
                 companyId: companyId || null,
                 medicalProfileId: medicalProfileId || null,
                 branchId,
@@ -304,8 +342,13 @@ export async function createWorker(formData: FormData) {
         }
     } catch (e: unknown) {
         const error = e as Error
-        console.error('Error creating worker:', error)
-        return { success: false, status: 'error', error: error.message || 'Error al crear el trabajador' }
+        console.error('[createWorker]', error.message || 'unknown')
+        return {
+            success: false,
+            status: 'error',
+            error: 'No se pudo crear el trabajador. Intenta de nuevo.',
+            technicalDetail: safeActionTechnicalDetail(e),
+        }
     }
 }
 
@@ -315,21 +358,33 @@ export async function createWorker(formData: FormData) {
  */
 export async function updateWorker(id: string, formData: FormData) {
     try {
-        const firstName = normalizeStoredPersonName(formData.get('firstName') as string)
-        const lastName = normalizeStoredPersonName(formData.get('lastName') as string)
-
-        if (!firstName || !lastName) {
-            return { success: false, error: 'Nombre y apellidos son obligatorios' }
+        const fieldsParsed = workerFormFieldsSchema.safeParse(workerFieldsFromFormData(formData))
+        if (!fieldsParsed.success) {
+            return failureFromZod(fieldsParsed.error, {
+                summary: 'Revisa nombre, apellidos y datos obligatorios del trabajador.',
+            })
         }
 
-        const companyId = formData.get('companyId') as string
-        const medicalProfileId = formData.get('medicalProfileId') as string
-        const dob = formData.get('dob') as string
+        const {
+            firstName,
+            lastName,
+            companyId: rawCompanyId,
+            medicalProfileId: rawMedicalProfileId,
+            dob,
+            email,
+            phone,
+        } = fieldsParsed.data
+
+        const companyId = rawCompanyId?.trim() || ''
+        const medicalProfileId = rawMedicalProfileId?.trim() || ''
 
         if (companyId && medicalProfileId) {
             const valid = await validateMedicalProfileForCompany(medicalProfileId, companyId)
             if (!valid) {
-                return { success: false, error: 'El perfil médico no corresponde a la empresa seleccionada' }
+                return failureFromFieldErrors(
+                    { medicalProfileId: ['Este perfil no aplica a la empresa'] },
+                    'El perfil médico no corresponde a la empresa seleccionada',
+                )
             }
         }
 
@@ -339,8 +394,8 @@ export async function updateWorker(id: string, formData: FormData) {
                 firstName,
                 lastName,
                 dob: dob ? new Date(dob) : null,
-                email: (formData.get('email') as string) || null,
-                phone: (formData.get('phone') as string) || null,
+                email: email || null,
+                phone: phone || null,
                 companyId: companyId || null,
                 medicalProfileId: medicalProfileId || null,
             }
@@ -350,8 +405,12 @@ export async function updateWorker(id: string, formData: FormData) {
         return { success: true }
     } catch (e: unknown) {
         const error = e as Error
-        console.error('Error updating worker:', error)
-        return { success: false, error: error.message || 'Error al actualizar el trabajador' }
+        console.error('[updateWorker]', error.message || 'unknown')
+        return {
+            success: false,
+            error: 'No se pudo actualizar el trabajador. Intenta de nuevo.',
+            technicalDetail: safeActionTechnicalDetail(e),
+        }
     }
 }
 

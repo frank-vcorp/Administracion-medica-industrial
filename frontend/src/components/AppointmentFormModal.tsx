@@ -14,6 +14,8 @@ import WorkerFormModal, { type WorkerCreatedPayload } from '@/components/WorkerF
 import { parseAppointmentLocalDateTime, todayAgendaDateString } from '@/lib/appointment-scheduling'
 import AppointmentWhatsAppSuccess from '@/components/AppointmentWhatsAppSuccess'
 import type { AppointmentPassWhatsAppResult } from '@/actions/appointment-pass-whatsapp.actions'
+import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
+import { mapSaveActionFailure, mapUserFacingError, type UserFacingError } from '@/lib/user-facing-error'
 
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 
@@ -73,7 +75,7 @@ export default function AppointmentFormModal({
 }) {
     const [isOpen, setIsOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
-    const [error, setError] = useState<string | null>(null)
+    const [saveError, setSaveError] = useState<UserFacingError | null>(null)
     const [successData, setSuccessData] = useState<AppointmentResult | null>(null)
     const [companies, setCompanies] = useState<Company[]>([])
     const [workers, setWorkers] = useState<Worker[]>([])
@@ -110,7 +112,7 @@ export default function AppointmentFormModal({
         setAppointmentTime('08:00')
         setAppointmentSource('SUCURSAL')
         setAppointmentNotes('')
-        setError(null)
+        setSaveError(null)
     }
 
     const companySpecificProfiles = useMemo(
@@ -197,7 +199,7 @@ export default function AppointmentFormModal({
                 setPreselectedWorkerId(null)
             } catch (err) {
                 console.error("Error cargando datos:", err)
-                setError("Error al cargar datos del formulario")
+                setSaveError(mapUserFacingError({ message: 'Error al cargar datos del formulario' }))
             }
         }
         
@@ -295,7 +297,7 @@ export default function AppointmentFormModal({
     function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault()
         startTransition(async () => {
-            setError(null)
+            setSaveError(null)
 
             const workerId = selectedWorker?.id ?? ''
             const branchId = selectedBranchId
@@ -306,12 +308,26 @@ export default function AppointmentFormModal({
             const serviceProfileId = selectedProfileId || null
 
             if (!workerId || !branchId || !date || !time) {
-                setError('Todos los campos son obligatorios')
+                setSaveError(
+                    mapUserFacingError({
+                        message: 'Completa trabajador, sucursal, fecha y hora.',
+                        fieldErrors: {
+                            ...(!workerId ? { workerId: ['Selecciona un trabajador'] } : {}),
+                            ...(!branchId ? { branchId: ['Selecciona una sucursal'] } : {}),
+                            ...(!date || !time ? { scheduledAt: ['Indica fecha y hora'] } : {}),
+                        },
+                    }),
+                )
                 return
             }
 
             if (!selectedWorker && !workers.find(w => w.id === workerId)) {
-                setError('Selecciona un trabajador de la búsqueda')
+                setSaveError(
+                    mapUserFacingError({
+                        message: 'Selecciona un trabajador de la búsqueda',
+                        fieldErrors: { workerId: ['Selecciona un trabajador de la lista'] },
+                    }),
+                )
                 return
             }
 
@@ -319,7 +335,12 @@ export default function AppointmentFormModal({
             const currentWorker = workers.find(w => w.id === workerId)
             const companyId = currentWorker?.companyId || selectedCompanyId
             if (!companyId) {
-                setError('Selecciona una empresa antes de agendar la cita')
+                setSaveError(
+                    mapUserFacingError({
+                        message: 'Selecciona una empresa antes de agendar la cita',
+                        fieldErrors: { companyId: ['Selecciona una empresa'] },
+                    }),
+                )
                 return
             }
 
@@ -344,11 +365,23 @@ export default function AppointmentFormModal({
                     }
                     router.refresh()
                     onSuccess?.({ branchId, date })
+                } else if ('error' in result && result.error) {
+                    setSaveError(
+                        mapSaveActionFailure(
+                            {
+                                error: result.error,
+                                fieldErrors: 'fieldErrors' in result ? result.fieldErrors : undefined,
+                                technicalDetail:
+                                    'technicalDetail' in result ? result.technicalDetail : undefined,
+                            },
+                            { context: 'createAppointment' },
+                        ),
+                    )
                 } else {
-                    setError(result.error || 'Error al agendar la cita')
+                    setSaveError(mapUserFacingError({ message: 'Error al agendar la cita' }))
                 }
-            } catch {
-                setError('Error de conexión')
+            } catch (err) {
+                setSaveError(mapUserFacingError({ error: err, message: 'Error de conexión' }))
             }
         })
     }
@@ -722,7 +755,12 @@ export default function AppointmentFormModal({
                                 />
                             </div>
 
-                            {error && <p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-lg border border-red-100 animate-shake">⚠️ {error}</p>}
+                            {saveError && (
+                                <UserFacingErrorCallout
+                                    mapped={saveError}
+                                    className="border-red-200 bg-red-50/90 animate-shake"
+                                />
+                            )}
 
                             <button
                                 type="submit"
