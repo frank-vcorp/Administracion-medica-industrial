@@ -208,6 +208,42 @@ export function heredoFamiliaresEspecifiqueKey(field: string): string {
   return `${field}_especifique`
 }
 
+/** Valores legacy del select cerrado de `mentales` (NEGADO/SI/NO APLICA). */
+export const HEREDOFAMILIARES_MENTALES_LEGACY = ['NEGADO', 'SI', 'NO APLICA'] as const
+
+/** Texto del campo abierto «Trastornos mentales» (AHF) para edición en UI. */
+export function readMentalesCampoAbierto(data: Record<string, unknown>): string {
+  const esp = String(data.mentales_especifique ?? '').trim()
+  if (esp) return esp
+  const raw = String(data.mentales ?? '').trim()
+  if (raw === 'SI' || raw === 'NEGADO' || raw === '') return ''
+  if (raw === 'NO APLICA') return 'NO APLICA'
+  return raw
+}
+
+/** Persistencia al editar «Trastornos mentales» como campo abierto (compat legacy). */
+export function writeMentalesCampoAbierto(text: string): {
+  mentales: string
+  mentales_especifique: string
+} {
+  const t = text.trim()
+  if (!t) return { mentales: 'NEGADO', mentales_especifique: '' }
+  if (t.toUpperCase() === 'NO APLICA') return { mentales: 'NO APLICA', mentales_especifique: '' }
+  return { mentales: t, mentales_especifique: '' }
+}
+
+/** PDF / display para `mentales` (legacy SI+especifique o texto libre). */
+export function formatMentalesDisplay(data: Record<string, unknown>): string {
+  const raw = String(data.mentales ?? '').trim()
+  const esp = String(data.mentales_especifique ?? '').trim()
+  if (raw === 'SI' && esp) return `SI (${esp})`
+  if (esp) return esp
+  if (raw === 'SI') return 'SI'
+  if (raw === 'NO APLICA') return 'NO APLICA'
+  if (raw === 'NEGADO' || !raw) return 'NEGADO'
+  return raw
+}
+
 /** Formato PDF/display para heredo-familiares (multiselect o mentales SI). */
 export function formatHeredoFamiliaresValor(
   value: string | null | undefined,
@@ -236,6 +272,7 @@ export function readHeredoFamiliaresDisplay(
   data: Record<string, unknown>,
   field: string,
 ): string {
+  if (field === 'mentales') return formatMentalesDisplay(data)
   return formatHeredoFamiliaresValor(
     String(data[field] ?? ''),
     String(data[heredoFamiliaresEspecifiqueKey(field)] ?? ''),

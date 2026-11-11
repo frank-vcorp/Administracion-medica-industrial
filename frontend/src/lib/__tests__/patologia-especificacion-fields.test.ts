@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   patologiaEspecificacionPlaceholder,
+  patologiaEspecificacionSiempreVisible,
   patologiaRequiresEspecificacion,
 } from '@/lib/patologia-especificacion-fields'
+
+describe('patologiaEspecificacionSiempreVisible', () => {
+  it('exantematicas tiene campo abierto siempre visible', () => {
+    expect(patologiaEspecificacionSiempreVisible('exantematicas')).toBe(true)
+    expect(patologiaEspecificacionSiempreVisible('diabetes')).toBe(false)
+  })
+})
 
 describe('patologiaRequiresEspecificacion', () => {
   it('requiere especificación en exantemáticas, psiquiátricas y otras', () => {

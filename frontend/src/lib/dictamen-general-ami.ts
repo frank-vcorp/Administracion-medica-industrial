@@ -310,7 +310,7 @@ export async function buildDictamenGeneralAmiConsolidado(
       renales: readHeredoFamiliaresDisplay(ahf, 'renales') || null,
       asma: readHeredoFamiliaresDisplay(ahf, 'asma') || null,
       cancer: readHeredoFamiliaresDisplay(ahf, 'cancer') || null,
-      mentales: s(ahf.mentales) || null,
+      mentales: readHeredoFamiliaresDisplay(ahf, 'mentales') || null,
       otras: readHeredoFamiliaresDisplay(ahf, 'otras') || null,
     },
     apnp: {

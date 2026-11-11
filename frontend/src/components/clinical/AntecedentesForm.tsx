@@ -42,7 +42,8 @@ import {
   HISTORIA_LABORAL_RIESGOS_TRABAJO,
   HEREDOFAMILIARES_DESCRIPCIONES,
   emptyHeredoFamiliaresRecord,
-  heredoFamiliaresEspecifiqueKey,
+  readMentalesCampoAbierto,
+  writeMentalesCampoAbierto,
   NO_PATOLOGICOS_DESCRIPCIONES,
   PATOLOGICOS_DESCRIPCIONES,
   TURNO_OPTIONS,
@@ -64,12 +65,10 @@ import {
 import { HeredofamiliaresRelacionMultiSelect } from '@/components/clinical/HeredofamiliaresRelacionMultiSelect'
 import {
   patologiaEspecificacionPlaceholder,
+  patologiaEspecificacionSiempreVisible,
   patologiaRequiresEspecificacion,
 } from '@/lib/patologia-especificacion-fields'
 import { hasDetalleContent } from '@/lib/patologicos-accordion'
-import {
-  HEREDOFAMILIARES_MENTALES_VALUES,
-} from '@/schemas/clinical/exam.schema'
 import {
   GRUPO_RH_VALUES,
   type DetalleTriple,
@@ -245,6 +244,11 @@ export function AntecedentesForm({
 
   const handleHeredofamiliaresChange = (field: string, value: string) => {
     setHeredofamiliares(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleMentalesCampoAbierto = (text: string) => {
+    const w = writeMentalesCampoAbierto(text)
+    setHeredofamiliares(prev => ({ ...prev, ...w }))
   }
 
   /**
@@ -578,6 +582,30 @@ export function AntecedentesForm({
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
                         </select>
+                        {patologiaEspecificacionSiempreVisible(item.field) && (
+                          <div className="mt-2">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Especificación (campo abierto)
+                            </label>
+                            <ClinicalFreeTextInput
+                              type="text"
+                              value={detalle.especificacion ?? ''}
+                              onChange={especificacion => {
+                                const nextDetalle = { ...detalle, especificacion }
+                                const patch: Partial<PatologiaEntry> = {
+                                  detalle: nextDetalle,
+                                }
+                                if (especificacion.trim() && entry.estado !== 'SI') {
+                                  patch.estado = 'SI'
+                                }
+                                handlePatologiaPatch(item.field, patch)
+                              }}
+                              placeholder={patologiaEspecificacionPlaceholder(item.field)}
+                              maxLength={500}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        )}
                         {showSummary && (
                           // IMPL-20260817-06 — resumen colapsado, click expande.
                           <button
@@ -608,7 +636,8 @@ export function AntecedentesForm({
                         )}
                         {showInputs && (
                           <div className="mt-3 space-y-2 p-3 bg-white border border-gray-200 rounded-lg">
-                            {patologiaRequiresEspecificacion(item.field) && (
+                            {patologiaRequiresEspecificacion(item.field)
+                              && !patologiaEspecificacionSiempreVisible(item.field) && (
                               <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">
                                   Especificación
@@ -698,14 +727,8 @@ export function AntecedentesForm({
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 {HEREDOFAMILIARES_DESCRIPCIONES.map((item) => {
-                  // IMPL-20260817-01-C2: 7 campos con catálogo ZIN de 8 opciones
-                  // (NEGADOS/PADRE/MADRE/AMBOS/HERMANOS/AB PATERNO/AB MATERNO/OTROS),
-                  // `mentales` con SI/NO/NO APLICA, `otras` con combo + input "Especifique"
-                  // condicional cuando value === 'OTROS'. Ver SPEC §4.4.
                   const isMentales = item.field === 'mentales'
                   const currentValue = heredofamiliares[item.field as keyof typeof heredofamiliares] ?? ''
-                  const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-                  const showEspecifiqueMentales = isMentales && currentValue === 'SI'
                   return (
                     <div key={item.field}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -713,30 +736,19 @@ export function AntecedentesForm({
                       </label>
                       <p className="text-xs text-gray-500 mb-2">{item.help}</p>
                       {isMentales ? (
-                        <select
-                          value={currentValue}
-                          onChange={(e) => handleHeredofamiliaresChange(item.field, e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="">— Seleccionar —</option>
-                          {HEREDOFAMILIARES_MENTALES_VALUES.map(v => (
-                            <option key={v} value={v}>{v}</option>
-                          ))}
-                        </select>
+                        <ClinicalFreeTextInput
+                          type="text"
+                          value={readMentalesCampoAbierto(heredofamiliares)}
+                          onChange={handleMentalesCampoAbierto}
+                          placeholder="Campo abierto (ej: depresión materna, esquizofrenia paterna; vacío = negado)"
+                          maxLength={500}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        />
                       ) : (
                         <HeredofamiliaresRelacionMultiSelect
                           value={currentValue}
                           onChange={(next) => handleHeredofamiliaresChange(item.field, next)}
                           itemClassName="flex items-center gap-2 text-sm text-gray-700"
-                        />
-                      )}
-                      {showEspecifiqueMentales && (
-                        <input
-                          type="text"
-                          value={heredofamiliares[especifiqueKey] ?? ''}
-                          onChange={(e) => handleHeredofamiliaresChange(especifiqueKey, e.target.value)}
-                          placeholder="Especificación (ej: depresión materna)"
-                          className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                         />
                       )}
                     </div>

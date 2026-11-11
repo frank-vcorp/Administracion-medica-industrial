@@ -56,7 +56,8 @@ import {
   HISTORIA_LABORAL_RIESGOS_TRABAJO,
   HEREDOFAMILIARES_DESCRIPCIONES,
   emptyHeredoFamiliaresRecord,
-  heredoFamiliaresEspecifiqueKey,
+  readMentalesCampoAbierto,
+  writeMentalesCampoAbierto,
   NO_PATOLOGICOS_DESCRIPCIONES,
   PATOLOGICOS_DESCRIPCIONES,
   TURNO_OPTIONS,
@@ -77,6 +78,7 @@ import {
 import { HeredofamiliaresRelacionMultiSelect } from '@/components/clinical/HeredofamiliaresRelacionMultiSelect'
 import {
   patologiaEspecificacionPlaceholder,
+  patologiaEspecificacionSiempreVisible,
   patologiaRequiresEspecificacion,
 } from '@/lib/patologia-especificacion-fields'
 import { ANTECEDENTES_SECTION_LEGEND, antecedentesTabIntro } from '@/lib/antecedentes-section-ui'
@@ -89,9 +91,6 @@ import {
   type Modulo1FieldDef,
 } from '@/lib/modulo1-capture-fields'
 import type { AntecedentesCaptura } from '@/schemas/clinical/exam.schema'
-import {
-  HEREDOFAMILIARES_MENTALES_VALUES,
-} from '@/schemas/clinical/exam.schema'
 import {
   GRUPO_RH_VALUES,
   type DetalleTriple,
@@ -492,6 +491,24 @@ export function AntecedentesCaptura({
     onChange(payload)
   }
 
+  function setMentalesCampoAbierto(text: string) {
+    const w = writeMentalesCampoAbierto(text)
+    const nextForm = {
+      ...form,
+      heredo_familiares: { ...form.heredo_familiares, ...w },
+    }
+    setForm(nextForm)
+    markModified('heredo_familiares.mentales')
+    const payload: AntecedentesCaptura = {
+      datos_personales: stripEmptyEnumKeys(nextForm.datos_personales, DP_ENUM_KEYS),
+      historia_laboral: { ...nextForm.historia_laboral },
+      heredo_familiares: { ...nextForm.heredo_familiares },
+      no_patologicos: stripEmptyEnumKeys(nextForm.no_patologicos, NP_ENUM_KEYS),
+      patologicos: { ...nextForm.patologicos },
+    } as unknown as AntecedentesCaptura
+    onChange(payload)
+  }
+
   function setField(section: SectionKey, field: string, rawValue: string) {
     const valueToStore = rawValue
     // Historia Laboral: checkboxes exponen 'true'/'false' (almacenamos como string
@@ -734,13 +751,8 @@ export function AntecedentesCaptura({
           </p>
           <div className="space-y-3 mt-2">
             {HEREDOFAMILIARES_DESCRIPCIONES.map(item => {
-              // IMPL-20260817-01-C2: 7 campos con HEREDOFAMILIARES_VALUES (8 opciones),
-              // `mentales` con HEREDOFAMILIARES_MENTALES_VALUES (3 opciones),
-              // `otras` con combo + input "Especifique" condicional. DA-6 espejo AntecedentesForm.
               const isMentales = item.field === 'mentales'
               const currentValue = form.heredo_familiares[item.field] ?? ''
-              const especifiqueKey = heredoFamiliaresEspecifiqueKey(item.field)
-              const showEspecifiqueMentales = isMentales && currentValue === 'SI'
               return (
                 <FieldRow
                   key={item.field}
@@ -749,32 +761,20 @@ export function AntecedentesCaptura({
                   modified={modified.has(`heredo_familiares.${item.field}`)}
                 >
                   {isMentales ? (
-                    <select
-                      value={currentValue}
-                      onChange={e => setField('heredo_familiares', item.field, e.target.value)}
+                    <ClinicalFreeTextInput
+                      type="text"
+                      value={readMentalesCampoAbierto(form.heredo_familiares)}
+                      onChange={setMentalesCampoAbierto}
                       disabled={readonly}
+                      placeholder="Campo abierto (ej: depresión materna; vacío = negado)"
+                      maxLength={500}
                       className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
-                    >
-                      <option value="">—</option>
-                      {HEREDOFAMILIARES_MENTALES_VALUES.map(v => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
+                    />
                   ) : (
                     <HeredofamiliaresRelacionMultiSelect
                       value={currentValue}
                       onChange={(next) => setField('heredo_familiares', item.field, next)}
                       disabled={readonly}
-                    />
-                  )}
-                  {showEspecifiqueMentales && (
-                    <input
-                      type="text"
-                      value={form.heredo_familiares[especifiqueKey] ?? ''}
-                      onChange={e => setField('heredo_familiares', especifiqueKey, e.target.value)}
-                      disabled={readonly}
-                      placeholder="Especificación (ej: depresión materna, esquizofrenia paterna)"
-                      className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
                     />
                   )}
                 </FieldRow>
@@ -949,6 +949,7 @@ export function AntecedentesCaptura({
                 const entry = form.patologicos[item.field] ?? emptyPatologia()
                 const detalle = entry.detalle ?? emptyDetalle()
                 const needsEspecificacion = patologiaRequiresEspecificacion(item.field)
+                const especSiempre = patologiaEspecificacionSiempreVisible(item.field)
                 return (
                   <div key={item.field} className="border border-slate-100 rounded-lg p-2 bg-white">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">{item.label}</label>
@@ -969,9 +970,28 @@ export function AntecedentesCaptura({
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
+                    {especSiempre && (
+                      <ClinicalFreeTextInput
+                        type="text"
+                        value={detalle.especificacion ?? ''}
+                        onChange={especificacion => {
+                          const patch: Partial<typeof entry> = {
+                            detalle: { ...detalle, especificacion },
+                          }
+                          if (especificacion.trim() && entry.estado !== 'SI') {
+                            patch.estado = 'SI'
+                          }
+                          updatePatologia(item.field, patch)
+                        }}
+                        disabled={readonly}
+                        placeholder={patologiaEspecificacionPlaceholder(item.field)}
+                        maxLength={500}
+                        className="mt-2 w-full text-[11px] px-2 py-1 border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                      />
+                    )}
                     {entry.estado === 'SI' && (
                       <div className="mt-2 space-y-2 p-2 bg-slate-50 rounded border border-slate-100">
-                        {needsEspecificacion && (
+                        {needsEspecificacion && !especSiempre && (
                           <ClinicalFreeTextInput
                             type="text"
                             value={detalle.especificacion ?? ''}
