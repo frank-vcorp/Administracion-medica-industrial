@@ -34,7 +34,10 @@ import { StudyCaptureMissingBanner } from "@/components/clinical/studies/StudyCa
 import type { StudyLeaveGuardFn } from "@/components/clinical/studies/useStudyLeaveGuard"
 import { formatStudyMissingFieldsSpanish } from "@/lib/clinical/study-required-fields"
 import { useRouter } from "next/navigation"
-import { replacePapeletaQuery } from '@/lib/clinical/papeleta-navigation'
+import {
+  replacePapeletaQuery,
+  resolveActiveEventTestAfterRefresh,
+} from '@/lib/clinical/papeleta-navigation'
 import type { StudyPresentationSchema } from "@/types/calibration"
 import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
@@ -498,12 +501,17 @@ export default function PapeletaWorkspace({
   }, [eventTests])
 
   useEffect(() => {
-    if (!initialEventTestId) return
-    const match = eventTests.find(t => t.id === initialEventTestId)
-    if (match && activeTestId !== initialEventTestId) {
-      setActiveTestIdInternal(initialEventTestId)
-    }
-  }, [initialEventTestId, eventTests, activeTestId])
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const validIds = new Set(eventTests.map((t) => t.id))
+    const synced = resolveActiveEventTestAfterRefresh(
+      params.get('eventTest'),
+      params.has('eventTest'),
+      validIds,
+    )
+    if (synced === undefined) return
+    setActiveTestIdInternal((current) => (current === synced ? current : synced))
+  }, [initialEventTestId, eventTests])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Actualizaciones optimistas del estado local
