@@ -189,7 +189,8 @@ export default function CompanyPortalAccessPanel({
           </button>
         </form>
         <p className="text-xs text-slate-500 mt-1">
-          Solo staff (admin/vendedor). No reemplaza el usuario portal real ni comparte su contraseña.
+          Abre el mismo inicio que el cliente (bienvenida y KPIs de atendidos, citados y cancelados). Solo
+          staff (admin/vendedor); no usa la contraseña del usuario portal.
         </p>
       </div>
 

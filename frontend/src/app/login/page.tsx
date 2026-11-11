@@ -8,7 +8,7 @@
 
 'use client'
 
-import { signIn } from 'next-auth/react'
+import { getSession, signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { FormEvent, useState, Suspense } from 'react'
 import { BrandLogo } from '@/components/BrandLogo'
@@ -39,7 +39,12 @@ function LoginForm() {
       if (result?.error) {
         setError(result.error)
       } else if (result?.ok) {
-        window.location.assign(result.url || callbackUrl)
+        const session = await getSession()
+        const isPortalClient = session?.user?.role === 'COMPANY_CLIENT'
+        const destination = isPortalClient
+          ? '/portal'
+          : result.url || callbackUrl
+        window.location.assign(destination)
         return
       } else {
         setError('No se pudo completar el inicio de sesión. Intenta nuevamente.')

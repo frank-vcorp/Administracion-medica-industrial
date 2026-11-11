@@ -53,7 +53,7 @@ export async function startPortalPreview(companyId: string): Promise<void> {
     companyName: company.name,
   })
 
-  redirect('/portal/events')
+  redirect('/portal')
 }
 
 export async function endPortalPreview(companyId?: string): Promise<void> {

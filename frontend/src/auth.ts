@@ -154,6 +154,7 @@ export const authOptions: NextAuthOptions = {
         if (!portalUser?.isActive || !portalUser.companyId) {
           token.portalBlocked = true
         } else {
+          token.companyId = portalUser.companyId
           const company = await prisma.company.findUnique({
             where: { id: portalUser.companyId },
             select: { portalEnabled: true, estado: true },

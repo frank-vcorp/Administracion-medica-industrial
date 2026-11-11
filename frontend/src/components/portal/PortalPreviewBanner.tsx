@@ -18,8 +18,8 @@ export default function PortalPreviewBanner({ companyId, companyName }: Props) {
     >
       <p>
         <strong>Vista previa del portal</strong> — viendo como empresa:{' '}
-        <span className="font-semibold">{companyName}</span>. Los datos son los mismos que vería
-        el cliente; las acciones de staff siguen auditadas.
+        <span className="font-semibold">{companyName}</span>. Misma bienvenida y KPIs que el cliente
+        en <a href="/portal" className="underline font-semibold">inicio portal</a>; acciones auditadas.
       </p>
       <button
         type="button"
