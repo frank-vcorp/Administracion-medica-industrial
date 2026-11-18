@@ -21,18 +21,24 @@ export async function GET(
 
   const { eventId } = await params
   const eventTestId = request.nextUrl.searchParams.get('eventTestId') ?? ''
-  const loaded = await loadCertificadoMedicoPdfInput(eventId, eventTestId)
+  const loaded = await loadCertificadoMedicoPdfInput(eventId, eventTestId, {
+    userId: session.user.id,
+  })
   if (!loaded.ok) {
     return NextResponse.json({ error: loaded.message }, { status: loaded.status })
   }
 
   const blob = await pdf(<CertificadoMedicoPDF data={loaded.data} />).toBlob()
   const arrayBuffer = await blob.arrayBuffer()
-  const filename = `CertificadoMedico-${eventTestId.slice(0, 8)}.pdf`
+  const isDraft = Boolean(loaded.data.isDraft)
+  const filename = isDraft
+    ? `CertificadoMedico-${eventTestId.slice(0, 8)}-borrador.pdf`
+    : `CertificadoMedico-${eventTestId.slice(0, 8)}.pdf`
   return new NextResponse(Buffer.from(arrayBuffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="${filename}"`,
+      ...(isDraft ? { 'Cache-Control': 'private, no-store' } : {}),
     },
   })
 }

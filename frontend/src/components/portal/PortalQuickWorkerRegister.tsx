@@ -180,6 +180,8 @@ export default function PortalQuickWorkerRegister({
               <label className="block text-xs">
                 <span className="font-bold text-slate-500">Nombre</span>
                 <input
+                  name="firstName"
+                  data-sentence-case="proper-name"
                   value={row.firstName}
                   onChange={(e) => updateRow(index, { firstName: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
@@ -189,6 +191,8 @@ export default function PortalQuickWorkerRegister({
               <label className="block text-xs">
                 <span className="font-bold text-slate-500">Apellidos</span>
                 <input
+                  name="lastName"
+                  data-sentence-case="proper-name"
                   value={row.lastName}
                   onChange={(e) => updateRow(index, { lastName: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"

@@ -1,10 +1,17 @@
 import { z } from 'zod'
-import { applySentenceCase } from '@/lib/text/sentence-case'
+import { applyProperNameCase, applySentenceCase } from '@/lib/text/sentence-case'
 
 const freeTextString = z
   .string()
   .trim()
   .transform(applySentenceCase)
+  .optional()
+  .nullable()
+
+const properNameString = z
+  .string()
+  .trim()
+  .transform(applyProperNameCase)
   .optional()
   .nullable()
 
@@ -68,7 +75,7 @@ export const FlowserveExtensionSchema = z.object({
   area: cleanString,
   alergias: cleanString,
   religion: cleanString,
-  contacto_emergencia: cleanString,
+  contacto_emergencia: properNameString,
   celular_emergencia: cleanString,
   higiene_bano: cleanString,
   higiene_aseo_bucal: cleanString,
@@ -118,8 +125,8 @@ const sodexoFuncionesSchema = z
 const sodexoNiegaSi = z.enum(['NEGADO', 'SI']).optional().nullable()
 
 const sodexoHoFilaSchema = z.object({
-  empresa_area: cleanString,
-  empresa: cleanString,
+  empresa_area: properNameString,
+  empresa: properNameString,
   ocupacion: cleanString,
   anios: cleanString,
   meses: cleanString,
@@ -164,7 +171,7 @@ export const SodexoExtensionSchema = z.object({
     .enum(['PREINGRESO', 'PERIODICA', 'RETIRO', 'REINGRESO'])
     .optional()
     .nullable(),
-  contacto_emergencia: cleanString,
+  contacto_emergencia: properNameString,
   telefono_emergencia: cleanString,
   actividades_cargo: cleanString,
   fecha_ingreso_actividades: cleanString,
@@ -180,12 +187,12 @@ export const SodexoExtensionSchema = z.object({
     .record(z.string(), sodexoHeredofamiliarFilaSchema)
     .optional()
     .nullable(),
-  lugar_nacimiento: cleanString,
+  lugar_nacimiento: properNameString,
   telefono_casa: cleanString,
   telefono_movil: cleanString,
   numero_exterior: cleanString,
   numero_interior: cleanString,
-  estado_domicilio: cleanString,
+  estado_domicilio: properNameString,
   tiempo_radicar: cleanString,
   profesion: cleanString,
   lee_y_escribe: z.enum(['SI', 'NO']).optional().nullable(),
@@ -200,7 +207,7 @@ export const SodexoExtensionSchema = z.object({
   epp_botas: z.boolean().optional().nullable(),
   epp_guantes: z.boolean().optional().nullable(),
   epp_faja: z.boolean().optional().nullable(),
-  declaracion_protesta_nombre: freeTextString,
+  declaracion_protesta_nombre: properNameString,
   /**
    * Solo impresión REG-SO-01: aclaración §5 si hace falta texto extra en el PDF.
    * No sustituye Antecedentes patológicos de la papeleta (se proyectan al PDF aparte).

@@ -637,7 +637,7 @@ function SelfRegistrationFormActive({
         </Field>
         {/* FIX-ARCH-20260624-05: Domicilio Fiscal en 3 inputs (calle req + int/ext opt) */}
         <Field label="Domicilio Fiscal (calle y número) *" hint="Calle y número exterior">
-          <input required value={form.domicilioCalle} onChange={(e) => setField('domicilioCalle', e.target.value)} className={inputClass} placeholder="Ej. Av. Industrias 1234" />
+          <input required data-sentence-case="proper-name" value={form.domicilioCalle} onChange={(e) => setField('domicilioCalle', e.target.value)} className={inputClass} placeholder="Ej. Av. Industrias 1234" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Número Interior (opcional)">
@@ -648,7 +648,7 @@ function SelfRegistrationFormActive({
           </Field>
         </div>
         <Field label="Colonia *">
-          <input required value={form.colonia} onChange={(e) => setField('colonia', e.target.value)} className={inputClass} />
+          <input required data-sentence-case="proper-name" value={form.colonia} onChange={(e) => setField('colonia', e.target.value)} className={inputClass} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Estado *">
@@ -658,11 +658,11 @@ function SelfRegistrationFormActive({
             </select>
           </Field>
           <Field label="Municipio *">
-            <input required value={form.municipio} onChange={(e) => setField('municipio', e.target.value)} className={inputClass} />
+            <input required data-sentence-case="proper-name" value={form.municipio} onChange={(e) => setField('municipio', e.target.value)} className={inputClass} />
           </Field>
         </div>
         <Field label="País *">
-          <input required value={form.pais} onChange={(e) => setField('pais', e.target.value)} className={inputClass} />
+          <input required data-sentence-case="proper-name" value={form.pais} onChange={(e) => setField('pais', e.target.value)} className={inputClass} />
         </Field>
         <Field label="CP * (5 dígitos)">
           <input required value={form.cp} onChange={(e) => setField('cp', e.target.value)} className={inputClass} maxLength={5} pattern="[0-9]{5}" />

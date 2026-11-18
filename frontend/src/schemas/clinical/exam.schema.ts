@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { applySentenceCase } from '@/lib/text/sentence-case';
+import { applyProperNameCase, applySentenceCase } from '@/lib/text/sentence-case';
 import {
   computeBmi,
   complexionFromImc,
@@ -752,8 +752,8 @@ export const ImpresiónAptitudSchema = z.object({
   aptitud: aptitudSchema.optional(),
   restricciones: freeTextOptional,
   observaciones_finales: freeTextOptional,
-  medico_evaluador: freeTextOptional,
-  medico_revisor: freeTextOptional,
+  medico_evaluador: z.string().trim().max(1000).transform(applyProperNameCase).optional(),
+  medico_revisor: z.string().trim().max(1000).transform(applyProperNameCase).optional(),
 });
 
 // ----------------------------------------------------------------------

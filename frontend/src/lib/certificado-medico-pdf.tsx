@@ -18,6 +18,18 @@ const styles = StyleSheet.create({
   title: { fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginVertical: 12, letterSpacing: 0.5 },
   paragraph: { fontSize: 10, textAlign: 'justify', marginBottom: 10 },
   sectionTitle: { fontSize: 10, fontWeight: 'bold', marginTop: 6, marginBottom: 4 },
+  draftBanner: {
+    borderWidth: 1,
+    borderColor: '#d97706',
+    backgroundColor: '#fffbeb',
+    color: '#92400e',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    marginBottom: 10,
+    fontSize: 9,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
   footer: { marginTop: 28, fontSize: 10, textAlign: 'center' },
   footerBrand: { marginTop: 16, fontSize: 10, fontWeight: 'bold', textAlign: 'center' },
 })
@@ -34,6 +46,7 @@ export interface CertificadoMedicoPdfPatient {
 
 export interface CertificadoMedicoPdfInput {
   lugarFecha: string
+  isDraft?: boolean
   patient: CertificadoMedicoPdfPatient
   certificado: CertificadoMedicoPayload
 }
@@ -57,6 +70,11 @@ export function CertificadoMedicoPDF({ data }: { data: CertificadoMedicoPdfInput
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {data.isDraft && (
+          <Text style={styles.draftBanner}>
+            VISTA PREVIA EN BORRADOR — DOCUMENTO SIN CIERRE DEFINITIVO
+          </Text>
+        )}
         <Text style={{ fontSize: 10, marginBottom: 8 }}>{lugarFecha}</Text>
         <Text style={styles.title}>CERTIFICADO MÉDICO LABORAL</Text>
 
@@ -82,14 +100,15 @@ export function CertificadoMedicoPDF({ data }: { data: CertificadoMedicoPdfInput
         <Text style={styles.paragraph}>{vitales}</Text>
 
         <Text style={styles.sectionTitle}>V. Exploración física:</Text>
-        <Text style={styles.paragraph}>{c.exploracion_fisica}</Text>
+        <Text style={styles.paragraph}>{v(c.exploracion_fisica, 'Pendiente de captura.')}</Text>
 
         <Text style={styles.sectionTitle}>
           VI. Integración diagnóstica y dictamen:
         </Text>
         <Text style={styles.paragraph}>
           Habiendo examinado al paciente, éste se encuentra con diagnóstico de{' '}
-          {c.integracion_diagnostica} {c.dictamen_laboral_texto}
+          {v(c.integracion_diagnostica, 'pendiente de integración diagnóstica')}
+          {c.dictamen_laboral_texto?.trim() ? ` ${c.dictamen_laboral_texto.trim()}` : ''}
         </Text>
 
         <Text style={styles.paragraph}>

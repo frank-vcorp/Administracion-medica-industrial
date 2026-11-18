@@ -471,6 +471,7 @@ export function SodexoExtension({
           value={value.contacto_emergencia ?? ''}
           onChange={(v) => set('contacto_emergencia', v)}
           readonly={readonly}
+          sentenceCase="proper-name"
         />
         <Field
           label="Teléfono de emergencia"
@@ -483,6 +484,7 @@ export function SodexoExtension({
           value={value.lugar_nacimiento ?? ''}
           onChange={(v) => set('lugar_nacimiento', v)}
           readonly={readonly}
+          sentenceCase="proper-name"
         />
         <Field
           label="Teléfono casa"
@@ -513,6 +515,7 @@ export function SodexoExtension({
           value={value.estado_domicilio ?? ''}
           onChange={(v) => set('estado_domicilio', v)}
           readonly={readonly}
+          sentenceCase="proper-name"
         />
         <Field
           label="Tiempo de radicar en la localidad"
@@ -2429,12 +2432,14 @@ function Field({
   onChange,
   readonly,
   placeholder,
+  sentenceCase,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   readonly?: boolean
   placeholder?: string
+  sentenceCase?: 'proper-name' | 'off'
 }) {
   return (
     <div>
@@ -2443,6 +2448,7 @@ function Field({
         disabled={readonly}
         value={value}
         placeholder={placeholder}
+        data-sentence-case={sentenceCase}
         onChange={(e) => onChange(e.target.value)}
         className="w-full border border-slate-200 rounded-lg p-2 text-sm"
       />

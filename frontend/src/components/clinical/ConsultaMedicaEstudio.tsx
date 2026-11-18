@@ -302,7 +302,7 @@ export default function ConsultaMedicaEstudio({
       eventId,
       workerId,
       buildPayload(),
-      { finalize: false },
+      { finalize: false, autosave: true },
     )
     if (!res.success) {
       return {

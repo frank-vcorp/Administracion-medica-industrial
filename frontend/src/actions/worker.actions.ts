@@ -13,7 +13,7 @@ import { logAudit } from "@/actions/audit.actions"
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { isMedicalProfileAssignableToCompany } from '@/actions/medical-profiles'
-import { applySentenceCase } from '@/lib/text/sentence-case'
+import { applyProperNameCase } from '@/lib/text/sentence-case'
 import { workerFieldsFromFormData, workerFormFieldsSchema } from '@/lib/schemas/worker-save'
 import {
   failureFromFieldErrors,
@@ -22,7 +22,7 @@ import {
 } from '@/lib/save-action-errors'
 
 function normalizeStoredPersonName(raw: string): string {
-    return applySentenceCase(raw.trim())
+    return applyProperNameCase(raw.trim())
 }
 
 const personNameSchema = z
@@ -30,7 +30,7 @@ const personNameSchema = z
     .trim()
     .min(1)
     .max(100)
-    .transform(applySentenceCase)
+    .transform(applyProperNameCase)
 
 // Get all workers with their company name and medical profile
 // @id IMPL-20260313-07

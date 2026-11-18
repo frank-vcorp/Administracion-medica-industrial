@@ -8,7 +8,10 @@ import { authOptions } from '@/auth'
 import { upsertWorkerClinicalHistory } from '@/actions/clinical-history.actions'
 import { validateCertificadoMedicoPayload } from '@/lib/clinical/certificado-medico-validate'
 import type { CertificadoMedicoPayload } from '@/schemas/clinical/certificado-medico.schema'
-import { isCertificadoMedicoTestName, parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
+import {
+  isCertificadoMedicoTestName,
+  parseCertificadoMedicoDraftContext,
+} from '@/lib/clinical/certificado-medico'
 import { denyIfClosedCaptureUnauthorized } from '@/lib/clinical/papeleta-readonly'
 import { resolveCertificadoMedicoMetadata } from '@/lib/clinical/certificado-medico-metadata'
 
@@ -43,7 +46,7 @@ export async function saveCertificadoMedico(
   eventId: string,
   workerId: string,
   rawPayload: unknown,
-  options: { finalize?: boolean } = {},
+  options: { finalize?: boolean; autosave?: boolean } = {},
 ): Promise<SaveCertificadoMedicoResult> {
   const access = await assertClinicalAccess()
   if (!access.ok) return { success: false, error: access.error }
@@ -86,7 +89,7 @@ export async function saveCertificadoMedico(
   }
 
   const priorClosed = Boolean(
-    parseCertificadoMedicoClinicalContext(eventTest.clinicalContext)?.cerrada_at?.trim(),
+    parseCertificadoMedicoDraftContext(eventTest.clinicalContext)?.cerrada_at?.trim(),
   )
   const closedGuard = denyIfClosedCaptureUnauthorized(priorClosed, access.role)
   if (!closedGuard.ok) return { success: false, error: closedGuard.error }
@@ -153,7 +156,7 @@ export async function saveCertificadoMedico(
   const toStore: CertificadoMedicoPayload = {
     ...payload,
     cerrada_at: priorClosed
-      ? (payload.cerrada_at ?? parseCertificadoMedicoClinicalContext(eventTest.clinicalContext)?.cerrada_at)
+      ? (payload.cerrada_at ?? parseCertificadoMedicoDraftContext(eventTest.clinicalContext)?.cerrada_at)
       : options.finalize
         ? new Date().toISOString()
         : payload.cerrada_at,
@@ -168,7 +171,9 @@ export async function saveCertificadoMedico(
       },
       select: { updatedAt: true },
     })
-    revalidatePath(`/events/${eventId}`)
+    if (!options.autosave) {
+      revalidatePath(`/events/${eventId}`)
+    }
     return {
       success: true,
       payload: toStore,

@@ -10,13 +10,14 @@ import {
   type SomaSignosVitalesValue,
 } from '@/components/clinical/ClinicalSomaSignosVitalesCapture'
 import { ClinicalAutosaveIndicator } from '@/components/clinical/ClinicalAutosaveIndicator'
+import { StudyCaptureMissingBanner } from '@/components/clinical/studies/StudyCaptureUi'
 import { UserFacingErrorCallout } from '@/components/clinical/UserFacingErrorCallout'
 import { ClinicalTextarea } from '@/components/clinical/ClinicalFreeTextControls'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import { mergeCertificadoSignosPrefill } from '@/lib/clinical/certificado-medico-prefill'
 import { resolveCertificadoMedicoMetadata } from '@/lib/clinical/certificado-medico-metadata'
-import { parseCertificadoMedicoClinicalContext } from '@/lib/clinical/certificado-medico'
+import { parseCertificadoMedicoDraftContext } from '@/lib/clinical/certificado-medico'
 import {
   buildIntegracionDiagnosticaCertificado,
   isIntegracionDiagnosticaPlaceholder,
@@ -33,7 +34,6 @@ import {
   DICTAMEN_LABORAL_VALUES,
   DICTAMEN_LABORAL_LABELS,
   buildDefaultExploracionCertificado,
-  emptySignosVitalesCertificado,
   type CertificadoMedicoPayload,
   type DictamenLaboralValue,
 } from '@/schemas/clinical/certificado-medico.schema'
@@ -47,19 +47,37 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'dictamen', label: 'Dictamen' },
 ]
 
-function CertificadoPdfLink({ href, prominent }: { href: string; prominent?: boolean }) {
+function CertificadoPdfLink({
+  href,
+  isDraft,
+  prominent,
+  onBeforeOpen,
+}: {
+  href: string
+  isDraft: boolean
+  prominent?: boolean
+  onBeforeOpen?: (e: React.MouseEvent<HTMLAnchorElement>) => void
+}) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={onBeforeOpen}
+      data-testid={
+        isDraft ? 'certificado-pdf-draft-preview-link' : 'certificado-pdf-download-link'
+      }
       className={
-        prominent
-          ? 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md transition-colors'
-          : 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors'
+        isDraft
+          ? prominent
+            ? 'inline-flex items-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold px-4 py-2.5 rounded-xl shadow-sm transition-colors'
+            : 'inline-flex items-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold px-3.5 py-2 rounded-xl transition-colors'
+          : prominent
+            ? 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md transition-colors'
+            : 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors'
       }
     >
-      📄 Generar / descargar certificado (PDF)
+      {isDraft ? '👁️ Vista previa PDF (borrador)' : '📄 Generar / descargar certificado (PDF)'}
     </a>
   )
 }
@@ -118,7 +136,7 @@ export default function CertificadoMedicoEstudio({
   readonly?: boolean
 }) {
   const { data: session } = useSession()
-  const parsed = parseCertificadoMedicoClinicalContext(initialClinicalContext)
+  const parsed = parseCertificadoMedicoDraftContext(initialClinicalContext)
 
   const [doctorProfile, setDoctorProfile] = useState<{
     fullName: string
@@ -128,6 +146,7 @@ export default function CertificadoMedicoEstudio({
   const [activeTab, setActiveTab] = useState<TabId>('antecedentes')
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState<UserFacingError | null>(null)
+  const [missingFieldsBanner, setMissingFieldsBanner] = useState('')
   const [isPending, startTransition] = useTransition()
 
   const [signos, setSignos] = useState(() =>
@@ -273,7 +292,7 @@ export default function CertificadoMedicoEstudio({
       eventId,
       workerId,
       buildPayload(),
-      { finalize: false },
+      { finalize: false, autosave: true },
     )
     if (!res.success) {
       return {
@@ -288,8 +307,12 @@ export default function CertificadoMedicoEstudio({
   }, [eventTestId, eventId, workerId, buildPayload])
 
   const autosaveEnabled = !formReadonly && !cerradaAt
-  const { statusLabel: autosaveLabel, markSaved: markCertificadoSaved, userFacingError: certAutosaveError } =
-    useClinicalIntervalAutosave({
+  const {
+    status: autosaveStatus,
+    statusLabel: autosaveLabel,
+    markSaved: markCertificadoSaved,
+    userFacingError: certAutosaveError,
+  } = useClinicalIntervalAutosave({
     enabled: autosaveEnabled,
     snapshotKey: certificadoSnapshotKey,
     save: persistCertificadoDraft,
@@ -297,6 +320,7 @@ export default function CertificadoMedicoEstudio({
 
   const runSave = (finalize: boolean) => {
     setSaveError(null)
+    setMissingFieldsBanner('')
     setSaveMsg('')
     startTransition(async () => {
       const res = await saveCertificadoMedico(
@@ -307,17 +331,19 @@ export default function CertificadoMedicoEstudio({
         { finalize },
       )
       if (!res.success) {
-        setSaveError(
-          mapSaveClinicalFailure(
-            {
-              success: false,
-              error: res.error,
-              fieldErrors: res.fieldErrors,
-              technicalDetail: res.technicalDetail,
-            },
-            { context: finalize ? 'Certificado médico (cierre)' : 'Certificado médico (borrador)' },
-          ),
+        const mapped = mapSaveClinicalFailure(
+          {
+            success: false,
+            error: res.error,
+            fieldErrors: res.fieldErrors,
+            technicalDetail: res.technicalDetail,
+          },
+          { context: finalize ? 'Certificado médico (cierre)' : 'Certificado médico (borrador)' },
         )
+        setSaveError(mapped)
+        if (mapped.kind === 'validation' || (res.fieldErrors && Object.keys(res.fieldErrors).length > 0)) {
+          setMissingFieldsBanner(mapped.userMessage.replace(/\n/g, ' · '))
+        }
         return
       }
       if (finalize && res.payload.cerrada_at) {
@@ -331,10 +357,55 @@ export default function CertificadoMedicoEstudio({
   const inputClass =
     'w-full mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500'
 
-  const pdfHref = `/api/pdf/certificado-medico/${eventId}?eventTestId=${encodeURIComponent(eventTestId)}`
+  const isDraft = !cerradaAt
+  const pdfHref = `/api/pdf/certificado-medico/${eventId}?eventTestId=${encodeURIComponent(eventTestId)}${isDraft ? '&preview=1' : ''}`
+
+  const handleDraftPreviewClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!isDraft || formReadonly || autosaveStatus !== 'dirty') return
+      e.preventDefault()
+      const previewWin = window.open('about:blank', '_blank')
+      if (previewWin) previewWin.opener = null
+      void persistCertificadoDraft().then((ok) => {
+        if (ok === true) {
+          markCertificadoSaved()
+          if (previewWin) {
+            previewWin.location.href = pdfHref
+          } else {
+            window.open(pdfHref, '_blank', 'noopener,noreferrer')
+          }
+          return
+        }
+        previewWin?.close()
+        setSaveError(
+          mapSaveClinicalFailure(
+            {
+              success: false,
+              error:
+                typeof ok === 'object' && ok.message
+                  ? ok.message
+                  : 'No se pudo guardar el borrador para la vista previa.',
+              fieldErrors: typeof ok === 'object' ? ok.fieldErrors : undefined,
+              technicalDetail: typeof ok === 'object' ? ok.technicalDetail : undefined,
+            },
+            { context: 'Certificado médico (vista previa)' },
+          ),
+        )
+      })
+    },
+    [
+      isDraft,
+      formReadonly,
+      autosaveStatus,
+      persistCertificadoDraft,
+      markCertificadoSaved,
+      pdfHref,
+    ],
+  )
 
   return (
     <div className="space-y-4">
+      <StudyCaptureMissingBanner message={missingFieldsBanner} />
       <ClinicalAutosaveIndicator
         label={autosaveEnabled ? autosaveLabel : null}
         error={autosaveEnabled ? certAutosaveError : null}
@@ -354,7 +425,12 @@ export default function CertificadoMedicoEstudio({
             </button>
           ))}
         </div>
-        {Boolean(cerradaAt) && <CertificadoPdfLink href={pdfHref} prominent />}
+        <CertificadoPdfLink
+          href={pdfHref}
+          isDraft={isDraft}
+          prominent
+          onBeforeOpen={handleDraftPreviewClick}
+        />
       </div>
 
       {activeTab === 'antecedentes' && (
@@ -433,7 +509,10 @@ export default function CertificadoMedicoEstudio({
           <ClinicalTextarea
             className={`${inputClass} min-h-[200px]`}
             value={exploracion}
-            onChange={setExploracion}
+            onChange={(v) => {
+              setMissingFieldsBanner('')
+              setExploracion(v)
+            }}
             disabled={formReadonly}
           />
         </section>
@@ -449,6 +528,7 @@ export default function CertificadoMedicoEstudio({
               className={`${inputClass} min-h-[80px]`}
               value={integracion}
               onChange={(v) => {
+                setMissingFieldsBanner('')
                 integracionManualRef.current = true
                 setIntegracion(v)
               }}
@@ -492,19 +572,26 @@ export default function CertificadoMedicoEstudio({
             <ClinicalTextarea
               className={`${inputClass} min-h-[72px]`}
               value={dictamenTexto}
-              onChange={setDictamenTexto}
+              onChange={(v) => {
+                setMissingFieldsBanner('')
+                setDictamenTexto(v)
+              }}
               disabled={formReadonly}
             />
           </div>
-          {Boolean(cerradaAt) && (
-            <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 items-center">
-              <CertificadoPdfLink href={pdfHref} prominent />
-              <p className="text-[10px] text-slate-500">
-                El certificado está cerrado. Lugar, hora, datos del paciente y del médico se tomaron
-                del expediente y del evento al guardar.
-              </p>
-            </div>
-          )}
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 items-center">
+            <CertificadoPdfLink
+              href={pdfHref}
+              isDraft={isDraft}
+              prominent
+              onBeforeOpen={handleDraftPreviewClick}
+            />
+            <p className="text-[10px] text-slate-500">
+              {cerradaAt
+                ? 'El certificado está cerrado. Lugar, hora, datos del paciente y del médico se tomaron del expediente y del evento al guardar.'
+                : 'Vista previa en borrador: permite revisar el formato de impresión antes de cerrar el certificado.'}
+            </p>
+          </div>
         </section>
       )}
 
@@ -521,7 +608,12 @@ export default function CertificadoMedicoEstudio({
       )}
       {(Boolean(cerradaAt) || !formReadonly) && (
         <div className="flex flex-wrap gap-2 items-center sticky bottom-0 bg-white/95 backdrop-blur border-t border-slate-200 py-3 -mx-1 px-1 z-10">
-          {Boolean(cerradaAt) && <CertificadoPdfLink href={pdfHref} prominent />}
+          <CertificadoPdfLink
+            href={pdfHref}
+            isDraft={isDraft}
+            prominent
+            onBeforeOpen={handleDraftPreviewClick}
+          />
           {!formReadonly && (
             <>
               <button

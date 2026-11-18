@@ -1,12 +1,12 @@
 import { z } from 'zod'
-import { applySentenceCase } from '@/lib/text/sentence-case'
+import { applyProperNameCase } from '@/lib/text/sentence-case'
 
 const personNameField = z
   .string()
   .trim()
   .min(1, 'Este campo es obligatorio')
   .max(100, 'Máximo 100 caracteres')
-  .transform(applySentenceCase)
+  .transform(applyProperNameCase)
 
 export const workerFormFieldsSchema = z.object({
   firstName: personNameField,
