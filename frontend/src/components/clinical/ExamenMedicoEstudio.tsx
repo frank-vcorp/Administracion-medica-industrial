@@ -71,6 +71,13 @@ import {
   isImpresionDiagnosticaPlaceholder,
   examForHallazgosFromForm,
 } from '@/lib/clinical/impresion-diagnostica'
+import {
+  deriveEstadoNutricionalFromSoma,
+  derivePresionArterialResumenFromVitals,
+  isResumenFieldManualOverride,
+  isSaludBucalManualOverride,
+  syncBocaEstadoToSaludBucal,
+} from '@/lib/clinical/resumen-clinico-sync'
 import { formatMedicoNombreYCedula } from "@/lib/clinical/medico-display"
 import {
   medicoLineFromProfile,
@@ -430,17 +437,85 @@ export default function ExamenMedicoEstudio({
   // (sub-objeto Módulo 1). Sin este filtro, `String({...})` produce
   // `"[object Object]"` y revienta la validación Zod en `ExamenMedicoCompletoSchema`.
   const { data: session } = useSession()
-  const [form, setForm] = useState<Record<string, string>>(() => {
+  const initialResumenSync = useMemo(() => {
     const isPrimitive = (v: unknown) =>
       v === null || v === undefined || typeof v === 'string' ||
       typeof v === 'number' || typeof v === 'boolean'
-    return applyExploracionFisicaDefaults(
+    const base = applyExploracionFisicaDefaults(
       Object.fromEntries(
-        Object.entries(physicalExamData).filter(([, v]) => isPrimitive(v))
+        Object.entries(physicalExamData)
+          .filter(([, v]) => isPrimitive(v))
           .map(([k, v]) => [k, String(v ?? '')]),
       ),
     )
-  })
+
+    const persistedSaludBucal = String(physicalExamData.salud_bucal ?? '').trim()
+    const saludBucalManual = isSaludBucalManualOverride(
+      base.boca_estado,
+      persistedSaludBucal,
+    )
+    if (!saludBucalManual && base.boca_estado) {
+      base.salud_bucal = base.boca_estado
+    }
+
+    const derivedNutri = deriveEstadoNutricionalFromSoma(
+      initSomatometryData.peso_kg,
+      initSomatometryData.talla_m,
+    )
+    const persistedNutri = String(physicalExamData.estado_nutricional ?? '').trim()
+    const estadoNutricionalManual = isResumenFieldManualOverride(
+      derivedNutri,
+      persistedNutri,
+    )
+    if (!persistedNutri && derivedNutri) {
+      base.estado_nutricional = derivedNutri
+    }
+
+    const derivedAgudeza = deriveAgudezaVisualResumen(
+      initEyeAcuityData.vision_lejana_od as string | undefined,
+      initEyeAcuityData.vision_lejana_oi as string | undefined,
+    )
+    const persistedAgudeza = String(physicalExamData.agudeza_visual_resumen ?? '').trim()
+    const agudezaVisualManual = isResumenFieldManualOverride(
+      derivedAgudeza,
+      persistedAgudeza,
+    )
+    if (!persistedAgudeza && derivedAgudeza) {
+      base.agudeza_visual_resumen = derivedAgudeza
+    }
+
+    const derivedPresion = derivePresionArterialResumenFromVitals(
+      initSomatometryData.ta_sistolica,
+      initSomatometryData.ta_diastolica,
+    )
+    const persistedPresion = String(physicalExamData.presion_arterial_resumen ?? '').trim()
+    const presionArterialManual = isResumenFieldManualOverride(
+      derivedPresion,
+      persistedPresion,
+    )
+    if (!persistedPresion && derivedPresion) {
+      base.presion_arterial_resumen = derivedPresion
+    }
+
+    const initialAutoRecomendaciones = buildRecommendationsFromExam(
+      examForHallazgosFromForm(base),
+    )
+
+    return {
+      initialForm: base,
+      saludBucalManual,
+      estadoNutricionalManual,
+      agudezaVisualManual,
+      presionArterialManual,
+      initialAutoRecomendaciones,
+    }
+    // Solo inicializar una vez al montar el estudio.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [form, setForm] = useState<Record<string, string>>(
+    () => initialResumenSync.initialForm,
+  )
   const [aptitud, setAptitud] = useState<string>(
     (physicalExamData.aptitud as string) ?? ''
   )
@@ -451,14 +526,25 @@ export default function ExamenMedicoEstudio({
   const [recomendaciones, setRecomendaciones] = useState<string>(() => {
     const persisted = physicalExamData.recomendaciones_clinicas
     if (typeof persisted === 'string' && persisted.trim()) return persisted
-    return buildRecommendationsFromExam({
-      estado_nutricional: (physicalExamData.estado_nutricional as string) ?? null,
-      agudeza_visual_resumen: (physicalExamData.agudeza_visual_resumen as string) ?? null,
-      salud_bucal: (physicalExamData.salud_bucal as string) ?? null,
-      presion_arterial_resumen: (physicalExamData.presion_arterial_resumen as string) ?? null,
-      examen_medico_texto: (physicalExamData.impresion_diagnostica as string) ?? null,
-    })
+    return initialResumenSync.initialAutoRecomendaciones
   })
+  const saludBucalManualRef = useRef(initialResumenSync.saludBucalManual)
+  const estadoNutricionalManualRef = useRef(initialResumenSync.estadoNutricionalManual)
+  const agudezaVisualManualRef = useRef(initialResumenSync.agudezaVisualManual)
+  const presionArterialManualRef = useRef(initialResumenSync.presionArterialManual)
+  const recomendacionesManualRef = useRef((() => {
+    const persisted =
+      typeof physicalExamData.recomendaciones_clinicas === 'string'
+        ? physicalExamData.recomendaciones_clinicas.trim()
+        : ''
+    return (
+      persisted.length > 0 &&
+      persisted !== initialResumenSync.initialAutoRecomendaciones.trim()
+    )
+  })())
+  const lastAutoRecomendacionesRef = useRef(
+    initialResumenSync.initialAutoRecomendaciones.trim(),
+  )
   const [captureClosed, setCaptureClosed] = useState<boolean>(
     physicalExamData[EXAMEN_CAPTURE_CLOSED_KEY] === true,
   )
@@ -616,6 +702,43 @@ export default function ExamenMedicoEstudio({
     [agudezaForm.vision_lejana_od, agudezaForm.vision_lejana_oi],
   )
 
+  function updateSomaField(name: string, value: string) {
+    setSomaForm(prev => {
+      const next = { ...prev, [name]: value }
+      if (name === 'peso_kg' || name === 'talla_m') {
+        const derivedNutri = deriveEstadoNutricionalFromSoma(next.peso_kg, next.talla_m)
+        if (derivedNutri) {
+          setForm(f =>
+            !estadoNutricionalManualRef.current || !(f.estado_nutricional ?? '').trim()
+              ? { ...f, estado_nutricional: derivedNutri }
+              : f,
+          )
+        }
+      }
+      return next
+    })
+  }
+
+  function updateVitalsField(name: string, value: string) {
+    setVitalsForm(prev => {
+      const next = { ...prev, [name]: value }
+      if (name === 'ta_sistolica' || name === 'ta_diastolica') {
+        const derivedPresion = derivePresionArterialResumenFromVitals(
+          next.ta_sistolica,
+          next.ta_diastolica,
+        )
+        if (derivedPresion) {
+          setForm(f =>
+            !presionArterialManualRef.current || !(f.presion_arterial_resumen ?? '').trim()
+              ? { ...f, presion_arterial_resumen: derivedPresion }
+              : f,
+          )
+        }
+      }
+      return next
+    })
+  }
+
   function handleAgudezaField(name: string, value: string) {
     setAgudezaForm(prev => {
       const next = { ...prev, [name]: value }
@@ -625,7 +748,11 @@ export default function ExamenMedicoEstudio({
           next.vision_lejana_oi,
         )
         if (resumen) {
-          setForm(f => ({ ...f, agudeza_visual_resumen: resumen }))
+          setForm(f =>
+            !agudezaVisualManualRef.current || !(f.agudeza_visual_resumen ?? '').trim()
+              ? { ...f, agudeza_visual_resumen: resumen }
+              : f,
+          )
         }
       }
       return next
@@ -651,6 +778,30 @@ export default function ExamenMedicoEstudio({
       setActiveInnerTab('impresion')
     }
   }, [activeInnerTab, examVariant])
+
+  const recomendacionesPropuesta = useMemo(
+    () => buildRecommendationsFromExam(examForHallazgosFromForm(form)),
+    [form],
+  )
+
+  useEffect(() => {
+    if (formReadonly) return
+    if (recomendacionesManualRef.current) return
+    const propuesta = recomendacionesPropuesta.trim()
+    setRecomendaciones((prev) => {
+      const current = prev.trim()
+      const lastAuto = lastAutoRecomendacionesRef.current
+      const replaceable =
+        current.length === 0 || (lastAuto !== '' && current === lastAuto)
+      if (!replaceable) return prev
+      if (current === propuesta) {
+        lastAutoRecomendacionesRef.current = propuesta
+        return prev
+      }
+      lastAutoRecomendacionesRef.current = propuesta
+      return propuesta
+    })
+  }, [recomendacionesPropuesta, formReadonly])
 
   const impresionDiagnosticaPropuesta = useMemo(
     () =>
@@ -806,7 +957,30 @@ export default function ExamenMedicoEstudio({
 
   function handleField(name: string, value: string) {
     clearFieldSaveError(name)
+    if (name === 'boca_estado') {
+      if (!saludBucalManualRef.current || !(form.salud_bucal ?? '').trim()) {
+        clearFieldSaveError('salud_bucal')
+      }
+      setForm(prev =>
+        syncBocaEstadoToSaludBucal(prev, value, saludBucalManualRef.current),
+      )
+      return
+    }
     setForm(prev => ({ ...prev, [name]: value }))
+  }
+
+  function handleResumenClinicoField(field: string, value: string) {
+    const hasManualValue = value.trim().length > 0
+    if (field === 'salud_bucal') {
+      saludBucalManualRef.current = hasManualValue
+    } else if (field === 'estado_nutricional') {
+      estadoNutricionalManualRef.current = hasManualValue
+    } else if (field === 'agudeza_visual_resumen') {
+      agudezaVisualManualRef.current = hasManualValue
+    } else if (field === 'presion_arterial_resumen') {
+      presionArterialManualRef.current = hasManualValue
+    }
+    handleField(field, value)
   }
 
   function examSaveErr(fieldKey: string): string | undefined {
@@ -1013,6 +1187,14 @@ export default function ExamenMedicoEstudio({
     const payload = { ...somaForm, ...vitalsForm, imc: parseFloat(imc), complexion }
     const res = await updateSomatometria(eventId, payload)
     if (res.success) {
+      const derivedNutri = deriveEstadoNutricionalFromSoma(somaForm.peso_kg, somaForm.talla_m)
+      if (derivedNutri) {
+        setForm(prev =>
+          !estadoNutricionalManualRef.current || !(prev.estado_nutricional ?? '').trim()
+            ? { ...prev, estado_nutricional: derivedNutri }
+            : prev,
+        )
+      }
       setSomaSaveMsg(markComplete ? '🏁 Somatometría completada.' : '✅ Datos guardados.')
       setSomaCompleted(true)
       if (somatometryEventTestId) {
@@ -1051,6 +1233,17 @@ export default function ExamenMedicoEstudio({
     const payload = { ...currentSoma, ...vitalsForm, imc: parseFloat(imc), complexion }
     const res = await updateSomatometria(eventId, payload)
     if (res.success) {
+      const derivedPresion = derivePresionArterialResumenFromVitals(
+        vitalsForm.ta_sistolica,
+        vitalsForm.ta_diastolica,
+      )
+      if (derivedPresion) {
+        setForm(prev =>
+          !presionArterialManualRef.current || !(prev.presion_arterial_resumen ?? '').trim()
+            ? { ...prev, presion_arterial_resumen: derivedPresion }
+            : prev,
+        )
+      }
       setVitalsSaveMsg(markComplete ? '🏁 Signos Vitales completados.' : '✅ Datos guardados.')
       setVitalsCompleted(true)
       if (somatometryEventTestId) {
@@ -1087,7 +1280,11 @@ export default function ExamenMedicoEstudio({
     const res = await updateAgudezaVisual(eventId, agudezaForm)
     if (res.success) {
       if (derivedAgudezaResumen) {
-        setForm(prev => ({ ...prev, agudeza_visual_resumen: derivedAgudezaResumen }))
+        setForm(prev =>
+          !agudezaVisualManualRef.current || !(prev.agudeza_visual_resumen ?? '').trim()
+            ? { ...prev, agudeza_visual_resumen: derivedAgudezaResumen }
+            : prev,
+        )
       }
       setAgudezaSaveMsg(markComplete ? '🏁 Agudeza Visual completada.' : '✅ Datos guardados.')
       setAgudezaCompleted(true)
@@ -1461,7 +1658,7 @@ export default function ExamenMedicoEstudio({
                 value={somaForm.peso_kg || ''}
                 onChange={e => {
                   clearFieldSaveError('peso_kg')
-                  setSomaForm(prev => ({ ...prev, peso_kg: e.target.value }))
+                  updateSomaField('peso_kg', e.target.value)
                 }}
                 disabled={formReadonly}
                 className={examFieldRingClass(
@@ -1489,12 +1686,12 @@ export default function ExamenMedicoEstudio({
                     v.includes('.') || v.includes(',')
                       ? v.replace(',', '.')
                       : formatTallaMetersWhileTyping(v)
-                  setSomaForm(prev => ({ ...prev, talla_m: next }))
+                  updateSomaField('talla_m', next)
                 }}
                 onBlur={e => {
                   const formatted = formatTallaMetersForDisplay(e.target.value)
                   if (formatted !== e.target.value.trim()) {
-                    setSomaForm(prev => ({ ...prev, talla_m: formatted }))
+                    updateSomaField('talla_m', formatted)
                   }
                 }}
                 disabled={formReadonly}
@@ -1565,7 +1762,7 @@ export default function ExamenMedicoEstudio({
                 <input
                   type="number" min={0} max={300}
                   value={vitalsForm.ta_sistolica || ''}
-                  onChange={e => setVitalsForm(prev => ({ ...prev, ta_sistolica: e.target.value }))}
+                  onChange={e => updateVitalsField('ta_sistolica', e.target.value)}
                   disabled={formReadonly}
                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 font-mono text-center disabled:opacity-60"
                   placeholder="120"
@@ -1574,7 +1771,7 @@ export default function ExamenMedicoEstudio({
                 <input
                   type="number" min={0} max={200}
                   value={vitalsForm.ta_diastolica || ''}
-                  onChange={e => setVitalsForm(prev => ({ ...prev, ta_diastolica: e.target.value }))}
+                  onChange={e => updateVitalsField('ta_diastolica', e.target.value)}
                   disabled={formReadonly}
                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 font-mono text-center disabled:opacity-60"
                   placeholder="80"
@@ -1883,10 +2080,15 @@ export default function ExamenMedicoEstudio({
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                       />
                       <div className="mt-3 pt-3 border-t border-slate-100">
-                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        <label
+                          htmlFor="exploracion-boca-estado"
+                          className="block text-[10px] font-semibold text-slate-500 mb-1"
+                        >
                           Salud bucal
                         </label>
                         <select
+                          id="exploracion-boca-estado"
+                          data-testid="exploracion-boca-estado"
                           value={form.boca_estado ?? ''}
                           onChange={e => handleField('boca_estado', e.target.value)}
                           disabled={formReadonly}
@@ -2225,11 +2427,18 @@ export default function ExamenMedicoEstudio({
                   const fieldErr = examSaveErr(field)
                   return (
                   <div key={field}>
-                    <label className="text-[10px] font-semibold text-slate-500">{label}</label>
+                    <label
+                      htmlFor={`resumen-clinico-${field}`}
+                      className="text-[10px] font-semibold text-slate-500"
+                    >
+                      {label}
+                    </label>
                     {comboValues ? (
                       <select
+                        id={`resumen-clinico-${field}`}
+                        data-testid={`resumen-clinico-${field}`}
                         value={form[field] ?? ''}
-                        onChange={e => handleField(field, e.target.value)}
+                        onChange={e => handleResumenClinicoField(field, e.target.value)}
                         disabled={formReadonly}
                         className={examFieldRingClass(
                           Boolean(fieldErr),
@@ -2243,9 +2452,11 @@ export default function ExamenMedicoEstudio({
                       </select>
                     ) : (
                       <input
+                        id={`resumen-clinico-${field}`}
+                        data-testid={`resumen-clinico-${field}`}
                         type="text"
                         value={form[field] ?? ''}
-                        onChange={e => handleField(field, e.target.value)}
+                        onChange={e => handleResumenClinicoField(field, e.target.value)}
                         disabled={formReadonly}
                         className={examFieldRingClass(
                           Boolean(fieldErr),
@@ -2359,13 +2570,13 @@ export default function ExamenMedicoEstudio({
                 {!formReadonly && (
                   <button
                     type="button"
-                    onClick={() => setRecomendaciones(buildRecommendationsFromExam({
-                      estado_nutricional: form.estado_nutricional ?? null,
-                      agudeza_visual_resumen: form.agudeza_visual_resumen ?? null,
-                      salud_bucal: form.salud_bucal ?? null,
-                      presion_arterial_resumen: form.presion_arterial_resumen ?? null,
-                      examen_medico_texto: form.impresion_diagnostica ?? null,
-                    }))}
+                    onClick={() => {
+                      recomendacionesManualRef.current = false
+                      const next = buildRecommendationsFromExam(examForHallazgosFromForm(form))
+                      lastAutoRecomendacionesRef.current = next.trim()
+                      clearFieldSaveError('recomendaciones_clinicas')
+                      setRecomendaciones(next)
+                    }}
                     className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline"
                     title="Reemplazar por la lista auto-poblada desde los hallazgos actuales"
                   >
@@ -2377,6 +2588,7 @@ export default function ExamenMedicoEstudio({
                 rows={6}
                 value={recomendaciones}
                 onChange={(v) => {
+                  recomendacionesManualRef.current = true
                   clearFieldSaveError('recomendaciones_clinicas')
                   setRecomendaciones(v)
                 }}
