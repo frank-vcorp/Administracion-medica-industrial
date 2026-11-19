@@ -61,7 +61,15 @@ const VALID_CANONICAL_STUDY_TYPES = new Set<string>([
   'Audiometria',
   'Espirometria',
   'ECG',
+  'Electrocardiograma',
+  'Rayos_X',
+  'Laboratorio',
+  'Campimetria',
+  'RiesgoCardiovascular',
+  'Somatometria',
+  'AgudezaVisual',
   'ExamenMedico',
+  'Otro',
 ])
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,6 +189,7 @@ function isValidOperationMode(value: unknown): value is OperationMode {
 export async function saveAICalibrationV3(
   testId: string,
   draft: AICalibrationDraftV3,
+  requestedOperationMode?: OperationMode | null,
 ): Promise<SaveDraftV3Result> {
   // Gate de sesión: ADMIN o superior para editar drafts.
   const session = await getServerSession(authOptions)
@@ -203,6 +212,13 @@ export async function saveAICalibrationV3(
   if (draft.status !== 'draft' && draft.status !== 'tested') {
     return { ok: false, code: 'INVALID_INPUT', error: 'draft.status debe ser "draft" o "tested"' }
   }
+  if (
+    requestedOperationMode !== undefined &&
+    requestedOperationMode !== null &&
+    !isValidOperationMode(requestedOperationMode)
+  ) {
+    return { ok: false, code: 'INVALID_INPUT', error: 'operationMode inválido' }
+  }
 
   const test = await prisma.medicalTest.findUnique({
     where: { id: testId },
@@ -211,7 +227,11 @@ export async function saveAICalibrationV3(
   if (!test) return { ok: false, code: 'TEST_NOT_FOUND', error: 'Prueba no encontrada' }
 
   const options = parseOptions(test.options)
-  const operationMode = readOperationMode(options)
+  const storedOperationMode = readOperationMode(options)
+  const operationMode =
+    requestedOperationMode !== undefined && requestedOperationMode !== null
+      ? requestedOperationMode
+      : storedOperationMode
 
   // DEC-20260820-02: manual_service no tiene bloque aiCalibration.
   if (operationMode === 'manual_service') {
@@ -275,7 +295,11 @@ export async function saveAICalibrationV3(
     // Preservar publishedVersions, legacyV1V2Snapshot, familyTemplateId.
   }
 
-  const newOptions = toPrismaJsonValue({ ...options, aiCalibration: updatedRoot })
+  const newOptions = toPrismaJsonValue({
+    ...options,
+    ...(operationMode ? { operationMode } : {}),
+    aiCalibration: updatedRoot,
+  })
 
   try {
     await prisma.medicalTest.update({

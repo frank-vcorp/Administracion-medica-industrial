@@ -302,6 +302,26 @@ export async function getMedicalTests() {
   })
 }
 
+export async function getMedicalTestsWithCalibration() {
+  return await prisma.medicalTest.findMany({
+    where: {
+      code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
+    },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      options: true,
+      categoryId: true,
+      category: { select: { name: true } },
+    },
+    orderBy: [
+      { category: { name: 'asc' } },
+      { name: 'asc' },
+    ],
+  })
+}
+
 export async function getTestCategories() {
   return await prisma.testCategory.findMany({
     select: {

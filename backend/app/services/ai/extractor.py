@@ -182,46 +182,13 @@ def _classify_m3_failure(error: Exception) -> Optional[str]:
 
 
 # ARCH-20260518-17 | respaldo: context/interconsultas/PROMPTS_DOC-20260518-02-AUDIOMETRIA.md
-# Frecuencias canónicas para Audiometría ocupacional (columnas esperadas de la tabla VA).
+# Frecuencias canónicas para Audiometría ocupacional (validación post-extracción).
 _AUDIOMETRIA_CANONICAL_FREQS: frozenset = frozenset(
     {"250", "500", "1000", "2000", "3000", "4000", "6000", "8000"}
 )
 
-# Guardrails backend inyectados antes del bloque de calibración para reforzar
-# fiabilidad tabular sin depender de ediciones en la configuración de DB.
-_AUDIOMETRIA_BACKEND_GUARDRAILS = """
-GUARDRAILS ESPECÍFICOS PARA AUDIOMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBRACIÓN)
-1. La tabla de umbrales tonales (vía aérea VA) es la fuente primaria de datos numéricos.
-   La descripción narrativa del diagnóstico NO es fuente de valores de umbral.
-2. Cada celda de la tabla corresponde a UNA frecuencia específica. Si una celda está vacía
-   o ilegible, usa null — NUNCA desplaces el valor de la columna adyacente para completar el hueco.
-3. Frecuencias canónicas aceptadas: 250, 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz.
-   No incluyas 125 Hz a menos que aparezca EXPLÍCITAMENTE como columna de la tabla en el documento.
-4. Si una frecuencia no está visible en la tabla, omite esa clave del dict — no uses 0 ni la inventes.
-5. `frecuencias_detectadas`: registra SOLO las frecuencias con valor numérico visible en la tabla.
-6. `completitud_documental` (calcula tú mismo antes de responder):
-   - "suficiente"     → ≥6 frecuencias con valor por oído en la tabla
-   - "parcial"        → 3-5 frecuencias con valor por oído
-   - "no_concluyente" → <3 frecuencias con valor por oído
-7. IDENTIFICACIÓN Y EXPLORACIÓN FÍSICA OBLIGATORIAS EN EL JSON DE SALIDA (aún si el bloque de calibración no las menciona):
-   - Incluye SIEMPRE en la raíz del JSON `"paciente"` con el nombre completo impreso del paciente y `"fecha_estudio"` con la fecha del estudio.
-   - Incluye también `"paciente_detalle": {"nombre_completo": "...", "fecha_nacimiento": "...", "empresa": "...", "puesto": "..."}` y `"estudio": {"fecha_estudio": "...", "equipo_modelo": "..."}` cuando sean visibles.
-   - Si el documento muestra exploración otoscópica/faríngea (Faringe, CAD, CAI, MTD, MTI), inclúyelos en `"campos_fuente": {"faringe": "...", "cad": "...", "cai": "...", "mtd": "...", "mti": "..."}` y también en raíz (`"faringe"`, `"cad"`, `"cai"`, `"mtd"`, `"mti"`).
-""".strip()
 
-
-# FIX-20260812-20 | ARCH-20260518-17: Espirometría — análogo de audiometría.
-# El extractor caía al prompt genérico porque nunca recibió guardrails backend
-# específicos (mismo gap que tenía Audiometría antes de ARCH-20260518-17).
-# Claves canónicas a las que debe mapear el `key` de cada fila del cuadro FVC.
-# Se incluyen variantes ortográficas válidas (fef2575_l_s / fef25_75_l_s) para
-# no flagar falsos positivos cuando el LLM usa una grafía equivalente.
-#
-# FIX-20260821-01: Ampliado con buckets equivalentes (sin sufijos `_l`, `_pct`,
-# `_l_s`, `_s`) y con claves "Mejor *" y "fev1_fvc" para soportar variantes que
-# el modelo M3 emite en el fixture del hallazgo FND-20260821-03
-# (mismo hash sha256:6a94384d…de541). Mantener como frozenset = fuente única
-# de verdad para el normalizador; evita errores de normalización runtime.
+# Claves canónicas para validación/normalización determinística post-extracción de Espirometría.
 _ESPIROMETRIA_CANONICAL_KEYS: frozenset = frozenset({
     "mejor_fvc_l", "mejor_fev1_l", "mejor_fvc", "mejor_fev1",
     "fef2575_l_s", "fef25_75_l_s", "fef25_75",
@@ -235,175 +202,25 @@ _ESPIROMETRIA_CANONICAL_KEYS: frozenset = frozenset({
     "repetibilidad_fvc", "repetibilidad_fev1",
 })
 
-# Guardrails backend inyectados antes del bloque de calibración para reforzar
-# la extracción tabular FVC/FEV1/M1/M2/M3/REF/LLN sin depender de ediciones
-# en la configuración de DB. Espejo de _AUDIOMETRIA_BACKEND_GUARDRAILS.
-# FIX-FEATURE-20260824-01 rev. 1.4: añadir §7-§9 con ejemplo concreto de fila
-# FEV1 (layout Sibelmed RD2026) tras detectarse desplazamiento/pérdida de la
-# celda M1 en producciones reales — el LLM emitía m1/m1_pct_ref faltantes o
-# desplazados a m2/m2_pct_ref, alterando el cálculo downstream de repetibilidad.
-_ESPIROMETRIA_BACKEND_GUARDRAILS = """
-GUARDRAILS ESPECÍFICOS PARA ESPIROMETRÍA (BACKEND — NO MODIFICAR VÍA CALIBRACIÓN)
-1. La tabla INFORME DE FVC es la fuente primaria de datos numéricos.
-   Cada fila contiene: Parámetro | M1 | %REF | M2 | %REF | M3 | %REF | REF | LLN.
-   M1/M2/M3 son las 3 maniobras. REF es el valor predicho. LLN es el límite inferior normal.
-2. Cada CELDA de la tabla corresponde a UN campo específico (ej: M1 de Mejor FVC = 2.33).
-   Si una celda está vacía, usa null — NUNCA desplaces valores entre celdas para "completar".
-3. Bloques canónicos a extraer (estructura exhaustiva):
-   - paciente_detalle: nombre_completo, sexo, edad_anios, talla_cm, peso_kg, imc, fuma, motivo, procedencia
-   - estudio: referencia, fecha_estudio, hora_estudio, equipo_modelo, version_software
-   - condiciones: temperatura_c, presion_mmhg, humedad_pct, tecnico, transductor, referencia_ecuacion, factor_etnico, factor_btps
-   - parametros: Lista de filas con {label, key, unidad, m1, m1_pct_ref, m2, m2_pct_ref, m3, m3_pct_ref, ref, lln}
-     El `key` debe mapear a uno de los canónicos si la fila es interpretable.
-   - calidad: repetibilidad_ats_ers_fvc, repetibilidad_ats_ers_fev1, es_interpretable, completitud_documental, notas_calidad
-   - graficas: curva_flujo_volumen_presente, curva_volumen_tiempo_presente, maniobras_graficadas, observaciones_grafica
-4. Si una fila no se puede mapear a `key` canónico, conserva el `label` literal y los valores.
-5. NO confundas este documento con Audiometría (no busca umbrales por frecuencia).
-6. `completitud_documental` (calcula):
-   - "suficiente"     → ≥6 parámetros principales con valores M1+M2+M3
-   - "parcial"        → 3-5 parámetros
-   - "no_concluyente" → <3 parámetros
-7. PRESERVACIÓN ESTRICTA DE LAS 6 CELDAS DE MANIOBRAS POR FILA. Cada fila
-   interpretable de `parametros[]` debe contener, para cada una de las 3
-   maniobras, el valor numérico Y su %REF asociado — 6 celdas en total:
-   `m1`, `m1_pct_ref`, `m2`, `m2_pct_ref`, `m3`, `m3_pct_ref`. Trata
-   `m1_pct_ref` como la celda INMEDIATAMENTE A LA DERECHA de `m1` (no la
-   confundas con un valor independiente). Lo mismo para `m2_pct_ref`/`m3_pct_ref`.
-8. NO permitas layout alternativo que omita o desplace celdas. Específicamente:
-   - Si `m1` está presente, `m1_pct_ref` debe vivir en la columna %REF de M1.
-   - Si una celda está vacía en la fuente, usa null — no rellenes con el valor
-     de la celda adyacente ni con el valor de otra maniobra.
-   - NO uses pares heterogéneos del tipo (m1 con %REF de M2) ni omitas
-     ninguna de las 6 celdas de una fila estándar (Mejor X, FVC, FEV1).
-9. EJEMPLO CONCRETO (layout Sibelmed W20s, fila FEV1) — referencia bit-a-bit:
-   "FEV1" → key "fev1_l", unidad "L", con la siguiente serie de 6 celdas:
-     m1 = 2.15, m1_pct_ref = 77, m2 = 2.11, m2_pct_ref = 76, m3 = 2.09, m3_pct_ref = 75
-   Este patrón se repite análogamente para FVC (`m1=2.30/69, m2=2.33/70,
-   m3=2.26/68`) y para "Mejor FEV1" / "Mejor FVC" donde `m1=m2=m3` consolidan
-   la mejor maniobra. Mantener la correspondencia celda↔campo es crítico para
-   el cálculo downstream de repetibilidad (top-2 = `max(m1,m2,m3) − segundo_max`).
-10. NO uses la fila "Mejor FEV1" / "Mejor FVC" como sustituto de la fila
-    estándar FEV1 / FVC. Son filas DISTINTAS del layout Sibelmed:
-    - "Mejor FEV1" CONSOLIDA la mejor maniobra (m1=m2=m3 = el mejor valor).
-    - "FEV1" contiene las 3 maniobras SEPARADAS (m1, m2, m3 pueden diferir).
-    Si la fila estándar FEV1/FVC no está visible, emite null para esas
-    celdas — NO rellenes la fila estándar copiando la fila "Mejor X".
-11. NO DUPLIQUES UNA CELDA EN OTRA. Específicamente, NO rellenes m1 con el
-    valor de m2, ni m1_pct_ref con m2_pct_ref. Cada celda conserva su propio
-    valor. Si la celda M1 está vacía en la fuente, usa null para m1 y
-    m1_pct_ref — nunca copies el valor de M2. El síntoma "(m1 − m2) × 1000
-    = 0 ml" revela que duplicaste M2 como M1; evítalo transcribiendo
-    literalmente cada celda en su columna.
-12. CONSISTENCIA ENTRE "Mejor X" Y FILA ESTÁNDAR X. En el layout Sibelmed,
-    el valor de la fila "Mejor FEV1" (m1=m2=m3) DEBE ser igual al máximo de
-    las maniobras de la fila "FEV1" (max(m1,m2,m3)), porque la mejor maniobra
-    consolidada es, por definición, el mayor valor entre las 3. Si al extraer
-    detectas que max(m1,m2,m3) de la fila FEV1 es MENOR que el valor de la
-    fila "Mejor FEV1", STOP: hay un error de extracción (probablemente
-    duplicaste M2 como M1 o perdiste M1). NO dupliques ni rellenes;
-    transcribe literalmente las celdas que veas y deja que la validación
-    posterior marque la fila como no concluyente. Lo mismo aplica a FVC.
-""".strip()
-
 
 class ExtractorService(GeminiBase):
     """
     Servicio que extrae parámetros canónicos según el tipo de documento.
-    GUARDRAIL: Los prompts NO deben pedir diagnóstico, interpretación clínica final
-    ni recomendaciones de aptitud. Esas capas pertenecen a PrediagnosticService.
-
-    FIX-20260810-05: acepta `key_resolver` opcional para inyección en tests
-    y para evitar recálculo del resolver cuando el caller ya lo tiene. Si es
-    None, usa el singleton global `key_resolver` (vía import lazy).
+    Usa únicamente el prompt configurado en `MedicalTest.options.aiCalibration` (BD).
     """
 
     def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash", key_resolver=None):
         super().__init__(api_key=api_key, model=model)
-        # FIX-20260810-05: resolver inyectable. Si es None, lazy-load del singleton
-        # global en primer uso (evita import circular en tests).
         self._key_resolver = key_resolver
-        # Stash de errores transitorios del resolver (trazabilidad).
         self._m3_resolve_error: Optional[str] = None
 
     @property
     def key_resolver(self):
-        """FIX-20260810-05: acceso lazy al singleton si no fue inyectado."""
+        """Acceso lazy al singleton si no fue inyectado."""
         if self._key_resolver is None:
             from .keys import key_resolver as _singleton
             self._key_resolver = _singleton
         return self._key_resolver
-
-    # ARCH-20260518-03: Prompts de extracción ELIMINADOS del backend.
-    # El prompt de extracción se resuelve ÚNICAMENTE desde aiCalibration.extraction.prompt.
-    # No existe fallback de extracción en el backend — ver extract_by_type().
-
-    # LEGACY NOTE (ARCH-20260518-03): El dict PROMPTS fue eliminado. Cualquier referencia a
-    # self.PROMPTS en código externo debe actualizarse para pasar ai_calibration correctamente.
-
-    # Prompt de referencia solo para documentación: ver context/SPECs/SPEC_ARCH-20260518-03*.md
-
-    # ARCH-20260518-06 | respaldo: context/SPECs/SPEC_ARCH-20260518-06-BASE-EXTRACCION-Y-PLANTILLA-CALIBRACION.md
-    BASE_EXTRACTION_PROMPT = """
-Eres un extractor de datos médicos estructurados.
-
-Tu tarea es leer un documento médico y extraer TODOS los datos visibles con máxima precisión y exhaustividad,
-devolviendo exclusivamente JSON válido según el esquema esperado.
-
-REGLAS GENERALES
-1. Extrae únicamente datos visibles en el documento.
-2. No inventes, no deduzcas y no completes valores ausentes.
-3. No hagas interpretación clínica, no emitas diagnósticos, no clasifiques normalidad o anormalidad.
-4. Si un dato está visible en cualquier parte del documento, no lo dejes fuera.
-5. Conserva números, unidades, porcentajes, fechas, horas, nombres y etiquetas con la mayor fidelidad posible.
-6. Si un campo del esquema no aparece visible, usa null.
-7. Si hay tablas, extrae todas las filas y columnas relevantes; no reduzcas el documento a pocos valores principales.
-8. Si una etiqueta no coincide exactamente con el esquema pero es claramente equivalente, mapea al campo canónico correcto.
-9. Si una etiqueta visible no tiene mapeo claro, conserva el label y sus valores en el bloque estructurado más cercano posible.
-10. Devuelve SOLO JSON válido. Sin markdown, sin comentarios, sin explicación adicional.
-
-CONTEXTO
-Este documento contiene datos médicos ocupacionales reales. Puedes encontrar identificación del paciente,
-metadatos del estudio, condiciones de medición, tablas de parámetros, referencias, LLN, porcentajes del predicho,
-notas de calidad y gráficas.
-""".strip()
-
-    def _build_extraction_prompt(self, study_specific_prompt: str) -> str:
-        """Compone la base universal con el bloque específico editable por calibración."""
-        return (
-            f"{self.BASE_EXTRACTION_PROMPT}\n\n"
-            "BLOQUE ESPECIFICO DEL ESTUDIO\n"
-            "El siguiente bloque complementa la base universal con reglas particulares del estudio actual.\n\n"
-            f"{study_specific_prompt.strip()}"
-        )
-
-    def _build_audiometria_extraction_prompt(self, study_specific_prompt: str) -> str:
-        """
-        ARCH-20260518-17: Variante de _build_extraction_prompt que inyecta los
-        guardrails backend de Audiometría entre la base universal y el bloque de calibración,
-        reforzando la fiabilidad tabular sin tocar la DB.
-        """
-        return (
-            f"{self.BASE_EXTRACTION_PROMPT}\n\n"
-            f"{_AUDIOMETRIA_BACKEND_GUARDRAILS}\n\n"
-            "BLOQUE ESPECIFICO DEL ESTUDIO\n"
-            "El siguiente bloque complementa la base universal con reglas particulares del estudio actual.\n\n"
-            f"{study_specific_prompt.strip()}"
-        )
-
-    def _build_espirometria_extraction_prompt(self, study_specific_prompt: str) -> str:
-        """
-        FIX-20260812-20 | ARCH-20260518-17: Variante de _build_extraction_prompt
-        que inyecta los guardrails backend de Espirometría entre la base universal
-        y el bloque de calibración, reforzando la fiabilidad tabular del cuadro
-        FVC/FEV1/M1/M2/M3/REF/LLN sin tocar la DB. Espejo del flujo de Audiometría.
-        """
-        return (
-            f"{self.BASE_EXTRACTION_PROMPT}\n\n"
-            f"{_ESPIROMETRIA_BACKEND_GUARDRAILS}\n\n"
-            "BLOQUE ESPECIFICO DEL ESTUDIO\n"
-            "El siguiente bloque complementa la base universal con reglas particulares del estudio actual.\n\n"
-            f"{study_specific_prompt.strip()}"
-        )
 
     def _normalize_audiometria_result(self, result: dict) -> dict:
         """
@@ -1112,59 +929,34 @@ notas de calidad y gráficas.
         ai_calibration: Optional[Dict[str, Any]] = None,
         extraction_provider_override: Optional[str] = None,
         extraction_model_override: Optional[str] = None,
+        test_name: Optional[str] = None,
     ) -> Union[AudiometriaData, LaboratorioData, EspirometriaData, RayosXData, Dict]:
         """
         Extrae datos estructurados según el tipo de documento.
 
-        ARCH-20260518-03: El prompt de extracción se resuelve ÚNICAMENTE desde aiCalibration.
-        Si no está configurado, la corrida falla explícitamente con EXTRACTION_PROMPT_NOT_CONFIGURED.
-        No existe fallback de extracción en el backend.
-
-        ARCH-20260809-02: Selector multi-proveedor con override por payload.
-        Precedencia: override > aiCalibration.extraction > default AppConfig (m3).
-        Política M3-only: sin fallback a Gemini; reintentos JSON en M3VisionBase.call_m3.
-
-        Args:
-            file_path:                  Ruta del archivo
-            doc_type:                   Tipo de documento (Audiometria, Laboratorio, etc.)
-            ai_calibration:             Dict con aiCalibration de la prueba. Debe contener
-                                        ai_calibration["extraction"]["prompt"] para que la
-                                        extracción proceda.
-            extraction_provider_override: Si presente, sobreescribe aiCalibration.extraction.provider.
-            extraction_model_override:   Si presente, sobreescribe aiCalibration.extraction.model.
-
-        Returns:
-            Tupla (extracted_object, audit_metadata) o, por compat con el contrato
-            histórico del pipeline, el objeto Pydántico/dict directo. La metadata
-            de auditoría extractiva (provider requested/used, model_used, fallback_reason)
-            se devuelve vía el parámetro de salida opcional `extraction_audit_out`.
-
-        Raises:
-            ValueError: EXTRACTION_PROMPT_NOT_CONFIGURED si falta prompt.
-            ExtractionProviderUnknownError: proveedor inválido (no fallback).
-            ExtractionAuthError: M3 respondió 401/403 (no fallback).
+        Única fuente de verdad: usa exclusivamente `ai_calibration["extraction"]["prompt"]`
+        proveniente de `MedicalTest.options.aiCalibration` en PostgreSQL, sin
+        concatenar prompts ni guardrails hardcodeados en código.
         """
-        # ARCH-20260518-03: resolver prompt únicamente desde aiCalibration
         extraction_cfg = (ai_calibration or {}).get("extraction") or {}
-        prompt = extraction_cfg.get("prompt")
+        if not isinstance(extraction_cfg, dict):
+            extraction_cfg = {}
+        raw_prompt = extraction_cfg.get("prompt")
+        prompt = raw_prompt.strip() if isinstance(raw_prompt, str) else ""
+        test_label = (test_name or doc_type or "desconocida").strip()
 
-        if not prompt:
-            # Sin fallback — error explícito y trazable de configuración
+        if (ai_calibration or {}).get("enabled") is False or extraction_cfg.get("enabled") is False:
             raise ValueError(
-                f"EXTRACTION_PROMPT_NOT_CONFIGURED: La prueba '{doc_type}' no tiene "
-                "prompt de extracción configurado en aiCalibration. "
-                "Configure el prompt de extracción en el panel de calibración antes de procesar."
+                f"EXTRACTION_PROMPT_NOT_CONFIGURED: La calibración IA de la prueba '{test_label}' "
+                "está deshabilitada. Habilítala o configúrala en Pruebas (/admin/services)."
             )
 
-        # ARCH-20260518-17: Audiometría usa prompt enriquecido con guardrails backend.
-        # FIX-20260812-20: Espirometría usa prompt enriquecido con guardrails backend
-        # análogos (cuadro FVC/FEV1/M1/M2/M3/REF/LLN). El resto cae al genérico.
-        if doc_type == "Audiometria":
-            prompt = self._build_audiometria_extraction_prompt(prompt)
-        elif doc_type == "Espirometria":
-            prompt = self._build_espirometria_extraction_prompt(prompt)
-        else:
-            prompt = self._build_extraction_prompt(prompt)
+        if not prompt:
+            raise ValueError(
+                f"EXTRACTION_PROMPT_NOT_CONFIGURED: La prueba '{test_label}' no tiene "
+                "calibración IA configurada (falta prompt de extracción). "
+                "Configúrala en Pruebas (/admin/services)."
+            )
 
         # ARCH-20260809-02: resolver provider/model efectivo con precedencia.
         provider, model = self._resolve_provider(

@@ -5,10 +5,34 @@
  *   cd frontend && DATABASE_URL=... npx tsx scripts/update-ecg-extraction-prompt.ts
  */
 import { Prisma, PrismaClient } from '@prisma/client'
-import {
-  ECG_EXTRACTION_PROMPT,
-  ECG_EXTRACTION_VERSION,
-} from '../src/lib/clinical/default-ai-calibration'
+
+const ECG_EXTRACTION_VERSION = 'ecg-ami-bootstrap-v1'
+
+const ECG_EXTRACTION_PROMPT = `EXTRACCIÓN DE ELECTROCARDIOGRAMA (ECG / Electrocardiograma)
+
+Devuelve SOLO un objeto JSON válido. Sin markdown, sin comentarios, sin bloques <think>. JSON único que empieza con { y termina con }.
+
+Campos esperados:
+{
+  "paciente": "nombre del paciente en el reporte",
+  "fecha_estudio": "fecha del estudio tal como aparece",
+  "ritmo": "ej. Sinusal, Fibrilación auricular, o null",
+  "frecuencia_bpm": número entero o null,
+  "intervalo_pr_ms": número entero o null,
+  "duracion_qrs_ms": número entero o null,
+  "qtc_ms": número entero o null,
+  "eje_electrico": "Normal, Desviación izquierda/derecha, o null",
+  "hallazgos": ["descripción objetiva del trazado, sin diagnóstico definitivo"],
+  "profesional": "médico o firmante si aparece, o null",
+  "notas_calidad": "calidad del documento o null"
+}
+
+REGLAS:
+- NO inventes valores; usa null si no son legibles.
+- NO incluyas diagnóstico final, aptitud laboral ni tratamiento.
+- "hallazgos" = descripciones del trazado (ondas, bloqueos, ST-T, etc.).
+- frecuencia_bpm, intervalos y qtc deben ser números (no strings) cuando sean legibles.
+`
 
 const prisma = new PrismaClient()
 

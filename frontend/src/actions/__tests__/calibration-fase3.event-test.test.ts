@@ -185,10 +185,9 @@ describe('ARCH-20260820-01 Fase 3 — AC-3.1 uploadEventTestFile con enabled=fal
     expect(logCall).toContain('calibration_disabled')
   })
 
-  it('enabled=false + estudio IA elegible → fallback legacy_heuristic (dispara IA)', async () => {
+  it('enabled=false published aunque el estudio sea IA elegible → NO dispara IA y persiste calibration_disabled', async () => {
     mockIsAIEligible.mockReturnValue(true)
     mockGetCanonical.mockReturnValue('Espirometria')
-    mockTriggerStudyAI.mockResolvedValue({ success: true, fileUrl: '/f.pdf' })
     mockGetPublished.mockResolvedValue({
       enabled: false,
       canonicalStudyType: 'Espirometria',
@@ -197,12 +196,11 @@ describe('ARCH-20260820-01 Fase 3 — AC-3.1 uploadEventTestFile con enabled=fal
       source: 'published_v3',
     })
 
-    await uploadEventTestFile(buildFormData())
+    const result = await uploadEventTestFile(buildFormData())
 
-    expect(mockIsAIEligible).toHaveBeenCalled()
-    expect(mockGetCanonical).toHaveBeenCalled()
-    expect(mockTriggerStudyAI).toHaveBeenCalled()
-    expect(mockStudyExtractionSnapshotCreate).not.toHaveBeenCalled()
+    expect(mockTriggerStudyAI).not.toHaveBeenCalled()
+    expect(mockStudyExtractionSnapshotCreate).toHaveBeenCalledTimes(1)
+    expect(result.aiAnalysis?.clinicalState).toBe('AI_NON_CONCLUSIVE')
   })
 
   it('snapshot disabled marca snapshots previos como superseded (inmutabilidad)', async () => {

@@ -96,47 +96,34 @@ interface AICalibrationEditorProps {
   onSaved?: (status: "draft" | "tested") => void
 }
 
-const EXTRACTION_PROMPT_TEMPLATE = `REGLAS ESPECIFICAS DEL ESTUDIO: {{nombre_del_estudio}}
+const EXTRACTION_PROMPT_TEMPLATE = `REGLAS ESPECÍFICAS DEL ESTUDIO: {{nombre_del_estudio}}
 
-OBJETIVO ESPECIFICO
-Extraer todos los datos visibles de este estudio con precision literal y exhaustividad, sin interpretacion clinica.
+OBJETIVO
+Extrae únicamente datos visibles en el documento con máxima fidelidad y sin interpretación clínica.
+Devuelve SOLO un objeto JSON válido (sin markdown, sin comentarios, sin bloques <think>).
 
-CAMPOS CRITICOS
-- identificacion del paciente
-- fecha y hora del estudio
-- equipo, software y condiciones tecnicas
-- tabla principal de parametros
-- referencias, LLN y porcentajes del predicho
-- notas de calidad tecnica
+CAMPOS ESPERADOS (JSON)
+{
+  "paciente": "nombre completo o null",
+  "fecha_estudio": "fecha del estudio o null",
+  "hallazgos": ["descripción objetiva visible"],
+  "profesional": "médico o firmante si aparece, o null",
+  "notas_calidad": "calidad técnica del documento o null"
+}
 
-SINONIMOS Y LABELS EQUIVALENTES
-- lista aqui labels reales y sus equivalencias canonicas
+REGLAS
+- No inventes, no deduzcas y no completes valores ausentes (usa null).
+- No incluyas diagnóstico definitivo, aptitud laboral ni tratamiento.
+- Conserva números, unidades, fechas, nombres y etiquetas tal como aparecen en el documento.`
 
-REGLAS ESPECIFICAS DE TABLAS
-- indica filas, columnas y variantes que nunca deben omitirse
+const CALIBRATION_REQUEST_TEMPLATE = `Genera un prompt completo de extracción JSON para {{nombre_del_estudio}}.
 
-REGLAS ESPECIFICAS DE CALIDAD
-- indica como capturar repetibilidad, interpretabilidad o completitud documental
-
-CAMPOS QUE NUNCA DEBEN OMITIRSE SI ESTAN VISIBLES
-- agrega aqui los campos que suelen perderse
-
-CAMPOS FRECUENTEMENTE OLVIDADOS
-- agrega aqui secundarios importantes del estudio`
-
-const CALIBRATION_REQUEST_TEMPLATE = `Genera un bloque especifico de extraccion para {{nombre_del_estudio}}.
-
-Necesito que complemente una base universal ya existente en backend.
-No repitas reglas generales de no invencion o salida JSON.
-Enfocate solo en:
-- campos criticos
-- labels y sinonimos reales
-- reglas de tablas
-- reglas de calidad
-- campos que nunca deben omitirse
-- datos medicos tecnicos visibles que suelen perderse
-
-No hagas interpretacion clinica. Solo extraccion precisa y exhaustiva.`
+Este prompt se enviará directamente al modelo de extracción (única fuente de verdad en BD, sin reglas ocultas en código).
+Incluye:
+- instrucción de devolver SOLO JSON válido sin markdown ni bloques <think>
+- esquema JSON exacto de campos esperados
+- reglas de no invención (usar null si no es visible) y sin diagnóstico clínico
+- labels/sinónimos reales y reglas de tablas o calidad si aplica.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers de acceso seguro a datos anidados del JSON
@@ -278,13 +265,27 @@ export function buildDraftV3FromEditorState(input: BuildDraftV3Input): AICalibra
   let clinicalCriteria: ClinicalCriteria | null = null
   if (sections.showClinicalCriteria) {
     const prediagnosisEnabled = diagnosisLegacy ? getBool(diagnosisLegacy, "enabled") : true
+    const reqParamsRaw = diagnosisLegacy?.requiredParams
+    const requiredParams = Array.isArray(reqParamsRaw)
+      ? reqParamsRaw.filter((item): item is string => typeof item === "string")
+      : []
+    const thresholdRaw = diagnosisLegacy?.confidenceThreshold
+    const confidenceThreshold =
+      typeof thresholdRaw === "number" && Number.isFinite(thresholdRaw)
+        ? thresholdRaw
+        : null
+    const refsRaw = diagnosisLegacy?.supportingReferences
+    const supportingReferences = Array.isArray(refsRaw)
+      ? (refsRaw as ClinicalCriteria["supportingReferences"])
+      : undefined
     clinicalCriteria = {
       prediagnosisEnabled,
-      requiredParams: [],
-      confidenceThreshold: null,
+      requiredParams,
+      confidenceThreshold,
       prompt: diagPrompt || null,
       promptVersion: diagVersion || null,
       promptHash: null,
+      ...(supportingReferences ? { supportingReferences } : {}),
     }
   }
 
@@ -294,7 +295,7 @@ export function buildDraftV3FromEditorState(input: BuildDraftV3Input): AICalibra
     enabled,
     canonicalStudyType: canonicalStudyType.trim() || null,
     extraction: {
-      enabled: getBool(extractionLegacy, "enabled"),
+      enabled: getBool(extractionLegacy, "enabled") || Boolean(extractPrompt.trim()),
       prompt: extractPrompt || null,
       version: extractVersion || null,
       schemaVersion: extractVersion || null,
@@ -331,16 +332,19 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
   const initialDiagPrompt = rawDiagPrompt || (looksLikePromptContent(rawDiagVersion) ? rawDiagVersion : "")
   const initialDiagVersion = looksLikePromptContent(rawDiagVersion) ? "" : rawDiagVersion
 
-  // ARCH-20260809-02: estado del selector de proveedor extractivo.
-  // Default "gemini" si ausente (migración legacy implícita).
   const rawExtractProvider = extraction?.provider
   const initialExtractProvider: ExtractionProvider = isExtractionProvider(rawExtractProvider)
     ? rawExtractProvider
-    : "gemini"
+    : "m3"
   const initialExtractModel = getStr(extraction, "model")
 
   // ── Estado del formulario ──────────────────────────────────────────────────
-  const [enabled, setEnabled] = useState(getBool(initial, "enabled"))
+  const [selectedOperationMode, setSelectedOperationMode] = useState<OperationMode>(
+    operationMode ?? "clinical_interpretation",
+  )
+  const [enabled, setEnabled] = useState(
+    initial ? getBool(initial, "enabled") : true,
+  )
   const [canonicalStudyType, setCanonicalStudyType] = useState(getStr(initial, "canonicalStudyType"))
 
   // Extracción: se lee schemaVersion por compatibilidad con configs previas
@@ -381,6 +385,10 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
   const editorSections: EditorSections = sections
 
   // ── Submit ─────────────────────────────────────────────────────────────────
+  const effectiveSections = getEditorSectionsForOperationMode(
+    operationMode ?? selectedOperationMode,
+  ) ?? editorSections
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setMessage(null)
@@ -390,10 +398,6 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
     const normalizedDiagPrompt = diagPrompt.trim() || (looksLikePromptContent(diagPromptVersion) ? diagPromptVersion.trim() : "")
     const normalizedDiagVersion = looksLikePromptContent(diagPromptVersion) ? "" : diagPromptVersion.trim()
 
-    // F-2.2 (QA-20260820-03, AC-2.1): el editor construye un draft V3 y persiste
-    // vía saveAICalibrationV3 (no saveAICalibration V1). El mapeo V1/V2 → V3
-    // vive en buildDraftV3FromEditorState. Campos V3 no expuestos en UI se
-    // documentan como Fase 6 dentro del helper.
     const draftV3 = buildDraftV3FromEditorState({
       enabled,
       canonicalStudyType,
@@ -404,15 +408,25 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
       diagPrompt: normalizedDiagPrompt,
       diagVersion: normalizedDiagVersion,
       initial,
-      operationMode,
-      sections: editorSections,
+      operationMode: operationMode ?? selectedOperationMode,
+      sections: effectiveSections,
       status: saveStatus,
     })
 
     startTransition(async () => {
-      const result = await saveAICalibrationV3(testId, draftV3)
+      const result = await saveAICalibrationV3(
+        testId,
+        draftV3,
+        operationMode ?? selectedOperationMode,
+      )
       if (result.ok) {
-        setMessage({ type: "success", text: "Configuración guardada correctamente." })
+        setMessage({
+          type: "success",
+          text:
+            saveStatus === "tested"
+              ? "Borrador probado guardado en base de datos. Publícalo para activarlo en estudios."
+              : "Borrador guardado en base de datos.",
+        })
         onSaved?.(saveStatus)
       } else {
         setMessage({ type: "error", text: result.error ?? "Error al guardar." })
@@ -471,38 +485,68 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
           </label>
         </div>
 
-        <div>
-          <label className="block text-xs text-slate-600 mb-1" htmlFor="canonical-study-type">
-            Tipo de estudio canónico
-          </label>
-          <input
-            id="canonical-study-type"
-            type="text"
-            value={canonicalStudyType}
-            onChange={(e) => setCanonicalStudyType(e.target.value)}
-            placeholder="ej. LABORATORIO_GENERAL"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
-          />
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <label className="block text-xs text-slate-600 mb-1" htmlFor="operation-mode-select">
+              Modo operativo
+            </label>
+            <select
+              id="operation-mode-select"
+              value={selectedOperationMode}
+              onChange={(e) => {
+                const val = e.target.value as OperationMode
+                setSelectedOperationMode(val)
+              }}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+            >
+              <option value="clinical_interpretation">Extracción y prediagnóstico IA</option>
+              <option value="document_extraction">Solo extracción documental</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-600 mb-1" htmlFor="canonical-study-type">
+              Tipo de estudio canónico
+            </label>
+            <input
+              id="canonical-study-type"
+              type="text"
+              list="canonical-study-types-list"
+              value={canonicalStudyType}
+              onChange={(e) => setCanonicalStudyType(e.target.value)}
+              placeholder="ej. Rayos_X, Espirometria, Audiometria"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+            />
+            <datalist id="canonical-study-types-list">
+              <option value="Rayos_X" />
+              <option value="Espirometria" />
+              <option value="Audiometria" />
+              <option value="Electrocardiograma" />
+              <option value="Laboratorio" />
+              <option value="Campimetria" />
+              <option value="Somatometria" />
+              <option value="AgudezaVisual" />
+              <option value="ExamenMedico" />
+              <option value="RiesgoCardiovascular" />
+              <option value="Otro" />
+            </datalist>
+          </div>
         </div>
       </div>
 
-      {/* ── Extracción documental — Gemini / MiniMax M3 ────────────────────── */}
+      {/* ── Extracción documental — MiniMax M3 ────────────────────────────── */}
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-blue-700 tracking-wide">Extracción documental</p>
-          {/*
-            ARCH-20260809-02: badge dinámico según el proveedor seleccionado.
-            Si es M3, mostramos "M3" con la misma paleta para mantener coherencia visual.
-          */}
           <span
             className="text-xs font-medium px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200"
             data-testid="extraction-provider-badge"
           >
-            {extractProvider === "m3" ? "M3 (MiniMax)" : "Gemini"}
+            {extractProvider === "m3" ? "MiniMax M3" : "Gemini"}
           </span>
         </div>
-        <p className="text-xs text-blue-600">
-          El backend ya aporta una base universal fija de extracción médica. Aquí captura solo el bloque específico del estudio.
+        <p className="text-xs text-blue-700">
+          Este prompt se envía tal cual al modelo de extracción (única fuente de verdad en base de datos, sin textos ni guardrails ocultos en código).
         </p>
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -558,7 +602,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-xs text-slate-600" htmlFor="extract-prompt">
-              Bloque específico de extracción
+              Prompt completo de extracción
             </label>
             <button
               type="button"
@@ -573,7 +617,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
             value={extractPrompt}
             onChange={(e) => setExtractPrompt(e.target.value)}
             rows={12}
-            placeholder="Pega aqui solo las reglas particulares del estudio. La base universal ya vive en backend."
+            placeholder="Escribe aquí el prompt completo de extracción JSON para esta prueba."
             className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
@@ -584,47 +628,47 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
             <pre className="whitespace-pre-wrap text-[11px] leading-5 text-slate-600 font-mono">{EXTRACTION_PROMPT_TEMPLATE}</pre>
           </div>
           <div className="rounded-lg border border-blue-200 bg-white p-3">
-            <p className="mb-2 text-xs font-semibold text-blue-700 tracking-wide">Qué pedirle a Copilot</p>
+            <p className="mb-2 text-xs font-semibold text-blue-700 tracking-wide">Guía para redactar el prompt</p>
             <pre className="whitespace-pre-wrap text-[11px] leading-5 text-slate-600 font-mono">{CALIBRATION_REQUEST_TEMPLATE}</pre>
           </div>
         </div>
       </div>
 
-      {/* ── Diagnóstico clínico — MedGemma ──────────────────────────────────── */}
-      {/* ARCH-20260820-01 Fase 2: sección condicional por operationMode.
-          Para document_extraction no se muestra (CB-14: clinicalCriteria=null). */}
-      {sections.showClinicalCriteria && (
+      {/* ── Prediagnóstico clínico ─────────────────────────────────────────── */}
+      {effectiveSections.showClinicalCriteria && (
         <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl space-y-3" data-testid="ai-calibration-clinical-section">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-violet-700 tracking-wide">Diagnóstico clínico</p>
-            <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MedGemma</span>
+            <p className="text-xs font-semibold text-violet-700 tracking-wide">Prediagnóstico clínico</p>
+            <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MiniMax M3</span>
           </div>
-          <p className="text-xs text-violet-600">Prompt y versión que MedGemma usa para interpretar los datos y generar el prediagnóstico.</p>
+          <p className="text-xs text-violet-700">
+            Prompt único que la IA clínica usa para interpretar los parámetros extraídos de esta prueba (sin respaldos hardcodeados en código). Incluye <code className="font-mono">{"{extracted_json}"}</code> donde desees insertar los datos.
+          </p>
 
           <div>
             <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt-version">
-              Versión de prompt de diagnóstico
+              Versión de prompt de prediagnóstico
             </label>
             <input
               id="diag-prompt-version"
               type="text"
               value={diagPromptVersion}
               onChange={(e) => setDiagPromptVersion(e.target.value)}
-              placeholder="ej. predx-audio-medgemma-v2"
+              placeholder="ej. predx-rx-columna-v1"
               className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
             />
           </div>
 
           <div>
             <label className="block text-xs text-slate-600 mb-1" htmlFor="diag-prompt">
-              Prompt clínico específico
+              Prompt completo de prediagnóstico
             </label>
             <textarea
               id="diag-prompt"
               value={diagPrompt}
               onChange={(e) => setDiagPrompt(e.target.value)}
               rows={8}
-              placeholder="Pega aqui el prompt clínico específico del estudio para MedGemma."
+              placeholder="Escribe aquí el prompt clínico de prediagnóstico para esta prueba."
               className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
             />
           </div>

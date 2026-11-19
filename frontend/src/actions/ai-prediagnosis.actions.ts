@@ -196,7 +196,6 @@ export interface StudySnapshotsResult {
 import {
   extractAndValidateClinicalContext,
 } from '@/lib/clinical/clinical-context-propagation'
-import { shouldOmitMedicalTestIdForLegacyPrediagnosis } from '@/lib/calibration-v3-gates'
 
 // ---------------------------------------------------------------------------
 // triggerStudyAIAnalysis
@@ -249,6 +248,7 @@ export async function triggerStudyAIAnalysis(
         test: {
           select: {
             id: true,
+            name: true,
             options: true,
             category: { select: { name: true } },
             code: true,
@@ -278,9 +278,12 @@ export async function triggerStudyAIAnalysis(
     const uploadForm = new FormData()
     uploadForm.append('file', file)
     uploadForm.append('triggered_by_user_id', triggeredByUserId)
-    const omitMedicalTestId = shouldOmitMedicalTestIdForLegacyPrediagnosis(testOptions)
-    if (eventTest?.test?.id && !omitMedicalTestId) {
+    if (eventTest?.test?.id) {
       uploadForm.append('medical_test_id', eventTest.test.id)
+    }
+    const testNameLabel = eventTest?.test?.name || eventTest?.testNameSnapshot
+    if (testNameLabel) {
+      uploadForm.append('test_name', testNameLabel)
     }
     if (studyType) {
       uploadForm.append('study_type', studyType)
@@ -366,7 +369,9 @@ export async function triggerStudyAIAnalysis(
       }
       return {
         success: false,
-        error: result.error || 'Error desconocido en backend V2',
+        error: result.message || result.error || 'Error desconocido en backend V2',
+        errorCode: result.error_code ?? undefined,
+        message: result.message ?? result.error ?? undefined,
       }
     }
 
@@ -601,19 +606,41 @@ export async function triggerStructuredStudyAIPrediagnosis(input: {
   try {
     const normalizedExtractedData = JSON.parse(JSON.stringify(extractedData)) as Prisma.InputJsonValue
 
-    // FastAPI (endpoint con varios Dict opcionales en body): `study_type` y
-    // `triggered_by_user_id` van en query; el JSON body debe incluir la clave
-    // `extracted_data` (no enviar el dict plano como body raíz).
+    const eventTestMeta = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: {
+        testNameSnapshot: true,
+        test: { select: { id: true, name: true, options: true } },
+      },
+    })
+    const testNameLabel =
+      eventTestMeta?.test?.name || eventTestMeta?.testNameSnapshot || studyType
+    const storedStructuredCal = readStoredAiCalibrationFromTestOptions(
+      eventTestMeta?.test?.options,
+    )
+
+    // FastAPI (endpoint con varios Dict opcionales en body): `study_type`,
+    // `triggered_by_user_id`, `medical_test_id` y `test_name` van en query;
+    // el JSON body incluye `extracted_data` (y `ai_calibration` si existía en BD).
     const query = new URLSearchParams({ study_type: studyType })
     if (triggeredByUserId) {
       query.set('triggered_by_user_id', triggeredByUserId)
+    }
+    if (eventTestMeta?.test?.id) {
+      query.set('medical_test_id', eventTestMeta.test.id)
+    }
+    if (testNameLabel) {
+      query.set('test_name', testNameLabel)
     }
     const response = await fetch(
       `${PYTHON_API}/api/v2/studies/prediagnosis-from-params?${query.toString()}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extracted_data: extractedData }),
+        body: JSON.stringify({
+          extracted_data: extractedData,
+          ...(storedStructuredCal ? { ai_calibration: storedStructuredCal } : {}),
+        }),
       },
     )
 
