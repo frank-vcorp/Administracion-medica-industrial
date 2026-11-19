@@ -30,6 +30,7 @@ import { BranchDeleteGuardModal } from './BranchDeleteGuardModal'
 import {
   BRANCH_WEEKDAY_KEYS,
   BRANCH_WEEKDAY_LABELS,
+  DEFAULT_HOURLY_MINUTES_CAPACITY,
   defaultBranchWeeklySchedule,
   parseBranchWeeklySchedule,
   type BranchDaySchedule,
@@ -43,6 +44,12 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
   const [error, setError] = useState<string | null>(null)
   const [successHours, setSuccessHours] = useState(false)
   const [successWeekly, setSuccessWeekly] = useState(false)
+  const [capacityMode, setCapacityMode] = useState<'HOURLY_COUNT' | 'DURATION_MINUTES'>(
+    branch.capacityMode === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT',
+  )
+  const [hourlyMinutesCapacity, setHourlyMinutesCapacity] = useState<string>(
+    String(branch.hourlyMinutesCapacity ?? DEFAULT_HOURLY_MINUTES_CAPACITY),
+  )
   const [weekly, setWeekly] = useState<BranchWeeklySchedule>(() =>
     parseBranchWeeklySchedule(branch.weeklySchedule) ??
       defaultBranchWeeklySchedule(
@@ -64,6 +71,11 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
       openingTime: formData.get('openingTime') as string,
       closingTime: formData.get('closingTime') as string,
       hourlyCapacity: Number(formData.get('hourlyCapacity')),
+      capacityMode,
+      hourlyMinutesCapacity:
+        capacityMode === 'DURATION_MINUTES'
+          ? Number(hourlyMinutesCapacity) || DEFAULT_HOURLY_MINUTES_CAPACITY
+          : branch.hourlyMinutesCapacity ?? null,
     }
     const parsed = branchUpdateSchema.safeParse(raw)
     if (!parsed.success) {
@@ -160,7 +172,7 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
             />
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Capacidad/Hr</label>
+            <label className="text-xs text-slate-500 mb-1 block">Capacidad/Hr (pacientes)</label>
             <input
               type="number"
               name="hourlyCapacity"
@@ -172,6 +184,56 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
             />
           </div>
         </div>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                Modo de control de cupo en agenda
+              </label>
+              <select
+                value={capacityMode}
+                onChange={(e) =>
+                  setCapacityMode(
+                    e.target.value === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT',
+                  )
+                }
+                className="w-full border border-slate-300 bg-white p-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="HOURLY_COUNT">Por pacientes / hora (actual)</option>
+                <option value="DURATION_MINUTES">Por duración de pruebas / minutos por hora</option>
+              </select>
+            </div>
+            {capacityMode === 'DURATION_MINUTES' && (
+              <div>
+                <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                  Capacidad operativa (min / hora)
+                </label>
+                <input
+                  type="number"
+                  min={15}
+                  max={3000}
+                  step={5}
+                  value={hourlyMinutesCapacity}
+                  onChange={(e) => setHourlyMinutesCapacity(e.target.value)}
+                  required
+                  className="w-full border border-slate-300 bg-white p-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            )}
+          </div>
+          {capacityMode === 'DURATION_MINUTES' ? (
+            <p className="text-xs text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+              Con <strong>{Number(hourlyMinutesCapacity) || DEFAULT_HOURLY_MINUTES_CAPACITY} min/hora</strong> y un perfil promedio de 60 min, caben aprox.{' '}
+              <strong>{Math.floor((Number(hourlyMinutesCapacity) || DEFAULT_HOURLY_MINUTES_CAPACITY) / 60)}</strong> paciente(s) por hora. Las citas largas se distribuyen entre horas sin rebasar el cierre.
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              Modo clásico: valida únicamente el máximo de pacientes por hora (<code>Capacidad/Hr</code>).
+            </p>
+          )}
+        </div>
+
         <button
           type="submit"
           disabled={pending}
@@ -195,7 +257,7 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
             return (
               <div
                 key={key}
-                className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end border border-slate-100 rounded-lg p-3 bg-slate-50/50"
+                className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end border border-slate-100 rounded-lg p-3 bg-slate-50/50"
               >
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-700 md:col-span-1">
                   <input
@@ -236,6 +298,25 @@ export function BranchOperationTab({ branch }: { branch: BranchDetail }) {
                     onChange={(e) =>
                       patchDay(key, { hourlyCapacity: Number(e.target.value) || 1 })
                     }
+                    className="mt-1 w-full border border-slate-300 p-2 rounded text-sm disabled:opacity-40"
+                  />
+                </label>
+                <label className="text-xs text-slate-500">
+                  Min./hr
+                  <input
+                    type="number"
+                    min={15}
+                    max={3000}
+                    step={5}
+                    disabled={day.enabled === false}
+                    placeholder={String(branch.hourlyMinutesCapacity ?? DEFAULT_HOURLY_MINUTES_CAPACITY)}
+                    value={day.hourlyMinutesCapacity ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value.trim()
+                      patchDay(key, {
+                        hourlyMinutesCapacity: v === '' ? null : Number(v) || DEFAULT_HOURLY_MINUTES_CAPACITY,
+                      })
+                    }}
                     className="mt-1 w-full border border-slate-300 p-2 rounded text-sm disabled:opacity-40"
                   />
                 </label>

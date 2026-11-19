@@ -9,14 +9,20 @@ import {
   EXAMEN_MEDICO_CATALOG_CODES,
   EXAMEN_MEDICO_CATALOG_NAMES,
 } from '../src/lib/clinical/examen-medico-variant'
+import { resolveUmmTheoreticalDurationMinutes } from '../src/lib/medical-test-duration-seed'
 
 const prisma = new PrismaClient()
 
 async function upsertTest(code: string, name: string, categoryId: string) {
+  const theoreticalDurationMinutes = resolveUmmTheoreticalDurationMinutes(code, name)
   return prisma.medicalTest.upsert({
     where: { code },
-    create: { code, name, categoryId },
-    update: { name, categoryId },
+    create: { code, name, categoryId, theoreticalDurationMinutes },
+    update: {
+      name,
+      categoryId,
+      ...(theoreticalDurationMinutes !== null ? { theoreticalDurationMinutes } : {}),
+    },
   })
 }
 

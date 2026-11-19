@@ -25,11 +25,14 @@ export const BRANCH_WEEKDAY_LABELS: Record<BranchWeekdayKey, string> = {
   saturday: 'Sábado',
 }
 
+export const DEFAULT_HOURLY_MINUTES_CAPACITY = 180
+
 export type BranchDaySchedule = {
   enabled?: boolean
   openingTime?: string
   closingTime?: string
   hourlyCapacity?: number
+  hourlyMinutesCapacity?: number | null
 }
 
 export type BranchWeeklySchedule = Partial<Record<BranchWeekdayKey, BranchDaySchedule>>
@@ -53,13 +56,39 @@ export function weekdayKeyForAgendaDate(dateStr: string, timeZone = 'America/Mex
 
 export function resolveBranchDayMeta(
   dateStr: string,
-  fallback: { openingTime: string; closingTime: string; hourlyCapacity: number },
+  fallback: {
+    openingTime: string
+    closingTime: string
+    hourlyCapacity: number
+    capacityMode?: string | null
+    hourlyMinutesCapacity?: number | null
+  },
   weeklySchedule: BranchWeeklySchedule | null | undefined,
-): { openingTime: string; closingTime: string; hourlyCapacity: number; open: boolean } {
+): {
+  openingTime: string
+  closingTime: string
+  hourlyCapacity: number
+  capacityMode: 'HOURLY_COUNT' | 'DURATION_MINUTES'
+  hourlyMinutesCapacity: number
+  open: boolean
+} {
+  const capacityMode =
+    fallback.capacityMode === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT'
+  const fallbackMinutes =
+    typeof fallback.hourlyMinutesCapacity === 'number' && fallback.hourlyMinutesCapacity > 0
+      ? fallback.hourlyMinutesCapacity
+      : DEFAULT_HOURLY_MINUTES_CAPACITY
   const key = weekdayKeyForAgendaDate(dateStr)
   const day = key ? weeklySchedule?.[key] : undefined
   if (day?.enabled === false) {
-    return { ...fallback, open: false }
+    return {
+      openingTime: fallback.openingTime,
+      closingTime: fallback.closingTime,
+      hourlyCapacity: fallback.hourlyCapacity,
+      capacityMode,
+      hourlyMinutesCapacity: fallbackMinutes,
+      open: false,
+    }
   }
   return {
     openingTime: day?.openingTime?.trim() || fallback.openingTime,
@@ -68,13 +97,24 @@ export function resolveBranchDayMeta(
       typeof day?.hourlyCapacity === 'number' && day.hourlyCapacity > 0
         ? day.hourlyCapacity
         : fallback.hourlyCapacity,
+    capacityMode,
+    hourlyMinutesCapacity:
+      typeof day?.hourlyMinutesCapacity === 'number' && day.hourlyMinutesCapacity > 0
+        ? day.hourlyMinutesCapacity
+        : fallbackMinutes,
     open: true,
   }
 }
 
 export function branchOperatingHoursForDate(
   dateStr: string,
-  fallback: { openingTime: string; closingTime: string; hourlyCapacity: number },
+  fallback: {
+    openingTime: string
+    closingTime: string
+    hourlyCapacity: number
+    capacityMode?: string | null
+    hourlyMinutesCapacity?: number | null
+  },
   weeklySchedule: BranchWeeklySchedule | null | undefined,
 ): number[] {
   const meta = resolveBranchDayMeta(dateStr, fallback, weeklySchedule)
@@ -108,6 +148,10 @@ export const branchDayScheduleSchema = z.object({
   openingTime: z.string().regex(hhmm, 'HH:MM').optional(),
   closingTime: z.string().regex(hhmm, 'HH:MM').optional(),
   hourlyCapacity: z.coerce.number().int().min(1).max(100).optional(),
+  hourlyMinutesCapacity: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    z.coerce.number().int().min(15).max(3000).nullable().optional(),
+  ),
 })
 
 export const branchWeeklyScheduleSchema = z

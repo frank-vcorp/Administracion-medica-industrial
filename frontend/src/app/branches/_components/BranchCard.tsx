@@ -54,7 +54,10 @@ export function BranchCard({ branch }: { branch: BranchWithCounts }) {
             <span>⏱️</span> {branch.openingTime} - {branch.closingTime}
           </div>
           <div className="flex items-center gap-2 text-slate-600">
-            <span>👥</span> {branch.hourlyCapacity} pacientes / hora
+            <span>👥</span>{' '}
+            {branch.capacityMode === 'DURATION_MINUTES'
+              ? `${branch.hourlyMinutesCapacity ?? 180} min / hora`
+              : `${branch.hourlyCapacity} pacientes / hora`}
           </div>
         </div>
 

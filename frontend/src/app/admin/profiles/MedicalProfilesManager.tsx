@@ -21,6 +21,13 @@ import {
   cloneMedicalProfile,
 } from '@/actions/medical-profiles'
 import { MedicalProfileNameBuilderFields } from '@/components/medical-profiles/MedicalProfileNameBuilderFields'
+import { ProfileDurationSummaryBox } from '@/components/medical-profiles/ProfileDurationSummaryBox'
+import {
+  formatMinutesLabel,
+  normalizeControlDeskMode,
+  resolveEffectiveProfileDuration,
+  type ControlDeskMode,
+} from '@/lib/profile-duration'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS LOCALES
@@ -30,6 +37,7 @@ type AvailableTest = {
   id: string
   name: string
   code: string
+  theoreticalDurationMinutes?: number | null
   category: { name: string }
 }
 
@@ -52,6 +60,10 @@ type MedicalProfileItem = {
   _count: { tests: number }
   reportEmails?: ProfileEmail[]
   specialNotes?: string | null
+  calculatedDurationMinutes?: number | null
+  controlDeskMode?: string | null
+  extraRxProjections?: number | null
+  durationOverrideMinutes?: number | null
 }
 
 interface Props {
@@ -259,6 +271,7 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
                 <th className="px-3 py-3 min-w-[180px]">Perfil</th>
                 <th className="px-3 py-3 hidden md:table-cell">Empresa</th>
                 <th className="px-3 py-3">Pruebas</th>
+                <th className="px-3 py-3">Duración</th>
                 <th className="px-3 py-3 hidden lg:table-cell">Correos</th>
                 <th className="px-3 py-3 w-12 text-center">Notas</th>
                 <th className="px-3 py-3 text-right w-44">Acción</th>
@@ -314,6 +327,26 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
                           )}
                         </div>
                       </div>
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {(() => {
+                        const effective = resolveEffectiveProfileDuration(profile)
+                        if (effective == null) {
+                          return <span className="text-xs text-slate-400">Sin calcular</span>
+                        }
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-[11px] font-bold text-teal-800">
+                              {formatMinutesLabel(effective)}
+                            </span>
+                            {profile.durationOverrideMinutes != null && (
+                              <span className="text-[10px] font-semibold text-amber-700" title="Ajuste manual">
+                                Manual
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td className="px-3 py-2.5 hidden lg:table-cell">
                       {emailCount === 0 ? (
@@ -426,6 +459,13 @@ export default function MedicalProfilesManager({ profiles, availableTests }: Pro
           initialCompanyId={editTarget.companyId}
           initialSpecialNotes={editTarget.specialNotes ?? ''}
           initialEmails={editTarget.reportEmails ?? []}
+          initialControlDeskMode={normalizeControlDeskMode(editTarget.controlDeskMode)}
+          initialExtraRxProjections={editTarget.extraRxProjections ?? 0}
+          initialDurationOverride={
+            editTarget.durationOverrideMinutes != null
+              ? String(editTarget.durationOverrideMinutes)
+              : ''
+          }
           onClose={() => setEditTarget(null)}
           onSubmit={(formData) => handleUpdate(editTarget.id, formData)}
           isPending={isPending}
@@ -553,6 +593,9 @@ function ProfileModal({
   initialCompanyId = null,
   initialSpecialNotes = '',
   initialEmails = [],
+  initialControlDeskMode = 'AUTO',
+  initialExtraRxProjections = 0,
+  initialDurationOverride = '',
   onClose,
   onSubmit,
   isPending,
@@ -566,6 +609,9 @@ function ProfileModal({
   initialCompanyId?: string | null
   initialSpecialNotes?: string
   initialEmails?: ProfileEmail[]
+  initialControlDeskMode?: ControlDeskMode
+  initialExtraRxProjections?: number
+  initialDurationOverride?: string
   onClose: () => void
   onSubmit: (formData: FormData) => void
   isPending: boolean
@@ -573,12 +619,20 @@ function ProfileModal({
 }) {
   const useStructuredName = Boolean(companyLegalName && initialCompanyId)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(initialTestIds))
+  const [controlDeskMode, setControlDeskMode] = useState<ControlDeskMode>(initialControlDeskMode)
+  const [extraRxProjections, setExtraRxProjections] = useState<number>(initialExtraRxProjections)
+  const [durationOverride, setDurationOverride] = useState<string>(initialDurationOverride)
   const [emails, setEmails] = useState<ProfileEmail[]>(initialEmails)
   const [newEmail, setNewEmail] = useState('')
   const [newLabel, setNewLabel] = useState('')
   const [emailError, setEmailError] = useState<string | null>(null)
   const [notesCharCount, setNotesCharCount] = useState(initialSpecialNotes.length)
   const [, startTransitionInner] = useTransition()
+
+  const selectedTests = useMemo(
+    () => availableTests.filter((t) => selectedIds.has(t.id)),
+    [availableTests, selectedIds],
+  )
 
   const byCategory = availableTests.reduce<Record<string, AvailableTest[]>>((acc, test) => {
     const cat = test.category.name
@@ -693,6 +747,16 @@ function ProfileModal({
           )}
 
           {/* Selección de pruebas */}
+          <ProfileDurationSummaryBox
+            selectedTests={selectedTests}
+            controlDeskMode={controlDeskMode}
+            onControlDeskModeChange={setControlDeskMode}
+            extraRxProjections={extraRxProjections}
+            onExtraRxProjectionsChange={setExtraRxProjections}
+            durationOverride={durationOverride}
+            onDurationOverrideChange={setDurationOverride}
+          />
+
           <div className="flex flex-col">
             <p className="text-sm font-semibold text-slate-700 mb-2 shrink-0">
               Pruebas incluidas{' '}
@@ -718,7 +782,12 @@ function ProfileModal({
                       <span className="font-mono text-xs text-slate-400 w-16 shrink-0">
                         {test.code}
                       </span>
-                      <span className="text-sm text-slate-700">{test.name}</span>
+                      <span className="text-sm text-slate-700 flex-1">{test.name}</span>
+                      {test.theoreticalDurationMinutes != null && (
+                        <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full shrink-0">
+                          {test.theoreticalDurationMinutes} min
+                        </span>
+                      )}
                     </label>
                   ))}
                 </div>

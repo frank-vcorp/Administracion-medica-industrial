@@ -4,11 +4,15 @@ import { UserRole } from '@prisma/client'
 import { createAppointment } from '@/actions/appointment.actions'
 import { getAssignableMedicalProfilesForCompany } from '@/actions/medical-profiles'
 import {
-  branchOperatingHours,
+  appointmentCapacityUserMessage,
   checkBranchHourCapacity,
   computeBranchDayAvailabilityForDates,
-  countAppointmentsByHourForDay,
+  computeBranchHourSlotsForDay,
+  normalizePositiveAppointmentDuration,
+  resolveBranchCapacityConfig,
+  resolveProfileRequiredDurationMinutes,
 } from '@/lib/appointment-capacity'
+import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
 import {
   addAgendaDays,
   formatAppointmentAgendaTime,
@@ -64,9 +68,31 @@ async function isBranchAllowedForCompany(companyId: string, branchId: string): P
   return allowed.has(branchId)
 }
 
+async function resolveEffectivePortalProfileId(
+  companyId: string,
+  serviceProfileId?: string | null,
+  workerId?: string | null,
+): Promise<string | null> {
+  if (serviceProfileId) return serviceProfileId
+  if (!workerId) return null
+  const w = await prisma.worker.findFirst({
+    where: { id: workerId, companyId },
+    select: { medicalProfileId: true },
+  })
+  return w?.medicalProfileId ?? null
+}
+
 export async function getPortalAppointmentBookingContext() {
   const gate = await resolvePortalBookingViewAccess()
   if (!gate.ok) return { success: false as const, error: gate.error }
+
+  const branchSelect = {
+    id: true,
+    name: true,
+    hourlyCapacity: true,
+    openingTime: true,
+    closingTime: true,
+  } as const
 
   const company = await prisma.company.findUnique({
     where: { id: gate.companyId },
@@ -74,24 +100,8 @@ export async function getPortalAppointmentBookingContext() {
       id: true,
       name: true,
       defaultBranchId: true,
-      defaultBranch: {
-        select: {
-          id: true,
-          name: true,
-          hourlyCapacity: true,
-          openingTime: true,
-          closingTime: true,
-        },
-      },
-      allowedBranches: {
-        select: {
-          id: true,
-          name: true,
-          hourlyCapacity: true,
-          openingTime: true,
-          closingTime: true,
-        },
-      },
+      defaultBranch: { select: branchSelect },
+      allowedBranches: { select: branchSelect },
     },
   })
   if (!company) return { success: false as const, error: 'Empresa no encontrada' }
@@ -111,9 +121,36 @@ export async function getPortalAppointmentBookingContext() {
       lastName: true,
       phone: true,
       medicalProfileId: true,
-      medicalProfile: { select: { id: true, name: true } },
+      medicalProfile: {
+        select: {
+          id: true,
+          name: true,
+          calculatedDurationMinutes: true,
+          durationOverrideMinutes: true,
+        },
+      },
     },
     orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+  }).catch(async (err) => {
+    if (!isPrismaMissingColumnError(err)) throw err
+    const fallbackWorkers = await prisma.worker.findMany({
+      where: { companyId: gate.companyId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        medicalProfileId: true,
+        medicalProfile: { select: { id: true, name: true } },
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    })
+    return fallbackWorkers.map((w) => ({
+      ...w,
+      medicalProfile: w.medicalProfile
+        ? { ...w.medicalProfile, calculatedDurationMinutes: null, durationOverrideMinutes: null }
+        : null,
+    }))
   })
 
   const profiles = await getAssignableMedicalProfilesForCompany(gate.companyId)
@@ -133,6 +170,8 @@ export async function getPortalAppointmentBookingContext() {
 export async function getPortalBranchHourAvailability(input: {
   branchId: string
   date: string
+  serviceProfileId?: string | null
+  workerId?: string | null
 }) {
   const gate = await resolvePortalBookingViewAccess()
   if (!gate.ok) return { success: false as const, error: gate.error }
@@ -144,38 +183,43 @@ export async function getPortalBranchHourAvailability(input: {
     return { success: false as const, error: 'Sucursal no autorizada' }
   }
 
-  const branch = await prisma.branch.findUnique({
-    where: { id: input.branchId },
-    select: {
-      hourlyCapacity: true,
-      openingTime: true,
-      closingTime: true,
-      isActive: true,
-    },
+  const effectiveProfileId = await resolveEffectivePortalProfileId(
+    gate.companyId,
+    input.serviceProfileId,
+    input.workerId,
+  )
+
+  const result = await computeBranchHourSlotsForDay(prisma, input.branchId, input.date, {
+    serviceProfileId: effectiveProfileId,
   })
-  if (!branch?.isActive) {
+  if (!result.ok) {
+    if (result.reason === 'BRANCH_CLOSED') {
+      return {
+        success: true as const,
+        closed: true,
+        capacityMode: 'HOURLY_COUNT' as const,
+        requiredDurationMinutes: 30,
+        slots: [],
+      }
+    }
     return { success: false as const, error: 'Sucursal no disponible' }
   }
 
-  const capacity = branch.hourlyCapacity ?? 15
-  const hours = branchOperatingHours(branch.openingTime, branch.closingTime)
-  const byHour = await countAppointmentsByHourForDay(prisma, input.branchId, input.date)
-  const slots = hours.map((hour) => {
-    const count = byHour.get(hour) ?? 0
-    return {
-      hour,
-      count,
-      capacity,
-      full: count >= capacity,
-    }
-  })
-
-  return { success: true as const, slots }
+  return {
+    success: true as const,
+    closed: false,
+    capacityMode: result.capacityMode,
+    requiredDurationMinutes: result.requiredDurationMinutes,
+    closingTime: result.closingTime,
+    slots: result.slots,
+  }
 }
 
 export async function getPortalBranchMonthAvailability(input: {
   branchId: string
   month: string
+  serviceProfileId?: string | null
+  workerId?: string | null
 }) {
   const gate = await resolvePortalBookingViewAccess()
   if (!gate.ok) return { success: false as const, error: gate.error }
@@ -187,18 +231,20 @@ export async function getPortalBranchMonthAvailability(input: {
     return { success: false as const, error: 'Sucursal no autorizada' }
   }
 
-  const branch = await prisma.branch.findUnique({
-    where: { id: input.branchId },
-    select: {
-      hourlyCapacity: true,
-      openingTime: true,
-      closingTime: true,
-      isActive: true,
-    },
-  })
+  const branch = await resolveBranchCapacityConfig(prisma, input.branchId)
   if (!branch?.isActive) {
     return { success: false as const, error: 'Sucursal no disponible' }
   }
+
+  const effectiveProfileId = await resolveEffectivePortalProfileId(
+    gate.companyId,
+    input.serviceProfileId,
+    input.workerId,
+  )
+  const requiredDurationMinutes = await resolveProfileRequiredDurationMinutes(
+    prisma,
+    effectiveProfileId,
+  )
 
   const firstOfMonth = `${input.month}-01`
   const gridStart = getAgendaWeekStartMonday(firstOfMonth)
@@ -216,16 +262,28 @@ export async function getPortalBranchMonthAvailability(input: {
       hourlyCapacity: capacity,
       openingTime: branch.openingTime,
       closingTime: branch.closingTime,
+      weeklySchedule: branch.weeklySchedule,
+      capacityMode: branch.capacityMode,
+      hourlyMinutesCapacity: branch.hourlyMinutesCapacity,
     },
     todayAgendaDateString(),
+    { requiredDurationMinutes },
   )
 
-  return { success: true as const, month: input.month, days, hourlyCapacity: capacity }
+  return {
+    success: true as const,
+    month: input.month,
+    days,
+    hourlyCapacity: capacity,
+    capacityMode: branch.capacityMode,
+  }
 }
 
 export async function getPortalBranchWeekAvailability(input: {
   branchId: string
   weekStart: string
+  serviceProfileId?: string | null
+  workerId?: string | null
 }) {
   const gate = await resolvePortalBookingViewAccess()
   if (!gate.ok) return { success: false as const, error: gate.error }
@@ -237,19 +295,23 @@ export async function getPortalBranchWeekAvailability(input: {
     return { success: false as const, error: 'Sucursal no autorizada' }
   }
 
-  const branch = await prisma.branch.findUnique({
-    where: { id: input.branchId },
-    select: {
-      name: true,
-      hourlyCapacity: true,
-      openingTime: true,
-      closingTime: true,
-      isActive: true,
-    },
-  })
+  const [branch, branchNameRow] = await Promise.all([
+    resolveBranchCapacityConfig(prisma, input.branchId),
+    prisma.branch.findUnique({ where: { id: input.branchId }, select: { name: true } }),
+  ])
   if (!branch?.isActive) {
     return { success: false as const, error: 'Sucursal no disponible' }
   }
+
+  const effectiveProfileId = await resolveEffectivePortalProfileId(
+    gate.companyId,
+    input.serviceProfileId,
+    input.workerId,
+  )
+  const requiredDurationMinutes = await resolveProfileRequiredDurationMinutes(
+    prisma,
+    effectiveProfileId,
+  )
 
   const weekStart = getAgendaWeekStartMonday(input.weekStart)
   const dateStrings = Array.from({ length: 7 }, (_, i) => addAgendaDays(weekStart, i))
@@ -262,16 +324,22 @@ export async function getPortalBranchWeekAvailability(input: {
       hourlyCapacity: capacity,
       openingTime: branch.openingTime,
       closingTime: branch.closingTime,
+      weeklySchedule: branch.weeklySchedule,
+      capacityMode: branch.capacityMode,
+      hourlyMinutesCapacity: branch.hourlyMinutesCapacity,
     },
     todayAgendaDateString(),
+    { requiredDurationMinutes },
   )
 
   return {
     success: true as const,
     weekStart,
     days,
-    branchName: branch.name,
+    branchName: branchNameRow?.name ?? '',
     hourlyCapacity: capacity,
+    capacityMode: branch.capacityMode,
+    requiredDurationMinutes: normalizePositiveAppointmentDuration(requiredDurationMinutes),
   }
 }
 
@@ -288,7 +356,7 @@ export async function createPortalClientAppointment(input: {
 
   const worker = await prisma.worker.findFirst({
     where: { id: input.workerId, companyId: gate.companyId },
-    select: { id: true, firstName: true, lastName: true },
+    select: { id: true, firstName: true, lastName: true, medicalProfileId: true },
   })
   if (!worker) {
     return { success: false as const, error: 'Trabajador no válido para su empresa.' }
@@ -298,14 +366,32 @@ export async function createPortalClientAppointment(input: {
     return { success: false as const, error: 'Sucursal no autorizada.' }
   }
 
+  const effectiveProfileId = input.serviceProfileId || worker.medicalProfileId || null
   const scheduledAt = parseAppointmentLocalDateTime(input.date, input.time)
-  const capacityCheck = await checkBranchHourCapacity(prisma, input.branchId, scheduledAt)
+  const capacityCheck = await checkBranchHourCapacity(prisma, input.branchId, scheduledAt, {
+    serviceProfileId: effectiveProfileId,
+  })
   if (!capacityCheck.ok) {
+    const isCapacityLimit =
+      !capacityCheck.reason ||
+      capacityCheck.reason === 'INSUFFICIENT_MINUTES' ||
+      capacityCheck.reason === 'EXCEEDS_CLOSING_TIME'
+    const fallbackMessage =
+      capacityCheck.capacityMode === 'DURATION_MINUTES'
+        ? appointmentCapacityUserMessage(capacityCheck)
+        : 'Este horario ya alcanzó el límite de citas por hora. Use la solicitud personalizada e indique cuántas citas necesita.'
+
     return {
       success: false as const,
-      error: 'BRANCH_HOUR_FULL',
+      error: isCapacityLimit ? 'BRANCH_HOUR_FULL' : (capacityCheck.reason ?? 'BRANCH_HOUR_FULL'),
       userMessage:
-        'Este horario ya alcanzó el límite de citas por hora. Use la solicitud personalizada e indique cuántas citas necesita.',
+        capacityCheck.reason === 'EXCEEDS_CLOSING_TIME' ||
+        capacityCheck.reason === 'INSUFFICIENT_MINUTES' ||
+        capacityCheck.reason === 'OUTSIDE_HOURS' ||
+        capacityCheck.reason === 'BRANCH_CLOSED' ||
+        capacityCheck.reason === 'APPOINTMENT_IN_PAST'
+          ? appointmentCapacityUserMessage(capacityCheck)
+          : fallbackMessage,
       capacity: capacityCheck,
     }
   }

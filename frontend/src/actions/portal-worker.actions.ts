@@ -3,8 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { logAudit } from '@/actions/audit.actions'
-import { checkBranchHourCapacity } from '@/lib/appointment-capacity'
-import { parseAppointmentLocalDateTime } from '@/lib/appointment-scheduling'
+import {
+  appointmentCapacityUserMessage,
+  checkBranchHourCapacity,
+  computeBranchHourSlotsForDay,
+} from '@/lib/appointment-capacity'
+import { appointmentAgendaHour, parseAppointmentLocalDateTime } from '@/lib/appointment-scheduling'
 import { generateUniversalId } from '@/lib/id.utils'
 import { applySentenceCase } from '@/lib/text/sentence-case'
 import { resolvePortalCompanyAccess } from '@/lib/portal-access'
@@ -64,6 +68,7 @@ const QuickRegisterSchema = z.object({
   branchId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: z.string().regex(/^\d{1,2}:\d{2}$/),
+  serviceProfileId: z.string().uuid().nullable().optional(),
   workers: z.array(QuickWorkerRowSchema).min(1),
 })
 
@@ -73,7 +78,12 @@ export type PortalWorkerListItem = {
   lastName: string
   phone: string | null
   medicalProfileId: string | null
-  medicalProfile: { id: string; name: string } | null
+  medicalProfile: {
+    id: string
+    name: string
+    calculatedDurationMinutes?: number | null
+    durationOverrideMinutes?: number | null
+  } | null
 }
 
 export async function listPortalCompanyWorkers(): Promise<
@@ -103,6 +113,7 @@ export async function quickRegisterPortalWorkers(input: {
   branchId: string
   date: string
   time: string
+  serviceProfileId?: string | null
   workers: Array<{ firstName: string; lastName: string; phone?: string }>
 }) {
   const gate = await assertPortalClientCanMutateWorkers()
@@ -116,25 +127,42 @@ export async function quickRegisterPortalWorkers(input: {
     }
   }
 
-  const { branchId, date, time, workers: rows } = parsed.data
+  const { branchId, date, time, serviceProfileId, workers: rows } = parsed.data
 
   if (!(await isBranchAllowedForCompany(gate.companyId, branchId))) {
     return { success: false as const, error: 'Sucursal no autorizada.' }
   }
 
   const scheduledAt = parseAppointmentLocalDateTime(date, time)
-  const capacityCheck = await checkBranchHourCapacity(prisma, branchId, scheduledAt)
-  if (!capacityCheck.ok && capacityCheck.capacity === 0) {
+  const [capacityCheck, daySlots] = await Promise.all([
+    checkBranchHourCapacity(prisma, branchId, scheduledAt, {
+      serviceProfileId: serviceProfileId ?? null,
+      partySize: rows.length,
+    }),
+    computeBranchHourSlotsForDay(prisma, branchId, date, {
+      serviceProfileId: serviceProfileId ?? null,
+    }),
+  ])
+
+  const targetHour = appointmentAgendaHour(scheduledAt)
+  const matchingSlot = daySlots.ok ? daySlots.slots.find((s) => s.hour === targetHour) : undefined
+  const slotsRemaining = matchingSlot
+    ? matchingSlot.availableForProfile
+    : Math.max(0, capacityCheck.capacity - capacityCheck.count)
+
+  if (!capacityCheck.ok && capacityCheck.reason === 'BRANCH_INACTIVE') {
     return { success: false as const, error: 'Sucursal no disponible.' }
   }
 
-  const slotsRemaining = Math.max(0, capacityCheck.capacity - capacityCheck.count)
   if (slotsRemaining === 0) {
     return {
       success: false as const,
       error: 'BRANCH_HOUR_FULL',
       userMessage:
-        'Este horario ya no tiene cupo. Elija la siguiente hora disponible o solicite atención personalizada.',
+        capacityCheck.reason === 'EXCEEDS_CLOSING_TIME' ||
+        capacityCheck.reason === 'INSUFFICIENT_MINUTES'
+          ? appointmentCapacityUserMessage(capacityCheck)
+          : 'Este horario ya no tiene cupo. Elija la siguiente hora disponible o solicite atención personalizada.',
     }
   }
 

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Catálogo de Pruebas con filtrado por categoría
+ * @fileoverview Catálogo de Pruebas con filtrado por categoría y Duración teórica (min)
  * @id ARCH-20260325-01
  * @backup context/checkpoints/CHK_ARCH-20260325-01.md
  */
@@ -9,6 +9,7 @@ import {
     getMedicalTests,
     getTestCategories,
 } from "@/actions/medical-profiles"
+import { MedicalServicesCatalogTable } from "@/components/admin/MedicalServicesCatalogTable"
 
 async function createMedicalTestFormAction(formData: FormData): Promise<void> {
     'use server'
@@ -46,7 +47,9 @@ export default async function AdminServicesPage({
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800">Catálogo de Pruebas</h2>
-                    <p className="text-sm text-slate-500">Estudios clínicos, laboratorio y gabinete disponibles.</p>
+                    <p className="text-sm text-slate-500">
+                        Estudios clínicos, laboratorio y gabinete disponibles con su duración teórica en clínica.
+                    </p>
                 </div>
 
                 <label htmlFor="new-service-modal" className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow flex items-center gap-2">
@@ -95,6 +98,21 @@ export default async function AdminServicesPage({
                                 ))}
                             </select>
                         </div>
+                        <div>
+                            <label htmlFor="new-theoretical-duration" className="block text-xs font-semibold text-slate-600 mb-1">
+                                Duración teórica (min)
+                            </label>
+                            <input
+                                id="new-theoretical-duration"
+                                type="number"
+                                name="theoreticalDurationMinutes"
+                                min={0}
+                                max={480}
+                                step={1}
+                                placeholder="Opcional (ej. 15, 30)"
+                                className="w-full border p-2 rounded text-sm"
+                            />
+                        </div>
                         {categories.length === 0 && (
                             <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
                                 No hay categorías configuradas. Debes dar de alta al menos una categoría en la base de datos para registrar pruebas.
@@ -110,48 +128,11 @@ export default async function AdminServicesPage({
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="bg-slate-50 text-xs text-slate-500 font-semibold border-b border-slate-200">
-                        <tr>
-                            <th className="px-6 py-4">Código</th>
-                            <th className="px-6 py-4">Prueba</th>
-                            <th className="px-6 py-4">Categoría</th>
-                            <th className="px-6 py-4 text-right">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {tests.map((test) => (
-                            <tr key={test.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 font-mono text-slate-400 text-xs">{test.code}</td>
-                                <td className="px-6 py-4 font-medium text-slate-900">{test.name}</td>
-                                <td className="px-6 py-4 text-slate-500">{test.category.name}</td>
-                                <td className="px-6 py-4 text-right flex items-center justify-end gap-4">
-                                    {/* ARCH-20260327-15: CTA Calibrar IA */}
-                                    <Link
-                                        href={`/admin/services/${test.id}/calibration`}
-                                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors whitespace-nowrap"
-                                    >
-                                        ⚡ Calibrar IA
-                                    </Link>
-                                    <button className="text-slate-400 hover:text-blue-600 font-medium text-xs">
-                                        Editar
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                        {tests.length === 0 && (
-                            <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-slate-400">
-                                    {category
-                                        ? 'No hay pruebas en la categoría seleccionada.'
-                                        : 'Aún no hay pruebas registradas en el catálogo.'}
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+            <MedicalServicesCatalogTable
+                tests={tests}
+                categories={categories}
+                activeCategoryId={category}
+            />
         </div>
     )
 }
