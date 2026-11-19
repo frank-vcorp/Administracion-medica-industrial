@@ -58,10 +58,31 @@ export interface AIKeyDeleteResponse {
   source: 'env'
 }
 
+export const M3_ACTIVE_MODEL = 'MiniMax-M3.1-Flash'
+
+const M3_LEGACY_ALIASES = new Set([
+  '',
+  'm3',
+  'minimax',
+  'minimax m3',
+  'minimax-m3',
+  'minimax-m3-flash',
+  'minimax-m3.1-flash',
+])
+
+/** Normaliza variantes heredadas (`MiniMax-M3`, `Minimax-M3`, vacío) a `MiniMax-M3.1-Flash`. */
+export function normalizeM3Model(model?: string | null): string {
+  const raw = (model ?? '').trim()
+  if (M3_LEGACY_ALIASES.has(raw.toLowerCase())) {
+    return M3_ACTIVE_MODEL
+  }
+  return raw
+}
+
 /** Etiqueta legible del proveedor para UI. */
 export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {
   gemini: 'Gemini (extracción)',
-  m3: 'MiniMax M3 (extracción y prediagnóstico)',
+  m3: 'MiniMax-M3.1-Flash (extracción y prediagnóstico)',
   dr7: 'DR7 / MedGemma (sin uso clínico)',
 }
 
@@ -102,14 +123,14 @@ export type ProbeResult =
       retryAfterSec?: number
     }
 
-/** Proveedores elegibles como default de extracción (gemini o MiniMax M3). */
+/** Proveedores elegibles como default de extracción (gemini o MiniMax-M3.1-Flash). */
 export type ExtractionProvider = 'gemini' | 'm3'
 
 export const EXTRACTION_PROVIDERS: readonly ExtractionProvider[] = ['gemini', 'm3'] as const
 
 export const EXTRACTION_PROVIDER_LABELS: Record<ExtractionProvider, string> = {
   gemini: 'Gemini',
-  m3: 'MiniMax M3',
+  m3: 'MiniMax-M3.1-Flash',
 }
 
 /** Respuesta de GET /api/v2/admin/app-config/extraction-default-provider */

@@ -4,7 +4,7 @@
  * `extraction_snapshot.audit.extraction_provider_used`.
  *
  * Reglas (ver SPEC_FIX-20260821-01-GATE-TABLEAWARE-ESPIROMETRIA.md §4.5):
- * - 'm3' → "Extrayendo datos con Minimax" (provider vigente tras FIX-20260812-12).
+ * - 'm3' → "Extrayendo datos con MiniMax-M3.1-Flash".
  * - 'gemini' → "Extrayendo datos con Gemini".
  * - cualquier otro / ausente → texto neutro "Extrayendo datos" sin afirmar proveedor.
  *
@@ -25,7 +25,7 @@ export type ExtractionProvider = 'm3' | 'gemini' | 'xml_parser' | (string & {})
  */
 export function extractingStageLabel(provider: ExtractionProvider | null | undefined): string {
   const p = (provider || '').toLowerCase()
-  if (p === 'm3') return 'Extrayendo datos con Minimax'
+  if (p === 'm3') return 'Extrayendo datos con MiniMax-M3.1-Flash'
   if (p === 'gemini') return 'Extrayendo datos con Gemini'
   return 'Extrayendo datos'
 }

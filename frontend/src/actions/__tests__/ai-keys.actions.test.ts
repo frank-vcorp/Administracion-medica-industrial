@@ -103,6 +103,18 @@ describe('listAIProviderKeys', () => {
     expect(result.providers).toHaveLength(3)
   })
 
+  it('normaliza MiniMax-M3 / Minimax-M3 / null de m3 hacia MiniMax-M3.1-Flash', async () => {
+    setSession('ADMIN')
+    setFetchResponse(200, {
+      providers: [
+        { provider: 'm3', present: true, keySuffix: 'abcd', baseUrl: null, defaultModel: 'Minimax-M3', enabled: true, updatedAt: null, updatedBy: null, source: 'db' },
+      ],
+    })
+    const result = await listAIProviderKeys()
+    expect(result.ok).toBe(true)
+    expect(result.providers![0].defaultModel).toBe('MiniMax-M3.1-Flash')
+  })
+
   it('forwards 403 error from backend', async () => {
     setSession('ADMIN')
     setFetchResponse(403, { detail: 'forbidden' })
@@ -175,13 +187,20 @@ describe('updateAIProviderKey', () => {
     setSession('SUPERADMIN')
     setFetchResponse(200, {
       provider: 'm3', present: true, keySuffix: '9999',
-      baseUrl: null, defaultModel: null, enabled: true,
+      baseUrl: null, defaultModel: 'MiniMax-M3.1-Flash', enabled: true,
       updatedAt: '2026-08-09T18:00:00Z', source: 'db',
     })
-    const result = await updateAIProviderKey({ provider: 'm3', apiKey: 'sk-rotated' })
+    const result = await updateAIProviderKey({
+      provider: 'm3',
+      apiKey: 'sk-rotated',
+      defaultModel: 'MiniMax-M3',
+    })
     expect(result.ok).toBe(true)
     expect(result.result?.provider).toBe('m3')
     expect(result.result?.keySuffix).toBe('9999')
+    const fetchCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const sentBody = JSON.parse((fetchCall[1] as { body: string }).body)
+    expect(sentBody.defaultModel).toBe('MiniMax-M3.1-Flash')
   })
 })
 

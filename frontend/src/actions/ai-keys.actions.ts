@@ -32,6 +32,7 @@ import {
   type ExtractionProvider,
   AI_PROVIDERS,
   EXTRACTION_PROVIDERS,
+  normalizeM3Model,
 } from '@/types/ai-keys'
 
 function _backendBase(): string {
@@ -92,6 +93,9 @@ export async function listAIProviderKeys(): Promise<{
         // Si el backend intenta exponer más de 4 chars, descartar (defense-in-depth).
         p.keySuffix = p.keySuffix.slice(-4)
       }
+      if (p.provider === 'm3') {
+        p.defaultModel = normalizeM3Model(p.defaultModel)
+      }
     }
     return { ok: true, providers: json.providers }
   } catch (e: unknown) {
@@ -137,7 +141,10 @@ export async function updateAIProviderKey(input: {
   const body: AIKeyUpsertRequest = {
     apiKey: input.apiKey,
     baseUrl: input.baseUrl ?? null,
-    defaultModel: input.defaultModel ?? null,
+    defaultModel:
+      input.provider === 'm3'
+        ? normalizeM3Model(input.defaultModel)
+        : (input.defaultModel ?? null),
     expectedUpdatedAt: input.expectedUpdatedAt ?? null,
   }
 

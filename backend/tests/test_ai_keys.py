@@ -534,3 +534,24 @@ def test_prediagnostic_dr7_module_constants_still_preserved(master_key_env):
     from app.services.ai import prediagnostic
     assert hasattr(prediagnostic, "DR7_API_KEY")
     assert hasattr(prediagnostic, "MEDGEMMA_ENABLED")
+
+
+def test_m3_default_model_and_legacy_promotion(monkeypatch):
+    """M3_DEFAULT_MODEL por defecto es MiniMax-M3.1-Flash y promueve MiniMax-M3 / Minimax-M3."""
+    from app.services.ai.m3_model import M3_DEFAULT_MODEL, M3_MODEL_FLASH, resolve_m3_model
+
+    assert M3_DEFAULT_MODEL == "MiniMax-M3.1-Flash"
+    assert M3_MODEL_FLASH == "MiniMax-M3.1-Flash"
+
+    monkeypatch.delenv("M3_DEFAULT_MODEL", raising=False)
+    assert resolve_m3_model(None) == "MiniMax-M3.1-Flash"
+    assert resolve_m3_model("") == "MiniMax-M3.1-Flash"
+    assert resolve_m3_model("MiniMax-M3") == "MiniMax-M3.1-Flash"
+    assert resolve_m3_model("Minimax-M3") == "MiniMax-M3.1-Flash"
+
+    _api_key, _base_url, default_model = KeyResolver._env_value("m3")
+    assert default_model == "MiniMax-M3.1-Flash"
+
+    monkeypatch.setenv("M3_DEFAULT_MODEL", "Minimax-M3")
+    _api_key2, _base_url2, promoted_model = KeyResolver._env_value("m3")
+    assert promoted_model == "MiniMax-M3.1-Flash"

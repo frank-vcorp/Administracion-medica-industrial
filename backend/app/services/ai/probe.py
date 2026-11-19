@@ -1,6 +1,6 @@
 """
 IMPL-20260809-09 — ARCH-20260809-05: Servicio de "Probar conexión" para
-proveedores IA (Gemini, MiniMax M3, DR7/MedGemma).
+proveedores IA (Gemini, MiniMax-M3.1-Flash, DR7/MedGemma).
 
 Hace una llamada **real mínima** al endpoint del proveedor con prompt
 trivial ("Hola", `max_tokens:16`) y timeout 12s. Reutiliza `KeyResolver.resolve`
@@ -240,7 +240,12 @@ async def _probe_openai_compatible(
     # M3 / DR7 exponen /chat/completions al final del base_url.
     # DR7_BASE_URL ya apunta a /chat/completions; si lo trae, usarlo tal cual.
     url = base_url if base_url.rstrip("/").endswith("/chat/completions") else f"{base_url.rstrip('/')}/chat/completions"
-    model = resolution.default_model or "unknown-model"
+    if provider_label == "m3":
+        from app.services.ai.m3_model import resolve_m3_model
+
+        model = resolve_m3_model(resolution.default_model)
+    else:
+        model = resolution.default_model or "unknown-model"
     log_url = _redact_url(url)
 
     body = {

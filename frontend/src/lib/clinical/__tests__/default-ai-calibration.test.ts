@@ -119,4 +119,37 @@ describe('default-ai-calibration (única fuente de verdad en BD)', () => {
     expect(src).not.toContain('bootstrapForStudyType')
     expect(src).not.toContain('update-espirometria-extraction-prompt')
   })
+
+  it('promueve MiniMax-M3 / Minimax-M3 a MiniMax-M3.1-Flash al leer V1/V2 y V3', () => {
+    const legacyV1 = readStoredAiCalibrationFromTestOptions({
+      aiCalibration: {
+        enabled: true,
+        extraction: { enabled: true, prompt: 'Prompt V1', provider: 'm3', model: 'Minimax-M3' },
+      },
+    })
+    expect((legacyV1?.extraction as { model?: string }).model).toBe('MiniMax-M3.1-Flash')
+
+    const v3 = readStoredAiCalibrationFromTestOptions({
+      aiCalibration: {
+        schemaVersion: 'V3',
+        currentPublishedVersionId: 'v1',
+        publishedVersions: [
+          {
+            versionId: 'v1',
+            status: 'published',
+            enabled: true,
+            canonicalStudyType: 'Audiometria',
+            extraction: { enabled: true, prompt: 'Prompt V3', provider: 'm3', model: 'MiniMax-M3' },
+            fieldDefinitions: [],
+            clinicalCriteria: null,
+            presentation: { enabled: false, schema: null },
+          },
+        ],
+        familyTemplateId: null,
+        draft: null,
+        legacyV1V2Snapshot: null,
+      },
+    })
+    expect((v3?.extraction as { model?: string }).model).toBe('MiniMax-M3.1-Flash')
+  })
 })

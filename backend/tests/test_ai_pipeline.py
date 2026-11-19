@@ -848,7 +848,7 @@ class TestCalibrationV1AudioEspiro:
             "no_published_version",
             "field_definitions_incomplete",
         )
-        assert result.clinical_model_used == "MiniMax-M3"
+        assert result.clinical_model_used == "MiniMax-M3.1-Flash"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
@@ -869,7 +869,7 @@ class TestCalibrationV1AudioEspiro:
             "no_published_version",
             "field_definitions_incomplete",
         )
-        assert result.clinical_model_used == "MiniMax-M3"
+        assert result.clinical_model_used == "MiniMax-M3.1-Flash"
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
     @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
@@ -933,7 +933,7 @@ class TestCalibrationV1AudioEspiro:
         # Fase 4: sin calibration_version → legacy_hardcoded (no medical_calibration).
         assert result.calibration_source == "legacy_hardcoded"
         assert result.prompt_source == "backend_fallback"
-        assert result.clinical_model_used == "MiniMax-M3"
+        assert result.clinical_model_used == "MiniMax-M3.1-Flash"
         assert result.confidence >= 0.60
 
 
@@ -1012,7 +1012,7 @@ class TestMedGemmaDR7Provider:
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
     @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
-    @patch('app.services.ai.prediagnostic.M3_DEFAULT_MODEL', 'MiniMax-M3')
+    @patch('app.services.ai.prediagnostic.M3_DEFAULT_MODEL', 'MiniMax-M3.1-Flash')
     @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
     def test_m3_key_llama_minimax(self, mock_featherless, prediagnostic_svc):
         """
@@ -2301,7 +2301,7 @@ class TestMultiProviderExtractionARCH20260809_02:
                 raise ImportError("Simulated: openai not installed")
             return original_import(name, *args, **kwargs)
 
-        client = M3VisionBase(api_key="test-key", model="MiniMax-M3")
+        client = M3VisionBase(api_key="test-key", model="MiniMax-M3.1-Flash")
         with patch("builtins.__import__", side_effect=_fake_import):
             with pytest.raises(RuntimeError, match="openai"):
                 client.call_m3("/fake/audio.pdf", "test prompt")
@@ -2309,13 +2309,19 @@ class TestMultiProviderExtractionARCH20260809_02:
     def test_m3_vision_base_dict_basico(self):
         """Smoke test: M3VisionBase se puede instanciar con kwargs sin fallar."""
         from app.services.ai.base import M3VisionBase
-        client = M3VisionBase(api_key="test-key", model="MiniMax-M3", base_url="https://example.com")
+        client = M3VisionBase(api_key="test-key", model="MiniMax-M3.1-Flash", base_url="https://example.com")
         assert client.api_key == "test-key"
-        assert client.model == "MiniMax-M3"
+        assert client.model == "MiniMax-M3.1-Flash"
         assert client.base_url == "https://example.com"
 
+    def test_m3_vision_base_promueve_legacy_minimax_m3(self):
+        """Variantes heredadas MiniMax-M3 / Minimax-M3 se promueven a MiniMax-M3.1-Flash."""
+        from app.services.ai.base import M3VisionBase
+        assert M3VisionBase(api_key="test-key", model="MiniMax-M3").model == "MiniMax-M3.1-Flash"
+        assert M3VisionBase(api_key="test-key", model="Minimax-M3").model == "MiniMax-M3.1-Flash"
+
     def test_m3_vision_base_constructor_default_model(self):
-        """Default model = MiniMax-M3 si no se especifica."""
+        """Default model = MiniMax-M3.1-Flash si no se especifica."""
         from app.services.ai.base import M3VisionBase
         with patch.dict(os.environ, {"M3_DEFAULT_MODEL": ""}, clear=False):
             client = M3VisionBase(api_key="test-key")
@@ -2334,7 +2340,7 @@ class TestMultiProviderExtractionARCH20260809_02:
         """CA-02: AIAuditMetadata acepta nuevos campos de trazabilidad extractiva."""
         from app.schemas.medical import AIAuditMetadata
         audit = AIAuditMetadata(
-            model_name="MiniMax-M3",
+            model_name="MiniMax-M3.1-Flash",
             prompt_version="test_v1",
             extraction_provider_requested="m3",
             extraction_provider_used="gemini",
@@ -2367,7 +2373,8 @@ class TestMultiProviderExtractionARCH20260809_02:
         assert "M3_STATUS" in source
         # Defaults explícitos en source
         assert "https://api.minimax.io/v1" in source
-        assert "MiniMax-M3" in source
+        assert "MiniMax-M3.1-Flash" in source or "M3_MODEL_FLASH" in source
+        assert 'or "MiniMax-M3"' not in source
         # /ai/status incluye los campos
         assert "m3_enabled" in source
         assert "m3_status" in source
@@ -2417,7 +2424,7 @@ class TestFix20260810_05_M3DbResolverAndGemini503:
             provider="m3",
             api_key="m3-key-from-db",
             base_url="https://api.minimax.io/v1",
-            default_model="MiniMax-M3",
+            default_model="MiniMax-M3.1-Flash",
             source="db",
             warning=None,
         )
@@ -2475,7 +2482,7 @@ class TestFix20260810_05_M3DbResolverAndGemini503:
             provider="m3",
             api_key="m3-key-from-db",
             base_url="https://api.minimax.io/v1",
-            default_model="MiniMax-M3",
+            default_model="MiniMax-M3.1-Flash",
             source="db",
             warning=None,
         )
@@ -2752,7 +2759,7 @@ class TestFix20260812_14_M3MissingCredentials:
                     file_path="/fake/audio.pdf",
                     prompt="prompt de extracción",
                     provider="m3",
-                    model="MiniMax-M3",
+                    model="MiniMax-M3.1-Flash",
                 )
         # reason y provider correctos.
         assert exc_info.value.provider == "m3"
@@ -2904,7 +2911,7 @@ class TestFix20260812_18_M3WarmupCacheCoherence:
         assert client.key_resolution_warning is None
         # IMPL-20260812-05: el model del selector NO se sobreescribe.
         assert client.model != "MiniMax-DB" or client.model == os.environ.get(
-            "M3_DEFAULT_MODEL", "MiniMax-M3"
+            "M3_DEFAULT_MODEL", "MiniMax-M3.1-Flash"
         )
 
     def test_refresh_keys_no_popula_api_key_si_resolucion_inutil(self, monkeypatch):
@@ -2921,7 +2928,7 @@ class TestFix20260812_18_M3WarmupCacheCoherence:
             provider="m3",
             api_key="",  # fallback env con M3_API_KEY ausente
             base_url="https://api.minimax.io/v1",
-            default_model="MiniMax-M3",
+            default_model="MiniMax-M3.1-Flash",
             source="env",
             warning="row_missing",
         )
@@ -4582,6 +4589,7 @@ class TestIMPLFIX20260824_02ExtractionNotJsonRegression:
         from app.services.ai.base import M3VisionBase
 
         client = M3VisionBase(model="Minimax-M3")
+        assert client.model == "MiniMax-M3.1-Flash"
         good = '{"paciente":"Retry OK","oido_derecho":{"500":5}}'
         with patch.object(
             M3VisionBase,

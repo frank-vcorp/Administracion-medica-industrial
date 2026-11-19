@@ -19,6 +19,7 @@
 
 import { useState, useTransition } from "react"
 import { saveAICalibrationV3 } from "@/actions/calibration-v3.actions"
+import { M3_ACTIVE_MODEL, normalizeM3Model } from "@/types/ai-keys"
 import type {
   AICalibrationDraftV3,
   AICalibrationPresentationV3,
@@ -153,7 +154,7 @@ type ExtractionProvider = "gemini" | "m3"
 const EXTRACTION_PROVIDERS: ExtractionProvider[] = ["gemini", "m3"]
 const EXTRACTION_MODEL_PLACEHOLDERS: Record<ExtractionProvider, string> = {
   gemini: "gemini-2.5-flash",
-  m3: "MiniMax-M3.1-Flash",
+  m3: M3_ACTIVE_MODEL,
 }
 function isExtractionProvider(value: unknown): value is ExtractionProvider {
   return value === "gemini" || value === "m3"
@@ -336,7 +337,11 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
   const initialExtractProvider: ExtractionProvider = isExtractionProvider(rawExtractProvider)
     ? rawExtractProvider
     : "m3"
-  const initialExtractModel = getStr(extraction, "model")
+  const rawExtractModel = getStr(extraction, "model")
+  const initialExtractModel =
+    initialExtractProvider === "m3"
+      ? normalizeM3Model(rawExtractModel)
+      : rawExtractModel
 
   // ── Estado del formulario ──────────────────────────────────────────────────
   const [selectedOperationMode, setSelectedOperationMode] = useState<OperationMode>(
@@ -398,13 +403,18 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
     const normalizedDiagPrompt = diagPrompt.trim() || (looksLikePromptContent(diagPromptVersion) ? diagPromptVersion.trim() : "")
     const normalizedDiagVersion = looksLikePromptContent(diagPromptVersion) ? "" : diagPromptVersion.trim()
 
+    const normalizedExtractModel =
+      extractProvider === "m3"
+        ? normalizeM3Model(extractModel)
+        : extractModel
+
     const draftV3 = buildDraftV3FromEditorState({
       enabled,
       canonicalStudyType,
       extractPrompt: normalizedExtractPrompt,
       extractVersion: normalizedExtractVersion,
       extractProvider,
-      extractModel,
+      extractModel: normalizedExtractModel,
       diagPrompt: normalizedDiagPrompt,
       diagVersion: normalizedDiagVersion,
       initial,
@@ -534,7 +544,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
         </div>
       </div>
 
-      {/* ── Extracción documental — MiniMax M3 ────────────────────────────── */}
+      {/* ── Extracción documental — MiniMax-M3.1-Flash ────────────────────── */}
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-blue-700 tracking-wide">Extracción documental</p>
@@ -542,7 +552,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
             className="text-xs font-medium px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200"
             data-testid="extraction-provider-badge"
           >
-            {extractProvider === "m3" ? "MiniMax M3" : "Gemini"}
+            {extractProvider === "m3" ? "MiniMax-M3.1-Flash" : "Gemini"}
           </span>
         </div>
         <p className="text-xs text-blue-700">
@@ -559,13 +569,22 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
               value={extractProvider}
               onChange={(e) => {
                 const next = e.target.value as ExtractionProvider
-                if (isExtractionProvider(next)) setExtractProvider(next)
+                if (isExtractionProvider(next)) {
+                  setExtractProvider(next)
+                  if (next === "m3") {
+                    setExtractModel((prev) =>
+                      !prev.trim() || prev.toLowerCase().includes("gemini")
+                        ? M3_ACTIVE_MODEL
+                        : normalizeM3Model(prev),
+                    )
+                  }
+                }
               }}
               className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
             >
               {EXTRACTION_PROVIDERS.map((p) => (
                 <option key={p} value={p}>
-                  {p === "m3" ? "M3 (MiniMax)" : "Gemini"}
+                  {p === "m3" ? "MiniMax-M3.1-Flash" : "Gemini"}
                 </option>
               ))}
             </select>
@@ -639,7 +658,7 @@ export default function AICalibrationEditor({ testId, initial, operationMode, in
         <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl space-y-3" data-testid="ai-calibration-clinical-section">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-violet-700 tracking-wide">Prediagnóstico clínico</p>
-            <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MiniMax M3</span>
+            <span className="text-xs font-medium px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full border border-violet-200">MiniMax-M3.1-Flash</span>
           </div>
           <p className="text-xs text-violet-700">
             Prompt único que la IA clínica usa para interpretar los parámetros extraídos de esta prueba (sin respaldos hardcodeados en código). Incluye <code className="font-mono">{"{extracted_json}"}</code> donde desees insertar los datos.

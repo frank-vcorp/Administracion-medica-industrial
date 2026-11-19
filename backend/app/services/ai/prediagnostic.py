@@ -164,10 +164,10 @@ DR7_MODEL    = os.environ.get("DR7_MODEL", "medgemma-4b-it").strip()
 # parcheen el fallback de módulo (mismo patrón que DR7_API_KEY).
 M3_API_KEY = os.environ.get("M3_API_KEY", "").strip()
 M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
-from app.services.ai.m3_model import M3_MODEL_LEGACY, resolve_m3_model
+from app.services.ai.m3_model import M3_MODEL_FLASH, resolve_m3_model
 from app.audiometry_criteria import enrich_audiometry_extracted_data
 
-M3_DEFAULT_MODEL = os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_LEGACY).strip() or M3_MODEL_LEGACY
+M3_DEFAULT_MODEL = resolve_m3_model(os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_FLASH))
 # Con razonamiento bajo la llamada debe cerrar pronto. 90s deja margen
 # y, junto con la extracción, cabe antes del corte de 300s de Vercel.
 M3_CLINICAL_DEADLINE_SEC = 90
@@ -1056,7 +1056,7 @@ class PrediagnosticService(GeminiBase):
 
         api_key = (m3_cfg.get("api_key") or "").strip()
         base_url = m3_cfg.get("base_url") or M3_BASE_URL or "https://api.minimax.io/v1"
-        model = resolve_m3_model(m3_cfg.get("model") or M3_DEFAULT_MODEL or M3_MODEL_LEGACY)
+        model = resolve_m3_model(m3_cfg.get("model") or M3_DEFAULT_MODEL or M3_MODEL_FLASH)
 
         if not api_key:
             raise RuntimeError("M3_HTTP:0:clave ausente")
