@@ -5,10 +5,7 @@ import {
   type EventTestPipelineStatus,
   type StudyInterpretationInput,
 } from '@/lib/clinical/study-status-display'
-import {
-  filterEventTestsForCheckout,
-  isExamenMedicoCaptureClosed,
-} from '@/lib/clinical/examen-medico-capture'
+import { filterEventTestsForCheckout } from '@/lib/clinical/examen-medico-capture'
 import { isExamenMedicoTestName } from '@/lib/clinical/examen-medico-variant'
 import {
   getStudyVisibleStep,
@@ -63,7 +60,11 @@ export function getCheckoutEligibility(
   for (const test of tests) {
     const name = test.testNameSnapshot ?? ''
     if (isExamenMedicoTestName(name)) {
-      if (!test.examenCaptureClosed) {
+      const isExamDone =
+        Boolean(test.examenCaptureClosed) ||
+        test.status === 'RESULT_REGISTERED' ||
+        test.status === 'COMPLETED'
+      if (!isExamDone) {
         return { eligible: false, reason: 'pending_studies' }
       }
       continue

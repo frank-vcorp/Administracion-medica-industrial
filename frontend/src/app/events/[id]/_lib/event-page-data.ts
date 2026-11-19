@@ -24,6 +24,7 @@ import {
   buildWorkerLongitudinalAntecedentesPrefill,
   findLatestWorkerAntecedentesCaptured,
 } from '@/lib/clinical/worker-antecedentes-prefill'
+import { shouldPromoteEventToValidating } from './event-flow-visibility'
 
 const STATUS_NAMES: Record<string, string> = {
   SCHEDULED: 'Ingreso',
@@ -115,10 +116,7 @@ export async function fetchEventPageData(input: {
   let event = await getEventById(input.id)
   if (!event) return null
 
-  if (
-    input.view === 'VALIDATING' &&
-    event.status === 'IN_PROGRESS'
-  ) {
+  if (shouldPromoteEventToValidating(input.view, event.status)) {
     await prisma.medicalEvent.update({
       where: { id: input.id },
       data: { status: 'VALIDATING' },

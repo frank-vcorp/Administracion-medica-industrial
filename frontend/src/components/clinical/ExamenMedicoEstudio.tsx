@@ -1178,6 +1178,9 @@ export default function ExamenMedicoEstudio({
       )
       if (res.success) {
         setSaveFieldErrors({})
+        if (markComplete) {
+          setCaptureClosed(true)
+        }
         // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / FND-20260825-22):
         // cuando se marca como completado, el Event pasa a `VALIDATING` y
         // se muestra el flujo "Firmar y Emitir Dictamen" en el workspace.
