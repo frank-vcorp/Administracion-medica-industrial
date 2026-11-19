@@ -259,6 +259,7 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
           </Field>
           <Field label="Contacto">
             <input
+              data-sentence-case="proper-name"
               value={basic.contactName}
               onChange={(e) => setBasic({ ...basic, contactName: e.target.value })}
               className={inputClass}
@@ -281,6 +282,7 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
           </Field>
           <Field label="Dirección" full>
             <input
+              data-sentence-case="proper-name"
               value={basic.address}
               onChange={(e) => setBasic({ ...basic, address: e.target.value })}
               className={inputClass}
@@ -325,6 +327,7 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
           <Field label="Domicilio Fiscal (Calle y número) *" full>
             <input
               required
+              data-sentence-case="proper-name"
               value={fiscalForm.domicilioCalle}
               onChange={(e) => setFiscalForm({ ...fiscalForm, domicilioCalle: e.target.value })}
               className={inputClass}
@@ -350,6 +353,7 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
           <Field label="Colonia *" full>
             <input
               required
+              data-sentence-case="proper-name"
               value={fiscalForm.colonia}
               onChange={(e) => setFiscalForm({ ...fiscalForm, colonia: e.target.value })}
               className={inputClass}
@@ -373,6 +377,7 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
           <Field label="Municipio *">
             <input
               required
+              data-sentence-case="proper-name"
               value={fiscalForm.municipio}
               onChange={(e) => setFiscalForm({ ...fiscalForm, municipio: e.target.value })}
               className={inputClass}
@@ -381,6 +386,7 @@ export default function CompanyEditForm({ company, catalogos }: CompanyEditFormP
           <Field label="País *">
             <input
               required
+              data-sentence-case="proper-name"
               value={fiscalForm.pais}
               onChange={(e) => setFiscalForm({ ...fiscalForm, pais: e.target.value })}
               className={inputClass}

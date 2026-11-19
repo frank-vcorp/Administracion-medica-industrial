@@ -21,8 +21,19 @@
 import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/auth'
+import { isAdminLike } from '@/lib/auth/roles'
+import { logAudit } from '@/actions/audit.actions'
 import prisma from '@/lib/prisma'
+import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
 import { zFreeTextMaxNullable } from '@/lib/text/zod-free-text'
+import {
+  calculateProfileDuration,
+  CONTROL_DESK_MODES,
+  normalizeControlDeskMode,
+  type ControlDeskMode,
+} from '@/lib/profile-duration'
 import {
   buildPbProfileNameFromTests,
   ensurePbProfileName,
@@ -41,6 +52,17 @@ import {
 // SCHEMA ZOD
 // ─────────────────────────────────────────────────────────────────────────────
 
+const optionalMinutesField = (max: number) =>
+  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    z.coerce
+      .number()
+      .int('Debe ser un número entero de minutos')
+      .min(0, 'La duración debe ser mayor o igual a 0')
+      .max(max, `La duración máxima permitida es ${max} minutos`)
+      .nullable(),
+  )
+
 const MedicalProfileSchema = z.object({
   name: z
     .string()
@@ -56,6 +78,9 @@ const MedicalProfileSchema = z.object({
     .min(1, 'Debe seleccionar al menos una prueba médica'),
   // ARCH-20260708-01: Comentarios especiales (firma autógrafa, cédula, pruebas excluidas)
   specialNotes: zFreeTextMaxNullable(2000),
+  controlDeskMode: z.enum(CONTROL_DESK_MODES).default('AUTO'),
+  extraRxProjections: z.coerce.number().int().min(0).max(20).default(0),
+  durationOverrideMinutes: optionalMinutesField(1440).optional(),
 })
 
 // ARCH-20260708-01: Schema Zod para correos configurados por perfil médico
@@ -67,15 +92,22 @@ const ReportEmailSchema = z.object({
 const MedicalTestSchema = z.object({
   name: z
     .string()
+    .trim()
     .min(1, 'El nombre de la prueba es obligatorio')
     .max(200, 'El nombre no puede exceder 200 caracteres'),
   code: z
     .string()
+    .trim()
     .min(1, 'El código de la prueba es obligatorio')
     .max(50, 'El código no puede exceder 50 caracteres'),
   categoryId: z
     .string()
     .uuid('La categoría seleccionada es inválida'),
+  theoreticalDurationMinutes: optionalMinutesField(480).optional(),
+})
+
+const MedicalTestUpdateSchema = MedicalTestSchema.extend({
+  id: z.string().uuid('ID de prueba inválido'),
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,42 +316,91 @@ async function assertUniqueProfileNameForCompany(
 const CATALOG_LEGACY_HIDDEN = ['GEN-01', 'GEN-02'] as const
 
 export async function getMedicalTests() {
-  return await prisma.medicalTest.findMany({
-    where: {
-      code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
-    },
-    select: {
-      id: true,
-      name: true,
-      code: true,
-      categoryId: true,
-      category: { select: { name: true } },
-    },
-    orderBy: [
-      { category: { name: 'asc' } },
-      { name: 'asc' },
-    ],
-  })
+  try {
+    return await prisma.medicalTest.findMany({
+      where: {
+        code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        categoryId: true,
+        theoreticalDurationMinutes: true,
+        category: { select: { name: true } },
+        _count: { select: { profiles: true } },
+      },
+      orderBy: [
+        { category: { name: 'asc' } },
+        { name: 'asc' },
+      ],
+    })
+  } catch (error) {
+    if (!isPrismaMissingColumnError(error)) throw error
+    const rows = await prisma.medicalTest.findMany({
+      where: {
+        code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        categoryId: true,
+        category: { select: { name: true } },
+        _count: { select: { profiles: true } },
+      },
+      orderBy: [
+        { category: { name: 'asc' } },
+        { name: 'asc' },
+      ],
+    })
+    return rows.map((row) => ({ ...row, theoreticalDurationMinutes: null }))
+  }
 }
 
 export async function getMedicalTestsWithCalibration() {
-  return await prisma.medicalTest.findMany({
-    where: {
-      code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
-    },
-    select: {
-      id: true,
-      name: true,
-      code: true,
-      options: true,
-      categoryId: true,
-      category: { select: { name: true } },
-    },
-    orderBy: [
-      { category: { name: 'asc' } },
-      { name: 'asc' },
-    ],
-  })
+  try {
+    return await prisma.medicalTest.findMany({
+      where: {
+        code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        options: true,
+        categoryId: true,
+        theoreticalDurationMinutes: true,
+        category: { select: { name: true } },
+        _count: { select: { profiles: true } },
+      },
+      orderBy: [
+        { category: { name: 'asc' } },
+        { name: 'asc' },
+      ],
+    })
+  } catch (error) {
+    if (!isPrismaMissingColumnError(error)) throw error
+    const rows = await prisma.medicalTest.findMany({
+      where: {
+        code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        options: true,
+        categoryId: true,
+        category: { select: { name: true } },
+        _count: { select: { profiles: true } },
+      },
+      orderBy: [
+        { category: { name: 'asc' } },
+        { name: 'asc' },
+      ],
+    })
+    return rows.map((row) => ({ ...row, theoreticalDurationMinutes: null }))
+  }
 }
 
 export async function getTestCategories() {
@@ -334,10 +415,29 @@ export async function getTestCategories() {
 
 /** Opciones ligeras para selects de alta/edición de paciente. */
 export async function getMedicalProfileOptions() {
-  return await prisma.medicalProfile.findMany({
-    select: { id: true, name: true, companyId: true },
-    orderBy: { name: 'asc' },
-  })
+  try {
+    return await prisma.medicalProfile.findMany({
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        calculatedDurationMinutes: true,
+        durationOverrideMinutes: true,
+      },
+      orderBy: { name: 'asc' },
+    })
+  } catch (error) {
+    if (!isPrismaMissingColumnError(error)) throw error
+    const rows = await prisma.medicalProfile.findMany({
+      select: { id: true, name: true, companyId: true },
+      orderBy: { name: 'asc' },
+    })
+    return rows.map((r) => ({
+      ...r,
+      calculatedDurationMinutes: null,
+      durationOverrideMinutes: null,
+    }))
+  }
 }
 
 async function findPublicGeneralCompanyId(): Promise<string | null> {
@@ -363,11 +463,31 @@ export async function getAssignableMedicalProfilesForCompany(companyId: string) 
   if (publicGeneralId && publicGeneralId !== companyId) {
     companyIds.push(publicGeneralId)
   }
-  return await prisma.medicalProfile.findMany({
-    where: { companyId: { in: companyIds } },
-    select: { id: true, name: true, companyId: true },
-    orderBy: { name: 'asc' },
-  })
+  try {
+    return await prisma.medicalProfile.findMany({
+      where: { companyId: { in: companyIds } },
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        calculatedDurationMinutes: true,
+        durationOverrideMinutes: true,
+      },
+      orderBy: { name: 'asc' },
+    })
+  } catch (error) {
+    if (!isPrismaMissingColumnError(error)) throw error
+    const rows = await prisma.medicalProfile.findMany({
+      where: { companyId: { in: companyIds } },
+      select: { id: true, name: true, companyId: true },
+      orderBy: { name: 'asc' },
+    })
+    return rows.map((r) => ({
+      ...r,
+      calculatedDurationMinutes: null,
+      durationOverrideMinutes: null,
+    }))
+  }
 }
 
 export async function isMedicalProfileAssignableToCompany(
@@ -385,74 +505,243 @@ export async function isMedicalProfileAssignableToCompany(
 }
 
 export async function getMedicalProfilesForCompany(companyId: string) {
-  return await prisma.medicalProfile.findMany({
-    where: {
-      OR: [
-        { companyId },
-        { companyId: null },
-      ],
-    },
-    select: {
-      id: true,
-      name: true,
-      companyId: true,
-      // ARCH-20260708-01: incluir correos y notas para mostrar en panel de empresa
-      specialNotes: true,
-      tests: {
-        select: {
-          test: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
-              category: { select: { name: true } },
+  try {
+    return await prisma.medicalProfile.findMany({
+      where: {
+        OR: [
+          { companyId },
+          { companyId: null },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        // ARCH-20260708-01: incluir correos y notas para mostrar en panel de empresa
+        specialNotes: true,
+        calculatedDurationMinutes: true,
+        controlDeskMode: true,
+        extraRxProjections: true,
+        durationOverrideMinutes: true,
+        tests: {
+          select: {
+            test: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                theoreticalDurationMinutes: true,
+                category: { select: { name: true } },
+              },
             },
           },
         },
+        reportEmails: {
+          select: { id: true, email: true, label: true },
+          orderBy: { createdAt: 'asc' },
+        },
       },
-      reportEmails: {
-        select: { id: true, email: true, label: true },
-        orderBy: { createdAt: 'asc' },
+      orderBy: { name: 'asc' },
+    })
+  } catch (error) {
+    if (!isPrismaMissingColumnError(error)) throw error
+    const rows = await prisma.medicalProfile.findMany({
+      where: {
+        OR: [
+          { companyId },
+          { companyId: null },
+        ],
       },
-    },
-    orderBy: { name: 'asc' },
-  })
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        specialNotes: true,
+        tests: {
+          select: {
+            test: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                category: { select: { name: true } },
+              },
+            },
+          },
+        },
+        reportEmails: {
+          select: { id: true, email: true, label: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { name: 'asc' },
+    })
+    return rows.map((row) => ({
+      ...row,
+      calculatedDurationMinutes: null,
+      controlDeskMode: 'AUTO',
+      extraRxProjections: 0,
+      durationOverrideMinutes: null,
+      tests: row.tests.map((pt) => ({
+        test: { ...pt.test, theoreticalDurationMinutes: null },
+      })),
+    }))
+  }
 }
 
 export async function getMedicalProfiles() {
-  return await prisma.medicalProfile.findMany({
-    select: {
-      id: true,
-      name: true,
-      companyId: true,
-      // ARCH-20260708-01: incluir correos y notas para mostrar en la grilla
-      specialNotes: true,
-      company: { select: { id: true, name: true } },
-      tests: {
-        include: {
-          test: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
-              category: { select: { name: true } },
+  try {
+    return await prisma.medicalProfile.findMany({
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        // ARCH-20260708-01: incluir correos y notas para mostrar en la grilla
+        specialNotes: true,
+        calculatedDurationMinutes: true,
+        controlDeskMode: true,
+        extraRxProjections: true,
+        durationOverrideMinutes: true,
+        company: { select: { id: true, name: true } },
+        tests: {
+          include: {
+            test: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                theoreticalDurationMinutes: true,
+                category: { select: { name: true } },
+              },
             },
           },
         },
+        _count: { select: { tests: true } },
+        reportEmails: {
+          select: { id: true, email: true, label: true },
+          orderBy: { createdAt: 'asc' },
+        },
       },
-      _count: { select: { tests: true } },
-      reportEmails: {
-        select: { id: true, email: true, label: true },
-        orderBy: { createdAt: 'asc' },
+      orderBy: { name: 'asc' },
+    })
+  } catch (error) {
+    if (!isPrismaMissingColumnError(error)) throw error
+    const rows = await prisma.medicalProfile.findMany({
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        specialNotes: true,
+        company: { select: { id: true, name: true } },
+        tests: {
+          include: {
+            test: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                category: { select: { name: true } },
+              },
+            },
+          },
+        },
+        _count: { select: { tests: true } },
+        reportEmails: {
+          select: { id: true, email: true, label: true },
+          orderBy: { createdAt: 'asc' },
+        },
       },
-    },
-    orderBy: { name: 'asc' },
-  })
+      orderBy: { name: 'asc' },
+    })
+    return rows.map((row) => ({
+      ...row,
+      calculatedDurationMinutes: null,
+      controlDeskMode: 'AUTO',
+      extraRxProjections: 0,
+      durationOverrideMinutes: null,
+      tests: row.tests.map((pt) => ({
+        ...pt,
+        test: { ...pt.test, theoreticalDurationMinutes: null },
+      })),
+    }))
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MUTATIONS
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function computeCalculatedDurationFromTestIds(
+  testIds: string[],
+  controlDeskMode: ControlDeskMode,
+  extraRxProjections: number,
+  durationOverrideMinutes: number | null | undefined,
+): Promise<number> {
+  const tests = await prisma.medicalTest.findMany({
+    where: { id: { in: testIds } },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      theoreticalDurationMinutes: true,
+    },
+  })
+  return calculateProfileDuration({
+    tests,
+    controlDeskMode,
+    extraRxProjections,
+    durationOverrideMinutes: durationOverrideMinutes ?? null,
+  }).calculatedDurationMinutes
+}
+
+async function recalculateAffectedProfilesDuration(testId: string): Promise<number> {
+  const pivots = await prisma.profileTest.findMany({
+    where: { testId },
+    select: { profileId: true },
+    distinct: ['profileId'],
+  })
+  if (pivots.length === 0) return 0
+
+  const profileIds = pivots.map((p) => p.profileId)
+  const profiles = await prisma.medicalProfile.findMany({
+    where: { id: { in: profileIds } },
+    select: {
+      id: true,
+      controlDeskMode: true,
+      extraRxProjections: true,
+      durationOverrideMinutes: true,
+      tests: {
+        select: {
+          test: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              theoreticalDurationMinutes: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  await prisma.$transaction(
+    profiles.map((profile) => {
+      const breakdown = calculateProfileDuration({
+        tests: profile.tests.map((pt) => pt.test),
+        controlDeskMode: normalizeControlDeskMode(profile.controlDeskMode),
+        extraRxProjections: profile.extraRxProjections,
+        durationOverrideMinutes: profile.durationOverrideMinutes,
+      })
+      return prisma.medicalProfile.update({
+        where: { id: profile.id },
+        data: { calculatedDurationMinutes: breakdown.calculatedDurationMinutes },
+      })
+    }),
+  )
+
+  return profiles.length
+}
 
 export async function createMedicalProfile(
   formData: FormData
@@ -472,6 +761,9 @@ export async function createMedicalProfile(
     companyId,
     testIds,
     specialNotes: typeof rawSpecialNotes === 'string' && rawSpecialNotes ? rawSpecialNotes : null,
+    controlDeskMode: formData.get('controlDeskMode') || 'AUTO',
+    extraRxProjections: formData.get('extraRxProjections') ?? 0,
+    durationOverrideMinutes: formData.get('durationOverrideMinutes'),
   })
 
   if (!parsed.success) {
@@ -492,11 +784,22 @@ export async function createMedicalProfile(
   }
 
   try {
+    const calculatedDurationMinutes = await computeCalculatedDurationFromTestIds(
+      parsed.data.testIds,
+      parsed.data.controlDeskMode,
+      parsed.data.extraRxProjections,
+      parsed.data.durationOverrideMinutes,
+    )
+
     await prisma.medicalProfile.create({
       data: {
         name: parsed.data.name,
         companyId: parsed.data.companyId ?? null,
         specialNotes: parsed.data.specialNotes ?? null,
+        calculatedDurationMinutes,
+        controlDeskMode: parsed.data.controlDeskMode,
+        extraRxProjections: parsed.data.extraRxProjections,
+        durationOverrideMinutes: parsed.data.durationOverrideMinutes ?? null,
         reportEmails: {
           create: reportEmails.map((row) => ({
             email: row.email,
@@ -555,7 +858,7 @@ export async function createPublicGeneralQuickProfile(input: {
 
   const tests = await prisma.medicalTest.findMany({
     where: { id: { in: parsed.data.testIds } },
-    select: { id: true, code: true, name: true },
+    select: { id: true, code: true, name: true, theoreticalDurationMinutes: true },
   })
 
   if (tests.length !== parsed.data.testIds.length) {
@@ -565,17 +868,25 @@ export async function createPublicGeneralQuickProfile(input: {
   const autoName = buildPbProfileNameFromTests(tests)
   const rawName = ensurePbProfileName(parsed.data.name, autoName)
   const finalName = await resolveUniquePbProfileName(parsed.data.companyId, rawName)
+  const calculatedDurationMinutes = calculateProfileDuration({
+    tests,
+    controlDeskMode: 'AUTO',
+    extraRxProjections: 0,
+  }).calculatedDurationMinutes
 
   try {
     const profile = await prisma.medicalProfile.create({
       data: {
         name: finalName,
         companyId: parsed.data.companyId,
+        calculatedDurationMinutes,
+        controlDeskMode: 'AUTO',
+        extraRxProjections: 0,
         tests: {
           create: parsed.data.testIds.map((testId) => ({ testId })),
         },
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, calculatedDurationMinutes: true },
     })
 
     revalidatePath('/admin/profiles')
@@ -616,6 +927,9 @@ export async function updateMedicalProfile(
     companyId,
     testIds,
     specialNotes: typeof rawSpecialNotes === 'string' ? rawSpecialNotes : null,
+    controlDeskMode: formData.get('controlDeskMode') || 'AUTO',
+    extraRxProjections: formData.get('extraRxProjections') ?? 0,
+    durationOverrideMinutes: formData.get('durationOverrideMinutes'),
   })
 
   if (!parsed.success) {
@@ -651,6 +965,13 @@ export async function updateMedicalProfile(
   }
 
   try {
+    const calculatedDurationMinutes = await computeCalculatedDurationFromTestIds(
+      parsed.data.testIds,
+      parsed.data.controlDeskMode,
+      parsed.data.extraRxProjections,
+      parsed.data.durationOverrideMinutes,
+    )
+
     // Reemplaza todos los ProfileTest del perfil en una sola operación atómica
     await prisma.medicalProfile.update({
       where: { id },
@@ -658,6 +979,10 @@ export async function updateMedicalProfile(
         name: parsed.data.name,
         companyId: parsed.data.companyId ?? null,
         specialNotes: parsed.data.specialNotes ?? null,
+        calculatedDurationMinutes,
+        controlDeskMode: parsed.data.controlDeskMode,
+        extraRxProjections: parsed.data.extraRxProjections,
+        durationOverrideMinutes: parsed.data.durationOverrideMinutes ?? null,
         tests: {
           deleteMany: {},
           create: parsed.data.testIds.map((testId) => ({ testId })),
@@ -893,6 +1218,10 @@ export async function cloneMedicalProfile(
           name: parsed.data,
           companyId: source.companyId ?? null,
           specialNotes: source.specialNotes ?? null,
+          calculatedDurationMinutes: source.calculatedDurationMinutes ?? null,
+          controlDeskMode: source.controlDeskMode ?? 'AUTO',
+          extraRxProjections: source.extraRxProjections ?? 0,
+          durationOverrideMinutes: source.durationOverrideMinutes ?? null,
           tests: {
             create: source.tests.map(({ testId }) => ({ testId })),
           },
@@ -924,6 +1253,7 @@ export async function createMedicalTest(
     name: formData.get('name'),
     code: formData.get('code'),
     categoryId: formData.get('categoryId'),
+    theoreticalDurationMinutes: formData.get('theoreticalDurationMinutes'),
   })
 
   if (!parsed.success) {
@@ -936,6 +1266,7 @@ export async function createMedicalTest(
         name: parsed.data.name,
         code: parsed.data.code.trim().toUpperCase(),
         categoryId: parsed.data.categoryId,
+        theoreticalDurationMinutes: parsed.data.theoreticalDurationMinutes ?? null,
       },
     })
     revalidatePath('/admin/services')
@@ -944,6 +1275,79 @@ export async function createMedicalTest(
   } catch (e: unknown) {
     console.error('[MedicalProfiles] Error creando prueba médica:', e)
     return { success: false, error: 'Error al crear la prueba médica' }
+  }
+}
+
+export async function updateMedicalTest(input: {
+  id: string
+  name: string
+  code: string
+  categoryId: string
+  theoreticalDurationMinutes: number | null
+}): Promise<ActionResult<{ recalculatedProfiles: number }>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user || !isAdminLike(session.user.role)) {
+    return { success: false, error: 'Sin permisos para editar el catálogo de pruebas.' }
+  }
+
+  const parsed = MedicalTestUpdateSchema.safeParse(input)
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  const normalizedCode = parsed.data.code.trim().toUpperCase()
+
+  try {
+    const existing = await prisma.medicalTest.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, code: true, theoreticalDurationMinutes: true },
+    })
+    if (!existing) {
+      return { success: false, error: 'Prueba médica no encontrada' }
+    }
+
+    const codeCollision = await prisma.medicalTest.findFirst({
+      where: {
+        code: normalizedCode,
+        id: { not: parsed.data.id },
+      },
+      select: { id: true },
+    })
+    if (codeCollision) {
+      return {
+        success: false,
+        error: `Ya existe otra prueba con el código ${normalizedCode}.`,
+      }
+    }
+
+    await prisma.medicalTest.update({
+      where: { id: parsed.data.id },
+      data: {
+        name: parsed.data.name,
+        code: normalizedCode,
+        categoryId: parsed.data.categoryId,
+        theoreticalDurationMinutes: parsed.data.theoreticalDurationMinutes ?? null,
+      },
+    })
+
+    const recalculatedProfiles = await recalculateAffectedProfilesDuration(parsed.data.id)
+
+    await logAudit('UPDATE', 'MedicalTest', parsed.data.id, {
+      code: normalizedCode,
+      previousTheoreticalDurationMinutes: existing.theoreticalDurationMinutes,
+      theoreticalDurationMinutes: parsed.data.theoreticalDurationMinutes ?? null,
+      recalculatedProfiles,
+    })
+
+    revalidatePath('/admin/services')
+    revalidatePath('/admin/profiles')
+    revalidatePath('/publico-general')
+    revalidatePath('/portal/appointments/new')
+
+    return { success: true, data: { recalculatedProfiles } }
+  } catch (e: unknown) {
+    console.error('[MedicalProfiles] Error actualizando prueba médica:', e)
+    return { success: false, error: 'Error al actualizar la prueba médica' }
   }
 }
 

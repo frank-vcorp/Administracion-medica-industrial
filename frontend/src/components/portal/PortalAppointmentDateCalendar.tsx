@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getPortalBranchWeekAvailability } from '@/actions/portal-appointment.actions'
-import type { BranchDayAvailabilityStatus } from '@/lib/appointment-capacity'
+import type { BranchCapacityMode, BranchDayAvailabilityStatus } from '@/lib/appointment-capacity'
 import {
   addAgendaDays,
   AMI_APPOINTMENT_TIMEZONE,
   formatAppointmentAgendaDateString,
   getAgendaWeekStartMonday,
   parseAppointmentLocalDateTime,
-  todayAgendaDateString,
 } from '@/lib/appointment-scheduling'
 
 type DayInfo = {
@@ -18,11 +17,13 @@ type DayInfo = {
   capacityTotal: number
   openHourSlots: number
   status: BranchDayAvailabilityStatus
+  capacityMode?: BranchCapacityMode
 }
 
 type Props = {
   branchId: string
   branchName?: string
+  serviceProfileId?: string | null
   selectedDate: string
   onSelectDate: (date: string) => void
   todayStr: string
@@ -89,6 +90,7 @@ function columnShell(
 export default function PortalAppointmentDateCalendar({
   branchId,
   branchName,
+  serviceProfileId,
   selectedDate,
   onSelectDate,
   todayStr,
@@ -96,6 +98,8 @@ export default function PortalAppointmentDateCalendar({
   const [weekStart, setWeekStart] = useState(() => getAgendaWeekStartMonday(selectedDate || todayStr))
   const [days, setDays] = useState<DayInfo[]>([])
   const [loadedBranchName, setLoadedBranchName] = useState<string | undefined>(branchName)
+  const [capacityMode, setCapacityMode] = useState<BranchCapacityMode>('HOURLY_COUNT')
+  const [requiredDurationMinutes, setRequiredDurationMinutes] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -108,7 +112,11 @@ export default function PortalAppointmentDateCalendar({
     if (!branchId) return
     setLoading(true)
     setError(null)
-    const res = await getPortalBranchWeekAvailability({ branchId, weekStart })
+    const res = await getPortalBranchWeekAvailability({
+      branchId,
+      weekStart,
+      serviceProfileId: serviceProfileId ?? null,
+    })
     setLoading(false)
     if (!res.success) {
       setDays([])
@@ -118,7 +126,9 @@ export default function PortalAppointmentDateCalendar({
     setWeekStart(res.weekStart)
     setDays(res.days)
     setLoadedBranchName(res.branchName)
-  }, [branchId, weekStart])
+    setCapacityMode(res.capacityMode === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT')
+    setRequiredDurationMinutes(res.requiredDurationMinutes ?? null)
+  }, [branchId, weekStart, serviceProfileId])
 
   useEffect(() => {
     setWeekStart(getAgendaWeekStartMonday(selectedDate || todayStr))
@@ -144,6 +154,9 @@ export default function PortalAppointmentDateCalendar({
           <p className="mt-1 text-sm text-slate-500">
             {displayBranch ? `${displayBranch} · ` : ''}
             Semana del {formatWeekRangeLabel(weekStart)}
+            {capacityMode === 'DURATION_MINUTES' && requiredDurationMinutes
+              ? ` · Perfil de ${requiredDurationMinutes} min`
+              : ''}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -221,6 +234,7 @@ export default function PortalAppointmentDateCalendar({
                       {info && status !== 'past' && (
                         <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-100">
                           {info.booked}/{info.capacityTotal}
+                          {info.capacityMode === 'DURATION_MINUTES' ? ' min' : ''}
                         </span>
                       )}
                     </div>

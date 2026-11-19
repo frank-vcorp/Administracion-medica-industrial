@@ -339,6 +339,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 <label className="text-xs font-bold text-slate-500 block mb-1">Nombre(s)</label>
                 <input
                   type="text"
+                  name="firstName"
+                  data-sentence-case="proper-name"
                   value={corroboratedFirstName}
                   onChange={e => setCorroboratedFirstName(e.target.value)}
                   placeholder="Nombre(s) según identificación"
@@ -349,6 +351,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 <label className="text-xs font-bold text-slate-500 block mb-1">Apellidos</label>
                 <input
                   type="text"
+                  name="lastName"
+                  data-sentence-case="proper-name"
                   value={corroboratedLastName}
                   onChange={e => setCorroboratedLastName(e.target.value)}
                   placeholder="Apellidos según identificación"

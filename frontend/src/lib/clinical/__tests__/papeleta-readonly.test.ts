@@ -56,6 +56,17 @@ describe('resolveClinicalStudyReadonly', () => {
   it('captura cerrada permite doctor con expediente en captura', () => {
     expect(resolveClinicalStudyReadonly(false, true, 'DOCTOR_VALIDATOR')).toBe(false)
   })
+
+  it('captura cerrada permite edición posterior a SUPERADMIN, ADMIN, DOCTOR_GENERAL y DOCTOR_VALIDATOR, y bloquea RECEPTIONIST y CAPTURIST', () => {
+    for (const role of ['SUPERADMIN', 'ADMIN', 'DOCTOR_GENERAL', 'DOCTOR_VALIDATOR']) {
+      expect(resolveClinicalStudyReadonly(false, true, role)).toBe(false)
+      expect(computePapeletaReadonly({ currentStep: 4, activeView: 'VALIDATING', userRole: role })).toBe(false)
+    }
+    for (const role of ['RECEPTIONIST', 'CAPTURIST']) {
+      expect(resolveClinicalStudyReadonly(false, true, role)).toBe(true)
+      expect(computePapeletaReadonly({ currentStep: 4, activeView: 'VALIDATING', userRole: role })).toBe(true)
+    }
+  })
 })
 
 describe('clinicalCaptureReadonlyBannerText', () => {

@@ -131,8 +131,14 @@ export function resolveActiveEventTestAfterRefresh(
   urlEventTest: string | null,
   urlHasEventTestParam: boolean,
   validTestIds: ReadonlySet<string>,
+  currentActiveTestId?: string | null,
 ): string | null | undefined {
-  if (!urlHasEventTestParam) return null
+  if (!urlHasEventTestParam) {
+    if (currentActiveTestId && validTestIds.has(currentActiveTestId)) {
+      return currentActiveTestId
+    }
+    return null
+  }
   if (!urlEventTest) return null
   return validTestIds.has(urlEventTest) ? urlEventTest : undefined
 }

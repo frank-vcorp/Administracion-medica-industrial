@@ -1,5 +1,5 @@
 /**
- * @fileoverview Catálogo de pruebas con filtrado por categoría y estado de calibración IA
+ * @fileoverview Catálogo de pruebas con filtrado por categoría, duración teórica (min) y estado de calibración IA
  * @id ARCH-20260325-01
  * @backup context/checkpoints/CHK_ARCH-20260325-01.md
  */
@@ -9,10 +9,8 @@ import {
     getMedicalTestsWithCalibration,
     getTestCategories,
 } from "@/actions/medical-profiles"
-import {
-    getMedicalTestCalibrationStatus,
-    type CalibrationStatusKind,
-} from "@/lib/clinical/calibration-status"
+import { MedicalServicesCatalogTable } from "@/components/admin/MedicalServicesCatalogTable"
+import { getMedicalTestCalibrationStatus } from "@/lib/clinical/calibration-status"
 
 async function createMedicalTestFormAction(formData: FormData): Promise<void> {
     'use server'
@@ -21,15 +19,6 @@ async function createMedicalTestFormAction(formData: FormData): Promise<void> {
     if (!result.success) {
         throw new Error(result.error)
     }
-}
-
-const STATUS_BADGE_CLASSES: Record<CalibrationStatusKind, string> = {
-    calibrated: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    partial: 'bg-amber-50 text-amber-800 border-amber-200',
-    draft_only: 'bg-amber-50 text-amber-800 border-amber-200',
-    missing: 'bg-rose-50 text-rose-700 border-rose-200',
-    disabled: 'bg-slate-100 text-slate-600 border-slate-200',
-    manual_service: 'bg-slate-100 text-slate-600 border-slate-200',
 }
 
 // searchParams es Promise en Next.js 16 (App Router)
@@ -86,7 +75,7 @@ export default async function AdminServicesPage({
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800">Catálogo de pruebas</h2>
                     <p className="text-sm text-slate-500">
-                        Estudios clínicos, laboratorio y gabinete. Los prompts IA se configuran y leen únicamente desde aquí.
+                        Estudios clínicos, laboratorio y gabinete con su duración teórica en clínica. Los prompts IA se configuran y leen únicamente desde aquí.
                     </p>
                 </div>
 
@@ -186,6 +175,21 @@ export default async function AdminServicesPage({
                                 ))}
                             </select>
                         </div>
+                        <div>
+                            <label htmlFor="new-theoretical-duration" className="block text-xs font-semibold text-slate-600 mb-1">
+                                Duración teórica (min)
+                            </label>
+                            <input
+                                id="new-theoretical-duration"
+                                type="number"
+                                name="theoreticalDurationMinutes"
+                                min={0}
+                                max={480}
+                                step={1}
+                                placeholder="Opcional (ej. 15, 30)"
+                                className="w-full border p-2 rounded text-sm"
+                            />
+                        </div>
                         {categories.length === 0 && (
                             <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
                                 No hay categorías configuradas. Debes dar de alta al menos una categoría en la base de datos para registrar pruebas.
@@ -201,67 +205,12 @@ export default async function AdminServicesPage({
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="bg-slate-50 text-xs text-slate-500 font-semibold border-b border-slate-200">
-                        <tr>
-                            <th className="px-6 py-4">Código</th>
-                            <th className="px-6 py-4">Prueba</th>
-                            <th className="px-6 py-4">Categoría</th>
-                            <th className="px-6 py-4">Estado de calibración IA</th>
-                            <th className="px-6 py-4 text-right">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {tests.map((test) => {
-                            const cal = test.calibration
-                            const badgeCls = STATUS_BADGE_CLASSES[cal.kind]
-                            return (
-                                <tr key={test.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-mono text-slate-400 text-xs">{test.code}</td>
-                                    <td className="px-6 py-4 font-medium text-slate-900">{test.name}</td>
-                                    <td className="px-6 py-4 text-slate-500">{test.category.name}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="space-y-1">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${badgeCls}`}>
-                                                {cal.label}
-                                            </span>
-                                            {cal.kind !== 'manual_service' && (
-                                                <p className="text-xs text-slate-400">
-                                                    Extracción: {cal.hasExtractionPrompt ? 'sí' : 'no'} · Prediagnóstico: {cal.hasClinicalPrompt ? 'sí' : 'no'}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-3">
-                                            <Link
-                                                href={`/admin/services/${test.id}/calibration`}
-                                                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap ${
-                                                    cal.needsCalibration
-                                                        ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-                                                        : 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
-                                                }`}
-                                            >
-                                                {cal.needsCalibration ? 'Configurar IA' : 'Editar calibración'}
-                                            </Link>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                        {tests.length === 0 && (
-                            <tr>
-                                <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
-                                    {category || status
-                                        ? 'No hay pruebas que coincidan con el filtro seleccionado.'
-                                        : 'Aún no hay pruebas registradas en el catálogo.'}
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+            <MedicalServicesCatalogTable
+                tests={tests}
+                categories={categories}
+                activeCategoryId={category}
+                activeStatusFilter={status}
+            />
         </div>
     )
 }

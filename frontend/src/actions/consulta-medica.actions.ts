@@ -11,13 +11,14 @@ import { validateConsultaMedicaPayload } from '@/lib/clinical/consulta-medica-va
 import type { ConsultaMedicaPayload } from '@/schemas/clinical/consulta-medica.schema'
 import { isConsultaMedicaTestName, parseConsultaMedicaClinicalContext } from '@/lib/clinical/consulta-medica'
 import { denyIfClosedCaptureUnauthorized } from '@/lib/clinical/papeleta-readonly'
-import { formatScheduledFollowUp, listOpenAgendaHourSlots } from '@/lib/clinical/consulta-seguimiento'
+import { formatScheduledFollowUp } from '@/lib/clinical/consulta-seguimiento'
 import { searchCie10Catalog, type Cie10Entry } from '@/lib/clinical/cie-10-catalog'
 import {
   addAgendaDays,
   appointmentAgendaHour,
   formatAppointmentAgendaDateString,
   getAgendaWeekStartMonday,
+  isAppointmentScheduleInPast,
   parseAppointmentLocalDateTime,
   todayAgendaDateString,
 } from '@/lib/appointment-scheduling'
@@ -25,13 +26,11 @@ import {
   appointmentCapacityUserMessage,
   checkBranchHourCapacity,
   computeBranchDayAvailabilityForDates,
-  countAppointmentsByHourForDay,
+  computeBranchHourSlotsForDay,
+  resolveBranchCapacityConfig,
+  resolveProfileRequiredDurationMinutes,
   type BranchDayAvailability,
 } from '@/lib/appointment-capacity'
-import {
-  branchOperatingHoursForDate,
-  parseBranchWeeklySchedule,
-} from '@/lib/branch-weekly-schedule'
 import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
 
 const CLINICAL_ROLES = new Set([
@@ -182,7 +181,10 @@ export async function scheduleConsultaSeguimiento(input: {
         select: { id: true, branchId: true, scheduledAt: true, status: true, notes: true },
       })
       if (existing && existing.status !== 'CANCELLED' && existing.status !== 'RESCHEDULED') {
-        const capacity = await checkBranchHourCapacity(prisma, branchId, scheduledAt)
+        const capacity = await checkBranchHourCapacity(prisma, branchId, scheduledAt, {
+          serviceProfileId: eventTest.event.worker.medicalProfileId,
+          excludeAppointmentId: existing.id,
+        })
         const sameSlot =
           existing.branchId === branchId &&
           formatAppointmentAgendaDateString(existing.scheduledAt) ===
@@ -301,41 +303,19 @@ export async function getConsultaSeguimientoAgenda(input: {
 
   const event = await prisma.medicalEvent.findUnique({
     where: { id: input.eventId },
-    select: { id: true, branchId: true },
+    select: {
+      id: true,
+      branchId: true,
+      worker: { select: { medicalProfileId: true } },
+    },
   })
   if (!event) return { success: false, error: 'Evento no encontrado.' }
 
-  const branchSelect = {
-    id: true,
-    name: true,
-    hourlyCapacity: true,
-    openingTime: true,
-    closingTime: true,
-    isActive: true,
-  } as const
-
-  let branch: {
-    id: string
-    name: string
-    hourlyCapacity: number | null
-    openingTime: string
-    closingTime: string
-    isActive: boolean
-    weeklySchedule: unknown
-  } | null = null
-  try {
-    branch = await prisma.branch.findUnique({
-      where: { id: event.branchId },
-      select: { ...branchSelect, weeklySchedule: true },
-    })
-  } catch (err) {
-    if (!isPrismaMissingColumnError(err)) throw err
-    const fallback = await prisma.branch.findUnique({
-      where: { id: event.branchId },
-      select: branchSelect,
-    })
-    branch = fallback ? { ...fallback, weeklySchedule: null } : null
-  }
+  const [branch, branchNameRow, requiredDurationMinutes] = await Promise.all([
+    resolveBranchCapacityConfig(prisma, event.branchId),
+    prisma.branch.findUnique({ where: { id: event.branchId }, select: { name: true } }),
+    resolveProfileRequiredDurationMinutes(prisma, event.worker.medicalProfileId),
+  ])
   if (!branch?.isActive) {
     return { success: false, error: 'La sucursal de este expediente no está activa.' }
   }
@@ -352,6 +332,8 @@ export async function getConsultaSeguimientoAgenda(input: {
     openingTime: branch.openingTime,
     closingTime: branch.closingTime,
     weeklySchedule: branch.weeklySchedule,
+    capacityMode: branch.capacityMode,
+    hourlyMinutesCapacity: branch.hourlyMinutesCapacity,
   }
   const days = await computeBranchDayAvailabilityForDates(
     prisma,
@@ -359,6 +341,7 @@ export async function getConsultaSeguimientoAgenda(input: {
     dateStrings,
     meta,
     todayAgendaDateString(),
+    { requiredDurationMinutes },
   )
 
   const date =
@@ -366,31 +349,32 @@ export async function getConsultaSeguimientoAgenda(input: {
   let slots: ConsultaSeguimientoAgendaSlot[] = []
   let closed = false
   if (date) {
-    const hours = branchOperatingHoursForDate(
-      date,
-      meta,
-      parseBranchWeeklySchedule(branch.weeklySchedule),
-    )
-    if (hours.length === 0) {
+    const daySlots = await computeBranchHourSlotsForDay(prisma, branch.id, date, {
+      serviceProfileId: event.worker.medicalProfileId,
+      requiredDurationMinutes,
+    })
+    if (!daySlots.ok) {
       closed = true
     } else {
-      const byHour = await countAppointmentsByHourForDay(prisma, branch.id, date)
-      slots = listOpenAgendaHourSlots({
-        hours,
-        counts: byHour,
-        capacity,
-        date,
-      }).map((slot) => ({
-        time: slot.time,
-        count: slot.count,
-        capacity: slot.capacity,
-      }))
+      const now = new Date()
+      slots = daySlots.slots
+        .filter((slot) => {
+          const timeStr = `${String(slot.hour).padStart(2, '0')}:00`
+          const at = parseAppointmentLocalDateTime(date, timeStr)
+          if (isAppointmentScheduleInPast(at, now)) return false
+          return !slot.full
+        })
+        .map((slot) => ({
+          time: `${String(slot.hour).padStart(2, '0')}:00`,
+          count: slot.capacityMode === 'DURATION_MINUTES' ? 0 : slot.count,
+          capacity: slot.availableForProfile,
+        }))
     }
   }
 
   return {
     success: true,
-    branchName: branch.name,
+    branchName: branchNameRow?.name ?? '',
     weekStart,
     days: days.map((day) => ({
       date: day.date,
@@ -408,7 +392,7 @@ export async function saveConsultaMedica(
   eventId: string,
   workerId: string,
   rawPayload: unknown,
-  options: { finalize?: boolean } = {},
+  options: { finalize?: boolean; autosave?: boolean } = {},
 ): Promise<SaveConsultaMedicaResult> {
   const access = await assertClinicalAccess()
   if (!access.ok) return { success: false, error: access.error }
@@ -479,7 +463,9 @@ export async function saveConsultaMedica(
       workerId,
       toStore.proxima_cita_appointment_id,
     )
-    revalidatePath(`/events/${eventId}`)
+    if (!options.autosave) {
+      revalidatePath(`/events/${eventId}`)
+    }
     return {
       success: true,
       payload: toStore,

@@ -69,4 +69,14 @@ describe('papeleta-navigation', () => {
       resolveActiveEventTestAfterRefresh('desconocido', true, valid),
     ).toBeUndefined()
   })
+
+  it('resolveActiveEventTestAfterRefresh conserva estudio activo si Next limpia query tras revalidatePath', () => {
+    const valid = new Set(['certificado-id', 'consulta-id'])
+    expect(
+      resolveActiveEventTestAfterRefresh(null, false, valid, 'certificado-id'),
+    ).toBe('certificado-id')
+    expect(
+      resolveActiveEventTestAfterRefresh(null, false, valid, 'eliminado-id'),
+    ).toBe(null)
+  })
 })

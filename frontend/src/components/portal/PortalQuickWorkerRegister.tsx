@@ -4,7 +4,16 @@ import { useMemo, useState, useTransition } from 'react'
 import { quickRegisterPortalWorkers } from '@/actions/portal-worker.actions'
 import type { PortalWorkerListItem } from '@/actions/portal-worker.actions'
 
-type Slot = { hour: number; count: number; capacity: number; full: boolean }
+type Slot = {
+  hour: number
+  count: number
+  capacity: number
+  full: boolean
+  capacityMode?: 'HOURLY_COUNT' | 'DURATION_MINUTES'
+  availableForProfile?: number
+  remainingMinutes?: number
+  requiredMinutes?: number
+}
 
 type Row = { firstName: string; lastName: string; phone: string }
 
@@ -12,6 +21,7 @@ type Props = {
   branchId: string
   date: string
   time: string
+  serviceProfileId?: string | null
   slots: Slot[]
   readOnly?: boolean
   defaultOpen?: boolean
@@ -27,6 +37,7 @@ export default function PortalQuickWorkerRegister({
   branchId,
   date,
   time,
+  serviceProfileId,
   slots,
   readOnly = false,
   defaultOpen = false,
@@ -46,6 +57,9 @@ export default function PortalQuickWorkerRegister({
 
   const slotsRemaining = useMemo(() => {
     if (!selectedSlot) return null
+    if (typeof selectedSlot.availableForProfile === 'number') {
+      return Math.max(0, selectedSlot.availableForProfile)
+    }
     return Math.max(0, selectedSlot.capacity - selectedSlot.count)
   }, [selectedSlot])
 
@@ -89,6 +103,7 @@ export default function PortalQuickWorkerRegister({
         branchId,
         date,
         time,
+        serviceProfileId: serviceProfileId ?? null,
         workers: filled.map((r) => ({
           firstName: r.firstName.trim(),
           lastName: r.lastName.trim(),
@@ -152,8 +167,16 @@ export default function PortalQuickWorkerRegister({
           >
             {nextOpenSlot.hour.toString().padStart(2, '0')}:00
           </button>{' '}
-          ({nextOpenSlot.capacity - nextOpenSlot.count} disponible
-          {nextOpenSlot.capacity - nextOpenSlot.count !== 1 ? 's' : ''}).
+          ({typeof nextOpenSlot.availableForProfile === 'number'
+            ? nextOpenSlot.availableForProfile
+            : nextOpenSlot.capacity - nextOpenSlot.count}{' '}
+          disponible
+          {(typeof nextOpenSlot.availableForProfile === 'number'
+            ? nextOpenSlot.availableForProfile
+            : nextOpenSlot.capacity - nextOpenSlot.count) !== 1
+            ? 's'
+            : ''}
+          ).
         </p>
       )}
 
@@ -180,6 +203,8 @@ export default function PortalQuickWorkerRegister({
               <label className="block text-xs">
                 <span className="font-bold text-slate-500">Nombre</span>
                 <input
+                  name="firstName"
+                  data-sentence-case="proper-name"
                   value={row.firstName}
                   onChange={(e) => updateRow(index, { firstName: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
@@ -189,6 +214,8 @@ export default function PortalQuickWorkerRegister({
               <label className="block text-xs">
                 <span className="font-bold text-slate-500">Apellidos</span>
                 <input
+                  name="lastName"
+                  data-sentence-case="proper-name"
                   value={row.lastName}
                   onChange={(e) => updateRow(index, { lastName: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"

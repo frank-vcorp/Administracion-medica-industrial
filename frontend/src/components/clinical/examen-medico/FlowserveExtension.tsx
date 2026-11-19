@@ -91,6 +91,7 @@ export function FlowserveExtension({ value, onChange, readonly = false }: Props)
           value={value.contacto_emergencia ?? ''}
           onChange={(v) => set('contacto_emergencia', v)}
           readonly={readonly}
+          sentenceCase="proper-name"
         />
         <Field
           label="Celular emergencia"
@@ -258,11 +259,13 @@ function Field({
   value,
   onChange,
   readonly,
+  sentenceCase,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   readonly?: boolean
+  sentenceCase?: 'proper-name' | 'off'
 }) {
   return (
     <div>
@@ -270,6 +273,7 @@ function Field({
       <input
         disabled={readonly}
         value={value}
+        data-sentence-case={sentenceCase}
         onChange={(e) => onChange(e.target.value)}
         className="w-full border border-slate-200 rounded-lg p-2 text-sm"
       />

@@ -57,6 +57,16 @@ const managerNameField = z.string().max(100).optional().or(z.literal(''))
 // payloads FormData/JSON donde el número viaja como string ("20"). PR-2 envía
 // desde formulario HTML y rompería con `z.number()` puro.
 const hourlyCapacityField = z.coerce.number().int().min(1).max(100)
+const capacityModeField = z.enum(['HOURLY_COUNT', 'DURATION_MINUTES'])
+const hourlyMinutesCapacityField = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? null : v),
+  z.coerce
+    .number()
+    .int('Debe ser un entero')
+    .min(15, 'La capacidad mínima es 15 min/hora')
+    .max(3000, 'La capacidad máxima es 3000 min/hora')
+    .nullable(),
+)
 const openingTimeField = z
   .string()
   .regex(timeRegex, 'Hora de apertura inválida (HH:MM)')
@@ -86,6 +96,8 @@ export const branchCreateSchema = z
     hourlyCapacity: hourlyCapacityField,
     openingTime: openingTimeField,
     closingTime: closingTimeField,
+    capacityMode: capacityModeField.optional(),
+    hourlyMinutesCapacity: hourlyMinutesCapacityField.optional(),
   })
   .refine(openingBeforeClosingRefine, {
     message: 'openingTime debe ser menor que closingTime',
@@ -103,6 +115,8 @@ export const branchUpdateSchema = z
     openingTime: openingTimeField.optional(),
     closingTime: closingTimeField.optional(),
     weeklySchedule: branchWeeklyScheduleSchema,
+    capacityMode: capacityModeField.optional(),
+    hourlyMinutesCapacity: hourlyMinutesCapacityField.optional(),
   })
   .refine(openingBeforeClosingRefine, {
     message: 'openingTime debe ser menor que closingTime',

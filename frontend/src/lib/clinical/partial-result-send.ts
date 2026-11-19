@@ -72,7 +72,11 @@ export function isNonLabStudyClosedForPartialSend(
 
   const name = test.testNameSnapshot ?? ''
   if (isExamenMedicoTestName(name)) {
-    return examCaptureClosed
+    return (
+      examCaptureClosed ||
+      test.status === 'RESULT_REGISTERED' ||
+      test.status === 'COMPLETED'
+    )
   }
 
   const step = getStudyVisibleStep(toStepInput(test, notPerformedTestIds))

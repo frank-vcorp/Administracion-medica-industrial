@@ -634,7 +634,7 @@ export function AntecedentesCaptura({
             </p>
             <p className="text-[10px] text-teal-600 mt-0.5">
               {certificadoLayout
-                ? 'AHF, APP y hábitos para las secciones I–III del PDF. Sin puesto, turno ni historia laboral.'
+                ? 'Antecedentes heredofamiliares, personales no patológicos y personales patológicos para las secciones I–III del PDF. Sin puesto, turno ni historia laboral.'
                 : 'Cuestionario del paciente + gineco/reproductivos e inmunizaciones para esta cita. Se guarda junto con el resto del Examen Médico.'}
               {portalPrefillHint && (
                 <span className="ml-1 text-emerald-700 font-semibold">
@@ -665,10 +665,18 @@ export function AntecedentesCaptura({
         </a>
       )}
 
-      <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-        <strong>AHF</strong> (Familiares) = en parientes · <strong>APP</strong> (Personales) = en el
-        trabajador · <strong>ANP</strong> (Hábitos) = tabaco, alcohol, etc.
-      </p>
+      {certificadoLayout ? (
+        <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+          <strong>Antecedentes heredofamiliares</strong> (familiares) ·{' '}
+          <strong>Antecedentes personales no patológicos</strong> (hábitos) ·{' '}
+          <strong>Antecedentes personales patológicos</strong> (padecimientos del paciente).
+        </p>
+      ) : (
+        <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+          <strong>AHF</strong> (Familiares) = en parientes · <strong>APP</strong> (Personales) = en el
+          trabajador · <strong>ANP</strong> (Hábitos) = tabaco, alcohol, etc.
+        </p>
+      )}
 
       {/* ── Grid 3 columnas: DP | HL | HF (certificado: solo HF) ─────────── */}
       <div
@@ -748,6 +756,8 @@ export function AntecedentesCaptura({
                     >
                       <input
                         type="text"
+                        name={field}
+                        data-sentence-case={field.startsWith('empresa_anterior_') ? 'proper-name' : undefined}
                         value={form.historia_laboral[field] ?? ''}
                         onChange={e => setField('historia_laboral', field, e.target.value)}
                         disabled={readonly}

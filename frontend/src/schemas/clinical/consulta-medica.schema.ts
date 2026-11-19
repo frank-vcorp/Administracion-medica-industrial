@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { applySentenceCase } from '@/lib/text/sentence-case'
+import { applyProperNameCase, applySentenceCase } from '@/lib/text/sentence-case'
 import {
   formatCie10Unified,
   isKnownCie10Code,
@@ -162,7 +162,7 @@ export const ConsultaMedicaPayloadSchema = z
     indicaciones_generales: optionalString,
     ...proximaCitaFinalFields,
     receta_lineas: z.array(RecetaLineaSchema).max(30),
-    medico_nombre: freeText(200, 1),
+    medico_nombre: z.string().trim().min(1).max(200).transform(applyProperNameCase),
     medico_cedula: plainString.min(1).max(50),
     antecedentes: ClinicalHistoryDataSchema.optional(),
     antecedentes_consulta: AntecedentesConsultaResumenSchema.optional(),
@@ -228,7 +228,7 @@ export const ConsultaMedicaDraftSchema = z.object({
     )
     .max(30)
     .optional(),
-  medico_nombre: draftText(200).optional(),
+  medico_nombre: z.string().trim().max(200).transform(applyProperNameCase).optional(),
   medico_cedula: plainString.max(50).optional(),
   antecedentes: ClinicalHistoryDataSchema.optional(),
   antecedentes_consulta: AntecedentesConsultaResumenSchema.optional(),

@@ -24,6 +24,7 @@
  */
 import { PrismaClient, LabUnitSystem, UserRole } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { resolveUmmTheoreticalDurationMinutes } from "../src/lib/medical-test-duration-seed";
 
 const prisma = new PrismaClient();
 
@@ -98,16 +99,19 @@ async function seedMedicalTests(): Promise<number> {
       console.warn(`  ⚠ Categoría no encontrada: ${t.categoryName}, saltando ${t.code}`);
       continue;
     }
+    const theoreticalDurationMinutes = resolveUmmTheoreticalDurationMinutes(t.code, t.name);
     await prisma.medicalTest.upsert({
       where: { code: t.code },
       create: {
         code: t.code,
         name: t.name,
         categoryId: category.id,
+        theoreticalDurationMinutes,
       },
       update: {
         name: t.name,
         categoryId: category.id,
+        ...(theoreticalDurationMinutes !== null ? { theoreticalDurationMinutes } : {}),
       },
     });
   }

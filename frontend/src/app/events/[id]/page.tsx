@@ -178,7 +178,8 @@ function EventView({ data }: EventViewProps) {
             const vStep = index + 1
             const isClickable =
               vStep <= currentVisualStep ||
-              (group.primary === 'VALIDATING' && event.status === 'IN_PROGRESS')
+              (group.primary === 'VALIDATING' &&
+                (event.status === 'CHECKED_IN' || event.status === 'IN_PROGRESS'))
             const isSelectedView = vStep === activeViewVisualStep
             const isCompleted = vStep < currentVisualStep
 
