@@ -14,6 +14,15 @@ export const OPTIONAL_MIGRATION_COLUMN_HINTS = [
   'followUpFromMedicalEventId',
   // 20261028190000_medical_verdict_patient_pdf
   'patientPdfUrl',
+  // 20261119020000_test_duration_and_branch_minutes_capacity
+  'theoreticalDurationMinutes',
+  'calculatedDurationMinutes',
+  'controlDeskMode',
+  'extraRxProjections',
+  'durationOverrideMinutes',
+  'capacityMode',
+  'hourlyMinutesCapacity',
+  'estimatedDurationMinutes',
 ] as const
 
 /**

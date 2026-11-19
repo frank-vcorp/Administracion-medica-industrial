@@ -43,10 +43,12 @@ export function withAppointmentOptionalMigrationDefaults<
     cancellationReason: null,
     cancelledAt: null,
     followUpFromMedicalEventId: null,
+    estimatedDurationMinutes: null,
   } as T & {
     cancellationReason: null
     cancelledAt: null
     followUpFromMedicalEventId: null
+    estimatedDurationMinutes: null
   }
 }
 
@@ -60,6 +62,7 @@ function buildFindManyArgsWithoutOptionalMigrationColumns(
       cancellationReason: _cr,
       cancelledAt: _ca,
       followUpFromMedicalEventId: _fu,
+      estimatedDurationMinutes: _edm,
       ...relationAndScalarSelect
     } = select as Prisma.AppointmentSelect
 

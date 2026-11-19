@@ -23,6 +23,13 @@ import {
   cloneMedicalProfile,
 } from '@/actions/medical-profiles'
 import { MedicalProfileNameBuilderFields } from '@/components/medical-profiles/MedicalProfileNameBuilderFields'
+import { ProfileDurationSummaryBox } from '@/components/medical-profiles/ProfileDurationSummaryBox'
+import {
+  formatMinutesLabel,
+  normalizeControlDeskMode,
+  resolveEffectiveProfileDuration,
+  type ControlDeskMode,
+} from '@/lib/profile-duration'
 import {
   buildMedicalProfileDisplayName,
   initialGenderAndLabelFromProfileName,
@@ -32,6 +39,7 @@ type AvailableTest = {
   id: string
   name: string
   code: string
+  theoreticalDurationMinutes?: number | null
   category: { name: string }
 }
 
@@ -46,6 +54,10 @@ type CompanyMedicalProfile = {
   name: string
   companyId: string | null
   specialNotes: string | null
+  calculatedDurationMinutes?: number | null
+  controlDeskMode?: string | null
+  extraRxProjections?: number | null
+  durationOverrideMinutes?: number | null
   reportEmails: ProfileEmail[]
   tests: Array<{
     test: AvailableTest
@@ -197,10 +209,22 @@ export default function CompanyMedicalProfilesPanel({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">{profile.name}</h3>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {profile.tests.length} prueba{profile.tests.length === 1 ? '' : 's'} configurada
-                    {profile.tests.length === 1 ? '' : 's'}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span>
+                      {profile.tests.length} prueba{profile.tests.length === 1 ? '' : 's'} configurada
+                      {profile.tests.length === 1 ? '' : 's'}
+                    </span>
+                    {(() => {
+                      const effective = resolveEffectiveProfileDuration(profile)
+                      if (effective == null) return null
+                      return (
+                        <span className="rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-[11px] font-bold text-teal-800">
+                          ⏱ {formatMinutesLabel(effective)}
+                          {profile.durationOverrideMinutes != null ? ' (Manual)' : ''}
+                        </span>
+                      )
+                    })()}
+                  </div>
                 </div>
                 <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
                   Empresa
@@ -299,6 +323,13 @@ export default function CompanyMedicalProfilesPanel({
           initialTestIds={editTarget.tests.map(({ test }) => test.id)}
           initialSpecialNotes={editTarget.specialNotes ?? ''}
           initialEmails={editTarget.reportEmails ?? []}
+          initialControlDeskMode={normalizeControlDeskMode(editTarget.controlDeskMode)}
+          initialExtraRxProjections={editTarget.extraRxProjections ?? 0}
+          initialDurationOverride={
+            editTarget.durationOverrideMinutes != null
+              ? String(editTarget.durationOverrideMinutes)
+              : ''
+          }
           isPending={isPending}
           onClose={() => setEditTarget(null)}
           onSubmit={(formData) => handleUpdate(editTarget.id, formData)}
@@ -435,6 +466,9 @@ function ProfileModal({
   initialTestIds,
   initialSpecialNotes = '',
   initialEmails = [],
+  initialControlDeskMode = 'AUTO',
+  initialExtraRxProjections = 0,
+  initialDurationOverride = '',
   isPending,
   onClose,
   onSubmit,
@@ -447,11 +481,17 @@ function ProfileModal({
   initialTestIds: string[]
   initialSpecialNotes?: string
   initialEmails?: ProfileEmail[]
+  initialControlDeskMode?: ControlDeskMode
+  initialExtraRxProjections?: number
+  initialDurationOverride?: string
   isPending: boolean
   onClose: () => void
   onSubmit: (formData: FormData) => void
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(initialTestIds))
+  const [controlDeskMode, setControlDeskMode] = useState<ControlDeskMode>(initialControlDeskMode)
+  const [extraRxProjections, setExtraRxProjections] = useState<number>(initialExtraRxProjections)
+  const [durationOverride, setDurationOverride] = useState<string>(initialDurationOverride)
   const [emails, setEmails] = useState<ProfileEmail[]>(initialEmails)
   const [newEmail, setNewEmail] = useState('')
   const [newLabel, setNewLabel] = useState('')
@@ -462,6 +502,11 @@ function ProfileModal({
   // se preserva aunque el término excluya al test (al limpiarse el filtro se ve de
   // nuevo, y "X seleccionadas" refleja el total real).
   const [testSearch, setTestSearch] = useState('')
+
+  const selectedTests = useMemo(
+    () => availableTests.filter((t) => selectedIds.has(t.id)),
+    [availableTests, selectedIds],
+  )
 
   const filteredTests = useMemo(() => {
     const trimmed = testSearch.trim().toLowerCase()
@@ -582,6 +627,16 @@ function ProfileModal({
               initialFullName={initialName}
             />
 
+            <ProfileDurationSummaryBox
+              selectedTests={selectedTests}
+              controlDeskMode={controlDeskMode}
+              onControlDeskModeChange={setControlDeskMode}
+              extraRxProjections={extraRxProjections}
+              onExtraRxProjectionsChange={setExtraRxProjections}
+              durationOverride={durationOverride}
+              onDurationOverrideChange={setDurationOverride}
+            />
+
             <div className="overflow-hidden rounded-xl border border-slate-200">
               <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <span className="font-semibold text-slate-700">Pruebas incluidas</span>
@@ -653,9 +708,14 @@ function ProfileModal({
                           <span className="w-20 shrink-0 font-mono text-xs text-slate-400">
                             {test.code}
                           </span>
-                          <span className="text-sm text-slate-700">{test.name}</span>
+                          <span className="text-sm text-slate-700 flex-1">{test.name}</span>
+                          {test.theoreticalDurationMinutes != null && (
+                            <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full shrink-0">
+                              {test.theoreticalDurationMinutes} min
+                            </span>
+                          )}
                           {isSelected && (
-                            <span className="ml-auto text-[10px] font-bold tracking-wider text-blue-700">
+                            <span className="text-[10px] font-bold tracking-wider text-blue-700">
                               ✓
                             </span>
                           )}

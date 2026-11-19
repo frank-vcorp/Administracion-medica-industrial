@@ -48,7 +48,11 @@ import {
 import {
   appointmentCapacityUserMessage,
   checkBranchHourCapacity,
+  computeBranchHourSlotsForDay,
+  normalizePositiveAppointmentDuration,
+  resolveProfileRequiredDurationMinutes,
 } from '@/lib/appointment-capacity'
+import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
 import { applySentenceCase } from '@/lib/text/sentence-case'
 import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
 import {
@@ -140,7 +144,41 @@ export async function createAppointment(data: {
       )
     }
 
-    const capacityCheck = await checkBranchHourCapacity(prisma, input.branchId, scheduledDate)
+    // Perfil clínico: explícito en la cita, o heredado del paciente (resuelto antes de validar capacidad)
+    let resolvedServiceProfileId = input.serviceProfileId || null
+    if (!resolvedServiceProfileId) {
+      const workerProfile = await prisma.worker.findUnique({
+        where: { id: input.workerId },
+        select: { medicalProfileId: true },
+      })
+      resolvedServiceProfileId = workerProfile?.medicalProfileId ?? null
+    }
+
+    if (resolvedServiceProfileId) {
+      const profileOk = await isMedicalProfileAssignableToCompany(
+        resolvedServiceProfileId,
+        input.companyId,
+      )
+      if (!profileOk) {
+        return failureFromFieldErrors(
+          { serviceProfileId: ['El perfil no es válido para la empresa seleccionada'] },
+          'El perfil médico no corresponde a la empresa ni a Público General.',
+        )
+      }
+    }
+
+    const resolvedProfileDuration = await resolveProfileRequiredDurationMinutes(
+      prisma,
+      resolvedServiceProfileId,
+    )
+    const estimatedDurationMinutes = normalizePositiveAppointmentDuration(
+      resolvedProfileDuration,
+    )
+
+    const capacityCheck = await checkBranchHourCapacity(prisma, input.branchId, scheduledDate, {
+      serviceProfileId: resolvedServiceProfileId,
+      requiredDurationMinutes: estimatedDurationMinutes,
+    })
     if (!capacityCheck.ok) {
       const msg = appointmentCapacityUserMessage(capacityCheck)
       return failureFromFieldErrors({ scheduledAt: [msg] }, msg, capacityCheck.reason)
@@ -167,29 +205,6 @@ export async function createAppointment(data: {
       }
     });
 
-    // Perfil clínico: explícito en la cita, o heredado del paciente
-    let resolvedServiceProfileId = input.serviceProfileId || null
-    if (!resolvedServiceProfileId) {
-      const workerProfile = await prisma.worker.findUnique({
-        where: { id: input.workerId },
-        select: { medicalProfileId: true },
-      })
-      resolvedServiceProfileId = workerProfile?.medicalProfileId ?? null
-    }
-
-    if (resolvedServiceProfileId) {
-      const profileOk = await isMedicalProfileAssignableToCompany(
-        resolvedServiceProfileId,
-        input.companyId,
-      )
-      if (!profileOk) {
-        return failureFromFieldErrors(
-          { serviceProfileId: ['El perfil no es válido para la empresa seleccionada'] },
-          'El perfil médico no corresponde a la empresa ni a Público General.',
-        )
-      }
-    }
-
     // IMPL-20260519-10: QR operativo mínimo — payload AMI|NOMBRE=...|FN=YYYY-MM-DD
     // Independiente del QR de check-in; orientado a recaptura en estaciones
     const workerForQr = await prisma.worker.findUnique({
@@ -206,32 +221,47 @@ export async function createAppointment(data: {
       color: { dark: '#1e293b', light: '#ffffff' }
     })
 
-    const appointment = await prisma.appointment.create({
-      data: {
-        workerId: input.workerId,
-        companyId: input.companyId,
-        branchId: input.branchId,
-        scheduledAt: scheduledDate,
-        notes: normalizedNotes ?? null,
-        source: input.source || 'SUCURSAL',
-        status: 'SCHEDULED',
-        expedientId,
-        qrCode,
-        qrOperativo,  // IMPL-20260519-10
-        serviceProfileId: resolvedServiceProfileId,
+    const appointmentDataBase = {
+      workerId: input.workerId,
+      companyId: input.companyId,
+      branchId: input.branchId,
+      scheduledAt: scheduledDate,
+      notes: normalizedNotes ?? null,
+      source: input.source || 'SUCURSAL',
+      status: 'SCHEDULED' as const,
+      expedientId,
+      qrCode,
+      qrOperativo,  // IMPL-20260519-10
+      serviceProfileId: resolvedServiceProfileId,
+    }
+    const appointmentInclude = {
+      worker: {
+        select: { id: true, firstName: true, lastName: true, universalId: true, phone: true },
       },
-      include: {
-        worker: {
-          select: { id: true, firstName: true, lastName: true, universalId: true, phone: true },
-        },
-        company: {
-          select: { id: true, name: true },
-        },
-        branch: {
-          select: { id: true, name: true, address: true },
-        },
+      company: {
+        select: { id: true, name: true },
       },
-    })
+      branch: {
+        select: { id: true, name: true, address: true },
+      },
+    }
+
+    let appointment
+    try {
+      appointment = await prisma.appointment.create({
+        data: {
+          ...appointmentDataBase,
+          estimatedDurationMinutes,
+        },
+        include: appointmentInclude,
+      })
+    } catch (createErr) {
+      if (!isPrismaMissingColumnError(createErr)) throw createErr
+      appointment = await prisma.appointment.create({
+        data: appointmentDataBase,
+        include: appointmentInclude,
+      })
+    }
 
     // Registrar en auditoría
     await logAudit('CREATE', 'Appointment', appointment.id, {
@@ -426,6 +456,30 @@ export async function rescheduleAppointment(
       return { success: false, error: 'CLIENTE_DESHABILITADO' }
     }
 
+    const resolvedRescheduleProfileId =
+      existing.serviceProfileId ??
+      (
+        await prisma.worker.findUnique({
+          where: { id: existing.workerId },
+          select: { medicalProfileId: true },
+        })
+      )?.medicalProfileId ??
+      null
+
+    const rescheduleDuration = normalizePositiveAppointmentDuration(
+      await resolveProfileRequiredDurationMinutes(prisma, resolvedRescheduleProfileId),
+    )
+
+    const capacityCheck = await checkBranchHourCapacity(prisma, existing.branchId, scheduledAt, {
+      serviceProfileId: resolvedRescheduleProfileId,
+      requiredDurationMinutes: rescheduleDuration,
+      excludeAppointmentId: appointmentId,
+    })
+    if (!capacityCheck.ok) {
+      const msg = appointmentCapacityUserMessage(capacityCheck)
+      return failureFromFieldErrors({ date: [msg], time: [msg] }, msg, capacityCheck.reason)
+    }
+
     const expedientId = await generateExpedientId(prisma)
     const { qrCode, qrOperativo } = await buildAppointmentQrPayloads(
       existing.workerId,
@@ -438,27 +492,41 @@ export async function rescheduleAppointment(
       : 'Reagendada'
 
     const result = await prisma.$transaction(async (tx) => {
-      const newAppointment = await tx.appointment.create({
-        data: {
-          workerId: existing.workerId,
-          companyId: existing.companyId,
-          branchId: existing.branchId,
-          scheduledAt,
-          notes: existing.notes ? `${existing.notes} · ${rescheduleNote}` : rescheduleNote,
-          source: existing.source,
-          status: 'SCHEDULED',
-          expedientId,
-          qrCode,
-          qrOperativo,
-          serviceProfileId: existing.serviceProfileId,
+      const createDataBase = {
+        workerId: existing.workerId,
+        companyId: existing.companyId,
+        branchId: existing.branchId,
+        scheduledAt,
+        notes: existing.notes ? `${existing.notes} · ${rescheduleNote}` : rescheduleNote,
+        source: existing.source,
+        status: 'SCHEDULED' as const,
+        expedientId,
+        qrCode,
+        qrOperativo,
+        serviceProfileId: resolvedRescheduleProfileId,
+      }
+      const createInclude = {
+        worker: {
+          select: { id: true, firstName: true, lastName: true, phone: true },
         },
-        include: {
-          worker: {
-            select: { id: true, firstName: true, lastName: true, phone: true },
+        branch: { select: { id: true, name: true, address: true } },
+      }
+      let newAppointment
+      try {
+        newAppointment = await tx.appointment.create({
+          data: {
+            ...createDataBase,
+            estimatedDurationMinutes: rescheduleDuration,
           },
-          branch: { select: { id: true, name: true, address: true } },
-        },
-      })
+          include: createInclude,
+        })
+      } catch (createErr) {
+        if (!isPrismaMissingColumnError(createErr)) throw createErr
+        newAppointment = await tx.appointment.create({
+          data: createDataBase,
+          include: createInclude,
+        })
+      }
 
       await tx.appointment.update({
         where: { id: appointmentId },
@@ -506,6 +574,68 @@ export async function rescheduleAppointment(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Error al reagendar la cita',
+    }
+  }
+}
+
+/**
+ * Disponibilidad horaria para recepción (Modal Agendar / Reagendar), considerando
+ * el modo de capacidad de la sucursal y la duración del perfil seleccionado.
+ */
+export async function getBranchScheduleAvailabilityForProfile(input: {
+  branchId: string
+  date: string
+  serviceProfileId?: string | null
+  workerId?: string | null
+  excludeAppointmentId?: string | null
+}) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return { success: false as const, error: 'No autenticado' }
+    }
+    if (!input.branchId || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
+      return { success: false as const, error: 'Sucursal o fecha inválida' }
+    }
+
+    let effectiveProfileId = input.serviceProfileId || null
+    if (!effectiveProfileId && input.workerId) {
+      const w = await prisma.worker.findUnique({
+        where: { id: input.workerId },
+        select: { medicalProfileId: true },
+      })
+      effectiveProfileId = w?.medicalProfileId ?? null
+    }
+
+    const result = await computeBranchHourSlotsForDay(prisma, input.branchId, input.date, {
+      serviceProfileId: effectiveProfileId,
+      excludeAppointmentId: input.excludeAppointmentId,
+    })
+
+    if (!result.ok) {
+      return {
+        success: true as const,
+        closed: result.reason === 'BRANCH_CLOSED',
+        inactive: result.reason === 'BRANCH_INACTIVE',
+        capacityMode: 'HOURLY_COUNT' as const,
+        requiredDurationMinutes: 30,
+        slots: [],
+      }
+    }
+
+    return {
+      success: true as const,
+      closed: false,
+      inactive: false,
+      capacityMode: result.capacityMode,
+      requiredDurationMinutes: result.requiredDurationMinutes,
+      closingTime: result.closingTime,
+      slots: result.slots,
+    }
+  } catch (error) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'No se pudo consultar la disponibilidad',
     }
   }
 }

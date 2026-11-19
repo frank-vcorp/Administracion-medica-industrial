@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useTransition, useEffect, useMemo } from 'react'
-import { createAppointment } from '@/actions/appointment.actions'
+import { createAppointment, getBranchScheduleAvailabilityForProfile } from '@/actions/appointment.actions'
+import type { BranchHourSlotAvailability } from '@/lib/appointment-capacity'
+import { formatMinutesLabel, resolveEffectiveProfileDuration } from '@/lib/profile-duration'
 import { sendAppointmentPassEmail } from '@/actions/appointment-pass-email.actions'
 import { getWorkersByCompany, searchWorkersByCompany } from '@/actions/worker.actions'
 import { getBranches, getCompanies } from '@/actions/admin.actions'
@@ -45,6 +47,8 @@ interface MedicalProfileOption {
     id: string
     name: string
     companyId: string | null
+    calculatedDurationMinutes?: number | null
+    durationOverrideMinutes?: number | null
 }
 
 interface AppointmentResult {
@@ -96,6 +100,10 @@ export default function AppointmentFormModal({
     const [appointmentTime, setAppointmentTime] = useState('08:00')
     const [appointmentSource, setAppointmentSource] = useState('SUCURSAL')
     const [appointmentNotes, setAppointmentNotes] = useState('')
+    const [daySlots, setDaySlots] = useState<BranchHourSlotAvailability[]>([])
+    const [dayCapacityMode, setDayCapacityMode] = useState<'HOURLY_COUNT' | 'DURATION_MINUTES'>('HOURLY_COUNT')
+    const [dayRequiredMinutes, setDayRequiredMinutes] = useState<number>(30)
+    const [dayClosed, setDayClosed] = useState(false)
     const router = useRouter()
     const searchParams = useSearchParams()
 
@@ -123,6 +131,42 @@ export default function AppointmentFormModal({
         () => profiles.filter((p) => p.companyId !== selectedCompanyId),
         [profiles, selectedCompanyId],
     )
+
+    const effectiveProfileIdForCapacity =
+        selectedProfileId || selectedWorker?.medicalProfileId || null
+
+    const selectedProfileDuration = useMemo(() => {
+        if (!effectiveProfileIdForCapacity) return null
+        const fromCompany = profiles.find((p) => p.id === effectiveProfileIdForCapacity)
+        const fromAll = allMedicalProfiles.find((p) => p.id === effectiveProfileIdForCapacity)
+        return resolveEffectiveProfileDuration(fromCompany ?? fromAll)
+    }, [effectiveProfileIdForCapacity, profiles, allMedicalProfiles])
+
+    useEffect(() => {
+        if (!isOpen || !selectedBranchId || !appointmentDate) {
+            setDaySlots([])
+            setDayClosed(false)
+            return
+        }
+        let cancelled = false
+        void getBranchScheduleAvailabilityForProfile({
+            branchId: selectedBranchId,
+            date: appointmentDate,
+            serviceProfileId: effectiveProfileIdForCapacity,
+            workerId: selectedWorker?.id ?? null,
+        }).then((res) => {
+            if (cancelled || !res.success) return
+            setDayClosed(Boolean(res.closed))
+            setDaySlots(res.slots)
+            setDayCapacityMode(
+                res.capacityMode === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT',
+            )
+            setDayRequiredMinutes(res.requiredDurationMinutes ?? 30)
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [isOpen, selectedBranchId, appointmentDate, effectiveProfileIdForCapacity, selectedWorker?.id])
 
     // Detect URL params (e.g. from create-worker redirect)
     useEffect(() => {
@@ -671,19 +715,34 @@ export default function AppointmentFormModal({
                                     </option>
                                     {companySpecificProfiles.length > 0 && (
                                         <optgroup label="Perfiles de esta empresa">
-                                            {companySpecificProfiles.map((p) => (
-                                                <option key={p.id} value={p.id}>{p.name}</option>
-                                            ))}
+                                            {companySpecificProfiles.map((p) => {
+                                                const dur = resolveEffectiveProfileDuration(p)
+                                                return (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.name}{dur != null ? ` (${dur} min)` : ''}
+                                                    </option>
+                                                )
+                                            })}
                                         </optgroup>
                                     )}
                                     {publicGeneralProfiles.length > 0 && (
                                         <optgroup label="Perfiles Público General">
-                                            {publicGeneralProfiles.map((p) => (
-                                                <option key={p.id} value={p.id}>{p.name}</option>
-                                            ))}
+                                            {publicGeneralProfiles.map((p) => {
+                                                const dur = resolveEffectiveProfileDuration(p)
+                                                return (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.name}{dur != null ? ` (${dur} min)` : ''}
+                                                    </option>
+                                                )
+                                            })}
                                         </optgroup>
                                     )}
                                 </select>
+                                {selectedProfileDuration != null && (
+                                    <p className="text-[11px] font-semibold text-teal-700 ml-1">
+                                        ⏱ Duración estimada en clínica: {formatMinutesLabel(selectedProfileDuration)}
+                                    </p>
+                                )}
                                 {!selectedCompanyId && (
                                     <p className="text-[10px] text-slate-400 ml-1">
                                         Los perfiles se filtran por la empresa de la cita.
@@ -725,6 +784,53 @@ export default function AppointmentFormModal({
                                     />
                                 </div>
                             </div>
+
+                            {selectedBranchId && (dayClosed || daySlots.length > 0) && (
+                                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
+                                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600">
+                                        <span>
+                                            {dayCapacityMode === 'DURATION_MINUTES'
+                                                ? `Disponibilidad por minutos (perfil: ${dayRequiredMinutes} min)`
+                                                : 'Disponibilidad por hora'}
+                                        </span>
+                                    </div>
+                                    {dayClosed ? (
+                                        <p className="text-xs text-red-700 font-medium">
+                                            La sucursal no atiende en la fecha seleccionada.
+                                        </p>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {daySlots.map((slot) => {
+                                                const hh = `${String(slot.hour).padStart(2, '0')}:00`
+                                                const selectedHour = Number(appointmentTime.split(':')[0]) === slot.hour
+                                                const label =
+                                                    slot.capacityMode === 'DURATION_MINUTES'
+                                                        ? slot.exceedsClosing
+                                                            ? `${hh} (cierre)`
+                                                            : `${hh} (${slot.remainingMinutes}m)`
+                                                        : `${hh} (${slot.count}/${slot.capacity})`
+                                                return (
+                                                    <button
+                                                        key={slot.hour}
+                                                        type="button"
+                                                        disabled={slot.full}
+                                                        onClick={() => setAppointmentTime(hh)}
+                                                        className={`rounded-lg px-2 py-1 text-[10px] font-bold border transition-colors ${
+                                                            slot.full
+                                                                ? 'border-slate-200 bg-slate-100 text-slate-400 line-through cursor-not-allowed'
+                                                                : selectedHour
+                                                                    ? 'border-blue-600 bg-blue-600 text-white'
+                                                                    : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                                                        }`}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-400 ml-1">Origen de la Cita</label>

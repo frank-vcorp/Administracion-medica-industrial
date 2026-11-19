@@ -1,7 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { rescheduleAppointment } from '@/actions/appointment.actions'
+import { useEffect, useState, useTransition } from 'react'
+import {
+  getBranchScheduleAvailabilityForProfile,
+  rescheduleAppointment,
+} from '@/actions/appointment.actions'
+import type { BranchHourSlotAvailability } from '@/lib/appointment-capacity'
 import {
   formatAppointmentAgendaDateString,
   formatAppointmentAgendaTime,
@@ -13,7 +17,9 @@ interface AppointmentToReschedule {
   id: string
   expedientId: string | null
   scheduledAt: Date | string
-  worker: { firstName: string; lastName: string }
+  serviceProfileId?: string | null
+  branch?: { id: string; name: string } | null
+  worker: { id?: string; firstName: string; lastName: string }
 }
 
 interface Props {
@@ -33,8 +39,34 @@ function toTimeInputValue(scheduledAt: Date | string): string {
 export default function RescheduleAppointmentModal({ appointment, onClose, onSuccess }: Props) {
   const [date, setDate] = useState(toDateInputValue(appointment.scheduledAt))
   const [time, setTime] = useState(toTimeInputValue(appointment.scheduledAt))
+  const [slots, setSlots] = useState<BranchHourSlotAvailability[]>([])
+  const [requiredMinutes, setRequiredMinutes] = useState<number | null>(null)
+  const [capacityMode, setCapacityMode] = useState<'HOURLY_COUNT' | 'DURATION_MINUTES'>('HOURLY_COUNT')
   const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    const branchId = appointment.branch?.id
+    if (!branchId || !date) return
+    let cancelled = false
+    void getBranchScheduleAvailabilityForProfile({
+      branchId,
+      date,
+      serviceProfileId: appointment.serviceProfileId ?? null,
+      workerId: appointment.worker.id ?? null,
+      excludeAppointmentId: appointment.id,
+    }).then((res) => {
+      if (cancelled || !res.success) return
+      setSlots(res.slots)
+      setRequiredMinutes(res.requiredDurationMinutes ?? null)
+      setCapacityMode(
+        res.capacityMode === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT',
+      )
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [appointment.branch?.id, appointment.id, appointment.serviceProfileId, appointment.worker.id, date])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -97,6 +129,41 @@ export default function RescheduleAppointmentModal({ appointment, onClose, onSuc
               />
             </div>
           </div>
+
+          {slots.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-600">
+                {capacityMode === 'DURATION_MINUTES'
+                  ? `Horarios disponibles (${requiredMinutes ?? 30} min requeridos)`
+                  : 'Horarios disponibles'}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {slots.map((slot) => {
+                  const hh = `${String(slot.hour).padStart(2, '0')}:00`
+                  const selectedHour = Number(time.split(':')[0]) === slot.hour
+                  return (
+                    <button
+                      key={slot.hour}
+                      type="button"
+                      disabled={slot.full}
+                      onClick={() => setTime(hh)}
+                      className={`rounded-lg px-2 py-1 text-[10px] font-bold border transition-colors ${
+                        slot.full
+                          ? 'border-slate-200 bg-slate-100 text-slate-400 line-through cursor-not-allowed'
+                          : selectedHour
+                            ? 'border-blue-600 bg-blue-600 text-white'
+                            : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                      }`}
+                    >
+                      {slot.capacityMode === 'DURATION_MINUTES'
+                        ? `${hh} (${slot.remainingMinutes}m)`
+                        : `${hh} (${slot.count}/${slot.capacity})`}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {saveError && (
             <UserFacingErrorCallout mapped={saveError} className="border-red-200 bg-red-50/90" />

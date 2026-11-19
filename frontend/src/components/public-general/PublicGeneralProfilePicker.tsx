@@ -5,11 +5,16 @@ import {
   buildPbProfileNameFromTests,
   PB_PROFILE_PREFIX,
 } from '@/lib/public-general-profile-name'
+import {
+  calculateProfileDuration,
+  formatMinutesLabel,
+} from '@/lib/profile-duration'
 
 export type AvailableTestOption = {
   id: string
   name: string
   code: string
+  theoreticalDurationMinutes?: number | null
   category: { name: string }
 }
 
@@ -17,6 +22,8 @@ export type MedicalProfileOption = {
   id: string
   name: string
   companyId: string | null
+  calculatedDurationMinutes?: number | null
+  durationOverrideMinutes?: number | null
 }
 
 type ProfileMode = 'existing' | 'quick'
@@ -79,6 +86,16 @@ export default function PublicGeneralProfilePicker({
   const autoNamePreview = useMemo(
     () => buildPbProfileNameFromTests(selectedTestsForPreview),
     [selectedTestsForPreview]
+  )
+
+  const quickDuration = useMemo(
+    () =>
+      calculateProfileDuration({
+        tests: selectedTestsForPreview,
+        controlDeskMode: 'AUTO',
+        extraRxProjections: 0,
+      }),
+    [selectedTestsForPreview],
   )
 
   const byCategory = useMemo(() => {
@@ -227,7 +244,7 @@ export default function PublicGeneralProfilePicker({
             <p className="text-[10px] text-slate-500">
               {selectedTestIds.length === 0
                 ? 'Marca al menos una prueba'
-                : `${selectedTestIds.length} prueba(s) seleccionada(s)`}
+                : `${selectedTestIds.length} prueba(s) seleccionada(s) · Duración estimada: ${formatMinutesLabel(quickDuration.effectiveDurationMinutes)}`}
             </p>
           </div>
         </div>

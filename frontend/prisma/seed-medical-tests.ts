@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { resolveUmmTheoreticalDurationMinutes } from "../src/lib/medical-test-duration-seed";
 
 const prisma = new PrismaClient();
 
@@ -230,11 +231,14 @@ async function seedMedicalTests(): Promise<void> {
   console.log("🔬 Insertando pruebas de LABORATORIO...");
   const labCategoryId = categoryMap.get("LABORATORIO")!;
   for (let i = 0; i < LAB_TESTS.length; i++) {
+    const code = generateCode("LAB", i + 1);
+    const name = LAB_TESTS[i];
     await prisma.medicalTest.create({
       data: {
-        code: generateCode("LAB", i + 1),
-        name: LAB_TESTS[i],
+        code,
+        name,
         categoryId: labCategoryId,
+        theoreticalDurationMinutes: resolveUmmTheoreticalDurationMinutes(code, name),
       },
     });
   }
@@ -245,6 +249,7 @@ async function seedMedicalTests(): Promise<void> {
   const seedConsultaPrice = Number(process.env.SEED_CONSULTA_MEDICA_PRICE ?? "");
   const seedCertificadoPrice = Number(process.env.SEED_CERTIFICADO_MEDICO_PRICE ?? "");
   for (let i = 0; i < GENERAL_TESTS.length; i++) {
+    const code = generateCode("GEN", i + 1);
     const name = GENERAL_TESTS[i];
     let options: { price: number } | undefined;
     if (
@@ -262,9 +267,10 @@ async function seedMedicalTests(): Promise<void> {
     }
     await prisma.medicalTest.create({
       data: {
-        code: generateCode("GEN", i + 1),
+        code,
         name,
         categoryId: generalCategoryId,
+        theoreticalDurationMinutes: resolveUmmTheoreticalDurationMinutes(code, name),
         ...(options ? { options } : {}),
       },
     });
@@ -274,11 +280,14 @@ async function seedMedicalTests(): Promise<void> {
   console.log("📷 Insertando estudios de IMAGEN...");
   const imagenCategoryId = categoryMap.get("IMAGEN")!;
   for (let i = 0; i < IMAGEN_TESTS.length; i++) {
+    const code = generateCode("IMG", i + 1);
+    const name = IMAGEN_TESTS[i];
     await prisma.medicalTest.create({
       data: {
-        code: generateCode("IMG", i + 1),
-        name: IMAGEN_TESTS[i],
+        code,
+        name,
         categoryId: imagenCategoryId,
+        theoreticalDurationMinutes: resolveUmmTheoreticalDurationMinutes(code, name),
       },
     });
   }
@@ -287,11 +296,14 @@ async function seedMedicalTests(): Promise<void> {
   console.log("🚑 Insertando servicios de AMBULANCIA...");
   const ambulanciaCategoryId = categoryMap.get("AMBULANCIA")!;
   for (let i = 0; i < AMBULANCIA_TESTS.length; i++) {
+    const code = generateCode("AMB", i + 1);
+    const name = AMBULANCIA_TESTS[i];
     await prisma.medicalTest.create({
       data: {
-        code: generateCode("AMB", i + 1),
-        name: AMBULANCIA_TESTS[i],
+        code,
+        name,
         categoryId: ambulanciaCategoryId,
+        theoreticalDurationMinutes: resolveUmmTheoreticalDurationMinutes(code, name),
       },
     });
   }

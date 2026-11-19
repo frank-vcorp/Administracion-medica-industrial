@@ -111,6 +111,7 @@ function appointmentMatchesPatientSearch(
 interface AppointmentWithWorker {
     id: string;
     workerId?: string;
+    serviceProfileId?: string | null;
     createdAt?: Date | string;
     scheduledAt: Date;
     status: string;

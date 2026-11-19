@@ -96,7 +96,16 @@ export function appointmentAgendaHour(
     hour: 'numeric',
     hour12: false,
   })
-  return Number(fmt.format(d))
+  return Number(fmt.format(d)) % 24
+}
+
+export function appointmentAgendaHourMinute(
+  scheduledAt: Date | string,
+  timeZone = AMI_APPOINTMENT_TIMEZONE,
+): { hour: number; minute: number } {
+  const d = new Date(scheduledAt)
+  const parts = zonedPartsFromUtcMs(d.getTime(), timeZone)
+  return { hour: parts.hour % 24, minute: parts.minute }
 }
 
 export function formatAppointmentAgendaTime(

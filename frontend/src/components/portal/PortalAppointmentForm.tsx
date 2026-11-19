@@ -11,6 +11,8 @@ import PortalQuickWorkerRegister from '@/components/portal/PortalQuickWorkerRegi
 import PortalSpecialRequestPanel from '@/components/portal/PortalSpecialRequestPanel'
 import type { PortalWorkerListItem } from '@/actions/portal-worker.actions'
 import { formatAgendaDayHeading } from '@/lib/appointment-scheduling'
+import type { BranchHourSlotAvailability } from '@/lib/appointment-capacity'
+import { formatMinutesLabel, resolveEffectiveProfileDuration } from '@/lib/profile-duration'
 
 type BookingContext = Extract<
   Awaited<ReturnType<typeof getPortalAppointmentBookingContext>>,
@@ -32,7 +34,14 @@ function mergeWorkers(existing: WorkerOption[], incoming: PortalWorkerListItem[]
       lastName: w.lastName,
       phone: w.phone,
       medicalProfileId: w.medicalProfileId,
-      medicalProfile: w.medicalProfile,
+      medicalProfile: w.medicalProfile
+        ? {
+            id: w.medicalProfile.id,
+            name: w.medicalProfile.name,
+            calculatedDurationMinutes: w.medicalProfile.calculatedDurationMinutes ?? null,
+            durationOverrideMinutes: w.medicalProfile.durationOverrideMinutes ?? null,
+          }
+        : null,
     })
   }
   return [...map.values()].sort((a, b) =>
@@ -49,9 +58,9 @@ export default function PortalAppointmentForm({ context }: Props) {
   const [date, setDate] = useState(context.suggestedDate)
   const [time, setTime] = useState('09:00')
   const [serviceProfileId, setServiceProfileId] = useState('')
-  const [slots, setSlots] = useState<
-    Array<{ hour: number; count: number; capacity: number; full: boolean }>
-  >([])
+  const [slots, setSlots] = useState<BranchHourSlotAvailability[]>([])
+  const [capacityMode, setCapacityMode] = useState<'HOURLY_COUNT' | 'DURATION_MINUTES'>('HOURLY_COUNT')
+  const [requiredDurationMinutes, setRequiredDurationMinutes] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCapacityHelp, setShowCapacityHelp] = useState(false)
   const [showBulkRequest, setShowBulkRequest] = useState(false)
@@ -60,19 +69,55 @@ export default function PortalAppointmentForm({ context }: Props) {
   const readOnly = context.isPreview
   const showSpecialRequest = showCapacityHelp || showBulkRequest
 
+  const selectedWorker = useMemo(
+    () => workers.find((w) => w.id === workerId) ?? null,
+    [workers, workerId],
+  )
+  const effectiveProfileId = serviceProfileId || selectedWorker?.medicalProfileId || null
+  const effectiveProfileDuration = useMemo(() => {
+    if (serviceProfileId) {
+      const p = context.profiles.find((pr) => pr.id === serviceProfileId)
+      return resolveEffectiveProfileDuration(p)
+    }
+    if (selectedWorker?.medicalProfile) {
+      return resolveEffectiveProfileDuration(selectedWorker.medicalProfile)
+    }
+    return null
+  }, [serviceProfileId, context.profiles, selectedWorker])
+
   useEffect(() => {
     if (!branchId || !date) return
-    void getPortalBranchHourAvailability({ branchId, date }).then((res) => {
-      if (res.success) setSlots(res.slots)
+    void getPortalBranchHourAvailability({
+      branchId,
+      date,
+      serviceProfileId: effectiveProfileId,
+      workerId: workerId || null,
+    }).then((res) => {
+      if (res.success) {
+        setSlots(res.slots)
+        setCapacityMode(res.capacityMode === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT')
+        setRequiredDurationMinutes(res.requiredDurationMinutes ?? null)
+      }
     })
-  }, [branchId, date])
+  }, [branchId, date, effectiveProfileId, workerId])
 
   const timeOptions = useMemo(() => {
-    const fromSlots = slots.map((s) => ({
-      value: `${s.hour.toString().padStart(2, '0')}:00`,
-      label: `${s.hour.toString().padStart(2, '0')}:00 (${s.count}/${s.capacity})`,
-      full: s.full,
-    }))
+    const fromSlots = slots.map((s) => {
+      const hh = `${s.hour.toString().padStart(2, '0')}:00`
+      if (s.capacityMode === 'DURATION_MINUTES') {
+        const label = s.exceedsClosing
+          ? `${hh} — excede cierre (${s.requiredMinutes} min)`
+          : s.full
+            ? `${hh} — sin tiempo (${s.remainingMinutes} min libres)`
+            : `${hh} (${s.remainingMinutes} min libres · caben ${s.availableForProfile})`
+        return { value: hh, label, full: s.full }
+      }
+      return {
+        value: hh,
+        label: `${hh} (${s.count}/${s.capacity})`,
+        full: s.full,
+      }
+    })
     if (fromSlots.length > 0) return fromSlots
     return Array.from({ length: 9 }, (_, i) => {
       const h = 8 + i
@@ -148,25 +193,58 @@ export default function PortalAppointmentForm({ context }: Props) {
         </p>
       )}
       <div className="space-y-4">
-        <label className="block text-sm max-w-md">
-          <span className="text-xs font-bold text-slate-500">Sucursal</span>
-          <select
-            required
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm"
-          >
-            {context.branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="grid gap-4 sm:grid-cols-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <label className="block text-sm">
+            <span className="text-xs font-bold text-slate-500">1. Sucursal</span>
+            <select
+              required
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm"
+            >
+              {context.branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-sm">
+            <span className="text-xs font-bold text-slate-500">
+              2. Perfil de exámenes (define duración en clínica)
+            </span>
+            <select
+              value={serviceProfileId}
+              onChange={(e) => setServiceProfileId(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm"
+            >
+              <option value="">Usar perfil del trabajador</option>
+              {context.profiles.map((p) => {
+                const dur = resolveEffectiveProfileDuration(p)
+                return (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {dur != null ? ` (${dur} min)` : ''}
+                  </option>
+                )
+              })}
+            </select>
+            {(effectiveProfileDuration != null || (capacityMode === 'DURATION_MINUTES' && requiredDurationMinutes != null)) && (
+              <p className="mt-1 text-xs font-medium text-teal-800">
+                ⏱ Duración proyectada:{' '}
+                <strong>
+                  {formatMinutesLabel(effectiveProfileDuration ?? requiredDurationMinutes)}
+                </strong>
+              </p>
+            )}
+          </label>
+        </div>
 
         <PortalAppointmentDateCalendar
           branchId={branchId}
           branchName={context.branches.find((b) => b.id === branchId)?.name}
+          serviceProfileId={effectiveProfileId}
           selectedDate={date}
           onSelectDate={setDate}
           todayStr={context.suggestedDate}
@@ -224,6 +302,7 @@ export default function PortalAppointmentForm({ context }: Props) {
               branchId={branchId}
               date={date}
               time={time}
+              serviceProfileId={effectiveProfileId}
               slots={slots}
               readOnly={readOnly}
               defaultOpen={workers.length === 0}
@@ -231,28 +310,31 @@ export default function PortalAppointmentForm({ context }: Props) {
               onWorkersCreated={(created, firstId) => {
                 setWorkers((prev) => mergeWorkers(prev, created))
                 if (firstId) setWorkerId(firstId)
-                void getPortalBranchHourAvailability({ branchId, date }).then((res) => {
+                void getPortalBranchHourAvailability({
+                  branchId,
+                  date,
+                  serviceProfileId: effectiveProfileId,
+                  workerId: firstId ?? (workerId || null),
+                }).then((res) => {
                   if (res.success) setSlots(res.slots)
                 })
               }}
             />
           </div>
 
-          <label className="block text-sm sm:col-span-2">
-            <span className="text-xs font-bold text-slate-500">Perfil de exámenes (opcional)</span>
-            <select
-              value={serviceProfileId}
-              onChange={(e) => setServiceProfileId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-            >
-              <option value="">Usar perfil del trabajador</option>
-              {context.profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="sm:col-span-2 text-xs text-slate-500">
+            Perfil aplicado:{' '}
+            <strong className="text-slate-700">
+              {serviceProfileId
+                ? (context.profiles.find((p) => p.id === serviceProfileId)?.name ?? 'Seleccionado')
+                : (selectedWorker?.medicalProfile?.name ?? 'Sin perfil asignado')}
+            </strong>
+            {effectiveProfileDuration != null && (
+              <span className="ml-2 rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-[11px] font-bold text-teal-800">
+                {formatMinutesLabel(effectiveProfileDuration)}
+              </span>
+            )}
+          </div>
 
         </div>
 
