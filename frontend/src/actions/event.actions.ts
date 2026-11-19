@@ -71,7 +71,9 @@ function toReceptionCheckoutTests(
         status: t.status as EventTestPipelineStatus,
         testNameSnapshot: t.testNameSnapshot,
         examenCaptureClosed: isExamenMedicoTestName(t.testNameSnapshot)
-            ? captureClosed
+            ? captureClosed ||
+              t.status === 'RESULT_REGISTERED' ||
+              t.status === 'COMPLETED'
             : undefined,
     }))
 }

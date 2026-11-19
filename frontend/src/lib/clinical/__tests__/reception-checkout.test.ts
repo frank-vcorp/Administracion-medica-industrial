@@ -79,6 +79,36 @@ describe('reception-checkout (SPEC ARCH-20260921-01 §4.4)', () => {
     ).toBe(true)
   })
 
+  it('desbloquea checkout cuando examen médico está RESULT_REGISTERED o COMPLETED aunque falte examenCaptureClosed (compat BD)', () => {
+    expect(
+      isCheckoutEnabled({
+        dischargedAt: null,
+        eventTests: [
+          {
+            id: 'em',
+            status: 'RESULT_REGISTERED',
+            testNameSnapshot: 'Examen Médico General',
+            examenCaptureClosed: false,
+          },
+          { id: 'soma', status: 'PENDING', testNameSnapshot: 'Somatometría' },
+        ],
+      }),
+    ).toBe(true)
+
+    expect(
+      isCheckoutEnabled({
+        dischargedAt: null,
+        eventTests: [
+          {
+            id: 'em',
+            status: 'COMPLETED',
+            testNameSnapshot: 'Examen Médico General',
+          },
+        ],
+      }),
+    ).toBe(true)
+  })
+
   it('bloquea si ya tiene dischargedAt', () => {
     expect(
       getCheckoutEligibility({

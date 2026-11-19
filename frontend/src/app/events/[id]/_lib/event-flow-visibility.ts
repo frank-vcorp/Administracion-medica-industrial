@@ -56,3 +56,13 @@ export function shouldRenderEventFlowController(
   if (status === 'COMPLETED' && activeView === 'VALIDATING') return true
   return false
 }
+
+export function shouldPromoteEventToValidating(
+  requestedView: string | undefined,
+  status: EventStatus,
+): boolean {
+  return (
+    requestedView === 'VALIDATING' &&
+    (status === 'CHECKED_IN' || status === 'IN_PROGRESS')
+  )
+}

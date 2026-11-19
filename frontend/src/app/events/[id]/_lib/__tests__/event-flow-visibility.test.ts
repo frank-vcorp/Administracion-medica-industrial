@@ -21,7 +21,10 @@
  */
 import { describe, it, expect } from 'vitest'
 
-import { shouldRenderEventFlowController } from '../event-flow-visibility'
+import {
+  shouldPromoteEventToValidating,
+  shouldRenderEventFlowController,
+} from '../event-flow-visibility'
 
 describe('IMPL-20260826-03: shouldRenderEventFlowController', () => {
   // ─── REGRESIÓN principal: pantalla blanca post-firma ──────────────────
@@ -112,4 +115,19 @@ describe('IMPL-20260826-03: shouldRenderEventFlowController', () => {
       expect(shouldRenderEventFlowController(activeView, status)).toBe(expected)
     },
   )
+})
+
+describe('shouldPromoteEventToValidating', () => {
+  it('promueve CHECKED_IN y IN_PROGRESS cuando view=VALIDATING', () => {
+    expect(shouldPromoteEventToValidating('VALIDATING', 'CHECKED_IN')).toBe(true)
+    expect(shouldPromoteEventToValidating('VALIDATING', 'IN_PROGRESS')).toBe(true)
+  })
+
+  it('no promueve si view no es VALIDATING o el estatus ya es VALIDATING/COMPLETED/CANCELED', () => {
+    expect(shouldPromoteEventToValidating('IN_PROGRESS', 'CHECKED_IN')).toBe(false)
+    expect(shouldPromoteEventToValidating(undefined, 'CHECKED_IN')).toBe(false)
+    expect(shouldPromoteEventToValidating('VALIDATING', 'VALIDATING')).toBe(false)
+    expect(shouldPromoteEventToValidating('VALIDATING', 'COMPLETED')).toBe(false)
+    expect(shouldPromoteEventToValidating('VALIDATING', 'CANCELED')).toBe(false)
+  })
 })

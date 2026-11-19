@@ -358,7 +358,7 @@ export async function saveExamenMedicoPapeleta(
           navigation: mapped.navigation,
         }
       }
-      // O9-23: cerrar revisión clínica del estudio sin bloquear edición (no examen_capture_closed).
+      physicalPayload.examen_capture_closed = true
     } else if (priorPhysical.examen_capture_closed === true) {
       physicalPayload.examen_capture_closed = true
     }
