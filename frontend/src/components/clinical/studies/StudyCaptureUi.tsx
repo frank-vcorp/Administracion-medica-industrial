@@ -34,7 +34,7 @@ export function StudyCaptureMissingBanner({
     <div
       role="alert"
       data-testid="study-missing-fields-banner"
-      className={`rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-800 ${className}`}
+      className={`sticky top-2 z-20 rounded-xl border border-red-200 bg-red-50/95 backdrop-blur-sm shadow-sm px-4 py-3 text-sm text-red-800 ${className}`}
     >
       <span className="font-bold">Campos obligatorios incompletos. </span>
       {message}

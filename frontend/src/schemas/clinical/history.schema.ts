@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { applySentenceCase } from '@/lib/text/sentence-case';
+import { applyProperNameCase, applySentenceCase } from '@/lib/text/sentence-case';
 import { tolerantZinEnum } from './zin.helper';
 
 const SiNegado = z.enum(['NEGADO', 'SI', 'NO APLICA']).default('NEGADO');
@@ -7,6 +7,9 @@ const SiNegado = z.enum(['NEGADO', 'SI', 'NO APLICA']).default('NEGADO');
 /** Texto libre (modo oración al persistir). */
 const freeTextOpt = (max: number) =>
   z.string().trim().max(max).transform(applySentenceCase).optional();
+
+const properNameOpt = (max: number) =>
+  z.string().trim().max(max).transform(applyProperNameCase).optional();
 
 const freeTextDefault = (max: number) =>
   z.string().trim().max(max).transform(applySentenceCase).default('');
@@ -108,10 +111,10 @@ export type DatosPersonalesModulo1 = z.infer<typeof DatosPersonalesModulo1Schema
 // Movido desde prefilled.schema.ts — ARCH-20260326-06
 // ─────────────────────────────────────────────────────────────────────────────
 export const HistoriaLaboralSchema = z.object({
-  empresa_anterior_1:                freeTextOpt(500),
+  empresa_anterior_1:                properNameOpt(500),
   puesto_anterior_1:                 freeTextOpt(500),
   tiempo_anterior_1:                 freeTextOpt(500),
-  empresa_anterior_2:                freeTextOpt(500),
+  empresa_anterior_2:                properNameOpt(500),
   puesto_anterior_2:                 freeTextOpt(500),
   tiempo_anterior_2:                 freeTextOpt(500),
   exposicion_quimica:                z.boolean().optional(),

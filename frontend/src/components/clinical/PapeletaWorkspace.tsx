@@ -407,8 +407,10 @@ export default function PapeletaWorkspace({
   const [activeTestId, setActiveTestIdInternal] = useState<string | null>(
     () => initialEventTestId ?? null,
   )
+  const activeTestIdRef = useRef<string | null>(activeTestId)
 
   const setActiveTestId = useCallback((testId: string | null) => {
+    activeTestIdRef.current = testId
     setActiveTestIdInternal(testId)
     replacePapeletaQuery({ eventTest: testId })
   }, [])
@@ -518,6 +520,10 @@ export default function PapeletaWorkspace({
 
   /* eslint-disable react-hooks/set-state-in-effect -- sincroniza state local con prop eventTests (controlled state pattern). */
   useEffect(() => {
+    activeTestIdRef.current = activeTestId
+  }, [activeTestId])
+
+  useEffect(() => {
     setLocalTests(eventTests)
   }, [eventTests])
 
@@ -529,8 +535,12 @@ export default function PapeletaWorkspace({
       params.get('eventTest'),
       params.has('eventTest'),
       validIds,
+      activeTestIdRef.current,
     )
     if (synced === undefined) return
+    if (synced && !params.has('eventTest')) {
+      replacePapeletaQuery({ eventTest: synced })
+    }
     setActiveTestIdInternal((current) => (current === synced ? current : synced))
   }, [initialEventTestId, eventTests])
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -810,7 +820,7 @@ export default function PapeletaWorkspace({
   // --- Vista Resumen (entrada al workspace) ---
   if (!activeTestId) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-clip">
         <div className="p-4">
           <h2 className="text-base font-bold text-slate-800 mb-0.5">Módulo de pruebas clínicas</h2>
           <p className="text-sm text-slate-500 mb-3">
@@ -869,7 +879,7 @@ export default function PapeletaWorkspace({
 
   // --- Vista Workspace (estudio activo) ---
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-clip">
       {/* Cabecera persistente con botón de regreso */}
       <WorkerHeader
         completedCount={completedCount}

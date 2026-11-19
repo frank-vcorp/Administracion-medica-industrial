@@ -408,7 +408,7 @@ export async function saveConsultaMedica(
   eventId: string,
   workerId: string,
   rawPayload: unknown,
-  options: { finalize?: boolean } = {},
+  options: { finalize?: boolean; autosave?: boolean } = {},
 ): Promise<SaveConsultaMedicaResult> {
   const access = await assertClinicalAccess()
   if (!access.ok) return { success: false, error: access.error }
@@ -479,7 +479,9 @@ export async function saveConsultaMedica(
       workerId,
       toStore.proxima_cita_appointment_id,
     )
-    revalidatePath(`/events/${eventId}`)
+    if (!options.autosave) {
+      revalidatePath(`/events/${eventId}`)
+    }
     return {
       success: true,
       payload: toStore,

@@ -488,6 +488,8 @@ export function AntecedentesForm({
                           <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
                           <input
                             type="text"
+                            name={field}
+                            data-sentence-case={field.startsWith('empresa_anterior_') ? 'proper-name' : undefined}
                             value={String(historiaLaboral[field] ?? '')}
                             onChange={e => setHistoriaLaboral(p => ({ ...p, [field]: e.target.value }))}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"

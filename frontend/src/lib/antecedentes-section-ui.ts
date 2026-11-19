@@ -45,7 +45,7 @@ export function antecedentesTabIntro(id: AntecedentesTabId): string {
 }
 
 export const ANTECEDENTES_SECTION_LEGEND = {
-  heredo_familiares: 'Familiares (AHF) — en parientes',
-  no_patologicos: 'Hábitos (ANP) — no patológicos',
-  patologicos: 'Personales (APP) — del trabajador',
+  heredo_familiares: 'Antecedentes heredofamiliares',
+  no_patologicos: 'Antecedentes personales no patológicos',
+  patologicos: 'Antecedentes personales patológicos',
 } as const

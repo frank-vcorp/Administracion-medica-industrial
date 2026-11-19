@@ -1,10 +1,31 @@
 import prisma from '@/lib/prisma'
 import {
   isCertificadoMedicoTestName,
-  parseCertificadoMedicoClinicalContext,
+  parseCertificadoMedicoDraftContext,
 } from '@/lib/clinical/certificado-medico'
 import type { CertificadoMedicoPdfInput } from '@/lib/certificado-medico-pdf'
 import { resolveCertificadoMedicoMetadata } from '@/lib/clinical/certificado-medico-metadata'
+import { mergeCertificadoSignosPrefill } from '@/lib/clinical/certificado-medico-prefill'
+import { computeBmi, complexionFromImc } from '@/lib/clinical/talla-meters'
+import {
+  CERTIFICADO_MEDICO_SCHEMA_VERSION,
+  DEFAULT_DICTAMEN_LABORAL_TEXTO,
+  buildDefaultExploracionCertificado,
+  type CertificadoMedicoPayload,
+} from '@/schemas/clinical/certificado-medico.schema'
+
+function mergeLongitudinalAntecedentes(
+  longitudinal: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!longitudinal || typeof longitudinal !== 'object') return {}
+  const out: Record<string, unknown> = {}
+  for (const key of ['heredo_familiares', 'no_patologicos', 'patologicos']) {
+    if (longitudinal[key] && typeof longitudinal[key] === 'object') {
+      out[key] = longitudinal[key]
+    }
+  }
+  return out
+}
 
 function formatLongDate(d: Date): string {
   return new Intl.DateTimeFormat('es-MX', {
@@ -25,6 +46,7 @@ function computeEdad(dob: Date, asOf: Date): string | null {
 export async function loadCertificadoMedicoPdfInput(
   eventId: string,
   eventTestId: string,
+  options?: { userId?: string },
 ): Promise<
   { ok: true; data: CertificadoMedicoPdfInput } | { ok: false; status: number; message: string }
 > {
@@ -44,6 +66,12 @@ export async function loadCertificadoMedicoPdfInput(
           id: true,
           checkInDate: true,
           createdAt: true,
+          exam: {
+            select: {
+              somatometryData: true,
+              eyeAcuityData: true,
+            },
+          },
           worker: {
             select: {
               firstName: true,
@@ -65,13 +93,8 @@ export async function loadCertificadoMedicoPdfInput(
     return { ok: false, status: 400, message: 'El estudio no es un certificado médico.' }
   }
 
-  const certificadoRaw = parseCertificadoMedicoClinicalContext(eventTest.clinicalContext)
-  if (!certificadoRaw) {
-    return { ok: false, status: 404, message: 'El certificado aún no tiene captura.' }
-  }
-  if (!certificadoRaw.cerrada_at) {
-    return { ok: false, status: 403, message: 'El certificado debe estar cerrado para generar PDF.' }
-  }
+  const certificadoRaw = parseCertificadoMedicoDraftContext(eventTest.clinicalContext)
+  const isDraft = !certificadoRaw?.cerrada_at?.trim()
 
   const event = eventTest.event
   const eventDateRaw = event.checkInDate ?? event.createdAt
@@ -80,13 +103,76 @@ export async function loadCertificadoMedicoPdfInput(
   const histObj =
     hist && typeof hist === 'object' && !Array.isArray(hist) ? (hist as Record<string, unknown>) : null
 
+  let doctorFullName: string | null = null
+  let doctorLicense: string | null = null
+  if (
+    options?.userId &&
+    (!certificadoRaw?.medico_nombre?.trim() || !certificadoRaw?.medico_cedula?.trim())
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: options.userId },
+      select: { fullName: true, professionalLicense: true },
+    })
+    doctorFullName = user?.fullName ?? null
+    doctorLicense = user?.professionalLicense ?? null
+  }
+
   const metadata = resolveCertificadoMedicoMetadata({
     parsed: certificadoRaw,
     workerNationalId: worker.nationalId,
     longitudinalData: histObj,
+    doctorFullName,
+    doctorLicense,
     eventAt: eventDateRaw,
   })
-  const certificado = { ...certificadoRaw, ...metadata }
+
+  const somaData =
+    event.exam?.somatometryData &&
+    typeof event.exam.somatometryData === 'object' &&
+    !Array.isArray(event.exam.somatometryData)
+      ? (event.exam.somatometryData as Record<string, unknown>)
+      : null
+  const eyeData =
+    event.exam?.eyeAcuityData &&
+    typeof event.exam.eyeAcuityData === 'object' &&
+    !Array.isArray(event.exam.eyeAcuityData)
+      ? (event.exam.eyeAcuityData as Record<string, unknown>)
+      : null
+
+  const mergedSignos = mergeCertificadoSignosPrefill(
+    certificadoRaw?.signos_vitales,
+    somaData,
+    eyeData,
+  )
+  const { imc, imcValue } = computeBmi(mergedSignos.peso_kg, mergedSignos.talla_m)
+  const complexion = complexionFromImc(imcValue)
+  const signosVitales = {
+    ...mergedSignos,
+    imc: mergedSignos.imc?.trim() || imc || '',
+    complexion: mergedSignos.complexion?.trim() || complexion || '',
+  }
+
+  const dictamen = certificadoRaw?.dictamen_laboral ?? 'APTO'
+  const certificado: CertificadoMedicoPayload = {
+    schemaVersion: CERTIFICADO_MEDICO_SCHEMA_VERSION,
+    ...metadata,
+    signos_vitales: signosVitales,
+    exploracion_fisica:
+      certificadoRaw?.exploracion_fisica !== undefined
+        ? certificadoRaw.exploracion_fisica
+        : buildDefaultExploracionCertificado(),
+    integracion_diagnostica: certificadoRaw?.integracion_diagnostica ?? '',
+    dictamen_laboral: dictamen,
+    dictamen_laboral_texto:
+      certificadoRaw?.dictamen_laboral_texto !== undefined
+        ? certificadoRaw.dictamen_laboral_texto
+        : DEFAULT_DICTAMEN_LABORAL_TEXTO[dictamen],
+    antecedentes: {
+      ...mergeLongitudinalAntecedentes(histObj),
+      ...(certificadoRaw?.antecedentes ?? {}),
+    } as CertificadoMedicoPayload['antecedentes'],
+    cerrada_at: certificadoRaw?.cerrada_at,
+  }
 
   const sexo = certificado.sexo_atencion?.trim() || null
   const domicilio = certificado.domicilio_atencion?.trim() || null
@@ -95,6 +181,7 @@ export async function loadCertificadoMedicoPdfInput(
 
   const data: CertificadoMedicoPdfInput = {
     lugarFecha: `${certificado.lugar_expedicion} a ${formatLongDate(eventDateRaw)}`,
+    isDraft,
     patient: {
       nombre: `${worker.firstName} ${worker.lastName}`.trim(),
       edad: edadNum,

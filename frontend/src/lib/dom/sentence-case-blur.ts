@@ -1,13 +1,61 @@
-import { applySentenceCase } from '@/lib/text/sentence-case'
+import { applyProperNameCase, applySentenceCase } from '@/lib/text/sentence-case'
 import { shouldEnableSpellCheck } from '@/lib/dom/spell-check'
 
 export const SENTENCE_CASE_INPUT_DEBOUNCE_MS = 400
 
-/** Mismas exclusiones que el corrector global (tipos, data-spellcheck=off, readonly). */
+export type SentenceCaseControlMode = 'off' | 'sentence' | 'proper-name'
+
+const PROPER_NAME_FIELD_NAMES = new Set([
+  'firstname',
+  'lastname',
+  'fullname',
+  'nombre',
+  'apellidos',
+  'apellido',
+  'medico_nombre',
+  'medico_evaluador',
+  'medico_revisor',
+  'medico_universidad',
+  'lugar_expedicion',
+  'lugar_nacimiento',
+  'domicilio',
+  'domicilio_atencion',
+  'domiciliocalle',
+  'direccion',
+  'address',
+  'ciudad',
+  'city',
+  'municipio',
+  'estado_domicilio',
+  'colonia',
+  'pais',
+  'contacto_emergencia',
+  'declaracion_protesta_nombre',
+  'razonsocial',
+  'nombrecomercial',
+  'empresa_anterior_1',
+  'empresa_anterior_2',
+])
+
+export function resolveSentenceCaseMode(
+  el: HTMLInputElement | HTMLTextAreaElement,
+): SentenceCaseControlMode {
+  const attr = el.dataset.sentenceCase
+  if (attr === 'off') return 'off'
+  if (attr === 'proper-name') return 'proper-name'
+  const fieldKey = (el.name || el.id || '').trim().toLowerCase()
+  if (fieldKey && PROPER_NAME_FIELD_NAMES.has(fieldKey)) {
+    return 'proper-name'
+  }
+  return 'sentence'
+}
+
+/** Mismas exclusiones que el corrector global (tipos, data-spellcheck=off, data-sentence-case=off, readonly). */
 export function shouldApplySentenceCaseOnBlur(
   el: HTMLInputElement | HTMLTextAreaElement,
 ): boolean {
   if (el.dataset.sentenceCaseManaged === 'react') return false
+  if (el.dataset.sentenceCase === 'off') return false
   if (!shouldEnableSpellCheck(el)) return false
   if (el instanceof HTMLInputElement) {
     const t = (el.type || 'text').toLowerCase()
@@ -46,12 +94,15 @@ function restoreSelection(
 }
 
 /**
- * Normaliza texto libre a modo oración. Idempotente con controles clínicos React.
+ * Normaliza texto libre a modo oración (o nombre propio en campos de persona/domicilio/ciudad).
+ * Idempotente con controles clínicos React.
  */
 export function applySentenceCaseToControl(el: HTMLInputElement | HTMLTextAreaElement): void {
   if (!shouldApplySentenceCaseOnBlur(el)) return
+  const mode = resolveSentenceCaseMode(el)
+  if (mode === 'off') return
   const current = el.value
-  const next = applySentenceCase(current)
+  const next = mode === 'proper-name' ? applyProperNameCase(current) : applySentenceCase(current)
   if (next === current) return
 
   const selStart = el.selectionStart

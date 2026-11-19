@@ -87,4 +87,27 @@ describe('applySentenceCaseToControl', () => {
     applySentenceCaseToControl(el)
     expect(el.value).toBe('María gómez')
   })
+
+  it('usa formato de nombre propio en campos de persona, ciudad y domicilio', () => {
+    const nameInput = document.createElement('input')
+    nameInput.type = 'text'
+    nameInput.name = 'firstName'
+    nameInput.value = 'JUAN CARLOS'
+    applySentenceCaseToControl(nameInput)
+    expect(nameInput.value).toBe('Juan Carlos')
+
+    const cityInput = document.createElement('input')
+    cityInput.type = 'text'
+    cityInput.dataset.sentenceCase = 'proper-name'
+    cityInput.value = 'SANTIAGO DE QUERÉTARO'
+    applySentenceCaseToControl(cityInput)
+    expect(cityInput.value).toBe('Santiago de Querétaro')
+
+    const offInput = document.createElement('input')
+    offInput.type = 'text'
+    offInput.dataset.sentenceCase = 'off'
+    offInput.value = 'ACME SA DE CV'
+    applySentenceCaseToControl(offInput)
+    expect(offInput.value).toBe('ACME SA DE CV')
+  })
 })

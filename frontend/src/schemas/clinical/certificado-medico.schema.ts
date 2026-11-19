@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { applySentenceCase } from '@/lib/text/sentence-case'
+import { applyProperNameCase, applySentenceCase } from '@/lib/text/sentence-case'
 import { ClinicalHistoryDataSchema } from '@/schemas/clinical/history.schema'
 
 export const CERTIFICADO_MEDICO_SCHEMA_VERSION = 'certificado-medico-v1' as const
@@ -40,6 +40,18 @@ const freeText = (max: number, min = 0) =>
 
 const draftText = (max: number) =>
   z.string().trim().max(max).transform(applySentenceCase)
+const properNameText = (max: number, min = 0) =>
+  z
+    .string()
+    .trim()
+    .min(min, min <= 1 ? 'Campo obligatorio.' : `Debe tener al menos ${min} caracteres.`)
+    .max(max, `Debe tener como máximo ${max} caracteres.`)
+    .transform(applyProperNameCase)
+const properNameDraft = (max: number) =>
+  z.string().trim().max(max).transform(applyProperNameCase)
+const properNameOptional = z
+  .union([z.literal(''), z.string().trim().max(1000).transform(applyProperNameCase)])
+  .optional()
 const plainString = z.string().trim()
 const optionalString = z
   .union([z.literal(''), z.string().trim().max(8000).transform(applySentenceCase)])
@@ -64,16 +76,16 @@ export const SignosVitalesCertificadoSchema = z.object({
 
 export const CertificadoMedicoPayloadSchema = z.object({
   schemaVersion: z.literal(CERTIFICADO_MEDICO_SCHEMA_VERSION),
-  lugar_expedicion: freeText(200, 3),
+  lugar_expedicion: properNameText(200, 3),
   hora_atencion: optionalString,
   sexo_atencion: optionalString,
-  domicilio_atencion: optionalString,
+  domicilio_atencion: properNameOptional,
   identificacion_tipo: optionalString,
   identificacion_folio: optionalString,
-  medico_nombre: freeText(200, 1),
+  medico_nombre: properNameText(200, 1),
   medico_cedula: plainString.min(1).max(50),
   medico_titulo: optionalString,
-  medico_universidad: optionalString,
+  medico_universidad: properNameOptional,
   signos_vitales: SignosVitalesCertificadoSchema,
   exploracion_fisica: freeText(12000, 10),
   integracion_diagnostica: freeText(4000, 3),
@@ -91,16 +103,16 @@ export type CertificadoMedicoPayload = z.infer<typeof CertificadoMedicoPayloadSc
  */
 export const CertificadoMedicoDraftSchema = z.object({
   schemaVersion: z.literal(CERTIFICADO_MEDICO_SCHEMA_VERSION),
-  lugar_expedicion: draftText(200).optional(),
+  lugar_expedicion: properNameDraft(200).optional(),
   hora_atencion: optionalString,
   sexo_atencion: optionalString,
-  domicilio_atencion: optionalString,
+  domicilio_atencion: properNameOptional,
   identificacion_tipo: optionalString,
   identificacion_folio: optionalString,
-  medico_nombre: draftText(200).optional(),
+  medico_nombre: properNameDraft(200).optional(),
   medico_cedula: plainString.max(50).optional(),
   medico_titulo: optionalString,
-  medico_universidad: optionalString,
+  medico_universidad: properNameOptional,
   signos_vitales: SignosVitalesCertificadoSchema.optional(),
   exploracion_fisica: draftText(12000).optional(),
   integracion_diagnostica: draftText(4000).optional(),
