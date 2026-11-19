@@ -340,9 +340,27 @@ class TestClinicalCriteriaByOperationMode:
         )
 
     def test_clinical_interpretation_returns_full_clinical_criteria(self, resolver):
-        """CA-G20: resolver devuelve clinicalCriteria completo para
-        clinical_interpretation."""
+        """CA-G20: resolver devuelve clinicalCriteria completo desde BD para
+        clinical_interpretation (sin sintetizar prompt hardcodeado)."""
         row = _row("t-cli", {
+            "operationMode": "clinical_interpretation",
+            "aiCalibration": {
+                "canonicalStudyType": "Audiometria",
+                "extraction": {"prompt": "p"},
+                "diagnosis": {"prompt": "prompt clínico en BD", "version": "aud-dx-v1"},
+            },
+        })
+        resolved = resolver.resolve(row, "published")
+        assert resolved is not None
+        assert resolved.operationMode == "clinical_interpretation"
+        assert resolved.clinicalCriteria is not None
+        assert resolved.clinicalCriteria["prediagnosisEnabled"] is True
+        assert resolved.clinicalCriteria["prompt"] == "prompt clínico en BD"
+        assert "oido_derecho" in resolved.clinicalCriteria["requiredParams"]
+
+    def test_clinical_interpretation_without_diagnosis_prompt_does_not_synthesize_prompt(self, resolver):
+        """Sin diagnosis.prompt en BD, el resolver NO sintetiza prompt hardcodeado."""
+        row = _row("t-cli-noprompt", {
             "operationMode": "clinical_interpretation",
             "aiCalibration": {
                 "canonicalStudyType": "Audiometria",
@@ -351,10 +369,9 @@ class TestClinicalCriteriaByOperationMode:
         })
         resolved = resolver.resolve(row, "published")
         assert resolved is not None
-        assert resolved.operationMode == "clinical_interpretation"
         assert resolved.clinicalCriteria is not None
-        assert resolved.clinicalCriteria["prediagnosisEnabled"] is True
-        assert "oido_derecho" in resolved.clinicalCriteria["requiredParams"]
+        assert resolved.clinicalCriteria["prompt"] is None
+        assert resolved.clinicalCriteria["prediagnosisEnabled"] is False
 
     def test_manual_service_returns_none(self, resolver):
         """CA-G20: manual_service ⇒ resolver None (no hay version que
@@ -856,8 +873,8 @@ class TestNoSecretsExposed:
 
 
 class TestAdaptorDefaultsFromHardcoded:
-    """CA-G20: clinicalCriteria defaults = valores hardcodeados actuales
-    de `prediagnostic.py` (preserva comportamiento)."""
+    """CA-G20: validación determinística (CONFIDENCE_THRESHOLDS / REQUIRED_PARAMS)
+    se preserva cuando BD aporta el prompt clínico, pero nunca se inventan prompts."""
 
     def test_defaults_audiometria(self, resolver):
         from app.services.ai.prediagnostic import (
@@ -865,20 +882,38 @@ class TestAdaptorDefaultsFromHardcoded:
             REQUIRED_PARAMS,
         )
 
-        raw = {"canonicalStudyType": "Audiometria", "extraction": {"prompt": "p"}}
+        raw = {
+            "canonicalStudyType": "Audiometria",
+            "extraction": {"prompt": "p"},
+            "diagnosis": {"prompt": "prompt audio BD"},
+        }
         row = _row("t-def-aud", {"aiCalibration": raw})
         resolved = resolver.resolve(row, "published")
         assert resolved is not None
         assert resolved.clinicalCriteria["confidenceThreshold"] == CONFIDENCE_THRESHOLDS["Audiometria"]
         assert resolved.clinicalCriteria["requiredParams"] == REQUIRED_PARAMS["Audiometria"]
+        assert resolved.clinicalCriteria["prompt"] == "prompt audio BD"
         assert resolved.clinicalCriteria["prediagnosisEnabled"] is True
 
     def test_defaults_laboratorio(self, resolver):
         from app.services.ai.prediagnostic import CONFIDENCE_THRESHOLDS
 
-        raw = {"canonicalStudyType": "Laboratorio", "extraction": {"prompt": "p"}}
+        raw = {
+            "canonicalStudyType": "Laboratorio",
+            "extraction": {"prompt": "p"},
+            "diagnosis": {"prompt": "prompt lab BD"},
+        }
         row = _row("t-def-lab", {"aiCalibration": raw})
         resolved = resolver.resolve(row, "published")
         assert resolved is not None
         assert resolved.clinicalCriteria["confidenceThreshold"] == CONFIDENCE_THRESHOLDS["Laboratorio"]
+        assert resolved.clinicalCriteria["prompt"] == "prompt lab BD"
         assert resolved.clinicalCriteria["prediagnosisEnabled"] is True
+
+    def test_without_db_prompt_does_not_fallback_to_code(self, resolver):
+        raw = {"canonicalStudyType": "Audiometria", "extraction": {"prompt": "p"}}
+        row = _row("t-no-dx", {"aiCalibration": raw})
+        resolved = resolver.resolve(row, "published")
+        assert resolved is not None
+        assert resolved.clinicalCriteria["prompt"] is None
+        assert resolved.clinicalCriteria["prediagnosisEnabled"] is False

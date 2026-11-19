@@ -4,6 +4,10 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { updateMedicalTest } from '@/actions/medical-profiles'
+import type {
+  CalibrationStatusKind,
+  MedicalTestCalibrationStatus,
+} from '@/lib/clinical/calibration-status'
 
 export type CatalogServiceRow = {
   id: string
@@ -13,6 +17,7 @@ export type CatalogServiceRow = {
   theoreticalDurationMinutes: number | null
   category: { name: string }
   _count?: { profiles: number }
+  calibration?: MedicalTestCalibrationStatus
 }
 
 export type CatalogCategoryOption = {
@@ -22,14 +27,25 @@ export type CatalogCategoryOption = {
 
 type DurationFilter = 'all' | 'defined' | 'undefined'
 
+const STATUS_BADGE_CLASSES: Record<CalibrationStatusKind, string> = {
+  calibrated: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  partial: 'bg-amber-50 text-amber-800 border-amber-200',
+  draft_only: 'bg-amber-50 text-amber-800 border-amber-200',
+  missing: 'bg-rose-50 text-rose-700 border-rose-200',
+  disabled: 'bg-slate-100 text-slate-600 border-slate-200',
+  manual_service: 'bg-slate-100 text-slate-600 border-slate-200',
+}
+
 export function MedicalServicesCatalogTable({
   tests,
   categories,
   activeCategoryId,
+  activeStatusFilter,
 }: {
   tests: CatalogServiceRow[]
   categories: CatalogCategoryOption[]
   activeCategoryId?: string
+  activeStatusFilter?: string
 }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -42,6 +58,8 @@ export function MedicalServicesCatalogTable({
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  const showCalibrationColumn = tests.some((t) => Boolean(t.calibration))
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -155,47 +173,86 @@ export function MedicalServicesCatalogTable({
               <th className="px-6 py-4">Prueba</th>
               <th className="px-6 py-4">Categoría</th>
               <th className="px-6 py-4">Duración teórica (min)</th>
+              {showCalibrationColumn && (
+                <th className="px-6 py-4">Estado de calibración IA</th>
+              )}
               <th className="px-6 py-4 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((test) => (
-              <tr key={test.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 font-mono text-slate-400 text-xs">{test.code}</td>
-                <td className="px-6 py-4 font-medium text-slate-900">{test.name}</td>
-                <td className="px-6 py-4 text-slate-500">{test.category.name}</td>
-                <td className="px-6 py-4">
-                  {test.theoreticalDurationMinutes != null ? (
-                    <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-bold text-teal-700 border border-teal-200">
-                      {test.theoreticalDurationMinutes} min
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-400">
-                      Sin definir
-                    </span>
+            {filtered.map((test) => {
+              const cal = test.calibration
+              const badgeCls = cal ? STATUS_BADGE_CLASSES[cal.kind] : ''
+              return (
+                <tr key={test.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 font-mono text-slate-400 text-xs">{test.code}</td>
+                  <td className="px-6 py-4 font-medium text-slate-900">{test.name}</td>
+                  <td className="px-6 py-4 text-slate-500">{test.category.name}</td>
+                  <td className="px-6 py-4">
+                    {test.theoreticalDurationMinutes != null ? (
+                      <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-bold text-teal-700 border border-teal-200">
+                        {test.theoreticalDurationMinutes} min
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-400">
+                        Sin definir
+                      </span>
+                    )}
+                  </td>
+                  {showCalibrationColumn && (
+                    <td className="px-6 py-4">
+                      {cal ? (
+                        <div className="space-y-1">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${badgeCls}`}
+                          >
+                            {cal.label}
+                          </span>
+                          {cal.kind !== 'manual_service' && (
+                            <p className="text-xs text-slate-400">
+                              Extracción: {cal.hasExtractionPrompt ? 'sí' : 'no'} · Prediagnóstico:{' '}
+                              {cal.hasClinicalPrompt ? 'sí' : 'no'}
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
+                    </td>
                   )}
-                </td>
-                <td className="px-6 py-4 text-right flex items-center justify-end gap-3">
-                  <Link
-                    href={`/admin/services/${test.id}/calibration`}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors whitespace-nowrap"
-                  >
-                    ⚡ Calibrar IA
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(test)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
-                  >
-                    Editar
-                  </button>
-                </td>
-              </tr>
-            ))}
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-3">
+                      <Link
+                        href={`/admin/services/${test.id}/calibration`}
+                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap ${
+                          cal?.needsCalibration
+                            ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                            : 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
+                        }`}
+                      >
+                        {cal
+                          ? cal.needsCalibration
+                            ? 'Configurar IA'
+                            : 'Editar calibración'
+                          : '⚡ Calibrar IA'}
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(test)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
-                  {activeCategoryId || search || durationFilter !== 'all'
+                <td
+                  colSpan={showCalibrationColumn ? 6 : 5}
+                  className="px-6 py-8 text-center text-slate-400"
+                >
+                  {activeCategoryId || activeStatusFilter || search || durationFilter !== 'all'
                     ? 'No hay pruebas que coincidan con el filtro seleccionado.'
                     : 'Aún no hay pruebas registradas en el catálogo.'}
                 </td>

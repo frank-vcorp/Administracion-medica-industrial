@@ -1,37 +1,38 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import {
-  ECG_EXTRACTION_VERSION,
   readStoredAiCalibrationFromTestOptions,
   resolveAiCalibrationForUpload,
 } from '@/lib/clinical/default-ai-calibration'
 
-describe('default-ai-calibration', () => {
-  it('inyecta extracción ECG cuando falta prompt en catálogo', () => {
-    const resolved = resolveAiCalibrationForUpload(null, 'Electrocardiograma')
-    expect(resolved).not.toBeNull()
-    const ext = resolved?.extraction as { prompt?: string; version?: string }
-    expect(ext.prompt?.length).toBeGreaterThan(100)
-    expect(ext.version).toBe(ECG_EXTRACTION_VERSION)
+describe('default-ai-calibration (única fuente de verdad en BD)', () => {
+  it('NO inyecta prompt hardcodeado para Electrocardiograma cuando falta en BD', () => {
+    expect(resolveAiCalibrationForUpload(null, 'Electrocardiograma')).toBeNull()
+    expect(resolveAiCalibrationForUpload(null, 'ECG')).toBeNull()
   })
 
-  it('no sobrescribe prompt existente en catálogo', () => {
+  it('NO inyecta prompt hardcodeado para Espirometría cuando falta en BD', () => {
+    expect(resolveAiCalibrationForUpload(null, 'Espirometria')).toBeNull()
+  })
+
+  it('NO inyecta prompt hardcodeado para Rayos_X cuando falta en BD', () => {
+    expect(resolveAiCalibrationForUpload(null, 'Rayos_X')).toBeNull()
+  })
+
+  it('preserva exactamente la calibración leída de BD sin sobrescribir', () => {
     const resolved = resolveAiCalibrationForUpload(
       {
-        extraction: { prompt: 'Prompt personalizado', version: 'custom-v1' },
+        extraction: { prompt: 'Prompt personalizado BD', version: 'custom-v1' },
       },
       'Electrocardiograma',
     )
     const ext = resolved?.extraction as { prompt?: string; version?: string }
-    expect(ext.prompt).toBe('Prompt personalizado')
+    expect(ext.prompt).toBe('Prompt personalizado BD')
     expect(ext.version).toBe('custom-v1')
   })
 
-  it('bootstrap ECG con alias V3 canonicalStudyType', () => {
-    const resolved = resolveAiCalibrationForUpload(null, 'ECG')
-    expect(resolved?.extraction).toBeTruthy()
-  })
-
-  it('lee prompt desde publishedVersions V3', () => {
+  it('lee prompt y clinicalCriteria desde publishedVersions V3', () => {
     const stored = readStoredAiCalibrationFromTestOptions({
       aiCalibration: {
         schemaVersion: 'V3',
@@ -41,11 +42,17 @@ describe('default-ai-calibration', () => {
             versionId: 'v1',
             status: 'published',
             enabled: true,
-            canonicalStudyType: 'ECG',
-            extraction: { prompt: 'Prompt V3 publicado', version: 'v3-1' },
+            canonicalStudyType: 'Rayos_X',
+            extraction: { enabled: true, prompt: 'Prompt RX publicado', version: 'rx-v1' },
             fieldDefinitions: [],
-            clinicalCriteria: null,
-            presentation: { schema: {} },
+            clinicalCriteria: {
+              prediagnosisEnabled: true,
+              requiredParams: ['hallazgos'],
+              confidenceThreshold: 0.5,
+              prompt: 'Prompt clínico RX',
+              promptVersion: 'rx-dx-v1',
+            },
+            presentation: { enabled: false, schema: null },
           },
         ],
         familyTemplateId: null,
@@ -54,22 +61,12 @@ describe('default-ai-calibration', () => {
       },
     })
     const ext = stored?.extraction as { prompt?: string }
-    expect(ext.prompt).toBe('Prompt V3 publicado')
+    const cc = stored?.clinicalCriteria as { prompt?: string }
+    expect(ext.prompt).toBe('Prompt RX publicado')
+    expect(cc.prompt).toBe('Prompt clínico RX')
   })
 
-  it('no bootstrap para tipos sin plantilla', () => {
-    expect(resolveAiCalibrationForUpload(null, 'Rayos_X')).toBeNull()
-  })
-
-  it('inyecta extracción Espirometría cuando falta prompt en catálogo', () => {
-    const resolved = resolveAiCalibrationForUpload(null, 'Espirometria')
-    expect(resolved).not.toBeNull()
-    const ext = resolved?.extraction as { prompt?: string; version?: string }
-    expect(ext.prompt?.length).toBeGreaterThan(200)
-    expect(ext.version).toBe('espirometria-sibelmed-v7')
-  })
-
-  it('V3 publicada sin prompt usa legacyV1V2Snapshot', () => {
+  it('V3 publicada deshabilitada NO cae a legacyV1V2Snapshot ni draft', () => {
     const stored = readStoredAiCalibrationFromTestOptions({
       aiCalibration: {
         schemaVersion: 'V3',
@@ -80,14 +77,23 @@ describe('default-ai-calibration', () => {
             status: 'published',
             enabled: false,
             canonicalStudyType: 'Espirometria',
-            extraction: { prompt: '', version: 'empty' },
+            extraction: { enabled: false, prompt: '', version: 'empty' },
             fieldDefinitions: [],
             clinicalCriteria: null,
-            presentation: { schema: {} },
+            presentation: { enabled: false, schema: null },
           },
         ],
         familyTemplateId: null,
-        draft: null,
+        draft: {
+          status: 'draft',
+          label: 'draft',
+          enabled: true,
+          canonicalStudyType: 'Espirometria',
+          extraction: { enabled: true, prompt: 'Draft no publicado' },
+          fieldDefinitions: [],
+          clinicalCriteria: null,
+          presentation: { enabled: false, schema: null },
+        },
         legacyV1V2Snapshot: {
           snapshot: {
             extraction: { prompt: 'Prompt legacy espiro', version: 'legacy-v6' },
@@ -98,7 +104,19 @@ describe('default-ai-calibration', () => {
         },
       },
     })
+    expect(stored?.enabled).toBe(false)
     const ext = stored?.extraction as { prompt?: string }
-    expect(ext.prompt).toBe('Prompt legacy espiro')
+    expect(ext.prompt).toBe('')
+  })
+
+  it('el módulo default-ai-calibration.ts no contiene prompts ni bootstrap en código', () => {
+    const src = readFileSync(
+      path.resolve(process.cwd(), 'src/lib/clinical/default-ai-calibration.ts'),
+      'utf8',
+    )
+    expect(src).not.toContain('ECG_EXTRACTION_PROMPT')
+    expect(src).not.toContain('ESPIRO_EXTRACTION_PROMPT')
+    expect(src).not.toContain('bootstrapForStudyType')
+    expect(src).not.toContain('update-espirometria-extraction-prompt')
   })
 })

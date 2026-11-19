@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  hasLegacyDiagnosisPrompt,
   readPublishedV3GatesFromTestOptions,
   shouldOmitMedicalTestIdForLegacyPrediagnosis,
 } from '../calibration-v3-gates'
@@ -25,7 +24,7 @@ describe('calibration-v3-gates', () => {
     expect(gates?.blocksPrediagnosisResolver).toBe(true)
   })
 
-  it('omite medical_test_id cuando V3 bloquea prediagnóstico (aun sin prompt legacy)', () => {
+  it('nunca omite medical_test_id aunque V3 deshabilite prediagnóstico (fuente única BD)', () => {
     const options = {
       aiCalibration: {
         schemaVersion: 'V3',
@@ -46,6 +45,6 @@ describe('calibration-v3-gates', () => {
         currentPublishedVersionId: 'v1',
       },
     }
-    expect(shouldOmitMedicalTestIdForLegacyPrediagnosis(options)).toBe(true)
+    expect(shouldOmitMedicalTestIdForLegacyPrediagnosis(options)).toBe(false)
   })
 })

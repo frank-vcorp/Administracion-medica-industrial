@@ -1058,26 +1058,13 @@ class V2AnalyzeStudyRequest(BaseModel):
 @app.post("/api/v2/studies/upload-and-analyze")
 async def v2_upload_and_analyze(
     file: UploadFile = File(...),
-    # FIX-20260812-11: study_type/triggered_by_user_id deben ser Form() (no query)
-    # para que curl -F "study_type=..." y el FormData del frontend funcionen.
-    # Sin Form(), FastAPI los trata como query params y study_type llega None.
     study_type: Optional[str] = Form(default=None),
     triggered_by_user_id: Optional[str] = Form(default=None),
-    # ARCH-20260820-01 Fase 4 (handoff §3.2 + §6.1): el backend prefiere resolver
-    # la calibración en proceso a partir de `medical_test_id` (UUID del MedicalTest
-    # del EventTest). `ai_calibration_json` queda deprecado y se acepta con
-    # warning sólo para compat de callers legacy.
     medical_test_id: Optional[str] = Form(default=None),
+    test_name: Optional[str] = Form(default=None),
     ai_calibration_json: Optional[str] = Form(default=None),
     extraction_provider_override: Optional[str] = Form(default=None),
     extraction_model_override: Optional[str] = Form(default=None),
-    # IMPL-FEATURE-20260824-02 (gap fix): cuestionario clínico estructurado
-    # opcional enviado por el frontend (FEATURE-20260824-02). Sólo se inyecta
-    # al contexto del prediagnóstico (capa MedGemma/DR7); NO se reenvía al
-    # extractor M3/extraction (la capa extractiva es documental pura, no
-    # recibe contexto adicional del paciente). Si está ausente o no es un
-    # objeto válido, el flujo corre sin contexto adicional (compat con
-    # snapshots pre-FEATURE-20260824-02).
     clinical_context: Optional[str] = Form(default=None),
 ):
     """
@@ -1151,10 +1138,11 @@ async def v2_upload_and_analyze(
                 f"se inyectará al prompt de prediagnóstico clínico (no a M3)."
             )
 
-    # ARCH-20260820-01 Fase 4 (handoff §6.1): resolver V3 en proceso vía
-    # `get_default_resolver()` + `medical_test_id` del EventTest. Si falta,
-    # `calibration_version=None` ⇒ fallback `legacy_hardcoded` trazado.
+    # Única fuente de verdad en BD: cuando llega `medical_test_id`, resolver
+    # `MedicalTest.options.aiCalibration` directamente desde PostgreSQL.
     calibration_version = None
+    resolved_test_name: Optional[str] = test_name
+    db_test_found = False
     if medical_test_id:
         prisma = get_prisma_client()
         if prisma is None:
@@ -1169,10 +1157,17 @@ async def v2_upload_and_analyze(
                 )
                 if test_row is None:
                     print(
-                        f"⚠️ [ARCH-20260820-01 Fase 4] medical_test_id="
-                        f"{medical_test_id} no existe; calibration_version=None."
+                        f"⚠️ [SingleSource] medical_test_id={medical_test_id} no existe."
                     )
                 else:
+                    db_test_found = True
+                    db_name = (
+                        test_row.get("name")
+                        if isinstance(test_row, dict)
+                        else getattr(test_row, "name", None)
+                    )
+                    if isinstance(db_name, str) and db_name.strip():
+                        resolved_test_name = db_name.strip()
                     from app.services.ai.calibration_resolver import (
                         get_default_resolver as _get_resolver,
                     )
@@ -1181,12 +1176,25 @@ async def v2_upload_and_analyze(
                     )
             except Exception as resolve_err:
                 print(
-                    f"⚠️ [ARCH-20260820-01 Fase 4] resolver falló para "
+                    f"⚠️ [SingleSource] resolver falló para "
                     f"medical_test_id={medical_test_id}: "
-                    f"{type(resolve_err).__name__}: {resolve_err}; "
-                    f"calibration_version=None (fallback legacy_hardcoded)."
+                    f"{type(resolve_err).__name__}: {resolve_err}"
                 )
                 calibration_version = None
+
+    effective_ai_calibration: Optional[Dict[str, Any]]
+    if db_test_found:
+        if calibration_version is not None:
+            effective_ai_calibration = {
+                "enabled": getattr(calibration_version, "enabled", True),
+                "canonicalStudyType": getattr(calibration_version, "canonicalStudyType", None),
+                "extraction": getattr(calibration_version, "extraction", None),
+                "clinicalCriteria": getattr(calibration_version, "clinicalCriteria", None),
+            }
+        else:
+            effective_ai_calibration = None
+    else:
+        effective_ai_calibration = ai_calibration
 
     # ARCH-20260809-02: import lazy para evitar import circular.
     from app.services.ai.extractor import (
@@ -1390,7 +1398,7 @@ async def v2_upload_and_analyze(
         print(
             f"🔍 [FIX-20260812-18] warmup específico provider={_target_provider} "
             f"origin={_target_provider_origin} "
-            f"calibration_provider={(ai_calibration or {}).get('extraction', {}).get('provider') if isinstance(ai_calibration, dict) else None}"
+            f"calibration_provider={(effective_ai_calibration or {}).get('extraction', {}).get('provider') if isinstance(effective_ai_calibration, dict) and isinstance((effective_ai_calibration or {}).get('extraction'), dict) else None}"
         )
         if _ai_keys_db_enabled():
             try:
@@ -1415,9 +1423,10 @@ async def v2_upload_and_analyze(
             extracted_raw = extractor.extract_by_type(
                 local_path,
                 detected_type,
-                ai_calibration=ai_calibration,
+                ai_calibration=effective_ai_calibration,
                 extraction_provider_override=extraction_provider_override,
                 extraction_model_override=extraction_model_override,
+                test_name=resolved_test_name or detected_type,
             )
         except ExtractionProviderUnknownError as prov_err:
             print(f"❌ [ARCH-20260809-02] {prov_err}")
@@ -1496,10 +1505,12 @@ async def v2_upload_and_analyze(
         except ValueError as ve:
             err_msg = str(ve)
             if "EXTRACTION_PROMPT_NOT_CONFIGURED" in err_msg:
-                print(f"❌ [ARCH-20260518-03] {err_msg}")
+                print(f"❌ [SingleSource] {err_msg}")
+                clean_msg = err_msg.replace("EXTRACTION_PROMPT_NOT_CONFIGURED:", "").strip()
                 return {
                     "status": "error",
                     "error": err_msg,
+                    "message": clean_msg,
                     "error_code": "EXTRACTION_PROMPT_NOT_CONFIGURED",
                     "file": filename,
                 }
@@ -1508,9 +1519,8 @@ async def v2_upload_and_analyze(
         extraction_audit: Dict[str, Any] = getattr(extractor, "last_extraction_audit", {}) or {}
         extraction_dict = extracted_raw if isinstance(extracted_raw, dict) else extracted_raw.model_dump()
         extraction_seconds = round(time.time() - extraction_start, 2)
-        # ARCH-20260518-03: extracción solo llega aquí si aiCalibration.extraction.prompt fue válido
         _extraction_prompt_source = "ai_calibration"
-        _extraction_prompt_version = (ai_calibration or {}).get("extraction", {}).get("version", "calibration_custom")
+        _extraction_prompt_version = ((effective_ai_calibration or {}).get("extraction") or {}).get("version", "calibration_custom")
         print(
             f"   ✓ Extracción en {extraction_seconds}s | prompt_source={_extraction_prompt_source} "
             f"| provider_used={extraction_audit.get('extraction_provider_used')} "
@@ -1519,18 +1529,13 @@ async def v2_upload_and_analyze(
 
         # PASO 3: PREDIAGNÓSTICO IA (capa separada)
         predx_start = time.time()
-        # ARCH-20260820-01 Fase 4 (handoff §6.3): consume `calibration_version`
-        # (V3 resuelta en proceso) en lugar de `medical_calibration`.
-        # IMPL-FEATURE-20260824-02 (gap fix): inyecta `clinical_context`
-        # estructurado al prompt del prediagnóstico clínico (MedGemma/DR7).
-        # NO se reenvía al extractor (la capa extractiva es documental pura).
-        # Si está ausente, el comportamiento es idéntico al pre-FEATURE-20260824-02.
         prediagnosis = prediagnostic_svc.generate_prediagnosis(
             detected_type,
             extraction_dict,
             calibration_version=calibration_version,
-            ai_calibration=ai_calibration,
+            ai_calibration=effective_ai_calibration,
             clinical_context=parsed_clinical_context,
+            test_name=resolved_test_name or detected_type,
         )
         predx_seconds = round(time.time() - predx_start, 2)
         predx_prompt_source = getattr(prediagnosis, "prompt_source", None)
@@ -1583,14 +1588,14 @@ async def v2_upload_and_analyze(
                         "extraction_provider_requested"
                     ) or (
                         extraction_provider_override
-                        or (ai_calibration or {}).get("extraction", {}).get("provider")
-                        or "gemini"
+                        or ((effective_ai_calibration or {}).get("extraction") or {}).get("provider")
+                        or "m3"
                     ),
                     "extraction_model_used": extraction_audit.get(
                         "extraction_model_used"
                     ) or (
                         extraction_model_override
-                        or (ai_calibration or {}).get("extraction", {}).get("model")
+                        or ((effective_ai_calibration or {}).get("extraction") or {}).get("model")
                         or GEMINI_MODEL_EXTRACTION
                     ),
                     "extraction_fallback_reason": extraction_audit.get(
@@ -1741,87 +1746,67 @@ async def v2_upload_and_analyze(
 
 
 @app.post("/api/v2/studies/prediagnosis-from-params")
-def v2_prediagnosis_from_params(
+async def v2_prediagnosis_from_params(
     study_type: str,
     extracted_data: Dict[str, Any],
     triggered_by_user_id: Optional[str] = None,
-    # ARCH-20260820-01 Fase 4 (handoff §2.2, §3.1): `medical_calibration` se
-    # RETIRA del flujo principal (canal muerto H11). Se conserva la firma sólo
-    # para compat de callers legacy y se ignora en `generate_prediagnosis`.
     medical_calibration: Optional[Dict[str, Any]] = None,  # DEPRECADO Fase 4
     ai_calibration: Optional[Dict[str, Any]] = None,
-    # ARCH-20260820-01 Fase 4 (handoff §3.2 + §6.1): cuando está presente, el
-    # backend prefiere el resolver V3 en proceso sobre los dicts legacy.
     medical_test_id: Optional[str] = None,
+    test_name: Optional[str] = None,
 ):
     """
-    Genera prediagnóstico IA a partir de parámetros ya extraídos.
-    Útil para regenerar el prediagnóstico sin re-procesar el archivo original.
-    IMPL-20260326-16: Requiere que exista un snapshot de extracción previo.
-    IMPL-20260513-01: Aceptaba `medical_calibration` del panel aiCalibration
-        (canal retirado en Fase 4 — handoff §2.2).
-    IMPL-20260518-03: Acepta `ai_calibration` legacy para resolver prompt
-        clínico V1/V2 (deprecado Fase 4 en favor de `medical_test_id`).
-    ARCH-20260820-01 Fase 4: `medical_test_id` activa el resolver V3 en proceso.
+    Genera prediagnóstico IA a partir de parámetros ya extraídos usando la
+    calibración en BD (`MedicalTest.options.aiCalibration`) como única fuente.
     """
     if not prediagnostic_svc:
         return _ai_unavailable_response("Servicio de prediagnóstico no disponible")
 
-    # ARCH-20260820-01 Fase 4: resolver V3 en proceso si llega `medical_test_id`.
     calibration_version = None
+    resolved_test_name: Optional[str] = test_name
+    db_test_found = False
     if medical_test_id:
         try:
-            import asyncio
             prisma = get_prisma_client()
             if prisma is None:
                 print(
-                    "⚠️ [ARCH-20260820-01 Fase 4] Prisma no inicializado en "
+                    "⚠️ [SingleSource] Prisma no inicializado en "
                     "prediagnosis-from-params; calibration_version=None."
                 )
             else:
-                async def _resolve_in_proc() -> Any:
-                    test_row = await prisma.medicaltest.find_unique(
-                        where={"id": medical_test_id}
+                test_row = await prisma.medicaltest.find_unique(
+                    where={"id": medical_test_id}
+                )
+                if test_row is not None:
+                    db_test_found = True
+                    db_name = (
+                        test_row.get("name")
+                        if isinstance(test_row, dict)
+                        else getattr(test_row, "name", None)
                     )
-                    if test_row is None:
-                        return None
+                    if isinstance(db_name, str) and db_name.strip():
+                        resolved_test_name = db_name.strip()
                     from app.services.ai.calibration_resolver import (
                         get_default_resolver as _get_resolver,
                     )
-                    return _get_resolver().resolve(test_row, "published")
-
-                # El endpoint es sync pero ya corre en el loop de FastAPI sólo si
-                # está marcado async; aquí es sync y puede bloquear. Para
-                # mantener compat, intentamos `asyncio.run` si no hay loop, o
-                # invocamos directamente. Para no introducir regresiones, sólo
-                # si no hay loop activo se ejecuta vía `asyncio.run`.
-                try:
-                    asyncio.get_running_loop()
-                    # Si hay loop activo, no podemos await aquí; deferimos a
-                    # `calibration_version=None` con warning (el caller puede
-                    # pasar `ai_calibration` legacy como fallback).
-                    print(
-                        "⚠️ [ARCH-20260820-01 Fase 4] Loop activo en "
-                        "prediagnosis-from-params; no se pudo resolver "
-                        "calibration_version asíncronamente. Pase "
-                        "`ai_calibration` legacy o use el endpoint async."
-                    )
-                except RuntimeError:
-                    calibration_version = asyncio.run(_resolve_in_proc())
+                    calibration_version = _get_resolver().resolve(test_row, "published")
         except Exception as resolve_err:
             print(
-                f"⚠️ [ARCH-20260820-01 Fase 4] resolver falló: "
+                f"⚠️ [SingleSource] resolver falló en prediagnosis-from-params: "
                 f"{type(resolve_err).__name__}: {resolve_err}"
             )
             calibration_version = None
+
+    effective_ai_calibration = None if db_test_found else ai_calibration
 
     try:
         prediagnosis = prediagnostic_svc.generate_prediagnosis(
             study_type,
             extracted_data,
             calibration_version=calibration_version,
-            ai_calibration=ai_calibration,
-                    medical_calibration=medical_calibration,  # DEPRECADO Fase 4
+            ai_calibration=effective_ai_calibration,
+            medical_calibration=medical_calibration,  # DEPRECADO Fase 4
+            test_name=resolved_test_name or study_type,
         )
         predx_model_used = getattr(prediagnosis, "clinical_model_used", None)
         predx_provider = getattr(prediagnosis, "clinical_provider", None)
@@ -2207,6 +2192,14 @@ async def v2_event_test_upload_xml_audiometry(
                 f"degradará a env o a no concluyente."
             )
 
+    snapshot_versioning_xml = build_snapshot_versioning_payload(calibration_version)
+    _extraction_hash_xml = snapshot_versioning_xml["extractionPromptHash"]
+    _presentation_schema_snapshot_xml = snapshot_versioning_xml["presentationSchemaSnapshot"]
+    _clinical_prompt_hash_xml = snapshot_versioning_xml["clinicalPromptHash"]
+    _clinical_criteria_hash_xml = snapshot_versioning_xml["clinicalCriteriaHash"]
+    _calibration_version_id_xml = snapshot_versioning_xml["calibrationVersionId"]
+    _calibration_version_number_xml = snapshot_versioning_xml["calibrationVersionNumber"]
+
     # Prediagnóstico clínico sobre los umbrales extraídos.
     if prediagnostic_svc is None:
         # Si el servicio clínico no está inicializado, devolvemos solo la extracción (xml_direct)
@@ -2244,6 +2237,7 @@ async def v2_event_test_upload_xml_audiometry(
                 extracted_data=extraction_dict,
                 calibration_version=calibration_version,
                 ai_calibration=ai_calibration,
+                test_name=_attr(medical_test, "name") or canonical_study_type,
             )
             predx_seconds = round(time.time() - predx_start, 2)
 
@@ -2287,7 +2281,7 @@ async def v2_event_test_upload_xml_audiometry(
                 "input_debug": predx_input_debug.model_dump() if predx_input_debug else None,
             }
         except Exception as predx_err:
-            print(f"⚠️ [FIX-20260729-03-G-XML] Prediagnóstico DR7.ai falló sobre "
+            print(f"⚠️ [FIX-20260729-03-G-XML] Prediagnóstico falló sobre "
                   f"datos XML: {type(predx_err).__name__}: {predx_err}")
             prediagnosis_payload = {
                 "clinical_state": "AI_PENDING_REVIEW",
@@ -2303,9 +2297,6 @@ async def v2_event_test_upload_xml_audiometry(
                     "pipeline_version": PIPELINE_VERSION,
                     "triggered_by_user_id": triggered_by_user_id,
                     "trigger_reason": "xml_direct_prediagnosis_failed",
-                    # ARCH-20260820-01 Fase 5: persistir los hashes congelados
-                    # aunque DR7 falle (los hashes sí están disponibles porque
-                    # sólo dependen de la calibración resuelta, no del modelo).
                     "clinical_prompt_hash": _clinical_prompt_hash_xml,
                     "clinical_criteria_hash": _clinical_criteria_hash_xml,
                     "calibration_version_id": _calibration_version_id_xml,
@@ -2315,18 +2306,6 @@ async def v2_event_test_upload_xml_audiometry(
             predx_seconds = 0.0
 
     total_seconds = round(time.time() - pipeline_start, 2)
-
-    # ARCH-20260820-01 Fase 5 — snapshot versionado histórico: poblar el
-    # payload XML con los mismos hashes/schema que la ruta V2. Si el resolver
-    # devolvió `None` (legacy_hardcoded/disabled), todos los campos quedan
-    # `null` y el snapshot pre-V5 queda legible con `calibration_version_mismatch=true`.
-    snapshot_versioning_xml = build_snapshot_versioning_payload(calibration_version)
-    _extraction_hash_xml = snapshot_versioning_xml["extractionPromptHash"]
-    _presentation_schema_snapshot_xml = snapshot_versioning_xml["presentationSchemaSnapshot"]
-    _clinical_prompt_hash_xml = snapshot_versioning_xml["clinicalPromptHash"]
-    _clinical_criteria_hash_xml = snapshot_versioning_xml["clinicalCriteriaHash"]
-    _calibration_version_id_xml = snapshot_versioning_xml["calibrationVersionId"]
-    _calibration_version_number_xml = snapshot_versioning_xml["calibrationVersionNumber"]
 
     # ── 6. Respuesta con shape compatible con v2_upload_and_analyze ───────
     return {

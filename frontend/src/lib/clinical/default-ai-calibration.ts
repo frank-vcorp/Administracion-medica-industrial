@@ -1,176 +1,75 @@
 /**
- * Calibración mínima embebida cuando el MedicalTest en BD no tiene
- * `options.aiCalibration.extraction.prompt` (bootstrap operativo AMI).
- * No sustituye calibración publicada en admin; solo evita EXTRACTION_PROMPT_NOT_CONFIGURED.
+ * Lectura única de calibración IA desde `MedicalTest.options.aiCalibration` (BD).
+ * Sin prompts hardcodeados ni bootstrap en código: toda calibración debe
+ * existir explícitamente en base de datos (administrada desde /admin/services).
  */
 
 import type { AICalibrationV3 } from '@/types/calibration'
-import { getV3PublishedAiCalibrationSlice } from '@/lib/calibration-v3-ui'
-import {
-  EXTRACTION_VERSION as ESPIRO_EXTRACTION_VERSION,
-  NEW_EXTRACTION_PROMPT as ESPIRO_EXTRACTION_PROMPT,
-} from '../../../scripts/update-espirometria-extraction-prompt'
-
-export const ECG_EXTRACTION_VERSION = 'ecg-ami-bootstrap-v1'
-
-export const ECG_EXTRACTION_PROMPT = `EXTRACCIÓN DE ELECTROCARDIOGRAMA (ECG / Electrocardiograma)
-
-Devuelve SOLO un objeto JSON válido. Sin markdown, sin comentarios, sin bloques <think>. JSON único que empieza con { y termina con }.
-
-Campos esperados:
-{
-  "paciente": "nombre del paciente en el reporte",
-  "fecha_estudio": "fecha del estudio tal como aparece",
-  "ritmo": "ej. Sinusal, Fibrilación auricular, o null",
-  "frecuencia_bpm": número entero o null,
-  "intervalo_pr_ms": número entero o null,
-  "duracion_qrs_ms": número entero o null,
-  "qtc_ms": número entero o null,
-  "eje_electrico": "Normal, Desviación izquierda/derecha, o null",
-  "hallazgos": ["descripción objetiva del trazado, sin diagnóstico definitivo"],
-  "profesional": "médico o firmante si aparece, o null",
-  "notas_calidad": "calidad del documento o null"
-}
-
-REGLAS:
-- NO inventes valores; usa null si no son legibles.
-- NO incluyas diagnóstico final, aptitud laboral ni tratamiento.
-- "hallazgos" = descripciones del trazado (ondas, bloqueos, ST-T, etc.).
-- frecuencia_bpm, intervalos y qtc deben ser números (no strings) cuando sean legibles.
-`
+import { resolveCurrentPublishedVersion } from '@/lib/calibration-v3-ui'
 
 type JsonRecord = Record<string, unknown>
 
-function hasExtractionPrompt(aiCalibration: JsonRecord | null | undefined): boolean {
-  if (!aiCalibration || typeof aiCalibration !== 'object') return false
-  const extraction = aiCalibration.extraction
-  if (!extraction || typeof extraction !== 'object' || Array.isArray(extraction)) return false
-  const prompt = (extraction as JsonRecord).prompt
-  return typeof prompt === 'string' && prompt.trim().length > 0
+function isPlainObject(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isEcgStudyType(studyType: string | null | undefined): boolean {
-  const type = (studyType ?? '').trim()
-  return (
-    type === 'Electrocardiograma' ||
-    type === 'ECG' ||
-    type.toLowerCase() === 'ekg'
-  )
-}
-
-function isEspirometriaStudyType(studyType: string | null | undefined): boolean {
-  const type = (studyType ?? '').trim()
-  return type === 'Espirometria' || type === 'Espirometría'
-}
-
-function calibrationSliceFromRecord(record: JsonRecord | null | undefined): JsonRecord | null {
-  if (!record || typeof record !== 'object') return null
-  if (!hasExtractionPrompt(record)) return null
-  const slice: JsonRecord = {
-    enabled: record.enabled ?? true,
-    extraction: record.extraction,
-  }
-  if (record.canonicalStudyType) slice.canonicalStudyType = record.canonicalStudyType
-  if (record.diagnosis) slice.diagnosis = record.diagnosis
-  return slice
-}
-
-function bootstrapForStudyType(studyType: string | null | undefined): JsonRecord | null {
-  if (isEcgStudyType(studyType)) {
-    return {
-      enabled: true,
-      canonicalStudyType: 'ECG',
-      extraction: {
-        prompt: ECG_EXTRACTION_PROMPT,
-        version: ECG_EXTRACTION_VERSION,
-      },
-      bootstrap: true,
-    }
-  }
-  if (isEspirometriaStudyType(studyType)) {
-    return {
-      enabled: true,
-      canonicalStudyType: 'Espirometria',
-      extraction: {
-        prompt: ESPIRO_EXTRACTION_PROMPT,
-        version: ESPIRO_EXTRACTION_VERSION,
-      },
-      bootstrap: true,
+function parseOptionsObject(options: unknown): JsonRecord | null {
+  if (isPlainObject(options)) return options
+  if (typeof options === 'string' && options.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(options)
+      return isPlainObject(parsed) ? parsed : null
+    } catch {
+      return null
     }
   }
   return null
 }
 
-/** Lee calibración legacy o el slice de la versión V3 publicada (prompt en publishedVersions). */
+/**
+ * Lee exclusivamente la calibración almacenada en `MedicalTest.options.aiCalibration`.
+ * Para contratos V3 lee la versión publicada/deshabilitada vigente (sin fallback a
+ * draft ni a prompts hardcodeados). Para V1/V2 devuelve el objeto persistido tal cual.
+ */
 export function readStoredAiCalibrationFromTestOptions(
   options: unknown,
 ): JsonRecord | null {
-  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+  const opts = parseOptionsObject(options)
+  if (!opts) return null
+
+  const rawCal = opts.aiCalibration
+  if (!isPlainObject(rawCal)) {
     return null
   }
-  const rawCal = (options as JsonRecord).aiCalibration
-  if (!rawCal || typeof rawCal !== 'object' || Array.isArray(rawCal)) {
-    return null
-  }
-  const cal = rawCal as JsonRecord
-  if (cal.schemaVersion === 'V3') {
-    const root = cal as unknown as AICalibrationV3
-    const published = getV3PublishedAiCalibrationSlice(root)
-    if (published && hasExtractionPrompt(published)) {
-      return published
+
+  if (rawCal.schemaVersion === 'V3') {
+    const root = rawCal as unknown as AICalibrationV3
+    const vigent = resolveCurrentPublishedVersion(root)
+    if (!vigent) return null
+
+    const slice: JsonRecord = {
+      enabled: vigent.status === 'disabled' ? false : Boolean(vigent.enabled),
+      canonicalStudyType: vigent.canonicalStudyType ?? null,
+      extraction: vigent.extraction ?? null,
     }
-
-    const fromDraft = root.draft
-      ? calibrationSliceFromRecord(root.draft as unknown as JsonRecord)
-      : null
-    if (fromDraft) return fromDraft
-
-    const legacySnapshot = root.legacyV1V2Snapshot?.snapshot
-    const fromLegacy = legacySnapshot
-      ? calibrationSliceFromRecord(legacySnapshot as JsonRecord)
-      : null
-    if (fromLegacy) return fromLegacy
-
-    const fromRootLegacy = calibrationSliceFromRecord(cal)
-    if (fromRootLegacy) return fromRootLegacy
-
-    return published
+    if (vigent.clinicalCriteria) {
+      slice.clinicalCriteria = vigent.clinicalCriteria
+    }
+    return slice
   }
-  return cal
+
+  return rawCal
 }
 
-/** Fusiona calibración de BD con bootstrap AMI si falta prompt de extracción. */
+/**
+ * Devuelve únicamente la calibración leída de BD sin inyectar prompts ni
+ * bootstrap hardcodeado.
+ */
 export function resolveAiCalibrationForUpload(
   stored: JsonRecord | null | undefined,
-  studyType: string | null | undefined,
+  _studyType?: string | null,
 ): JsonRecord | null {
-  const base: JsonRecord =
-    stored && typeof stored === 'object' && !Array.isArray(stored) ? { ...stored } : {}
-
-  if (hasExtractionPrompt(base)) {
-    return Object.keys(base).length > 0 ? base : null
-  }
-
-  const bootstrap = bootstrapForStudyType(studyType)
-  if (!bootstrap) {
-    return Object.keys(base).length > 0 ? base : null
-  }
-
-  const baseExtraction =
-    base.extraction && typeof base.extraction === 'object' && !Array.isArray(base.extraction)
-      ? (base.extraction as JsonRecord)
-      : {}
-
-  const bootExtraction =
-    bootstrap.extraction && typeof bootstrap.extraction === 'object'
-      ? (bootstrap.extraction as JsonRecord)
-      : {}
-
-  return {
-    ...base,
-    enabled: base.enabled ?? bootstrap.enabled,
-    canonicalStudyType: base.canonicalStudyType ?? bootstrap.canonicalStudyType,
-    extraction: { ...baseExtraction, ...bootExtraction },
-    bootstrap: true,
-  }
+  void _studyType
+  if (!isPlainObject(stored)) return null
+  return Object.keys(stored).length > 0 ? { ...stored } : null
 }

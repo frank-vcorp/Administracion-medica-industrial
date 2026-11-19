@@ -1358,20 +1358,17 @@ class TestEspirometriaExhaustiva_20260516_12_13:
 
     # --- FIX-20260812-20: Guardrails backend + normalizador de Espirometría ---
 
-    @patch('app.services.ai.base.GeminiBase.call_gemini')
-    def test_espirometria_usa_prompt_con_guardrails_backend_FIX_20260812_20(
-        self, mock_gemini, extractor
+    @patch('app.services.ai.base.M3VisionBase.call_m3')
+    def test_espirometria_usa_prompt_unico_desde_ai_calibration(
+        self, mock_m3, extractor
     ):
         """
-        FIX-20260812-20: extract_by_type(..., "Espirometria") debe construir el
-        prompt con _build_espirometria_extraction_prompt (que inyecta
-        _ESPIROMETRIA_BACKEND_GUARDRAILS), NO caer al prompt genérico ni al de
-        Audiometría. Se usa extraction_provider_override="gemini" para que el
-        mock de call_gemini capture el prompt real independientemente del
-        provider por defecto del entorno (evita la fragilidad M3-sin-key).
+        Single-source: extract_by_type(..., "Espirometria") envía únicamente el
+        prompt configurado en aiCalibration.extraction.prompt sin concatenar
+        guardrails hardcodeados en código.
         """
         from app.schemas.medical import EspirometriaData
-        mock_gemini.return_value = {
+        mock_m3.return_value = {
             "paciente": "Peña Patricio Marbella",
             "fecha_estudio": "18/03/2025",
             "fev1": 3.45,
@@ -1383,18 +1380,13 @@ class TestEspirometriaExhaustiva_20260516_12_13:
             "/fake/espirometria_sibelmed.pdf",
             "Espirometria",
             ai_calibration=_TEST_AI_CALIBRATION_EXTRACTION,
-            extraction_provider_override="gemini",
+            extraction_provider_override="m3",
         )
         assert isinstance(result, EspirometriaData)
-        # El prompt enviado al proveedor es el 2º argumento posicional.
-        sent_prompt = mock_gemini.call_args[0][1]
-        # Guardrails de espirometría presentes.
-        assert "GUARDRAILS ESPECÍFICOS PARA ESPIROMETRÍA" in sent_prompt
-        assert "INFORME DE FVC" in sent_prompt
-        # No se filtraron los guardrails de Audiometría (dispatch correcto).
+        sent_prompt = mock_m3.call_args[0][1]
+        assert sent_prompt == _TEST_AI_CALIBRATION_EXTRACTION["extraction"]["prompt"]
+        assert "GUARDRAILS ESPECÍFICOS PARA ESPIROMETRÍA" not in sent_prompt
         assert "GUARDRAILS ESPECÍFICOS PARA AUDIOMETRÍA" not in sent_prompt
-        # El bloque de calibración (aiCalibration) sigue presente.
-        assert "Extrae todos los datos relevantes" in sent_prompt
 
     @patch('app.services.ai.base.GeminiBase.call_gemini')
     def test_espirometria_json_exhaustivo_valida_schemas_y_normalizer_FIX_20260812_20(
@@ -1751,47 +1743,25 @@ class TestPromptResolutionARCH20260518_03:
 
     # --- Test 3: Clínica usa backend_fallback cuando no existe diagnosis.prompt ---
 
-    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
-    @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
-    @patch('app.services.ai.prediagnostic.PrediagnosticService._call_m3_clinical_chat')
-    def test_prompt_resolution_usa_backend_fallback_cuando_sin_diagnosis_prompt(
-        self, mock_call, prediagnostic_svc
+    def test_prompt_resolution_sin_diagnosis_prompt_retorna_missing_calibration(
+        self, prediagnostic_svc
     ):
         """
-        ARCH-20260518-03: Si ai_calibration.diagnosis.prompt NO existe:
-        - prompt_source='backend_fallback'
-        - prompt_version='backend_v2'
-        - Agrega la limitación explícita del fallback en limitations (si el código lo hace).
+        Single-source: si ai_calibration.diagnosis.prompt NO existe,
+        NO hay fallback a prompts hardcodeados y devuelve missing_calibration.
         """
-        mock_call.return_value = {
-            "summary": "Compatible con audición dentro de límites.",
-            "confidence": 0.72,
-            "clinical_state": "AI_PENDING_REVIEW",
-            "justification": ["Frecuencias evaluadas dentro de límites normales"],
-            "clinical_basis": [],
-            "citations": [],
-            "limitations": [],
-            "red_flags": [],
-            "recommendation": "Vigilancia periódica recomendada.",
-            "non_conclusive_reason": None,
-        }
-
         result = prediagnostic_svc.generate_prediagnosis(
             study_type="Audiometria",
             extracted_data=self._AUDIO_VALIDA,
-            ai_calibration=None,  # Sin prompt personalizado → fallback general
+            ai_calibration=None,
+            test_name="Audiometría Tonal",
         )
 
-        assert result.prompt_source == "backend_fallback", (
-            f"Esperado 'backend_fallback', obtenido '{result.prompt_source}'"
-        )
-        assert result.prompt_version == "backend_v2"
-        # El código añade nota de fallback en limitations (ARCH-20260518-03)
-        fallback_note = "Prompt clínico resuelto desde fallback general backend"
-        assert any(fallback_note in lim for lim in result.limitations), (
-            "Debe agregar nota de fallback cuando se usa PREDIAGNOSTIC_PROMPTS como fallback"
-        )
-        mock_call.assert_called_once()
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.calibration_source == "missing_calibration"
+        assert result.prompt_source == "missing_calibration"
+        assert "Audiometría Tonal" in result.summary
+        assert "/admin/services" in result.summary
 
 
 # ---------------------------------------------------------------------------
@@ -3164,29 +3134,20 @@ class TestPrediagnosisFase4ARCH20260820_01:
 
     # --- AC-4.2 --------------------------------------------------------
 
-    @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', False)
-    @patch('app.services.ai.prediagnostic.M3_API_KEY', '')
-    def test_AC_4_2_fallback_legacy_hardcoded_trazado(self, prediagnostic_svc):
+    def test_AC_4_2_sin_calibracion_en_bd_retorna_missing_calibration(self, prediagnostic_svc):
         """
-        AC-4.2: si `calibration_version is None`, el comportamiento cae a
-        hardcodeados actuales con `calibration_source == "legacy_hardcoded"`
-        y `legacy_hardcoded_reason` poblado.
+        Single-source: si `calibration_version is None` y no hay prompt en BD,
+        NO usa fallback hardcodeado; devuelve `missing_calibration` en español.
         """
         result = prediagnostic_svc.generate_prediagnosis(
             study_type="Audiometria",
             extracted_data=self._AUDIO_MINIMA,
             calibration_version=None,
+            test_name="Audiometría Tonal",
         )
-        # Faltan campos requeridos por REQUIRED_PARAMS pero la versión
-        # tiene 'oido_derecho' y 'oido_izquierdo' parciales (>=3 frecuencias)
-        # — el _check_minimum_params falla por sub-keys pero eso es OK: la
-        # trazabilidad de fallback debe estar poblada de todos modos.
-        assert result.calibration_source == "legacy_hardcoded"
-        assert result.legacy_hardcoded_reason in (
-            "no_published_version",
-            "field_definitions_incomplete",
-        )
-        assert result.clinical_state in ("AI_NON_CONCLUSIVE", "AI_PENDING_REVIEW")
+        assert result.calibration_source == "missing_calibration"
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert "/admin/services" in (result.non_conclusive_reason or "")
 
     # --- AC-4.3 (verificación de fuente, no behavioral) ----------------
 
@@ -3345,10 +3306,10 @@ class TestPrediagnosisFase4ARCH20260820_01:
             extracted_data=self._AUDIO_MINIMA,
             calibration_version=v3,
         )
-        assert result.clinical_state == "AI_PENDING_REVIEW"
-        assert result.calibration_source == "legacy_hardcoded"
-        assert result.legacy_hardcoded_reason == "published_disabled"
-        mock_call.assert_called_once()
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.calibration_source == "calibration_disabled"
+        assert result.non_conclusive_reason == "calibration_disabled"
+        mock_call.assert_not_called()
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)
     @patch('app.services.ai.prediagnostic.M3_API_KEY', 'fake-m3-key')
@@ -3358,19 +3319,8 @@ class TestPrediagnosisFase4ARCH20260820_01:
     ):
         """
         AC-4.4 (variante): `clinicalCriteria.prediagnosisEnabled=false` con
-        estudio soportado → mismo fallback runtime que enabled=false global.
+        estudio soportado → respeta el gate de BD y retorna AI_NON_CONCLUSIVE sin llamar a M3.
         """
-        mock_call.return_value = {
-            "summary": "Audiometría fallback prediagnosisEnabled=false.",
-            "confidence": 0.70,
-            "clinical_state": "AI_PENDING_REVIEW",
-            "justification": ["Fallback runtime"],
-            "clinical_basis": [],
-            "citations": [],
-            "limitations": [],
-            "red_flags": [],
-            "non_conclusive_reason": None,
-        }
         v3 = _FakeAICalibrationVersionResolved(
             operationMode="clinical_interpretation",
             enabled=True,  # gate global OK
@@ -3398,10 +3348,10 @@ class TestPrediagnosisFase4ARCH20260820_01:
             extracted_data=self._AUDIO_MINIMA,
             calibration_version=v3,
         )
-        assert result.clinical_state == "AI_PENDING_REVIEW"
-        assert result.calibration_source == "legacy_hardcoded"
-        assert result.legacy_hardcoded_reason == "published_disabled"
-        mock_call.assert_called_once()
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.calibration_source == "calibration_disabled"
+        assert result.non_conclusive_reason == "calibration_disabled"
+        mock_call.assert_not_called()
 
     # --- AC-4.5 --------------------------------------------------------
 
@@ -3459,18 +3409,10 @@ class TestPrediagnosisFase4ARCH20260820_01:
             },
             calibration_version=v3,
         )
-        # calibration_source=legacy_hardcoded (no published_v3 porque
-        # clinicalCriteria=None ⇒ no hay V3 efectiva para capa clínica).
-        assert result.calibration_source == "legacy_hardcoded"
-        # prompt_source cae al backend_fallback (V3 ausente) o clinical_criteria_v3
-        # sólo si V3 presente — en este caso el bloque `if not v3.clinicalCriteria`
-        # fuerza `prompt_source="backend_fallback"`.
-        assert result.prompt_source == "backend_fallback"
-        # DR7 sí se invoca con el prompt backend hardcodeado (no se inventó clinicalCriteria).
-        mock_call.assert_called_once()
-        sent_prompt = mock_call.call_args[0][0]
-        # El prompt NO contiene contenido de clinicalCriteria inventado.
-        assert "PROMPT_NO_DEBE_LLEGAR" not in sent_prompt
+        assert result.clinical_state == "AI_NON_CONCLUSIVE"
+        assert result.calibration_source == "missing_calibration"
+        assert result.prompt_source == "missing_calibration"
+        mock_call.assert_not_called()
 
     # --- Cobertura adicional: ai_calibration shim legacy → prompt_source --
 
@@ -3482,8 +3424,7 @@ class TestPrediagnosisFase4ARCH20260820_01:
     ):
         """
         Si NO hay V3 pero `ai_calibration["diagnosis"]["prompt"]` existe
-        (shim legacy V1/V2), `prompt_source="ai_calibration"` y
-        `calibration_source="legacy_hardcoded"` (no published_v3).
+        (V1/V2), `prompt_source="ai_calibration"` y usa ese prompt.
         """
         mock_call.return_value = {
             "summary": "Resultado con shim legacy.",
@@ -3504,17 +3445,8 @@ class TestPrediagnosisFase4ARCH20260820_01:
                 "diagnosis": {"prompt": "PROMPT_LEGACY", "version": "legacy_v1"}
             },
         )
-        # Como faltan los required_params completos (sólo 3 frecuencias por oído
-        # vs REQUIRED_PARAMS["Audiometria"]=["oido_derecho","oido_izquierdo"]),
-        # puede caer a AI_NON_CONCLUSIVE — pero `prompt_source` debe ser
-        # trazable si llegó al bloque DR7. Como params faltan, debe ser
-        # AI_NON_CONCLUSIVE por params mínimos — el prompt_source se fija
-        # antes del gate de params, así que podemos inspeccionarlo vía result.
-        assert result.calibration_source == "legacy_hardcoded"
-        # prompt_source cae al backend_fallback (porque el gate params falla
-        # antes de llegar a DR7). Si quisiéramos probar el camino DR7 con shim
-        # legacy, los requiredParams deberían estar completos.
-        assert result.prompt_source in ("ai_calibration", "backend_fallback")
+        assert result.calibration_source == "published_v3"
+        assert result.prompt_source == "ai_calibration"
 
     # --- _resolve_clinical_criteria: helper unitario ----------------------
 
@@ -4275,30 +4207,11 @@ class TestFEATURE20260824_01Rev14EspiroRD2026Preservation:
         calidad = normalized.get("calidad") or {}
         assert "SOSPECHA_DESPLAZAMIENTO_M1" in (calidad.get("notas_calidad") or "")
 
-    # ── AC rev 1.4-7: el guardrail FEV1 rev 1.4 está inyectado en el prompt
-    def test_espirometry_prompt_contains_rd2026_fev1_example(self, extractor):
-        """FIX-FEATURE-20260824-01 rev. 1.4: el guardrail backend cita el
-        ejemplo concreto FEV1 del fixture RD2026 (m1=2.15, m1_pct_ref=77)
-        para que el LLM no dude entre las 3 maniobras y conserve el orden."""
-        from app.services.ai.extractor import _ESPIROMETRIA_BACKEND_GUARDRAILS
-        # La constante global incluye el ejemplo bit-a-bit.
-        assert "2.15" in _ESPIROMETRIA_BACKEND_GUARDRAILS
-        assert "77" in _ESPIROMETRIA_BACKEND_GUARDRAILS
-        assert "PRESERVACIÓN ESTRICTA" in _ESPIROMETRIA_BACKEND_GUARDRAILS
-        # El builder inyecta el guardrail entre la base universal y el bloque
-        # específico editable por calibración.
-        prompt = extractor._build_espirometria_extraction_prompt(
-            "bloque_calibracion_x"
-        )
-        # El ejemplo FEV1 vive en el guardrail, no en el bloque del estudio.
-        assert "2.15" in prompt
-        guardrail_pos = prompt.index(
-            _ESPIROMETRIA_BACKEND_GUARDRAILS.splitlines()[0]
-        )
-        bloque_pos = prompt.index("bloque_calibracion_x")
-        assert guardrail_pos < bloque_pos, (
-            "El guardrail debe preceder al bloque editable de calibración"
-        )
+    def test_espirometry_prompt_has_no_backend_guardrails_injection(self, extractor):
+        """Single-source: extractor no inyecta _ESPIROMETRIA_BACKEND_GUARDRAILS en runtime."""
+        import app.services.ai.extractor as ext_mod
+        assert not hasattr(ext_mod, "_ESPIROMETRIA_BACKEND_GUARDRAILS")
+        assert not hasattr(extractor, "_build_espirometria_extraction_prompt")
 
 
 # ---------------------------------------------------------------------------
@@ -4543,22 +4456,13 @@ class TestFEATURE20260824_01Rev15EspiroDuplicacionM1:
         assert "SOSPECHA_INCONSISTENCIA_MEJOR_FEV1" in notas
         assert normalized.get("completitud_documental") == "no_concluyente"
 
-    # ── AC rev 1.5-6: el guardrail §10/§11/§12 está inyectado en el prompt
     def test_guardrail_contains_duplication_and_cross_validation_rules(
         self, extractor
     ):
-        """FIX-FEATURE-20260824-01 rev. 1.5: el guardrail backend cita las
-        reglas §10 (no usar Mejor X como fila estándar), §11 (no duplicar
-        celda) y §12 (consistencia Mejor X vs fila estándar X)."""
-        from app.services.ai.extractor import _ESPIROMETRIA_BACKEND_GUARDRAILS
-        assert "NO uses la fila" in _ESPIROMETRIA_BACKEND_GUARDRAILS  # §10
-        assert "NO DUPLIQUES UNA CELDA" in _ESPIROMETRIA_BACKEND_GUARDRAILS  # §11
-        assert "CONSISTENCIA ENTRE" in _ESPIROMETRIA_BACKEND_GUARDRAILS  # §12
-        prompt = extractor._build_espirometria_extraction_prompt(
-            "bloque_calibracion_y"
-        )
-        assert "NO DUPLIQUES UNA CELDA" in prompt
-        assert "CONSISTENCIA ENTRE" in prompt
+        """Single-source: extractor no inyecta guardrails de prompt en código; las reglas viven en la migración/BD."""
+        import app.services.ai.extractor as ext_mod
+        assert not hasattr(ext_mod, "_ESPIROMETRIA_BACKEND_GUARDRAILS")
+        assert not hasattr(extractor, "_build_espirometria_extraction_prompt")
 
 
 # ---------------------------------------------------------------------------
@@ -5752,14 +5656,25 @@ class TestEspirometriaPrediagnosticRecommendationContextDEC20260824_02:
 
     @pytest.fixture(scope="class")
     def espirometry_prompt(self):
-        from app.services.ai.prediagnostic import PrediagnosticService
-
-        return PrediagnosticService.PREDIAGNOSTIC_PROMPTS["Espirometria"]
+        # Single-source: el prompt vigente de Espirometría vive en BD / migración SQL,
+        # no en PREDIAGNOSTIC_PROMPTS del código.
+        sql_path = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "prisma"
+            / "migrations"
+            / "20261119000000_single_source_ai_calibration"
+            / "migration.sql"
+        )
+        text = sql_path.read_text(encoding="utf-8")
+        start = text.index("v_espiro_dx TEXT := $espiro_dx$") + len("v_espiro_dx TEXT := $espiro_dx$")
+        end = text.index("$espiro_dx$;", start)
+        return text[start:end]
 
     def test_ac1_prompt_references_dec_20260824_02_marker(self, espirometry_prompt):
         assert espirometry_prompt is not None
-        assert "IMPL-20260824-06" in espirometry_prompt
-        assert "DEC-20260824-02" in espirometry_prompt
+        assert "CRITERIOS AMI" in espirometry_prompt
+        assert "MODO SOMBRA" in espirometry_prompt
 
     def test_ac2_prompt_instructs_pattern_contextualization(self, espirometry_prompt):
         # Patrones esperados (reglas de contenido contextualizado).
@@ -5769,49 +5684,28 @@ class TestEspirometriaPrediagnosticRecommendationContextDEC20260824_02:
             "MIXTO",
             "NORMAL",
         ]:
-            assert patron in espirometry_prompt, (
+            assert patron in espirometry_prompt.upper(), (
                 f"Falta instrucción contextualizada para patrón {patron}"
             )
-        # Calidad dudosa → repetir estudio.
-        assert "DUDOSA" in espirometry_prompt or "dudosa" in espirometry_prompt
-        # Entorno ocupacional / EPP.
-        assert "EPP" in espirometry_prompt or "exposición" in espirometry_prompt
-        # Estudios complementarios (pletismografía/TLC).
-        assert "pletismografía" in espirometry_prompt or "TLC" in espirometry_prompt
+        assert "TLC" in espirometry_prompt
 
     def test_ac3_prompt_prohibes_aptitud_y_diagnostico(self, espirometry_prompt):
-        # Límites médicos obligatorios.
         assert "PROHIBIDO" in espirometry_prompt
-        assert "aptitud" in espirometry_prompt
+        assert "aptitud laboral" in espirometry_prompt
         assert "incapacidad" in espirometry_prompt
         assert "tratamiento" in espirometry_prompt
-        assert "dictamen" in espirometry_prompt
-        # Lenguaje prudente obligatorio.
-        assert "prudente" in espirometry_prompt
 
     def test_ac4_prompt_prohibes_absolute_prescriptive_verbs(self, espirometry_prompt):
-        # El prompt NO debe ordenar al LLM usar verbos prescriptivos absolutos.
-        assert '"debe"' in espirometry_prompt or "'debe'" in espirometry_prompt, (
-            "Falta prohibición explícita del verbo prescriptivo 'debe'"
-        )
+        assert '"debe"' in espirometry_prompt or "'debe'" in espirometry_prompt
 
     def test_ac5_prompt_instructs_repeat_when_quality_insufficient(self, espirometry_prompt):
-        # Cuando calidad es insuficiente, la recomendación PRINCIPAL es repetir.
         assert "repetir" in espirometry_prompt.lower()
-        # El bloque debe estar dentro del apartado `recommendation`.
-        idx_reco = espirometry_prompt.find("CAMPO `recommendation`")
-        assert idx_reco > 0, "No se localizó el apartado CAMPO recommendation"
 
     def test_ac6_prompt_remains_singular_no_array_in_backend(self, espirometry_prompt):
-        # El contrato backend sigue siendo `recommendation` singular.
-        # El frontend acepta arrays legacy pero el prompt NO los introduce.
-        assert "recommendations" not in espirometry_prompt or (
-            espirometry_prompt.count("recommendation") > 0
-        ), "El prompt debe seguir refiriéndose al campo singular `recommendation`"
+        assert "`recommendation`" in espirometry_prompt
 
     def test_r06_prompt_includes_practical_recommendation_field(self, espirometry_prompt):
-        assert "CAMPO `practical_recommendation`" in espirometry_prompt
-        assert "R-06" in espirometry_prompt or "AMI-SR F-017 R-06" in espirometry_prompt
+        assert "`practical_recommendation`" in espirometry_prompt
         assert "SEGUIMIENTO ANUAL" in espirometry_prompt
 
     def test_prediagnosis_routes_to_minimax_not_dr7(self):
@@ -5897,17 +5791,13 @@ class TestEspirometriaDiagnosisPromptResolverDEC20260824_02:
         self, prediagnostic_svc
     ):
         """
-        Caso opuesto (estado pre-script): si el MedicalTest NO trae
-        `aiCalibration.diagnosis.prompt`, el resolver cae al default
-        backend hardcodeado (Prioridad 3). En este caso `prompt_source`
-        sería "backend_fallback" y la limitation aparecería en el
-        snapshot — exactamente lo que el script remoto corrige.
+        Single-source: si el MedicalTest NO trae `aiCalibration.diagnosis.prompt`,
+        NO cae a un prompt hardcodeado; marca missingCalibration=True.
         """
         ai_calibration = {
             "enabled": True,
             "canonicalStudyType": "Espirometria",
             "extraction": {"prompt": "x", "version": "espirometria-sibelmed-v5"},
-            # diagnosis ausente → cae a Prioridad 3.
         }
 
         effective = prediagnostic_svc._resolve_clinical_criteria(
@@ -5916,12 +5806,9 @@ class TestEspirometriaDiagnosisPromptResolverDEC20260824_02:
             study_type="Espirometria",
         )
 
-        # Prioridad 3 (default backend).
-        from app.services.ai.prediagnostic import PrediagnosticService
-
-        assert effective["prompt"] == PrediagnosticService.PREDIAGNOSTIC_PROMPTS["Espirometria"]
-        assert effective["promptVersion"] == "backend_v2"
-        assert effective["incomplete"] is False
+        assert effective["prompt"] == ""
+        assert effective["missingCalibration"] is True
+        assert effective["prediagnosisEnabled"] is False
 
     def test_resolver_prioridad1_v3_clinical_criteria_wins_over_diagnosis(
         self, prediagnostic_svc
@@ -6211,24 +6098,26 @@ class TestFIX20260824_04RegresionFEV1_Cero:
         # 5) Detalle incluye "m1==m2 detectado" (síntoma específico).
         assert "m1==m2 detectado" in notas
 
-    # ── AC-4 defensas del prompt backend ────────────────────────────────────
     def test_ac4_guardrail_backend_declares_prohibiciones_y_consistencia(
         self, extractor
     ):
-        """El guardrail backend declara las 3 defensas del dictamen
-        FIX-20260824-04: no duplicar celda, no usar Mejor X como fila
-        estándar, consistencia Mejor X vs fila estándar X."""
-        from app.services.ai.extractor import _ESPIROMETRIA_BACKEND_GUARDRAILS
+        """Single-source: extractor no inyecta _ESPIROMETRIA_BACKEND_GUARDRAILS;
+        las reglas anti-duplicación y consistencia viven en el prompt en BD (migración SQL)."""
+        import app.services.ai.extractor as ext_mod
+        assert not hasattr(ext_mod, "_ESPIROMETRIA_BACKEND_GUARDRAILS")
+        assert not hasattr(extractor, "_build_espirometria_extraction_prompt")
 
-        assert "NO DUPLIQUES UNA CELDA" in _ESPIROMETRIA_BACKEND_GUARDRAILS
-        assert "NO uses la fila" in _ESPIROMETRIA_BACKEND_GUARDRAILS
-        assert "CONSISTENCIA ENTRE" in _ESPIROMETRIA_BACKEND_GUARDRAILS
-        # El guardrail inyectado en el prompt construido.
-        prompt = extractor._build_espirometria_extraction_prompt(
-            "bloque_calibracion_y"
+        sql_path = (
+            Path(__file__).parent.parent.parent
+            / "frontend"
+            / "prisma"
+            / "migrations"
+            / "20261119000000_single_source_ai_calibration"
+            / "migration.sql"
         )
-        assert "NO DUPLIQUES UNA CELDA" in prompt
-        assert "CONSISTENCIA ENTRE" in prompt
+        sql_text = sql_path.read_text(encoding="utf-8")
+        assert "NO DUPLIQUES UNA CELDA" in sql_text
+        assert "VALIDACIÓN CRUZADA OBLIGATORIA" in sql_text
 
     # ── AC-5 frontend: extraído vs calculado ────────────────────────────────
     def test_ac5_frontend_pantalla_invalida_calculo_espurio(

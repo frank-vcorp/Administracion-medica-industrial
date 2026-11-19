@@ -573,13 +573,15 @@ class AIPrediagnosisResult(BaseModel):
         "published_v3",
         "calibration_disabled",
         "legacy_hardcoded",
+        "missing_calibration",
     ]] = Field(
         default=None,
         description=(
             "Fuente del contrato aplicado al prediagnóstico: "
             "'published_v3' = aiCalibration.clinicalCriteria publicada; "
             "'calibration_disabled' = enabled=false o prediagnosisEnabled=false; "
-            "'legacy_hardcoded' = resolver devolvió None, fallback trazado; "
+            "'missing_calibration' = prueba sin calibración IA configurada en BD; "
+            "'legacy_hardcoded' = sin versión publicada (deprecado); "
             "'medical_calibration'/'general_fallback' = deprecados Fase 4."
         )
     )
@@ -611,13 +613,14 @@ class AIPrediagnosisResult(BaseModel):
         )
     )
     # IMPL-20260518-03 + ARCH-20260820-01 Fase 4 (handoff §3.4): fuente del prompt.
-    prompt_source: Optional[Literal["ai_calibration", "backend_fallback", "clinical_criteria_v3"]] = Field(
+    prompt_source: Optional[Literal["ai_calibration", "backend_fallback", "clinical_criteria_v3", "missing_calibration"]] = Field(
         default=None,
         description=(
             "Fuente real del prompt clínico usado: "
             "'clinical_criteria_v3' = aiCalibration.clinicalCriteria.prompt publicada; "
-            "'ai_calibration' = aiCalibration.diagnosis.prompt legacy V1/V2 (deprecado); "
-            "'backend_fallback' = prompt backend hardcodeado."
+            "'ai_calibration' = aiCalibration.diagnosis.prompt en BD (V1/V2); "
+            "'missing_calibration' = falta prompt clínico en BD; "
+            "'backend_fallback' = legado sin fallback activo."
         )
     )
     # IMPL-20260518-03: Versión real del prompt clínico usado (ARCH-20260518-03)

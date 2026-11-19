@@ -90,13 +90,12 @@ export function hasLegacyDiagnosisPrompt(rawOptions: unknown): boolean {
 }
 
 /**
- * Si el published V3 bloquearía prediagnóstico, omitir `medical_test_id` para
- * que el backend no aplique el gate `calibration_disabled` y use shim
- * `ai_calibration_json` o prompts `legacy_hardcoded`.
+ * En única fuente de verdad (BD), nunca se omite `medical_test_id` para
+ * eludir gates de calibración persistidos en `MedicalTest.options`.
  */
 export function shouldOmitMedicalTestIdForLegacyPrediagnosis(
-  rawOptions: unknown,
+  _rawOptions: unknown,
 ): boolean {
-  const gates = readPublishedV3GatesFromTestOptions(rawOptions)
-  return Boolean(gates?.blocksPrediagnosisResolver)
+  void _rawOptions
+  return false
 }

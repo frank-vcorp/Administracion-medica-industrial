@@ -36,6 +36,7 @@ import CalibrationTestResults from "@/components/calibration/CalibrationTestResu
 import {
   describeCalibrationV3State,
   coerceV3DraftToEditorInitial,
+  resolveCurrentPublishedVersion,
 } from "@/lib/calibration-v3-ui"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -312,6 +313,21 @@ export default function CalibrationWorkspaceClient({
 
   // Derivación pura de estado V3 (no inventa; ver calibration-v3-ui.ts).
   const v3State = describeCalibrationV3State(aiCalibrationV3, operationMode)
+  const publishedVersionForEditor = aiCalibrationV3
+    ? resolveCurrentPublishedVersion(aiCalibrationV3)
+    : null
+  const editorInitialCalibration = aiCalibrationV3?.draft
+    ? coerceV3DraftToEditorInitial(aiCalibrationV3.draft)
+    : publishedVersionForEditor
+      ? coerceV3DraftToEditorInitial(publishedVersionForEditor)
+      : initialRawCalibration
+  const effectiveTestTypeForUpload =
+    aiCalibrationV3?.draft?.canonicalStudyType ??
+    publishedVersionForEditor?.canonicalStudyType ??
+    (typeof initialRawCalibration?.canonicalStudyType === "string"
+      ? initialRawCalibration.canonicalStudyType
+      : null) ??
+    aiCalibration?.canonicalStudyType ?? ""
 
   // Snapshot seleccionado (controla qué documento se muestra a la derecha)
   const allSnapshots = eventTests.flatMap((et) =>
@@ -508,11 +524,7 @@ export default function CalibrationWorkspaceClient({
               {!v3State.isManualService && (
                 <AICalibrationEditor
                   testId={testId}
-                  initial={
-                    aiCalibrationV3?.draft
-                      ? coerceV3DraftToEditorInitial(aiCalibrationV3.draft)
-                      : initialRawCalibration
-                  }
+                  initial={editorInitialCalibration}
                   operationMode={operationMode}
                   initialStatus={aiCalibrationV3?.draft?.status ?? "draft"}
                   onSaved={() => router.refresh()}
@@ -551,15 +563,7 @@ export default function CalibrationWorkspaceClient({
               </div>
               <CalibrationTestUpload
                 testId={testId}
-                // ARCH-20260820-01 Fase 3 (AC-3.4, H3, DEC-20260820-02):
-                // Eliminado el default silencioso a "Audiometria". El
-                // `testType` del modo de prueba se obtiene del
-                // `canonicalStudyType` (draft/published). Si el draft no lo
-                // define, se pasa string vacío y CalibrationTestUpload muestra
-                // un placeholder ("Sin tipo canónico") — NO se asume
-                // Audiometría (anti-patrón H3). El backend resuelve
-                // `aiCalibration.canonicalStudyType` si test_type llega vacío.
-                testType={aiCalibration?.canonicalStudyType ?? ""}
+                testType={effectiveTestTypeForUpload}
                 onResults={setTestResults}
                 apiUrl={apiUrl}
               />

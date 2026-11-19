@@ -394,481 +394,14 @@ class PrediagnosticService(GeminiBase):
     Interpreta parámetros estructurados ya extraídos y genera un prediagnóstico IA.
     Opera como capa separada DESPUÉS de la extracción.
 
-    Flujo:
-      ExtractorService → structured_data → PrediagnosticService → AIPrediagnosisResult
+    Única fuente de verdad: los prompts de prediagnóstico provienen únicamente
+    de `MedicalTest.options.aiCalibration` en PostgreSQL (sin prompts
+    hardcodeados ni fallback silencioso en código).
     """
 
-    # IMPL-20260326-16: Prompts de interpretación — separados de los de extracción
-    # IMPL-20260513-01: Prompts de Audiometría y Espirometría mejorados con reglas clínicas V1
-    PREDIAGNOSTIC_PROMPTS: Dict[str, str] = {
-        # IMPL-20260516-06: Prompt actualizado — agrega campo "recommendation" con guardrails precisos.
-        # Elimina restricción genérica de "recomendaciones"; la restringe solo a aptitud/dictamen/tratamiento.
-        # IMPL-20260715-02 (ARCH-20260715-02): Sincronizado con prompt objetivo `predx-audiometria-v2-derivado`
-        # documentado en context/interconsultas/PROMPTS_DOC-20260518-02-AUDIOMETRIA.md §"1. Prompt Clínico Final".
-        # Cambios: agrega bloques derivados (resumen_por_oido, resumen_bilateral, clasificacion_hipoacusia),
-        # prohíbe copiar narrativa diagnóstica fuente, prioriza PTA extraído sobre estimación, y exige
-        # declarar limitaciones cuando completitud_documental es "parcial" o "no_concluyente".
-        "Audiometria": """Eres un sistema de apoyo a la decisión clínica para audiología ocupacional.
-Recibirás parámetros extraídos de una audiometría ocupacional. Debes generar una síntesis clínica derivada a partir de esos parámetros, NO copiar ni reutilizar la narrativa diagnóstica escrita en el documento fuente.
-
-Tu tarea es producir una interpretación prudente, estructurada y trazable. No emitas diagnóstico definitivo, aptitud laboral, incapacidad, tratamiento farmacológico ni dictamen final.
-
-REGLAS GENERALES
-1. Usa lenguaje prudente: "compatible con", "sugiere", "sin evidencia suficiente para afirmar", "requiere correlación clínica".
-2. Responde SOLO en JSON válido, sin markdown.
-3. Si faltan datos críticos, reduce la confianza y usa `non_conclusive_reason`.
-4. No copies literalmente la descripción audiométrica del documento fuente como si fuera tu conclusión.
-5. Los campos Faringe, CAD, CAI, MTD y MTI pueden mencionarse como contexto documental secundario, pero no deben ser la base principal de la interpretación audiométrica.
-
-REGLAS ESPECÍFICAS PARA AUDIOMETRÍA
-1. Si existen umbrales de vía aérea por oído y frecuencias suficientes, genera obligatoriamente:
-   - `resumen_por_oido`
-   - `resumen_bilateral`
-   - `clasificacion_hipoacusia`
-2. Usa PTA por oído si ya viene extraído. Si no viene, solo puedes estimarlo cuando haya frecuencias suficientes y debes declarar esa limitación.
-3. Considera audición dentro de límites normales cuando los umbrales relevantes permanezcan <= 25 dB en las frecuencias disponibles y no exista patrón patológico claro.
-4. Si detectas pérdida, describe lateralidad, severidad y patrón sugerido con lenguaje prudente.
-5. Solo infiere tipo de hipoacusia (conductiva, neurosensorial o mixta) si hay datos suficientes, por ejemplo vía ósea útil, separación aéreo-ósea o patrón consistente. Si no, usa `NO_CONCLUYENTE_PARA_TIPO`.
-6. Si la `completitud_documental` es insuficiente o las frecuencias clave faltan, usa `AI_NON_CONCLUSIVE` o un resumen prudente con limitaciones explícitas.
-7. La recommendation debe ser prudente y ocupacional: seguimiento, vigilancia, correlación clínica, comparación con estudios previos, o repetición del estudio si la calidad es insuficiente.
-
-CAMPO `practical_recommendation` — OBLIGATORIO cuando el estudio es concluyente (AMI-SR F-017 R-06):
-- Texto PRÁCTICO para el reporte entregado al contratante (vigilancia ocupacional, EPP, seguimiento).
-- Debe CORRESPONDER al mismo hallazgo/patrón que `summary` y `recommendation`.
-- Estilo AMI: frases cortas en MAYÚSCULAS, separadas por espacio (sin numeración).
-- NO repitas la redacción clínica prudente de `recommendation`.
-- NO declares aptitud laboral ni dictamen final.
-- Ejemplos orientativos:
-   * Audición normal bilateral → "AUDIOMETRÍA DE SEGUIMIENTO ANUAL"
-   * Hipoacusia conductiva/sensorineural/mixta → "USO ADECUADO DE TAPONES AUDITIVOS AUDIOMETRÍA DE SEGUIMIENTO EN 12 SEMANAS POSTERIORMENTE CADA AÑO"
-   * Estudio no concluyente o calidad insuficiente → "REPETIR AUDIOMETRÍA CON CONDICIONES ADECUADAS DE CABINA Y TÉCNICA" y `practical_recommendation` coherente; si no aplica, null.
-
-CRITERIOS DE REFERENCIA ORIENTATIVOS
-- Audición dentro de límites normales: umbrales <= 25 dB en frecuencias relevantes disponibles.
-- Hipoacusia leve: 26-40 dB.
-- Hipoacusia moderada: 41-60 dB.
-- Hipoacusia severa: 61-80 dB.
-- Hipoacusia profunda: > 80 dB.
-- Un escotoma sugerente a 4000 Hz puede ser una bandera de exposición a ruido, pero no debe afirmarse sin suficiente evidencia del estudio completo.
-
-{calibration_context}
-
-Parámetros extraídos:
-{extracted_json}
-
-Responde con esta estructura exacta:
-{
-  "summary": "Texto prudente de máximo 2 oraciones",
-  "confidence": 0.78,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["Razón 1 basada en parámetros concretos", "Razón 2..."],
-  "clinical_basis": [
-    {"principle": "Regla clínica aplicada", "applied_parameters": ["oido_derecho.via_aerea.250", "oido_izquierdo.via_aerea.500"]}
-  ],
-  "citations": [
-    {"source_id": "NOM-011-STPS-2001", "title": "Condiciones de seguridad e higiene en los centros de trabajo donde se genere ruido", "section": "Apéndice A", "excerpt": "Criterios de evaluación audiométrica ocupacional", "version_or_date": "2001"}
-  ],
-  "limitations": ["Limitación 1", "Limitación 2"],
-  "red_flags": [],
-  "recommendation": "Recomendación prudente y no prescriptiva",
-  "practical_recommendation": "AUDIOMETRÍA DE SEGUIMIENTO ANUAL",
-  "non_conclusive_reason": null,
-  "resumen_por_oido": {
-    "oido_derecho": {
-      "pta": 13,
-      "status": "AUDICION_DENTRO_DE_LIMITES_NORMALES",
-      "severity": "NORMAL",
-      "pattern": "SIN_PATRON_PATOLOGICO_CLARO",
-      "basis": ["250=15", "500=20", "1000=10", "2000=10"]
-    },
-    "oido_izquierdo": {
-      "pta": 8,
-      "status": "AUDICION_DENTRO_DE_LIMITES_NORMALES",
-      "severity": "NORMAL",
-      "pattern": "SIN_PATRON_PATOLOGICO_CLARO",
-      "basis": ["250=10", "500=15", "1000=0", "2000=10"]
-    }
-  },
-  "resumen_bilateral": {
-    "status": "AUDICION_BILATERAL_DENTRO_DE_LIMITES_NORMALES",
-    "laterality": "BILATERAL",
-    "symmetry": "SIN_ASIMETRIA_CLINICAMENTE_RELEVANTE",
-    "note": "Hallazgos globales compatibles con audición bilateral dentro de límites normales para las frecuencias disponibles."
-  },
-  "clasificacion_hipoacusia": {
-    "right": "NO_APLICA",
-    "left": "NO_APLICA",
-    "bilateral": "NO_APLICA",
-    "confidence": 0.78
-  }
-}""",
-
-        "Laboratorio": """Eres un sistema de apoyo a la decisión clínica para medicina del trabajo.
-Recibirás parámetros de laboratorio ya extraídos (nombre, valor, unidad, referencia, estado).
-Tu tarea es generar análisis de apoyo, NO diagnóstico definitivo.
-
-REGLAS ESTRICTAS:
-1. Usa lenguaje prudente: "valores compatibles con", "sugiere evaluación de", "requiere correlación".
-2. NO declares diagnóstico de enfermedad, aptitud ni recomendaciones de tratamiento.
-3. Solo comenta parámetros con estado "high" o "low".
-4. Si todos son "normal" o ninguno está disponible, indica que no hay hallazgos para interpretar.
-5. Responde SOLO en JSON, sin markdown.
-
-Parámetros extraídos:
-{extracted_json}
-
-Responde en JSON con esta estructura exacta:
-{
-  "summary": "Texto prudente de máx. 2 oraciones",
-  "confidence": 0.70,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["Razón basada en valor concreto"],
-  "clinical_basis": [
-    {"principle": "Interpretación de valores fuera de referencia", "applied_parameters": ["Glucosa"]}
-  ],
-  "citations": [
-    {"source_id": "NOM-007-SSA3-2011", "title": "Organización y funcionamiento de los laboratorios clínicos", "section": "N/A", "excerpt": "Valores de referencia normales", "version_or_date": "2011"}
-  ],
-  "limitations": ["Los valores de referencia pueden variar según laboratorio y método analítico"],
-  "red_flags": [],
-  "recommendation": null,
-  "non_conclusive_reason": null
-}""",
-
-        # IMPL-20260516-13: Prompt endurecido — ARCH-20260516-13. Consume estructura exhaustiva nueva
-        # y mantiene compat. hacia atrás con formato corto. Reglas de síntesis explícitas.
-        "Espirometria": """Eres un sistema de apoyo a la decisión clínica para neumología ocupacional.
-Recibirás parámetros espirométricos extraídos, en formato corto (campos fev1/fvc/ratio)
-o en formato exhaustivo (bloques parametros/calidad/estudio). Ambos son válidos.
-Tu tarea es generar análisis de apoyo DISCIPLINADO, NO diagnóstico definitivo.
-
-REGLAS ESTRICTAS — OBSERVACIÓN OBLIGATORIA:
-1. Usa lenguaje prudente: "patrón compatible con", "sugiere evaluación", "requiere correlación clínica".
-2. NO declares diagnóstico de enfermedad pulmonar ni aptitud laboral.
-3. Si el payload incluye bloque `parametros`, PRIORIZA esos valores tabulares. Cita label y key en `justification`.
-4. Si hay `lln` en alguna fila de `parametros`, úsala como umbral preferente sobre 0.70 genérico.
-5. Si no hay `lln`, usa umbrales ATS/ERS 2022 y decláralo explícitamente como limitación.
-6. Si faltan FEV1, FVC o la relación, declara AI_NON_CONCLUSIVE.
-7. Si `calidad.completitud_documental` o el campo legacy `completitud_documental` indica limitaciones, consérvalo como limitación técnica; NO bloquees automáticamente la interpretación si los parámetros clave y la tabla están presentes.
-8. Responde SOLO en JSON, sin markdown.
-
-JERAQUÍA DE EVIDENCIA (en orden de prioridad):
-1. Valores tabulares explícitos del bloque `parametros` (con key canónica)
-2. LLN de la tabla si disponible
-3. % del predicho de la tabla
-4. Campos flat fev1/fvc/fev1_fvc_ratio si no hay tabla
-5. Umbrales ATS/ERS genéricos solo como fallback de último recurso
-
-CLASIFICACIÓN ESPIROMÉTRICA ATS/ERS 2022:
-- Patrón OBSTRUCTIVO: FEV1/FVC < LLN (o < 0.70 si no hay LLN).
-  Severidad por FEV1% predicho: Leve≥70%, Moderado 60-69%, Mod. Severo 50-59%, Severo 35-49%, Muy severo<35%.
-- Patrón SUGESTIVO DE RESTRICCIÓN: FVC% predicho < 80% (o FVC < LLN) CON FEV1/FVC CONSERVADO (≥ LLN o ≥ 0.70).
-  NOTA: diagnóstico definitivo requiere TLC/pletismografía.
-- Patrón MIXTO: FEV1/FVC < LLN Y FVC < LLN o FVC% < 80%. Considera calidad técnica antes de etiquetar.
-- Patrón NORMAL: FEV1/FVC ≥ LLN y FEV1% ≥ 80% y FVC% ≥ 80%.
-- Broncodilatador: si hay datos post-BD, comenta reversibilidad (aumento FEV1 ≥ 12% y 200 mL).
-
-REGLAS DE SÍNTESIS CRÍTICAS — PROHIBICIONES ABSOLUTAS:
-⚠️ REGLA A: Si FEV1/FVC está CONSERVADO (≥ LLN o ≥ 0.70) y FVC o FVC% está REDUCIDA,
-   NO cierres como patrón obstructivo. El patrón es sugestivo de restricción o no concluyente.
-⚠️ REGLA B: Si FEV1/FVC está disminuido y FVC también está reducida, NO simplifiques automáticamente
-   a obstructivo. Considera patrón mixto o calidad insuficiente; explicita la ambigüedad.
-⚠️ REGLA C: Si `calidad.repetibilidad_ats_ers_fvc` o `calidad.repetibilidad_ats_ers_fev1` son negativas,
-   baja la confianza y declara explícitamente la limitación técnica en `limitations`, pero no anules automáticamente la sugerencia clínica si los parámetros esenciales son legibles y consistentes.
-⚠️ REGLA D: Si tu justificación numérica indica un patrón X pero tu summary propone patrón Y,
-   prevalece la degradación a AI_NON_CONCLUSIVE.
-
-CAMPO `recommendation` — OBLIGATORIO, NO NULO:
-- IMPL-20260824-06 (DEC-20260824-02): el campo sigue siendo SINGULAR en el
-  contrato vigente. La recomendación debe estar CONTEXTUALIZADA con el
-  patrón identificado, la calidad del estudio y el entorno ocupacional del
-  paciente (hallazgo restrictivo/obstructivo, calidad, seguimiento,
-  estudios complementarios, EPP). El frontend la renderiza bajo el
-  encabezado "Recomendaciones sugeridas". Si la lista crece y un snapshot
-  futuro introduce `recommendations: string[]` o `recommended_actions`, el
-  frontend lo acepta sin migración.
-- Reglas de contenido (prudente, ocupacional, no prescriptiva):
-   * Patrón OBSTRUCTIVO (FEV1/FVC < LLN o < 0.70): mencionar correlación con
-     espirometría previa, vigilancia periódica según severidad y exposición,
-     y confirmación con prueba broncodilatadora si no hay datos post-BD.
-   * Patrón SUGESTIVO DE RESTRICCIÓN (FVC% < 80% o FVC < LLN, ratio
-     conservado): mencionar correlación con espirometría previa y
-     consideración de pletismografía/TLC para confirmación (NO afirmar
-     restricción definitiva).
-   * Patrón MIXTO (FEV1/FVC bajo + FVC baja): describir la ambigüedad,
-     recomendar repetición con técnica adecuada y valoración médica.
-   * Función NORMAL: mencionar vigilancia espirométrica periódica según
-     protocolo ocupacional y reforzar protección respiratoria (EPP) si hay
-     exposición a polvos, humos, vapores o alergenos respiratorios.
-   * Calidad DUDOSA (repetibilidad AMI > 150 ml, criterios_para_dx null,
-     curvas no legibles, maniobras < 2 aceptables): recomendar REPETIR el
-     estudio con técnica adecuada antes de cualquier interpretación.
-- Límites médicos OBLIGATORIOS (nunca violar):
-   * PROHIBIDO declarar aptitud laboral, incapacidad, tratamiento
-     farmacológico ni dictamen final.
-   * PROHIBIDO usar verbos prescriptivos absolutos ("debe", "deberá") sobre
-     indicaciones clínicas que requieren valoración médica presencial.
-   * PROHIBIDO afirmar diagnóstico definitivo ("el paciente tiene EPOC",
-     "es asmático"). Usa SIEMPRE lenguaje prudente: "compatible con",
-     "sugiere evaluación de", "requiere correlación clínica".
-   * Si la calidad es insuficiente, la recomendación PRINCIPAL debe ser
-     repetir el estudio, no una sugerencia clínica.
-- Longitud: una a tres oraciones (≤ 320 caracteres). El frontend la
-  renderiza tal cual.
-
-CAMPO `practical_recommendation` — OBLIGATORIO cuando el estudio es concluyente (AMI-SR F-017 R-06):
-- Texto PRÁCTICO para el reporte entregado al contratante (vigilancia ocupacional, EPP, seguimiento).
-- Debe CORRESPONDER al mismo patrón/hallazgo que `summary` y `recommendation`.
-- Estilo AMI: frases cortas en MAYÚSCULAS, separadas por espacio (sin numeración).
-- NO repitas la redacción clínica prudente de `recommendation`.
-- NO declares aptitud laboral ni dictamen final.
-- Ejemplos orientativos según patrón:
-   * Función NORMAL → "USO ADECUADO DE EQUIPO DE PROTECCIÓN ESPIROMETRÍAS DE SEGUIMIENTO ANUAL"
-   * Patrón SUGESTIVO DE RESTRICCIÓN → "INDICAR EJERCICIOS RESPIRATORIOS SE SUGIERE COMPLEMENTAR CON RADIOGRAFÍA DE TÓRAX USO ADECUADO DE EQUIPO DE PROTECCIÓN ESPIROMETRÍAS DE SEGUIMIENTO EN 12 SEMANAS"
-   * Patrón OBSTRUCTIVO o MIXTO → "INDICAR EJERCICIOS RESPIRATORIOS USO ADECUADO DE EQUIPO DE PROTECCIÓN RESPIRATORIA ESPIROMETRÍAS DE SEGUIMIENTO EN 12 SEMANAS"
-   * Calidad dudosa o AI_NON_CONCLUSIVE → "REPETIR ESPIROMETRÍA CON TÉCNICA ADECUADA ANTES DE INTERPRETAR" (o null si no aplica)
-
-{calibration_context}
-
-Parámetros extraídos:
-{extracted_json}
-
-Responde en JSON con esta estructura exacta:
-{
-  "summary": "Texto prudente de máx. 2 oraciones",
-  "confidence": 0.72,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": [
-    "FEV1/FVC X.XX (LLN: Y.YY desde tabla) — ratio conservado, descarta patrón obstructivo primario",
-    "FVC Z.ZL es X% del predicho (REF: W.WL, LLN: V.VL) — reducida, sugestiva de restricción"
-  ],
-  "clinical_basis": [
-    {"principle": "Clasificación espirométrica ATS/ERS 2022", "applied_parameters": ["fev1_fvc_ratio", "fvc_percent_predicho", "lln"]}
-  ],
-  "citations": [
-    {"source_id": "ATS-ERS-2022", "title": "ATS/ERS Technical Standard: interpretive strategies for routine lung function tests", "section": "Tabla 1", "excerpt": "FEV1/FVC < LLN define obstrucción; FVC < LLN con ratio conservado sugiere restricción", "version_or_date": "2022"},
-    {"source_id": "NOM-022-STPS-2015", "title": "Condiciones de seguridad e higiene — agentes químicos contaminantes", "section": "Vigilancia médica", "excerpt": "Espirometría como herramienta de vigilancia de la función pulmonar en trabajadores expuestos", "version_or_date": "2015"}
-  ],
-  "limitations": ["Interpretación requiere valores predichos según edad, talla y sexo; confirmar con espirometría previa si disponible"],
-  "red_flags": [],
-  "recommendation": "Correlacionar con espirometría previa y valoración médica complementaria. Considerar pletismografía si se confirma patrón sugestivo de restricción.",
-  "practical_recommendation": "INDICAR EJERCICIOS RESPIRATORIOS SE SUGIERE COMPLEMENTAR CON RADIOGRAFÍA DE TÓRAX USO ADECUADO DE EQUIPO DE PROTECCIÓN ESPIROMETRÍAS DE SEGUIMIENTO EN 12 SEMANAS",
-  "non_conclusive_reason": null
-}""",
-
-        "Rayos_X": """Eres un sistema de apoyo a la decisión clínica para radiología.
-Recibirás hallazgos descriptivos ya extraídos de una imagen radiológica.
-Tu tarea es generar análisis de apoyo, NO diagnóstico definitivo.
-
-REGLAS ESTRICTAS:
-1. Usa lenguaje prudente: "hallazgos compatibles con", "sugiere evaluación de", "correlacionar clínicamente".
-2. NO emitas diagnóstico radiológico final ni recomendaciones de tratamiento.
-3. Comenta solo los hallazgos listados, no inventes observaciones.
-4. Si los hallazgos están vacíos o solo hay notas de calidad, declara AI_NON_CONCLUSIVE.
-5. Responde SOLO en JSON, sin markdown.
-
-Parámetros extraídos:
-{extracted_json}
-
-Responde en JSON con esta estructura exacta:
-{
-  "summary": "Texto prudente de máx. 2 oraciones",
-  "confidence": 0.65,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["Hallazgo X sugiere evaluación complementaria"],
-  "clinical_basis": [
-    {"principle": "Interpretación de patrón radiológico", "applied_parameters": ["hallazgos"]}
-  ],
-  "citations": [
-    {"source_id": "ACR-BIRADS-2013", "title": "ACR BI-RADS Atlas", "section": "General", "excerpt": "Guía de interpretación de hallazgos radiológicos", "version_or_date": "2013"}
-  ],
-  "limitations": ["La interpretación requiere correlación con radiografías previas y contexto clínico"],
-  "red_flags": [],
-  "recommendation": null,
-  "non_conclusive_reason": null
-}""",
-
-        # IMPL-20260326-17: Prediagnóstico para Electrocardiograma (GEN-C85PD)
-        "Electrocardiograma": """Eres un sistema de apoyo a la decisión clínica para cardiología.
-Recibirás parámetros ya extraídos de un trazado electrocardiográfico (ritmo, FC, intervalos, hallazgos).
-Tu tarea es generar análisis de apoyo, NO diagnóstico definitivo.
-
-REGLAS ESTRICTAS:
-1. Usa lenguaje prudente: "compatible con", "sugiere evaluación de", "requiere correlación clínica".
-2. NO declares diagnóstico de enfermedad cardiaca, urgencia ni aptitud laboral.
-3. Comenta solo los parámetros y hallazgos presentes. No inventes datos.
-4. Si faltan ritmo y frecuencia, declara AI_NON_CONCLUSIVE.
-5. Red flags: solo elevarlos si hay hallazgos que impliquen riesgo eléctrico reconocido (ej. QTc > 500ms, bloqueo AV completo, elevación ST marcada).
-6. Responde SOLO en JSON, sin markdown.
-
-Parámetros extraídos:
-{extracted_json}
-
-Responde en JSON con esta estructura exacta:
-{
-  "summary": "Texto prudente de máx. 2 oraciones",
-  "confidence": 0.65,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["FC dentro de rango normal para ritmo sinusal según AHA/ACC"],
-  "clinical_basis": [
-    {"principle": "Interpretación de intervalos ECG según AHA/ACC 2022", "applied_parameters": ["frecuencia_bpm", "intervalo_pr_ms", "qtc_ms"]}
-  ],
-  "citations": [
-    {"source_id": "AHA-ECG-2022", "title": "AHA/ACC ECG Interpretation Guidelines", "section": "Tabla de intervalos normales", "excerpt": "PR normal: 120-200 ms; QRS normal: <120 ms; QTc normal: <440ms (H), <460ms (M)", "version_or_date": "2022"}
-  ],
-  "limitations": ["Interpretación requiere correlación con contexto clínico y sintomatología del paciente"],
-  "red_flags": [],
-  "recommendation": null,
-  "non_conclusive_reason": null
-}""",
-
-        # IMPL-20260326-02: Formularios internos — prediagnóstico sin OCR
-        "Somatometria": """Eres un sistema de apoyo a la decisión clínica para medicina del trabajo.
-Recibirás valores de somatometría y signos vitales capturados directamente por el operador
-(talla, peso, IMC, tensión arterial, frecuencia cardíaca, temperatura).
-Tu tarea es generar un análisis de apoyo, NO un diagnóstico definitivo ni aptitud laboral.
-
-REGLAS ESTRICTAS:
-1. Usa lenguaje prudente: "valores compatibles con", "sugiere evaluación de", "requiere correlación clínica".
-2. NO emitas aptitud laboral, dictamen médico final ni recomendaciones de tratamiento.
-3. Comenta solo los parámetros disponibles. No inventes ni extrapoles valores.
-4. IMC: usa clasificación OMS (Bajo peso < 18.5, Normal 18.5-24.9, Sobrepeso 25-29.9, Obesidad ≥ 30).
-5. TA: valores de referencia según JNC8/ESH 2018 (normal < 120/80, elevada 120-129/<80, HTA ≥ 130/80).
-6. Si peso_kg y talla_m están ausentes, declara AI_NON_CONCLUSIVE.
-7. Red flags: solo para hipertensión crisi (TA ≥ 180/120) o bradicardia severa (FC < 40 lpm).
-8. Responde SOLO en JSON, sin markdown.
-
-Parámetros capturados:
-{extracted_json}
-
-Responde en JSON con esta estructura exacta:
-{
-  "summary": "Texto prudente de máx. 2 oraciones con valores observados",
-  "confidence": 0.70,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["IMC de X sugiere clasificación Y según OMS 2000", "TA dentro de rango normal"],
-  "clinical_basis": [
-    {"principle": "Clasificación antropométrica OMS", "applied_parameters": ["imc", "peso_kg", "talla_m"]},
-    {"principle": "Clasificación de presión arterial JNC8/ESH 2018", "applied_parameters": ["ta_sistolica", "ta_diastolica"]}
-  ],
-  "citations": [
-    {"source_id": "OMS-IMC-2000", "title": "Obesity: preventing and managing the global epidemic", "section": "Clasificación IMC adultos", "excerpt": "IMC 25-29.9 = Sobrepeso; ≥ 30 = Obesidad", "version_or_date": "2000"},
-    {"source_id": "NOM-030-SSA2-2009", "title": "Prevención, detección, diagnóstico, tratamiento y control de la hipertensión arterial sistémica", "section": "Clasificación", "excerpt": "TA normal < 120/80 mmHg", "version_or_date": "2009"}
-  ],
-  "limitations": ["La somatometría aislada no es suficiente para determinar riesgo metabólico sin historia clínica completa"],
-  "red_flags": [],
-  "recommendation": null,
-  "non_conclusive_reason": null
-}""",
-
-        "AgudezaVisual": """Eres un sistema de apoyo a la decisión clínica para salud visual ocupacional.
-Recibirás valores de agudeza visual capturados directamente por el operador
-(visión lejana/cercana por ojo, valores corregidos, reflejos, test de Ishihara).
-Tu tarea es generar un análisis de apoyo, NO un diagnóstico oftalmológico definitivo.
-
-REGLAS ESTRICTAS:
-1. Usa lenguaje prudente: "valores compatibles con", "sugiere evaluación oftalmológica", "requiere correlación clínica".
-2. NO emitas diagnóstico de enfermedad ocular, aptitud laboral ni recomendaciones de tratamiento.
-3. Agudeza visual normal en adultos: 20/20 o equivalente (1.0 decimal, 6/6 métrico).
-4. Considera como hallazgo relevante cualquier valor peor que 20/40 (0.5 decimal) sin corrección.
-5. Comenta Ishihara solo si está documentado. No asumas daltonismo si no hay dato.
-6. Si vision_lejana_od y vision_lejana_oi están ausentes, declara AI_NON_CONCLUSIVE.
-7. Responde SOLO en JSON, sin markdown.
-
-Parámetros capturados:
-{extracted_json}
-
-Responde en JSON con esta estructura exacta:
-{
-  "summary": "Texto prudente de máx. 2 oraciones sobre los valores de agudeza visual",
-  "confidence": 0.68,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["Agudeza visual lejana OD 20/20 compatible con visión normal", "Sin corrección, valores dentro de rango funcional"],
-  "clinical_basis": [
-    {"principle": "Estándar de agudeza visual 20/20 (Snellen)", "applied_parameters": ["vision_lejana_od", "vision_lejana_oi"]},
-    {"principle": "Evaluación de visión cromática (Ishihara)", "applied_parameters": ["test_ishihara"]}
-  ],
-  "citations": [
-    {"source_id": "NOM-009-STPS-2011", "title": "Condiciones de seguridad e higiene en los centros de trabajo donde se realicen actividades de soldadura y corte", "section": "Req. visuales", "excerpt": "Referencia a requisitos de agudeza visual en actividades de riesgo", "version_or_date": "2011"},
-    {"source_id": "CONAPO-OV-2018", "title": "Guía de práctica clínica: detección y diagnóstico de errores de refracción", "section": "Clasificación AV", "excerpt": "AV 20/20 normal; < 20/40 sugiere evaluación", "version_or_date": "2018"}
-  ],
-  "limitations": ["La agudeza visual por sí sola no descarta patología ocular estructural; se requiere valoración oftalmológica completa para diagnóstico"],
-  "red_flags": [],
-  "recommendation": null,
-  "non_conclusive_reason": null
-}""",
-
-        "Campimetria": """Eres un sistema de apoyo a la decisión clínica para salud visual ocupacional.
-Recibirás hallazgos de campimetría de confrontación e Ishihara capturados por el operador
-(campos visuales por ojo, exploración oftalmológica, discriminación de color, agudeza heredada).
-Tu tarea es generar un análisis de apoyo, NO un diagnóstico oftalmológico definitivo ni aptitud laboral.
-
-REGLAS ESTRICTAS:
-1. Usa lenguaje prudente: "hallazgos compatibles con", "sugiere evaluación oftalmológica", "requiere correlación clínica".
-2. NO emitas diagnóstico de glaucoma, retinopatía u otra enfermedad, ni aptitud laboral.
-3. Campos visuales: comenta confrontacion_od y confrontacion_oi. "ALTERADOS" es hallazgo relevante.
-4. Ishihara: comenta ishihara_resultado. No asumas daltonismo si el resultado es NORMAL o NO APLICA.
-5. Agudeza visual heredada puede estar PENDIENTE: no la inventes.
-6. Si faltan confrontacion_od y confrontacion_oi, declara AI_NON_CONCLUSIVE.
-7. Responde SOLO en JSON, sin markdown.
-
-Parámetros capturados:
-{extracted_json}
-
-Responde en JSON con esta estructura exacta:
-{
-  "summary": "Texto prudente de máx. 2 oraciones sobre campos visuales e Ishihara",
-  "confidence": 0.68,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["Campos visuales de confrontación dentro de parámetros normales en ambos ojos", "Ishihara sin alteración documentada"],
-  "clinical_basis": [
-    {"principle": "Campimetría de confrontación como tamiz de campo visual", "applied_parameters": ["confrontacion_od", "confrontacion_oi"]},
-    {"principle": "Evaluación de visión cromática (Ishihara)", "applied_parameters": ["ishihara_resultado"]}
-  ],
-  "citations": [
-    {"source_id": "AAO-VF-2022", "title": "Primary Open-Angle Glaucoma Preferred Practice Pattern", "section": "Visual field testing", "excerpt": "Confrontation fields are a screening adjunct, not a substitute for automated perimetry when indicated", "version_or_date": "2022"}
-  ],
-  "limitations": ["La confrontación no sustituye perimetría automatizada; se requiere correlación oftalmológica para diagnóstico"],
-  "red_flags": [],
-  "recommendation": null,
-  "non_conclusive_reason": null
-}""",
-
-        "ExamenMedico": """Eres un sistema de apoyo a la decisión clínica para medicina del trabajo.
-Recibirás hallazgos de una exploración física general capturados directamente por el médico
-(hallazgos por sistema: neurológico, corazón, pulmones, abdomen, columna, extremidades, etc.).
-Tu tarea es generar un análisis de apoyo, NO un diagnóstico médico definitivo.
-
-REGLAS ESTRICTAS:
-1. Usa lenguaje prudente: "hallazgos compatibles con", "sugiere evaluación de", "requiere correlación clínica".
-2. NO emitas diagnóstico de enfermedad, aptitud laboral ni recomendaciones de tratamiento.
-3. Solo comenta los sistemas con hallazgos documentados. Ignora campos vacíos o null.
-4. Red flags: solo para hallazgos que impliquen riesgo inmediato (ej. soplo cardíaco no documentado, signos meníngeos, abdomen en tabla).
-5. Si todos los campos están vacíos o null, declara AI_NON_CONCLUSIVE.
-6. Responde SOLO en JSON, sin markdown.
-
-Parámetros capturados:
-{extracted_json}
-
-Responde en JSON con esta estructura exacta:
-{
-  "summary": "Texto prudente de máx. 2 oraciones sobre los hallazgos principales",
-  "confidence": 0.60,
-  "clinical_state": "AI_PENDING_REVIEW",
-  "justification": ["Exploración cardiovascular sin hallazgos patológicos documentados", "Sistema osteomuscular con hallazgos que sugieren evaluación complementaria"],
-  "clinical_basis": [
-    {"principle": "Exploración física sistemática por aparatos y sistemas", "applied_parameters": ["corazon", "campos_pulmonares", "ms_superiores", "ms_inferiores"]}
-  ],
-  "citations": [
-    {"source_id": "NOM-030-SSA2-2009", "title": "Prevención y control de enfermedades cardiovasculares", "section": "Exploración física", "excerpt": "Hallazgos auscultatorios como criterio de evaluación", "version_or_date": "2009"},
-    {"source_id": "IMSS-575-12", "title": "Guía de práctica clínica: examen médico ocupacional", "section": "Exploración por sistemas", "excerpt": "La exploración por sistemas es parte integral del examen médico de ingreso y periódico", "version_or_date": "2012"}
-  ],
-  "limitations": ["La exploración física aislada no reemplaza estudios de gabinete complementarios; requiere correlación con historia clínica y antecedentes"],
-  "red_flags": [],
-  "recommendation": null,
-  "non_conclusive_reason": null
-}""",
-    }
+    # Sin prompts hardcodeados en código; conservado vacío únicamente como
+    # referencia de interfaz histórica.
+    PREDIAGNOSTIC_PROMPTS: Dict[str, str] = {}
 
     def _check_minimum_params(
         self,
@@ -940,75 +473,85 @@ Responde en JSON con esta estructura exacta:
         study_type: str,
     ) -> Dict[str, Any]:
         """
-        Devuelve el `clinicalCriteria` efectivo a aplicar:
-          - Si `calibration_version` trae `clinicalCriteria` completo
-            (clinical_interpretation) → ese dict.
-          - Si `calibration_version` trae `clinicalCriteria` parcial/incompleto
-            → fallback parcial a constantes de módulo, marcado con `incomplete=True`.
-          - Si `calibration_version` es None → constantes de módulo.
-          - `ai_calibration_shim` (legacy V1/V2 con `diagnosis.prompt`) sólo se
-            usa si V3 está ausente.
-
-        Returns:
-          {
-            "prediagnosisEnabled": bool,
-            "requiredParams": list,
-            "confidenceThreshold": float | None,
-            "prompt": str,
-            "promptVersion": str,
-            "incomplete": bool,         # True si hubo fallback parcial
-            "fieldDefinitionsIncomplete": bool,
-          }
+        Resuelve el `clinicalCriteria` efectivo únicamente desde la calibración
+        persistida en BD (V3 `clinicalCriteria` o V1/V2 `diagnosis`), sin
+        prompts hardcodeados en código.
         """
-        # Prioridad 1: V3 resuelta con clinicalCriteria completo
+        # Prioridad 1: V3 resuelta (o adaptador V1/V2 desde CalibrationResolver)
         if calibration_version is not None and getattr(calibration_version, "clinicalCriteria", None):
             cc = calibration_version.clinicalCriteria
-            incomplete = False
-            field_definitions_incomplete = False
-            # Validar completitud mínima: prediagnosisEnabled + requiredParams + confidenceThreshold
-            if (
+            raw_prompt = cc.get("prompt")
+            prompt_str = raw_prompt.strip() if isinstance(raw_prompt, str) else ""
+            incomplete = (
                 cc.get("prediagnosisEnabled") is None
                 or cc.get("requiredParams") is None
                 or cc.get("confidenceThreshold") is None
-                or not cc.get("prompt")
-            ):
-                incomplete = True
-                field_definitions_incomplete = True
+                or not prompt_str
+            )
             return {
-                "prediagnosisEnabled": bool(cc.get("prediagnosisEnabled", True)),
+                "prediagnosisEnabled": bool(cc.get("prediagnosisEnabled", bool(prompt_str))),
                 "requiredParams": list(cc.get("requiredParams") or []),
                 "confidenceThreshold": cc.get("confidenceThreshold"),
-                "prompt": cc.get("prompt") or "",
+                "prompt": prompt_str,
                 "promptVersion": cc.get("promptVersion") or "calibration_v3",
                 "incomplete": incomplete,
-                "fieldDefinitionsIncomplete": field_definitions_incomplete,
+                "fieldDefinitionsIncomplete": incomplete,
+                "missingCalibration": not bool(prompt_str),
             }
 
-        # Prioridad 2: shim `ai_calibration` legacy (V1/V2 con diagnosis.prompt)
-        if ai_calibration_shim:
-            _diagnosis_cfg = (ai_calibration_shim or {}).get("diagnosis") or {}
-            _legacy_prompt = _diagnosis_cfg.get("prompt")
-            if _legacy_prompt:
-                return {
-                    "prediagnosisEnabled": True,
-                    "requiredParams": [],
-                    "confidenceThreshold": CONFIDENCE_THRESHOLDS.get(study_type),
-                    "prompt": _legacy_prompt,
-                    "promptVersion": _diagnosis_cfg.get("version", "calibration_custom"),
-                    "incomplete": True,  # shim no garantiza requiredParams/threshold trazados
-                    "fieldDefinitionsIncomplete": True,
-                }
+        # Prioridad 2: shim `ai_calibration` (V1/V2 con diagnosis.prompt o V3 slice)
+        if isinstance(ai_calibration_shim, dict) and ai_calibration_shim:
+            shim_cc = ai_calibration_shim.get("clinicalCriteria")
+            if isinstance(shim_cc, dict):
+                raw_prompt = shim_cc.get("prompt")
+                prompt_str = raw_prompt.strip() if isinstance(raw_prompt, str) else ""
+                if prompt_str:
+                    return {
+                        "prediagnosisEnabled": bool(shim_cc.get("prediagnosisEnabled", True)),
+                        "requiredParams": list(shim_cc.get("requiredParams") or []),
+                        "confidenceThreshold": (
+                            shim_cc.get("confidenceThreshold")
+                            if shim_cc.get("confidenceThreshold") is not None
+                            else CONFIDENCE_THRESHOLDS.get(study_type)
+                        ),
+                        "prompt": prompt_str,
+                        "promptVersion": shim_cc.get("promptVersion") or "calibration_v3",
+                        "incomplete": False,
+                        "fieldDefinitionsIncomplete": False,
+                        "missingCalibration": False,
+                    }
 
-        # Prioridad 3: fallback hardcodeado (legacy_hardcoded).
-        default_prompt = self.PREDIAGNOSTIC_PROMPTS.get(study_type, "")
+            _diagnosis_cfg = ai_calibration_shim.get("diagnosis") or {}
+            if isinstance(_diagnosis_cfg, dict):
+                raw_legacy_prompt = _diagnosis_cfg.get("prompt")
+                legacy_prompt = raw_legacy_prompt.strip() if isinstance(raw_legacy_prompt, str) else ""
+                if legacy_prompt:
+                    diag_enabled = _diagnosis_cfg.get("enabled")
+                    return {
+                        "prediagnosisEnabled": True if diag_enabled is None else bool(diag_enabled),
+                        "requiredParams": list(_diagnosis_cfg.get("requiredParams") or []),
+                        "confidenceThreshold": (
+                            _diagnosis_cfg.get("confidenceThreshold")
+                            if _diagnosis_cfg.get("confidenceThreshold") is not None
+                            else CONFIDENCE_THRESHOLDS.get(study_type)
+                        ),
+                        "prompt": legacy_prompt,
+                        "promptVersion": _diagnosis_cfg.get("version") or _diagnosis_cfg.get("promptVersion") or "calibration_custom",
+                        "incomplete": True,
+                        "fieldDefinitionsIncomplete": True,
+                        "missingCalibration": False,
+                    }
+
+        # Prioridad 3: sin prompt clínico en BD (no hay fallback hardcodeado)
         return {
-            "prediagnosisEnabled": study_type in PREDIAGNOSIS_SUPPORTED_TYPES,
+            "prediagnosisEnabled": False,
             "requiredParams": list(REQUIRED_PARAMS.get(study_type, [])),
             "confidenceThreshold": CONFIDENCE_THRESHOLDS.get(study_type),
-            "prompt": default_prompt,
-            "promptVersion": "backend_v2",
-            "incomplete": False,
-            "fieldDefinitionsIncomplete": False,
+            "prompt": "",
+            "promptVersion": None,
+            "incomplete": True,
+            "fieldDefinitionsIncomplete": True,
+            "missingCalibration": True,
         }
 
     # Mantengo bloque stub para que `generate_prediagnosis` lo invoque de forma
@@ -1023,6 +566,7 @@ Responde en JSON con esta estructura exacta:
         ai_calibration: Optional[Dict[str, Any]] = None,
         medical_calibration: Optional[Dict[str, Any]] = None,  # DEPRECADO Fase 4
         clinical_context: Optional[Dict[str, Any]] = None,
+        test_name: Optional[str] = None,
     ) -> AIPrediagnosisResult:
         """
         Genera prediagnóstico IA basado en parámetros ya extraídos.
@@ -1107,85 +651,72 @@ Responde en JSON con esta estructura exacta:
             except Exception:
                 pass
 
-        # ── Determinar calibration_source y legacy_hardcoded_reason ───────
+        # ── Determinar calibration_source y prompt_source (fuente única BD) ───
+        test_label = (test_name or study_type or "desconocida").strip()
+        shim_disabled = isinstance(ai_calibration, dict) and (
+            ai_calibration.get("enabled") is False
+            or (
+                isinstance(ai_calibration.get("diagnosis"), dict)
+                and (ai_calibration.get("diagnosis") or {}).get("enabled") is False
+            )
+        )
+
         if calibration_version is not None and getattr(calibration_version, "clinicalCriteria", None):
-            # Resolver devolvió V3 con clinicalCriteria.
             v3_enabled = bool(getattr(calibration_version, "enabled", True))
             v3_prediag_enabled = bool(effective["prediagnosisEnabled"])
-            if not v3_enabled or not v3_prediag_enabled:
+            has_prompt = bool((effective.get("prompt") or "").strip())
+            if not v3_enabled or (not v3_prediag_enabled and has_prompt):
                 calibration_source = "calibration_disabled"
                 legacy_hardcoded_reason = None
-            else:
+                prompt_source = "clinical_criteria_v3"
+                _clinical_prompt_version = effective.get("promptVersion") or "calibration_v3"
+            elif has_prompt:
                 calibration_source = "published_v3"
                 legacy_hardcoded_reason = None
+                prompt_source = "clinical_criteria_v3"
+                _clinical_prompt_version = effective.get("promptVersion") or "calibration_v3"
+            else:
+                calibration_source = "missing_calibration"
+                legacy_hardcoded_reason = None
+                prompt_source = "missing_calibration"
+                _clinical_prompt_version = None
         elif calibration_version is not None and not bool(getattr(calibration_version, "enabled", True)):
-            # V3 publicada pero disabled explícitamente.
             calibration_source = "calibration_disabled"
             legacy_hardcoded_reason = None
-        else:
-            # Resolver devolvió None (no hay versión publicada) o V3 sin
-            # clinicalCriteria (e.g. document_extraction ⇒ CB-14: no IA clínica).
-            calibration_source = "legacy_hardcoded"
-            if effective.get("fieldDefinitionsIncomplete"):
-                legacy_hardcoded_reason = "field_definitions_incomplete"
-            else:
-                legacy_hardcoded_reason = "no_published_version"
-
-        # ── prompt_source ────────────────────────────────────────────────
-        if calibration_source == "published_v3":
             prompt_source = "clinical_criteria_v3"
-            _clinical_prompt_version = effective["promptVersion"]
-        elif ai_calibration and (ai_calibration.get("diagnosis") or {}).get("prompt"):
+            _clinical_prompt_version = effective.get("promptVersion") or "calibration_v3"
+        elif shim_disabled:
+            calibration_source = "calibration_disabled"
+            legacy_hardcoded_reason = None
             prompt_source = "ai_calibration"
-            _clinical_prompt_version = (ai_calibration.get("diagnosis") or {}).get(
-                "version", "calibration_custom"
+            _clinical_prompt_version = effective.get("promptVersion") or "calibration_custom"
+        elif (effective.get("prompt") or "").strip():
+            calibration_source = "published_v3"
+            legacy_hardcoded_reason = None
+            prompt_source = (
+                "clinical_criteria_v3"
+                if isinstance(ai_calibration, dict) and isinstance(ai_calibration.get("clinicalCriteria"), dict)
+                else "ai_calibration"
             )
+            _clinical_prompt_version = effective.get("promptVersion") or "calibration_custom"
         else:
-            prompt_source = "backend_fallback"
-            _clinical_prompt_version = "backend_v2"
+            calibration_source = "missing_calibration"
+            legacy_hardcoded_reason = None
+            prompt_source = "missing_calibration"
+            _clinical_prompt_version = None
 
-        # ── Gates Fase 4 (AC-4.4): enabled=false / prediagnosisEnabled=false ─
+        # ── Gate: calibración explícitamente deshabilitada en BD ─────────────
         if calibration_source == "calibration_disabled":
-            fallback_effective = self._resolve_clinical_criteria(
-                calibration_version=None,
-                ai_calibration_shim=ai_calibration,
-                study_type=study_type,
+            reason = (
+                "calibration_disabled: aiCalibration publicada con enabled=false"
+                if (calibration_version is not None and not bool(getattr(calibration_version, "enabled", True))) or shim_disabled
+                else "calibration_disabled: clinicalCriteria.prediagnosisEnabled=false"
             )
-            fallback_prompt = (fallback_effective.get("prompt") or "").strip()
-            can_use_runtime_fallback = (
-                study_type in PREDIAGNOSIS_SUPPORTED_TYPES
-                and bool(fallback_effective.get("prediagnosisEnabled"))
-                and bool(fallback_prompt)
-            )
-            if can_use_runtime_fallback:
-                calibration_source = "legacy_hardcoded"
-                legacy_hardcoded_reason = "published_disabled"
-                effective = fallback_effective
-                if ai_calibration and (ai_calibration.get("diagnosis") or {}).get("prompt"):
-                    prompt_source = "ai_calibration"
-                    _clinical_prompt_version = (ai_calibration.get("diagnosis") or {}).get(
-                        "version", "calibration_custom"
-                    )
-                else:
-                    prompt_source = "backend_fallback"
-                    _clinical_prompt_version = fallback_effective.get(
-                        "promptVersion", "backend_v2"
-                    )
-                print(
-                    f"ℹ️ [ARCH-20260820-01 Fase 4] V3 deshabilitada para {study_type}; "
-                    f"fallback runtime → legacy_hardcoded ({legacy_hardcoded_reason})"
-                )
-            else:
-                reason = (
-                    "calibration_disabled: aiCalibration publicada con enabled=false"
-                    if not bool(getattr(calibration_version, "enabled", True))
-                    else "calibration_disabled: clinicalCriteria.prediagnosisEnabled=false"
-                )
-                print(f"ℹ️ [ARCH-20260820-01 Fase 4] {reason} para {study_type}")
-                return _result_with_provider(
+            print(f"ℹ️ [SingleSource] {reason} para {test_label}")
+            return _result_with_provider(
                 summary=(
-                    "Prediagnóstico IA no habilitado para esta prueba: la versión "
-                    "publicada tiene `enabled=false` o `clinicalCriteria.prediagnosisEnabled=false`."
+                    f"Prediagnóstico IA deshabilitado para la prueba '{test_label}' "
+                    "según su calibración en Pruebas (/admin/services)."
                 ),
                 confidence=0.0,
                 clinical_state="AI_NON_CONCLUSIVE",
@@ -1193,7 +724,7 @@ Responde en JSON con esta estructura exacta:
                 clinical_basis=[],
                 citations=[],
                 limitations=[
-                    "Calibración publicada deshabilitada para esta prueba; no se invoca MiniMax.",
+                    "Calibración deshabilitada para esta prueba en BD; no se invoca MiniMax.",
                 ],
                 red_flags=[],
                 non_conclusive_reason="calibration_disabled",
@@ -1205,7 +736,7 @@ Responde en JSON con esta estructura exacta:
                 input_debug=PrediagnosisInputDebug(
                     study_type=study_type,
                     extracted_data=extracted_data,
-                    medical_calibration=None,  # H11: canal muerto, siempre None.
+                    medical_calibration=None,
                     calibration_version=(
                         calibration_version.to_dict()
                         if calibration_version is not None
@@ -1216,19 +747,10 @@ Responde en JSON con esta estructura exacta:
                     clinical_model_used=clinical_model_used,
                     rendered_prompt=None,
                 ),
-                )
+            )
 
-        # CB-14 / AC-4.5: document_extraction ⇒ clinicalCriteria=None ⇒ el
-        # backend NO debe sintetizar prediagnóstico. Esta rama se cubre arriba
-        # cuando `calibration_version.clinicalCriteria is None` y
-        # `ai_calibration` shim está ausente: calibration_source="legacy_hardcoded"
-        # + `fieldDefinitionsIncomplete=False` ⇒ cae al fallback. Si el estudio
-        # NO está en PREDIAGNOSIS_SUPPORTED_TYPES, el bloque inferior retorna
-        # AI_NON_CONCLUSIVE explícito sin llamar a MiniMax.
-
-        # IMPL-20260326-17: Tipos sin soporte de prediagnóstico IA en V1
-        # RiesgoCardiovascular retorna AI_NON_CONCLUSIVE explícito.
-        if study_type not in PREDIAGNOSIS_SUPPORTED_TYPES or not effective["prediagnosisEnabled"]:
+        # Tipos sin soporte de prediagnóstico IA en V1 (ej. RiesgoCardiovascular)
+        if study_type not in PREDIAGNOSIS_SUPPORTED_TYPES and not (effective.get("prompt") or "").strip():
             print(f"ℹ️ Tipo '{study_type}' sin prediagnóstico IA habilitado — revisión médica manual requerida")
             return _result_with_provider(
                 summary=(
@@ -1243,12 +765,37 @@ Responde en JSON con esta estructura exacta:
                 citations=[],
                 limitations=[f"Prediagnóstico IA no soportado para '{study_type}'."],
                 red_flags=[],
-                non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido.",
+                non_conclusive_reason=f"Tipo '{study_type}' sin prediagnóstico IA.",
                 calibration_source=calibration_source,
                 legacy_hardcoded_reason=legacy_hardcoded_reason,
                 clinical_model_used=clinical_model_used,
                 prompt_source=prompt_source,
                 prompt_version=_clinical_prompt_version,
+            )
+
+        # Gate: sin calibración/prompt de prediagnóstico en BD (sin fallback)
+        prompt_template = (effective.get("prompt") or "").strip()
+        if calibration_source == "missing_calibration" or not prompt_template:
+            missing_msg = (
+                f"La prueba '{test_label}' no tiene calibración IA de prediagnóstico "
+                "configurada en base de datos. Configúrala en Pruebas (/admin/services)."
+            )
+            print(f"⚠️ [SingleSource] {missing_msg}")
+            return _result_with_provider(
+                summary=missing_msg,
+                confidence=0.0,
+                clinical_state="AI_NON_CONCLUSIVE",
+                justification=[],
+                clinical_basis=[],
+                citations=[],
+                limitations=[missing_msg],
+                red_flags=[],
+                non_conclusive_reason=missing_msg,
+                calibration_source="missing_calibration",
+                legacy_hardcoded_reason=None,
+                clinical_model_used=clinical_model_used,
+                prompt_source="missing_calibration",
+                prompt_version=None,
             )
 
         # Verificar parámetros mínimos
@@ -1276,38 +823,18 @@ Responde en JSON con esta estructura exacta:
                 prompt_version=_clinical_prompt_version,
             )
 
-        prompt_template = effective["prompt"]
-
-        if not prompt_template:
-            return _result_with_provider(
-                summary="Tipo de estudio sin soporte de prediagnóstico en V1.",
-                confidence=0.0,
-                clinical_state="AI_NON_CONCLUSIVE",
-                limitations=["Tipo de estudio no soportado por prediagnóstico V1."],
-                non_conclusive_reason=f"Tipo '{study_type}' sin prompt de prediagnóstico definido.",
-                calibration_source=calibration_source,
-                legacy_hardcoded_reason=legacy_hardcoded_reason,
-                clinical_model_used=clinical_model_used,
-                prompt_source=prompt_source,
-                prompt_version=_clinical_prompt_version,
-            )
-
-        # ARCH-20260518-03 + Fase 4: si el template contiene "{calibration_context}"
-        # (legacy), se sustituye por cadena vacía (Fase 4: contexto ya vive en el
-        # prompt clínico de clinicalCriteria o en el prompt backend hardcodeado).
-        prompt = prompt_template.replace(
-            "{calibration_context}",
-            "",
-        ).replace(
-            "{extracted_json}",
-            json.dumps(
-                enrich_audiometry_extracted_data(extracted_data)
-                if study_type == "Audiometria"
-                else extracted_data,
-                ensure_ascii=False,
-                indent=2,
-            ),
+        serialized_extracted = json.dumps(
+            enrich_audiometry_extracted_data(extracted_data)
+            if study_type == "Audiometria"
+            else extracted_data,
+            ensure_ascii=False,
+            indent=2,
         )
+        prompt = prompt_template.replace("{calibration_context}", "")
+        if "{extracted_json}" in prompt:
+            prompt = prompt.replace("{extracted_json}", serialized_extracted)
+        else:
+            prompt = f"{prompt}\n\nParámetros extraídos:\n{serialized_extracted}"
 
         # IMPL-FEATURE-20260824-02 (gap fix): inyectar el cuestionario
         # clínico estructurado (`clinical_context`) como contexto adicional
@@ -1435,16 +962,9 @@ Responde en JSON con esta estructura exacta:
                 result.prompt_source = prompt_source
             if "prompt_version" in result_fields:
                 result.prompt_version = _clinical_prompt_version
-            # IMPL-20260518-03 + Fase 4: trazabilidad explícita de fuente del prompt.
-            if prompt_source == "backend_fallback":
+            if prompt_source == "clinical_criteria_v3":
                 result.limitations.append(
-                    "Prompt clínico resuelto desde fallback general backend "
-                    "(aiCalibration.clinicalCriteria.prompt no configurado)."
-                )
-            elif prompt_source == "clinical_criteria_v3":
-                # AC-4.1: trazabilidad explícita de la fuente.
-                result.limitations.append(
-                    "Prompt clínico resuelto desde aiCalibration.clinicalCriteria.prompt publicada."
+                    "Prompt clínico resuelto desde calibración publicada en BD."
                 )
             # IMPL-FEATURE-20260824-02 (gap fix): trazabilidad explícita de
             # la presencia del cuestionario clínico estructurado cuando fue
@@ -1557,8 +1077,7 @@ Responde en JSON con esta estructura exacta:
                         "Usa lenguaje prudente como 'compatible con', 'sugiere' y 'requiere correlación clínica'. "
                         "Si faltan parámetros mínimos, la calidad documental es insuficiente o la evidencia es débil, "
                         "debes devolver un resultado no concluyente con confidence baja y non_conclusive_reason explícita. "
-                        "Si existe un bloque de calibración médica, úsalo como criterio prioritario sobre conocimiento general; "
-                        "si no existe, opera con conocimiento clínico general conservador y trazable. "
+                        "Sigue estrictamente las instrucciones y criterios configurados en el prompt de la prueba. "
                         "No inventes hallazgos, citas ni parámetros no sustentados por la información recibida. "
                         "Responde SIEMPRE en JSON válido, sin markdown ni bloques de código."
                     ),

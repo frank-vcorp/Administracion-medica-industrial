@@ -358,6 +358,51 @@ export async function getMedicalTests() {
   }
 }
 
+export async function getMedicalTestsWithCalibration() {
+  try {
+    return await prisma.medicalTest.findMany({
+      where: {
+        code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        options: true,
+        categoryId: true,
+        theoreticalDurationMinutes: true,
+        category: { select: { name: true } },
+        _count: { select: { profiles: true } },
+      },
+      orderBy: [
+        { category: { name: 'asc' } },
+        { name: 'asc' },
+      ],
+    })
+  } catch (error) {
+    if (!isPrismaMissingColumnError(error)) throw error
+    const rows = await prisma.medicalTest.findMany({
+      where: {
+        code: { notIn: [...CATALOG_LEGACY_HIDDEN] },
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        options: true,
+        categoryId: true,
+        category: { select: { name: true } },
+        _count: { select: { profiles: true } },
+      },
+      orderBy: [
+        { category: { name: 'asc' } },
+        { name: 'asc' },
+      ],
+    })
+    return rows.map((row) => ({ ...row, theoreticalDurationMinutes: null }))
+  }
+}
+
 export async function getTestCategories() {
   return await prisma.testCategory.findMany({
     select: {

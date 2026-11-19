@@ -95,11 +95,37 @@ def _attr(obj: Any, key: str, default: Any = None) -> Any:
     return getattr(obj, key, default)
 
 
-def _resolve_test_ai_calibration(test_row: Any) -> Optional[Dict[str, Any]]:
-    """Extrae el bloque aiCalibration de MedicalTest.options."""
+def _resolve_test_ai_calibration(
+    test_row: Any,
+) -> tuple[Optional[Dict[str, Any]], Any]:
+    """
+    Resuelve la calibración efectiva para pruebas en /admin/services/[id]/calibration.
+    Para V3 prefiere `draft` → `tested` → `published`; para V1/V2 usa el adaptador
+    del `CalibrationResolver`.
+    """
+    resolver = get_default_resolver()
     options = _sanitize_options(_attr(test_row, "options"))
-    ai_calibration = options.get("aiCalibration")
-    return ai_calibration if isinstance(ai_calibration, dict) else None
+    raw_cal = options.get("aiCalibration")
+    resolved = None
+    if isinstance(raw_cal, dict) and raw_cal.get("schemaVersion") == "V3":
+        for st in ("draft", "tested", "published"):
+            resolved = resolver.resolve(test_row, desired_state=st)  # type: ignore[arg-type]
+            if resolved is not None:
+                break
+    else:
+        resolved = resolver.resolve(test_row, desired_state="published")
+
+    if resolved is not None:
+        return (
+            {
+                "enabled": getattr(resolved, "enabled", True),
+                "canonicalStudyType": getattr(resolved, "canonicalStudyType", None),
+                "extraction": getattr(resolved, "extraction", None),
+                "clinicalCriteria": getattr(resolved, "clinicalCriteria", None),
+            },
+            resolved,
+        )
+    return (raw_cal if isinstance(raw_cal, dict) else None), None
 
 
 def _build_services() -> tuple[Optional[ExtractorService], Optional[PrediagnosticService]]:
@@ -306,7 +332,8 @@ async def upload_calibration_test(
     if test_row is None:
         raise HTTPException(status_code=404, detail=f"MedicalTest {test_id} no existe")
 
-    ai_calibration = _resolve_test_ai_calibration(test_row)
+    ai_calibration, calibration_version = _resolve_test_ai_calibration(test_row)
+    test_name_label = _attr(test_row, "name") or test_type
     canonical_study_type = (
         (ai_calibration or {}).get("canonicalStudyType") or test_type
     )
@@ -397,7 +424,9 @@ async def upload_calibration_test(
             prediagnosis_obj = prediagnostic_svc.generate_prediagnosis(
                 study_type=canonical_study_type,
                 extracted_data=extraction_dict,
+                calibration_version=calibration_version,
                 ai_calibration=ai_calibration,
+                test_name=test_name_label,
             )
             predx_seconds = round(time.time() - predx_start, 2)
             
@@ -520,6 +549,7 @@ async def upload_calibration_test(
                 ai_calibration=ai_calibration,
                 extraction_provider_override=extraction_provider_override,
                 extraction_model_override=extraction_model_override,
+                test_name=test_name_label,
             )
         except ExtractionProviderUnknownError as prov_err:
             raise HTTPException(
@@ -586,7 +616,9 @@ async def upload_calibration_test(
         prediagnosis_obj = prediagnostic_svc.generate_prediagnosis(
             study_type=canonical_study_type,
             extracted_data=extraction_dict,
+            calibration_version=calibration_version,
             ai_calibration=ai_calibration,
+            test_name=test_name_label,
         )
         predx_seconds = round(time.time() - predx_start, 2)
 

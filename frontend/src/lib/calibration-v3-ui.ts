@@ -162,7 +162,7 @@ export function describeCalibrationV3State(
  * No muta `draft`; devuelve un objeto nuevo.
  */
 export function coerceV3DraftToEditorInitial(
-  draft: AICalibrationDraftV3,
+  draft: AICalibrationDraftV3 | AICalibrationVersionV3,
 ): Record<string, unknown> {
   const extraction = draft.extraction ?? {
     enabled: false,
@@ -177,13 +177,16 @@ export function coerceV3DraftToEditorInitial(
       prompt: extraction.prompt ?? "",
       version: extraction.version ?? "",
       schemaVersion: extraction.schemaVersion ?? "",
-      provider: extraction.provider ?? "gemini",
+      provider: extraction.provider ?? "m3",
       model: extraction.model ?? "",
     },
     diagnosis: {
       enabled: clinical?.prediagnosisEnabled ?? false,
       prompt: clinical?.prompt ?? "",
       promptVersion: clinical?.promptVersion ?? "",
+      requiredParams: clinical?.requiredParams ?? [],
+      confidenceThreshold: clinical?.confidenceThreshold ?? null,
+      supportingReferences: clinical?.supportingReferences ?? [],
     },
     fieldDefinitions: draft.fieldDefinitions ?? [],
     presentation: draft.presentation ?? { enabled: false, schema: null },
@@ -331,7 +334,7 @@ export function mapPublishErrorCode(code: string): PublishErrorMap {
     case "PUBLISH_MANUAL_SERVICE_NO_CALIBRATION":
       return { gate: "G0b", title: "manual_service no publica", hint: "Los servicios manuales no admiten calibración IA." }
     case "PUBLISH_INVALID_CANONICAL_TYPE":
-      return { gate: "G1", title: "canonicalStudyType inválido", hint: "Usa uno de los tipos canónicos definidos (Audiometria, Espirometria, ECG, ExamenMedico)." }
+      return { gate: "G1", title: "canonicalStudyType inválido", hint: "Usa uno de los tipos canónicos válidos (Rayos_X, Audiometria, Espirometria, Electrocardiograma, ECG, Laboratorio, Campimetria, Somatometria, AgudezaVisual, ExamenMedico, Otro)." }
     case "PUBLISH_EXTRACTION_PROMPT_EMPTY":
       return { gate: "G2", title: "Prompt de extracción vacío", hint: "Completa el bloque específico de extracción antes de publicar." }
     case "PUBLISH_CLINICAL_PROMPT_EMPTY":

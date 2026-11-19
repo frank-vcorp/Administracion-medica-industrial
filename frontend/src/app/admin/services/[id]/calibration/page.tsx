@@ -34,6 +34,7 @@ import CalibrationWorkspaceClient from "@/components/calibration/CalibrationWork
 import { deriveSchemaFromSnapshots } from "@/lib/calibration-schema"
 import { isAdminLike, isSuperAdmin } from "@/lib/auth/roles"
 import { isOperationModeValue } from "@/lib/calibration-v3-ui"
+import { getMedicalTestCalibrationStatus } from "@/lib/clinical/calibration-status"
 import type {
   AICalibrationV2,
   AICalibrationV3,
@@ -134,6 +135,7 @@ export default async function CalibrationPage({
   })()
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+  const calibrationStatus = getMedicalTestCalibrationStatus(test.options)
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -142,7 +144,7 @@ export default async function CalibrationPage({
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-xs text-slate-400">
           <Link href="/admin/services" className="hover:text-slate-700 transition-colors">
-            Catálogo de Pruebas
+            Catálogo de pruebas
           </Link>
           <span>/</span>
           <span className="text-slate-600 font-medium">{test.name}</span>
@@ -157,6 +159,17 @@ export default async function CalibrationPage({
                 {test.code}
               </span>
               <span className="text-xs text-slate-400">{test.category.name}</span>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                  calibrationStatus.needsCalibration
+                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                    : calibrationStatus.kind === "calibrated"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-slate-100 text-slate-600 border-slate-200"
+                }`}
+              >
+                {calibrationStatus.label}
+              </span>
               {/* operationMode badge (siempre; null = "sin clasificar") */}
               <span
                 className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${

@@ -231,51 +231,73 @@ def get_family_template_registry() -> FamilyTemplateRegistry:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _synthesize_clinical_criteria_defaults(
+def _adapt_v1v2_clinical_criteria(
+    raw_ai_calibration: Dict[str, Any],
     canonical_study_type: Optional[str],
 ) -> Optional[Dict[str, Any]]:
     """
-    Construye `clinicalCriteria` desde los defaults hardcodeados actuales
-    de `prediagnostic.py` (preserva comportamiento durante la migración
-    V1/V2 → V3).
-
-    Si `canonical_study_type` no está en `PREDIAGNOSIS_SUPPORTED_TYPES` se
-    asume `prediagnosisEnabled=false` (no hay prompt default para ese
-    tipo). Si no hay `canonical_study_type`, se construye `clinicalCriteria`
-    "vacío" con `prediagnosisEnabled=false` — el resolver nunca asume
-    Audiometría por defecto.
+    Construye `clinicalCriteria` únicamente desde los datos persistidos en
+    `MedicalTest.options.aiCalibration` (nunca desde prompts hardcodeados).
     """
-    if not canonical_study_type:
+    raw_cc = raw_ai_calibration.get("clinicalCriteria")
+    if isinstance(raw_cc, dict):
+        prompt = raw_cc.get("prompt")
+        prompt_clean = prompt.strip() if isinstance(prompt, str) and prompt.strip() else None
+        req = raw_cc.get("requiredParams")
+        threshold = raw_cc.get("confidenceThreshold")
         return {
-            "prediagnosisEnabled": False,
-            "requiredParams": [],
-            "confidenceThreshold": None,
-            "prompt": None,
-            "promptHash": None,
-            "promptVersion": None,
-            "supportingReferences": [],
+            "prediagnosisEnabled": bool(raw_cc.get("prediagnosisEnabled", bool(prompt_clean))),
+            "requiredParams": (
+                list(req)
+                if isinstance(req, list) and len(req) > 0
+                else list(REQUIRED_PARAMS.get(canonical_study_type or "", []))
+            ),
+            "confidenceThreshold": (
+                threshold
+                if threshold is not None
+                else CONFIDENCE_THRESHOLDS.get(canonical_study_type or "")
+            ),
+            "prompt": prompt_clean,
+            "promptHash": raw_cc.get("promptHash"),
+            "promptVersion": raw_cc.get("promptVersion") or ("calibration_custom" if prompt_clean else None),
+            "supportingReferences": list(raw_cc.get("supportingReferences") or []),
         }
 
-    prediagnosis_enabled = canonical_study_type in PREDIAGNOSIS_SUPPORTED_TYPES
-    default_prompt = (
-        # Importación local para evitar ciclos y reflejar snapshots al
-        # import (consistente con `prediagnostic.py`).
-        __import__(
-            "app.services.ai.prediagnostic", fromlist=["PrediagnosticService"]
-        ).PrediagnosticService.PREDIAGNOSTIC_PROMPTS.get(
-            canonical_study_type, ""
-        )
-        if prediagnosis_enabled
-        else ""
-    )
+    diag = raw_ai_calibration.get("diagnosis")
+    if isinstance(diag, dict):
+        prompt = diag.get("prompt")
+        prompt_clean = prompt.strip() if isinstance(prompt, str) and prompt.strip() else None
+        diag_enabled = diag.get("enabled")
+        prediag_enabled = (
+            bool(diag_enabled) if diag_enabled is not None else bool(prompt_clean)
+        ) and bool(prompt_clean)
+        req = diag.get("requiredParams")
+        threshold = diag.get("confidenceThreshold")
+        return {
+            "prediagnosisEnabled": prediag_enabled,
+            "requiredParams": (
+                list(req)
+                if isinstance(req, list) and len(req) > 0
+                else list(REQUIRED_PARAMS.get(canonical_study_type or "", []))
+            ),
+            "confidenceThreshold": (
+                threshold
+                if threshold is not None
+                else CONFIDENCE_THRESHOLDS.get(canonical_study_type or "")
+            ),
+            "prompt": prompt_clean,
+            "promptHash": None,
+            "promptVersion": diag.get("version") or diag.get("promptVersion") or ("calibration_custom" if prompt_clean else None),
+            "supportingReferences": list(diag.get("supportingReferences") or []),
+        }
 
     return {
-        "prediagnosisEnabled": prediagnosis_enabled,
-        "requiredParams": list(REQUIRED_PARAMS.get(canonical_study_type, [])),
-        "confidenceThreshold": CONFIDENCE_THRESHOLDS.get(canonical_study_type),
-        "prompt": default_prompt or None,
+        "prediagnosisEnabled": False,
+        "requiredParams": list(REQUIRED_PARAMS.get(canonical_study_type or "", [])),
+        "confidenceThreshold": CONFIDENCE_THRESHOLDS.get(canonical_study_type or ""),
+        "prompt": None,
         "promptHash": None,
-        "promptVersion": "backend_v1_default",
+        "promptVersion": None,
         "supportingReferences": [],
     }
 
@@ -291,8 +313,9 @@ def _infer_operation_mode_from_v1v2(
 
     Cuatro ramas (NUNCA Audiometría por defecto — DEC-20260820-02):
 
-      1. Clínica: `aiCalibration` con `canonicalStudyType` cubierto por
-         `PREDIAGNOSIS_SUPPORTED_TYPES`  →  `clinical_interpretation`
+      1. Clínica: `aiCalibration` con `diagnosis`/`clinicalCriteria` o
+         `canonicalStudyType` cubierto por `PREDIAGNOSIS_SUPPORTED_TYPES`
+         → `clinical_interpretation`
       2. Extracción: `aiCalibration` con extracción pero sin tipo clínico
          cubierto  →  `document_extraction`
       3. Manual seguro: sin `aiCalibration` y categoría/nombre sugiere
@@ -308,7 +331,11 @@ def _infer_operation_mode_from_v1v2(
     # Rama 1: clínica
     if raw_ai_calibration:
         canonical = raw_ai_calibration.get("canonicalStudyType")
-        if (
+        has_clinical_block = (
+            isinstance(raw_ai_calibration.get("diagnosis"), dict)
+            or isinstance(raw_ai_calibration.get("clinicalCriteria"), dict)
+        )
+        if has_clinical_block or (
             canonical
             and canonical in PREDIAGNOSIS_SUPPORTED_TYPES
             and canonical in CONFIDENCE_THRESHOLDS
@@ -346,16 +373,10 @@ def _adapt_v1v2_to_v3(
     test_category: Optional[str],
 ) -> AICalibrationVersionResolved:
     """
-    Normaliza una calibración V1/V2 a V3 sintética (status=published),
-    preservando comportamiento actual (defaults = `prediagnostic.py`).
+    Normaliza una calibración V1/V2 persistida en BD a V3 (status=published),
+    leyendo únicamente la configuración almacenada en BD (sin prompts hardcodeados).
 
     NO escribe en DB. Sólo lectura.
-
-    Ramas:
-      - `clinical_interpretation` (V1/V2 con tipo clínico)  →  clinicalCriteria
-        sintetizado desde defaults de `prediagnostic.py`.
-      - `document_extraction` (V1/V2 con extracción sin tipo clínico)  →
-        clinicalCriteria=None.
     """
     operation_mode, requires_review = _infer_operation_mode_from_v1v2(
         raw_ai_calibration,
@@ -370,8 +391,9 @@ def _adapt_v1v2_to_v3(
     presentation = raw_ai_calibration.get("presentation") or {}
 
     if operation_mode == "clinical_interpretation":
-        clinical_criteria = _synthesize_clinical_criteria_defaults(
-            canonical_study_type
+        clinical_criteria = _adapt_v1v2_clinical_criteria(
+            raw_ai_calibration,
+            canonical_study_type,
         )
     else:  # document_extraction
         clinical_criteria = None

@@ -385,28 +385,6 @@ type EventTestEligibilityRow = {
   } | null
 }
 
-/** V3 published con enabled=false: seguir pipeline vía heurística legacy trazada (AC-3.3). */
-function applyLegacyHeuristicWhenV3Disabled(
-  eventTest: EventTestEligibilityRow,
-  formData: FormData,
-): {
-  isAIEligible: boolean
-  canonicalTypeForXml: string | null
-  calibrationSource: 'legacy_heuristic'
-  publishedVersionId: null
-} {
-  const canonicalType = getCanonicalAIStudyType(eventTest)
-  if (canonicalType) {
-    formData.set('study_type', canonicalType)
-  }
-  return {
-    isAIEligible: true,
-    canonicalTypeForXml: canonicalType,
-    calibrationSource: 'legacy_heuristic',
-    publishedVersionId: null,
-  }
-}
-
 /** Parser XML directo (FIX-20260729-03-G-XML) no usa DR7; permitir aunque V3 tenga enabled=false. */
 async function allowAudiometryXmlWhenCalibrationDisabled(
   eventTest: EventTestEligibilityRow,
@@ -966,27 +944,18 @@ export async function uploadEventTestFile(formData: FormData) {
             file,
           )
           if (!xmlAudiometryBypass) {
-            if (isAIEligibleEventTest(eventTest)) {
-              const legacy = applyLegacyHeuristicWhenV3Disabled(eventTest, formData)
-              isAIEligible = legacy.isAIEligible
-              canonicalTypeForXml = legacy.canonicalTypeForXml
-              calibrationSource = legacy.calibrationSource
-              publishedVersionId = legacy.publishedVersionId
-            } else {
-              return await persistCalibrationDisabledSnapshot({
-                eventTestId,
-                eventId,
-                triggeredByUserId,
-                versionId: published.versionId,
-                versionNumber: published.versionNumber,
-              })
-            }
-          } else {
+            return await persistCalibrationDisabledSnapshot({
+              eventTestId,
+              eventId,
+              triggeredByUserId,
+              versionId: published.versionId,
+              versionNumber: published.versionNumber,
+            })
+          }
           isAIEligible = true
           canonicalTypeForXml = 'Audiometria'
           calibrationSource = 'published_v3'
           formData.set('study_type', 'Audiometria')
-          }
         } else if (published.canonicalStudyType) {
         // enabled=true: enrutar por canonicalStudyType published si existe.
           isAIEligible = true
@@ -1377,17 +1346,14 @@ export async function regenerateStudyAI(
           )),
       )
       if (!xmlAudiometryBypass) {
-        if (!eventTest || !isAIEligibleEventTest(eventTest)) {
-          const disabled = await persistCalibrationDisabledSnapshot({
-            eventTestId,
-            eventId,
-            triggeredByUserId,
-            versionId: published.versionId,
-            versionNumber: published.versionNumber,
-          })
-          return { success: disabled.success, error: undefined }
-        }
-        // IA elegible: regenerar con heurística legacy (mismo criterio que upload).
+        const disabled = await persistCalibrationDisabledSnapshot({
+          eventTestId,
+          eventId,
+          triggeredByUserId,
+          versionId: published.versionId,
+          versionNumber: published.versionNumber,
+        })
+        return { success: disabled.success, error: undefined }
       }
     }
 
