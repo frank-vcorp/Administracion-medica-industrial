@@ -32,6 +32,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import { isSuperAdmin, isAdminLike } from '@/lib/auth/roles'
 import prisma from '@/lib/prisma'
+import { normalizeM3Model } from '@/types/ai-keys'
 import {
   PUBLISH_REQUIRED_ROLE,
   MAX_SUPERSEDED_VERSIONS,
@@ -282,9 +283,25 @@ export async function saveAICalibrationV3(
     root.legacyV1V2Snapshot = legacyV1V2Snapshot
   }
 
+  // Normalizar modelo heredado MiniMax-M3 / Minimax-M3 → MiniMax-M3.1-Flash al guardar.
+  const normalizedExtraction = draft.extraction
+    ? {
+        ...draft.extraction,
+        model:
+          draft.extraction.provider === 'gemini'
+            ? draft.extraction.model
+            : draft.extraction.provider === 'm3' ||
+                (typeof draft.extraction.model === 'string' &&
+                  draft.extraction.model.trim().length > 0)
+              ? normalizeM3Model(draft.extraction.model)
+              : draft.extraction.model,
+      }
+    : draft.extraction
+
   // Para document_extraction, forzar clinicalCriteria=null (CB-14).
   const effectiveDraft: AICalibrationDraftV3 = {
     ...draft,
+    extraction: normalizedExtraction,
     clinicalCriteria: operationMode === 'document_extraction' ? null : draft.clinicalCriteria,
     updatedAt: new Date().toISOString(),
   }

@@ -18,6 +18,8 @@ import {
   AI_PROVIDER_LABELS,
   EXTRACTION_PROVIDER_LABELS,
   EXTRACTION_PROVIDERS,
+  M3_ACTIVE_MODEL,
+  normalizeM3Model,
   type AIProvider,
   type AIKeyPublic,
   type ExtractionProvider,
@@ -46,12 +48,11 @@ const PROVIDER_MODELS: Record<AIProvider, { id: string; label: string; descripti
     { id: 'gemini-flash-lite-latest', label: 'Gemini Flash-Lite (latest)', description: 'Más barato y rápido' },
   ],
     m3: [
-      { id: 'MiniMax-M3.1-Flash', label: 'MiniMax-M3.1-Flash', description: 'Modelo activo para extracción y prediagnóstico (rápido, multimodal, 1M context).' },
-      { id: 'MiniMax-M3', label: 'MiniMax-M3', description: 'Modelo anterior (1M context).' },
-    { id: 'MiniMax-M2.7', label: 'MiniMax-M2.7', description: 'Recursive self-improvement' },
-    { id: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', description: 'Más rápido (~100 tps)' },
-    { id: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
-    { id: 'MiniMax-M2.5-highspeed', label: 'MiniMax-M2.5 Highspeed' },
+    {
+      id: M3_ACTIVE_MODEL,
+      label: M3_ACTIVE_MODEL,
+      description: 'Modelo activo para extracción y prediagnóstico (rápido, multimodal, 1M context).',
+    },
   ],
   dr7: [
     { id: 'medgemma-27b-it', label: 'MedGemma 27B IT', description: 'Modelo clínico grande (recomendado)' },
@@ -336,7 +337,11 @@ function ProviderCard(props: {
             </dd>
 
             <dt className="text-gray-500">Modelo default</dt>
-            <dd className="font-mono text-xs">{info.defaultModel ?? '—'}</dd>
+            <dd className="font-mono text-xs">
+              {info.provider === 'm3'
+                ? normalizeM3Model(info.defaultModel)
+                : (info.defaultModel ?? '—')}
+            </dd>
 
             <dt className="text-gray-500">Última actualización</dt>
             <dd className="text-xs">
@@ -486,7 +491,7 @@ function ExtractionDefaultSection(props: {
         id="extraction-default-description"
         className="text-xs text-gray-500 mb-3"
       >
-        La extracción predeterminada es MiniMax M3 o Gemini. El prediagnóstico clínico usa la misma clave MiniMax M3.
+        La extracción predeterminada es MiniMax-M3.1-Flash o Gemini. El prediagnóstico clínico usa la misma clave MiniMax-M3.1-Flash.
       </p>
 
       {error && (
@@ -591,7 +596,11 @@ function EditModal(props: {
   const [apiKey, setApiKey] = useState('')
   const [apiKeyConfirm, setApiKeyConfirm] = useState('')
   const [baseUrl, setBaseUrl] = useState<string>(current?.baseUrl ?? '')
-  const [defaultModel, setDefaultModel] = useState<string>(current?.defaultModel ?? '')
+  const [defaultModel, setDefaultModel] = useState<string>(
+    provider === 'm3'
+      ? normalizeM3Model(current?.defaultModel)
+      : (current?.defaultModel ?? ''),
+  )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -608,11 +617,15 @@ function EditModal(props: {
   const submit = async () => {
     setError(null)
     setSubmitting(true)
+    const normalizedDefaultModel =
+      provider === 'm3'
+        ? normalizeM3Model(defaultModel)
+        : (defaultModel.trim() || null)
     const result = await updateAIProviderKey({
       provider,
       apiKey,
       baseUrl: baseUrl.trim() || null,
-      defaultModel: defaultModel.trim() || null,
+      defaultModel: normalizedDefaultModel,
       expectedUpdatedAt: current?.updatedAt ?? null,
     })
     setSubmitting(false)

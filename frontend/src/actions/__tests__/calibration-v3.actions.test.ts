@@ -234,6 +234,17 @@ describe('saveAICalibrationV3', () => {
     expect(mockMedicalTestUpdate).toHaveBeenCalled()
   })
 
+  it('12c. saveAICalibrationV3 promueve MiniMax-M3 / Minimax-M3 de m3 a MiniMax-M3.1-Flash', async () => {
+    mockMedicalTestFindUnique.mockResolvedValue(makeTestRow('clinical_interpretation'))
+    const draft = makeDraft({
+      extraction: { enabled: true, prompt: 'prompt válido', provider: 'm3', model: 'Minimax-M3' },
+    })
+    const res = await saveAICalibrationV3('test-1', draft)
+    expect(res.ok).toBe(true)
+    const updated = readUpdatedAiCalibration()
+    expect(updated!.draft!.extraction.model).toBe('MiniMax-M3.1-Flash')
+  })
+
   it('12c. rol RECEPTIONIST → FORBIDDEN (no admin-like)', async () => {
     mockGetServerSession.mockResolvedValue(makeSession('RECEPTIONIST'))
     const res = await saveAICalibrationV3('test-1', makeDraft())

@@ -622,9 +622,9 @@ class M3VisionBase:
     segundo proveedor de extracción. La capa clínica sigue con MedGemma/DR7.
 
     Variables de entorno consumidas (NO mezclar con la capa clínica):
-      M3_API_KEY        — token del plan Pro para MiniMax M3.
+      M3_API_KEY        — token del plan Pro para MiniMax-M3.1-Flash.
       M3_BASE_URL       — endpoint OpenAI-compatible (default: https://api.minimax.io/v1).
-      M3_DEFAULT_MODEL  — modelo default (default: MiniMax-M3).
+      M3_DEFAULT_MODEL  — modelo default (default: MiniMax-M3.1-Flash).
     """
 
     @staticmethod
@@ -668,7 +668,7 @@ class M3VisionBase:
         )
         from app.services.ai.m3_model import resolve_m3_model
 
-        self.model = model or resolve_m3_model(_read_env_var("M3_DEFAULT_MODEL"))
+        self.model = resolve_m3_model(model or _read_env_var("M3_DEFAULT_MODEL"))
         self.key_source: str = "env"
         self.key_resolution_warning: Optional[str] = None
 

@@ -463,6 +463,45 @@ def test_delete_invalidate_cache(client, prisma_mock, monkeypatch):
     assert post.warning == "row_missing"
 
 
+def test_put_and_get_m3_normalizes_legacy_minimax_m3_to_flash(monkeypatch):
+    """PUT/GET de m3 promueve MiniMax-M3 / Minimax-M3 / None hacia MiniMax-M3.1-Flash."""
+    import prisma._fields as prisma_fields
+
+    if not hasattr(prisma_fields.Base64, "fromb64"):
+        class _CompatBase64:
+            def __init__(self, raw: bytes):
+                self._raw = raw
+
+            @classmethod
+            def fromb64(cls, val: str) -> "_CompatBase64":
+                return cls(base64.b64decode(val))
+
+            def decode(self) -> bytes:
+                return self._raw
+
+        monkeypatch.setattr(prisma_fields, "Base64", _CompatBase64)
+
+    monkeypatch.setenv("ENCRYPTION_KEY", base64.b64encode(b"\x42" * 32).decode())
+    get_key_resolver().invalidate_all()
+    local_prisma = _make_prisma_mock()
+    prisma_client.set_prisma_client(local_prisma)
+    local_client = TestClient(_build_app())
+
+    r = local_client.put(
+        "/api/v2/admin/ai-keys/m3",
+        headers=_headers("SUPERADMIN"),
+        json={"apiKey": "sk-m3-legacy-model-1234", "defaultModel": "Minimax-M3"},
+    )
+    assert r.status_code == 200
+    assert r.json()["defaultModel"] == "MiniMax-M3.1-Flash"
+    assert local_prisma._store["m3"]["defaultModel"] == "MiniMax-M3.1-Flash"
+
+    r_get = local_client.get("/api/v2/admin/ai-keys", headers=_headers("ADMIN"))
+    assert r_get.status_code == 200
+    m3_item = next(p for p in r_get.json()["providers"] if p["provider"] == "m3")
+    assert m3_item["defaultModel"] == "MiniMax-M3.1-Flash"
+
+
 # ---------------------------------------------------------------------------
 # FIX-20260810-02 — Contrato de serialización Bytes <-> base64 str
 # ---------------------------------------------------------------------------

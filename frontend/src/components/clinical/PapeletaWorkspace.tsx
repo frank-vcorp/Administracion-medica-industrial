@@ -256,7 +256,7 @@ const AI_PIPELINE_STAGE_LABELS: Record<UploadStageId, (provider?: string) => str
   uploading:     () => 'Subiendo archivo',
   classifying:   () => 'Clasificando estudio',
   extracting:    (provider) => extractingStageLabel(provider),
-  prediagnosing: () => 'Generando prediagnóstico con MiniMax',
+  prediagnosing: () => 'Generando prediagnóstico con MiniMax-M3.1-Flash',
   saving:        () => 'Guardando resultado',
 }
 

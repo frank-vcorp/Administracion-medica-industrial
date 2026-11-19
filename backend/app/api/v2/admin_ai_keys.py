@@ -29,6 +29,7 @@ from app.services.ai.keys import (
     get_key_resolver,
     is_ai_keys_from_db_enabled,
 )
+from app.services.ai.m3_model import M3_MODEL_FLASH, resolve_m3_model
 
 router = APIRouter(prefix="/api/v2/admin/ai-keys", tags=["admin-ai-keys"])
 
@@ -92,12 +93,17 @@ def _key_suffix_from_row(row: Any) -> Optional[str]:
 def _row_to_public(row: Any) -> Dict[str, Any]:
     """Serializa una fila `AIProviderKey` para el GET — NUNCA incluye la key
     completa ni el ciphertext. `keySuffix` = últimos 4 chars (sólo si descifró)."""
+    default_model = (
+        resolve_m3_model(row.defaultModel)
+        if row.provider == "m3"
+        else row.defaultModel
+    )
     return {
         "provider": row.provider,
         "present": bool(row.enabled),
         "keySuffix": _key_suffix_from_row(row),
         "baseUrl": row.baseUrl,
-        "defaultModel": row.defaultModel,
+        "defaultModel": default_model,
         "enabled": bool(row.enabled),
         "updatedAt": row.updatedAt.isoformat() if row.updatedAt else None,
         "updatedBy": row.updatedBy,
@@ -131,7 +137,7 @@ async def _build_listing_response(prisma: Any) -> List[Dict[str, Any]]:
                 "present": False,
                 "keySuffix": None,
                 "baseUrl": None,
-                "defaultModel": None,
+                "defaultModel": M3_MODEL_FLASH if provider == "m3" else None,
                 "enabled": False,
                 "updatedAt": None,
                 "updatedBy": None,
@@ -206,6 +212,8 @@ async def upsert_ai_key(
     if default_model is not None:
         if not isinstance(default_model, str) or len(default_model) > 128:
             raise HTTPException(status_code=400, detail="defaultModel inválido")
+    if provider == "m3":
+        default_model = resolve_m3_model(default_model)
 
     expected_updated_at_raw = payload.get("expectedUpdatedAt")
 

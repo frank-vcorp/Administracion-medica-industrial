@@ -200,7 +200,7 @@ def test_probe_gemini_happy_path(client, monkeypatch):
 def test_probe_m3_happy_path(client, monkeypatch):
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "false")
     monkeypatch.setenv("M3_API_KEY", "sk-m3-fake-key-9999")
-    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3")
+    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3.1-Flash")
 
     class _FakeResponse:
         status_code = 200
@@ -231,7 +231,7 @@ def test_probe_m3_happy_path(client, monkeypatch):
 def test_probe_auth_error_401(client, monkeypatch):
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "false")
     monkeypatch.setenv("M3_API_KEY", "sk-bad-key-1234")
-    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3")
+    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3.1-Flash")
 
     class _FakeResponse:
         status_code = 401
@@ -261,7 +261,7 @@ def test_probe_auth_error_401(client, monkeypatch):
 def test_probe_rate_limit_internal(client, monkeypatch):
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "false")
     monkeypatch.setenv("M3_API_KEY", "sk-fake-9999")
-    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3")
+    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3.1-Flash")
 
     # Pre-cargar rate limit timestamp (simula probe reciente).
     probe_module._last_probe_ts["m3"] = time.monotonic()
@@ -282,7 +282,7 @@ def test_probe_rate_limit_internal(client, monkeypatch):
 def test_probe_provider_429_maps_to_rate_limited_kind(client, monkeypatch):
     monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "false")
     monkeypatch.setenv("M3_API_KEY", "sk-fake-9999")
-    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3")
+    monkeypatch.setenv("M3_DEFAULT_MODEL", "MiniMax-M3.1-Flash")
 
     class _FakeResponse:
         status_code = 429
@@ -402,3 +402,31 @@ def test_probe_dr7_accepted_as_provider(client, monkeypatch):
         "/api/v2/admin/ai-keys/dr7/probe", headers=_headers("SUPERADMIN")
     )
     assert r.status_code == 503
+
+
+def test_probe_m3_promotes_legacy_minimax_m3_to_flash(client, monkeypatch):
+    """Aunque M3_DEFAULT_MODEL o la resolución traiga MiniMax-M3, el probe envía MiniMax-M3.1-Flash."""
+    monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "false")
+    monkeypatch.setenv("M3_API_KEY", "sk-m3-legacy-env-9999")
+    monkeypatch.setenv("M3_DEFAULT_MODEL", "Minimax-M3")
+
+    captured = {}
+
+    class _FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Hola!!"}}]}
+
+    async def fake_post(*args, **kwargs):
+        captured["json"] = kwargs.get("json")
+        return _FakeResponse()
+
+    probe_module._last_probe_ts.clear()
+    with patch.object(probe_module.httpx.AsyncClient, "post", new=fake_post):
+        r = client.post(
+            "/api/v2/admin/ai-keys/m3/probe", headers=_headers("SUPERADMIN")
+        )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert captured["json"]["model"] == "MiniMax-M3.1-Flash"

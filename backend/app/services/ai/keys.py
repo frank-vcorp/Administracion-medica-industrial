@@ -396,11 +396,17 @@ class KeyResolver:
                 self._cache[provider] = (now, resolution)
                 return resolution
 
+            resolved_default_model = row.defaultModel
+            if provider == "m3":
+                from app.services.ai.m3_model import resolve_m3_model
+
+                resolved_default_model = resolve_m3_model(row.defaultModel)
+
             resolution = KeyResolution(
                 provider=provider,
                 api_key=api_key,
                 base_url=row.baseUrl,
-                default_model=row.defaultModel,
+                default_model=resolved_default_model,
                 source="db",
                 warning=None,
             )

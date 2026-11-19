@@ -601,7 +601,7 @@ class AIPrediagnosisResult(BaseModel):
     )
     clinical_model_used: Optional[str] = Field(
         default=None,
-        description="Modelo real utilizado para la capa clínica (ej: MiniMax-M3)"
+        description="Modelo real utilizado para la capa clínica (ej: MiniMax-M3.1-Flash)"
     )
     # FIX-20261028-01: proveedor clínico activo = MiniMax M3.
     # 'gemini' y 'featherless' se conservan para snapshots históricos.

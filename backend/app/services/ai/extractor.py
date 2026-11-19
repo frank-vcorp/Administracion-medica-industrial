@@ -40,7 +40,7 @@ EXTRACTION_PROVIDERS = frozenset({"gemini", "m3"})
 
 
 def _coerce_extraction_provider_m3_only(provider: str) -> str:
-    """Política producto: extracción documental solo con MiniMax M3."""
+    """Política producto: extracción documental solo con MiniMax-M3.1-Flash."""
     if provider == "gemini":
         print(
             "ℹ️ [M3-ONLY] Calibración/override pedía 'gemini'; "

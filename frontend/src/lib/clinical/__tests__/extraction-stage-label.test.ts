@@ -8,7 +8,7 @@
  * esta fase del upload, por lo que el panel renderiza con texto neutro).
  *
  * Reglas:
- * - m3      → "Extrayendo datos con Minimax" (provider vigente post-FIX-20260812-12).
+ * - m3      → "Extrayendo datos con MiniMax-M3.1-Flash".
  * - gemini  → "Extrayendo datos con Gemini".
  * - ausente/otro → "Extrayendo datos" (texto neutro, sin afirmar proveedor).
  *
@@ -19,9 +19,9 @@ import { describe, it, expect } from 'vitest'
 import { extractingStageLabel } from '@/lib/clinical/extraction-stage-label'
 
 describe('IMPL-20260821-01 / AC-7.1: extraction stage label deriva de provider real', () => {
-  it('AC-7.1: cuando provider es "m3", el label contiene "Minimax" y NO contiene "Gemini"', () => {
+  it('AC-7.1: cuando provider es "m3", el label contiene "MiniMax-M3.1-Flash" y NO contiene "Gemini"', () => {
     const label = extractingStageLabel('m3')
-    expect(label).toBe('Extrayendo datos con Minimax')
+    expect(label).toBe('Extrayendo datos con MiniMax-M3.1-Flash')
     expect(label).not.toContain('Gemini')
   })
 
@@ -41,6 +41,6 @@ describe('IMPL-20260821-01 / AC-7.1: extraction stage label deriva de provider r
     // para no mentir al usuario sobre el proveedor activo.
     expect(extractingStageLabel('xml_parser')).toBe('Extrayendo datos')
     expect(extractingStageLabel('openai')).toBe('Extrayendo datos')
-    expect(extractingStageLabel('M3')).toBe('Extrayendo datos con Minimax') // case-insensitive
+    expect(extractingStageLabel('M3')).toBe('Extrayendo datos con MiniMax-M3.1-Flash') // case-insensitive
   })
 })

@@ -14,12 +14,14 @@ from typing import Any, Dict, Optional
 
 M3_MODEL_FLASH = "MiniMax-M3.1-Flash"
 M3_MODEL_LEGACY = "MiniMax-M3"
+M3_DEFAULT_MODEL = M3_MODEL_FLASH
 M3_FLASH_REASONING_EFFORT = "low"
 
 _FLASH_PROMOTED_LOWER = frozenset({
     "",
     "m3",
     "minimax",
+    "minimax m3",
     "minimax-m3",
     "minimax-m3.1-flash",
     "minimax-m3-flash",

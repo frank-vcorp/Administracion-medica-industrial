@@ -39,6 +39,12 @@ const SAMPLE = [
 
 beforeEach(() => {
   vi.clearAllMocks()
+  ;(getExtractionDefaultProvider as ReturnType<typeof vi.fn>).mockResolvedValue({
+    ok: true,
+    provider: 'gemini',
+    source: 'default',
+    updatedAt: null,
+  })
 })
 
 describe('AIProviderKeyManager', () => {
@@ -51,9 +57,9 @@ describe('AIProviderKeyManager', () => {
     render(<AIProviderKeyManager canEdit={false} />)
 
     await waitFor(() => {
-      expect(screen.getByText(/Gemini/i)).toBeInTheDocument()
-      expect(screen.getByText(/M3/i)).toBeInTheDocument()
-      expect(screen.getByText(/DR7|MedGemma/i)).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Gemini/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /MiniMax-M3\.1-Flash/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /DR7|MedGemma/i })).toBeInTheDocument()
     })
   })
 
@@ -115,7 +121,7 @@ describe('AIProviderKeyManager', () => {
     fireEvent.change(apiKeyInput, { target: { value: 'sk-original-9999' } })
     fireEvent.change(apiKeyConfirmInput, { target: { value: 'sk-OTRA-9999' } })
 
-    const guardarBtn = screen.getByRole('button', { name: /Guardar/i })
+    const guardarBtn = screen.getAllByRole('button', { name: /^Guardar$/i })[0]
     expect(guardarBtn).toBeDisabled()
 
     // Ahora coinciden → Guardar habilitado
@@ -150,7 +156,11 @@ describe('AIProviderKeyManager', () => {
     await waitFor(() => screen.getByRole('button', { name: /Eliminar/i }))
     fireEvent.click(screen.getByRole('button', { name: /Eliminar/i }))
 
-    const eliminarBtn = await screen.findByRole('button', { name: /^Eliminar/i })
+    const eliminarBtn = await waitFor(() => {
+      const btns = screen.getAllByRole('button', { name: /^Eliminar$/i })
+      expect(btns.length).toBeGreaterThanOrEqual(2)
+      return btns.at(-1)!
+    })
     expect(eliminarBtn).toBeDisabled()
 
     // Marcar checkbox
@@ -292,7 +302,7 @@ describe('AIProviderKeyManager', () => {
     render(<AIProviderKeyManager canEdit={true} />)
 
     await waitFor(() => screen.getAllByRole('radio'))
-    const m3Radio = screen.getByRole('radio', { name: /MiniMax M3/i })
+    const m3Radio = screen.getByRole('radio', { name: /MiniMax-M3\.1-Flash/i })
     fireEvent.click(m3Radio)
 
     const guardarBtn = screen.getByRole('button', { name: /^Guardar$/ })
@@ -329,5 +339,48 @@ describe('AIProviderKeyManager', () => {
     expect(screen.getByText(/Proveedor de extracción predeterminado/i)).toBeInTheDocument()
     // Y el botón Guardar no debe estar presente para ADMIN.
     expect(screen.queryByRole('button', { name: /^Guardar$/ })).not.toBeInTheDocument()
+  })
+
+  it('normaliza MiniMax-M3 / Minimax-M3 a MiniMax-M3.1-Flash al mostrar y guardar, y retira MiniMax-M3 del catálogo', async () => {
+    ;(listAIProviderKeys as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      providers: [
+        { provider: 'gemini', present: false, keySuffix: null, baseUrl: null, defaultModel: null, enabled: false, updatedAt: null, updatedBy: null, source: 'env' as const },
+        { provider: 'm3', present: true, keySuffix: 'abcd', baseUrl: 'https://api.minimax.io/v1', defaultModel: 'Minimax-M3', enabled: true, updatedAt: '2026-08-09T18:00:00Z', updatedBy: 'u', source: 'db' as const },
+        { provider: 'dr7', present: false, keySuffix: null, baseUrl: null, defaultModel: null, enabled: false, updatedAt: null, updatedBy: null, source: 'env' as const },
+      ],
+    })
+    ;(updateAIProviderKey as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      result: { provider: 'm3', present: true, keySuffix: '9999', baseUrl: null, defaultModel: 'MiniMax-M3.1-Flash', enabled: true, updatedAt: 'now', source: 'db' },
+    })
+
+    render(<AIProviderKeyManager canEdit={true} />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('MiniMax-M3.1-Flash').length).toBeGreaterThanOrEqual(1)
+    })
+    expect(screen.queryByText('Minimax-M3')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Rotar/i }))
+
+    const options = await screen.findAllByRole('option')
+    const optionTexts = options.map((opt) => opt.textContent ?? '')
+    expect(optionTexts.some((t) => t.includes('MiniMax-M3.1-Flash'))).toBe(true)
+    expect(optionTexts.some((t) => /^MiniMax-M3(\s|—|$)/.test(t))).toBe(false)
+
+    const inputs = await screen.findAllByDisplayValue('')
+    fireEvent.change(inputs[0], { target: { value: 'sk-original-9999' } })
+    fireEvent.change(inputs[1], { target: { value: 'sk-original-9999' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /^Guardar$/i })[0])
+
+    await waitFor(() => {
+      expect(updateAIProviderKey).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'm3',
+          defaultModel: 'MiniMax-M3.1-Flash',
+        }),
+      )
+    })
   })
 })
