@@ -217,6 +217,7 @@ export function examForHallazgosFromForm(
     examen_medico_texto: form.examen_medico_texto ?? form.impresion_diagnostica ?? null,
     exploracion: {
       circulacion_venosa: form.circulacion_venosa ?? null,
+      boca_estado: form.boca_estado ?? null,
     },
   }
 }

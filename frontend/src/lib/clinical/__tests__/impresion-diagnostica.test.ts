@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildImpresionDiagnosticaFromAntecedentesYExamen,
+  examForHallazgosFromForm,
   hasPatologicoSi,
 } from '@/lib/clinical/impresion-diagnostica'
 
@@ -58,5 +59,35 @@ describe('buildImpresionDiagnosticaFromAntecedentesYExamen (F04)', () => {
     })
     expect(text).toContain('Varices')
     expect(text).toContain('Edema maleolar leve')
+  })
+
+  it('sincroniza boca_estado y circulacion_venosa desde examForHallazgosFromForm', () => {
+    const exam = examForHallazgosFromForm({
+      boca_estado: 'CARIES Y SARRO',
+      salud_bucal: '',
+      agudeza_visual_resumen: 'DISMINUIDA',
+      circulacion_venosa: 'C2: VARICES',
+    })
+    const text = buildImpresionDiagnosticaFromAntecedentesYExamen({
+      antecedentes: { patologicos: { diabetes: { estado: 'SI' } } },
+      exam,
+    })
+    expect(text).toContain('Caries y sarro')
+    expect(text).toContain('Disminución agudeza visual')
+    expect(text).toContain('Insuficiencia venosa')
+  })
+
+  it('C0 en circulacion_venosa no agrega insuficiencia venosa en impresión diagnóstica', () => {
+    const exam = examForHallazgosFromForm({
+      boca_estado: 'CARIES Y SARRO',
+      salud_bucal: 'CARIES Y SARRO',
+      circulacion_venosa: 'C0: SIN SIGNOS VISIBLES NI PALPABLES',
+    })
+    const text = buildImpresionDiagnosticaFromAntecedentesYExamen({
+      antecedentes: { patologicos: { diabetes: { estado: 'SI' } } },
+      exam,
+    })
+    expect(text).toContain('Caries y sarro')
+    expect(text).not.toContain('Insuficiencia venosa')
   })
 })

@@ -54,10 +54,14 @@ export interface ExamForHallazgos {
   presion_arterial_resumen?: string | null
   /** Texto diagnóstico (para marcadores específicos como "hiperglucemia"). */
   examen_medico_texto?: string | null
-  /** Marcadores de circulación venosa (Exploración Física). */
+  /** Marcadores de Exploración Física (circulación venosa, salud bucal). */
   exploracion?: {
     circulacion_venosa?: string | null
+    boca_estado?: string | null
   } | null
+  /** Fallbacks planos cuando el caller pasa `physicalExamData` directo. */
+  boca_estado?: string | null
+  circulacion_venosa?: string | null
 }
 
 /** Resultados de IA para detectar hallazgos. */
@@ -193,12 +197,18 @@ function inSet(v: string | null | undefined, set: readonly string[]): boolean {
 export function detectHallazgosFromExam(exam: ExamForHallazgos): Hallazgo[] {
   const hallazgos: Hallazgo[] = []
 
-  // Salud bucal
-  if (inSet(exam.salud_bucal, ['CARIES Y SARRO', 'CARIES Y SARRO '])) {
+  // Salud bucal (prioriza resumen si fue capturado; fallback a exploración física)
+  const rawSaludBucal = norm(exam.salud_bucal)
+  const effectiveSaludBucal =
+    rawSaludBucal !== '' && rawSaludBucal !== 'NORMAL'
+      ? exam.salud_bucal
+      : (exam.exploracion?.boca_estado ?? exam.boca_estado ?? exam.salud_bucal)
+
+  if (inSet(effectiveSaludBucal, ['CARIES Y SARRO', 'CARIES Y SARRO '])) {
     hallazgos.push({ id: 'caries_sarro', texto: 'Caries y sarro', categoria: 'salud_bucal' })
-  } else if (inSet(exam.salud_bucal, ['CARIES'])) {
+  } else if (inSet(effectiveSaludBucal, ['CARIES'])) {
     hallazgos.push({ id: 'caries', texto: 'Caries', categoria: 'salud_bucal' })
-  } else if (inSet(exam.salud_bucal, ['SARRO'])) {
+  } else if (inSet(effectiveSaludBucal, ['SARRO'])) {
     hallazgos.push({ id: 'sarro', texto: 'Sarro', categoria: 'salud_bucal' })
   }
 
@@ -225,10 +235,12 @@ export function detectHallazgosFromExam(exam: ExamForHallazgos): Hallazgo[] {
     hallazgos.push({ id: 'presion_baja', texto: 'Hipotensión arterial', categoria: 'cardiovascular' })
   }
 
-  // Exploración: circulación venosa
-  if (exam.exploracion?.circulacion_venosa) {
-    const cv = norm(exam.exploracion.circulacion_venosa)
-    if (cv.includes('INSUFICIENCIA')) {
+  // Exploración: circulación venosa (C0 es normal; C1–C6 o INSUFICIENCIA son hallazgo)
+  const rawCirculacionVenosa =
+    exam.exploracion?.circulacion_venosa ?? exam.circulacion_venosa
+  if (rawCirculacionVenosa) {
+    const cv = norm(rawCirculacionVenosa)
+    if (cv.includes('INSUFICIENCIA') || /^C[1-6]\b/.test(cv)) {
       hallazgos.push({ id: 'insuficiencia_venosa', texto: 'Insuficiencia venosa', categoria: 'venosa' })
     }
   }

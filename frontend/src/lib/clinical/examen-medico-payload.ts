@@ -12,7 +12,6 @@ import { formatMedicoNombreYCedula } from '@/lib/clinical/medico-display'
 
 const IMPRESION_RESUMEN_DEFAULTS: Record<string, string> = {
   estado_nutricional: 'NORMAL',
-  salud_bucal: 'NORMAL',
 }
 
 function isPrimitiveFieldValue(v: unknown): v is string | number | boolean {
@@ -70,6 +69,10 @@ export function prepareExamenMedicoPayloadForSave(
   const withExploracionDefaults = applyExploracionFisicaDefaults(stringSlice)
   for (const [key, value] of Object.entries(withExploracionDefaults)) {
     next[key] = value
+  }
+
+  if (!String(next.salud_bucal ?? '').trim()) {
+    next.salud_bucal = String(next.boca_estado ?? '').trim() || 'SIN DATOS'
   }
 
   for (const [key, defaultValue] of Object.entries(IMPRESION_RESUMEN_DEFAULTS)) {
