@@ -1845,16 +1845,31 @@ function StudyPanel({
             {showExamenMedicoPrediagnosis && (
             <div className="space-y-3 lg:sticky lg:top-4 self-start">
               {test.aiSnapshot ? (
-                <StudyAIPrediagnosisPanel
-                  prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
-                  snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
-                  reviewerUserId={reviewerUserId}
-                  reviewerRole={reviewerRole}
-                  eventId={eventId}
-                  existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
-                  readonly={readonly}
-                  studyType="ExamenMedico"
-                />
+                <div className="space-y-2">
+                  <StudyAIPrediagnosisPanel
+                    prediagnosisSnapshotId={test.aiSnapshot.prediagnosisSnapshotId}
+                    snapshot={test.aiSnapshot.snapshot as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['snapshot']}
+                    reviewerUserId={reviewerUserId}
+                    reviewerRole={reviewerRole}
+                    eventId={eventId}
+                    existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
+                    readonly={readonly}
+                    studyType="ExamenMedico"
+                  />
+                  {!readonly && (
+                    <button
+                      type="button"
+                      disabled={isExamenMedicoRetrying}
+                      onClick={onRetryExamenMedicoAI}
+                      className="w-full rounded-xl border border-blue-300 bg-white px-4 py-2 text-xs font-bold text-blue-800 disabled:opacity-50"
+                    >
+                      {isExamenMedicoRetrying ? 'Generando…' : 'Reintentar prediagnóstico IA'}
+                    </button>
+                  )}
+                  {examenMedicoRetryError && (
+                    <p className="text-xs text-red-600">{examenMedicoRetryError}</p>
+                  )}
+                </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center space-y-3">
                   <span className="text-2xl block mb-1">🤖</span>

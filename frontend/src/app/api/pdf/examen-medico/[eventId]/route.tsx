@@ -90,7 +90,9 @@ export async function GET(
   if (!eventId) {
     return new NextResponse('eventId requerido', { status: 400 })
   }
-  return deliverExamenMedicoPdf(eventId, 'clinical')
+  return deliverExamenMedicoPdf(eventId, 'clinical', {
+    userId: session.user.id,
+  })
 }
 
 /**
@@ -182,10 +184,9 @@ export async function deliverExamenMedicoPdf(
     return new NextResponse('Recurso no disponible', { status: 404 })
   }
 
-  // ADR-R4/R6: el PDF oficial requiere dictamen firmado con aptitud explícita
-  // del médico. Sin verdict NO se genera. La vista previa Sodexo (borrador
-  // desde la extensión, misma plantilla REG-SO-01) es la única excepción.
-  if (!event.verdict && !isSodexoPreview) {
+  // El reporte de aptitud (clínico AMI) sale al cerrar el examen, antes
+  // del dictamen general. Sodexo oficial sigue exigiendo el dictamen.
+  if (!event.verdict && deliverable !== 'clinical' && !isSodexoPreview) {
     return new NextResponse(
       'El dictamen aún no ha sido emitido.',
       { status: 404 }
@@ -353,7 +354,11 @@ export async function deliverExamenMedicoPdf(
     // firma, NO se genera el PDF oficial (gate §R6). En vista previa se usa
     // el usuario en sesión y se toleran campos vacíos (borrador sin firmar).
     let validator = event.verdict?.validator ?? null
-    if (!validator && isSodexoPreview && opts?.userId) {
+    const signerFromSession =
+      !validator &&
+      opts?.userId &&
+      (isSodexoPreview || (deliverable === 'clinical' && !event.verdict))
+    if (signerFromSession) {
       validator = await prisma.user.findUnique({
         where: { id: opts.userId },
         select: {
@@ -364,8 +369,11 @@ export async function deliverExamenMedicoPdf(
         },
       })
     }
+    const clinicalBeforeDictamen =
+      deliverable === 'clinical' && !event.verdict
     if (
       !isSodexoPreview &&
+      !clinicalBeforeDictamen &&
       (!validator ||
         !validator.fullName ||
         !validator.professionalLicense ||
@@ -373,6 +381,12 @@ export async function deliverExamenMedicoPdf(
     ) {
       return new NextResponse(
         'El médico firmante no tiene identidad congelada completa (cédula/firma). El PDF no puede regenerarse. Completa el perfil médico y vuelve a firmar.',
+        { status: 410 }
+      )
+    }
+    if (clinicalBeforeDictamen && !validator?.fullName) {
+      return new NextResponse(
+        'La cuenta que genera el reporte no tiene un nombre registrado.',
         { status: 410 }
       )
     }
@@ -386,7 +400,9 @@ export async function deliverExamenMedicoPdf(
     // (`MedicalVerdict.recommendations`) tiene prioridad sobre el
     // auto-poblamiento. El auto-poblamiento sirve como base si el médico
     // no escribió nada (DA-7).
-    const recomendacionesPersisted = str(event.verdict?.recommendations)
+    const recomendacionesPersisted =
+      str(event.verdict?.recommendations) ||
+      str(physicalExamData.recomendaciones_clinicas)
 
     const data = await buildExamenMedicoPdfDataAsync({
       folio: event.verdict?.id ?? event.id,

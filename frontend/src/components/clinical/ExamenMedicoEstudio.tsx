@@ -225,25 +225,15 @@ export function navigateToValidatingView(eventId: string): string {
  * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
  * Decide si el CTA de descarga del PDF consolidado debe mostrarse.
  *
- * Reglas (FEATURE-20260825-03 / SPEC §2 / ADR §R6):
- *   - Visible si y sólo si hay una aptitud médica NO vacía persistida
- *     (state local del componente o `physicalExamData.aptitud`) Y ya
- *     existe `MedicalVerdict` emitido para el Event.
- *   - NO se muestra si falta aptitud (gate ADR R6 / P2-3 — el endpoint
- *     devuelve 409 cuando falta aptitud; no invitamos a un 409).
- *   - NO se muestra si falta `MedicalVerdict` (BR-20260825-20 — la
- *     descarga devolvería 404 "El dictamen aún no ha sido emitido";
- *     ocultamos el CTA para no exponer al médico a un 404).
- *   - Pura y testeable sin DOM. Vive aquí para que cualquier llamada
- *     posterior (bot, enlace, atajo) use la misma lógica.
+ * El reporte de examen médico (aptitud) se emite al cerrar la captura,
+ * antes del dictamen general. Visible si hay aptitud no vacía.
+ * El ZIP de cierre sigue exigiendo el dictamen firmado.
  */
 export function shouldShowExamenMedicoPdfCta(
   aptitud: string | null | undefined,
-  hasMedicalVerdict: boolean | null | undefined = false
+  _hasMedicalVerdict: boolean | null | undefined = false
 ): boolean {
-  const aptitudOk =
-    typeof aptitud === 'string' && aptitud.trim().length > 0
-  return aptitudOk && hasMedicalVerdict === true
+  return typeof aptitud === 'string' && aptitud.trim().length > 0
 }
 
 /**
@@ -270,7 +260,9 @@ export function shouldShowClinicalClosureZipCta(
   aptitud: string | null | undefined,
   hasMedicalVerdict: boolean | null | undefined = false
 ): boolean {
-  return shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)
+  return (
+    shouldShowExamenMedicoPdfCta(aptitud) && hasMedicalVerdict === true
+  )
 }
 
 interface ExamenMedicoEstudioProps {
@@ -2367,7 +2359,9 @@ export default function ExamenMedicoEstudio({
             readonly={formReadonly}
             sodexoPdfUrl={examenMedicoSodexoPdfUrl(eventId)}
             sodexoPreviewApiUrl={examenMedicoSodexoPreviewApiUrl(eventId)}
-            showSodexoPdfDownload={shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict)}
+            showSodexoPdfDownload={
+              shouldShowExamenMedicoPdfCta(aptitud) && hasMedicalVerdict === true
+            }
             sodexoPdfPending={Boolean(aptitud) && hasMedicalVerdict !== true}
             validatingViewHref={navigateToValidatingView(eventId)}
             ami={{
@@ -2685,17 +2679,25 @@ export default function ExamenMedicoEstudio({
               — el endpoint devolvería 404 — y se reemplaza por un
               mensaje informativo invitando a firmar el dictamen desde
               el flujo "Firmar y Emitir Dictamen" del workspace. */}
-          {shouldShowExamenMedicoPdfCta(aptitud, hasMedicalVerdict) ? (
+          {shouldShowExamenMedicoPdfCta(aptitud) ? (
             <div className="bg-white border-2 border-teal-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="flex-1">
+              <div className="flex-1 space-y-2">
                 <p className="text-sm font-bold text-teal-800">
-                  Documentos clínicos disponibles
+                  Reporte de examen médico (aptitud)
                 </p>
-                <p className="text-xs text-slate-600 mt-1">
-                  Descarga el PDF consolidado (4 secciones) o el ZIP
-                  de cierre clínico (dictamen general + carpetas por
-                  estudio + fuentes + manifest).
+                <p className="text-xs text-slate-600">
+                  Este PDF se emite al cerrar el examen. El dictamen general
+                  y el ZIP de cierre se habilitan después, en Firma.
                 </p>
+                {hasMedicalVerdict !== true && (
+                  <Link
+                    href={navigateToValidatingView(eventId)}
+                    className="inline-flex text-xs font-bold text-amber-800 underline"
+                    data-testid="examen-medico-go-validating-link"
+                  >
+                    Después del reporte: ir a Firma y emitir dictamen
+                  </Link>
+                )}
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
                 <a
@@ -2707,43 +2709,22 @@ export default function ExamenMedicoEstudio({
                   data-has-medical-verdict={String(hasMedicalVerdict)}
                   className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
                 >
-                  📄 PDF
+                  📄 Reporte de aptitud
                 </a>
-                {/* IMPL-FEATURE-20260825-04: ZIP de cierre clínico por Event
-                    (dictamen general + carpetas por estudio + fuentes + manifest).
-                    Comparte el gate del PDF individual. */}
-                <a
-                  href={clinicalClosureZipUrl(eventId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="clinical-closure-zip-download-link"
-                  data-implementacion="IMPL-FEATURE-20260825-04"
-                  data-has-medical-verdict={String(hasMedicalVerdict)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
-                >
-                  📦 ZIP
-                </a>
+                {shouldShowClinicalClosureZipCta(aptitud, hasMedicalVerdict) && (
+                  <a
+                    href={clinicalClosureZipUrl(eventId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="clinical-closure-zip-download-link"
+                    data-implementacion="IMPL-FEATURE-20260825-04"
+                    data-has-medical-verdict={String(hasMedicalVerdict)}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+                  >
+                    📦 ZIP
+                  </a>
+                )}
               </div>
-            </div>
-          ) : aptitud ? (
-            <div
-              className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-3"
-              data-testid="examen-medico-pdf-pending-notice"
-              data-implementacion="IMPL-FEATURE-20260825-03"
-              data-has-medical-verdict={String(hasMedicalVerdict)}
-            >
-              <p>
-                ⏳ Captura guardada. El PDF consolidado y el ZIP de cierre se
-                habilitan después de <strong>Firmar y Emitir Dictamen</strong>
-                (paso <em>Firma</em>).
-              </p>
-              <Link
-                href={navigateToValidatingView(eventId)}
-                className="inline-flex items-center justify-center rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold px-4 py-2.5 transition-colors"
-                data-testid="examen-medico-go-validating-link"
-              >
-                Ir a Firma y emitir dictamen →
-              </Link>
             </div>
           ) : null}
 

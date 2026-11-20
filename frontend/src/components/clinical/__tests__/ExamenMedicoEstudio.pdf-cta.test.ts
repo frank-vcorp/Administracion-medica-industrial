@@ -112,21 +112,15 @@ describe('IMPL-FEATURE-20260825-03 ronda 4: CTA PDF consolidado Examen Médico',
   })
 
   // ─── Gate verdict emitido (ronda 4 / DEC-20260825-19 / FND-20260825-22) ──
-  it('REGRESIÓN FND-20260825-22: aptitud OK pero sin verdict → CTA oculto', () => {
-    // El médico ya guardó aptitud ("APTO") pero todavía NO firmó el
-    // dictamen (MedicalVerdict no emitido). El CTA NO debe mostrarse —
-    // el endpoint devolvería 404 y debemos evitar exponer al médico a
-    // un 404. Mientras tanto se muestra el mensaje pendiente invitando
-    // a "Firmar y Emitir Dictamen".
-    expect(shouldShowExamenMedicoPdfCta('APTO', false)).toBe(false)
+  it('aptitud OK sin dictamen → el reporte de aptitud ya se puede descargar', () => {
+    expect(shouldShowExamenMedicoPdfCta('APTO', false)).toBe(true)
+    expect(shouldShowClinicalClosureZipCta('APTO', false)).toBe(false)
   })
 
-  it('REGRESIÓN FND-20260825-22: aptitud OK pero hasMedicalVerdict=null/undefined → CTA oculto', () => {
-    // Defensa en profundidad: si el caller NO pasa `hasMedicalVerdict`
-    // (null/undefined), el CTA NO se muestra por defecto (firma
-    // pendiente).
-    expect(shouldShowExamenMedicoPdfCta('APTO', null)).toBe(false)
-    expect(shouldShowExamenMedicoPdfCta('APTO', undefined)).toBe(false)
+  it('aptitud OK y hasMedicalVerdict null → reporte visible, ZIP no', () => {
+    expect(shouldShowExamenMedicoPdfCta('APTO', null)).toBe(true)
+    expect(shouldShowExamenMedicoPdfCta('APTO', undefined)).toBe(true)
+    expect(shouldShowClinicalClosureZipCta('APTO', null)).toBe(false)
   })
 
   it('REGRESIÓN FND-20260825-22: sin aptitud y con verdict → CTA oculto', () => {
@@ -146,10 +140,9 @@ describe('IMPL-FEATURE-20260825-03 ronda 4: CTA PDF consolidado Examen Médico',
     expect(shouldShowExamenMedicoPdfCta('APTO', true)).toBe(true)
   })
 
-  it('persistencia tras refresh: sin verdict persistido → CTA oculto (aunque haya aptitud)', () => {
-    // Caso FND-20260825-22: tras refrescar después de Completar, el
-    // médico ve aptitud="APTO" pero el verdict aún no existe.
-    expect(shouldShowExamenMedicoPdfCta('APTO', false)).toBe(false)
+  it('persistencia tras refresh: sin verdict el reporte sigue visible', () => {
+    expect(shouldShowExamenMedicoPdfCta('APTO', false)).toBe(true)
+    expect(shouldShowClinicalClosureZipCta('APTO', false)).toBe(false)
   })
 
   // ─── Decisión sin acoplamiento al rol ─────────────────────────────────────
@@ -200,26 +193,10 @@ describe('IMPL-FEATURE-20260825-04: CTA ZIP de cierre clínico', () => {
     expect(shouldShowClinicalClosureZipCta('   ', true)).toBe(false)
   })
 
-  it('paridad con CTA PDF: ZIP hereda exactamente el gate aptitud + verdict', () => {
-    // SPEC FEATURE-20260825-04 §Reglas: el ZIP requiere aptitud + verdict
-    // (mismo gate que el PDF individual). El CTA debe mostrar/ocultar
-    // de forma sincronizada con el PDF para no invitar a un 404/409.
-    const aptitudValues = [
-      'APTO',
-      'NO APTO',
-      'APTO CONDICIONADO',
-      '',
-      undefined,
-      null,
-      '  ',
-    ]
-    const verdictValues = [true, false, null, undefined]
-    for (const a of aptitudValues) {
-      for (const v of verdictValues) {
-        expect(shouldShowClinicalClosureZipCta(a, v as boolean | null)).toBe(
-          shouldShowExamenMedicoPdfCta(a, v as boolean | null),
-        )
-      }
-    }
+  it('el ZIP exige dictamen; el reporte de aptitud no', () => {
+    expect(shouldShowExamenMedicoPdfCta('APTO', false)).toBe(true)
+    expect(shouldShowClinicalClosureZipCta('APTO', false)).toBe(false)
+    expect(shouldShowClinicalClosureZipCta('APTO', true)).toBe(true)
+    expect(shouldShowClinicalClosureZipCta('', true)).toBe(false)
   })
 })
