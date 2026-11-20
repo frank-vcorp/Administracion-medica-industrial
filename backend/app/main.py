@@ -1801,6 +1801,24 @@ async def v2_prediagnosis_from_params(
 
     effective_ai_calibration = None if db_test_found else ai_calibration
 
+    # Campimetría y el resto de capturas manuales no pasan por
+    # upload-and-analyze, así que la caché de la clave MiniMax puede estar
+    # fría. Sin este warmup, generate_prediagnosis (sync, dentro del event
+    # loop) no puede leer la fila m3 y responde «falta la clave».
+    from app.services.ai.keys import (
+        is_ai_keys_from_db_enabled as _predx_ai_keys_db_enabled,
+        key_resolver as _predx_key_resolver,
+    )
+    if _predx_ai_keys_db_enabled():
+        try:
+            await _predx_key_resolver.resolve("m3")
+        except Exception as _predx_warmup_err:
+            print(
+                f"⚠️ [prediagnosis-from-params] Warmup key MiniMax (m3) falló "
+                f"({type(_predx_warmup_err).__name__}); el prediagnóstico "
+                f"degradará a env o a no concluyente."
+            )
+
     try:
         prediagnosis = prediagnostic_svc.generate_prediagnosis(
             study_type,

@@ -22,6 +22,7 @@ import {
   studyValidationToFieldErrors,
   validateStudyCaptureForComplete,
 } from '@/lib/clinical/study-required-fields'
+import { buildPapeletaUrl } from '@/lib/clinical/papeleta-navigation'
 import { useClinicalIntervalAutosave } from '@/lib/hooks/useClinicalIntervalAutosave'
 import { mapSaveClinicalFailure, type UserFacingError } from '@/lib/user-facing-error'
 import {
@@ -373,7 +374,16 @@ export default function CampimetriaStudy({
         `La captura se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`,
       )
     }
-    if (complete) router.refresh()
+    if (complete) {
+      // replace (no refresh suelto): Next conserva el eventTest de esta
+      // captura. Un refresh con el query viejo abre otro estudio.
+      router.replace(
+        buildPapeletaUrl(window.location.pathname, window.location.search, {
+          eventTest: eventTestId,
+        }),
+        { scroll: false },
+      )
+    }
     setSaving(false)
   }
 
