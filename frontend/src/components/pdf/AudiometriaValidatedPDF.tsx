@@ -19,18 +19,16 @@
  *   - DEC-20260825-10 / BR-20260825-11 / FND-20260825-14 (rectificación
  *     Frank): la sección "Criterio audiométrico AMI (referencia)" —
  *     tablas de normalidad, patrón operativo, severidad y etiologías
- *     — fue RETIRADA del PDF. Esa referencia (información administrativa)
- *     vive ahora SÓLO en el panel clínico, dentro del acordeón nativo
- *     `<details>`/`<summary>` cerrado por defecto de
- *     `AudiometriaClinicalCriteriaPanel.tsx` (FND-20260825-13).
+ *     — fue RETIRADA del PDF. Las constantes siguen en
+ *     `AudiometriaClinicalCriteriaPanel.tsx`; el panel ya no las muestra.
  *   - DEC-20260825-11 / BR-20260825-12 / FND-20260825-15 (rectificación
  *     Frank): la sección "Criterios audiométricos derivados" (PTA3,
  *     PTA fuente, criterio AMI, patrón, estado bilateral, completitud,
  *     advertencias) también fue RETIRADA del PDF. El PDF se enfoca
- *     ahora en datos del estudio, EVIDENCIA DOCUMENTAL (umbrales
- *     TA/VO por frecuencia y por oído), impresión del médico,
- *     recomendaciones validadas y notas. Los datos DERIVADOS (PTA3,
- *     criterio, patrón) viven SÓLO en el panel clínico audiométrico.
+ *     en datos del estudio, evidencia documental (umbrales TA/VO por
+ *     frecuencia y por oído), impresión del médico, recomendaciones
+ *     validadas y notas. En la papeleta el médico ve sólo el índice de
+ *     Fletcher, el estado bilateral y la completitud documental.
  *   - TA = vía aérea; VO = vía ósea (sólo si están visibles en el
  *     documento).
  */
@@ -172,8 +170,7 @@ export interface AudiometriaValidatedPDFData {
   /**
    * FND-20260825-15: el campo `criterios` (PTA3, PTA fuente, criterio
    * AMI, patrón, estado bilateral, completitud, advertencias) ya NO
-   * forma parte del PDF. Esos datos viven únicamente en el panel
-   * clínico audiométrico. El shape del PDF queda alineado con su
+   * forma parte del PDF. El shape del PDF queda alineado con su
    * contenido: evidencia documental + impresión + recomendaciones +
    * notas + identidad/firma.
    */
@@ -216,11 +213,11 @@ const SOURCE_IMAGE_MAX_HEIGHT_PT = 300
 // DEC-20260825-10 / DEC-20260825-11 — la sección IV de referencia AMI
 // (FND-20260825-12) y la sección III "Criterios audiométricos derivados"
 // (FND-20260825-15) fueron RETIRADAS del PDF por rectificación de Frank.
-// Esa información (administrativa + derivada) vive SÓLO en el panel
-// clínico audiométrico (`AudiometriaClinicalCriteriaPanel`). El PDF se
-// concentra en: datos del estudio (I), evidencia documental fuente (II),
-// impresión del médico (III), recomendaciones validadas (IV) y notas (V).
-// Identidad + firma + cédula siguen al final.
+// El panel clínico ya no muestra esa captura ni la referencia: sólo el
+// índice de Fletcher, el estado bilateral y la completitud documental.
+// El PDF se concentra en: datos del estudio (I), evidencia documental
+// fuente (II), impresión del médico (III), recomendaciones validadas (IV)
+// y notas (V). Identidad + firma + cédula siguen al final.
 
 export const AudiometriaValidatedPDF = ({
   data,
@@ -290,17 +287,12 @@ export const AudiometriaValidatedPDF = ({
       </View>
 
       {/* DEC-20260825-10 — sección III "Criterios audiométricos
-          DERIVADOS" RETIRADA del PDF (FND-20260825-15). Los datos
-          derivados del paciente (PTA3, PTA fuente, criterio AMI,
-          patrón, estado bilateral, completitud, advertencias) viven
-          SÓLO en el panel clínico audiométrico. La sección II del
-          PDF conserva la EVIDENCIA DOCUMENTAL del paciente (tabla
-          TA/VO por frecuencia y por oído).
-
-          Nota: la sección IV "Criterio audiométrico AMI (referencia)"
-          — tablas administrativas de patrones operativos, severidad y
-          etiologías — TAMBIÉN fue retirada en FND-20260825-14 (live
-          sólo en el acordeón nativo del panel, FND-20260825-13). */}
+          derivados" retirada del PDF (FND-20260825-15). En la papeleta
+          el médico ve el índice de Fletcher, el estado bilateral y la
+          completitud documental; la captura (tabla, PTA, capas) no se
+          muestra. La sección II del PDF conserva la evidencia documental
+          (tabla TA/VO). La referencia AMI tampoco se imprime
+          (FND-20260825-14). */}
 
       {/* II. IMPRESIÓN DIAGNÓSTICA VALIDADA */}
       <View style={styles.section}>

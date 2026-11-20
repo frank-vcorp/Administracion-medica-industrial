@@ -978,7 +978,7 @@ export async function submitDoctorStudyReview(
 
         // IMPL-FEATURE-20260825-02: dispatch por tipo. Espirometría conserva
         // el flujo existente (IMPL-FEATURE-20260825-01). Audiometría usa el
-        // template propio con PTA3, PTA fuente, capas NOM/AMI/fuente.
+        // template propio del PDF validado (evidencia documental).
         let pdfResult:
           | { url: string | null; hash: string; buffer: Buffer }
           | null = null
