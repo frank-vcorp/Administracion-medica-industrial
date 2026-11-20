@@ -1,3 +1,7 @@
+/** Cómo se captura el celular en los formularios. El envío le agrega 521. */
+export const PHONE_CAPTURE_HINT =
+  'Celular a 10 dígitos, sin +52 ni espacios. Ejemplo: 4424532415.'
+
 /**
  * Dígitos para WhatsApp. En México el celular se registra como 521
  * más los 10 dígitos. Sin ese 1, Baileys no entrega el mensaje.

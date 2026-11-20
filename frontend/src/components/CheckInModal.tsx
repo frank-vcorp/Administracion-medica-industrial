@@ -8,6 +8,7 @@
  */
 
 import { useRef, useState, useTransition } from 'react'
+import { PHONE_CAPTURE_HINT } from '@/lib/whatsapp-phone'
 import { useRouter } from 'next/navigation'
 import {
     createReceptionWalkInEvent,
@@ -417,7 +418,10 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                                         <input name="lastName" placeholder="Apellido(s)*" className="rounded border border-slate-300 px-3 py-2 text-sm" required />
                                         <input name="dob" type="date" className="rounded border border-slate-300 px-3 py-2 text-sm" />
                                         <input name="nationalId" placeholder="CURP o ID" className="rounded border border-slate-300 px-3 py-2 text-sm" />
-                                        <input name="phone" placeholder="Teléfono" className="rounded border border-slate-300 px-3 py-2 text-sm" />
+                                        <div className="space-y-1">
+                                            <input name="phone" placeholder="4424532415" inputMode="numeric" className="w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                                            <p className="text-[10px] leading-snug text-slate-500">{PHONE_CAPTURE_HINT}</p>
+                                        </div>
                                         <input name="email" placeholder="Correo" className="rounded border border-slate-300 px-3 py-2 text-sm" />
                                     </div>
                                 )}
