@@ -194,6 +194,7 @@ describe('datos de la cuenta y del estudio', () => {
     expect(data.patient.universalId).toBe('TRAB-100')
     expect(data.medico.fullName).toBe('Dra. Marta Ruiz')
     expect(data.medico.professionalLicense).toBe('9988776')
+    expect(data.medico.signatureImageUrl).toBe('')
     expect(data.formato.fechaEstudio).toBe('02/03/2026')
     expect(data.taOd).toMatchObject({ 500: 20, 1000: 20, 2000: 20, 3000: 20 })
     expect(data.taOi).toMatchObject({ 500: 10, 1000: 10, 2000: 10, 3000: 10 })
@@ -206,6 +207,20 @@ describe('datos de la cuenta y del estudio', () => {
     expect(serializado).not.toContain('Cervantes')
     expect(serializado).not.toContain('VALIANT')
     expect(serializado).not.toContain('12.0000%')
+  })
+
+  it('sin cédula imprime — y descarta una firma que no es imagen del perfil', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      medico: {
+        fullName: 'Prueba Cuenta Audiometria',
+        professionalLicense: '   ',
+        signatureImageUrl: 'trazo-generico',
+      },
+    })
+    expect(data.medico.fullName).toBe('Prueba Cuenta Audiometria')
+    expect(data.medico.professionalLicense).toBe('—')
+    expect(data.medico.signatureImageUrl).toBe('')
   })
 
   it('no inventa la pérdida si falta una de las cuatro frecuencias', () => {

@@ -58,6 +58,7 @@ import {
 } from '@/lib/pdf/patient-identification'
 import { resolveAudiometrySourceCropForPdf } from '@/lib/audiometry-source-crop'
 import { buildAudiometriaFormato } from '@/lib/audiometry-formato'
+import { audiometrySignerFromAccount } from '@/lib/audiometry-signer'
 
 export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl }
 
@@ -213,7 +214,11 @@ export function buildAudiometriaPdfData(
       prediagnosis: predxData,
       clinicalContext: input.clinicalContext,
     }),
-    medico: input.medico,
+    medico: audiometrySignerFromAccount(input.medico) ?? {
+      fullName: (input.medico.fullName ?? '').trim(),
+      professionalLicense: '—',
+      signatureImageUrl: '',
+    },
     logoUrl: input.logoDataUrl ?? '',
     sourceCropDataUrl: input.sourceCropDataUrl ?? null,
     sourceCropAspectRatio: input.sourceCropAspectRatio ?? null,

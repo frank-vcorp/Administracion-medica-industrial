@@ -59,6 +59,12 @@ vi.mock('@/lib/prisma', () => ({
     user: {
       findUnique: (...a: unknown[]) => mockUserFindUnique(...a),
     },
+    medicalEvent: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    medicalExam: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     $transaction: async (cb: (tx: typeof txMock) => Promise<unknown>) =>
       cb(txMock),
   },
@@ -140,6 +146,10 @@ const VALID_ESPIRO_SNAPSHOT = {
     structuredData: {
       calidad: { repetibilidad_fvc_ml: 30 },
       parametros: [],
+    },
+    eventTest: {
+      ...VALID_AUDIO_SNAPSHOT.extractionSnapshot.eventTest,
+      id: 'test-espi-1',
     },
   },
 }
@@ -340,5 +350,65 @@ describe('submitDoctorStudyReview — dispatch por tipo canónico del estudio', 
     expect(updateArgs.data.validatedPdfUrl).toBe(
       'audiometry-pdfs/review-1.pdf',
     )
+  })
+
+  it('imprime el nombre, la cédula y la firma de la cuenta en sesión', async () => {
+    const firma = 'data:image/png;base64,FIRMADECUENTA'
+    setSession({ id: 'session-user-1', role: 'DOCTOR_GENERAL' })
+    mockAIPrediagnosisSnapshotFindUnique.mockResolvedValue(VALID_AUDIO_SNAPSHOT)
+    mockUserFindUnique.mockResolvedValue({
+      fullName: 'Prueba Cuenta Audiometria',
+      professionalLicense: '5544332',
+      signatureImageUrl: firma,
+    })
+
+    const res = await submitDoctorStudyReview({
+      prediagnosisSnapshotId: 'predx-audio-1',
+      doctorStatus: 'REVIEWED_ACCEPTED',
+      doctorDiagnosis: 'HIPOACUSIA BILATERAL LEVE',
+      reviewedByUserId: 'nombre-de-ejemplo',
+      eventId: 'ev-1',
+    })
+
+    expect(res.success).toBe(true)
+    expect(res.pdfGenerated).toBe(true)
+    const medico = generateAudiometry.mock.calls[0][0].data.medico
+    expect(medico.fullName).toBe('Prueba Cuenta Audiometria')
+    expect(medico.professionalLicense).toBe('5544332')
+    expect(medico.signatureImageUrl).toBe(firma)
+    expect(medico.fullName).not.toMatch(/Marta Ruiz|Erika Rodr[ií]guez/)
+    const createArgs = mockDoctorStudyReviewCreate.mock.calls[0][0]
+    expect(createArgs.data.validatorSnapshotFullName).toBe('Prueba Cuenta Audiometria')
+    expect(createArgs.data.validatorSnapshotProfessionalLicense).toBe('5544332')
+    expect(createArgs.data.validatorSnapshotSignatureUrl).toBe(firma)
+  })
+
+  it('sin cédula ni firma igual imprime el nombre de la cuenta', async () => {
+    setSession({ id: 'session-user-1', role: 'DOCTOR_GENERAL' })
+    mockAIPrediagnosisSnapshotFindUnique.mockResolvedValue(VALID_AUDIO_SNAPSHOT)
+    mockUserFindUnique.mockResolvedValue({
+      fullName: 'Prueba Cuenta Audiometria',
+      professionalLicense: null,
+      signatureImageUrl: null,
+    })
+
+    const res = await submitDoctorStudyReview({
+      prediagnosisSnapshotId: 'predx-audio-1',
+      doctorStatus: 'REVIEWED_ACCEPTED',
+      doctorDiagnosis: 'HIPOACUSIA BILATERAL LEVE',
+      reviewedByUserId: 'Dra. Erika Rodríguez',
+      eventId: 'ev-1',
+    })
+
+    expect(res.success).toBe(true)
+    expect(res.pdfGenerated).toBe(true)
+    const medico = generateAudiometry.mock.calls[0][0].data.medico
+    expect(medico.fullName).toBe('Prueba Cuenta Audiometria')
+    expect(medico.professionalLicense).toBe('—')
+    expect(medico.signatureImageUrl).toBe('')
+    const createArgs = mockDoctorStudyReviewCreate.mock.calls[0][0]
+    expect(createArgs.data.validatorSnapshotFullName).toBe('Prueba Cuenta Audiometria')
+    expect(createArgs.data.validatorSnapshotProfessionalLicense).toBeNull()
+    expect(createArgs.data.validatorSnapshotSignatureUrl).toBeNull()
   })
 })

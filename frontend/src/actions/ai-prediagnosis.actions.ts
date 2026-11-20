@@ -69,6 +69,10 @@ import {
   buildAudiometriaPdfDataAsync,
 } from '@/lib/audiometry-pdf'
 import { validateDoctorProfileForPdf } from '@/schemas/clinical/doctor-profile.schema'
+import {
+  audiometrySignerFromAccount,
+  type AudiometryAccountSigner,
+} from '@/lib/audiometry-signer'
 import { authOptions } from '@/auth'
 import { canEmitMedicalReview } from '@/lib/auth/roles'
 
@@ -879,10 +883,14 @@ export async function submitDoctorStudyReview(
     // sigue siendo trazable por `reviewedByUserId` (de sesión).
     const shouldGeneratePdf =
       doctorStatus === 'REVIEWED_ACCEPTED' || doctorStatus === 'REVIEWED_EDITED'
+    const studyType =
+      (snapshot.extractionSnapshot?.studyType ?? '') as string
+    const isAudiometria = studyType === 'Audiometria'
 
     let snapshotFullName: string | null = null
     let snapshotLicense: string | null = null
     let snapshotSignatureUrl: string | null = null
+    let audiometrySigner: AudiometryAccountSigner | null = null
     if (shouldGeneratePdf) {
       const reviewer = await prisma.user.findUnique({
         where: { id: reviewedByUserId },
@@ -891,20 +899,39 @@ export async function submitDoctorStudyReview(
       if (!reviewer) {
         return { success: false, error: 'Médico revisor no encontrado' }
       }
-      const validationError = validateDoctorProfileForPdf({
-        fullName: reviewer.fullName,
-        professionalLicense: reviewer.professionalLicense,
-        signatureImageUrl: reviewer.signatureImageUrl,
-      })
-      if (validationError) {
-        return {
-          success: false,
-          error: validationError,
+      if (isAudiometria) {
+        // Nombre, cédula y firma de la cuenta en sesión. La cédula y la
+        // imagen pueden faltar: el PDF igual lleva el nombre de la cuenta.
+        audiometrySigner = audiometrySignerFromAccount(reviewer)
+        if (!audiometrySigner) {
+          return {
+            success: false,
+            error:
+              'La cuenta que genera el PDF debe tener un nombre registrado (al menos 3 caracteres).',
+          }
         }
+        snapshotFullName = audiometrySigner.fullName
+        snapshotLicense =
+          audiometrySigner.professionalLicense === '—'
+            ? null
+            : audiometrySigner.professionalLicense
+        snapshotSignatureUrl = audiometrySigner.signatureImageUrl || null
+      } else {
+        const validationError = validateDoctorProfileForPdf({
+          fullName: reviewer.fullName,
+          professionalLicense: reviewer.professionalLicense,
+          signatureImageUrl: reviewer.signatureImageUrl,
+        })
+        if (validationError) {
+          return {
+            success: false,
+            error: validationError,
+          }
+        }
+        snapshotFullName = reviewer.fullName
+        snapshotLicense = reviewer.professionalLicense ?? null
+        snapshotSignatureUrl = reviewer.signatureImageUrl ?? null
       }
-      snapshotFullName = reviewer.fullName
-      snapshotLicense = reviewer.professionalLicense ?? null
-      snapshotSignatureUrl = reviewer.signatureImageUrl ?? null
     }
 
     const review = await prisma.doctorStudyReview.create({
@@ -938,12 +965,14 @@ export async function submitDoctorStudyReview(
     // ── IMPL-FEATURE-20260825-02: dispatch por tipo de estudio ────────────
     let pdfGenerated = false
     let pdfErrorMessage: string | null = null
-    if (shouldGeneratePdf && snapshotFullName && snapshotLicense && snapshotSignatureUrl) {
+    const audiometryReady = isAudiometria && Boolean(audiometrySigner)
+    const otherStudyReady =
+      !isAudiometria &&
+      Boolean(snapshotFullName && snapshotLicense && snapshotSignatureUrl)
+    if (shouldGeneratePdf && (audiometryReady || otherStudyReady)) {
       try {
         const eventTestData = snapshot.extractionSnapshot?.eventTest
         const worker = eventTestData?.event?.worker
-        const studyType =
-          (snapshot.extractionSnapshot?.studyType ?? '') as string
 
         // QA-20260825-01 P3-G: resolver el logo UNA VEZ por proceso (cacheado).
         const logoDataUrl = await resolveAmiLogoDataUrl()
@@ -968,10 +997,10 @@ export async function submitDoctorStudyReview(
             universalId: worker?.universalId ?? null,
             companyName: worker?.company?.name ?? null,
           },
-          medico: {
-            fullName: snapshotFullName,
-            professionalLicense: snapshotLicense,
-            signatureImageUrl: snapshotSignatureUrl,
+          medico: audiometrySigner ?? {
+            fullName: snapshotFullName ?? '',
+            professionalLicense: snapshotLicense ?? '',
+            signatureImageUrl: snapshotSignatureUrl ?? '',
           },
           logoDataUrl,
         }

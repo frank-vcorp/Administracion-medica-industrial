@@ -69,6 +69,12 @@ vi.mock('@/lib/prisma', () => ({
     user: {
       findUnique: (...a: unknown[]) => mockUserFindUnique(...a),
     },
+    medicalEvent: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    medicalExam: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     $transaction: async (cb: (tx: typeof txMock) => Promise<unknown>) => cb(txMock),
   },
 }))
@@ -113,6 +119,7 @@ const VALID_SNAPSHOT = {
   extractionSnapshot: {
     studyType: 'Espirometria',
     eventTest: {
+      id: 'test-espi-1',
       testNameSnapshot: 'Espirometría',
       eventId: 'ev-1',
       event: {
