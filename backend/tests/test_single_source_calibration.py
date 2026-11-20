@@ -231,3 +231,31 @@ class TestMainEndpointsSingleSource:
         assert predx["prompt_source"] == "missing_calibration"
         assert "TELE DE TORAX" in predx["summary"]
         assert "/admin/services" in predx["summary"]
+
+    def test_prediagnosis_from_params_warms_m3_key_before_generate(self, monkeypatch, tmp_path):
+        import os
+        os.environ.setdefault("UPLOAD_DIR", str(tmp_path / "uploads"))
+
+        from fastapi.testclient import TestClient
+        import app.main as main_mod
+        from app.services.ai import keys as keys_mod
+        from app.services.ai.prediagnostic import PrediagnosticService
+
+        warmed: list[str] = []
+
+        async def _fake_resolve(provider: str):
+            warmed.append(provider)
+            return None
+
+        monkeypatch.setattr(keys_mod, "is_ai_keys_from_db_enabled", lambda: True)
+        monkeypatch.setattr(keys_mod.key_resolver, "resolve", _fake_resolve)
+        monkeypatch.setattr(main_mod, "prediagnostic_svc", PrediagnosticService(api_key="test-key"))
+
+        client = TestClient(main_mod.app)
+        resp = client.post(
+            "/api/v2/studies/prediagnosis-from-params",
+            params={"study_type": "Campimetria", "test_name": "Campimetría"},
+            json={"extracted_data": {"confrontacion": "normal"}},
+        )
+        assert resp.status_code == 200
+        assert warmed == ["m3"]

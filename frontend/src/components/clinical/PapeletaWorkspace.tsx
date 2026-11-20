@@ -35,6 +35,7 @@ import type { StudyLeaveGuardFn } from "@/components/clinical/studies/useStudyLe
 import { formatStudyMissingFieldsSpanish } from "@/lib/clinical/study-required-fields"
 import { useRouter } from "next/navigation"
 import {
+  buildPapeletaUrl,
   replacePapeletaQuery,
   resolveActiveEventTestAfterRefresh,
 } from '@/lib/clinical/papeleta-navigation'
@@ -1012,9 +1013,9 @@ export default function PapeletaWorkspace({
               isClearingStudy={isClearingStudy}
               clearStudyError={clearStudyError}
               onClearStudy={handleClearStudy}
-              onExamenMedicoStatusChange={(status) => {
+              onExamenMedicoStatusChange={(status, options) => {
                 updateLocalStatus(activeTest.id, status as StudyStatus)
-                router.refresh()
+                if (!options?.skipRefresh) router.refresh()
               }}
               // IMPL-FEATURE-20260824-02: abrir el modal del cuestionario
               // de Espirometría (gestionado en el padre para acceder a
@@ -1508,7 +1509,10 @@ function StudyPanel({
   isClearingStudy: boolean
   clearStudyError: string
   onClearStudy: (id: string) => Promise<boolean>
-  onExamenMedicoStatusChange: (status: string) => void
+  onExamenMedicoStatusChange: (
+    status: string,
+    options?: { skipRefresh?: boolean },
+  ) => void
   // IMPL-FEATURE-20260824-02: callback para abrir el modal del
   // cuestionario de Espirometría (gestionado en el padre).
   onOpenQuestionnaire: () => void
@@ -1561,7 +1565,12 @@ function StudyPanel({
         setCampiRetryError(res.error)
         return
       }
-      router.refresh()
+      router.replace(
+        buildPapeletaUrl(window.location.pathname, window.location.search, {
+          eventTest: test.id,
+        }),
+        { scroll: false },
+      )
     })
   }
 
@@ -1739,7 +1748,9 @@ function StudyPanel({
             longitudinalData={longitudinalData}
             workerInfo={workerInfo}
             readonly={readonly}
-            onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+            onStatusChange={(status) =>
+              onExamenMedicoStatusChange(status, { skipRefresh: true })
+            }
             registerLeaveGuard={registerStudyLeaveGuard}
           />
           <div className="space-y-3 lg:sticky lg:top-4 self-start">
