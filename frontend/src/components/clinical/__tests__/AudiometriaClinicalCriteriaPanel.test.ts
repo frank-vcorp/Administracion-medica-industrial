@@ -15,8 +15,9 @@
  *   - FND-20260825-12: las constantes de referencia (normalidad, patrón
  *     operativo, severidad, etiologías) siguen en el módulo y no se
  *     renderizan en el panel del médico.
- *   - La vista del médico muestra índice de Fletcher, estado bilateral
- *     y completitud documental, sin tabla TA, PTA, sustitución ni capas.
+ *   - La vista del médico muestra el cálculo del índice de Fletcher
+ *     (fórmula y entradas), el estado bilateral y la completitud
+ *     documental, sin la tabla de vía aérea, el PTA fuente ni las capas.
  *
  * @id IMPL-FEATURE-20260825-02
  * @backup context/SPECs/SPEC-FEATURE-20260825-02-AUDIOMETRIA-ENTREGABLE.md
@@ -325,33 +326,39 @@ describe('vista del médico: sin bloque de captura', () => {
     }),
   )
 
-  it('muestra el índice de Fletcher, el estado bilateral y la completitud documental', () => {
+  it('muestra la fórmula y las entradas del índice de Fletcher, el estado bilateral y la completitud', () => {
     expect(html).toContain('Índice de Fletcher')
+    expect(html).toContain('data-testid="audiometria-fletcher-formula"')
+    expect(html).toContain(
+      '((PTA del oído menos afectado × 7) + (PTA del oído más afectado × 1)) ÷ 8',
+    )
+    expect(html).toContain('data-testid="audiometria-fletcher-entradas"')
+    expect(html).toContain(
+      'El oído menos afectado (OD) entra con 10 dB y el oído más afectado (OI) entra con 50 dB.',
+    )
     expect(html).toContain('data-testid="audiometria-fletcher-valor"')
-    expect(html).toContain('15 dB HL')
+    expect(html).toContain('((10 × 7) + (50 × 1)) ÷ 8 = 15 dB HL')
     expect(html).toContain('Estado bilateral')
     expect(html).toContain('data-testid="audiometria-estado-bilateral"')
     expect(html).toContain('Completitud documental')
     expect(html).toContain('data-testid="audiometria-completitud-documental"')
   })
 
-  it('no muestra la tabla, los PTA, la sustitución, las entradas ni las capas', () => {
+  it('no muestra la tabla de vía aérea, el PTA fuente ni las capas', () => {
     expect(html).not.toContain('Vía aérea (TA) por oído y frecuencia')
+    expect(html).not.toContain('Vía aérea por oído y frecuencia')
     expect(html).not.toContain('PTA calculado')
     expect(html).not.toContain('PTA fuente')
-    expect(html).not.toContain('Sustitución')
     expect(html).not.toContain('Entradas TA')
     expect(html).not.toContain('referencia regulatoria')
     expect(html).not.toContain('criterio audiométrico')
     expect(html).not.toContain('datos del documento')
     expect(html).not.toContain('cálculo del sistema')
     expect(html).not.toContain('audiometria-pta-')
-    expect(html).not.toContain('audiometria-fletcher-sustitucion')
     expect(html).not.toContain('audiometria-sme-reference-section')
-    expect(html).not.toContain('PTA')
   })
 
-  it('el índice incompleto se dice en una oración, sin la ecuación', () => {
+  it('sin las dos entradas deja la fórmula y dice que no se puede calcular', () => {
     const incompleto = renderToStaticMarkup(
       createElement(AudiometriaClinicalCriteriaPanel, {
         extractedData: {
@@ -362,10 +369,12 @@ describe('vista del médico: sin bloque de captura', () => {
       }),
     )
     expect(incompleto).toContain('Índice de Fletcher')
+    expect(incompleto).toContain('data-testid="audiometria-fletcher-formula"')
     expect(incompleto).toContain('data-testid="audiometria-fletcher-incompleto"')
     expect(incompleto).toContain('No se puede calcular hasta tener los dos oídos completos.')
-    expect(incompleto).not.toContain('Sustitución')
-    expect(incompleto).not.toContain('PTA')
+    expect(incompleto).not.toContain('data-testid="audiometria-fletcher-entradas"')
+    expect(incompleto).not.toContain('PTA fuente')
+    expect(incompleto).not.toContain('Vía aérea')
     expect(incompleto).toContain('Estado bilateral')
     expect(incompleto).toContain('Completitud documental')
   })

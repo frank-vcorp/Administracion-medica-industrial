@@ -3,16 +3,16 @@
  * @id IMPL-FEATURE-20260825-02
  * @backup context/SPECs/SPEC-FEATURE-20260825-02-AUDIOMETRIA-ENTREGABLE.md
  *
- * La vista muestra sólo tres datos, en modo oración:
- *   - Índice de Fletcher.
+ * La vista muestra, en modo oración:
+ *   - Índice de Fletcher, con la fórmula y las dos entradas (PTA del
+ *     oído menos afectado y PTA del oído más afectado).
  *   - Estado bilateral.
  *   - Completitud documental.
  *
  * El cálculo interno sigue usando las frecuencias y el PTA3
  * `(TA500 + TA1000 + TA2000) / 3` porque Fletcher y el estado bilateral
- * dependen de ellos. Esa captura (tabla TA/VO, PTA calculado, PTA fuente,
- * sustitución, entradas TA y las capas NOM/SME/fuente/derivada) no se
- * renderiza.
+ * dependen de ellos. No se renderizan la tabla de vía aérea, el PTA
+ * fuente ni las capas NOM/SME.
  *
  * Índice de Fletcher: a partir de los dos PTA3 completos, oído menos
  * afectado = menor dB HL, oído más afectado = mayor dB HL:
@@ -730,7 +730,21 @@ export default function AudiometriaClinicalCriteriaPanel({
 
 
 function FletcherCard({ indice }: { indice: IndiceFletcherResultado }) {
-  const { valor, completo } = indice
+  const {
+    valor,
+    completo,
+    oidoMenosAfectado,
+    oidoMasAfectado,
+    ptaMenor,
+    ptaMayor,
+  } = indice
+  const conEntradas =
+    completo &&
+    valor !== null &&
+    ptaMenor !== null &&
+    ptaMayor !== null &&
+    oidoMenosAfectado !== null &&
+    oidoMasAfectado !== null
   return (
     <div
       className="bg-violet-50 border border-violet-200 rounded-lg p-3"
@@ -739,20 +753,35 @@ function FletcherCard({ indice }: { indice: IndiceFletcherResultado }) {
       <p className="text-xs font-semibold text-violet-900 tracking-normal">
         Índice de Fletcher
       </p>
+      <p
+        className="text-[11px] text-violet-800 mt-1 tracking-normal"
+        data-testid="audiometria-fletcher-formula"
+      >
+        ((PTA del oído menos afectado × 7) + (PTA del oído más afectado × 1)) ÷ 8
+      </p>
+      {conEntradas && (
+        <>
+          <p
+            className="text-xs text-violet-900 mt-2"
+            data-testid="audiometria-fletcher-entradas"
+          >
+            El oído menos afectado ({oidoMenosAfectado}) entra con {ptaMenor} dB
+            y el oído más afectado ({oidoMasAfectado}) entra con {ptaMayor} dB.
+          </p>
+          <p
+            className="text-sm font-semibold text-violet-950 mt-2 tracking-normal"
+            data-testid="audiometria-fletcher-valor"
+          >
+            (({ptaMenor} × 7) + ({ptaMayor} × 1)) ÷ 8 = {valor} dB HL
+          </p>
+        </>
+      )}
       {!completo && (
         <p
           className="text-xs text-orange-700 mt-2"
           data-testid="audiometria-fletcher-incompleto"
         >
           No se puede calcular hasta tener los dos oídos completos.
-        </p>
-      )}
-      {completo && valor !== null && (
-        <p
-          className="text-sm font-semibold text-violet-950 mt-2 tracking-normal"
-          data-testid="audiometria-fletcher-valor"
-        >
-          {valor} dB HL
         </p>
       )}
     </div>
