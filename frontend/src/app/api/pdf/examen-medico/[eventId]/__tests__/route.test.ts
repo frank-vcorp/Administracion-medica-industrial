@@ -38,6 +38,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 // ─── Mock state ─────────────────────────────────────────────────────────────
 const mockMedicalEventFindUnique = vi.fn()
 const mockMedicalVerdictUpdate = vi.fn()
+const mockUserFindUnique = vi.fn()
 const mockGetServerSession = vi.fn()
 const mockReadFile = vi.fn()
 const mockGenerateExamenMedicoValidatedPdf = vi.fn()
@@ -57,6 +58,9 @@ vi.mock('@/lib/prisma', () => ({
     },
     medicalVerdict: {
       update: (...a: unknown[]) => mockMedicalVerdictUpdate(...a),
+    },
+    user: {
+      findUnique: (...a: unknown[]) => mockUserFindUnique(...a),
     },
   },
 }))
@@ -293,19 +297,31 @@ describe('GET /api/pdf/examen-medico/[eventId] — IMPL-FEATURE-20260825-03 auth
     expect(res.status).toBe(200)
   })
 
-  it('sin MedicalVerdict firmado → 404 (PDF requiere dictamen)', async () => {
+  it('sin MedicalVerdict, con aptitud, el reporte lo firma la cuenta en sesión', async () => {
     setSession({ id: 'doctor-X', role: 'DOCTOR_GENERAL' })
+    mockUserFindUnique.mockResolvedValue({
+      id: 'doctor-X',
+      fullName: 'Dr. Sesión',
+      professionalLicense: '999',
+      signatureImageUrl: '',
+    })
     mockMedicalEventFindUnique.mockResolvedValue({
       ...EVENT_BASE,
       verdict: null,
+    })
+    mockGenerateExamenMedicoValidatedPdf.mockResolvedValue({
+      buffer: Buffer.from('%PDF-1.4 fake'),
+      hash: 'sha256:fake',
+      url: null,
+      absolutePath: null,
     })
 
     const res = await GET(makeRequest() as never, {
       params: Promise.resolve({ eventId: 'event-1' }),
     })
 
-    expect(res.status).toBe(404)
-    expect(mockGenerateExamenMedicoValidatedPdf).not.toHaveBeenCalled()
+    expect(res.status).toBe(200)
+    expect(mockGenerateExamenMedicoValidatedPdf).toHaveBeenCalled()
   })
 
   // ─── REGRESIÓN P2-3 ──────────────────────────────────────────────────────
