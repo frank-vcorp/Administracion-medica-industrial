@@ -160,3 +160,105 @@ describe('buildAudiometriaPdfData — FND-20260825-15 (payload sanity)', () => {
     expect(data.doctorNotes).toBeNull()
   })
 })
+
+describe('datos de la cuenta y del estudio', () => {
+  it('usa paciente, empresa, médico, fecha, umbrales y recomendaciones que recibe', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      doctorDiagnosis: 'Umbrales elevados en agudos.',
+      doctorRecommendations: 'Repetir el estudio en seis meses.',
+      patient: {
+        firstName: 'Ana',
+        lastName: 'López',
+        universalId: 'TRAB-100',
+        companyName: 'Norte Industrial',
+      },
+      medico: {
+        fullName: 'Dra. Marta Ruiz',
+        professionalLicense: '9988776',
+        signatureImageUrl: '',
+      },
+      extractionStructuredData: {
+        estudio: { fecha_estudio: '02/03/2026', hora_estudio: '09:15' },
+        oido_derecho: { va: { 500: 20, 1000: 20, 2000: 20, 3000: 20 } },
+        oido_izquierdo: { va: { 500: 10, 1000: 10, 2000: 10, 3000: 10 } },
+        campos_fuente: { faringe: 'Sin hallazgos', cad: 'Libre' },
+        notas_calidad: { descripcion: 'Umbrales elevados en agudos.' },
+      },
+      sourceCropDataUrl: 'data:image/png;base64,CROPREAL',
+      sourceCropAspectRatio: 2.1,
+    })
+
+    expect(data.patient.fullName).toBe('Ana López')
+    expect(data.patient.companyName).toBe('Norte Industrial')
+    expect(data.patient.universalId).toBe('TRAB-100')
+    expect(data.medico.fullName).toBe('Dra. Marta Ruiz')
+    expect(data.medico.professionalLicense).toBe('9988776')
+    expect(data.formato.fechaEstudio).toBe('02/03/2026')
+    expect(data.taOd).toMatchObject({ 500: 20, 1000: 20, 2000: 20, 3000: 20 })
+    expect(data.taOi).toMatchObject({ 500: 10, 1000: 10, 2000: 10, 3000: 10 })
+    expect(data.formato.perdidaPorOidoOd).toBe('16.00%')
+    expect(data.formato.perdidaPorOidoOi).toBe('8.00%')
+    expect(data.formato.recomendacionesTexto).toBe('Repetir el estudio en seis meses.')
+    expect(data.formato.faringe).toBe('Sin hallazgos')
+    expect(data.sourceCropDataUrl).toBe('data:image/png;base64,CROPREAL')
+    const serializado = JSON.stringify(data)
+    expect(serializado).not.toContain('Cervantes')
+    expect(serializado).not.toContain('VALIANT')
+    expect(serializado).not.toContain('12.0000%')
+  })
+
+  it('no inventa la pérdida si falta una de las cuatro frecuencias', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      extractionStructuredData: {
+        oido_derecho: { va: { 500: 10, 1000: 10, 2000: 10 } },
+        oido_izquierdo: { va: { 500: 10, 1000: 10, 2000: 10, 3000: 10 } },
+      },
+    })
+    expect(data.formato.perdidaPorOidoOd).toBeNull()
+    expect(data.formato.perdidaPorOidoOi).toBe('8.00%')
+    expect(data.formato.hipoacusiaBilateralCombinada).toBeNull()
+  })
+
+  it('traduce el patrón aceptado y no inventa etiología', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      doctorDiagnosis: 'Hallazgos compatibles con hipoacusia.',
+      prediagnosisData: {
+        recommendation: 'Uso de tapones.',
+        resumen_por_oido: {
+          oido_derecho: { pattern: 'NEUROSENSORIAL', severity: 'LEVE' },
+          oido_izquierdo: { pattern: 'NORMAL', severity: 'NORMAL' },
+        },
+        clasificacion_hipoacusia: { right: 'LEVE', left: 'NO_APLICA' },
+      },
+    })
+    expect(data.formato.diagnosticoNosologicoOd).toBe('Hipoacusia Neurosensorial')
+    expect(data.formato.diagnosticoNosologicoOi).toBe('Audición Normal')
+    expect(data.formato.clasificacionHipoacusiaOd).toBe('Leve')
+    expect(data.formato.clasificacionHipoacusiaOi).toBe('No Aplica')
+    expect(data.formato.diagnosticoEtiologicoOd).toBeNull()
+    expect(data.formato.diagnosticoEtiologicoOi).toBeNull()
+  })
+
+  it('la exploración del cuestionario llena faringe, CAD y membranas', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      clinicalContext: {
+        exploracionFisica: {
+          faringe: { estado: 'NORMAL' },
+          cad: { estado: 'NORMAL' },
+          cai: { estado: 'ALTERADO', observacion: 'Cerumen' },
+          mtd: { estado: 'NORMAL' },
+          mti: { estado: 'NO_REALIZADO' },
+        },
+      },
+    })
+    expect(data.formato.faringe).toBe('Sin datos patológicos')
+    expect(data.formato.cad).toBe('permeable')
+    expect(data.formato.cai).toBe('Cerumen')
+    expect(data.formato.mtd).toBe('íntegra, aspecto normal')
+    expect(data.formato.mti).toBe('No realizado')
+  })
+})

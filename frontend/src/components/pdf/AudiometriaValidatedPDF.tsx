@@ -1,152 +1,115 @@
 /**
- * @fileoverview Plantilla PDF validado de Audiometría — IMPL-FEATURE-20260825-02.
- * @id IMPL-FEATURE-20260825-02
- * @backup context/SPECs/SPEC-FEATURE-20260825-02-AUDIOMETRIA-ENTREGABLE.md
+ * PDF validado de Audiometría, en el formato institucional común.
  *
- * GUARDRAILS:
- *   - NO copia el diagnóstico nosológico ni la recomendación textual del
- *     PDF fuente como salida de IA (SPEC §3). La impresión diagnóstica del
- *     PDF refleja la decisión del médico firmante (`doctorDiagnosis`),
- *     no el texto del documento fuente.
- *   - El PDF conserva explícitamente TRES secciones de contenido + una
- *     sección de identidad/firma:
- *       I.  Datos del estudio y paciente (NOM)
- *       II. Evidencia audiométrica por oído y frecuencia (Fuente)
- *       III. Impresión diagnóstica validada por el médico
- *       IV. Recomendaciones validadas (snapshot IA aceptado)
- *       V.  Notas clínicas
- *     + identidad (médico + cédula) + firma al final.
- *   - DEC-20260825-10 / BR-20260825-11 / FND-20260825-14 (rectificación
- *     Frank): la sección "Criterio audiométrico AMI (referencia)" —
- *     tablas de normalidad, patrón operativo, severidad y etiologías
- *     — fue RETIRADA del PDF. Las constantes siguen en
- *     `AudiometriaClinicalCriteriaPanel.tsx`; el panel ya no las muestra.
- *   - DEC-20260825-11 / BR-20260825-12 / FND-20260825-15 (rectificación
- *     Frank): la sección "Criterios audiométricos derivados" (PTA3,
- *     PTA fuente, criterio AMI, patrón, estado bilateral, completitud,
- *     advertencias) también fue RETIRADA del PDF. El PDF se enfoca
- *     en datos del estudio, evidencia documental (umbrales TA/VO por
- *     frecuencia y por oído), impresión del médico, recomendaciones
- *     validadas y notas. En la papeleta el médico ve sólo el índice de
- *     Fletcher, el estado bilateral y la completitud documental.
- *   - TA = vía aérea; VO = vía ósea (sólo si están visibles en el
- *     documento).
+ * Los datos del estudio se componen aquí. Las gráficas no se redibujan:
+ * son el recorte del audiograma del PDF que subió el usuario.
+ *
+ * El panel del médico no se arma aquí. Ahí siguen el índice de Fletcher,
+ * su cálculo, el estado bilateral y la completitud documental.
  */
-import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
-import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
-import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
+import { Document, Image, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 import { SME_LEGAL_NAME, SME_PDF_FOOTER } from '@/lib/brand-constants'
+import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
+import type { AudiometriaFormatoReferencia } from '@/lib/audiometry-formato'
+import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
+
+const CONTENT_WIDTH = 584
+const SOURCE_IMAGE_MAX_HEIGHT = 210
 
 const styles = StyleSheet.create({
-  page: { padding: 36, fontFamily: 'Helvetica', fontSize: 10, color: '#0f172a' },
+  page: {
+    paddingTop: 14,
+    paddingBottom: 48,
+    paddingHorizontal: 14,
+    fontFamily: 'Helvetica',
+    fontSize: 7,
+    color: '#0f172a',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#0f766e',
-    paddingBottom: 8,
+    paddingBottom: 4,
   },
   headerLeft: { flexDirection: 'column' },
-  brand: { fontSize: 16, fontWeight: 'bold', color: '#0f766e' },
-  brandSub: { fontSize: 8, color: '#475569' },
-  headerRight: { alignItems: 'flex-end', justifyContent: 'flex-start', width: 140 },
-  logoImage: { width: 130, height: 48, objectFit: 'contain' },
+  brand: { fontSize: 11, fontWeight: 'bold', color: '#0f766e' },
+  brandSub: { fontSize: 6, color: '#475569' },
+  headerRight: { width: 110, alignItems: 'flex-end' },
+  logoImage: { width: 110, height: 36, objectFit: 'contain' },
   logoFallback: {
-    width: 130,
-    height: 48,
+    width: 110,
+    height: 36,
     borderWidth: 1,
     borderColor: '#cbd5e1',
     textAlign: 'center',
-    paddingTop: 14,
-    fontSize: 14,
+    paddingTop: 10,
+    fontSize: 11,
     fontWeight: 'bold',
     color: '#0f766e',
   },
-  docTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: '#0f172a' },
-  sourceWrap: {
-    marginHorizontal: -36,
-    marginBottom: 8,
-  },
-  sourceImage: {
-    width: '100%',
-    objectFit: 'contain',
-  },
-  section: { marginBottom: 12 },
-  sectionTitle: {
-    fontSize: 10,
+  docTitle: { fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+  infoGrid: { flexDirection: 'row', marginBottom: 4, gap: 8 },
+  infoCol: { flex: 1 },
+  infoLine: { fontSize: 6.5, marginBottom: 1 },
+  infoLabel: { fontWeight: 'bold', color: '#475569' },
+  sourceWrap: { marginBottom: 4, alignItems: 'center' },
+  sourceImage: { objectFit: 'contain' },
+  missingCrop: { fontSize: 7, color: '#64748b', marginBottom: 4 },
+  table: { borderWidth: 0.6, borderColor: '#334155', marginBottom: 4 },
+  tableRow: { flexDirection: 'row' },
+  th: {
+    fontSize: 6,
     fontWeight: 'bold',
-    backgroundColor: '#f1f5f9',
-    padding: 5,
-    marginBottom: 6,
-    color: '#0f172a',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    textAlign: 'center',
+    paddingVertical: 2,
+    borderRightWidth: 0.4,
+    borderBottomWidth: 0.6,
+    borderColor: '#334155',
   },
-  row: { flexDirection: 'row', marginBottom: 3 },
-  label: { width: 130, fontSize: 9, fontWeight: 'bold', color: '#475569' },
-  value: { flex: 1, fontSize: 9, color: '#0f172a' },
-  paragraph: { fontSize: 9, lineHeight: 1.5, color: '#0f172a', marginBottom: 4 },
-  bulletItem: { fontSize: 9, marginLeft: 8, marginBottom: 2 },
-  verdictBox: {
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 4,
-    backgroundColor: '#f8fafc',
-    marginBottom: 6,
+  td: {
+    fontSize: 7,
+    textAlign: 'center',
+    paddingVertical: 2,
+    borderRightWidth: 0.4,
+    borderColor: '#334155',
   },
-  // Tabla de umbrales
-  table: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    marginBottom: 8,
+  examLine: { flexDirection: 'row', marginBottom: 1 },
+  examLabel: { width: 48, fontSize: 7, fontWeight: 'bold' },
+  examValue: { flex: 1, fontSize: 7 },
+  sectionLine: { flexDirection: 'row', marginTop: 2 },
+  sectionLabel: { fontSize: 7, fontWeight: 'bold', marginRight: 3 },
+  sectionValue: { flex: 1, fontSize: 7 },
+  dxTitle: { textAlign: 'center', fontSize: 8, fontWeight: 'bold', marginTop: 3 },
+  earTitle: { fontSize: 7, fontWeight: 'bold', marginTop: 2 },
+  dxRow: { flexDirection: 'row' },
+  dxCol: { flex: 1, paddingRight: 4 },
+  dxLabel: { fontSize: 6, fontWeight: 'bold', color: '#475569' },
+  dxValue: { fontSize: 7 },
+  signatureArea: { marginTop: 6, flexDirection: 'row', justifyContent: 'flex-end' },
+  signatureBox: { width: 200, alignItems: 'center' },
+  signatureImage: { width: 100, height: 28, objectFit: 'contain', marginBottom: 2 },
+  signatureLine: {
+    width: 150,
+    borderBottomWidth: 0.8,
+    borderBottomColor: '#0f172a',
+    marginBottom: 2,
   },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#e2e8f0',
-    borderBottomWidth: 1,
-    borderBottomColor: '#cbd5e1',
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-  },
-  tableHeaderCell: { flex: 1, fontSize: 8, fontWeight: 'bold', color: '#0f172a' },
-  tableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-  },
-  tableRowAlt: {
-    flexDirection: 'row',
-    backgroundColor: '#f8fafc',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-  },
-  tableCell: { flex: 1, fontSize: 8, color: '#0f172a' },
-  // Firma
-  signatureArea: { marginTop: 36, flexDirection: 'row', justifyContent: 'flex-end' },
-  signatureBox: { width: 240, alignItems: 'center' },
-  signatureImage: { width: 200, height: 70, objectFit: 'contain', marginBottom: 4 },
-  signatureLine: { width: 200, borderBottomWidth: 1, borderBottomColor: '#0f172a', marginBottom: 4 },
-  signatureName: { fontSize: 10, fontWeight: 'bold', color: '#0f172a' },
-  signatureLicense: { fontSize: 9, color: '#475569' },
-  signatureDate: { fontSize: 8, color: '#94a3b8', marginTop: 2 },
+  signatureName: { fontSize: 7, fontWeight: 'bold', textAlign: 'center' },
+  signatureMeta: { fontSize: 6.5, textAlign: 'center', color: '#475569' },
   footer: {
     position: 'absolute',
-    bottom: 24,
-    left: 36,
-    right: 36,
+    bottom: 12,
+    left: 14,
+    right: 14,
     textAlign: 'center',
-    fontSize: 7,
-    color: '#94a3b8',
-    borderTopWidth: 1,
+    fontSize: 5.5,
+    color: '#64748b',
+    borderTopWidth: 0.6,
     borderTopColor: '#e2e8f0',
-    paddingTop: 8,
-    lineHeight: 1.4,
+    paddingTop: 4,
+    lineHeight: 1.35,
   },
 })
 
@@ -159,204 +122,247 @@ export interface AudiometriaValidatedPDFData {
   doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
   doctorDiagnosis: string
   doctorNotes?: string | null
-  /** Frecuencias presentes en el documento fuente (Hz). NO se inventan. */
   frecuencias: number[]
-  /** TA por oído y frecuencia (dB). Ausentes → null. */
   taOd: Record<number, number | null>
   taOi: Record<number, number | null>
-  /** VO por oído y frecuencia (dB). Ausentes → null. */
   voOd: Record<number, number | null>
   voOi: Record<number, number | null>
-  /**
-   * FND-20260825-15: el campo `criterios` (PTA3, PTA fuente, criterio
-   * AMI, patrón, estado bilateral, completitud, advertencias) ya NO
-   * forma parte del PDF. El shape del PDF queda alineado con su
-   * contenido: evidencia documental + impresión + recomendaciones +
-   * notas + identidad/firma.
-   */
-  /** Recomendaciones validadas (snapshot IA aceptado). */
   recomendacionesValidadas: string[]
+  formato: AudiometriaFormatoReferencia
   medico: {
     fullName: string
     professionalLicense: string
     signatureImageUrl: string
   }
   logoUrl: string
-  /** Recorte del audiograma tonal (PDF DD65) — sustituye tabla TA/VO. */
+  /** Recorte del audiograma del PDF subido. No se redibuja. */
   sourceCropDataUrl?: string | null
   sourceCropAspectRatio?: number | null
 }
 
-const formatDate = (d: string | Date) => {
-  const date = d instanceof Date ? d : new Date(d)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('es-MX', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+function valor(texto: string | null | undefined): string {
+  const limpio = texto?.trim()
+  return limpio ? limpio : '—'
 }
 
-const A4_CONTENT_WIDTH_PT = 523
-/** Techo de altura del recorte embebido (evita 2ª hoja en A4). */
-const SOURCE_IMAGE_MAX_HEIGHT_PT = 300
+function celda(umbral: number | null | undefined): string {
+  return typeof umbral === 'number' && Number.isFinite(umbral) ? String(umbral) : '—'
+}
 
-// FND-20260825-14 / FND-20260825-15 — Retiro de las secciones "Criterio
-// audiométrico AMI (referencia)" (DEC-20260825-10) y "Criterios
-// audiométricos derivados" (DEC-20260825-11) del PDF. Las constantes
-// `CRITERIO_AMI_LABEL`, `PATRON_AMI_LABEL` y `BILATERAL_LABEL` dejaron de
-// ser usadas y se eliminaron. `formatDb` se conserva porque sigue
-// dando formato a TA/VO en la sección II (evidencia documental).
+function InfoLine({ label, value }: { label: string; value: string | null }) {
+  return (
+    <Text style={styles.infoLine}>
+      <Text style={styles.infoLabel}>{label} </Text>
+      {valor(value)}
+    </Text>
+  )
+}
 
-// DEC-20260825-10 / DEC-20260825-11 — la sección IV de referencia AMI
-// (FND-20260825-12) y la sección III "Criterios audiométricos derivados"
-// (FND-20260825-15) fueron RETIRADAS del PDF por rectificación de Frank.
-// El panel clínico ya no muestra esa captura ni la referencia: sólo el
-// índice de Fletcher, el estado bilateral y la completitud documental.
-// El PDF se concentra en: datos del estudio (I), evidencia documental
-// fuente (II), impresión del médico (III), recomendaciones validadas (IV)
-// y notas (V). Identidad + firma + cédula siguen al final.
+const COLS = [42, 58, 64, 64, 64, 120, 172]
 
 export const AudiometriaValidatedPDF = ({
   data,
 }: {
   data: AudiometriaValidatedPDFData
 }) => {
-  const sourceImageHeight =
+  const formato = data.formato
+  const aspect =
     data.sourceCropAspectRatio && data.sourceCropAspectRatio > 0
-      ? Math.min(
-          SOURCE_IMAGE_MAX_HEIGHT_PT,
-          A4_CONTENT_WIDTH_PT / data.sourceCropAspectRatio,
-        )
-      : 280
+      ? data.sourceCropAspectRatio
+      : null
+  const imageHeight = aspect
+    ? Math.min(SOURCE_IMAGE_MAX_HEIGHT, CONTENT_WIDTH / aspect)
+    : SOURCE_IMAGE_MAX_HEIGHT
 
   return (
-  <Document
-    title={`Audiometria-validada-${data.reviewId.slice(0, 8)}`}
-    author={`Dr(a). ${data.medico.fullName}`}
-    subject="Reporte de Audiometría validado por el médico"
-  >
-    <Page size="A4" style={styles.page}>
-      {/* MEMBRETE SUPERIOR (capa NOM) */}
-      <View style={styles.header} fixed>
-        <View style={styles.headerLeft}>
-          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
-          <Text style={styles.brandSub}>
-            Evaluaciones médicas · Outsourcing · Capacitación
-          </Text>
-          <Text style={styles.brandSub}>
-            Ergonomía · Fisioterapia · Nutrición
-          </Text>
+    <Document
+      title={`Audiometria-${data.reviewId.slice(0, 8)}`}
+      author={data.medico.fullName}
+      subject="Estudio de audiometría validado"
+    >
+      <Page size="LETTER" style={styles.page}>
+        <View style={styles.header} fixed>
+          <View style={styles.headerLeft}>
+            <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
+            <Text style={styles.brandSub}>Evaluaciones médicas · Outsourcing · Capacitación</Text>
+            <Text style={styles.brandSub}>Ergonomía · Fisioterapia · Nutrición</Text>
+          </View>
+          <View style={styles.headerRight}>
+            {data.logoUrl ? (
+              <Image style={styles.logoImage} src={data.logoUrl} />
+            ) : (
+              <Text style={styles.logoFallback}>SME</Text>
+            )}
+          </View>
         </View>
-        <View style={styles.headerRight}>
-          {data.logoUrl ? (
-            <Image style={styles.logoImage} src={data.logoUrl} />
-          ) : (
-            <Text style={styles.logoFallback}>SME</Text>
-          )}
+
+        <Text style={styles.docTitle}>Estudio de Audiometría</Text>
+
+        <PatientIdentificationPdfBlock
+          patient={data.patient}
+          heading="Identificación del paciente"
+        />
+
+        <View style={styles.infoGrid}>
+          <View style={styles.infoCol}>
+            <InfoLine label="Nacimiento" value={formato.nacimiento} />
+            <InfoLine label="Notas" value={formato.notasPaciente} />
+          </View>
+          <View style={styles.infoCol}>
+            <InfoLine label="Fecha del estudio" value={formato.fechaEstudio} />
+            <InfoLine label="Hora" value={formato.horaEstudio} />
+            <InfoLine label="Notas de prueba" value={formato.notasPrueba} />
+          </View>
+          <View style={styles.infoCol}>
+            <InfoLine label="Audiómetro" value={formato.audiometro} />
+            <InfoLine label="Transductor" value={formato.transductor} />
+            <InfoLine label="Número de serie" value={formato.numeroSerie} />
+            <InfoLine label="Última calibración" value={formato.ultimaCalibracion} />
+          </View>
         </View>
-      </View>
 
-      <Text style={styles.docTitle}>Reporte de Audiometría Validado</Text>
-
-      <PatientIdentificationPdfBlock
-        patient={data.patient}
-        heading="Identificación del paciente"
-      />
-
-      {/* I. Audiograma tonal (recorte documento fuente DD65) */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          I. Audiograma tonal (documento fuente)
-        </Text>
         {data.sourceCropDataUrl ? (
           <View style={styles.sourceWrap}>
             <Image
-              style={[styles.sourceImage, { height: sourceImageHeight }]}
+              style={[styles.sourceImage, { width: CONTENT_WIDTH, height: imageHeight }]}
               src={data.sourceCropDataUrl}
             />
           </View>
         ) : (
-          <Text style={styles.paragraph}>
-            Gráficas del audiómetro no disponibles en este entorno. Consulte el
-            PDF original vinculado al estudio en la papeleta.
+          <Text style={styles.missingCrop}>
+            Audiograma del archivo fuente no disponible.
           </Text>
         )}
-      </View>
 
-      {/* DEC-20260825-10 — sección III "Criterios audiométricos
-          derivados" retirada del PDF (FND-20260825-15). En la papeleta
-          el médico ve el índice de Fletcher, el estado bilateral y la
-          completitud documental; la captura (tabla, PTA, capas) no se
-          muestra. La sección II del PDF conserva la evidencia documental
-          (tabla TA/VO). La referencia AMI tampoco se imprime
-          (FND-20260825-14). */}
-
-      {/* II. IMPRESIÓN DIAGNÓSTICA VALIDADA */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          II. Impresión diagnóstica (validada por el médico)
-        </Text>
-        <View style={styles.verdictBox}>
-          <Text style={styles.paragraph}>{data.doctorDiagnosis}</Text>
+        <View style={styles.table}>
+          <View style={styles.tableRow}>
+            {[
+              'OIDO',
+              '500 Hz',
+              '1000Hz',
+              '2000 Hz',
+              '3000 Hz',
+              'Perdida por Oido',
+              'Hipoacusia Bilateral Combinada',
+            ].map((titulo, index) => (
+              <Text key={titulo} style={[styles.th, { width: COLS[index] }]}>
+                {titulo}
+              </Text>
+            ))}
+          </View>
+          <View style={styles.tableRow}>
+            {[
+              'OD',
+              celda(data.taOd[500]),
+              celda(data.taOd[1000]),
+              celda(data.taOd[2000]),
+              celda(data.taOd[3000]),
+              formato.perdidaPorOidoOd ?? '—',
+              formato.hipoacusiaBilateralCombinada ?? '—',
+            ].map((texto, index) => (
+              <Text key={`od-${index}`} style={[styles.td, { width: COLS[index] }]}>
+                {texto}
+              </Text>
+            ))}
+          </View>
+          <View style={styles.tableRow}>
+            {[
+              'OI',
+              celda(data.taOi[500]),
+              celda(data.taOi[1000]),
+              celda(data.taOi[2000]),
+              celda(data.taOi[3000]),
+              formato.perdidaPorOidoOi ?? '—',
+              '',
+            ].map((texto, index) => (
+              <Text key={`oi-${index}`} style={[styles.td, { width: COLS[index] }]}>
+                {texto}
+              </Text>
+            ))}
+          </View>
         </View>
-      </View>
 
-      {/* IV. RECOMENDACIONES VALIDADAS */}
-      {data.recomendacionesValidadas.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>III. Recomendaciones validadas</Text>
-          {data.recomendacionesValidadas.map((r, i) => (
-            <Text key={i} style={styles.bulletItem}>
-              • {r}
+        <View style={styles.examLine}>
+          <Text style={styles.examLabel}>FARINGE</Text>
+          <Text style={styles.examValue}>{valor(formato.faringe)}</Text>
+        </View>
+        <View style={styles.examLine}>
+          <Text style={styles.examLabel}>CAD</Text>
+          <Text style={styles.examValue}>{valor(formato.cad)}</Text>
+          <Text style={styles.examLabel}>CAI</Text>
+          <Text style={styles.examValue}>{valor(formato.cai)}</Text>
+        </View>
+        <View style={styles.examLine}>
+          <Text style={styles.examLabel}>MTD</Text>
+          <Text style={styles.examValue}>{valor(formato.mtd)}</Text>
+          <Text style={styles.examLabel}>MTI</Text>
+          <Text style={styles.examValue}>{valor(formato.mti)}</Text>
+        </View>
+
+        <View style={styles.sectionLine}>
+          <Text style={styles.sectionLabel}>DESCRIPCIÓN AUDIOMÉTRICA:</Text>
+          <Text style={styles.sectionValue}>{formato.descripcionAudiometrica}</Text>
+        </View>
+
+        <Text style={styles.dxTitle}>DIAGNOSTICO AUDIOMETRICO</Text>
+        <Text style={styles.earTitle}>Oído derecho</Text>
+        <View style={styles.dxRow}>
+          <View style={styles.dxCol}>
+            <Text style={styles.dxLabel}>Nosológico</Text>
+            <Text style={styles.dxValue}>{valor(formato.diagnosticoNosologicoOd)}</Text>
+          </View>
+          <View style={styles.dxCol}>
+            <Text style={styles.dxLabel}>Etiológico</Text>
+            <Text style={styles.dxValue}>{valor(formato.diagnosticoEtiologicoOd)}</Text>
+          </View>
+          <View style={styles.dxCol}>
+            <Text style={styles.dxLabel}>Clasificación</Text>
+            <Text style={styles.dxValue}>{valor(formato.clasificacionHipoacusiaOd)}</Text>
+          </View>
+        </View>
+        <Text style={styles.earTitle}>Oído izquierdo</Text>
+        <View style={styles.dxRow}>
+          <View style={styles.dxCol}>
+            <Text style={styles.dxLabel}>Nosológico</Text>
+            <Text style={styles.dxValue}>{valor(formato.diagnosticoNosologicoOi)}</Text>
+          </View>
+          <View style={styles.dxCol}>
+            <Text style={styles.dxLabel}>Etiológico</Text>
+            <Text style={styles.dxValue}>{valor(formato.diagnosticoEtiologicoOi)}</Text>
+          </View>
+          <View style={styles.dxCol}>
+            <Text style={styles.dxLabel}>Clasificación</Text>
+            <Text style={styles.dxValue}>{valor(formato.clasificacionHipoacusiaOi)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.sectionLine}>
+          <Text style={styles.sectionLabel}>RECOMENDACIONES:</Text>
+          <Text style={styles.sectionValue}>{formato.recomendacionesTexto}</Text>
+        </View>
+
+        <View style={styles.signatureArea}>
+          <View style={styles.signatureBox}>
+            {data.medico.signatureImageUrl ? (
+              <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
+            ) : (
+              <View style={styles.signatureLine} />
+            )}
+            <Text style={styles.signatureName}>
+              Realizó EM: {data.medico.fullName.toUpperCase()}
             </Text>
-          ))}
+            <Text style={styles.signatureMeta}>
+              Ced. Prof.: {data.medico.professionalLicense}
+            </Text>
+          </View>
         </View>
-      ) : null}
 
-      {/* V. NOTAS */}
-      {data.doctorNotes ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>IV. Notas clínicas</Text>
-          <Text style={styles.paragraph}>{data.doctorNotes}</Text>
-        </View>
-      ) : null}
-
-      {/* FIRMA */}
-      <View style={styles.signatureArea}>
-        <View style={styles.signatureBox}>
-          {data.medico.signatureImageUrl ? (
-            <Image
-              style={styles.signatureImage}
-              src={data.medico.signatureImageUrl}
-            />
-          ) : (
-            <View style={styles.signatureLine} />
-          )}
-          <Text style={styles.signatureName}>Dr(a). {data.medico.fullName}</Text>
-          <Text style={styles.signatureLicense}>
-            Cédula profesional: {data.medico.professionalLicense}
-          </Text>
-          <Text style={styles.signatureDate}>
-            Fecha y hora: {formatDate(data.signedAt)}
-          </Text>
-        </View>
-      </View>
-
-      {/* PIE INSTITUCIONAL AMI */}
-      <Text style={styles.footer} fixed>
-        {SME_PDF_FOOTER}
-        {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
-        {'\n'}Este documento es un reporte clínico validado por el médico firmante. Queda prohibida su alteración o reproducción no autorizada.
-      </Text>
-    </Page>
-  </Document>
+        <Text style={styles.footer} fixed>
+          {SME_PDF_FOOTER}
+          {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
+          {'\n'}Este documento es un reporte clínico validado por el médico firmante.
+        </Text>
+      </Page>
+    </Document>
   )
 }
-
-// FND-20260825-15: `formatBool` ya NO se usa en este PDF (la sección
-// "Criterios audiométricos derivados" se retiró). Se elimina la
-// exportación que se conservaba por simetría con el PDF de Espirometría.
-// Si una futura sección la necesita, volver a declarar la función.

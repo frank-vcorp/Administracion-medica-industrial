@@ -1,6 +1,6 @@
 """
-Recorte vertical del PDF DD65 V2: banda «Audiograma Tono Puro» → antes de «Notas».
-Ratios calibrados en frontend (`audiometry-dd65-clip.ts`). Ejecuta en Railway (poppler + Pillow).
+Recorte del audiograma tonal en el PDF subido (DD65 V2), sin la ficha
+del equipo y antes de «Audiograma Habla». Ratios en `audiometry-dd65-clip.ts`.
 """
 from __future__ import annotations
 

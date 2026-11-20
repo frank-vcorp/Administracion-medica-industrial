@@ -6,11 +6,11 @@
  * Patrón (paralelo a `espirometry-pdf.tsx`):
  *   - Toma los datos de la revisión + snapshot congelado + identidad
  *     congelada del médico (`DoctorStudyReview.validatorSnapshot*`).
- *   - Resuelve la EVIDENCIA DOCUMENTAL (TA/VO por frecuencia y por
- *     oído) desde la presentación clínica estructurada de Audiometría.
- *     NO calcula ni renderiza criterios derivados (PTA3, criterio AMI,
- *     patrón, completitud). En la papeleta el médico ve el índice de
- *     Fletcher, el estado bilateral y la completitud documental.
+ *   - Resuelve la evidencia documental (TA/VO) y los bloques del formato
+ *     «ESTUDIO DE AUDIOMETRIA»: paciente, equipo, tabla 500–3000 Hz,
+ *     exploración, descripción, diagnóstico y recomendaciones.
+ *     No arma el panel del médico. En la papeleta siguen el índice de
+ *     Fletcher, su cálculo, el estado bilateral y la completitud.
  *   - Renderiza `<AudiometriaValidatedPDF>` con `@react-pdf/renderer`.
  *   - Persiste el PDF a disco en `uploads/audiometry-pdfs/<reviewId>.pdf`
  *     y devuelve URL relativa + hash SHA-256 + bytes para que la server
@@ -57,6 +57,7 @@ import {
   type PatientIdentificationPdf,
 } from '@/lib/pdf/patient-identification'
 import { resolveAudiometrySourceCropForPdf } from '@/lib/audiometry-source-crop'
+import { buildAudiometriaFormato } from '@/lib/audiometry-formato'
 
 export { resolveSmeLogoDataUrl, resolveAmiLogoDataUrl }
 
@@ -174,22 +175,22 @@ export function buildAudiometriaPdfData(
     return out
   }
 
-  const patientFullName = `${input.patient.firstName} ${input.patient.lastName}`.trim()
   const diagnosis = (input.doctorDiagnosis ?? '').trim()
+  const patient =
+    input.patientIdentification ??
+    buildPatientIdentificationPdf({
+      firstName: input.patient.firstName,
+      lastName: input.patient.lastName,
+      universalId: input.patient.universalId,
+      companyName: input.patient.companyName,
+    })
 
   return {
     reviewId: input.reviewId,
     signedAt: input.reviewCreatedAt,
     studyName: input.studyName ?? 'Audiometría',
     studyType: input.studyType ?? 'Audiometria',
-    patient:
-      input.patientIdentification ??
-      buildPatientIdentificationPdf({
-        firstName: input.patient.firstName,
-        lastName: input.patient.lastName,
-        universalId: input.patient.universalId,
-        companyName: input.patient.companyName,
-      }),
+    patient,
     doctorStatus: input.doctorStatus,
     doctorDiagnosis:
       diagnosis.length > 0
@@ -202,6 +203,16 @@ export function buildAudiometriaPdfData(
     voOd: voMap(od),
     voOi: voMap(oi),
     recomendacionesValidadas,
+    formato: buildAudiometriaFormato({
+      doctorStatus: input.doctorStatus,
+      doctorDiagnosis: diagnosis.length > 0 ? diagnosis : null,
+      doctorNotes: input.doctorNotes ?? null,
+      recomendacionesValidadas,
+      patient,
+      extraction: extracted,
+      prediagnosis: predxData,
+      clinicalContext: input.clinicalContext,
+    }),
     medico: input.medico,
     logoUrl: input.logoDataUrl ?? '',
     sourceCropDataUrl: input.sourceCropDataUrl ?? null,
@@ -226,7 +237,7 @@ export async function buildAudiometriaPdfDataAsync(
       lastName: input.patient.lastName,
       universalId: input.patient.universalId,
       companyName: input.patient.companyName,
-      attentionDate: input.reviewCreatedAt,
+      attentionDate: undefined,
     }))
   return buildAudiometriaPdfData({
     ...input,
