@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
+import base64
 import os
 import re
 import time
@@ -1967,6 +1968,8 @@ async def v2_event_test_audiometry_source_crop(body: AudiometrySourceCropRequest
         "file_url": file_url,
         "template_id": AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        # Evita un segundo fetch a /api/files (302→S3) desde Vercel al armar el PDF.
+        "png_base64": base64.b64encode(png_bytes).decode("ascii"),
     }
 
 

@@ -1030,6 +1030,7 @@ export async function submitDoctorStudyReview(
             eventId: eventTestData?.eventId ?? eventId,
             eventTestId,
             clinicalContext: eventTestData?.clinicalContext,
+            forceSourceCropRegenerate: true,
           })
           pdfResult = await generateAudiometriaValidatedPdf({
             reviewId: review.id,

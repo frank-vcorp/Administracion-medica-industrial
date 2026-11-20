@@ -64,7 +64,7 @@ async function maybeCropAudiometrySourceAfterUpload(
   if (!fileName.toLowerCase().endsWith('.pdf')) return
   try {
     const { ensureAudiometrySourceCrop } = await import('@/lib/audiometry-source-crop')
-    await ensureAudiometrySourceCrop(eventTestId)
+    await ensureAudiometrySourceCrop(eventTestId, { force: true })
   } catch (err) {
     console.warn('[event-test] Recorte audiometría no disponible:', err)
   }
@@ -1525,6 +1525,22 @@ export async function regenerateStudyAI(
       where: { id: eventTestId },
       data: { resultNotes },
     })
+
+    if (aiResult.success && canonicalType === 'Audiometria') {
+      const fileName = eventTest.fileUrl.split('/').pop() ?? ''
+      await maybeCropAudiometrySourceAfterUpload(
+        eventTestId,
+        fileName,
+        'Audiometria',
+      )
+    } else if (aiResult.success && canonicalType === 'Espirometria') {
+      const fileName = eventTest.fileUrl.split('/').pop() ?? ''
+      await maybeCropEspirometrySourceAfterUpload(
+        eventTestId,
+        fileName,
+        'Espirometria',
+      )
+    }
 
     revalidatePath(`/events/${eventId}`)
     return {
