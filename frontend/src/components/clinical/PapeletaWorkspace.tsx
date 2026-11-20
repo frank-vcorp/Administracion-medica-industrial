@@ -38,6 +38,7 @@ import {
   replacePapeletaQuery,
   resolveActiveEventTestAfterRefresh,
 } from '@/lib/clinical/papeleta-navigation'
+import { scopedStudyBusy } from '@/lib/clinical/papeleta-upload-scope'
 import {
   appendPapeletaEventTests,
   removePapeletaEventTestById,
@@ -418,8 +419,12 @@ export default function PapeletaWorkspace({
   const [isPending, startTransition] = useTransition()
   const [uploadError, setUploadError] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadingTestId, setUploadingTestId] = useState<string | null>(null)
+  const [uploadFeedbackTestId, setUploadFeedbackTestId] = useState<string | null>(null)
   // IMPL-20260326-03: Estado para regeneración IA desde archivo existente
   const [isRegenerating, setIsRegenerating] = useState(false)
+  const [regeneratingTestId, setRegeneratingTestId] = useState<string | null>(null)
+  const [regenFeedbackTestId, setRegenFeedbackTestId] = useState<string | null>(null)
   const [regenError, setRegenError] = useState('')
   // SPEC-FIX-20260824-01: cuando el backend clasifica el rechazo del proveedor
   // como STUDY_TYPE_MISMATCH, mostramos el mensaje user-friendly estructurado
@@ -489,6 +494,12 @@ export default function PapeletaWorkspace({
   )
 
   const activeTest = localTests.find(t => t.id === activeTestId) ?? null
+  const uploadUi = activeTest
+    ? scopedStudyBusy(activeTest.id, uploadingTestId, isUploading)
+    : { showHere: false, lockOthers: false }
+  const regenUi = activeTest
+    ? scopedStudyBusy(activeTest.id, regeneratingTestId, isRegenerating)
+    : { showHere: false, lockOthers: false }
   const completedCount = localTests.filter(t =>
     t.status === 'COMPLETED' || t.status === 'RESULT_REGISTERED'
   ).length
@@ -596,6 +607,8 @@ export default function PapeletaWorkspace({
   // IMPL-20260516-04: Avance progresivo de etapas mientras corre el pipeline IA
   // FIX-20260516-01: try/catch/finally robusto — sin promesas sin capturar ante ERR_NETWORK_CHANGED
   const handleFileUpload = async (testId: string, file: File) => {
+    if (isUploading) return
+    setUploadFeedbackTestId(testId)
     setUploadError('')
     setUploadMismatch(null)
     const targetTestForValidation = localTests.find(t => t.id === testId)
@@ -613,6 +626,8 @@ export default function PapeletaWorkspace({
     }
 
     let currentStage: UploadStageId | null = 'uploading'
+    setUploadingTestId(testId)
+    setUploadFeedbackTestId(testId)
     setIsUploading(true)
     setUploadStage('uploading')
     const t1 = setTimeout(() => { currentStage = 'classifying';   setUploadStage('classifying') },   3000)
@@ -723,13 +738,17 @@ export default function PapeletaWorkspace({
     } finally {
       setUploadStage(null)
       setIsUploading(false)
+      setUploadingTestId(null)
     }
   }
 
   // IMPL-20260326-03 / IMPL-20260516-04: Regenerar análisis IA con progreso visual por etapas
   // FIX-20260516-01: try/catch/finally robusto — sin promesas sin capturar ante ERR_NETWORK_CHANGED
   const handleRegenerateAI = async (testId: string) => {
+    if (isRegenerating) return
     let currentStage: UploadStageId | null = 'classifying'
+    setRegeneratingTestId(testId)
+    setRegenFeedbackTestId(testId)
     setIsRegenerating(true)
     setRegenError('')
     setRegenMismatch(null)
@@ -785,6 +804,7 @@ export default function PapeletaWorkspace({
     } finally {
       setRegenStage(null)
       setIsRegenerating(false)
+      setRegeneratingTestId(null)
     }
   }
 
@@ -940,6 +960,9 @@ export default function PapeletaWorkspace({
                 <p className="text-xs font-semibold truncate leading-tight">
                   {formatPapeletaStudyTitle(t.testNameSnapshot)}
                 </p>
+                {uploadingTestId === t.id && (
+                  <p className="text-[10px] font-semibold text-teal-700">Procesando archivo…</p>
+                )}
                 <StudyStepChips status={t.status} aiSnapshot={t.aiSnapshot} compact />
                 <StudyStatusBadge
                   status={t.status}
@@ -957,6 +980,7 @@ export default function PapeletaWorkspace({
           <StudyCaptureMissingBanner message={studyNavBlockMessage} className="mb-4" />
           {activeTest && (
             <StudyPanel
+              key={activeTest.id}
               test={activeTest}
               registerStudyLeaveGuard={registerStudyLeaveGuard}
               eventId={eventId}
@@ -969,14 +993,15 @@ export default function PapeletaWorkspace({
               reviewerRole={reviewerRole}
               readonly={readonly}
               isPending={isPending}
-              isUploading={isUploading}
-              uploadError={uploadError}
-              uploadMismatch={uploadMismatch}
-              uploadStage={uploadStage}
-              isRegenerating={isRegenerating}
-              regenError={regenError}
-              regenMismatch={regenMismatch}
-              regenStage={regenStage}
+              isUploading={uploadUi.showHere}
+              uploadLocked={uploadUi.lockOthers}
+              uploadError={uploadFeedbackTestId === activeTest.id ? uploadError : ''}
+              uploadMismatch={uploadFeedbackTestId === activeTest.id ? uploadMismatch : null}
+              uploadStage={uploadUi.showHere ? uploadStage : null}
+              isRegenerating={regenUi.showHere}
+              regenError={regenFeedbackTestId === activeTest.id ? regenError : ''}
+              regenMismatch={regenFeedbackTestId === activeTest.id ? regenMismatch : null}
+              regenStage={regenUi.showHere ? regenStage : null}
               apiUrl={apiUrl}
               somatometryEventTestId={somatometriaTest?.id}
               agudezaEventTestId={agudezaTest?.id}
@@ -1418,6 +1443,7 @@ function StudyPanel({
   readonly,
   isPending,
   isUploading,
+  uploadLocked = false,
   uploadError,
   uploadMismatch,
   uploadStage,
@@ -1460,6 +1486,8 @@ function StudyPanel({
   readonly: boolean
   isPending: boolean
   isUploading: boolean
+  /** Otro estudio de la papeleta está subiendo; no mostrar su progreso aquí. */
+  uploadLocked?: boolean
   uploadError: string
   // SPEC-FIX-20260824-01: mismatch estructurado del proveedor extractivo.
   uploadMismatch: StudyTypeMismatchState | null
@@ -1946,9 +1974,11 @@ function StudyPanel({
                       {test.fileUrl ? 'Reemplazar archivo' : 'Subir resultado'}
                     </span>
                     <span className="block text-xs text-slate-400 mt-1">
-                      {getUploadHintForStudyType(
-                        getCanonicalAIStudyType(test) ?? 'Otro',
-                      )}
+                      {uploadLocked
+                        ? 'Otro estudio de esta papeleta se está procesando.'
+                        : getUploadHintForStudyType(
+                            getCanonicalAIStudyType(test) ?? 'Otro',
+                          )}
                     </span>
                     <input
                       type="file"
@@ -1956,10 +1986,11 @@ function StudyPanel({
                         getCanonicalAIStudyType(test) ?? 'Otro',
                       )}
                       className="hidden"
-                      disabled={isUploading}
+                      disabled={isUploading || uploadLocked}
                       onChange={(e) => {
                         const file = e.target.files?.[0]
-                        if (file) onFileUpload(test.id, file)
+                        e.target.value = ''
+                        if (file && !uploadLocked) onFileUpload(test.id, file)
                       }}
                     />
                   </label>
@@ -2171,6 +2202,7 @@ function StudyPanel({
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-emerald-700">Archivo vinculado</p>
                 <StudyDocumentViewer
+                  key={`${test.id}:${test.fileUrl}`}
                   fileUrl={`${apiUrl}${test.fileUrl}`}
                   fileName={test.fileUrl.split('/').pop() || 'archivo'}
                 />
