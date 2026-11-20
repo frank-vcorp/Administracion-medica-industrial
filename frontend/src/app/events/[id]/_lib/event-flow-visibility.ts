@@ -39,10 +39,11 @@ export type EventStatus =
  * Reglas (contrato vigente):
  *   - `IN_PROGRESS` → NUNCA (el workspace `PapeletaWorkspace` ocupa el
  *     área; el Flow Controller aparecería duplicado).
- *   - `VALIDATING` → NUNCA en esta página. Ese estatus muestra la
- *     papeleta (estudios + cronograma) y el controller pintaría debajo
- *     la tarjeta «Reporte médico de aptitud». Esa tarjeta no pertenece
- *     a la papeleta. El flujo de firma permanece en `EventFlowController`.
+ *   - `VALIDATING` + vista Firma (`activeView=VALIDATING`) → sí. Esa
+ *     pastilla es el dictamen general. La papeleta no se monta en esa
+ *     vista, así el recuadro «Firmar y Emitir Dictamen» queda en pantalla.
+ *   - `VALIDATING` con otra vista (Estudios, Ingreso) → no. El usuario
+ *     volvió a la papeleta.
  *   - `CHECKED_IN` y cualquier otro status distinto de los anteriores →
  *     sólo cuando `activeView === event.status` (comportamiento legacy).
  *   - `COMPLETED` (post-firma) → se renderiza si `activeView` es el
@@ -62,7 +63,7 @@ export function shouldRenderEventFlowController(
   status: EventStatus,
 ): boolean {
   if (status === 'IN_PROGRESS') return false
-  if (status === 'VALIDATING') return false
+  if (status === 'VALIDATING') return activeView === 'VALIDATING'
   if (activeView === status) return true
   if (status === 'COMPLETED' && activeView === 'VALIDATING') return true
   return false
