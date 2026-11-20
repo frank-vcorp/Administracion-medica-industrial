@@ -18,7 +18,7 @@ import {
   AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID,
 } from '@/lib/audiometry-dd65-clip'
 import { readEventTestSourcePdfBytes } from '@/lib/espirometry-source-crop'
-import { resolveBackendFileUrl } from '@/lib/zip-cierre-clinico'
+import { tryReadSourceFromBackend } from '@/lib/clinical/backend-file-read'
 
 const execFileAsync = promisify(execFile)
 
@@ -32,6 +32,11 @@ export type AudiometrySourceCropMeta = {
   fileUrl?: string
   templateId: typeof AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID
   generatedAt: string
+}
+
+/** PNG recién generado por Railway; solo en memoria del request actual. */
+export type AudiometrySourceCropResult = AudiometrySourceCropMeta & {
+  previewDataUrl?: string | null
 }
 
 export const AUDIOMETRY_CROP_SUBDIR = 'audiometry-crops'
@@ -66,24 +71,15 @@ async function readSourceCropPngBuffer(
   }
 
   const fileRef = meta.fileUrl ?? `/api/files/${meta.relativePath}`
-  const remoteUrl = resolveBackendFileUrl(fileRef)
-  if (!remoteUrl) return null
-
-  try {
-    const resp = await fetch(remoteUrl, {
-      headers: { 'User-Agent': 'AMI-Audiometry-Crop/1.0' },
-    })
-    if (!resp.ok) return null
-    return Buffer.from(await resp.arrayBuffer())
-  } catch {
-    return null
-  }
+  const bytes = await tryReadSourceFromBackend(fileRef)
+  if (!bytes) return null
+  return Buffer.from(bytes)
 }
 
 async function cropViaBackend(
   eventTestId: string,
   fileUrl: string,
-): Promise<AudiometrySourceCropMeta | null> {
+): Promise<AudiometrySourceCropResult | null> {
   const apiBase =
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.BACKEND_URL ||
@@ -122,17 +118,24 @@ async function cropViaBackend(
       file_url?: string
       template_id?: string
       generated_at?: string
+      png_base64?: string
     }
 
     if (payload.status !== 'success' || !payload.relative_path) {
       return null
     }
 
+    const previewDataUrl =
+      typeof payload.png_base64 === 'string' && payload.png_base64.length > 0
+        ? `data:image/png;base64,${payload.png_base64}`
+        : null
+
     return {
       relativePath: payload.relative_path,
       fileUrl: payload.file_url ?? `/api/files/${payload.relative_path}`,
       templateId: AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID,
       generatedAt: payload.generated_at ?? new Date().toISOString(),
+      previewDataUrl,
     }
   } catch (err) {
     console.warn('[audiometry-crop] Backend no disponible:', err)
@@ -208,7 +211,7 @@ function mergeClinicalContext(
 export async function ensureAudiometrySourceCrop(
   eventTestId: string,
   options?: { force?: boolean },
-): Promise<AudiometrySourceCropMeta | null> {
+): Promise<AudiometrySourceCropResult | null> {
   const eventTest = await prisma.eventTest.findUnique({
     where: { id: eventTestId },
     select: {
@@ -235,14 +238,18 @@ export async function ensureAudiometrySourceCrop(
     return null
   }
 
-  let meta =
+  let meta: AudiometrySourceCropResult | null =
     (await cropViaBackend(eventTestId, fileUrl)) ??
-    (await (async () => {
+    (await (async (): Promise<AudiometrySourceCropResult | null> => {
       const pdfBytes = await readEventTestSourcePdfBytes(fileUrl)
       if (!pdfBytes) return null
       try {
         const pngBuffer = await cropAudiometryAudiogramFromPdfLocal(pdfBytes)
-        return await persistAudiometrySourceCropPng(eventTestId, pngBuffer)
+        const persisted = await persistAudiometrySourceCropPng(eventTestId, pngBuffer)
+        return {
+          ...persisted,
+          previewDataUrl: `data:image/png;base64,${pngBuffer.toString('base64')}`,
+        }
       } catch (err) {
         console.warn('[audiometry-crop] Recorte local falló:', err)
         return null
@@ -251,25 +258,40 @@ export async function ensureAudiometrySourceCrop(
 
   if (!meta) return null
 
+  const { previewDataUrl, ...persistedMeta } = meta
+
   await prisma.eventTest.update({
     where: { id: eventTestId },
     data: {
       clinicalContext: mergeClinicalContext(eventTest.clinicalContext, {
-        audiometrySourceCrop: meta,
+        audiometrySourceCrop: persistedMeta,
       }) as Prisma.InputJsonValue,
     },
   })
 
-  return meta
+  return { ...persistedMeta, previewDataUrl }
+}
+
+function aspectRatioFromDataUrl(dataUrl: string): number | null {
+  try {
+    const idx = dataUrl.indexOf(',')
+    if (idx < 0) return null
+    const buf = Buffer.from(dataUrl.slice(idx + 1), 'base64')
+    const parsed = PNG.sync.read(buf)
+    return parsed.height > 0 ? parsed.width / parsed.height : null
+  } catch {
+    return null
+  }
 }
 
 export async function resolveAudiometryCropMeta(input: {
   eventTestId?: string | null
   clinicalContext?: unknown
-}): Promise<AudiometrySourceCropMeta | null> {
+  forceRegenerate?: boolean
+}): Promise<AudiometrySourceCropResult | null> {
   const ctx = input.clinicalContext as Record<string, unknown> | null | undefined
   const fromCtx = ctx?.audiometrySourceCrop as AudiometrySourceCropMeta | undefined
-  if (fromCtx?.relativePath) {
+  if (fromCtx?.relativePath && !input.forceRegenerate) {
     const preview = await loadAudiometrySourceCrop(fromCtx)
     if (preview) return fromCtx
   }
@@ -277,7 +299,9 @@ export async function resolveAudiometryCropMeta(input: {
   if (!input.eventTestId) return null
 
   try {
-    const meta = await ensureAudiometrySourceCrop(input.eventTestId)
+    const meta = await ensureAudiometrySourceCrop(input.eventTestId, {
+      force: input.forceRegenerate === true,
+    })
     return meta?.relativePath ? meta : null
   } catch (err) {
     console.warn('[audiometry-pdf] No se pudo generar recorte fuente:', err)
@@ -290,6 +314,7 @@ export async function resolveAudiometrySourceCropForPdf(input: {
   clinicalContext?: unknown
   sourceCropDataUrl?: string | null
   sourceCropAspectRatio?: number | null
+  forceRegenerate?: boolean
 }): Promise<{ dataUrl: string | null; aspectRatio: number | null }> {
   if (input.sourceCropDataUrl) {
     return {
@@ -298,12 +323,21 @@ export async function resolveAudiometrySourceCropForPdf(input: {
     }
   }
 
-  const meta = await resolveAudiometryCropMeta({
+  const cropResult = await resolveAudiometryCropMeta({
     eventTestId: input.eventTestId,
     clinicalContext: input.clinicalContext,
+    forceRegenerate: input.forceRegenerate,
   })
-  if (!meta) return { dataUrl: null, aspectRatio: null }
-  const crop = await loadAudiometrySourceCrop(meta)
+  if (!cropResult) return { dataUrl: null, aspectRatio: null }
+
+  if (cropResult.previewDataUrl) {
+    return {
+      dataUrl: cropResult.previewDataUrl,
+      aspectRatio: aspectRatioFromDataUrl(cropResult.previewDataUrl),
+    }
+  }
+
+  const crop = await loadAudiometrySourceCrop(cropResult)
   return {
     dataUrl: crop?.dataUrl ?? null,
     aspectRatio: crop?.aspectRatio ?? null,

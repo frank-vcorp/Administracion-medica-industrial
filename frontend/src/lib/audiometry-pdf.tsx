@@ -92,6 +92,8 @@ export interface BuildAudiometriaPdfInput {
   clinicalContext?: unknown
   sourceCropDataUrl?: string | null
   sourceCropAspectRatio?: number | null
+  /** Fuerza recorte del PDF fuente (p. ej. tras reemplazar archivo). */
+  forceSourceCropRegenerate?: boolean
 }
 
 export function buildAudiometriaPdfData(
@@ -233,6 +235,7 @@ export async function buildAudiometriaPdfDataAsync(
     clinicalContext: input.clinicalContext,
     sourceCropDataUrl: input.sourceCropDataUrl,
     sourceCropAspectRatio: input.sourceCropAspectRatio,
+    forceRegenerate: input.forceSourceCropRegenerate === true,
   })
   const patientIdentification =
     input.patientIdentification ??

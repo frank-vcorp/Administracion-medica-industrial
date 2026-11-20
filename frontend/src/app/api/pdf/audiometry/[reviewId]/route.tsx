@@ -39,7 +39,7 @@ import {
 import {
   ensureAudiometrySourceCrop,
   loadAudiometrySourceCrop,
-  type AudiometrySourceCropMeta,
+  type AudiometrySourceCropResult,
 } from '@/lib/audiometry-source-crop'
 import { audiometrySignerFromAccount } from '@/lib/audiometry-signer'
 
@@ -140,16 +140,28 @@ export async function GET(
   const universalId = eventTest?.event?.worker?.universalId ?? reviewId.slice(0, 8)
   const filename = `Audiometria-${universalId}.pdf`
 
-  let cropMeta: AudiometrySourceCropMeta | null = null
+  let cropMeta: AudiometrySourceCropResult | null = null
   if (eventTest?.id) {
     try {
       cropMeta = await ensureAudiometrySourceCrop(eventTest.id)
+      if (!cropMeta?.previewDataUrl) {
+        const loaded =
+          cropMeta ? await loadAudiometrySourceCrop(cropMeta) : null
+        if (!loaded) {
+          cropMeta = await ensureAudiometrySourceCrop(eventTest.id, {
+            force: true,
+          })
+        }
+      }
     } catch (cropErr) {
       console.warn('[audiometry-pdf] Recorte fuente antes de PDF:', cropErr)
     }
   }
-  const cropPreview =
-    cropMeta ? await loadAudiometrySourceCrop(cropMeta) : null
+  const cropPreview = cropMeta?.previewDataUrl
+    ? { dataUrl: cropMeta.previewDataUrl, aspectRatio: null as number | null }
+    : cropMeta
+      ? await loadAudiometrySourceCrop(cropMeta)
+      : null
   const cropGeneratedAt = cropMeta?.generatedAt
     ? new Date(cropMeta.generatedAt)
     : null
@@ -208,6 +220,7 @@ export async function GET(
       eventId: eventTest?.eventId ?? null,
       eventTestId: eventTest?.id ?? null,
       clinicalContext: eventTest?.clinicalContext,
+      forceSourceCropRegenerate: true,
       doctorStatus:
         review.doctorStatus === 'REVIEWED_ACCEPTED'
           ? 'REVIEWED_ACCEPTED'
