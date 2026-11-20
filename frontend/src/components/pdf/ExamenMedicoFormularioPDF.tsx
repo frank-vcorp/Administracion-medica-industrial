@@ -133,6 +133,20 @@ const APP_COLS: Array<Array<[string, string]>> = [
   ],
 ]
 
+function blankWhenDenied(habit: unknown, value: unknown): string {
+  const estado = show(habit).toUpperCase()
+  if ((estado === 'NEGADO' || estado === '—') && (value === 0 || value === '0')) return '—'
+  return show(value)
+}
+
+function vacuna(m1: Record<string, unknown>, key: string): string {
+  const raw = m1[key]
+  const estado = raw === undefined || raw === null || String(raw).trim() === '' ? 'NEGADO' : show(raw)
+  if (estado.toUpperCase() !== 'SI') return estado
+  const extra = show(m1[`${key}_especifique`])
+  return extra === '—' ? 'SI' : `SI — ${extra}`
+}
+
 function show(value: unknown): string {
   if (value === null || value === undefined) return '—'
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '—'
@@ -206,6 +220,89 @@ function Footer() {
   )
 }
 
+function bit(value: unknown): string | null {
+  const text = show(value)
+  return text === '—' ? null : text
+}
+
+function factorRiesgo(hl: Record<string, unknown>): string | null {
+  const parts: string[] = []
+  const add = (flag: unknown, label: string, detail: unknown) => {
+    if (flag !== true && flag !== 'true' && flag !== 'SI') return
+    const extra = bit(detail)
+    parts.push(extra ? `${label}: ${extra}` : label)
+  }
+  add(hl.exposicion_fisica, 'Físico', hl.exposicion_fisica_especifique)
+  add(hl.exposicion_quimica, 'Químico', hl.exposicion_quimica_especifique)
+  add(hl.exposicion_biologica, 'Biológico', hl.exposicion_biologica_especifique)
+  add(hl.exposicion_ergonomica, 'Ergonómico', hl.exposicion_ergonomica_especifique)
+  add(hl.exposicion_psicosocial, 'Psicosocial', hl.exposicion_psicosocial_especifique)
+  return parts.length > 0 ? parts.join(', ') : null
+}
+
+function HistoriaLaboral({ data }: { data: ExamenMedicoPDFData }) {
+  const hl = rec(data.historiaLaboral)
+  const empleo1 = bit(hl.empresa_anterior_1)
+  const empleo2 = bit(hl.empresa_anterior_2)
+  const accidentes = [
+    hl.accidentes_trabajo === true || hl.accidentes_trabajo === 'true' || hl.accidentes_trabajo === 'SI'
+      ? `Accidente: ${bit(hl.accidentes_descripcion) || 'Sí'}`
+      : null,
+    hl.enfermedades_trabajo === true || hl.enfermedades_trabajo === 'true' || hl.enfermedades_trabajo === 'SI'
+      ? `Enfermedad: ${bit(hl.enfermedades_descripcion) || 'Sí'}`
+      : null,
+  ].filter(Boolean).join('. ')
+  if (!empleo1 && !empleo2) {
+    return (
+      <>
+        <Row cells={[{ label: 'ÚLTIMOS EMPLEOS Y RIESGOS', value: data.paciente.historiaOcupacional }]} />
+        <Row cells={[{ label: 'ACCIDENTES / ENFERMEDADES DE TRABAJO', value: accidentes || data.paciente.riesgosTrabajo }]} />
+      </>
+    )
+  }
+  return (
+    <>
+      <Row cells={[{ label: 'ÚLTIMO EMPLEO 1', value: empleo1 }, { label: 'PUESTO', value: hl.puesto_anterior_1 }, { label: 'ANTIGÜEDAD', value: hl.tiempo_anterior_1 }]} />
+      <Row cells={[{ label: 'ÚLTIMO EMPLEO 2', value: empleo2 }, { label: 'PUESTO', value: hl.puesto_anterior_2 }, { label: 'ANTIGÜEDAD', value: hl.tiempo_anterior_2 }]} />
+      <Row cells={[{ label: 'FACTOR DE RIESGO', value: factorRiesgo(hl) }]} />
+      <Row cells={[{ label: 'ACCIDENTES / ENFERMEDADES DE TRABAJO', value: accidentes || data.paciente.riesgosTrabajo }]} />
+    </>
+  )
+}
+
+function AntecedentesPorSexo({
+  sexo,
+  m1,
+  texto,
+}: {
+  sexo: string | null | undefined
+  m1: Record<string, unknown>
+  texto?: string | null
+}) {
+  const raw = (sexo || '').trim().toLowerCase()
+  const femenino = raw.startsWith('f') || raw.startsWith('muj')
+  const masculino = !femenino && (raw.startsWith('m') || raw.startsWith('hom') || raw === 'varon' || raw === 'varón')
+  if (masculino) {
+    return (
+      <>
+        <Bar title="ANTECEDENTES REPRODUCTIVOS" />
+        <Row cells={[{ label: 'D.O.C. PRÓSTATA', value: m1.m1_repro_doc_prostata || m1.doc_prostata }, { label: 'M.P.F.', value: m1.m1_repro_mpf }]} />
+        {texto ? <Text style={s.note}>{texto}</Text> : null}
+      </>
+    )
+  }
+  return (
+    <>
+      <Bar title="ANTECEDENTES GINECOLÓGICOS" />
+      <Row cells={[{ label: 'MENARCA', value: m1.m1_gine_menarca }, { label: 'FUM', value: m1.m1_gine_fum }, { label: 'I.V.S.', value: m1.m1_gine_ivs }]} />
+      <Row cells={[{ label: 'RITMO', value: m1.m1_gine_ritmo }, { label: 'GESTA', value: m1.m1_gine_gesta }, { label: 'ABORTO', value: m1.m1_gine_aborto }]} />
+      <Row cells={[{ label: 'PARTO', value: m1.m1_gine_parto }, { label: 'CESÁREA', value: m1.m1_gine_cesarea }, { label: 'D.O.C.', value: m1.m1_gine_doc }]} />
+      <Row cells={[{ label: 'M.P.F.', value: m1.m1_gine_mpf }, { label: 'F.UP./F.U.C.', value: m1.m1_gine_fup_uc }, { label: 'EXP. MAMARIA', value: m1.m1_gine_exp_mamaria }]} />
+      {texto ? <Text style={s.note}>{texto}</Text> : null}
+    </>
+  )
+}
+
 function Header({ data }: { data: ExamenMedicoPDFData }) {
   return (
     <View style={s.top}>
@@ -215,9 +312,11 @@ function Header({ data }: { data: ExamenMedicoPDFData }) {
       </View>
       <View style={{ alignItems: 'flex-end' }}>
         {data.logoUrl ? <Image style={s.logo} src={data.logoUrl} /> : null}
-        <Text style={{ fontSize: 8, fontWeight: 'bold', marginTop: 2 }}>
-          {show(data.paciente.tipoExamen)}
-        </Text>
+        {show(data.paciente.tipoExamen) !== '—' ? (
+          <Text style={{ fontSize: 8, fontWeight: 'bold', marginTop: 2 }}>
+            {show(data.paciente.tipoExamen)}
+          </Text>
+        ) : null}
       </View>
     </View>
   )
@@ -253,8 +352,7 @@ export function ExamenMedicoFormularioPDF({ data }: { data: ExamenMedicoPDFData 
         <Bar title="HISTORIA LABORAL" />
         <Row cells={[{ label: 'PUESTO', value: p.puesto }, { label: 'ÁREA', value: p.area || id.workAreaLabel }]} />
         <Row cells={[{ label: 'ANTIGÜEDAD EN EL ÁREA', value: id.tenureInAreaLabel }]} />
-        <Row cells={[{ label: 'ÚLTIMOS EMPLEOS Y RIESGOS', value: p.historiaOcupacional }]} />
-        <Row cells={[{ label: 'ACCIDENTES / ENFERMEDADES DE TRABAJO', value: p.riesgosTrabajo }]} />
+        <HistoriaLaboral data={data} />
         <Row cells={[{ label: 'EPP', value: p.epp }]} />
 
         <Bar title="ANTECEDENTES HEREDO-FAMILIARES" />
@@ -263,9 +361,9 @@ export function ExamenMedicoFormularioPDF({ data }: { data: ExamenMedicoPDFData 
         <Row cells={[{ label: 'CÁNCER', value: data.ahf.cancer }, { label: 'MENTALES', value: data.ahf.mentales }, { label: 'OTRAS', value: data.ahf.otras }]} />
 
         <Bar title="ANTECEDENTES PERSONALES NO PATOLÓGICOS Y TOXICOMANÍAS" />
-        <Row cells={[{ label: 'ALCOHOL', value: np.alcohol ?? data.apnp.alcohol }, { label: 'EDAD DE COMIENZO', value: np.alcohol_edad_comienzo }, { label: 'FRECUENCIA', value: np.alcohol_frecuencia }]} />
+        <Row cells={[{ label: 'ALCOHOL', value: np.alcohol ?? data.apnp.alcohol }, { label: 'EDAD DE COMIENZO', value: blankWhenDenied(np.alcohol ?? data.apnp.alcohol, np.alcohol_edad_comienzo) }, { label: 'FRECUENCIA', value: np.alcohol_frecuencia }]} />
         <Row cells={[{ label: '¿SUSPENDIDO?', value: np.alcohol_suspendido }, { label: 'TIEMPO SUSPENDIDO', value: np.alcohol_tiempo_suspendido }]} />
-        <Row cells={[{ label: 'TABACO', value: np.tabaco ?? data.apnp.tabaco }, { label: 'EDAD DE COMIENZO', value: np.tabaco_edad_comienzo }, { label: 'CIGARROS/DÍA', value: np.tabaco_cigarros_dia }]} />
+        <Row cells={[{ label: 'TABACO', value: np.tabaco ?? data.apnp.tabaco }, { label: 'EDAD DE COMIENZO', value: blankWhenDenied(np.tabaco ?? data.apnp.tabaco, np.tabaco_edad_comienzo) }, { label: 'CIGARROS/DÍA', value: blankWhenDenied(np.tabaco ?? data.apnp.tabaco, np.tabaco_cigarros_dia) }]} />
         <Row cells={[{ label: '¿SUSPENDIDO?', value: np.tabaco_suspendido }, { label: 'TIEMPO SUSPENDIDO', value: np.tabaco_tiempo_suspendido }, { label: 'FRECUENCIA', value: np.tabaco_frecuencia }]} />
         <Row cells={[{ label: 'DROGAS/ESTIMULANTES', value: np.drogas_estimulantes ?? data.apnp.drogas }, { label: 'ESPECIFIQUE', value: np.drogas_especifique }, { label: 'ÚLTIMO CONSUMO', value: np.drogas_ultimo_consumo }]} />
         <Row cells={[{ label: 'EJERCICIO', value: np.ejercicio ?? data.apnp.ejercicio }, { label: 'ESPECIFIQUE', value: np.ejercicio_especifique }, { label: 'FRECUENCIA', value: np.ejercicio_frecuencia }]} />
@@ -286,20 +384,15 @@ export function ExamenMedicoFormularioPDF({ data }: { data: ExamenMedicoPDFData 
             </View>
           ))}
         </View>
-        <Row cells={[{ label: 'OTRAS', value: otrasApp }, { label: 'ESPECIFIQUE', value: otrasLista || null }]} />
+        <Row cells={[{ label: 'OTRAS', value: otrasApp }]} />
+        <Row cells={[{ label: 'ESPECIFIQUE', value: otrasLista || null }]} />
 
-        <Bar title="ANTECEDENTES GINECOLÓGICOS" />
-        <Row cells={[{ label: 'MENARCA', value: m1.m1_gine_menarca }, { label: 'FUM', value: m1.m1_gine_fum }, { label: 'I.V.S.', value: m1.m1_gine_ivs }]} />
-        <Row cells={[{ label: 'RITMO', value: m1.m1_gine_ritmo }, { label: 'GESTA', value: m1.m1_gine_gesta }, { label: 'ABORTO', value: m1.m1_gine_aborto }]} />
-        <Row cells={[{ label: 'PARTO', value: m1.m1_gine_parto }, { label: 'CESÁREA', value: m1.m1_gine_cesarea }, { label: 'D.O.C.', value: m1.m1_gine_doc }]} />
-        <Row cells={[{ label: 'M.P.F.', value: m1.m1_gine_mpf || m1.m1_repro_mpf }, { label: 'F.UP./F.U.C.', value: m1.m1_gine_fup_uc }, { label: 'EXP. MAMARIA', value: m1.m1_gine_exp_mamaria }]} />
-        {data.historiaGineco ? <Text style={s.note}>{data.historiaGineco}</Text> : null}
+        <AntecedentesPorSexo sexo={p.sexo || id.sexLabel} m1={m1} texto={data.historiaGineco} />
 
         <Bar title="INMUNIZACIONES" />
-        <Row cells={[{ label: 'RUBÉOLA', value: m1.m1_vac_rubeola }, { label: 'SARAMPIÓN', value: m1.m1_vac_sarampion }, { label: 'TOXOIDE TETÁNICO', value: m1.m1_vac_toxoide }]} />
-        <Row cells={[{ label: 'NEUMOCOCO', value: m1.m1_vac_neumococo }, { label: 'INFLUENZA', value: m1.m1_vac_influenza }, { label: 'HEPATITIS B', value: m1.m1_vac_hepatitisb }]} />
-        <Row cells={[{ label: 'OTRA', value: m1.m1_vac_covid19 || m1.m1_vac_otras }]} />
-        {!m1.m1_vac_rubeola && data.inmunizaciones ? <Text style={s.note}>{data.inmunizaciones}</Text> : null}
+        <Row cells={[{ label: 'RUBÉOLA', value: vacuna(m1, 'm1_vac_rubeola') }, { label: 'SARAMPIÓN', value: vacuna(m1, 'm1_vac_sarampion') }, { label: 'TOXOIDE TETÁNICO', value: vacuna(m1, 'm1_vac_toxoide') }]} />
+        <Row cells={[{ label: 'NEUMOCOCO', value: vacuna(m1, 'm1_vac_neumococo') }, { label: 'INFLUENZA', value: vacuna(m1, 'm1_vac_influenza') }, { label: 'HEPATITIS B', value: vacuna(m1, 'm1_vac_hepatitisb') }]} />
+        <Row cells={[{ label: 'COVID-19', value: vacuna(m1, 'm1_vac_covid19') }, { label: 'OTRAS', value: vacuna(m1, 'm1_vac_otras') }]} />
 
         <Bar title="SOMATOMETRÍA / SIGNOS VITALES" />
         <Row cells={[{ label: 'TA/mmHg', value: data.somatometria.ta }, { label: 'F.C. /min', value: data.somatometria.fc }, { label: 'F.R. /min', value: data.somatometria.fr }, { label: 'T', value: data.somatometria.temperatura }]} />
@@ -308,8 +401,9 @@ export function ExamenMedicoFormularioPDF({ data }: { data: ExamenMedicoPDFData 
         <Bar title="AGUDEZA VISUAL" />
         <Row cells={[{ label: 'LEJANA O.D.', value: data.agudezaVisual.visionLejanaOD }, { label: 'LEJANA O.I.', value: data.agudezaVisual.visionLejanaOI }, { label: 'REFLEJOS', value: data.agudezaVisual.reflejos }]} />
         <Row cells={[{ label: 'CERCANA O.D.', value: data.agudezaVisual.visionCercanaOD }, { label: 'CERCANA O.I.', value: data.agudezaVisual.visionCercanaOI }, { label: 'ISHIHARA', value: data.agudezaVisual.ishihara }]} />
-        <Row cells={[{ label: 'LEJANA CORREGIDA O.D.', value: data.agudezaVisual.lejanaCorregidaOD }, { label: 'LEJANA CORREGIDA O.I.', value: data.agudezaVisual.lejanaCorregidaOI }, { label: 'CAMPIMETRÍA', value: data.agudezaVisual.campimetria }]} />
+        <Row cells={[{ label: 'LEJANA CORREGIDA O.D.', value: data.agudezaVisual.lejanaCorregidaOD }, { label: 'LEJANA CORREGIDA O.I.', value: data.agudezaVisual.lejanaCorregidaOI }]} />
         <Row cells={[{ label: 'CERCANA CORREGIDA O.D.', value: data.agudezaVisual.cercanaCorregidaOD }, { label: 'CERCANA CORREGIDA O.I.', value: data.agudezaVisual.cercanaCorregidaOI }]} />
+        <Row cells={[{ label: 'CAMPIMETRÍA', value: data.agudezaVisual.campimetria }]} />
         <Footer />
       </Page>
 
