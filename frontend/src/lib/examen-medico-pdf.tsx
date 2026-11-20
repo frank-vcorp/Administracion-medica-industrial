@@ -53,6 +53,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { renderToBuffer } from '@react-pdf/renderer'
+import { ExamenMedicoFormularioPDF } from '@/components/pdf/ExamenMedicoFormularioPDF'
 import { ExamenMedicoValidatedPDF } from '@/components/pdf/ExamenMedicoValidatedPDF'
 import type { ExamenMedicoPDFData } from '@/components/pdf/ExamenMedicoValidatedPDF'
 import { buildExamSummary, type ExamSnapshot } from '@/lib/clinical/exam-summary'
@@ -693,6 +694,14 @@ export async function generateExamenMedicoValidatedPdf(
   }
 
   return { buffer, hash, url, absolutePath }
+}
+
+/** Formulario contestado. No pisa el archivo del resumen de aptitud. */
+export async function generateExamenMedicoFormularioPdf(
+  data: ExamenMedicoPDFData,
+): Promise<Buffer> {
+  const logoUrl = data.logoUrl || (await resolveSmeLogoDataUrl()) || ''
+  return renderToBuffer(<ExamenMedicoFormularioPDF data={{ ...data, logoUrl }} />)
 }
 
 /**

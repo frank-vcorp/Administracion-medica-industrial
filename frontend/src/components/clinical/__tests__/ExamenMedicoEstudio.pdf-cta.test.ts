@@ -36,6 +36,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
+  examenMedicoFormularioPdfUrl,
   examenMedicoPdfUrl,
   examenMedicoSodexoPdfUrl,
   examenMedicoSodexoPreviewPdfUrl,
@@ -54,6 +55,12 @@ describe('IMPL-FEATURE-20260825-03 ronda 4: CTA PDF consolidado Examen Médico',
     // No añade prefijo, sufijo, query ni hash.
     expect(examenMedicoPdfUrl('event-1')).not.toMatch(/[?#]/)
     expect(examenMedicoPdfUrl('event-1')).not.toMatch(/\/api\/pdf\/examen-medico\/+$/)
+  })
+
+  it('examenMedicoFormularioPdfUrl: formulario contestado, aparte del resumen', () => {
+    expect(examenMedicoFormularioPdfUrl('event-1')).toBe(
+      '/api/pdf/examen-medico/event-1?forma=1',
+    )
   })
 
   it('examenMedicoPdfUrl: acepta UUIDs (formato real)', () => {
