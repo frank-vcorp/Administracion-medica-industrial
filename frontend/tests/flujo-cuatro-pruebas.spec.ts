@@ -309,7 +309,7 @@ test.describe('Flujo E2E — 4 pruebas clínicas', () => {
     })
   })
 
-  test('TC-14: Completar examen médico y firmar dictamen', async () => {
+  test('TC-14: Completar examen médico sin reporte de aptitud en la papeleta', async () => {
     test.setTimeout(180_000)
     test.skip(!eventId, 'Sin evento')
 
@@ -334,21 +334,14 @@ test.describe('Flujo E2E — 4 pruebas clínicas', () => {
     })
 
     await page.goto(`/events/${eventId}?view=VALIDATING`)
-    const verdictHeading = page.getByRole('heading', { name: 'Reporte médico de aptitud' })
-    await expect(verdictHeading).toBeVisible({ timeout: 30_000 })
-
-    await page
-      .getByPlaceholder('Ej: Apto para el puesto sin restricciones...')
-      .fill('Apto para el puesto — E2E cuatro pruebas.')
-    await page
-      .getByPlaceholder('Ej: Uso de protección auditiva...')
-      .fill('EPP según política de la empresa.')
-    await page.getByRole('button', { name: /firmar y emitir dictamen/i }).click()
-
-    await expect(page.getByRole('heading', { name: '¡Expediente Completado!' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Módulo de pruebas clínicas' })).toBeVisible({
       timeout: 30_000,
     })
-    await expect(page.getByText(/dictamen médico ha sido firmado/i)).toBeVisible()
+    await expect(page.getByText('Cronograma operativo')).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Reporte médico de aptitud', exact: true }),
+    ).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /firmar y emitir dictamen/i })).toHaveCount(0)
   })
 
   test.afterAll(async () => {

@@ -16,8 +16,9 @@
  *   - status=COMPLETED + activeView=COMPLETED → true (legacy).
  *   - status=COMPLETED + activeView=CHECKED_IN/IN_PROGRESS/SCHEDULED
  *     → false (usuario navegó deliberadamente hacia atrás).
+ *   - VALIDATING → false (el reporte de aptitud no va en la papeleta).
  *   - Cualquier otro status con activeView=event.status → true (legacy).
- *   - activeView undefined → false salvo que el status sea COMPLETED.
+ *   - activeView undefined → false.
  */
 import { describe, it, expect } from 'vitest'
 
@@ -52,8 +53,8 @@ describe('IMPL-20260826-03: shouldRenderEventFlowController', () => {
     expect(shouldRenderEventFlowController('COMPLETED', 'COMPLETED')).toBe(true)
   })
 
-  it('status=VALIDATING + activeView=VALIDATING → true (legacy)', () => {
-    expect(shouldRenderEventFlowController('VALIDATING', 'VALIDATING')).toBe(true)
+  it('status=VALIDATING + activeView=VALIDATING → false (reporte de aptitud fuera de la papeleta)', () => {
+    expect(shouldRenderEventFlowController('VALIDATING', 'VALIDATING')).toBe(false)
   })
 
   it('status=CHECKED_IN + activeView=CHECKED_IN → true (legacy)', () => {
@@ -102,7 +103,7 @@ describe('IMPL-20260826-03: shouldRenderEventFlowController', () => {
     ['CHECKED_IN', 'COMPLETED', false, 'COMPLETED no es workspace pero ya no está firmando'],
     ['IN_PROGRESS', 'COMPLETED', false, 'COMPLETED + workspace de papeleta'],
     ['SCHEDULED', 'COMPLETED', false, 'COMPLETED + stepper pre-examen'],
-    ['VALIDATING', 'VALIDATING', true, 'legacy match'],
+    ['VALIDATING', 'VALIDATING', false, 'reporte de aptitud fuera de la papeleta'],
     ['IN_PROGRESS', 'IN_PROGRESS', false, 'IN_PROGRESS NUNCA renderiza'],
     ['CHECKED_IN', 'CHECKED_IN', true, 'legacy match'],
     ['SCHEDULED', 'SCHEDULED', true, 'legacy match'],

@@ -256,6 +256,8 @@ describe('Desbloqueo cierre de examen + edición posterior + checkout + CHECKED_
     expect(data).not.toBeNull()
     expect(data?.serializedStatus).toBe('VALIDATING')
     expect(data?.activeView).toBe('VALIDATING')
-    expect(shouldRenderEventFlowController(data?.activeView, data!.serializedStatus)).toBe(true)
+    // La promoción a VALIDATING sigue ocurriendo, pero la papeleta no
+    // monta el reporte de aptitud al final del cronograma.
+    expect(shouldRenderEventFlowController(data?.activeView, data!.serializedStatus)).toBe(false)
   })
 })
