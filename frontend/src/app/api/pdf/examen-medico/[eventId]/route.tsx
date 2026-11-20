@@ -291,16 +291,28 @@ export async function deliverExamenMedicoPdf(
       (event.worker.clinicalHistory?.data as Record<string, unknown> | null) ??
       {}
 
-    const dp =
-      (clinicalHistoryData.datos_personales as Record<string, unknown>) ?? {}
-    const hl =
-      (clinicalHistoryData.historia_laboral as Record<string, unknown>) ?? {}
-    const ahf =
-      (clinicalHistoryData.heredo_familiares as Record<string, unknown>) ?? {}
-    const apnp =
-      (clinicalHistoryData.no_patologicos as Record<string, unknown>) ?? {}
     const captured =
       (physicalExamData.antecedentes_captured as Record<string, unknown> | null) ?? {}
+    const dpMaster =
+      (clinicalHistoryData.datos_personales as Record<string, unknown>) ?? {}
+    const hlMaster =
+      (clinicalHistoryData.historia_laboral as Record<string, unknown>) ?? {}
+    const ahfMaster =
+      (clinicalHistoryData.heredo_familiares as Record<string, unknown>) ?? {}
+    const dp = preferSnapshot(
+      dpMaster,
+      (captured.datos_personales as Record<string, unknown> | undefined) ?? {},
+    )
+    const hl = preferSnapshot(
+      hlMaster,
+      (captured.historia_laboral as Record<string, unknown> | undefined) ?? {},
+    )
+    const ahf = preferSnapshot(
+      ahfMaster,
+      (captured.heredo_familiares as Record<string, unknown> | undefined) ?? {},
+    )
+    const apnp =
+      (clinicalHistoryData.no_patologicos as Record<string, unknown>) ?? {}
     const modulo1Captured =
       (physicalExamData.modulo1 as Record<string, unknown> | undefined) ?? {}
     const apnpForNoPatologicos =
@@ -429,7 +441,9 @@ export async function deliverExamenMedicoPdf(
         empresa: event.worker.company?.name ?? null,
         puesto: str(dp.puesto_actual),
         area: str(dp.area_departamento),
-        tipoExamen: str(physicalExamData.tipo_examen),
+        tipoExamen:
+          str(physicalExamData.tipo_examen) ||
+          str((variantExtensions.SODEXO as Record<string, unknown> | undefined)?.tipo_examen),
         direccion: str(dp.direccion),
         estadoCivil: str(dp.estado_civil),
         escolaridad: str(dp.escolaridad),
@@ -481,6 +495,7 @@ export async function deliverExamenMedicoPdf(
             .filter(Boolean)
             .join('. ') || null,
         epp: null,
+        detalle: hl,
       },
       app: {
         texto: appTexto,
@@ -495,7 +510,7 @@ export async function deliverExamenMedicoPdf(
         imc: numOrStr(somatometry.imc ?? vitalSigns.imc),
         saturacionOxigeno: numOrStr(somatometry.saturacion_oxigeno ?? vitalSigns.saturacion_oxigeno),
         ta,
-        fc: numOrStr(somatometry.fc_min ?? vitalSigns.fc_min),
+        fc: pulseOrEmpty(somatometry.fc_min ?? vitalSigns.fc_min),
         fr: numOrStr(somatometry.fr_min ?? vitalSigns.fr_min),
         temperatura: numOrStr(somatometry.temperatura ?? vitalSigns.temperatura),
       },
@@ -696,6 +711,24 @@ export async function deliverExamenMedicoPdf(
 // ──────────────────────────────────────────────────────────────────────────
 
 /** String seguro: null/undefined → ''. */
+function preferSnapshot(
+  master: Record<string, unknown>,
+  captured: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...master }
+  for (const [key, value] of Object.entries(captured)) {
+    if (value === null || value === undefined) continue
+    if (typeof value === 'string' && value.trim() === '') continue
+    out[key] = value
+  }
+  return out
+}
+
+function pulseOrEmpty(v: unknown): string {
+  const text = numOrStr(v)
+  return text === '0' ? '' : text
+}
+
 function empleoAnterior(
   n: number,
   empresa: unknown,

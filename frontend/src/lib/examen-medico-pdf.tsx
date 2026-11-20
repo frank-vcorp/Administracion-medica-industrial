@@ -173,6 +173,8 @@ export interface BuildExamenMedicoPdfHistoriaOcupacionalInput {
   riesgos?: string | null
   /** EPP usado. */
   epp?: string | null
+  /** Snapshot de esta cita: empleos, puestos, antigüedad y riesgos. */
+  detalle?: Record<string, unknown> | null
 }
 
 /** Resumen de hallazgos clínicos (APP) para la sección II. */
@@ -485,6 +487,7 @@ export function buildExamenMedicoPdfData(
       tatuajes: s(input.apnp.tatuajes) || null,
     },
     noPatologicos: input.noPatologicos ?? null,
+    historiaLaboral: input.historiaOcupacional?.detalle ?? null,
     app: s(input.app?.texto) || '',
     patologicos: input.patologicos ?? null,
     modulo1: input.modulo1 ?? null,

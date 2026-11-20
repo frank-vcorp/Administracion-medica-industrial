@@ -309,6 +309,8 @@ export interface ExamenMedicoPDFData {
     studies: Array<{ serviceName: string; extractedData: unknown | null }>
     labs: Array<{ serviceName: string; extractedData: unknown | null }>
   }>
+  /** Historia laboral de esta cita (empleos, puestos, riesgos). */
+  historiaLaboral?: Record<string, unknown> | null
   /** Variante corporativa del examen médico (AMI | SODEXO | FLOWSERVE). */
   variant?: 'SME' | 'SODEXO' | 'FLOWSERVE' | 'AMI'
   variantExtensions?: {
