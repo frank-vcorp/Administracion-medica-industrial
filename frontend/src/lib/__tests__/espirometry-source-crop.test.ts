@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
@@ -12,6 +12,7 @@ import {
   cropEspirometryLetterBottomHalfFromPdfLocal,
   extractLetterBottomHalfFromFullPagePng,
   bottomHalfCropFromSourcePng,
+  loadEspirometryBottomHalfCrop,
 } from '@/lib/espirometry-source-crop'
 
 const SAMPLE_PDF = path.join(
@@ -87,5 +88,38 @@ describe('espirometry letter bottom clip', () => {
     expect(crop.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
     const cropHeight = 200 - Math.floor(200 * ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO)
     expect(crop.aspectRatio).toBeCloseTo(100 / cropHeight, 5)
+  })
+})
+
+describe('loadEspirometryBottomHalfCrop', () => {
+  it('lee el PNG desde /uploads cuando /api/files no entrega la imagen', async () => {
+    const png = PNG.sync.write(new PNG({ width: 20, height: 10, filterType: -1 }))
+    const previous = process.env.NEXT_PUBLIC_API_URL
+    process.env.NEXT_PUBLIC_API_URL = 'https://backend.test'
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('/uploads/espirometry-crops/')) {
+        return {
+          ok: true,
+          arrayBuffer: async () =>
+            png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+        }
+      }
+      return { ok: false, status: 403, arrayBuffer: async () => new ArrayBuffer(0) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const crop = await loadEspirometryBottomHalfCrop({
+        relativePath: 'espirometry-crops/et.png',
+        fileUrl: '/api/files/espirometry-crops/et.png',
+      })
+      expect(crop?.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+      expect(String(fetchMock.mock.calls[0][0])).toBe(
+        'https://backend.test/uploads/espirometry-crops/et.png',
+      )
+    } finally {
+      vi.unstubAllGlobals()
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_API_URL
+      else process.env.NEXT_PUBLIC_API_URL = previous
+    }
   })
 })
