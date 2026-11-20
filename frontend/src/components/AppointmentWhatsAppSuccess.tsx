@@ -45,14 +45,19 @@ export default function AppointmentWhatsAppSuccess({
 
   if (whatsApp?.fallbackWaUrl) {
     return (
-      <a
-        href={whatsApp.fallbackWaUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
-      >
-        <span>📱</span> Abrir WhatsApp manualmente (respaldo)
-      </a>
+      <div className="space-y-2">
+        {whatsApp.error ? (
+          <p className="text-[11px] text-amber-800 text-center">{whatsApp.error}</p>
+        ) : null}
+        <a
+          href={whatsApp.fallbackWaUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-3 rounded-xl font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+        >
+          <span>📱</span> Abrir WhatsApp manualmente (respaldo)
+        </a>
+      </div>
     )
   }
 

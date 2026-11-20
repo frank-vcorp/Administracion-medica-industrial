@@ -351,7 +351,7 @@ class BaileysManager {
     return this.getSnapshot()
   }
 
-  async sendText(toPhone: string, text: string): Promise<void> {
+  private async resolveJid(toPhone: string): Promise<string> {
     if (this.status !== 'connected' || !this.sock) {
       throw new Error('WhatsApp no conectado. Escanee el QR en Configuración.')
     }
@@ -359,12 +359,33 @@ class BaileysManager {
     if (digits.length < 10) {
       throw new Error('Teléfono destino inválido')
     }
+    const candidates: string[] = []
+    if (digits.length === 10) candidates.push(`521${digits}`)
+    if (digits.length === 12 && digits.startsWith('52')) candidates.push(`521${digits.slice(2)}`)
+    candidates.push(digits)
+    const unique = [...new Set(candidates)]
+    const lookup = this.sock.onWhatsApp?.bind(this.sock)
+    if (lookup) {
+      for (const candidate of unique) {
+        try {
+          const rows = await lookup(`${candidate}@s.whatsapp.net`)
+          const hit = Array.isArray(rows) ? rows.find((row) => row?.exists && row.jid) : undefined
+          if (hit?.jid) return hit.jid
+        } catch {
+          // Siguiente candidato.
+        }
+      }
+    }
+    return `${unique[0]}@s.whatsapp.net`
+  }
+
+  async sendText(toPhone: string, text: string): Promise<void> {
     const body = text.trim().slice(0, 4000)
     if (!body) {
       throw new Error('Mensaje vacío')
     }
-    const jid = `${digits}@s.whatsapp.net`
-    await this.sock.sendMessage(jid, { text: body })
+    const jid = await this.resolveJid(toPhone)
+    await this.sock!.sendMessage(jid, { text: body })
   }
 
   async sendDocument(input: {
@@ -394,15 +415,8 @@ class BaileysManager {
     buffer: Buffer
     caption?: string
   }): Promise<void> {
-    if (this.status !== 'connected' || !this.sock) {
-      throw new Error('WhatsApp no conectado. Escanee el QR en Configuración.')
-    }
-    const digits = input.toPhone.replace(/\D/g, '')
-    if (digits.length < 10) {
-      throw new Error('Teléfono destino inválido')
-    }
-    const jid = `${digits}@s.whatsapp.net`
-    await this.sock.sendMessage(jid, {
+    const jid = await this.resolveJid(input.toPhone)
+    await this.sock!.sendMessage(jid, {
       document: input.buffer,
       mimetype: input.mimetype,
       fileName: input.fileName,
