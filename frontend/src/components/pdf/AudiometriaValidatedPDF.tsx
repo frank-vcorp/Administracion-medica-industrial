@@ -13,7 +13,6 @@
  * su cálculo, el estado bilateral y la completitud documental.
  */
 import { Circle, Document, Image, Line, Page, Svg, Text, View, StyleSheet } from '@react-pdf/renderer'
-import { SME_PDF_FOOTER } from '@/lib/brand-constants'
 import type { AudiometriaFormatoReferencia } from '@/lib/audiometry-formato'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 
@@ -22,7 +21,7 @@ const CONTENT_WIDTH = 572
 const styles = StyleSheet.create({
   page: {
     paddingTop: 16,
-    paddingBottom: 42,
+    paddingBottom: 78,
     paddingHorizontal: 20,
     fontFamily: 'Helvetica',
     fontSize: 8,
@@ -133,17 +132,13 @@ const styles = StyleSheet.create({
   signatureImage: { width: 110, height: 36, objectFit: 'contain', marginLeft: 12 },
   footer: {
     position: 'absolute',
-    bottom: 12,
+    bottom: 10,
     left: 20,
     right: 20,
-    borderTopWidth: 0.6,
-    borderTopColor: '#0f766e',
-    paddingTop: 3,
   },
-  footerLine: { fontSize: 6, color: '#334155', textAlign: 'center' },
-  footerBottom: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 1 },
-  footerSmall: { fontSize: 6, color: '#334155' },
-  slogan: { fontSize: 8, fontWeight: 'bold', color: '#15803d' },
+  footerImage: { width: CONTENT_WIDTH, height: 72, objectFit: 'contain' },
+  footerServices: { fontSize: 7, color: '#5f8f95', textAlign: 'center', marginBottom: 2 },
+  footerContacts: { fontSize: 7.5, color: '#5f8f95', textAlign: 'center' },
 })
 
 export interface AudiometriaValidatedPDFData {
@@ -168,6 +163,8 @@ export interface AudiometriaValidatedPDFData {
     signatureImageUrl: string
   }
   logoUrl: string
+  /** Pie de la referencia: teléfono, amisaludresponsable.com y redes. */
+  footerImageUrl?: string | null
   sourceCropDataUrl?: string | null
   sourceCropAspectRatio?: number | null
 }
@@ -347,11 +344,11 @@ export const AudiometriaValidatedPDF = ({
       ? data.sourceCropAspectRatio
       : null
   let imageWidth = CONTENT_WIDTH
-  let imageHeight = 220
+  let imageHeight = 240
   if (aspect) {
     imageHeight = imageWidth / aspect
-    if (imageHeight > 250) {
-      imageHeight = 250
+    if (imageHeight > 300) {
+      imageHeight = 300
       imageWidth = imageHeight * aspect
     }
   }
@@ -375,33 +372,34 @@ export const AudiometriaValidatedPDF = ({
           <View style={styles.logoSlot} />
         </View>
 
-        <View style={styles.infoRow}>
-          <View style={styles.infoCol}>
-            <Text style={styles.infoHeading}>Información del Paciente</Text>
-            <InfoLine label="Identificación" value={formato.identificacion} />
-            <InfoLine label="Nombre" value={data.patient.fullName} />
-            <InfoLine label="Nacimiento" value={formato.nacimiento} />
-            <InfoLine label="Sexo" value={formato.sexo} />
-            <InfoLine label="Empresa" value={data.patient.companyName} />
-            <InfoLine label="Notas" value={formato.notasPaciente} />
+        {data.sourceCropDataUrl ? null : (
+          <View style={styles.infoRow}>
+            <View style={styles.infoCol}>
+              <Text style={styles.infoHeading}>Información del Paciente</Text>
+              <InfoLine label="Identificación" value={formato.identificacion} />
+              <InfoLine label="Nombre" value={data.patient.fullName} />
+              <InfoLine label="Nacimiento" value={formato.nacimiento} />
+              <InfoLine label="Sexo" value={formato.sexo} />
+              <InfoLine label="Notas" value={formato.notasPaciente} />
+            </View>
+            <View style={styles.infoCol}>
+              <Text style={styles.infoHeading}>Información de la Prueba</Text>
+              <InfoLine label="Fecha" value={formato.fechaEstudio} />
+              <InfoLine label="Hora" value={formato.horaEstudio} />
+              <Text style={[styles.infoHeading, { marginTop: 4 }]}>Notas de Prueba</Text>
+              <Text style={styles.infoLine}>
+                {formato.notasPrueba?.trim() ? formato.notasPrueba : '—'}
+              </Text>
+            </View>
+            <View style={styles.infoCol}>
+              <Text style={styles.infoHeading}>Información del Sistema</Text>
+              <InfoLine label="Audiómetro" value={formato.audiometro} />
+              <InfoLine label="Transductor" value={formato.transductor} />
+              <InfoLine label="Número de serie" value={formato.numeroSerie} />
+              <InfoLine label="Última calibración" value={formato.ultimaCalibracion} />
+            </View>
           </View>
-          <View style={styles.infoCol}>
-            <Text style={styles.infoHeading}>Información de la Prueba</Text>
-            <InfoLine label="Fecha" value={formato.fechaEstudio} />
-            <InfoLine label="Hora" value={formato.horaEstudio} />
-            <Text style={[styles.infoHeading, { marginTop: 4 }]}>Notas de Prueba</Text>
-            <Text style={styles.infoLine}>
-              {formato.notasPrueba?.trim() ? formato.notasPrueba : '—'}
-            </Text>
-          </View>
-          <View style={styles.infoCol}>
-            <Text style={styles.infoHeading}>Información del Sistema</Text>
-            <InfoLine label="Audiómetro" value={formato.audiometro} />
-            <InfoLine label="Transductor" value={formato.transductor} />
-            <InfoLine label="Número de serie" value={formato.numeroSerie} />
-            <InfoLine label="Última calibración" value={formato.ultimaCalibracion} />
-          </View>
-        </View>
+        )}
 
         {data.sourceCropDataUrl ? (
           <View style={styles.graphWrap}>
@@ -542,13 +540,18 @@ export const AudiometriaValidatedPDF = ({
         </View>
 
         <View style={styles.footer} fixed>
-          <Text style={styles.footerLine}>
-            Evaluaciones médicas / Outsourcing de Personal Médico / Capacitación en Salud y Seguridad / Evaluaciones Ergonómicas / Fisioterapia / Nutrición
-          </Text>
-          <View style={styles.footerBottom}>
-            <Text style={styles.footerSmall}>{SME_PDF_FOOTER}</Text>
-            <Text style={styles.slogan}>Salud que produce ®</Text>
-          </View>
+          {data.footerImageUrl ? (
+            <Image style={styles.footerImage} src={data.footerImageUrl} />
+          ) : (
+            <View>
+              <Text style={styles.footerServices}>
+                Evaluaciones Médicas • Servicio de Personal Médico • Capacitación en salud • Ergonomía • Fisioterapia • Nutrición • Ambulancia
+              </Text>
+              <Text style={styles.footerContacts}>
+                (442) 480 0548    amisaludresponsable.com    AMISaludResponsable    @amisaludresponsable    amisaludresponsable
+              </Text>
+            </View>
+          )}
         </View>
       </Page>
     </Document>

@@ -36,7 +36,7 @@
  *     archivo generado NO se expone públicamente; sólo se sirve por la
  *     API route autenticada `/api/pdf/audiometry/[reviewId]`.
  */
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { renderToBuffer } from '@react-pdf/renderer'
@@ -264,11 +264,24 @@ export interface GenerateAudiometriaPdfInput {
  * relativa (si la persistencia en disco fue exitosa). Lanza excepción si
  * la renderización falla.
  */
+async function resolveAudiometryFooterDataUrl(): Promise<string | null> {
+  try {
+    const buf = await readFile(
+      path.join(process.cwd(), 'public', 'branding', 'ami-pdf-footer.png'),
+    )
+    return `data:image/png;base64,${buf.toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
 export async function generateAudiometriaValidatedPdf(
   input: GenerateAudiometriaPdfInput,
 ): Promise<GenerateAudiometriaPdfResult> {
   const logoUrl = input.data.logoUrl || (await resolveSmeLogoDataUrl()) || ''
-  const data = { ...input.data, logoUrl }
+  const footerImageUrl =
+    input.data.footerImageUrl || (await resolveAudiometryFooterDataUrl())
+  const data = { ...input.data, logoUrl, footerImageUrl }
   const buffer = await renderToBuffer(
     <AudiometriaValidatedPDF data={data} />,
   )
