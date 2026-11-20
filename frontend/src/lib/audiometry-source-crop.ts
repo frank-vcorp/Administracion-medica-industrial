@@ -60,34 +60,78 @@ function toSourceImageCrop(band: Buffer, fallbackAspect = 2.4): AudiometrySource
   }
 }
 
+function audiometryApiBase(): string {
+  return (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    ''
+  ).replace(/\/+$/, '')
+}
+
+function isPngBuffer(buf: Buffer): boolean {
+  return (
+    buf.length > 8 &&
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47
+  )
+}
+
+/**
+ * El PNG del recorte queda en el volumen `/uploads` de Railway.
+ * `/api/files/...` redirige a una URL firmada que hoy responde 403
+ * (SignatureDoesNotMatch), así que esa vía no sirve para embeber la gráfica.
+ */
+async function readCropPngFromUploads(relativePath: string): Promise<Buffer | null> {
+  const base = audiometryApiBase()
+  const trimmed = relativePath.trim().replace(/^\/+/, '')
+  if (!base || !trimmed || trimmed.includes('..')) return null
+  const url = `${base}/uploads/${trimmed.split('/').map(encodeURIComponent).join('/')}`
+  try {
+    const resp = await fetch(url, {
+      cache: 'no-store',
+      redirect: 'manual',
+      headers: { 'User-Agent': 'AMI-Audiometry-Crop/1.0' },
+    })
+    if (!resp.ok) return null
+    const buf = Buffer.from(await resp.arrayBuffer())
+    return isPngBuffer(buf) ? buf : null
+  } catch {
+    return null
+  }
+}
+
 async function readSourceCropPngBuffer(
   meta: Pick<AudiometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
 ): Promise<Buffer | null> {
   try {
     const abs = path.join(REPO_UPLOAD_DIR, meta.relativePath)
-    return await readFile(abs)
+    const local = await readFile(abs)
+    if (isPngBuffer(local)) return local
   } catch {
     // Producción: PNG remoto
   }
 
+  const fromUploads = await readCropPngFromUploads(meta.relativePath)
+  if (fromUploads) return fromUploads
+
   const fileRef = meta.fileUrl ?? `/api/files/${meta.relativePath}`
   const bytes = await tryReadSourceFromBackend(fileRef)
   if (!bytes) return null
-  return Buffer.from(bytes)
+  const remote = Buffer.from(bytes)
+  return isPngBuffer(remote) ? remote : null
 }
 
 async function cropViaBackend(
   eventTestId: string,
   fileUrl: string,
 ): Promise<AudiometrySourceCropResult | null> {
-  const apiBase =
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.BACKEND_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    ''
+  const apiBase = audiometryApiBase()
 
   const endpoint = apiBase
-    ? `${apiBase.replace(/\/+$/, '')}/api/v2/event-tests/audiometry-source-crop`
+    ? `${apiBase}/api/v2/event-tests/audiometry-source-crop`
     : '/api/v2/event-tests/audiometry-source-crop'
 
   try {
