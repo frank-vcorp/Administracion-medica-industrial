@@ -17,6 +17,7 @@ import { useSession } from 'next-auth/react'
 import { buildVerdictFromExam } from '@/lib/clinical/verdict.builder'
 import { buildRecommendationsFromExam } from '@/lib/clinical/recommendations'
 import { isAdminLike } from '@/lib/auth/roles'
+import { sendCierreClinico } from '@/actions/cierre-clinico-send.actions'
 
 interface EventFlowControllerProps {
     eventId: string
@@ -52,6 +53,8 @@ export default function EventFlowController({
 }: EventFlowControllerProps) {
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
+    const [sendNote, setSendNote] = useState<string | null>(null)
+    const [sending, setSending] = useState<'email' | 'whatsapp' | null>(null)
     // IMPL-20260826-08: estado para mostrar al usuario que la versión
     // firmada anterior fue sustituida por la nueva re-emisión. NO
     // ocultamos la firma vieja — el mensaje es explícito y muestra
@@ -329,6 +332,46 @@ export default function EventFlowController({
                                 Volver a Recepción
                             </button>
                         </div>
+
+                        {hasMedicalVerdict && (
+                            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                <button
+                                    type="button"
+                                    disabled={sending !== null}
+                                    onClick={() => {
+                                        setSendNote(null)
+                                        setSending('email')
+                                        startTransition(async () => {
+                                            const res = await sendCierreClinico({ eventId, channel: 'email' })
+                                            setSending(null)
+                                            setSendNote(res.success ? 'Cierre enviado por correo.' : (res.error ?? 'No se pudo enviar el correo.'))
+                                        })
+                                    }}
+                                    className="bg-white border border-slate-300 text-slate-800 px-6 py-3 rounded-xl font-bold disabled:opacity-50"
+                                >
+                                    {sending === 'email' ? 'Enviando correo…' : '✉️ Enviar por correo'}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={sending !== null}
+                                    onClick={() => {
+                                        setSendNote(null)
+                                        setSending('whatsapp')
+                                        startTransition(async () => {
+                                            const res = await sendCierreClinico({ eventId, channel: 'whatsapp' })
+                                            setSending(null)
+                                            setSendNote(res.success ? 'Cierre enviado por WhatsApp (Baileys).' : (res.error ?? 'Baileys no pudo enviar el archivo.'))
+                                        })
+                                    }}
+                                    className="bg-[#128C7E] hover:bg-[#0f7a6e] text-white px-6 py-3 rounded-xl font-bold disabled:opacity-50"
+                                >
+                                    {sending === 'whatsapp' ? 'Enviando por Baileys…' : '💬 Enviar por WhatsApp'}
+                                </button>
+                            </div>
+                        )}
+                        {sendNote && (
+                            <p className="text-sm text-slate-600">{sendNote}</p>
+                        )}
 
                         <p className="mx-auto mt-6 max-w-md rounded-xl border border-amber-100 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
                             La calificación del servicio y la encuesta se ofrecen en{' '}
