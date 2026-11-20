@@ -33,13 +33,7 @@
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { ExamenMedicoVariantAppendixPages } from '@/components/pdf/ExamenMedicoVariantAppendix'
-import {
-  examenMedicoVariantLabel,
-  normalizeExamenMedicoVariant,
-} from '@/lib/clinical/examen-medico-variant'
-import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
-import { SUPLEMENTOS_COMPLEMENTOS_LABEL } from '@/lib/antecedentes-fields'
 import { SME_LEGAL_NAME, SME_PDF_FOOTER } from '@/lib/brand-constants'
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
@@ -345,811 +339,239 @@ const v = (val: string | number | null | undefined): string => {
 }
 
 /** Etiqueta del estado de la revisión/dictamen. */
-const statusLabel = (s: ExamenMedicoPDFData['status']) => {
-  if (s === 'SIGNED') return 'Firmado'
-  if (s === 'REVIEWED_ACCEPTED') return 'Aceptado'
-  return 'Editado'
+// ─── Reporte de una hoja (formato de aptitud) ───────────────────────────────
+
+const APTITUD_OPCIONES = [
+  'APTO',
+  'APTO CONDICIONADO',
+  'APTO CON RESTRICCIONES',
+  'NO CUMPLE CON LOS CRITERIOS DE SALUD PARA EL PUESTO PROPUESTO',
+] as const
+
+const reportStyles = StyleSheet.create({
+  page: {
+    paddingTop: 28,
+    paddingBottom: 36,
+    paddingHorizontal: 32,
+    fontFamily: 'Helvetica',
+    fontSize: 9,
+    color: '#0f172a',
+  },
+  title: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+    letterSpacing: 0.4,
+  },
+  idRow: { flexDirection: 'row', marginBottom: 2 },
+  idLabel: { width: 118, fontSize: 8, fontWeight: 'bold' },
+  idValue: { flex: 1, fontSize: 8 },
+  idSplit: { flex: 1, flexDirection: 'row' },
+  rule: {
+    borderBottomWidth: 0.6,
+    borderBottomColor: '#94a3b8',
+    marginVertical: 6,
+  },
+  study: { fontSize: 8, lineHeight: 1.35, marginBottom: 4 },
+  studyLabel: { fontWeight: 'bold' },
+  sectionHead: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  aptitudRow: { flexDirection: 'row', alignItems: 'stretch' },
+  aptitudTable: { width: '58%', borderWidth: 0.8, borderColor: '#0f172a' },
+  aptitudLine: {
+    flexDirection: 'row',
+    borderBottomWidth: 0.6,
+    borderBottomColor: '#0f172a',
+    minHeight: 18,
+  },
+  aptitudName: { flex: 1, fontSize: 7.5, fontWeight: 'bold', padding: 3 },
+  aptitudMark: {
+    width: 36,
+    fontSize: 8,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    paddingTop: 3,
+    borderLeftWidth: 0.6,
+    borderLeftColor: '#0f172a',
+  },
+  restrictBox: {
+    width: '42%',
+    borderWidth: 0.8,
+    borderColor: '#0f172a',
+    borderLeftWidth: 0,
+    padding: 4,
+    fontSize: 7.5,
+    lineHeight: 1.3,
+  },
+  reco: { fontSize: 8, lineHeight: 1.35, marginTop: 2 },
+  sign: { marginTop: 16, alignItems: 'center' },
+  signImage: { width: 140, height: 48, objectFit: 'contain', marginBottom: 2 },
+  signName: { fontSize: 9, fontWeight: 'bold', textAlign: 'center' },
+  signMeta: { fontSize: 8, textAlign: 'center', marginTop: 1 },
+})
+
+function filled(val: string | null | undefined): string | null {
+  const s = (val ?? '').trim()
+  if (!s || s === '—' || s === '-') return null
+  return s
 }
 
-// ─── Componente ───────────────────────────────────────────────────────────────
+function studyLine(label: string, value: string | null | undefined) {
+  const text = filled(value)
+  if (!text) return null
+  return { label, text }
+}
 
 export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }) => {
-  const variant = normalizeExamenMedicoVariant(data.variant)
-  const variantLabel = examenMedicoVariantLabel(variant)
+  const id = data.patientIdentification
+  const p = data.paciente
+  const examParts = [
+    filled(data.summary.estado_nutricional) ? `ESTADO NUTRICIONAL: ${data.summary.estado_nutricional}` : null,
+    filled(data.summary.agudeza_visual) ? `AGUDEZA VISUAL: ${data.summary.agudeza_visual}` : null,
+    filled(data.summary.salud_bucal) ? `SALUD BUCAL: ${data.summary.salud_bucal}` : null,
+    filled(data.summary.presion_arterial) ? `PRESION ARTERIAL: ${data.summary.presion_arterial}` : null,
+  ].filter((x): x is string => Boolean(x))
+  const impresion = filled(data.impresionDiagnostica) || filled(data.summary.examen_medico)
+  const examBody = [examParts.join(', '), impresion].filter(Boolean).join('. ')
+  const studies = [
+    studyLine('AUDIOMETRIA', data.slots.audiometria || data.summary.audiometria),
+    studyLine('ESPIROMETRIA', data.slots.espirometria || data.summary.espirometria),
+    studyLine('LABORATORIOS', data.slots.laboratorios || data.summary.laboratorios),
+    studyLine('RADIOGRAFIA', data.slots.radiografia || data.summary.radiografia),
+  ].filter((x): x is { label: string; text: string } => Boolean(x))
+  const aptitud = (data.aptitud || '').trim().toUpperCase()
+  const restricciones = filled(data.restricciones)
+  const observaciones = filled(data.observacionesFinales)
+  const recomendaciones = data.recomendaciones.filter((r) => filled(r))
+
   return (
-  <Document
-    title={`ExamenMedico-${variant}-${data.folio.slice(0, 8)}`}
-    author={`Dr(a). ${data.medico.fullName}`}
-    subject={`Reporte de Examen Médico — ${variantLabel}`}
-  >
-    {/* ═════════════════════════════════════════════════════════════════════
-        PÁGINA 1 — Identificación e historia
-        ═════════════════════════════════════════════════════════════════════ */}
-    <Page size="A4" style={styles.page}>
-      {/* MEMBRETE SUPERIOR */}
-      <View style={styles.header} fixed>
-        <View style={styles.headerLeft}>
-          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
-          <Text style={styles.brandSub}>
-            Evaluaciones médicas · Outsourcing · Capacitación
-          </Text>
-          <Text style={styles.brandSub}>
-            Ergonomía · Fisioterapia · Nutrición
-          </Text>
+    <Document
+      title={`Reporte de Examen Medico ${data.folio.slice(0, 8)}`}
+      author={data.medico.fullName}
+      subject="Reporte de examen medico (aptitud)"
+    >
+      <Page size="LETTER" style={reportStyles.page}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
+            <Text style={styles.brandSub}>Evaluaciones médicas · Outsourcing · Capacitación</Text>
+            <Text style={styles.brandSub}>Ergonomía · Fisioterapia · Nutrición</Text>
+          </View>
+          <View style={styles.headerRight}>
+            {data.logoUrl ? (
+              <Image style={styles.logoImage} src={data.logoUrl} />
+            ) : (
+              <Text style={styles.logoFallback}>SME</Text>
+            )}
+          </View>
         </View>
-        <View style={styles.headerRight}>
-          {data.logoUrl ? (
-            <Image style={styles.logoImage} src={data.logoUrl} />
-          ) : (
-            <Text style={styles.logoFallback}>SME</Text>
-          )}
+
+        <Text style={reportStyles.title}>REPORTE DE EXAMEN MEDICO</Text>
+
+        <View style={reportStyles.idRow}>
+          <Text style={reportStyles.idLabel}>NOMBRE:</Text>
+          <Text style={reportStyles.idValue}>{v(p.nombreCompleto || id.fullName)}</Text>
         </View>
-      </View>
+        <View style={reportStyles.idRow}>
+          <View style={reportStyles.idSplit}>
+            <Text style={reportStyles.idLabel}>SEXO:</Text>
+            <Text style={reportStyles.idValue}>{v(p.sexo || id.sexLabel)}</Text>
+          </View>
+          <View style={reportStyles.idSplit}>
+            <Text style={[reportStyles.idLabel, { width: 52 }]}>EDAD:</Text>
+            <Text style={reportStyles.idValue}>{v(p.edad || id.ageLabel)}</Text>
+          </View>
+          <View style={reportStyles.idSplit}>
+            <Text style={[reportStyles.idLabel, { width: 70 }]}>EMPRESA:</Text>
+            <Text style={reportStyles.idValue}>{v(p.empresa || id.companyName)}</Text>
+          </View>
+        </View>
+        <View style={reportStyles.idRow}>
+          <View style={reportStyles.idSplit}>
+            <Text style={reportStyles.idLabel}>FECHA:</Text>
+            <Text style={reportStyles.idValue}>{v(id.attentionDate)}</Text>
+          </View>
+          <View style={reportStyles.idSplit}>
+            <Text style={[reportStyles.idLabel, { width: 92 }]}>TIPO DE EXAMEN:</Text>
+            <Text style={reportStyles.idValue}>{v(p.tipoExamen)}</Text>
+          </View>
+        </View>
+        <View style={reportStyles.idRow}>
+          <Text style={reportStyles.idLabel}>PUESTO:</Text>
+          <Text style={reportStyles.idValue}>{v(p.puesto)}</Text>
+        </View>
 
-      <Text style={styles.docTitle}>Reporte de Examen Médico — {variantLabel}</Text>
+        <View style={reportStyles.rule} />
 
-      {/* I. IDENTIFICACIÓN E HISTORIA */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          I. Identificación del paciente e historia ocupacional
+        <Text style={reportStyles.study}>
+          <Text style={reportStyles.studyLabel}>EXAMEN MEDICO: </Text>
+          {examBody || '—'}
         </Text>
-
-        <PatientIdentificationPdfBlock patient={data.patientIdentification} />
-
-        <Text style={styles.subTitle}>Paciente</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Nombre:</Text>
-              <Text style={styles.value}>{v(data.paciente.nombreCompleto)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>F. nacimiento:</Text>
-              <Text style={styles.value}>{v(data.paciente.fechaNacimiento)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Edad:</Text>
-              <Text style={styles.value}>{v(data.paciente.edad)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Sexo:</Text>
-              <Text style={styles.value}>{v(data.paciente.sexo)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Identidad género:</Text>
-              <Text style={styles.value}>{v(data.paciente.identidadGenero)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Estado civil:</Text>
-              <Text style={styles.value}>{v(data.paciente.estadoCivil)}</Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Escolaridad:</Text>
-              <Text style={styles.value}>{v(data.paciente.escolaridad)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Dirección:</Text>
-              <Text style={styles.value}>{v(data.paciente.direccion)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Tipo sanguíneo:</Text>
-              <Text style={styles.value}>{v(data.paciente.tipoSanguineo)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Empresa:</Text>
-              <Text style={styles.value}>{v(data.paciente.empresa)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Puesto:</Text>
-              <Text style={styles.value}>{v(data.paciente.puesto)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Área:</Text>
-              <Text style={styles.value}>{v(data.paciente.area)}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Tipo de examen:</Text>
-          <Text style={styles.value}>{v(data.paciente.tipoExamen)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Historia ocupacional:</Text>
-          <Text style={styles.value}>{v(data.paciente.historiaOcupacional)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Riesgos de trabajo:</Text>
-          <Text style={styles.value}>{v(data.paciente.riesgosTrabajo)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>EPP:</Text>
-          <Text style={styles.value}>{v(data.paciente.epp)}</Text>
-        </View>
-
-        <Text style={styles.subTitle}>Antecedentes heredofamiliares</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Diabetes:</Text>
-              <Text style={styles.value}>{v(data.ahf.diabetes)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Hipertensión:</Text>
-              <Text style={styles.value}>{v(data.ahf.hipertension)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Epilepsia:</Text>
-              <Text style={styles.value}>{v(data.ahf.epilepsia)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cardiopatía:</Text>
-              <Text style={styles.value}>{v(data.ahf.cardiopatia)}</Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Renales:</Text>
-              <Text style={styles.value}>{v(data.ahf.renales)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Asma:</Text>
-              <Text style={styles.value}>{v(data.ahf.asma)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cáncer:</Text>
-              <Text style={styles.value}>{v(data.ahf.cancer)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Mentales / Otras:</Text>
-              <Text style={styles.value}>
-                {v(data.ahf.mentales)} / {v(data.ahf.otras)}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <Text style={styles.subTitle}>Antecedentes personales no patológicos (toxicomanías)</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Alcoholismo:</Text>
-              <Text style={styles.value}>{v(data.apnp.alcohol)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Tabaquismo:</Text>
-              <Text style={styles.value}>{v(data.apnp.tabaco)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Drogas:</Text>
-              <Text style={styles.value}>{v(data.apnp.drogas)}</Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Ejercicio:</Text>
-              <Text style={styles.value}>{v(data.apnp.ejercicio)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Alimentación:</Text>
-              <Text style={styles.value}>{v(data.apnp.alimentacion)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>{SUPLEMENTOS_COMPLEMENTOS_LABEL}:</Text>
-              <Text style={styles.value}>{v(data.apnp.tratamientoMedicoActual)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Tatuajes:</Text>
-              <Text style={styles.value}>{v(data.apnp.tatuajes)}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* PIE */}
-      <Text style={styles.footer} fixed>
-        {SME_PDF_FOOTER}
-        {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
-        {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
-      </Text>
-    </Page>
-
-    {/* ═════════════════════════════════════════════════════════════════════
-        PÁGINA 2 — Antecedentes y mediciones
-        ═════════════════════════════════════════════════════════════════════ */}
-    <Page size="A4" style={styles.page}>
-      <View style={styles.header} fixed>
-        <View style={styles.headerLeft}>
-          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
-          <Text style={styles.brandSub}>II. Antecedentes y mediciones</Text>
-        </View>
-        <View style={styles.headerRight}>
-          {data.logoUrl ? (
-            <Image style={styles.logoImage} src={data.logoUrl} />
-          ) : (
-            <Text style={styles.logoFallback}>SME</Text>
-          )}
-        </View>
-      </View>
-
-      {/* APP */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Antecedentes personales patológicos</Text>
-        <View style={styles.verdictBox}>
-          <Text style={styles.paragraph}>{v(data.app)}</Text>
-        </View>
-      </View>
-
-      {/* GO + Inmunizaciones */}
-      <View style={styles.grid2}>
-        <View style={[styles.gridCol, { paddingRight: 8 }]}>
-          <Text style={styles.subTitle}>
-            {String(data.paciente.sexo ?? '')
-              .normalize('NFD')
-              .replace(/[\u0300-\u036f]/g, '')
-              .toLowerCase()
-              .startsWith('m')
-              ? 'Antecedentes reproductivos'
-              : 'Historia gineco-obstétrica'}
+        {studies.map((row) => (
+          <Text key={row.label} style={reportStyles.study}>
+            <Text style={reportStyles.studyLabel}>{row.label}: </Text>
+            {row.text}
           </Text>
-          <Text style={styles.paragraph}>{v(data.historiaGineco)}</Text>
-        </View>
-        <View style={styles.gridCol}>
-          <Text style={styles.subTitle}>Inmunizaciones</Text>
-          <Text style={styles.paragraph}>{v(data.inmunizaciones)}</Text>
-        </View>
-      </View>
+        ))}
 
-      {/* Somatometría / Signos vitales */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Somatometría y signos vitales</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Peso (kg):</Text>
-              <Text style={styles.value}>{v(data.somatometria.peso)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Talla (m):</Text>
-              <Text style={styles.value}>{v(data.somatometria.talla)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>IMC:</Text>
-              <Text style={styles.value}>{v(data.somatometria.imc)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Sat. oxígeno (%):</Text>
-              <Text style={styles.value}>{v(data.somatometria.saturacionOxigeno)}</Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Tensión arterial:</Text>
-              <Text style={styles.value}>{v(data.somatometria.ta)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>FC (lpm):</Text>
-              <Text style={styles.value}>{v(data.somatometria.fc)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>FR (rpm):</Text>
-              <Text style={styles.value}>{v(data.somatometria.fr)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Temperatura (°C):</Text>
-              <Text style={styles.value}>{v(data.somatometria.temperatura)}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Agudeza visual y pruebas complementarias */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Agudeza visual y pruebas complementarias</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Visión lejana OD:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.visionLejanaOD)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Visión lejana OI:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.visionLejanaOI)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Visión cercana OD:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.visionCercanaOD)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Visión cercana OI:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.visionCercanaOI)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Lejana correg. OD:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.lejanaCorregidaOD)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Lejana correg. OI:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.lejanaCorregidaOI)}</Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cercana correg. OD:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.cercanaCorregidaOD)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cercana correg. OI:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.cercanaCorregidaOI)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Reflejos:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.reflejos)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Ishihara:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.ishihara)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Campimetría:</Text>
-              <Text style={styles.value}>{v(data.agudezaVisual.campimetria)}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      <Text style={styles.footer} fixed>
-        {SME_PDF_FOOTER}
-        {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
-      </Text>
-    </Page>
-
-    {/* ═════════════════════════════════════════════════════════════════════
-        PÁGINA 3 — Exploración
-        ═════════════════════════════════════════════════════════════════════ */}
-    <Page size="A4" style={styles.page}>
-      <View style={styles.header} fixed>
-        <View style={styles.headerLeft}>
-          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
-          <Text style={styles.brandSub}>III. Exploración física</Text>
-        </View>
-        <View style={styles.headerRight}>
-          {data.logoUrl ? (
-            <Image style={styles.logoImage} src={data.logoUrl} />
-          ) : (
-            <Text style={styles.logoFallback}>SME</Text>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Exploración general y por aparatos</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Neurológico:</Text>
-              <Text style={styles.value}>{v(data.exploracion.neurologico)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cabeza:</Text>
-              <Text style={styles.value}>{v(data.exploracion.cabeza)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Piel y faneras:</Text>
-              <Text style={styles.value}>{v(data.exploracion.piel_y_faneras)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Oídos CAD:</Text>
-              <Text style={styles.value}>{v(data.exploracion.oidos_cad)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Oídos CAI:</Text>
-              <Text style={styles.value}>{v(data.exploracion.oidos_cai)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Ojos:</Text>
-              <Text style={styles.value}>{v(data.exploracion.ojos)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cavidad bucal:</Text>
-              <Text style={styles.value}>{v(data.exploracion.boca_alineacion)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Salud bucal:</Text>
-              <Text style={styles.value}>{v(data.exploracion.boca_estado)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Nariz:</Text>
-              <Text style={styles.value}>{v(data.exploracion.nariz)}</Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Faringe:</Text>
-              <Text style={styles.value}>{v(data.exploracion.faringe)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cuello:</Text>
-              <Text style={styles.value}>{v(data.exploracion.cuello)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Tórax:</Text>
-              <Text style={styles.value}>{v(data.exploracion.torax)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Corazón:</Text>
-              <Text style={styles.value}>{v(data.exploracion.corazon)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Campos pulm.:</Text>
-              <Text style={styles.value}>{v(data.exploracion.campos_pulmonares)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Abdomen:</Text>
-              <Text style={styles.value}>{v(data.exploracion.abdomen)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Genitourinario:</Text>
-              <Text style={styles.value}>{v(data.exploracion.genitourinario)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Columna:</Text>
-              <Text style={styles.value}>{v(data.exploracion.columna_vertebral)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Circulación venosa:</Text>
-              <Text style={styles.value}>{v(data.exploracion.circulacion_venosa)}</Text>
-            </View>
-          </View>
-        </View>
-
-        <Text style={styles.subTitle}>Extremidades</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>MMSS:</Text>
-              <Text style={styles.value}>{v(data.exploracion.ms_superiores)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Fuerza (Daniels sup):</Text>
-              <Text style={styles.value}>
-                {v(data.exploracion.fuerza_muscular_daniels_sup)}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>MMII:</Text>
-              <Text style={styles.value}>{v(data.exploracion.ms_inferiores)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Fuerza (Daniels inf):</Text>
-              <Text style={styles.value}>
-                {v(data.exploracion.fuerza_muscular_daniels_inf)}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Pruebas musculoesqueléticas</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Arco de movilidad:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.arcoMovilidad)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Tono muscular:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.tonoMuscular)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Coordinación:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.coordinacion)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Test de Adam:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.testAdam)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Test de Romberg:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.testRomberg)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Signo Bragard:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.bragard)}</Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Finkelstein:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.finkelstein)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Signo Tinel:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.tinel)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Phanel:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.phanel)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Lasegue:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.lasegue)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Quiste sinovial:</Text>
-              <Text style={styles.value}>{v(data.pruebasMusculo.quisteSinovial)}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Impresión diagnóstica del médico (referencia visible) */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          Impresión diagnóstica del médico (validada)
-        </Text>
-        <View style={styles.verdictBox}>
-          <Text style={styles.paragraph}>{v(data.impresionDiagnostica)}</Text>
-        </View>
-      </View>
-
-      <Text style={styles.footer} fixed>
-        {SME_PDF_FOOTER}
-        {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
-      </Text>
-    </Page>
-
-    {/* ═════════════════════════════════════════════════════════════════════
-        PÁGINA 4 — Dictamen (aptitud / recomendaciones / firma)
-        ═════════════════════════════════════════════════════════════════════ */}
-    <Page size="A4" style={styles.page}>
-      <View style={styles.header} fixed>
-        <View style={styles.headerLeft}>
-          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
-          <Text style={styles.brandSub}>IV. Dictamen de aptitud laboral</Text>
-        </View>
-        <View style={styles.headerRight}>
-          {data.logoUrl ? (
-            <Image style={styles.logoImage} src={data.logoUrl} />
-          ) : (
-            <Text style={styles.logoFallback}>SME</Text>
-          )}
-        </View>
-      </View>
-
-      {/* Resumen ejecutivo de 9 campos (referencia consolidada) */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Resumen ejecutivo (auto-poblado)</Text>
-        <View style={styles.grid2}>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Estado nutricional:</Text>
-              <Text style={styles.value}>{v(data.summary.estado_nutricional)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Agudeza visual:</Text>
-              <Text style={styles.value}>{v(data.summary.agudeza_visual)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Salud bucal:</Text>
-              <Text style={styles.value}>{v(data.summary.salud_bucal)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Examen médico:</Text>
-              <Text style={styles.value}>{v(data.summary.examen_medico)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Presión arterial:</Text>
-              <Text style={styles.value}>{v(data.summary.presion_arterial)}</Text>
-            </View>
-          </View>
-          <View style={styles.gridCol}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Audiometría:</Text>
-              <Text style={styles.value}>{v(data.summary.audiometria)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Espirometría:</Text>
-              <Text style={styles.value}>{v(data.summary.espirometria)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Laboratorios:</Text>
-              <Text style={styles.value}>{v(data.summary.laboratorios)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Radiografía:</Text>
-              <Text style={styles.value}>{v(data.summary.radiografia)}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Aptitud */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Aptitud laboral</Text>
-        <View style={styles.verdictBox}>
-          <Text style={[styles.paragraph, { fontWeight: 'bold', fontSize: 10 }]}>
-            {v(data.aptitud)}
-          </Text>
-        </View>
-      </View>
-
-      {/* Restricciones y observaciones finales */}
-      <View style={styles.grid2}>
-        <View style={[styles.gridCol, { paddingRight: 8 }]}>
-          <Text style={styles.subTitle}>Restricciones</Text>
-          <View style={styles.verdictBox}>
-            <Text style={styles.paragraph}>{v(data.restricciones)}</Text>
-          </View>
-        </View>
-        <View style={styles.gridCol}>
-          <Text style={styles.subTitle}>Observaciones finales</Text>
-          <View style={styles.verdictBox}>
-            <Text style={styles.paragraph}>{v(data.observacionesFinales)}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Recomendaciones */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recomendaciones</Text>
-        {data.recomendaciones.length === 0 ? (
-          <Text style={[styles.paragraph, styles.missing]}>—</Text>
-        ) : (
-          data.recomendaciones.map((r, i) => (
-            <Text key={i} style={styles.bulletItem}>
-              {i + 1}.- {r}
-            </Text>
-          ))
-        )}
-      </View>
-
-      {/* Nota de condicionamiento por estudios paraclínicos */}
-      {data.notaCondicionamiento ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Nota de condicionamiento (estudios paraclínicos)
-          </Text>
-          <View style={styles.verdictBox}>
-            <Text style={styles.paragraph}>{v(data.notaCondicionamiento)}</Text>
-          </View>
-        </View>
-      ) : null}
-
-      {/* Slots de estudios (referencia trazable) */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Estudios complementarios (slots)</Text>
-        <View style={styles.row}>
-          <Text style={styles.label}>Audiometría:</Text>
-          <Text style={styles.value}>{v(data.slots.audiometria)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Espirometría:</Text>
-          <Text style={styles.value}>{v(data.slots.espirometria)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Laboratorios:</Text>
-          <Text style={styles.value}>{v(data.slots.laboratorios)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Radiografía:</Text>
-          <Text style={styles.value}>{v(data.slots.radiografia)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>Examen físico:</Text>
-          <Text style={styles.value}>{v(data.slots.examenMedico)}</Text>
-        </View>
-      </View>
-
-      {/* IMPL-20260826-08: Hallazgos de la Atención/Cita (consolidado por
-          Event hermanos del mismo appointmentId + workerId). Sólo se
-          renderiza si `consolidatedEvents` está presente y tiene > 0
-          elementos. NO inventa resultados: cada bloque sólo refleja el
-          snapshot del Event correspondiente. */}
-      {data.consolidatedEvents && data.consolidatedEvents.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            HALLAZGOS DE LA ATENCIÓN/CITA (EVENTS HERMANOS)
-          </Text>
-          <Text style={styles.sectionTitle}>
-            Estudios auxiliares de los Events del trabajador ligados a la
-            misma cita. Sólo se muestran los datos disponibles en cada
-            Event; los faltantes aparecen como PENDIENTE sin inventar
-            resultados.
-          </Text>
-          {data.consolidatedEvents.map((block) => {
-            const blockEntries: Array<{
-              serviceName: string
-              extractedData: unknown | null
-            }> = [
-              ...(block.studies ?? []),
-              ...(block.labs ?? []),
-            ]
-            return (
+        <View style={reportStyles.rule} />
+        <Text style={reportStyles.sectionHead}>DICTAMEN DE APTITUD</Text>
+        <View style={reportStyles.aptitudRow}>
+          <View style={reportStyles.aptitudTable}>
+            {APTITUD_OPCIONES.map((opcion, index) => (
               <View
-                key={block.eventId}
-                style={{
-                  marginBottom: 8,
-                  paddingLeft: 10,
-                  paddingTop: 4,
-                  paddingBottom: 4,
-                  borderLeftWidth: 2,
-                  borderLeftColor: block.isCurrent ? '#0f172a' : '#cbd5e1',
-                }}
-                wrap={false}
+                key={opcion}
+                style={[
+                  reportStyles.aptitudLine,
+                  index === APTITUD_OPCIONES.length - 1 ? { borderBottomWidth: 0 } : {},
+                ]}
               >
-                <Text style={{ fontSize: 9, fontWeight: 'bold' }}>
-                  • Event {block.eventShortId}
-                  {block.isCurrent && (
-                    <Text style={{ color: '#166534' }}>  [ACTUAL]</Text>
-                  )}
+                <Text style={reportStyles.aptitudName}>{opcion}</Text>
+                <Text style={reportStyles.aptitudMark}>
+                  {aptitud === opcion ? 'XXX' : ''}
                 </Text>
-                {blockEntries.length === 0 ? (
-                  <Text style={{ fontSize: 8, color: '#64748b', fontStyle: 'italic' }}>
-                    Sin estudios auxiliares registrados para este Event.
-                  </Text>
-                ) : (
-                  blockEntries.map((s, sIdx) => {
-                    const hasData =
-                      s.extractedData !== null &&
-                      s.extractedData !== undefined &&
-                      typeof s.extractedData === 'object' &&
-                      !Array.isArray(s.extractedData) &&
-                      Object.keys(s.extractedData as Record<string, unknown>).length > 0
-                    return (
-                      <Text
-                        key={`${block.eventId}-${s.serviceName}-${sIdx}`}
-                        style={{ fontSize: 8, marginLeft: 14 }}
-                      >
-                        – {s.serviceName}:{' '}
-                        <Text
-                          style={{
-                            color: hasData ? '#166534' : '#92400e',
-                            fontWeight: 'bold',
-                          }}
-                        >
-                          {hasData ? 'APLICADO' : 'PENDIENTE'}
-                        </Text>
-                      </Text>
-                    )
-                  })
-                )}
               </View>
-            )
-          })}
+            ))}
+          </View>
+          <Text style={reportStyles.restrictBox}>{restricciones || ''}</Text>
         </View>
-      )}
 
-      {/* FIRMA */}
-      <View style={styles.signatureArea}>
-        <View style={styles.signatureBox}>
+        <Text style={[reportStyles.sectionHead, { marginTop: 8 }]}>
+          OBSERVACIONES / COMENTARIOS / RECOMENDACIONES
+        </Text>
+        {observaciones ? <Text style={reportStyles.reco}>{observaciones}</Text> : null}
+        {recomendaciones.length > 0 ? (
+          <Text style={reportStyles.reco}>
+            {recomendaciones.map((item, i) => `${i + 1}.- ${item}`).join(' ')}
+          </Text>
+        ) : null}
+        {!observaciones && recomendaciones.length === 0 ? (
+          <Text style={reportStyles.reco}>—</Text>
+        ) : null}
+
+        <View style={reportStyles.sign}>
           {data.medico.signatureImageUrl ? (
-            <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
-          ) : (
-            <View style={styles.signatureLine} />
-          )}
-          <Text style={styles.signatureName}>Dr(a). {v(data.medico.fullName)}</Text>
-          <Text style={styles.signatureLicense}>
-            Cédula profesional: {v(data.medico.professionalLicense)}
+            <Image style={reportStyles.signImage} src={data.medico.signatureImageUrl} />
+          ) : null}
+          <Text style={reportStyles.signName}>
+            Realizó EM: {(data.medico.fullName || '').trim().toUpperCase() || '—'}
           </Text>
-          <Text style={styles.signatureDate}>
-            Fecha y hora: {formatDate(data.signedAt)}
+          <Text style={reportStyles.signMeta}>
+            Ced. Prof.: {v(data.medico.professionalLicense)}
           </Text>
         </View>
-      </View>
 
-      <Text style={styles.footer} fixed>
-        {SME_PDF_FOOTER}
-        {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
-        {'\n'}Este documento es un reporte clínico consolidado firmado por el médico evaluador. Queda prohibida su alteración o reproducción no autorizada.
-      </Text>
-    </Page>
-    <ExamenMedicoVariantAppendixPages data={data} />
-  </Document>
+        <Text style={styles.footer} fixed>
+          {SME_PDF_FOOTER}
+        </Text>
+      </Page>
+      <ExamenMedicoVariantAppendixPages data={data} />
+    </Document>
   )
 }
