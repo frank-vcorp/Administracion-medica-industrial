@@ -462,8 +462,8 @@ export async function deliverExamenMedicoPdf(
         area: str(dp.area_departamento),
         narrativa:
           [
-            hl.empresa_anterior_1 && `Anterior 1: ${str(hl.empresa_anterior_1)} (${str(hl.puesto_anterior_1)}, ${str(hl.tiempo_anterior_1)})`,
-            hl.empresa_anterior_2 && `Anterior 2: ${str(hl.empresa_anterior_2)} (${str(hl.puesto_anterior_2)}, ${str(hl.tiempo_anterior_2)})`,
+            empleoAnterior(1, hl.empresa_anterior_1, hl.puesto_anterior_1, hl.tiempo_anterior_1),
+            empleoAnterior(2, hl.empresa_anterior_2, hl.puesto_anterior_2, hl.tiempo_anterior_2),
             hl.exposicion_fisica && `Riesgos físicos: ${str(hl.exposicion_fisica_especifique) || 'Sí'}`,
             hl.exposicion_quimica && `Riesgos químicos: ${str(hl.exposicion_quimica_especifique) || 'Sí'}`,
             hl.exposicion_biologica && `Riesgos biológicos: ${str(hl.exposicion_biologica_especifique) || 'Sí'}`,
@@ -696,6 +696,18 @@ export async function deliverExamenMedicoPdf(
 // ──────────────────────────────────────────────────────────────────────────
 
 /** String seguro: null/undefined → ''. */
+function empleoAnterior(
+  n: number,
+  empresa: unknown,
+  puesto: unknown,
+  tiempo: unknown,
+): string | null {
+  const nombre = str(empresa)
+  if (!nombre) return null
+  const extra = [str(puesto), str(tiempo)].filter(Boolean).join(', ')
+  return extra ? `Último empleo ${n}: ${nombre} (${extra})` : `Último empleo ${n}: ${nombre}`
+}
+
 function str(v: unknown): string {
   if (v === null || v === undefined) return ''
   return String(v).trim()
