@@ -328,12 +328,23 @@ export async function renderDictamenGeneralPdfForEvent(
     })),
   })
 
+  const currentMapped = mapStudiesLabs(event.studies, event.labs)
+  if (currentMapped.studies.length === 0) {
+    const testsHere = eventTestsForDictamenFilter.filter((row) => row.eventId === event.id)
+    currentMapped.studies = testsHere
+      .filter((row) => (row.testNameSnapshot ?? '').trim().length > 0)
+      .map((row) => ({
+        serviceName: row.testNameSnapshot as string,
+        extractedData: { aplicado: true },
+      }))
+  }
+
   const currentBlock = applyEventDictamenLabFilters(
     {
       eventId: event.id,
       eventShortId: deriveEventShortId(event.id),
       isCurrent: true,
-      ...mapStudiesLabs(event.studies, event.labs),
+      ...currentMapped,
     },
     eventTestsByEventId.get(event.id) ?? [],
   )

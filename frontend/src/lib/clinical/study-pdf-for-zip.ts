@@ -13,6 +13,9 @@ export type EventTestForZipPdf = {
   status: string
   testNameSnapshot: string | null
   fileUrl: string | null
+  /** PDF que el médico subió para el análisis. */
+  sourceFileUrl: string | null
+  sourceFileName: string | null
   validatedPdfUrl: string | null
 }
 
@@ -84,4 +87,46 @@ export async function resolveEventTestPdfForZip(
   }
 
   return null
+}
+
+function sourceFilename(test: EventTestForZipPdf, label: string): string {
+  const raw = (test.sourceFileName || '').trim()
+  if (raw) {
+    const base = path.basename(raw)
+    if (base) return `fuente-${sanitizeFilenamePart(base)}`
+  }
+  const fromUrl = (test.sourceFileUrl || test.fileUrl || '').split('?')[0]
+  const base = path.basename(fromUrl)
+  if (base && base.includes('.')) return `fuente-${sanitizeFilenamePart(base)}`
+  return `fuente-${label}.pdf`
+}
+
+/** Informe generado y, aparte, el archivo que se subió para analizarlo. */
+export async function resolveEventTestFilesForZip(
+  test: EventTestForZipPdf,
+): Promise<Array<{ filename: string; data: Uint8Array }>> {
+  const generated = await resolveEventTestPdfForZip(test)
+  const files: Array<{ filename: string; data: Uint8Array }> = []
+  if (generated) {
+    files.push({
+      filename: generated.filename.startsWith('fuente-')
+        ? generated.filename
+        : `informe-${generated.filename}`,
+      data: generated.data,
+    })
+  }
+
+  const sourceUrl = (test.sourceFileUrl || '').trim() || (test.fileUrl || '').trim()
+  if (!sourceUrl || sourceUrl === (test.validatedPdfUrl || '').trim()) return files
+
+  const label = sanitizeFilenamePart(test.testNameSnapshot ?? 'estudio')
+  const bytes =
+    (await tryReadSourceFromBackend(sourceUrl)) ??
+    (sourceUrl.startsWith('/uploads/')
+      ? await readPersistedPdfBytes(sourceUrl.slice('/uploads/'.length))
+      : null)
+  if (bytes && bytes.length > 0) {
+    files.push({ filename: sourceFilename(test, label), data: bytes })
+  }
+  return files
 }

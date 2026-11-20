@@ -8,6 +8,8 @@ describe('resolveEventTestPdfForZip', () => {
       status: 'COMPLETED',
       testNameSnapshot: 'Examen Médico General',
       fileUrl: null,
+      sourceFileUrl: null,
+      sourceFileName: null,
       validatedPdfUrl: 'examen-medico-pdfs/x.pdf',
     })
     expect(out).toBeNull()
@@ -19,6 +21,8 @@ describe('resolveEventTestPdfForZip', () => {
       status: 'CANCELLED',
       testNameSnapshot: 'Audiometría',
       fileUrl: null,
+      sourceFileUrl: null,
+      sourceFileName: null,
       validatedPdfUrl: null,
     })
     expect(out).toBeNull()

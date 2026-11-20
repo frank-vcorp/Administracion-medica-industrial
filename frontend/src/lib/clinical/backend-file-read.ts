@@ -40,8 +40,15 @@ export async function tryReadSourceFromBackend(
   try {
     const res = await fetchImpl(url, { cache: 'no-store' })
     if (!res.ok) return null
+    const contentType = res.headers?.get?.('content-type') ?? ''
+    if (/xml|text\/html/i.test(contentType)) return null
     const buf = await res.arrayBuffer()
-    return new Uint8Array(buf)
+    const bytes = new Uint8Array(buf)
+    if (bytes.length >= 5) {
+      const head = new TextDecoder().decode(bytes.subarray(0, 5))
+      if (head.startsWith('<') || head.startsWith('<?xml')) return null
+    }
+    return bytes
   } catch {
     return null
   }
