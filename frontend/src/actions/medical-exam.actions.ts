@@ -15,6 +15,7 @@ import {
 } from "@/schemas/clinical/exam.schema"
 import { deriveAgudezaVisualResumen } from "@/lib/clinical/agudeza-visual"
 import { assertExamenMedicoReadyToClose } from "@/lib/clinical/examen-medico-capture"
+import { isExamenMedicoTestName } from "@/lib/clinical/examen-medico-variant"
 import { mergeVariantExtensionsForPersist } from '@/lib/sodexo-extension-persist'
 import {
   formatExamenMedicoZodError,
@@ -490,7 +491,7 @@ export async function retryExamenMedicoPrediagnosis(
   if (eventTest.eventId !== eventId) {
     return { success: false, error: 'El estudio no pertenece al evento indicado.' }
   }
-  if (!eventTest.testNameSnapshot.toLowerCase().includes('examen medico')) {
+  if (!isExamenMedicoTestName(eventTest.testNameSnapshot)) {
     return { success: false, error: 'Este reintento sólo aplica al examen médico.' }
   }
 
