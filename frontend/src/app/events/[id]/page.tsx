@@ -217,7 +217,7 @@ function EventView({ data }: EventViewProps) {
       {/* PASO 2 y 3: WORKSPACE DE PAPELETA DE ESTUDIOS (ARCH-20260325-05) */}
       {/* Somatometría y Agudeza Visual son EventTests independientes dentro de la Papeleta. */}
       {/* TriageForm global eliminado: CHECKED_IN e IN_PROGRESS comparten el mismo workspace. */}
-      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS' || activeView === 'VALIDATING') && (
+      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') && (
         <PapeletaWorkspace
           eventId={serializedEventId}
           eventTests={serializedEventTests as Parameters<typeof PapeletaWorkspace>[0]['eventTests']}
@@ -236,7 +236,7 @@ function EventView({ data }: EventViewProps) {
       )}
 
       {/* IMPL-20260507-08: Cronograma operativo persistente — ADMIN + SUPERADMIN */}
-      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS' || activeView === 'VALIDATING') &&
+      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') &&
         isAdminLike(userRole) && (
         <PapeletaCronograma
           eventId={serializedEventId}
@@ -245,21 +245,29 @@ function EventView({ data }: EventViewProps) {
       )}
 
       {/* IMPL-20260707-16: Slice C — Sección Laboratorio (LabOrders + LabResults) */}
-      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS' || activeView === 'VALIDATING') && isAdminLike(userRole) && (
+      {(activeView === 'CHECKED_IN' || activeView === 'IN_PROGRESS') && isAdminLike(userRole) && (
         <LabSection
           medicalEventId={serializedEventId}
           workerId={event.worker.id}
         />
       )}
 
-      {/* 4. Flow Controller — descarga post-firma. No incluye el reporte
-          de aptitud: ese formulario no se muestra al final de la papeleta.
-          La regla vive en `_lib/event-flow-visibility.ts`.
-            * IN_PROGRESS y VALIDATING → nunca (la papeleta ocupa la vista).
-            * status=X, activeView=X → sí, salvo los dos estatus de arriba.
-            * status=COMPLETED, activeView=VALIDATING → sí (URL
-              desincronizada tras firmar). Cualquier otro activeView para
-              COMPLETED → no (usuario navegó hacia atrás). */}
+      {/* Firma: el dictamen general. La papeleta queda en Estudios. */}
+      {activeView === 'VALIDATING' && event.status === 'VALIDATING' && (
+        <div className="mb-3">
+          <Link
+            href={`/events/${event.id}?view=IN_PROGRESS`}
+            className="text-teal-700 hover:text-teal-900 text-xs font-semibold"
+          >
+            ← Volver a estudios
+          </Link>
+        </div>
+      )}
+
+      {/* 4. Flow Controller. En Firma muestra «Firmar y Emitir Dictamen».
+          Tras firmar, si la URL sigue en VALIDATING y el estatus ya es
+          COMPLETED, muestra la descarga. La regla vive en
+          `_lib/event-flow-visibility.ts`. */}
       {shouldRenderEventFlowController(activeView, event.status) && (
         <EventFlowController
           eventId={serializedEventId}
