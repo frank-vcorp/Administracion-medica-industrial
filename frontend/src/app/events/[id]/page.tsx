@@ -252,13 +252,12 @@ function EventView({ data }: EventViewProps) {
         />
       )}
 
-      {/* 4. Flow Controller Section (Fuera de Estudios, ya que Paso 3 ahora vive dentro de la papeleta) */}
-      {/* IMPL-20260826-03 (FIX pantalla blanca post-firma, Frank 2026-08-26):
-          La lógica vive en `_lib/event-flow-visibility.ts` (test focal) para
-          poder cubrirla sin DOM ni Next runtime. Resumen del contrato:
-            * IN_PROGRESS → NUNCA (workspace ocupa el área).
-            * status=X, activeView=X → sí (legacy).
-            * status=COMPLETED, activeView=VALIDATING → sí (FIX: URL
+      {/* 4. Flow Controller — descarga post-firma. No incluye el reporte
+          de aptitud: ese formulario no se muestra al final de la papeleta.
+          La regla vive en `_lib/event-flow-visibility.ts`.
+            * IN_PROGRESS y VALIDATING → nunca (la papeleta ocupa la vista).
+            * status=X, activeView=X → sí, salvo los dos estatus de arriba.
+            * status=COMPLETED, activeView=VALIDATING → sí (URL
               desincronizada tras firmar). Cualquier otro activeView para
               COMPLETED → no (usuario navegó hacia atrás). */}
       {shouldRenderEventFlowController(activeView, event.status) && (

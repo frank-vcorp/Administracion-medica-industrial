@@ -17,6 +17,11 @@
  *   `status=COMPLETED + activeView=VALIDATING` SIN tocar el resto del
  *   flujo (workspace se sigue mostrando para CHECKED_IN/IN_PROGRESS,
  *   IN_PROGRESS sigue ocultando el Flow Controller, etc).
+ *
+ *   El reporte de aptitud (cuerpo `VALIDATING` del controller) no se
+ *   monta en esta página: comparte la papeleta con estudios y
+ *   cronograma. El componente y las actions de firma siguen en el
+ *   código para la pantalla de validación / dictamen final.
  */
 
 export type EventStatus =
@@ -31,16 +36,21 @@ export type EventStatus =
  * Determina si el `EventFlowController` debe renderizarse en
  * `frontend/src/app/events/[id]/page.tsx`.
  *
- * Reglas (contrato vigente, IMPL-20260826-03):
+ * Reglas (contrato vigente):
  *   - `IN_PROGRESS` → NUNCA (el workspace `PapeletaWorkspace` ocupa el
  *     área; el Flow Controller aparecería duplicado).
- *   - `CHECKED_IN` y cualquier otro status → sólo cuando
- *     `activeView === event.status` (comportamiento legacy preservado).
+ *   - `VALIDATING` → NUNCA en esta página. Ese estatus muestra la
+ *     papeleta (estudios + cronograma) y el controller pintaría debajo
+ *     la tarjeta «Reporte médico de aptitud». Esa tarjeta no pertenece
+ *     a la papeleta. El flujo de firma permanece en `EventFlowController`.
+ *   - `CHECKED_IN` y cualquier otro status distinto de los anteriores →
+ *     sólo cuando `activeView === event.status` (comportamiento legacy).
  *   - `COMPLETED` (post-firma) → se renderiza si `activeView` es el
  *     status O si la URL todavía conserva `?view=VALIDATING` (FIX
- *     pantalla blanca). Cualquier otro `activeView` para COMPLETED
- *     (e.g. `CHECKED_IN`, `IN_PROGRESS`, `SCHEDULED`) NO renderiza el
- *     Flow Controller — el usuario navegó deliberadamente hacia atrás
+ *     pantalla blanca). Ese montaje muestra la descarga del expediente,
+ *     no el formulario de aptitud. Cualquier otro `activeView` para
+ *     COMPLETED (e.g. `CHECKED_IN`, `IN_PROGRESS`, `SCHEDULED`) NO
+ *     renderiza el Flow Controller — el usuario navegó hacia atrás
  *     y debe seguir viendo la papeleta/workspace correspondiente.
  *
  * @param activeView `view` parseado de la URL (o fallback a `event.status`).
@@ -52,6 +62,7 @@ export function shouldRenderEventFlowController(
   status: EventStatus,
 ): boolean {
   if (status === 'IN_PROGRESS') return false
+  if (status === 'VALIDATING') return false
   if (activeView === status) return true
   if (status === 'COMPLETED' && activeView === 'VALIDATING') return true
   return false

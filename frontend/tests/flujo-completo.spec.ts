@@ -658,29 +658,24 @@ test.describe('Flujo End-to-End Completo', () => {
     console.log('LabOrder visible en recepción para eventId:', eventId);
   });
 
-  // Fase 9: Dictamen final
-  test('TC-12: Generar dictamen final y cerrar papeleta', async () => {
+  // Fase 9: el reporte de aptitud no se renderiza al final de la papeleta.
+  test('TC-12: La papeleta no muestra el reporte médico de aptitud', async () => {
     test.setTimeout(60000);
     test.skip(!eventId, 'Sin papeleta creada');
 
-    await authenticatedPage.goto(`${BASE_URL}/events/${eventId}`);
+    await authenticatedPage.goto(`${BASE_URL}/events/${eventId}?view=VALIDATING`);
     await authenticatedPage.waitForLoadState('networkidle');
 
-    // Si el evento alcanza VALIDATING, el componente real es
-    // EventFlowController (no una section con select Aptitud).
-    const verdictHeading = authenticatedPage.getByRole('heading', { name: 'Reporte médico de aptitud' });
-    await expect(verdictHeading).toBeVisible({ timeout: 15000 });
-
-    await authenticatedPage
-      .getByPlaceholder('Ej: Apto para el puesto sin restricciones...')
-      .fill('Paciente sin hallazgos patológicos. Apto para el puesto.');
-    await authenticatedPage
-      .getByPlaceholder('Ej: Uso de protección auditiva...')
-      .fill('Control médico anual y uso de equipo de protección personal.');
-    await authenticatedPage.getByRole('button', { name: /firmar y emitir dictamen/i }).click();
-
-    await expect(authenticatedPage.getByRole('heading', { name: '¡Expediente Completado!' })).toBeVisible({ timeout: 15000 });
-    await expect(authenticatedPage.getByText(/dictamen médico ha sido firmado/i)).toBeVisible();
+    await expect(authenticatedPage.getByRole('heading', { name: 'Módulo de pruebas clínicas' })).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(authenticatedPage.getByText('Cronograma operativo')).toBeVisible();
+    await expect(
+      authenticatedPage.getByRole('heading', { name: 'Reporte médico de aptitud', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      authenticatedPage.getByRole('button', { name: /firmar y emitir dictamen/i }),
+    ).toHaveCount(0);
   });
 
   // Cleanup opcional al final
