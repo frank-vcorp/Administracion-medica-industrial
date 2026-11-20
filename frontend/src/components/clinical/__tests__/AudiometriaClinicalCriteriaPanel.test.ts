@@ -12,11 +12,11 @@
  *   - `pta_fuente` se conserva por separado del calculado.
  *   - NO se inventan frecuencias: el helper sólo devuelve las que están
  *     realmente presentes en `va`/`vo`.
- *   - FND-20260825-12: la sección de referencia AMI expone las
- *     constantes (normalidad, patrón operativo, severidad,
- *     etiologías) como informational data — NO como salida derivada.
- *   - FND-20260825-12: el componente por defecto ahora renderiza la
- *     tabla de referencia completa con `data-testid` estables.
+ *   - FND-20260825-12: las constantes de referencia (normalidad, patrón
+ *     operativo, severidad, etiologías) siguen en el módulo y no se
+ *     renderizan en el panel del médico.
+ *   - La vista del médico muestra índice de Fletcher, estado bilateral
+ *     y completitud documental, sin tabla TA, PTA, sustitución ni capas.
  *
  * @id IMPL-FEATURE-20260825-02
  * @backup context/SPECs/SPEC-FEATURE-20260825-02-AUDIOMETRIA-ENTREGABLE.md
@@ -314,263 +314,59 @@ describe('hasRenderableAudiometriaCriteria', () => {
   })
 })
 
-describe('PTACard: línea de sustitución PTA3', () => {
-  it('muestra (TA500 + TA1000 + TA2000) ÷ 3 con valores y resultado', () => {
-    const html = renderToStaticMarkup(
+describe('vista del médico: sin bloque de captura', () => {
+  const html = renderToStaticMarkup(
+    createElement(AudiometriaClinicalCriteriaPanel, {
+      extractedData: {
+        oido_derecho: { va: { 500: 0, 1000: 10, 2000: 20 } },
+        oido_izquierdo: { va: { 500: 50, 1000: 50, 2000: 50 } },
+      },
+      version: 1,
+    }),
+  )
+
+  it('muestra el índice de Fletcher, el estado bilateral y la completitud documental', () => {
+    expect(html).toContain('Índice de Fletcher')
+    expect(html).toContain('data-testid="audiometria-fletcher-valor"')
+    expect(html).toContain('15 dB HL')
+    expect(html).toContain('Estado bilateral')
+    expect(html).toContain('data-testid="audiometria-estado-bilateral"')
+    expect(html).toContain('Completitud documental')
+    expect(html).toContain('data-testid="audiometria-completitud-documental"')
+  })
+
+  it('no muestra la tabla, los PTA, la sustitución, las entradas ni las capas', () => {
+    expect(html).not.toContain('Vía aérea (TA) por oído y frecuencia')
+    expect(html).not.toContain('PTA calculado')
+    expect(html).not.toContain('PTA fuente')
+    expect(html).not.toContain('Sustitución')
+    expect(html).not.toContain('Entradas TA')
+    expect(html).not.toContain('referencia regulatoria')
+    expect(html).not.toContain('criterio audiométrico')
+    expect(html).not.toContain('datos del documento')
+    expect(html).not.toContain('cálculo del sistema')
+    expect(html).not.toContain('audiometria-pta-')
+    expect(html).not.toContain('audiometria-fletcher-sustitucion')
+    expect(html).not.toContain('audiometria-sme-reference-section')
+    expect(html).not.toContain('PTA')
+  })
+
+  it('el índice incompleto se dice en una oración, sin la ecuación', () => {
+    const incompleto = renderToStaticMarkup(
       createElement(AudiometriaClinicalCriteriaPanel, {
         extractedData: {
-          oido_derecho: { va: { 500: 20, 1000: 25, 2000: 30 } },
+          oido_derecho: { va: { 500: 20, 1000: 25 } },
           oido_izquierdo: { va: { 500: 20, 1000: 25, 2000: 30 } },
         },
         version: 1,
       }),
     )
-    expect(html).toContain('audiometria-pta-sustitucion-od')
-    expect(html).toContain('Sustitución: (20 + 25 + 30) ÷ 3 = 25 dB')
-  })
-})
-
-describe('calcularIndiceFletcher', () => {
-  it('((PTA menor × 7) + (PTA mayor × 1)) ÷ 8 con OD mejor que OI', () => {
-    const r = calcularIndiceFletcher(10, 50)
-    expect(r.completo).toBe(true)
-    expect(r.oidoMenosAfectado).toBe('OD')
-    expect(r.oidoMasAfectado).toBe('OI')
-    expect(r.valor).toBe(15)
-  })
-
-  it('no calcula si falta un PTA3', () => {
-    const r = calcularIndiceFletcher(10, null)
-    expect(r.completo).toBe(false)
-    expect(r.valor).toBe(null)
-  })
-
-  it('empates: mismo índice y etiqueta OD/OI para sustitución', () => {
-    const r = calcularIndiceFletcher(25, 25)
-    expect(r.completo).toBe(true)
-    expect(r.valor).toBe(25)
-    expect(r.oidoMenosAfectado).toBe('OD')
-    expect(r.oidoMasAfectado).toBe('OI')
-  })
-})
-
-describe('FletcherCard en panel', () => {
-  it('muestra sustitución con PTA OD 10 y OI 50 → 15 dB', () => {
-    const html = renderToStaticMarkup(
-      createElement(AudiometriaClinicalCriteriaPanel, {
-        extractedData: {
-          oido_derecho: { va: { 500: 0, 1000: 10, 2000: 20 } },
-          oido_izquierdo: { va: { 500: 50, 1000: 50, 2000: 50 } },
-        },
-        version: 1,
-      }),
-    )
-    expect(html).toContain('data-testid="audiometria-fletcher-sustitucion"')
-    expect(html).toContain('((PTA OD 10 × 7) + (PTA OI 50 × 1)) ÷ 8 = 15 dB')
-  })
-})
-
-describe('FND-20260825-12: AudiometriaClinicalCriteriaPanel renderiza la sección de referencia', () => {
-  const html = renderToStaticMarkup(
-    createElement(AudiometriaClinicalCriteriaPanel, {
-      extractedData: {
-        oido_derecho: { va: { 500: 20, 1000: 25, 2000: 30 } },
-        oido_izquierdo: { va: { 500: 20, 1000: 25, 2000: 30 } },
-      },
-      version: 1,
-    }),
-  )
-
-  it('Contenedor `data-testid="audiometria-sme-reference-section"` presente', () => {
-    expect(html).toContain('data-testid="audiometria-sme-reference-section"')
-  })
-
-  it('Título "Criterio audiométrico SME (referencia)" presente', () => {
-    expect(html).toContain('Criterio audiométrico SME (referencia)')
-  })
-
-  it('Etiqueta explícita "Referencia operativa" presente', () => {
-    expect(html).toContain('data-testid="audiometria-sme-reference-tag"')
-  })
-
-  it('Normalidad ≤ 25 dB visible', () => {
-    expect(html).toContain('audiometria-sme-ref-normalidad')
-    expect(html).toContain('≤ 25')
-  })
-
-  it('Tabla de patrones con etiqueta legible "Patrón de graves" en 250/500/1000 Hz', () => {
-    expect(html).toContain('audiometria-sme-ref-patrones')
-    expect(html).toContain('Patrón de graves')
-    expect(html).toContain('250 / 500 / 1000 Hz')
-  })
-
-  it('Tabla de patrones incluye "Neurosensorial medias/agudas"', () => {
-    expect(html).toContain('Neurosensorial medias/agudas')
-    expect(html).toContain(
-      '2000 / 3000 / 4000 / 6000 / 8000 Hz',
-    )
-  })
-
-  it('Tabla de severidad incluye los 6 rangos (No aplica, Leve 30–40, Moderada 45–55, Mod. severa 60–70, Severa 75–90, Profunda ≥95)', () => {
-    expect(html).toContain('audiometria-sme-ref-severidad')
-    // Severidad - todos los rangos visibles.
-    expect(html).toContain('audiometria-sme-ref-severidad-no_aplica')
-    expect(html).toContain('audiometria-sme-ref-severidad-leve')
-    expect(html).toContain('30–40 dB HL')
-    expect(html).toContain('audiometria-sme-ref-severidad-moderada')
-    expect(html).toContain('45–55 dB HL')
-    expect(html).toContain('audiometria-sme-ref-severidad-moderadamente_severa')
-    expect(html).toContain('60–70 dB HL')
-    expect(html).toContain('audiometria-sme-ref-severidad-severa')
-    expect(html).toContain('75–90 dB HL')
-    expect(html).toContain('audiometria-sme-ref-severidad-profunda')
-    expect(html).toContain('≥ 95 dB HL')
-  })
-
-  it('Lista de etiologías visibles (normal, trauma acústico crónico, presbiacusia, etc.)', () => {
-    expect(html).toContain('audiometria-sme-ref-etiologias')
-    expect(html).toContain(
-      'audiometria-sme-ref-etiologia-trauma_acustico_cronico',
-    )
-    expect(html).toContain(
-      'audiometria-sme-ref-etiologia-presbiacusia',
-    )
-    expect(html).toContain(
-      'audiometria-sme-ref-etiologia-probable_vias_respiratorias_altas',
-    )
-    expect(html).toContain(
-      'audiometria-sme-ref-etiologia-etiologia_a_determinar',
-    )
-  })
-
-  it('La sección se muestra ANTES de la advertencia que prohíbe el diagnóstico automático (separación derivación vs impresión)', () => {
-    const idxRef = html.indexOf('audiometria-sme-reference-section')
-    const idxWarn = html.indexOf('Este panel NO replica el diagnóstico')
-    expect(idxRef).toBeGreaterThanOrEqual(0)
-    expect(idxWarn).toBeGreaterThan(idxRef)
-  })
-
-  it('NO contiene campos administrativos retirados (DEC-20260825-08) — re-confirmación de guardrail', () => {
-    expect(html).not.toContain('Patient ID del formato')
-    expect(html).not.toContain('Consentimiento informado')
-    expect(html).not.toContain('Responsable de captura')
-    expect(html).not.toContain('Responsable médico')
-  })
-})
-
-// ──────────────────────────────────────────────────────────────────────────
-// FND-20260825-13 — UX: la sección de referencia va envuelta en un
-// acordeón nativo `<details>` CERRADO por defecto. El PDF conserva la
-// referencia desplegada (no se ve afectado por este cambio UX).
-// ──────────────────────────────────────────────────────────────────────────
-
-describe('FND-20260825-13: acordeón nativo en la sección de referencia AMI', () => {
-  const html = renderToStaticMarkup(
-    createElement(AudiometriaClinicalCriteriaPanel, {
-      extractedData: {
-        oido_derecho: { va: { 500: 20, 1000: 25, 2000: 30 } },
-        oido_izquierdo: { va: { 500: 20, 1000: 25, 2000: 30 } },
-      },
-      version: 1,
-    }),
-  )
-
-  it('Envuelve la sección en un `<details>` nativo y accesible', () => {
-    // El contenedor de la sección ahora es `<details>`, no un `<div>`.
-    expect(html).toMatch(
-      /<details[^>]*data-testid="audiometria-sme-reference-section"/,
-    )
-  })
-
-  it('Cerrado por defecto (sin atributo `open`)', () => {
-    // SSR: si no hay `open`, el browser lo considera cerrado por defecto.
-    const detailsSection = html.match(
-      /<details[^>]*data-testid="audiometria-sme-reference-section"[^>]*>/,
-    )
-    expect(detailsSection).not.toBeNull()
-    expect(detailsSection![0]).not.toMatch(/\bopen(?:=|\s|>|")/)
-  })
-
-  it('Incluye `<summary>` con `data-testid` para el encabezado clickable', () => {
-    expect(html).toContain(
-      'data-testid="audiometria-sme-reference-summary"',
-    )
-    // Accesibilidad: el `<summary>` activa el toggle con teclado/aria-expanded
-    // de forma nativa (HTML disclosure widget).
-    expect(html).toMatch(
-      /<summary[^>]*data-testid="audiometria-sme-reference-summary"/,
-    )
-  })
-
-  it('El título "Criterio audiométrico SME (referencia)" sigue visible dentro del summary', () => {
-    expect(html).toContain('Criterio audiométrico SME (referencia)')
-    // El summary contiene el título (siempre visible, abierto o cerrado).
-    const summaryMatch = html.match(
-      /<summary[^>]*data-testid="audiometria-sme-reference-summary"[^>]*>[\s\S]*?<\/summary>/,
-    )
-    expect(summaryMatch).not.toBeNull()
-    expect(summaryMatch![0]).toContain('Criterio audiométrico SME (referencia)')
-  })
-
-  it('La etiqueta "Referencia operativa" sigue visible dentro del summary', () => {
-    expect(html).toContain('data-testid="audiometria-sme-reference-tag"')
-  })
-
-  it('Conservar todo el contenido al expandir (data-testid por sub-tabla)', () => {
-    // El cuerpo del acordeón contiene las 4 secciones con sus data-testid.
-    expect(html).toContain('data-testid="audiometria-sme-reference-body"')
-    expect(html).toContain('data-testid="audiometria-sme-ref-normalidad"')
-    expect(html).toContain('data-testid="audiometria-sme-ref-patrones"')
-    expect(html).toContain('data-testid="audiometria-sme-ref-severidad"')
-    expect(html).toContain('data-testid="audiometria-sme-ref-etiologias"')
-  })
-
-  it('Conservar constantes clínicas: tabla de patrones operativa', () => {
-    expect(html).toContain('audiometria-sme-ref-patron-graves')
-    expect(html).toContain('audiometria-sme-ref-patron-neurosensorial_medias_agudas')
-    expect(html).toContain('audiometria-sme-ref-patron-mixta')
-    expect(html).toContain('audiometria-sme-ref-patron-fatiga')
-    expect(html).toContain('audiometria-sme-ref-patron-normal')
-  })
-
-  it('Conservar severidad completa con los 6 escalones', () => {
-    expect(html).toContain('audiometria-sme-ref-severidad-no_aplica')
-    expect(html).toContain('audiometria-sme-ref-severidad-leve')
-    expect(html).toContain('audiometria-sme-ref-severidad-moderada')
-    expect(html).toContain('audiometria-sme-ref-severidad-moderadamente_severa')
-    expect(html).toContain('audiometria-sme-ref-severidad-severa')
-    expect(html).toContain('audiometria-sme-ref-severidad-profunda')
-    expect(html).toContain('30–40 dB HL')
-    expect(html).toContain('≥ 95 dB HL')
-  })
-
-  it('Conservar etiologías completas (5 categorías)', () => {
-    expect(html).toContain('audiometria-sme-ref-etiologia-normal')
-    expect(html).toContain('audiometria-sme-ref-etiologia-trauma_acustico_cronico')
-    expect(html).toContain('audiometria-sme-ref-etiologia-presbiacusia')
-    expect(html).toContain(
-      'audiometria-sme-ref-etiologia-probable_vias_respiratorias_altas',
-    )
-    expect(html).toContain('audiometria-sme-ref-etiologia-etiologia_a_determinar')
-  })
-
-  it('Mantiene `aria-label` en el contenedor padre para lectores de pantalla', () => {
-    expect(html).toMatch(
-      /<details[^>]*aria-label="Criterio audiométrico SME \(referencia\)"/,
-    )
-  })
-
-  it('El body usa `role="region"` para anunciarse como landmark secundario', () => {
-    expect(html).toContain('data-testid="audiometria-sme-reference-body"')
-    expect(html).toMatch(
-      /<div[^>]*data-testid="audiometria-sme-reference-body"[^>]*role="region"/,
-    )
-  })
-
-  it('Sigue fuera del flujo de "resultado derivado" — orden relativo a la advertencia', () => {
-    const idxRef = html.indexOf('audiometria-sme-reference-section')
-    const idxWarn = html.indexOf('Este panel NO replica el diagnóstico')
-    expect(idxRef).toBeGreaterThanOrEqual(0)
-    expect(idxWarn).toBeGreaterThan(idxRef)
+    expect(incompleto).toContain('Índice de Fletcher')
+    expect(incompleto).toContain('data-testid="audiometria-fletcher-incompleto"')
+    expect(incompleto).toContain('No se puede calcular hasta tener los dos oídos completos.')
+    expect(incompleto).not.toContain('Sustitución')
+    expect(incompleto).not.toContain('PTA')
+    expect(incompleto).toContain('Estado bilateral')
+    expect(incompleto).toContain('Completitud documental')
   })
 })

@@ -8,8 +8,9 @@
  *     congelada del médico (`DoctorStudyReview.validatorSnapshot*`).
  *   - Resuelve la EVIDENCIA DOCUMENTAL (TA/VO por frecuencia y por
  *     oído) desde la presentación clínica estructurada de Audiometría.
- *     NO calcula ni renderiza criterios DERIVADOS (PTA3, criterio AMI,
- *     patrón, completitud) — viven sólo en el panel clínico.
+ *     NO calcula ni renderiza criterios derivados (PTA3, criterio AMI,
+ *     patrón, completitud). En la papeleta el médico ve el índice de
+ *     Fletcher, el estado bilateral y la completitud documental.
  *   - Renderiza `<AudiometriaValidatedPDF>` con `@react-pdf/renderer`.
  *   - Persiste el PDF a disco en `uploads/audiometry-pdfs/<reviewId>.pdf`
  *     y devuelve URL relativa + hash SHA-256 + bytes para que la server
@@ -17,9 +18,10 @@
  *
  * Decisiones recientes (corregidas por Frank):
  *   - FND-20260825-14: la sección IV "Criterio audiométrico AMI
- *     (referencia)" se retiró del PDF; vive sólo en el panel.
+ *     (referencia)" se retiró del PDF y tampoco se muestra en el panel.
  *   - FND-20260825-15: la sección III "Criterios audiométricos
- *     derivados" también se retiró del PDF; vive sólo en el panel.
+ *     derivados" se retiró del PDF. El panel muestra Fletcher, estado
+ *     bilateral y completitud, sin la captura de PTA ni la tabla.
  *
  * Advertencias operativas:
  *   - El filesystem local NO está disponible en Vercel serverless. Aquí

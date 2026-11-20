@@ -5,8 +5,8 @@
  * Cubre la rectificación de Frank (DEC-20260825-11 / BR-20260825-12):
  *   - El shape del PDF RETIRA el bloque `criterios` (PTA3, PTA fuente,
  *     criterio AMI, patrón, estado bilateral, completitud, advertencias).
- *   - Los datos derivados del paciente quedan SÓLO en el panel clínico
- *     audiométrico.
+ *   - El panel clínico muestra el índice de Fletcher, el estado bilateral
+ *     y la completitud documental, sin la captura de PTA ni la tabla.
  *   - El shape del PDF conserva: identificación (reviewId, signedAt,
  *     studyName, studyType, paciente), EVIDENCIA documental (frecuencias,
  *     taOd, taOi, voOd, voOi), impresión del médico, recomendaciones

@@ -80,7 +80,7 @@ import type {
 import { getEspirometriaDisplayVitals } from '@/lib/espirometria-display-vitals'
 import { ESPIROMETRIA_QUESTIONNAIRE_SCHEMA_VERSION } from "@/schemas/clinical/espirometria-questionnaire.schema"
 // IMPL-FEATURE-20260825-02: cuestionario auditivo de Audiometría + panel
-// clínico audiométrico (PTA3, ecuación, PTA fuente, capas NOM/AMI/fuente).
+// clínico (índice de Fletcher, estado bilateral, completitud documental).
 // Persistencia paralela al cuestionario de Espirometría en
 // `EventTest.clinicalContext`.
 import AudiometriaQuestionnaireModal from "@/components/clinical/AudiometriaQuestionnaireModal"
@@ -2190,7 +2190,7 @@ function StudyPanel({
                 repetibilidad numérica desde `parametros[]` cuando no esté
                 pre-extraída en `calidad`. Tolerante a payload parcial.
                 IMPL-FEATURE-20260825-02: rama paralela para Audiometría
-                (PTA3, ecuación, PTA fuente, capas NOM/AMI/fuente). */}
+                (índice de Fletcher, estado bilateral, completitud). */}
             {getCanonicalAIStudyType(test) === 'Espirometria' && test.extractionSnapshot ? (
               <EspirometriaClinicalCriteriaPanel
                 extractedData={
