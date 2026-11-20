@@ -300,12 +300,13 @@ export function buildAudiometriaFormato(
   return {
     identificacion:
       text(input.patient.universalId) ?? text(paciente?.identificacion),
-    nacimiento: text(paciente?.fecha_nacimiento),
+    nacimiento:
+      text(input.patient.birthDateLabel) ?? text(paciente?.fecha_nacimiento),
     sexo: text(input.patient.sexLabel) ?? text(paciente?.sexo),
     notasPaciente:
       text(paciente?.notas) ?? text(input.patient.tenureInAreaLabel),
     fechaEstudio:
-      text(input.patient.attentionDate) ?? text(estudio?.fecha_estudio),
+      text(estudio?.fecha_estudio) ?? text(input.patient.attentionDate),
     horaEstudio: text(estudio?.hora_estudio),
     audiometro: text(estudio?.equipo_modelo),
     transductor: text(estudio?.transductor),

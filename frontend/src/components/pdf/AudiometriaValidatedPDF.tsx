@@ -1,144 +1,116 @@
 /**
- * @fileoverview PDF «ESTUDIO DE AUDIOMETRIA» — una hoja tamaño carta.
+ * PDF validado de Audiometría, en el formato institucional común.
  *
- * Reproduce los bloques del formato de referencia (gráficas de ambos
- * oídos, datos del paciente y del equipo, tabla 500–3000 Hz, exploración,
- * descripción, diagnóstico nosológico / etiológico / clasificación,
- * recomendaciones, firma y membrete).
- *
- * La impresión que imprime el médico es la que él aceptó o editó. La
- * etiología sólo aparece cuando el estudio la trae escrita: no se infiere.
+ * Los datos del estudio se componen aquí. Las gráficas no se redibujan:
+ * son el recorte del audiograma del PDF que subió el usuario.
  *
  * El panel del médico no se arma aquí. Ahí siguen el índice de Fletcher,
  * su cálculo, el estado bilateral y la completitud documental.
  */
-import { Circle, Document, Image, Line, Page, Svg, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { Document, Image, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { SME_LEGAL_NAME, SME_PDF_FOOTER } from '@/lib/brand-constants'
+import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
 import type { AudiometriaFormatoReferencia } from '@/lib/audiometry-formato'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 
-const CONTENT_WIDTH = 572
+const CONTENT_WIDTH = 584
+const SOURCE_IMAGE_MAX_HEIGHT = 210
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 16,
-    paddingBottom: 78,
-    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 48,
+    paddingHorizontal: 14,
     fontFamily: 'Helvetica',
-    fontSize: 8,
+    fontSize: 7,
     color: '#0f172a',
   },
-  headerRow: {
+  header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0f766e',
+    paddingBottom: 4,
   },
-  logoSlot: { width: 88 },
-  logoImage: { width: 84, height: 36, objectFit: 'contain' },
+  headerLeft: { flexDirection: 'column' },
+  brand: { fontSize: 11, fontWeight: 'bold', color: '#0f766e' },
+  brandSub: { fontSize: 6, color: '#475569' },
+  headerRight: { width: 110, alignItems: 'flex-end' },
+  logoImage: { width: 110, height: 36, objectFit: 'contain' },
   logoFallback: {
-    width: 84,
+    width: 110,
     height: 36,
     borderWidth: 1,
-    borderColor: '#0f766e',
+    borderColor: '#cbd5e1',
     textAlign: 'center',
     paddingTop: 10,
     fontSize: 11,
     fontWeight: 'bold',
     color: '#0f766e',
   },
-  docTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  infoRow: { flexDirection: 'row', marginBottom: 4, gap: 8 },
+  docTitle: { fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+  infoGrid: { flexDirection: 'row', marginBottom: 4, gap: 8 },
   infoCol: { flex: 1 },
-  infoHeading: {
-    fontSize: 7.5,
-    fontWeight: 'bold',
-    backgroundColor: '#c4a35a',
-    color: '#1c1917',
-    paddingVertical: 2,
-    paddingHorizontal: 4,
-    marginBottom: 2,
-  },
-  infoLine: { fontSize: 7, marginBottom: 1, lineHeight: 1.25 },
-  infoLabel: { fontWeight: 'bold' },
-  graphWrap: { marginBottom: 4, alignItems: 'center' },
+  infoLine: { fontSize: 6.5, marginBottom: 1 },
+  infoLabel: { fontWeight: 'bold', color: '#475569' },
+  sourceWrap: { marginBottom: 4, alignItems: 'center' },
   sourceImage: { objectFit: 'contain' },
-  chartRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  chartCard: { width: 278 },
-  chartTitle: {
-    fontSize: 8,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    backgroundColor: '#c4a35a',
-    paddingVertical: 2,
-    marginBottom: 2,
-  },
+  missingCrop: { fontSize: 7, color: '#64748b', marginBottom: 4 },
   table: { borderWidth: 0.6, borderColor: '#334155', marginBottom: 4 },
   tableRow: { flexDirection: 'row' },
   th: {
-    fontSize: 6.5,
+    fontSize: 6,
     fontWeight: 'bold',
     textAlign: 'center',
     paddingVertical: 2,
-    paddingHorizontal: 1,
     borderRightWidth: 0.4,
     borderBottomWidth: 0.6,
     borderColor: '#334155',
   },
   td: {
-    fontSize: 7.5,
+    fontSize: 7,
     textAlign: 'center',
     paddingVertical: 2,
     borderRightWidth: 0.4,
     borderColor: '#334155',
   },
-  examLine: { flexDirection: 'row', marginBottom: 2, alignItems: 'flex-end' },
-  examLabel: { width: 52, fontSize: 8, fontWeight: 'bold' },
-  examValue: {
-    flex: 1,
-    fontSize: 8,
-    borderBottomWidth: 0.4,
-    borderBottomColor: '#334155',
-    paddingBottom: 1,
-    marginRight: 8,
-  },
-  sectionLine: { flexDirection: 'row', marginTop: 3, marginBottom: 2 },
-  sectionLabel: { fontSize: 8, fontWeight: 'bold', marginRight: 4 },
-  sectionValue: { flex: 1, fontSize: 8 },
-  dxTitle: {
-    textAlign: 'center',
-    fontSize: 9,
-    fontWeight: 'bold',
-    marginTop: 4,
+  examLine: { flexDirection: 'row', marginBottom: 1 },
+  examLabel: { width: 48, fontSize: 7, fontWeight: 'bold' },
+  examValue: { flex: 1, fontSize: 7 },
+  sectionLine: { flexDirection: 'row', marginTop: 2 },
+  sectionLabel: { fontSize: 7, fontWeight: 'bold', marginRight: 3 },
+  sectionValue: { flex: 1, fontSize: 7 },
+  dxTitle: { textAlign: 'center', fontSize: 8, fontWeight: 'bold', marginTop: 3 },
+  earTitle: { fontSize: 7, fontWeight: 'bold', marginTop: 2 },
+  dxRow: { flexDirection: 'row' },
+  dxCol: { flex: 1, paddingRight: 4 },
+  dxLabel: { fontSize: 6, fontWeight: 'bold', color: '#475569' },
+  dxValue: { fontSize: 7 },
+  signatureArea: { marginTop: 6, flexDirection: 'row', justifyContent: 'flex-end' },
+  signatureBox: { width: 200, alignItems: 'center' },
+  signatureImage: { width: 100, height: 28, objectFit: 'contain', marginBottom: 2 },
+  signatureLine: {
+    width: 150,
+    borderBottomWidth: 0.8,
+    borderBottomColor: '#0f172a',
     marginBottom: 2,
   },
-  earTitle: { fontSize: 8, fontWeight: 'bold', marginTop: 2, marginBottom: 1 },
-  dxRow: { flexDirection: 'row', marginBottom: 2 },
-  dxCol: { flex: 1, paddingRight: 4 },
-  dxLabel: { fontSize: 6.5, fontWeight: 'bold' },
-  dxValue: { fontSize: 8 },
-  signatureRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  signatureText: { alignItems: 'center' },
-  signatureName: { fontSize: 9, fontWeight: 'bold' },
-  signatureLicense: { fontSize: 8, marginTop: 1 },
-  signatureImage: { width: 110, height: 36, objectFit: 'contain', marginLeft: 12 },
+  signatureName: { fontSize: 7, fontWeight: 'bold', textAlign: 'center' },
+  signatureMeta: { fontSize: 6.5, textAlign: 'center', color: '#475569' },
   footer: {
     position: 'absolute',
-    bottom: 10,
-    left: 20,
-    right: 20,
+    bottom: 12,
+    left: 14,
+    right: 14,
+    textAlign: 'center',
+    fontSize: 5.5,
+    color: '#64748b',
+    borderTopWidth: 0.6,
+    borderTopColor: '#e2e8f0',
+    paddingTop: 4,
+    lineHeight: 1.35,
   },
-  footerImage: { width: CONTENT_WIDTH, height: 72, objectFit: 'contain' },
-  footerServices: { fontSize: 7, color: '#5f8f95', textAlign: 'center', marginBottom: 2 },
-  footerContacts: { fontSize: 7.5, color: '#5f8f95', textAlign: 'center' },
 })
 
 export interface AudiometriaValidatedPDFData {
@@ -163,175 +135,30 @@ export interface AudiometriaValidatedPDFData {
     signatureImageUrl: string
   }
   logoUrl: string
-  /** Pie de la referencia: teléfono, amisaludresponsable.com y redes. */
-  footerImageUrl?: string | null
+  /** Recorte del audiograma del PDF subido. No se redibuja. */
   sourceCropDataUrl?: string | null
   sourceCropAspectRatio?: number | null
 }
 
-const EJE_FRECUENCIAS = [125, 250, 500, 1000, 2000, 4000, 8000]
-const DB_MIN = -10
-const DB_MAX = 120
-
-function dbY(db: number, top: number, height: number): number {
-  const t = (db - DB_MIN) / (DB_MAX - DB_MIN)
-  return top + t * height
+function valor(texto: string | null | undefined): string {
+  const limpio = texto?.trim()
+  return limpio ? limpio : '—'
 }
 
-function freqX(freq: number, left: number, width: number): number {
-  const min = Math.log2(125)
-  const max = Math.log2(8000)
-  const t = (Math.log2(freq) - min) / (max - min)
-  return left + Math.min(1, Math.max(0, t)) * width
-}
-
-function puntosDe(
-  mapa: Record<number, number | null>,
-): Array<{ freq: number; db: number }> {
-  return Object.entries(mapa)
-    .map(([hz, db]) => ({ freq: Number(hz), db }))
-    .filter(
-      (punto): punto is { freq: number; db: number } =>
-        Number.isFinite(punto.freq) &&
-        punto.freq > 0 &&
-        typeof punto.db === 'number' &&
-        Number.isFinite(punto.db),
-    )
-    .sort((a, b) => a.freq - b.freq)
-}
-
-function AudiogramaTrazado({
-  titulo,
-  mapa,
-  simbolo,
-}: {
-  titulo: string
-  mapa: Record<number, number | null>
-  simbolo: 'od' | 'oi'
-}) {
-  const width = 270
-  const height = 132
-  const left = 22
-  const top = 8
-  const plotW = width - 30
-  const plotH = height - 22
-  const puntos = puntosDe(mapa)
-  const color = simbolo === 'od' ? '#dc2626' : '#2563eb'
-  const niveles = [-10, 0, 20, 40, 60, 80, 100, 120]
-
-  return (
-    <View style={styles.chartCard}>
-      <Text style={styles.chartTitle}>{titulo}</Text>
-      <Svg width={width} height={height}>
-        {niveles.map((db) => (
-          <Line
-            key={`h-${db}`}
-            x1={left}
-            y1={dbY(db, top, plotH)}
-            x2={left + plotW}
-            y2={dbY(db, top, plotH)}
-            stroke="#cbd5e1"
-            strokeWidth={0.4}
-          />
-        ))}
-        {EJE_FRECUENCIAS.map((freq) => (
-          <Line
-            key={`v-${freq}`}
-            x1={freqX(freq, left, plotW)}
-            y1={top}
-            x2={freqX(freq, left, plotW)}
-            y2={top + plotH}
-            stroke="#cbd5e1"
-            strokeWidth={0.4}
-          />
-        ))}
-        <Line x1={left} y1={top} x2={left} y2={top + plotH} stroke="#334155" strokeWidth={0.7} />
-        <Line
-          x1={left}
-          y1={top + plotH}
-          x2={left + plotW}
-          y2={top + plotH}
-          stroke="#334155"
-          strokeWidth={0.7}
-        />
-        {puntos.slice(1).map((punto, index) => {
-          const previo = puntos[index]
-          return (
-            <Line
-              key={`l-${punto.freq}`}
-              x1={freqX(previo.freq, left, plotW)}
-              y1={dbY(previo.db, top, plotH)}
-              x2={freqX(punto.freq, left, plotW)}
-              y2={dbY(punto.db, top, plotH)}
-              stroke={color}
-              strokeWidth={1}
-            />
-          )
-        })}
-        {puntos.map((punto) => {
-          const x = freqX(punto.freq, left, plotW)
-          const y = dbY(punto.db, top, plotH)
-          if (simbolo === 'od') {
-            return (
-              <Circle
-                key={`p-${punto.freq}`}
-                cx={x}
-                cy={y}
-                r={2.4}
-                stroke={color}
-                strokeWidth={0.9}
-                fill="#ffffff"
-              />
-            )
-          }
-          return (
-            <Line
-              key={`p-${punto.freq}`}
-              x1={x - 2.4}
-              y1={y - 2.4}
-              x2={x + 2.4}
-              y2={y + 2.4}
-              stroke={color}
-              strokeWidth={0.9}
-            />
-          )
-        })}
-        {simbolo === 'oi'
-          ? puntos.map((punto) => {
-              const x = freqX(punto.freq, left, plotW)
-              const y = dbY(punto.db, top, plotH)
-              return (
-                <Line
-                  key={`x2-${punto.freq}`}
-                  x1={x - 2.4}
-                  y1={y + 2.4}
-                  x2={x + 2.4}
-                  y2={y - 2.4}
-                  stroke={color}
-                  strokeWidth={0.9}
-                />
-              )
-            })
-          : null}
-      </Svg>
-    </View>
-  )
+function celda(umbral: number | null | undefined): string {
+  return typeof umbral === 'number' && Number.isFinite(umbral) ? String(umbral) : '—'
 }
 
 function InfoLine({ label, value }: { label: string; value: string | null }) {
   return (
     <Text style={styles.infoLine}>
       <Text style={styles.infoLabel}>{label} </Text>
-      {value?.trim() ? value : '—'}
+      {valor(value)}
     </Text>
   )
 }
 
-function celda(valor: number | null | undefined): string {
-  return typeof valor === 'number' && Number.isFinite(valor) ? String(valor) : '—'
-}
-
-const COLS = [42, 58, 62, 62, 62, 110, 176]
+const COLS = [42, 58, 64, 64, 64, 120, 172]
 
 export const AudiometriaValidatedPDF = ({
   data,
@@ -343,76 +170,68 @@ export const AudiometriaValidatedPDF = ({
     data.sourceCropAspectRatio && data.sourceCropAspectRatio > 0
       ? data.sourceCropAspectRatio
       : null
-  let imageWidth = CONTENT_WIDTH
-  let imageHeight = 240
-  if (aspect) {
-    imageHeight = imageWidth / aspect
-    if (imageHeight > 300) {
-      imageHeight = 300
-      imageWidth = imageHeight * aspect
-    }
-  }
+  const imageHeight = aspect
+    ? Math.min(SOURCE_IMAGE_MAX_HEIGHT, CONTENT_WIDTH / aspect)
+    : SOURCE_IMAGE_MAX_HEIGHT
 
   return (
     <Document
-      title={`Estudio-de-audiometria-${data.reviewId.slice(0, 8)}`}
+      title={`Audiometria-${data.reviewId.slice(0, 8)}`}
       author={data.medico.fullName}
-      subject="Estudio de audiometría"
+      subject="Estudio de audiometría validado"
     >
       <Page size="LETTER" style={styles.page}>
-        <View style={styles.headerRow}>
-          <View style={styles.logoSlot}>
+        <View style={styles.header} fixed>
+          <View style={styles.headerLeft}>
+            <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
+            <Text style={styles.brandSub}>Evaluaciones médicas · Outsourcing · Capacitación</Text>
+            <Text style={styles.brandSub}>Ergonomía · Fisioterapia · Nutrición</Text>
+          </View>
+          <View style={styles.headerRight}>
             {data.logoUrl ? (
               <Image style={styles.logoImage} src={data.logoUrl} />
             ) : (
               <Text style={styles.logoFallback}>SME</Text>
             )}
           </View>
-          <Text style={styles.docTitle}>ESTUDIO DE AUDIOMETRIA</Text>
-          <View style={styles.logoSlot} />
         </View>
 
-        {data.sourceCropDataUrl ? null : (
-          <View style={styles.infoRow}>
-            <View style={styles.infoCol}>
-              <Text style={styles.infoHeading}>Información del Paciente</Text>
-              <InfoLine label="Identificación" value={formato.identificacion} />
-              <InfoLine label="Nombre" value={data.patient.fullName} />
-              <InfoLine label="Nacimiento" value={formato.nacimiento} />
-              <InfoLine label="Sexo" value={formato.sexo} />
-              <InfoLine label="Notas" value={formato.notasPaciente} />
-            </View>
-            <View style={styles.infoCol}>
-              <Text style={styles.infoHeading}>Información de la Prueba</Text>
-              <InfoLine label="Fecha" value={formato.fechaEstudio} />
-              <InfoLine label="Hora" value={formato.horaEstudio} />
-              <Text style={[styles.infoHeading, { marginTop: 4 }]}>Notas de Prueba</Text>
-              <Text style={styles.infoLine}>
-                {formato.notasPrueba?.trim() ? formato.notasPrueba : '—'}
-              </Text>
-            </View>
-            <View style={styles.infoCol}>
-              <Text style={styles.infoHeading}>Información del Sistema</Text>
-              <InfoLine label="Audiómetro" value={formato.audiometro} />
-              <InfoLine label="Transductor" value={formato.transductor} />
-              <InfoLine label="Número de serie" value={formato.numeroSerie} />
-              <InfoLine label="Última calibración" value={formato.ultimaCalibracion} />
-            </View>
+        <Text style={styles.docTitle}>Estudio de Audiometría</Text>
+
+        <PatientIdentificationPdfBlock
+          patient={data.patient}
+          heading="Identificación del paciente"
+        />
+
+        <View style={styles.infoGrid}>
+          <View style={styles.infoCol}>
+            <InfoLine label="Nacimiento" value={formato.nacimiento} />
+            <InfoLine label="Notas" value={formato.notasPaciente} />
           </View>
-        )}
+          <View style={styles.infoCol}>
+            <InfoLine label="Fecha del estudio" value={formato.fechaEstudio} />
+            <InfoLine label="Hora" value={formato.horaEstudio} />
+            <InfoLine label="Notas de prueba" value={formato.notasPrueba} />
+          </View>
+          <View style={styles.infoCol}>
+            <InfoLine label="Audiómetro" value={formato.audiometro} />
+            <InfoLine label="Transductor" value={formato.transductor} />
+            <InfoLine label="Número de serie" value={formato.numeroSerie} />
+            <InfoLine label="Última calibración" value={formato.ultimaCalibracion} />
+          </View>
+        </View>
 
         {data.sourceCropDataUrl ? (
-          <View style={styles.graphWrap}>
+          <View style={styles.sourceWrap}>
             <Image
-              style={[styles.sourceImage, { width: imageWidth, height: imageHeight }]}
+              style={[styles.sourceImage, { width: CONTENT_WIDTH, height: imageHeight }]}
               src={data.sourceCropDataUrl}
             />
           </View>
         ) : (
-          <View style={styles.chartRow}>
-            <AudiogramaTrazado titulo="Audiograma Oído Derecho" mapa={data.taOd} simbolo="od" />
-            <AudiogramaTrazado titulo="Audiograma Oído Izquierdo" mapa={data.taOi} simbolo="oi" />
-          </View>
+          <Text style={styles.missingCrop}>
+            Audiograma del archivo fuente no disponible.
+          </Text>
         )}
 
         <View style={styles.table}>
@@ -440,9 +259,9 @@ export const AudiometriaValidatedPDF = ({
               celda(data.taOd[3000]),
               formato.perdidaPorOidoOd ?? '—',
               formato.hipoacusiaBilateralCombinada ?? '—',
-            ].map((valor, index) => (
+            ].map((texto, index) => (
               <Text key={`od-${index}`} style={[styles.td, { width: COLS[index] }]}>
-                {valor}
+                {texto}
               </Text>
             ))}
           </View>
@@ -455,12 +274,9 @@ export const AudiometriaValidatedPDF = ({
               celda(data.taOi[3000]),
               formato.perdidaPorOidoOi ?? '—',
               '',
-            ].map((valor, index) => (
-              <Text
-                key={`oi-${index}`}
-                style={[styles.td, { width: COLS[index], borderBottomWidth: 0 }]}
-              >
-                {valor}
+            ].map((texto, index) => (
+              <Text key={`oi-${index}`} style={[styles.td, { width: COLS[index] }]}>
+                {texto}
               </Text>
             ))}
           </View>
@@ -468,19 +284,19 @@ export const AudiometriaValidatedPDF = ({
 
         <View style={styles.examLine}>
           <Text style={styles.examLabel}>FARINGE</Text>
-          <Text style={styles.examValue}>{formato.faringe ?? '—'}</Text>
+          <Text style={styles.examValue}>{valor(formato.faringe)}</Text>
         </View>
         <View style={styles.examLine}>
-          <Text style={styles.examLabel}>CAD:</Text>
-          <Text style={styles.examValue}>{formato.cad ?? '—'}</Text>
-          <Text style={styles.examLabel}>CAI:</Text>
-          <Text style={styles.examValue}>{formato.cai ?? '—'}</Text>
+          <Text style={styles.examLabel}>CAD</Text>
+          <Text style={styles.examValue}>{valor(formato.cad)}</Text>
+          <Text style={styles.examLabel}>CAI</Text>
+          <Text style={styles.examValue}>{valor(formato.cai)}</Text>
         </View>
         <View style={styles.examLine}>
-          <Text style={styles.examLabel}>MTD:</Text>
-          <Text style={styles.examValue}>{formato.mtd ?? '—'}</Text>
-          <Text style={styles.examLabel}>MTI:</Text>
-          <Text style={styles.examValue}>{formato.mti ?? '—'}</Text>
+          <Text style={styles.examLabel}>MTD</Text>
+          <Text style={styles.examValue}>{valor(formato.mtd)}</Text>
+          <Text style={styles.examLabel}>MTI</Text>
+          <Text style={styles.examValue}>{valor(formato.mti)}</Text>
         </View>
 
         <View style={styles.sectionLine}>
@@ -489,34 +305,34 @@ export const AudiometriaValidatedPDF = ({
         </View>
 
         <Text style={styles.dxTitle}>DIAGNOSTICO AUDIOMETRICO</Text>
-        <Text style={styles.earTitle}>OÍDO DERECHO:</Text>
+        <Text style={styles.earTitle}>Oído derecho</Text>
         <View style={styles.dxRow}>
           <View style={styles.dxCol}>
-            <Text style={styles.dxLabel}>DIAGNOSTICO NOSOLOGICO:</Text>
-            <Text style={styles.dxValue}>{formato.diagnosticoNosologicoOd ?? '—'}</Text>
+            <Text style={styles.dxLabel}>Nosológico</Text>
+            <Text style={styles.dxValue}>{valor(formato.diagnosticoNosologicoOd)}</Text>
           </View>
           <View style={styles.dxCol}>
-            <Text style={styles.dxLabel}>DIAGNOSTICO ETIOLOGICO:</Text>
-            <Text style={styles.dxValue}>{formato.diagnosticoEtiologicoOd ?? '—'}</Text>
+            <Text style={styles.dxLabel}>Etiológico</Text>
+            <Text style={styles.dxValue}>{valor(formato.diagnosticoEtiologicoOd)}</Text>
           </View>
           <View style={styles.dxCol}>
-            <Text style={styles.dxLabel}>CLASIFICACION HIPOACUSIA:</Text>
-            <Text style={styles.dxValue}>{formato.clasificacionHipoacusiaOd ?? '—'}</Text>
+            <Text style={styles.dxLabel}>Clasificación</Text>
+            <Text style={styles.dxValue}>{valor(formato.clasificacionHipoacusiaOd)}</Text>
           </View>
         </View>
-        <Text style={styles.earTitle}>OÍDO IZQUIERDO:</Text>
+        <Text style={styles.earTitle}>Oído izquierdo</Text>
         <View style={styles.dxRow}>
           <View style={styles.dxCol}>
-            <Text style={styles.dxLabel}>DIAGNOSTICO NOSOLOGICO:</Text>
-            <Text style={styles.dxValue}>{formato.diagnosticoNosologicoOi ?? '—'}</Text>
+            <Text style={styles.dxLabel}>Nosológico</Text>
+            <Text style={styles.dxValue}>{valor(formato.diagnosticoNosologicoOi)}</Text>
           </View>
           <View style={styles.dxCol}>
-            <Text style={styles.dxLabel}>DIAGNOSTICO ETIOLOGICO:</Text>
-            <Text style={styles.dxValue}>{formato.diagnosticoEtiologicoOi ?? '—'}</Text>
+            <Text style={styles.dxLabel}>Etiológico</Text>
+            <Text style={styles.dxValue}>{valor(formato.diagnosticoEtiologicoOi)}</Text>
           </View>
           <View style={styles.dxCol}>
-            <Text style={styles.dxLabel}>CLASIFICACION HIPOACUSIA:</Text>
-            <Text style={styles.dxValue}>{formato.clasificacionHipoacusiaOi ?? '—'}</Text>
+            <Text style={styles.dxLabel}>Clasificación</Text>
+            <Text style={styles.dxValue}>{valor(formato.clasificacionHipoacusiaOi)}</Text>
           </View>
         </View>
 
@@ -525,34 +341,27 @@ export const AudiometriaValidatedPDF = ({
           <Text style={styles.sectionValue}>{formato.recomendacionesTexto}</Text>
         </View>
 
-        <View style={styles.signatureRow}>
-          <View style={styles.signatureText}>
+        <View style={styles.signatureArea}>
+          <View style={styles.signatureBox}>
+            {data.medico.signatureImageUrl ? (
+              <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
+            ) : (
+              <View style={styles.signatureLine} />
+            )}
             <Text style={styles.signatureName}>
               Realizó EM: {data.medico.fullName.toUpperCase()}
             </Text>
-            <Text style={styles.signatureLicense}>
+            <Text style={styles.signatureMeta}>
               Ced. Prof.: {data.medico.professionalLicense}
             </Text>
           </View>
-          {data.medico.signatureImageUrl ? (
-            <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
-          ) : null}
         </View>
 
-        <View style={styles.footer} fixed>
-          {data.footerImageUrl ? (
-            <Image style={styles.footerImage} src={data.footerImageUrl} />
-          ) : (
-            <View>
-              <Text style={styles.footerServices}>
-                Evaluaciones Médicas • Servicio de Personal Médico • Capacitación en salud • Ergonomía • Fisioterapia • Nutrición • Ambulancia
-              </Text>
-              <Text style={styles.footerContacts}>
-                (442) 480 0548    amisaludresponsable.com    AMISaludResponsable    @amisaludresponsable    amisaludresponsable
-              </Text>
-            </View>
-          )}
-        </View>
+        <Text style={styles.footer} fixed>
+          {SME_PDF_FOOTER}
+          {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia · Nutrición
+          {'\n'}Este documento es un reporte clínico validado por el médico firmante.
+        </Text>
       </Page>
     </Document>
   )

@@ -21,6 +21,8 @@ export type PatientIdentificationPdf = {
   workAreaLabel: string | null
   /** Antigüedad en el área (años/meses capturados). */
   tenureInAreaLabel: string | null
+  /** Fecha de nacimiento de la cuenta del trabajador, si está registrada. */
+  birthDateLabel?: string | null
 }
 
 export function formatPdfGender(g: string | null | undefined): string {
@@ -66,6 +68,7 @@ export function buildPatientIdentificationPdf(input: {
   bloodPressureLabel?: string | null
   workAreaLabel?: string | null
   tenureInAreaLabel?: string | null
+  birthDateLabel?: string | null
 }): PatientIdentificationPdf {
   const fromParts = `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim()
   const fullName = (input.fullName?.trim() || fromParts || '—').trim() || '—'
@@ -91,6 +94,7 @@ export function buildPatientIdentificationPdf(input: {
     bloodPressureLabel: normalizePdfVitalLabel(input.bloodPressureLabel),
     workAreaLabel: normalizePdfVitalLabel(input.workAreaLabel),
     tenureInAreaLabel: normalizePdfVitalLabel(input.tenureInAreaLabel),
+    birthDateLabel: normalizePdfVitalLabel(input.birthDateLabel),
   }
 }
 
@@ -205,6 +209,7 @@ export async function resolvePatientIdentificationForPdf(args: {
   bloodPressureLabel?: string | null
   workAreaLabel?: string | null
   tenureInAreaLabel?: string | null
+  birthDateLabel?: string | null
 }): Promise<PatientIdentificationPdf> {
   const base = buildPatientIdentificationPdf(args)
   if (!args.eventId) return base
@@ -273,5 +278,6 @@ export async function resolvePatientIdentificationForPdf(args: {
     bloodPressureLabel: args.bloodPressureLabel ?? basicVitals.bloodPressureLabel,
     workAreaLabel: args.workAreaLabel ?? occupational.workArea,
     tenureInAreaLabel: args.tenureInAreaLabel ?? occupational.tenureLabel,
+    birthDateLabel: args.birthDateLabel ?? (dob ? formatPdfAttentionDate(dob) : null),
   })
 }

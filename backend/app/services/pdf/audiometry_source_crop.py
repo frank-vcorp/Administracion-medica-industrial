@@ -1,6 +1,6 @@
 """
-Recorte vertical del PDF DD65 V2: ficha del equipo y gráficas de tono puro,
-antes de «Audiograma Habla». Ratios en frontend (`audiometry-dd65-clip.ts`).
+Recorte del audiograma tonal en el PDF subido (DD65 V2), sin la ficha
+del equipo y antes de «Audiograma Habla». Ratios en `audiometry-dd65-clip.ts`.
 """
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from app.services.pdf.espirometry_source_crop import file_url_to_storage_key
 
 AUDIOMETRY_CROP_SUBDIR = "audiometry-crops"
 AUDIOMETRY_RENDER_DPI = 150
-AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO = 0.12
-AUDIOMETRY_DD65_AUDIOGRAM_Y1_RATIO = 0.56
-AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID = "dd65-audiogram-ficha-y-graficas-v5"
+AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO = 0.27
+AUDIOMETRY_DD65_AUDIOGRAM_Y1_RATIO = 0.6
+AUDIOMETRY_SOURCE_CROP_TEMPLATE_ID = "dd65-audiogram-tono-puro-v4"
 
 
 def audiometry_crop_output_key(event_test_id: str) -> str:
