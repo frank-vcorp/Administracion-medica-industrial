@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { PNG } from 'pngjs'
 import {
   AUDIOMETRY_DD65_AUDIOGRAM_Y0_RATIO,
@@ -7,6 +7,7 @@ import {
 import {
   audiogramBandFromSourcePng,
   extractDd65AudiogramBandFromFullPagePng,
+  loadAudiometrySourceCrop,
 } from '@/lib/audiometry-source-crop'
 
 describe('audiometry-source-crop (DD65 audiogram band)', () => {
@@ -30,5 +31,36 @@ describe('audiometry-source-crop (DD65 audiogram band)', () => {
     const crop = audiogramBandFromSourcePng(full)
     expect(crop.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
     expect(crop.aspectRatio).toBeGreaterThan(0)
+  })
+
+  it('carga el PNG desde /uploads cuando /api/files no entrega la imagen', async () => {
+    const png = PNG.sync.write(new PNG({ width: 12, height: 8, filterType: -1 }))
+    const previous = process.env.NEXT_PUBLIC_API_URL
+    process.env.NEXT_PUBLIC_API_URL = 'https://backend.test'
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('/uploads/audiometry-crops/')) {
+        return {
+          ok: true,
+          arrayBuffer: async () =>
+            png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+        }
+      }
+      return { ok: false, status: 403, arrayBuffer: async () => new ArrayBuffer(0) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const crop = await loadAudiometrySourceCrop({
+        relativePath: 'audiometry-crops/et-uploads.png',
+        fileUrl: '/api/files/audiometry-crops/et-uploads.png',
+      })
+      expect(crop?.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+      expect(String(fetchMock.mock.calls[0][0])).toBe(
+        'https://backend.test/uploads/audiometry-crops/et-uploads.png',
+      )
+    } finally {
+      vi.unstubAllGlobals()
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_API_URL
+      else process.env.NEXT_PUBLIC_API_URL = previous
+    }
   })
 })
