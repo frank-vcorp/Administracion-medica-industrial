@@ -266,6 +266,31 @@ def test_resolve_db_unavailable_returns_env_with_warning_db_unavailable(
     assert resolution.api_key == "env-m3"
 
 
+def test_empty_m3_key_is_not_cached_for_ttl(
+    monkeypatch, master_key_env, resolver
+):
+    """Una clave vacía no se queda 60 s: el siguiente estudio vuelve a leer la BD."""
+    monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+    monkeypatch.delenv("M3_API_KEY", raising=False)
+    prisma = MagicMock()
+    prisma.aiproviderkey = MagicMock()
+    prisma.aiproviderkey.find_unique = AsyncMock(
+        side_effect=RuntimeError("BD aún no lista")
+    )
+    from app.services import prisma_client
+    prisma_client.set_prisma_client(prisma)
+
+    first = _arun(resolver.resolve("m3"))
+    assert first.api_key == ""
+    assert resolver.resolve_sync_cached("m3") is None
+
+    row = _make_db_row(provider="m3", api_key="sk-from-db-after-blip")
+    prisma.aiproviderkey.find_unique = AsyncMock(return_value=row)
+    second = _arun(resolver.resolve("m3"))
+    assert second.api_key == "sk-from-db-after-blip"
+    assert second.source == "db"
+
+
 def test_resolve_encryption_key_missing_returns_env_with_warning(
     monkeypatch, master_key_env, resolver
 ):
