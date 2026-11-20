@@ -54,6 +54,7 @@ export default function StudyDocumentViewer({ fileUrl, fileName }: StudyDocument
       {isPdfFile && (
         <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
           <iframe
+            key={fileUrl}
             src={pdfViewerUrl}
             title={fileName}
             className="w-full"
