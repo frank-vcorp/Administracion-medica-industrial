@@ -1227,7 +1227,8 @@ async def v2_upload_and_analyze(
         )
         for _prov in ("m3", "gemini", "dr7"):
             try:
-                _res = await _key_resolver_singleton.resolve(_prov)
+                from app.services.ai.keys import warmup_provider_key as _warmup_provider_key
+                _res = await _warmup_provider_key(_prov)
                 # FIX-20260812-18-debug: estado de la resolución cacheada por el
                 # warmup (sin secretos: sólo len/source/warning).
                 print(
@@ -1404,7 +1405,8 @@ async def v2_upload_and_analyze(
         )
         if _ai_keys_db_enabled():
             try:
-                _res17 = await _key_resolver_singleton.resolve(_target_provider)
+                from app.services.ai.keys import warmup_provider_key as _warmup_provider_key
+                _res17 = await _warmup_provider_key(_target_provider)
                 # FIX-20260812-18-debug: resultado del warmup específico.
                 print(
                     f"🔍 [FIX-20260812-18] warmup específico result "
@@ -1811,7 +1813,8 @@ async def v2_prediagnosis_from_params(
     )
     if _predx_ai_keys_db_enabled():
         try:
-            await _predx_key_resolver.resolve("m3")
+            from app.services.ai.keys import warmup_provider_key as _warmup_provider_key
+            await _warmup_provider_key("m3")
         except Exception as _predx_warmup_err:
             print(
                 f"⚠️ [prediagnosis-from-params] Warmup key MiniMax (m3) falló "
@@ -2206,7 +2209,8 @@ async def v2_event_test_upload_xml_audiometry(
     )
     if _xml_ai_keys_db_enabled():
         try:
-            await _xml_key_resolver.resolve("m3")
+            from app.services.ai.keys import warmup_provider_key as _warmup_provider_key
+            await _warmup_provider_key("m3")
         except Exception as _xml_warmup_err:
             print(
                 f"⚠️ [FIX-20261028-01] Warmup key MiniMax (m3) falló "

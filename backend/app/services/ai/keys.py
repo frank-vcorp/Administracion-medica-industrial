@@ -295,7 +295,7 @@ class KeyResolver:
             cached = self._cache.get(provider)
             if cached is not None:
                 ts, value = cached
-                if now - ts < self.ttl:
+                if now - ts < self.ttl and (value.api_key or "").strip():
                     # FIX-20260812-18-debug: cache hit — el warmup NO re-consulta
                     # BD; hereda lo que haya en caché (Hipótesis C).
                     print(
@@ -319,8 +319,7 @@ class KeyResolver:
                 resolution = self._env_resolution(
                     provider, warning="db_unavailable"
                 )
-                self._cache[provider] = (now, resolution)
-                return resolution
+                return self._store_resolution(provider, now, resolution)
 
             if row is None:
                 # FIX-20260812-18-debug: fila ausente según ESTE cliente Prisma
@@ -332,8 +331,7 @@ class KeyResolver:
                 resolution = self._env_resolution(
                     provider, warning="row_missing"
                 )
-                self._cache[provider] = (now, resolution)
-                return resolution
+                return self._store_resolution(provider, now, resolution)
 
             if not getattr(row, "enabled", True):
                 print(
@@ -343,8 +341,7 @@ class KeyResolver:
                 resolution = self._env_resolution(
                     provider, warning="row_disabled"
                 )
-                self._cache[provider] = (now, resolution)
-                return resolution
+                return self._store_resolution(provider, now, resolution)
 
             master_key = self._get_master_key()
             if master_key is None:
@@ -362,8 +359,7 @@ class KeyResolver:
                 resolution = self._env_resolution(
                     provider, warning="encryption_key_missing"
                 )
-                self._cache[provider] = (now, resolution)
-                return resolution
+                return self._store_resolution(provider, now, resolution)
 
             try:
                 # FIX-20260810-03: prisma-client-py 0.15 expone columnas Bytes
@@ -393,8 +389,7 @@ class KeyResolver:
                 resolution = self._env_resolution(
                     provider, warning="decrypt_error"
                 )
-                self._cache[provider] = (now, resolution)
-                return resolution
+                return self._store_resolution(provider, now, resolution)
 
             resolved_default_model = row.defaultModel
             if provider == "m3":
@@ -410,7 +405,7 @@ class KeyResolver:
                 source="db",
                 warning=None,
             )
-            self._cache[provider] = (now, resolution)
+            self._store_resolution(provider, now, resolution)
             # FIX-20260812-18-debug: descifrado OK desde BD (sin la key en claro).
             print(
                 f"🔍 [FIX-20260812-18] resolve provider={provider} descifrado OK "
@@ -445,9 +440,27 @@ class KeyResolver:
         ts, value = cached
         if time.monotonic() - ts >= self.ttl:
             return None
+        if not (value.api_key or "").strip():
+            return None
         return value
 
     # -- invalidación -------------------------------------------------------
+    def _store_resolution(
+        self,
+        provider: str,
+        now: float,
+        resolution: "KeyResolution",
+    ) -> "KeyResolution":
+        """Guarda en caché sólo una clave usable.
+
+        Un fallo transitorio (BD aún no lista, fila no visible, descifrado)
+        con api_key vacía no debe quedarse 60 s: el siguiente espiro o
+        campimetría repetiría «falta la clave» aunque la fila ya esté.
+        """
+        if (resolution.api_key or "").strip():
+            self._cache[provider] = (now, resolution)
+        return resolution
+
     def invalidate(self, provider: str) -> None:
         """Elimina la entrada de caché para forzar re-lookup en próxima resolve.
         SPEC §5.2: PUT/DELETE llaman esto tras commit → rotación inmediata."""
@@ -471,6 +484,19 @@ def set_key_resolver(resolver: KeyResolver) -> None:
 def get_key_resolver() -> KeyResolver:
     """Acceso al singleton (útil para tests que sólo quieren resetear caché)."""
     return key_resolver
+
+
+async def warmup_provider_key(provider: str) -> Optional[KeyResolution]:
+    """Deja la clave en caché antes del pipeline síncrono.
+
+    Si el primer intento no trae secreto, reintenta una vez. Un fallo
+    transitorio no se cachea cuando la clave viene vacía.
+    """
+    resolution = await key_resolver.resolve(provider)
+    if resolution and (resolution.api_key or "").strip():
+        return resolution
+    key_resolver.invalidate(provider)
+    return await key_resolver.resolve(provider)
 
 
 # ---------------------------------------------------------------------------
