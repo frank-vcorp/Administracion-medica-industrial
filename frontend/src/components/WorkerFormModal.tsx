@@ -7,6 +7,7 @@ import { createWorker, updateWorker } from '@/actions/worker.actions'
 import { useRouter } from 'next/navigation'
 import { EVENTS, OpenAppointmentModalDetail } from '@/types/events'
 import { isPublicGeneralCompany } from '@/lib/public-general-company'
+import { PHONE_CAPTURE_HINT } from '@/lib/whatsapp-phone'
 import {
   createPublicGeneralQuickProfile,
   getAssignableMedicalProfilesForCompany,
@@ -820,12 +821,14 @@ export default function WorkerFormModal({
                                     <label className="text-[10px] font-bold text-slate-400 ml-1">Teléfono</label>
                                     <input
                                         name="phone"
-                                        placeholder="10 dígitos"
+                                        placeholder="4424532415"
+                                        inputMode="numeric"
                                         value={isCreateMode ? contactPhone : undefined}
                                         defaultValue={!isCreateMode ? (workerToEdit?.phone || '') : undefined}
                                         onChange={isCreateMode ? (e) => setContactPhone(e.target.value) : undefined}
                                         className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 p-3 rounded-xl text-sm outline-none"
                                     />
+                                    <p className="text-[10px] text-slate-500 leading-snug ml-1">{PHONE_CAPTURE_HINT}</p>
                                 </div>
                             </div>
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
+import { PHONE_CAPTURE_HINT } from '@/lib/whatsapp-phone'
 import { quickRegisterPortalWorkers } from '@/actions/portal-worker.actions'
 import type { PortalWorkerListItem } from '@/actions/portal-worker.actions'
 
@@ -224,11 +225,12 @@ export default function PortalQuickWorkerRegister({
               </label>
               <label className="block text-xs">
                 <span className="font-bold text-slate-500">Teléfono</span>
+                <span className="mt-0.5 block text-[10px] font-normal leading-snug text-slate-500">{PHONE_CAPTURE_HINT}</span>
                 <input
                   type="tel"
                   value={row.phone}
                   onChange={(e) => updateRow(index, { phone: e.target.value })}
-                  placeholder="10 dígitos"
+                  placeholder="4424532415"
                   className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
                 />
               </label>
