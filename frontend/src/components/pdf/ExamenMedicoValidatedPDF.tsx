@@ -409,6 +409,14 @@ const reportStyles = StyleSheet.create({
     fontSize: 7.5,
     lineHeight: 1.3,
   },
+  blockTitle: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  pairGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  pairCell: { width: '50%', fontSize: 7.5, marginBottom: 1 },
   reco: { fontSize: 8, lineHeight: 1.35, marginTop: 2 },
   sign: { marginTop: 16, alignItems: 'center' },
   signImage: { width: 140, height: 48, objectFit: 'contain', marginBottom: 2 },
@@ -505,6 +513,46 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
         <View style={reportStyles.idRow}>
           <Text style={reportStyles.idLabel}>PUESTO:</Text>
           <Text style={reportStyles.idValue}>{v(p.puesto)}</Text>
+        </View>
+
+        <Text style={reportStyles.blockTitle}>SOMATOMETRÍA</Text>
+        <View style={reportStyles.pairGrid}>
+          <Text style={reportStyles.pairCell}>Peso: {v(data.somatometria.peso)} kg</Text>
+          <Text style={reportStyles.pairCell}>Talla: {v(data.somatometria.talla)} m</Text>
+          <Text style={reportStyles.pairCell}>IMC: {v(data.somatometria.imc)}</Text>
+          <Text style={reportStyles.pairCell}>TA: {v(data.somatometria.ta)} mmHg</Text>
+          <Text style={reportStyles.pairCell}>FC: {v(data.somatometria.fc)} /min</Text>
+          <Text style={reportStyles.pairCell}>FR: {v(data.somatometria.fr)} /min</Text>
+          <Text style={reportStyles.pairCell}>Temp: {v(data.somatometria.temperatura)} °C</Text>
+          <Text style={reportStyles.pairCell}>Sat. O2: {v(data.somatometria.saturacionOxigeno)} %</Text>
+        </View>
+
+        <Text style={reportStyles.blockTitle}>ANTECEDENTES HEREDOFAMILIARES</Text>
+        <View style={reportStyles.pairGrid}>
+          <Text style={reportStyles.pairCell}>Diabetes: {v(data.ahf.diabetes)}</Text>
+          <Text style={reportStyles.pairCell}>Hipertensión: {v(data.ahf.hipertension)}</Text>
+          <Text style={reportStyles.pairCell}>Epilepsia: {v(data.ahf.epilepsia)}</Text>
+          <Text style={reportStyles.pairCell}>Cardiopatía: {v(data.ahf.cardiopatia)}</Text>
+          <Text style={reportStyles.pairCell}>Renales: {v(data.ahf.renales)}</Text>
+          <Text style={reportStyles.pairCell}>Asma: {v(data.ahf.asma)}</Text>
+          <Text style={reportStyles.pairCell}>Cáncer: {v(data.ahf.cancer)}</Text>
+          <Text style={reportStyles.pairCell}>Mentales: {v(data.ahf.mentales)}</Text>
+          <Text style={reportStyles.pairCell}>Otras: {v(data.ahf.otras)}</Text>
+        </View>
+
+        <Text style={reportStyles.blockTitle}>AGUDEZA VISUAL</Text>
+        <View style={reportStyles.pairGrid}>
+          <Text style={reportStyles.pairCell}>Lejana OD: {v(data.agudezaVisual.visionLejanaOD)}</Text>
+          <Text style={reportStyles.pairCell}>Lejana OI: {v(data.agudezaVisual.visionLejanaOI)}</Text>
+          <Text style={reportStyles.pairCell}>Cercana OD: {v(data.agudezaVisual.visionCercanaOD)}</Text>
+          <Text style={reportStyles.pairCell}>Cercana OI: {v(data.agudezaVisual.visionCercanaOI)}</Text>
+          <Text style={reportStyles.pairCell}>Lejana corr. OD: {v(data.agudezaVisual.lejanaCorregidaOD)}</Text>
+          <Text style={reportStyles.pairCell}>Lejana corr. OI: {v(data.agudezaVisual.lejanaCorregidaOI)}</Text>
+          <Text style={reportStyles.pairCell}>Cercana corr. OD: {v(data.agudezaVisual.cercanaCorregidaOD)}</Text>
+          <Text style={reportStyles.pairCell}>Cercana corr. OI: {v(data.agudezaVisual.cercanaCorregidaOI)}</Text>
+          <Text style={reportStyles.pairCell}>Ishihara: {v(data.agudezaVisual.ishihara)}</Text>
+          <Text style={reportStyles.pairCell}>Campimetría: {v(data.agudezaVisual.campimetria)}</Text>
+          <Text style={reportStyles.pairCell}>Reflejos: {v(data.agudezaVisual.reflejos)}</Text>
         </View>
 
         <View style={reportStyles.rule} />
