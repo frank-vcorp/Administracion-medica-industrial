@@ -19,6 +19,10 @@ import {
 } from '@/lib/audiometry-dd65-clip'
 import { readEventTestSourcePdfBytes } from '@/lib/espirometry-source-crop'
 import { tryReadSourceFromBackend } from '@/lib/clinical/backend-file-read'
+import {
+  isPngBuffer,
+  readCropPngFromUploads,
+} from '@/lib/clinical/crop-png-from-uploads'
 
 const execFileAsync = promisify(execFile)
 
@@ -69,40 +73,6 @@ function audiometryApiBase(): string {
   ).replace(/\/+$/, '')
 }
 
-function isPngBuffer(buf: Buffer): boolean {
-  return (
-    buf.length > 8 &&
-    buf[0] === 0x89 &&
-    buf[1] === 0x50 &&
-    buf[2] === 0x4e &&
-    buf[3] === 0x47
-  )
-}
-
-/**
- * El PNG del recorte queda en el volumen `/uploads` de Railway.
- * `/api/files/...` redirige a una URL firmada que hoy responde 403
- * (SignatureDoesNotMatch), así que esa vía no sirve para embeber la gráfica.
- */
-async function readCropPngFromUploads(relativePath: string): Promise<Buffer | null> {
-  const base = audiometryApiBase()
-  const trimmed = relativePath.trim().replace(/^\/+/, '')
-  if (!base || !trimmed || trimmed.includes('..')) return null
-  const url = `${base}/uploads/${trimmed.split('/').map(encodeURIComponent).join('/')}`
-  try {
-    const resp = await fetch(url, {
-      cache: 'no-store',
-      redirect: 'manual',
-      headers: { 'User-Agent': 'AMI-Audiometry-Crop/1.0' },
-    })
-    if (!resp.ok) return null
-    const buf = Buffer.from(await resp.arrayBuffer())
-    return isPngBuffer(buf) ? buf : null
-  } catch {
-    return null
-  }
-}
-
 async function readSourceCropPngBuffer(
   meta: Pick<AudiometrySourceCropMeta, 'relativePath' | 'fileUrl'>,
 ): Promise<Buffer | null> {
@@ -114,7 +84,10 @@ async function readSourceCropPngBuffer(
     // Producción: PNG remoto
   }
 
-  const fromUploads = await readCropPngFromUploads(meta.relativePath)
+  const fromUploads = await readCropPngFromUploads(
+    meta.relativePath,
+    'AMI-Audiometry-Crop/1.0',
+  )
   if (fromUploads) return fromUploads
 
   const fileRef = meta.fileUrl ?? `/api/files/${meta.relativePath}`

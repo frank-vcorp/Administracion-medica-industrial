@@ -15,6 +15,10 @@ import { PNG } from 'pngjs'
 import { cropPngBand } from '@/lib/png-crop-band'
 import { resolveBackendFileUrl } from '@/lib/zip-cierre-clinico'
 import {
+  isPngBuffer,
+  readCropPngFromUploads,
+} from '@/lib/clinical/crop-png-from-uploads'
+import {
   ESPIROMETRY_LETTER_BOTTOM_Y0_RATIO,
   ESPIROMETRY_LETTER_BOTTOM_Y1_RATIO,
   ESPIROMETRY_SOURCE_CROP_TEMPLATE_ID,
@@ -69,10 +73,17 @@ async function readSourceCropPngBuffer(
 ): Promise<Buffer | null> {
   try {
     const abs = path.join(REPO_UPLOAD_DIR, meta.relativePath)
-    return await readFile(abs)
+    const local = await readFile(abs)
+    if (isPngBuffer(local)) return local
   } catch {
     // Producción: PNG remoto
   }
+
+  const fromUploads = await readCropPngFromUploads(
+    meta.relativePath,
+    'AMI-Espirometry-Crop/1.0',
+  )
+  if (fromUploads) return fromUploads
 
   const fileRef = meta.fileUrl ?? `/api/files/${meta.relativePath}`
   const remoteUrl = resolveBackendFileUrl(fileRef)
@@ -83,7 +94,8 @@ async function readSourceCropPngBuffer(
       headers: { 'User-Agent': 'AMI-Espirometry-Crop/1.0' },
     })
     if (!resp.ok) return null
-    return Buffer.from(await resp.arrayBuffer())
+    const remote = Buffer.from(await resp.arrayBuffer())
+    return isPngBuffer(remote) ? remote : null
   } catch {
     return null
   }
