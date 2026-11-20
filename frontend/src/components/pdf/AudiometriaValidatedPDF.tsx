@@ -90,12 +90,7 @@ const styles = StyleSheet.create({
   signatureArea: { marginTop: 6, flexDirection: 'row', justifyContent: 'flex-end' },
   signatureBox: { width: 200, alignItems: 'center' },
   signatureImage: { width: 100, height: 28, objectFit: 'contain', marginBottom: 2 },
-  signatureLine: {
-    width: 150,
-    borderBottomWidth: 0.8,
-    borderBottomColor: '#0f172a',
-    marginBottom: 2,
-  },
+  signatureBlank: { width: 100, height: 28, marginBottom: 2 },
   signatureName: { fontSize: 7, fontWeight: 'bold', textAlign: 'center' },
   signatureMeta: { fontSize: 6.5, textAlign: 'center', color: '#475569' },
   footer: {
@@ -346,13 +341,13 @@ export const AudiometriaValidatedPDF = ({
             {data.medico.signatureImageUrl ? (
               <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
             ) : (
-              <View style={styles.signatureLine} />
+              <View style={styles.signatureBlank} />
             )}
             <Text style={styles.signatureName}>
               Realizó EM: {data.medico.fullName.toUpperCase()}
             </Text>
             <Text style={styles.signatureMeta}>
-              Ced. Prof.: {data.medico.professionalLicense}
+              Ced. Prof.: {valor(data.medico.professionalLicense)}
             </Text>
           </View>
         </View>

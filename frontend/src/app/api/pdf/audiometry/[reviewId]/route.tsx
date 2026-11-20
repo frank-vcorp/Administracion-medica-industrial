@@ -14,7 +14,9 @@
  *  - Si la revisión está en estado REVIEWED_REJECTED devuelve 404
  *    (no hay PDF y NO debe haberlo por contrato de la SPEC).
  *  - Fast-path sirviendo desde disco + path de regeneración en línea.
- *  - Devuelve 410 Gone si la revisión no tiene snapshot congelado.
+ *  - Al regenerar, «Realizó EM», la cédula y la firma salen del perfil
+ *    de la cuenta en sesión. Sin cédula se imprime «—». Sin imagen de
+ *    firma el espacio queda vacío. 410 si esa cuenta no tiene nombre.
  *  - Filename `Audiometria-<universalId>.pdf` consistente con el patrón
  *    `Dictamen-<universalId>.pdf` / `Espirometria-<universalId>.pdf`.
  *
@@ -39,6 +41,7 @@ import {
   loadAudiometrySourceCrop,
   type AudiometrySourceCropMeta,
 } from '@/lib/audiometry-source-crop'
+import { audiometrySignerFromAccount } from '@/lib/audiometry-signer'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -83,9 +86,6 @@ export async function GET(
       validatedPdfUrl: true,
       validatedPdfGeneratedAt: true,
       validatedPdfError: true,
-      validatorSnapshotFullName: true,
-      validatorSnapshotProfessionalLicense: true,
-      validatorSnapshotSignatureUrl: true,
       prediagnosisSnapshot: {
         select: {
           prediagnosisData: true,
@@ -181,14 +181,21 @@ export async function GET(
     }
   }
 
-  // Regeneración en línea: requiere snapshot congelado de identidad.
-  if (
-    !review.validatorSnapshotFullName ||
-    !review.validatorSnapshotProfessionalLicense ||
-    !review.validatorSnapshotSignatureUrl
-  ) {
+  // Quien genera esta copia es la cuenta de la sesión: nombre, cédula
+  // y la imagen de firma de su perfil. Sin cédula se imprime «—».
+  // Sin imagen, el espacio queda vacío.
+  const account = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      fullName: true,
+      professionalLicense: true,
+      signatureImageUrl: true,
+    },
+  })
+  const signer = audiometrySignerFromAccount(account)
+  if (!signer) {
     return new NextResponse(
-      'Esta revisión no tiene identidad congelada del médico; el PDF no puede regenerarse. Vuelve a aceptar/editar la revisión desde el panel.',
+      'La cuenta que genera el PDF no tiene un nombre registrado.',
       { status: 410 },
     )
   }
@@ -221,11 +228,7 @@ export async function GET(
         universalId: worker?.universalId ?? null,
         companyName: worker?.company?.name ?? null,
       },
-      medico: {
-        fullName: review.validatorSnapshotFullName,
-        professionalLicense: review.validatorSnapshotProfessionalLicense,
-        signatureImageUrl: review.validatorSnapshotSignatureUrl,
-      },
+      medico: signer,
       logoDataUrl,
     })
 
