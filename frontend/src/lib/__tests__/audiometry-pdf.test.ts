@@ -160,3 +160,133 @@ describe('buildAudiometriaPdfData — FND-20260825-15 (payload sanity)', () => {
     expect(data.doctorNotes).toBeNull()
   })
 })
+
+describe('formato ESTUDIO DE AUDIOMETRIA', () => {
+  it('arma la tabla de Cervantes: 12.00% por oído y 12.0000% bilateral', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      doctorDiagnosis: 'CAÍDA DEL UMBRAL DE AUDICIÓN BILATERAL EN 4000 HZ',
+      doctorRecommendations:
+        'Se sugiere evitar exponer a ruido mayor de 85 dB, Uso adecuado de tapones auditivos, audiometría de seguimiento cada año',
+      patient: {
+        firstName: 'Damián',
+        lastName: 'Cervante Celedón',
+        universalId: 'VALIANT29',
+        companyName: null,
+      },
+      extractionStructuredData: {
+        paciente_detalle: {
+          identificacion: 'VALIANT29',
+          fecha_nacimiento: '26/06/1989',
+          sexo: 'Hombre',
+          notas: 'ESAMBRE 4 AÑOS',
+        },
+        estudio: {
+          fecha_estudio: '26/11/2025',
+          hora_estudio: '02:39 p. m.',
+          equipo_modelo: 'Amplitude T3 AMPT3-3000-015',
+          transductor: 'HDA300',
+          numero_serie_sistema: '96000030/96000030',
+          ultima_calibracion: '20250910',
+        },
+        oido_derecho: { va: { 500: 15, 1000: 15, 2000: 10, 3000: 20 } },
+        oido_izquierdo: { va: { 500: 10, 1000: 5, 2000: 15, 3000: 30 } },
+        campos_fuente: {
+          faringe: 'Sin datos patológicos',
+          cad: 'permeable',
+          cai: 'permeable',
+          mtd: 'íntegra,aspecto normal',
+          mti: 'íntegra,aspecto normal',
+        },
+        notas_calidad: {
+          descripcion: 'CAÍDA DEL UMBRAL DE AUDICIÓN BILATERAL EN 4000 HZ',
+        },
+        diagnostico_nosologico_od: 'Hipoacusia Neurosensorial',
+        diagnostico_nosologico_oi: 'Hipoacusia Neurosensorial',
+        diagnostico_etiologico: 'Secundario a Trauma Acústico crónico por ruido',
+        clasificacion_hipoacusia_od: 'Leve',
+        clasificacion_hipoacusia_oi: 'Leve',
+      },
+    })
+
+    expect(data).not.toHaveProperty('criterios')
+    expect(data.taOd[500]).toBe(15)
+    expect(data.taOi[3000]).toBe(30)
+    expect(data.formato.identificacion).toBe('VALIANT29')
+    expect(data.patient.fullName).toBe('Damián Cervante Celedón')
+    expect(data.formato.nacimiento).toBe('26/06/1989')
+    expect(data.formato.sexo).toBe('Hombre')
+    expect(data.formato.notasPaciente).toBe('ESAMBRE 4 AÑOS')
+    expect(data.formato.audiometro).toBe('Amplitude T3 AMPT3-3000-015')
+    expect(data.formato.transductor).toBe('HDA300')
+    expect(data.formato.perdidaPorOidoOd).toBe('12.00%')
+    expect(data.formato.perdidaPorOidoOi).toBe('12.00%')
+    expect(data.formato.hipoacusiaBilateralCombinada).toBe('12.0000%')
+    expect(data.formato.faringe).toBe('Sin datos patológicos')
+    expect(data.formato.cad).toBe('permeable')
+    expect(data.formato.mtd).toBe('íntegra,aspecto normal')
+    expect(data.formato.descripcionAudiometrica).toBe(
+      'CAÍDA DEL UMBRAL DE AUDICIÓN BILATERAL EN 4000 HZ',
+    )
+    expect(data.formato.diagnosticoNosologicoOd).toBe('Hipoacusia Neurosensorial')
+    expect(data.formato.diagnosticoEtiologicoOi).toBe(
+      'Secundario a Trauma Acústico crónico por ruido',
+    )
+    expect(data.formato.clasificacionHipoacusiaOd).toBe('Leve')
+    expect(data.formato.recomendacionesTexto).toContain('tapones auditivos')
+  })
+
+  it('no inventa la pérdida si falta una de las cuatro frecuencias', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      extractionStructuredData: {
+        oido_derecho: { va: { 500: 10, 1000: 10, 2000: 10 } },
+        oido_izquierdo: { va: { 500: 10, 1000: 10, 2000: 10, 3000: 10 } },
+      },
+    })
+    expect(data.formato.perdidaPorOidoOd).toBeNull()
+    expect(data.formato.perdidaPorOidoOi).toBe('8.00%')
+    expect(data.formato.hipoacusiaBilateralCombinada).toBeNull()
+  })
+
+  it('traduce el patrón aceptado y no inventa etiología', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      doctorDiagnosis: 'Hallazgos compatibles con hipoacusia.',
+      prediagnosisData: {
+        recommendation: 'Uso de tapones.',
+        resumen_por_oido: {
+          oido_derecho: { pattern: 'NEUROSENSORIAL', severity: 'LEVE' },
+          oido_izquierdo: { pattern: 'NORMAL', severity: 'NORMAL' },
+        },
+        clasificacion_hipoacusia: { right: 'LEVE', left: 'NO_APLICA' },
+      },
+    })
+    expect(data.formato.diagnosticoNosologicoOd).toBe('Hipoacusia Neurosensorial')
+    expect(data.formato.diagnosticoNosologicoOi).toBe('Audición Normal')
+    expect(data.formato.clasificacionHipoacusiaOd).toBe('Leve')
+    expect(data.formato.clasificacionHipoacusiaOi).toBe('No Aplica')
+    expect(data.formato.diagnosticoEtiologicoOd).toBeNull()
+    expect(data.formato.diagnosticoEtiologicoOi).toBeNull()
+  })
+
+  it('la exploración del cuestionario llena faringe, CAD y membranas', () => {
+    const data = buildAudiometriaPdfData({
+      ...MIN_INPUT,
+      clinicalContext: {
+        exploracionFisica: {
+          faringe: { estado: 'NORMAL' },
+          cad: { estado: 'NORMAL' },
+          cai: { estado: 'ALTERADO', observacion: 'Cerumen' },
+          mtd: { estado: 'NORMAL' },
+          mti: { estado: 'NO_REALIZADO' },
+        },
+      },
+    })
+    expect(data.formato.faringe).toBe('Sin datos patológicos')
+    expect(data.formato.cad).toBe('permeable')
+    expect(data.formato.cai).toBe('Cerumen')
+    expect(data.formato.mtd).toBe('íntegra, aspecto normal')
+    expect(data.formato.mti).toBe('No realizado')
+  })
+})
