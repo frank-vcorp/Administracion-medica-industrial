@@ -45,6 +45,7 @@ import {
 } from '@/lib/sodexo-extension-validation'
 import {
   generateExamenMedicoValidatedPdf,
+  generateExamenMedicoFormularioPdf,
   generateSodexoRegSo01Pdf,
   buildExamenMedicoPdfDataAsync,
   resolveAmiLogoDataUrl,
@@ -90,8 +91,10 @@ export async function GET(
   if (!eventId) {
     return new NextResponse('eventId requerido', { status: 400 })
   }
+  const forma = _request.nextUrl.searchParams.get('forma') === '1'
   return deliverExamenMedicoPdf(eventId, 'clinical', {
     userId: session.user.id,
+    forma,
   })
 }
 
@@ -105,6 +108,8 @@ export async function deliverExamenMedicoPdf(
   opts?: {
     preview?: boolean
     userId?: string
+    /** Formulario contestado (preguntas y respuestas), no el resumen. */
+    forma?: boolean
     /** Vista previa REG-SO-01: extensión en pantalla (evita depender del autoguardado). */
     sodexoExtensionOverride?: unknown
   },
@@ -626,6 +631,19 @@ export async function deliverExamenMedicoPdf(
           { status: 409 },
         )
       }
+    }
+
+    if (opts?.forma && deliverable === 'clinical') {
+      const formBuffer = await generateExamenMedicoFormularioPdf(data)
+      const formName = `ExamenMedico-formulario-${event.worker.universalId}.pdf`
+      return new NextResponse(new Uint8Array(formBuffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${formName}"`,
+          'Cache-Control': 'private, no-store',
+        },
+      })
     }
 
     const result =

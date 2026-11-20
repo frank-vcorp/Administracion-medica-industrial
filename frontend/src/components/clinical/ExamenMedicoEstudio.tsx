@@ -180,6 +180,11 @@ export function examenMedicoPdfUrl(eventId: string): string {
   return `/api/pdf/examen-medico/${eventId}`
 }
 
+/** Formulario contestado (preguntas y respuestas), aparte del resumen. */
+export function examenMedicoFormularioPdfUrl(eventId: string): string {
+  return `/api/pdf/examen-medico/${eventId}?forma=1`
+}
+
 /** PDF oficial Sodexo REG-SO-01 (solo variante Sodexo; no es el AMI clínico). */
 export function examenMedicoSodexoPdfUrl(eventId: string): string {
   return `/api/pdf/examen-medico-sodexo/${eventId}`
@@ -2699,7 +2704,7 @@ export default function ExamenMedicoEstudio({
                   </Link>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex flex-col gap-2">
                 <a
                   href={examenMedicoPdfUrl(eventId)}
                   target="_blank"
@@ -2707,9 +2712,18 @@ export default function ExamenMedicoEstudio({
                   data-testid="examen-medico-pdf-download-link"
                   data-implementacion="IMPL-FEATURE-20260825-03"
                   data-has-medical-verdict={String(hasMedicalVerdict)}
-                  className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+                  className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap text-center"
                 >
                   📄 Reporte de aptitud
+                </a>
+                <a
+                  href={examenMedicoFormularioPdfUrl(eventId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="examen-medico-formulario-download-link"
+                  className="bg-white hover:bg-teal-50 text-teal-800 border border-teal-600 text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap text-center"
+                >
+                  📋 Formulario contestado
                 </a>
                 {shouldShowClinicalClosureZipCta(aptitud, hasMedicalVerdict) && (
                   <a
