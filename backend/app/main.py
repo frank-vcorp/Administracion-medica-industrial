@@ -2422,22 +2422,17 @@ def resolve_file(key: str):
     """
     content_type, is_embeddable = _detect_content_type(key)
 
-    # --- Camino A: S3 habilitado → intentar presigned URL -----------------------
+    # --- Camino A: S3 habilitado → entregar los bytes --------------------
+    # No redirigir a una URL prefirmada: esa firma responde 403
+    # (SignatureDoesNotMatch) y el ZIP de cierre se queda sin los PDF.
     if _s3_enabled and _s3_client:
-        try:
-            params: dict = {"Bucket": STORAGE_S3_BUCKET, "Key": key}
+        blob = _download_file_from_s3(key)
+        if blob is not None:
+            headers: Dict[str, str] = {"Content-Type": content_type}
             if is_embeddable:
-                params["ResponseContentDisposition"] = "inline"
-                params["ResponseContentType"] = content_type
-            presigned_url = _s3_client.generate_presigned_url(
-                "get_object",
-                Params=params,
-                ExpiresIn=300,  # 5 minutos — suficiente para visor y descarga
-            )
-            return RedirectResponse(url=presigned_url, status_code=302)
-        except Exception as e:
-            # Falla S3 → intentar fallback local antes de rendirse.
-            print(f"⚠️ S3 presigned URL falló para key={key}: {_sanitize_error(str(e))}; intentando fallback local.")
+                headers["Content-Disposition"] = "inline"
+            return Response(content=blob, headers=headers, media_type=content_type)
+        print(f"⚠️ S3 download no devolvió bytes para key={key}; intentando fallback local.")
 
     # --- Camino B: Fallback a filesystem local ----------------------------------
     local_path = os.path.join(UPLOAD_DIR, key)

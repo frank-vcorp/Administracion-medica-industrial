@@ -784,6 +784,22 @@ export async function resolveExamenMedicoEntregablePdfForEvent(
   }
 }
 
+/** Formulario contestado (preguntas y respuestas), aparte del reporte de una hoja. */
+export async function resolveExamenMedicoFormularioPdfForEvent(
+  eventId: string,
+  prisma: import('@prisma/client').PrismaClient,
+): Promise<Uint8Array | null> {
+  try {
+    const { buildDictamenGeneralAmiConsolidado } = await import('@/lib/dictamen-general-ami')
+    const consolidado = await buildDictamenGeneralAmiConsolidado(eventId, prisma)
+    const dataFinal = await buildExamenMedicoPdfDataAsync(consolidado.data)
+    const buffer = await generateExamenMedicoFormularioPdf(dataFinal)
+    return new Uint8Array(buffer)
+  } catch {
+    return null
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Helpers exportados para tests V1
 // ──────────────────────────────────────────────────────────────────────────

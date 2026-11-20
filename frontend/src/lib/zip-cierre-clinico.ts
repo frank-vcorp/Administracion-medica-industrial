@@ -28,13 +28,16 @@
  */
 import prisma from '@/lib/prisma'
 import { buildZip, type ZipEntry } from '@/lib/zip-store'
-import { resolveExamenMedicoEntregablePdfForEvent } from '@/lib/examen-medico-pdf'
+import {
+  resolveExamenMedicoEntregablePdfForEvent,
+  resolveExamenMedicoFormularioPdfForEvent,
+} from '@/lib/examen-medico-pdf'
 import { renderDictamenGeneralPdfForEvent } from '@/lib/dictamen-pdf'
 import { findSiblingEventsInAtencion } from '@/lib/event-atencion'
 import { isExamenMedicoTestName } from '@/lib/clinical/examen-medico-variant'
 import {
   type EventTestForZipPdf,
-  resolveEventTestPdfForZip,
+  resolveEventTestFilesForZip,
 } from '@/lib/clinical/study-pdf-for-zip'
 
 export {
@@ -214,6 +217,8 @@ const eventTestsForZipSelect = {
     orderBy: { version: 'desc' as const },
     take: 1,
     select: {
+      sourceFileUrl: true,
+      sourceFileName: true,
       aiPrediagnoses: {
         where: { isSuperseded: false },
         orderBy: { version: 'desc' as const },
@@ -239,6 +244,8 @@ type RawEventTestForZip = {
   testNameSnapshot: string | null
   fileUrl: string | null
   extractionSnapshots?: Array<{
+    sourceFileUrl?: string | null
+    sourceFileName?: string | null
     aiPrediagnoses?: Array<{
       doctorReviews?: Array<{
         validatedPdfUrl: string | null
@@ -249,8 +256,8 @@ type RawEventTestForZip = {
 }
 
 function mapEventTestForZipPdf(test: RawEventTestForZip): EventTestForZipPdf {
-  const latestReview =
-    test.extractionSnapshots?.[0]?.aiPrediagnoses?.[0]?.doctorReviews?.[0]
+  const snapshot = test.extractionSnapshots?.[0]
+  const latestReview = snapshot?.aiPrediagnoses?.[0]?.doctorReviews?.[0]
   const validatedPdfUrl =
     latestReview?.validatedPdfUrl && !latestReview?.validatedPdfError
       ? latestReview.validatedPdfUrl
@@ -260,6 +267,8 @@ function mapEventTestForZipPdf(test: RawEventTestForZip): EventTestForZipPdf {
     status: test.status,
     testNameSnapshot: test.testNameSnapshot,
     fileUrl: test.fileUrl,
+    sourceFileUrl: snapshot?.sourceFileUrl ?? test.fileUrl,
+    sourceFileName: snapshot?.sourceFileName ?? null,
     validatedPdfUrl,
   }
 }
@@ -431,22 +440,28 @@ export async function buildCierreClinicoZip(
 
     studyIndex += 1
     const folder = folderName(studyIndex, row.serviceName)
-    const pdfResolved = isExamenMedicoTestName(row.serviceName)
+    const pdfFiles = isExamenMedicoTestName(row.serviceName)
       ? await (async () => {
+          const files: Array<{ filename: string; data: Uint8Array }> = []
           const data = await examenMedicoPdfForEvent(row.eventId)
-          return data ? { filename: 'examen-medico.pdf', data } : null
+          if (data) files.push({ filename: 'reporte-aptitud.pdf', data })
+          const formulario = await resolveExamenMedicoFormularioPdfForEvent(row.eventId, prisma)
+          if (formulario) files.push({ filename: 'formulario-contestado.pdf', data: formulario })
+          return files
         })()
-      : await resolveEventTestPdfForZip(row)
+      : await resolveEventTestFilesForZip(row)
 
-    if (pdfResolved) {
-      const pdfPath = `${folder}/${pdfResolved.filename}`
-      entries.push({ path: pdfPath, data: pdfResolved.data })
-      manifestStudies.push({
-        folder,
-        serviceName: row.serviceName,
-        pdfPath,
-        eventTestId: row.id,
-      })
+    if (pdfFiles.length > 0) {
+      for (const pdfResolved of pdfFiles) {
+        const pdfPath = `${folder}/${pdfResolved.filename}`
+        entries.push({ path: pdfPath, data: pdfResolved.data })
+        manifestStudies.push({
+          folder,
+          serviceName: row.serviceName,
+          pdfPath,
+          eventTestId: row.id,
+        })
+      }
     } else {
       const pdfPath = `${folder}/PDF_NO_DISPONIBLE.txt`
       const note =
