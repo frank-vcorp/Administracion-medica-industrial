@@ -55,4 +55,42 @@ describe('StudyAIPrediagnosisPanel R-05 — resolveDoctorReviewStatus', () => {
     expect(html).toContain('/api/pdf/campimetria/710fb923-4385-4bcd-9671-e5409f707dd2')
     expect(html).toContain('Descargar PDF validado')
   })
+
+  it('renderiza enlace PDF de Rayos_X en SSR', () => {
+    const review = {
+      id: 'rx-rev-001',
+      doctorStatus: 'REVIEWED_ACCEPTED',
+      doctorDiagnosis: 'Cifosis lumbar leve sin fracturas.',
+      doctorNotes: null,
+      doctorRecommendations: null,
+      createdAt: new Date('2026-11-26T06:00:00.000Z'),
+      pdfGenerated: true,
+      pdfErrorMessage: null,
+    }
+    const html = renderToStaticMarkup(
+      createElement(StudyAIPrediagnosisPanel, {
+        prediagnosisSnapshotId: 'rx-predx-001',
+        snapshot: {
+          id: 'rx-predx-001',
+          version: 1,
+          clinicalState: 'REVIEWED_ACCEPTED',
+          createdAt: new Date('2026-11-26T05:59:00.000Z'),
+          isSuperseded: false,
+          prediagnosisData: {
+            summary: 'Cifosis lumbar leve sin fracturas.',
+            confidence: 0.68,
+            clinical_state: 'REVIEWED_ACCEPTED',
+          },
+          doctorReviews: [review],
+        },
+        reviewerUserId: 'doc-1',
+        eventId: 'evt-1',
+        existingReview: review,
+        studyType: 'Rayos_X',
+      }),
+    )
+
+    expect(html).toContain('/api/pdf/rayos-x/rx-rev-001')
+    expect(html).toContain('Descargar PDF validado')
+  })
 })

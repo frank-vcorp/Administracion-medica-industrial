@@ -60,6 +60,7 @@ import {
   generateCampimetriaValidatedPdf,
 } from '@/lib/campimetria-pdf'
 import { buildEcgPdfDataAsync, generateEcgValidatedPdf } from '@/lib/ecg-pdf'
+import { buildRayosXPdfDataAsync, generateRayosXValidatedPdf } from '@/lib/rayos-x-pdf'
 import { ensureEspirometrySourceCrop } from '@/lib/espirometry-source-crop'
 import { ensureAudiometrySourceCrop } from '@/lib/audiometry-source-crop'
 // IMPL-FEATURE-20260825-02: generación del PDF validado de Audiometría.
@@ -1062,6 +1063,26 @@ export async function submitDoctorStudyReview(
             logoDataUrl: baseInput.logoDataUrl,
           })
           pdfResult = await generateEcgValidatedPdf({
+            reviewId: review.id,
+            data: pdfData,
+          })
+        } else if (studyType === 'Rayos_X') {
+          const pdfData = await buildRayosXPdfDataAsync({
+            reviewId: review.id,
+            doctorStatus: typedDoctorStatus,
+            doctorDiagnosis: baseInput.doctorDiagnosis,
+            doctorNotes: baseInput.doctorNotes,
+            doctorRecommendations: baseInput.doctorRecommendations,
+            reviewCreatedAt: review.createdAt,
+            prediagnosisData: baseInput.prediagnosisData,
+            extractionStructuredData: baseInput.extractionStructuredData,
+            studyName: baseInput.studyName,
+            eventId: eventTestData?.eventId ?? eventId,
+            patient: baseInput.patient,
+            medico: baseInput.medico,
+            logoDataUrl: baseInput.logoDataUrl,
+          })
+          pdfResult = await generateRayosXValidatedPdf({
             reviewId: review.id,
             data: pdfData,
           })

@@ -391,23 +391,34 @@ export async function fetchEventPageData(input: {
                 doctorReviews: latestPredx.doctorReviews ?? [],
               },
               existingReview: latestPredx.doctorReviews?.[0]
-                ? {
-                    id: latestPredx.doctorReviews[0].id,
-                    doctorStatus: latestPredx.doctorReviews[0].doctorStatus,
-                    doctorDiagnosis: latestPredx.doctorReviews[0].doctorDiagnosis,
-                    doctorNotes: latestPredx.doctorReviews[0].doctorNotes,
-                    doctorRecommendations: latestPredx.doctorReviews[0].doctorRecommendations ?? null,
-                    createdAt: latestPredx.doctorReviews[0].createdAt,
-                    // En Vercel serverless el disco local es read-only (`validatedPdfUrl`
-                    // puede quedar null aunque la generación y hash/fecha hayan tenido éxito).
-                    pdfGenerated: !!(
-                      (latestPredx.doctorReviews[0].validatedPdfUrl ||
-                        latestPredx.doctorReviews[0].validatedPdfGeneratedAt) &&
-                      !latestPredx.doctorReviews[0].validatedPdfError
-                    ),
-                    pdfErrorMessage:
-                      latestPredx.doctorReviews[0].validatedPdfError ?? null,
-                  }
+                ? (() => {
+                    const rev = latestPredx.doctorReviews[0]
+                    // Revisiones previas de Rayos_X que fallaron solo por falta de
+                    // plantilla ("No hay plantilla PDF validada para el estudio \"Rayos_X\".")
+                    // ahora pueden regenerar el PDF al vuelo desde validatorSnapshot*.
+                    const isStaleMissingRayosXTemplate =
+                      latestExtraction?.studyType === 'Rayos_X' &&
+                      typeof rev.validatedPdfError === 'string' &&
+                      rev.validatedPdfError.includes('No hay plantilla PDF validada') &&
+                      rev.validatedPdfError.includes('Rayos_X')
+                    const resolvedError = isStaleMissingRayosXTemplate
+                      ? null
+                      : (rev.validatedPdfError ?? null)
+                    return {
+                      id: rev.id,
+                      doctorStatus: rev.doctorStatus,
+                      doctorDiagnosis: rev.doctorDiagnosis,
+                      doctorNotes: rev.doctorNotes,
+                      doctorRecommendations: rev.doctorRecommendations ?? null,
+                      createdAt: rev.createdAt,
+                      // En Vercel serverless el disco local es read-only (`validatedPdfUrl`
+                      // puede quedar null aunque la generación y hash/fecha hayan tenido éxito).
+                      pdfGenerated:
+                        isStaleMissingRayosXTemplate ||
+                        !!((rev.validatedPdfUrl || rev.validatedPdfGeneratedAt) && !resolvedError),
+                      pdfErrorMessage: resolvedError,
+                    }
+                  })()
                 : null,
               calibration_version_mismatch: !hasFrozenPredx,
             }

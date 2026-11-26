@@ -712,7 +712,9 @@ export default function StudyAIPrediagnosisPanel({
                         ? 'campimetria'
                         : studyType === 'Electrocardiograma'
                           ? 'ecg'
-                          : null
+                          : studyType === 'Rayos_X'
+                            ? 'rayos-x'
+                            : null
                 if (!pdfKind) return null
                 const testIdPrefix = pdfKind
                 return (

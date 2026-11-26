@@ -166,6 +166,7 @@ M3_API_KEY = os.environ.get("M3_API_KEY", "").strip()
 M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
 from app.services.ai.m3_model import M3_MODEL_FLASH, resolve_m3_model
 from app.audiometry_criteria import enrich_audiometry_extracted_data
+from app.espirometry_criteria import enrich_espirometry_extracted_data
 
 M3_DEFAULT_MODEL = resolve_m3_model(os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_FLASH))
 # Con razonamiento bajo la llamada debe cerrar pronto. 90s deja margen
@@ -823,10 +824,17 @@ class PrediagnosticService(GeminiBase):
                 prompt_version=_clinical_prompt_version,
             )
 
-        serialized_extracted = json.dumps(
+        enriched_payload = (
             enrich_audiometry_extracted_data(extracted_data)
             if study_type == "Audiometria"
-            else extracted_data,
+            else (
+                enrich_espirometry_extracted_data(extracted_data)
+                if study_type == "Espirometria"
+                else extracted_data
+            )
+        )
+        serialized_extracted = json.dumps(
+            enriched_payload,
             ensure_ascii=False,
             indent=2,
         )
