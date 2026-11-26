@@ -40,8 +40,13 @@ import {
   attachRayosXPlatesSchema,
   eventTestUploadIdsSchema,
   removeRayosXAttachmentSchema,
+  saveEcgClinicalParametersSchema,
   updateRayosXAttachmentLabelSchema,
 } from '@/schemas/clinical/event-test-upload.schema'
+import {
+  isEcgParametersContext,
+  type EcgParametersPayload,
+} from '@/lib/clinical/ecg-parameters'
 import {
   buildRayosXAttachmentsContext,
   inferRayosXProjectionLabel,
@@ -2167,6 +2172,63 @@ export async function removeRayosXAttachment(input: {
   }
 }
 
+export async function saveEcgClinicalParameters(input: {
+  eventTestId: string
+  eventId: string
+  parameters: EcgParametersPayload
+}): Promise<{
+  success: boolean
+  error?: string
+  clinicalContext?: EcgParametersPayload
+}> {
+  const parsed = saveEcgClinicalParametersSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      error:
+        parsed.error.issues[0]?.message ??
+        'Parámetros de electrocardiograma inválidos',
+    }
+  }
+
+  const { eventTestId, eventId, parameters } = parsed.data
+  try {
+    const existing = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: { id: true, eventId: true },
+    })
+    if (!existing || existing.eventId !== eventId) {
+      return {
+        success: false,
+        error: 'El estudio no existe o no pertenece al evento.',
+      }
+    }
+
+    const payloadToPersist: EcgParametersPayload = {
+      ...parameters,
+      updatedAt: new Date().toISOString(),
+    }
+
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        clinicalContext: payloadToPersist as unknown as Prisma.InputJsonValue,
+      },
+    })
+    revalidatePath(`/events/${eventId}`)
+    return { success: true, clinicalContext: payloadToPersist }
+  } catch (error) {
+    console.error('[ecg] saveEcgClinicalParameters error:', error)
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Error al guardar los parámetros del electrocardiograma',
+    }
+  }
+}
+
 export async function clearEventTestFile(
   eventTestId: string,
   eventId: string,
@@ -2181,7 +2243,9 @@ export async function clearEventTestFile(
       where: { id: eventTestId },
       select: { clinicalContext: true },
     })
-    const clearRxAttachments = isRayosXAttachmentsContext(currentTest?.clinicalContext)
+    const clearStructuredContext =
+      isRayosXAttachmentsContext(currentTest?.clinicalContext) ||
+      isEcgParametersContext(currentTest?.clinicalContext)
 
     // 1. Buscar snapshots activos (no superseded) para marcarlos históricos
     const activeExtractions = await prisma.studyExtractionSnapshot.findMany({
@@ -2213,7 +2277,7 @@ export async function clearEventTestFile(
         fileUrl: null,
         status: 'PENDING',
         resultNotes: auditNote,
-        ...(clearRxAttachments ? { clinicalContext: Prisma.DbNull } : {}),
+        ...(clearStructuredContext ? { clinicalContext: Prisma.DbNull } : {}),
       },
     })
 

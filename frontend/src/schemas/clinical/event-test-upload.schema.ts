@@ -3,6 +3,7 @@ import {
   RAYOS_X_MAX_FILES,
   rayosXAttachmentItemSchema,
 } from '@/lib/clinical/rayos-x-attachments'
+import { ecgParametersPayloadSchema } from '@/lib/clinical/ecg-parameters'
 
 /** Identificadores obligatorios en uploadEventTestFile (validación servidor). */
 export const eventTestUploadIdsSchema = z.object({
@@ -23,4 +24,8 @@ export const updateRayosXAttachmentLabelSchema = eventTestUploadIdsSchema.extend
 
 export const removeRayosXAttachmentSchema = eventTestUploadIdsSchema.extend({
   fileUrl: z.string().min(1),
+})
+
+export const saveEcgClinicalParametersSchema = eventTestUploadIdsSchema.extend({
+  parameters: ecgParametersPayloadSchema,
 })

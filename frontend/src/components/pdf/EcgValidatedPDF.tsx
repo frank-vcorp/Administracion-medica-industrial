@@ -1,83 +1,158 @@
 /**
- * Informe validado de electrocardiograma — mismo formato visual que
- * Audiometría / reportes clínicos AMI (membrete teal, secciones numeradas).
+ * Informe validado oficial SME — ELECTROCARDIOGRAMA EN REPOSO.
  */
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
-import { SME_LEGAL_NAME, SME_PDF_FOOTER } from '@/lib/brand-constants'
-import { PatientIdentificationPdfBlock } from '@/components/pdf/PatientIdentificationPdfBlock'
+import { SME_PDF_FOOTER } from '@/lib/brand-constants'
 import type { PatientIdentificationPdf } from '@/lib/pdf/patient-identification'
 
+const SME_PURPLE = '#592c82'
+const SME_TEAL_BORDER = '#7cc0b9'
+
 const styles = StyleSheet.create({
-  page: { padding: 36, fontFamily: 'Helvetica', fontSize: 10, color: '#0f172a' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#0f766e',
-    paddingBottom: 8,
+  page: {
+    paddingTop: 34,
+    paddingBottom: 68,
+    paddingHorizontal: 48,
+    fontFamily: 'Helvetica',
+    fontSize: 10.5,
+    color: '#0f172a',
+    lineHeight: 1.5,
   },
-  headerLeft: { flexDirection: 'column' },
-  brand: { fontSize: 16, fontWeight: 'bold', color: '#0f766e' },
-  brandSub: { fontSize: 8, color: '#475569' },
-  headerRight: { alignItems: 'flex-end', justifyContent: 'flex-start', width: 140 },
-  logoImage: { width: 130, height: 48, objectFit: 'contain' },
-  logoFallback: {
-    width: 130,
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  logoImage: {
+    width: 124,
     height: 48,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    textAlign: 'center',
-    paddingTop: 14,
-    fontSize: 14,
+    objectFit: 'contain',
+  },
+  logoFallback: {
+    fontSize: 12,
     fontWeight: 'bold',
     color: '#0f766e',
   },
-  docTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 4, color: '#0f172a' },
-  docSubtitle: { fontSize: 9, color: '#475569', marginBottom: 14 },
-  section: { marginBottom: 12 },
-  sectionTitle: {
+  metaBlock: {
+    marginBottom: 24,
+  },
+  metaLine: {
     fontSize: 10,
     fontWeight: 'bold',
-    backgroundColor: '#f1f5f9',
-    padding: 5,
-    marginBottom: 6,
+    color: SME_PURPLE,
+    marginBottom: 2,
+  },
+  studyTitleBlock: {
+    alignItems: 'center',
+    marginBottom: 22,
+  },
+  studyTypeHeading: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: SME_PURPLE,
+    marginBottom: 3,
+  },
+  studyTitleMain: {
+    fontSize: 14.5,
+    fontWeight: 'bold',
+    color: SME_PURPLE,
+    letterSpacing: 0.3,
+  },
+  narrativeParagraph: {
+    fontSize: 10.5,
+    lineHeight: 1.55,
     color: '#0f172a',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    textAlign: 'justify',
+    marginBottom: 26,
   },
-  row: { flexDirection: 'row', marginBottom: 3 },
-  label: { width: 130, fontSize: 9, fontWeight: 'bold', color: '#475569' },
-  value: { flex: 1, fontSize: 9, color: '#0f172a' },
-  paragraph: { fontSize: 9, lineHeight: 1.5, color: '#0f172a', marginBottom: 4 },
-  bulletItem: { fontSize: 9, marginLeft: 8, marginBottom: 3 },
-  verdictBox: {
+  diagnosisHeading: {
+    fontSize: 10.5,
+    fontWeight: 'bold',
+    color: SME_PURPLE,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  diagnosisList: {
+    marginBottom: 16,
+  },
+  diagnosisItem: {
+    fontSize: 10,
+    lineHeight: 1.5,
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  recBlock: {
+    marginTop: 10,
     padding: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 4,
     backgroundColor: '#f8fafc',
-    marginBottom: 6,
+    borderWidth: 0.75,
+    borderColor: '#e2e8f0',
+    borderRadius: 3,
   },
-  signatureArea: { marginTop: 36, flexDirection: 'row', justifyContent: 'flex-end' },
-  signatureBox: { width: 240, alignItems: 'center' },
-  signatureImage: { width: 200, height: 70, objectFit: 'contain', marginBottom: 4 },
-  signatureLine: { width: 200, borderBottomWidth: 1, borderBottomColor: '#0f172a', marginBottom: 4 },
-  signatureName: { fontSize: 10, fontWeight: 'bold', color: '#0f172a' },
-  signatureLicense: { fontSize: 9, color: '#475569' },
-  signatureDate: { fontSize: 8, color: '#94a3b8', marginTop: 2 },
+  recTitle: {
+    fontSize: 8.5,
+    fontWeight: 'bold',
+    color: SME_PURPLE,
+    marginBottom: 3,
+  },
+  recText: {
+    fontSize: 9,
+    color: '#334155',
+    lineHeight: 1.4,
+  },
+  signatureArea: {
+    marginTop: 42,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  signatureBox: {
+    width: 240,
+    alignItems: 'center',
+  },
+  signatureImage: {
+    width: 155,
+    height: 54,
+    objectFit: 'contain',
+    marginBottom: 3,
+  },
+  signatureLine: {
+    width: 190,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0f172a',
+    marginBottom: 4,
+  },
+  signatureMeta: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    textAlign: 'center',
+    marginBottom: 1,
+  },
+  signatureSubDate: {
+    fontSize: 7.5,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 2,
+  },
   footer: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 20,
     left: 36,
     right: 36,
+    borderTopWidth: 1.25,
+    borderTopColor: SME_TEAL_BORDER,
+    paddingTop: 5,
     textAlign: 'center',
+  },
+  footerServices: {
     fontSize: 7,
-    color: '#94a3b8',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    paddingTop: 8,
-    lineHeight: 1.4,
+    color: '#0f766e',
+    marginBottom: 2,
+  },
+  footerAddress: {
+    fontSize: 6.5,
+    color: '#64748b',
   },
 })
 
@@ -91,6 +166,7 @@ export interface EcgValidatedPDFData {
   narrativeParagraph: string
   diagnosisItems: string[]
   doctorNotes?: string | null
+  recommendations?: string | null
   medico: {
     fullName: string
     professionalLicense: string
@@ -108,91 +184,103 @@ const formatDate = (d: string | Date) => {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'America/Mexico_City',
   })
 }
 
-export const EcgValidatedPDF = ({ data }: { data: EcgValidatedPDFData }) => (
-  <Document
-    title={`ECG-validado-${data.reviewId.slice(0, 8)}`}
-    author={`Dr(a). ${data.medico.fullName}`}
-    subject="Reporte de Electrocardiograma validado por el médico"
-  >
-    <Page size="A4" style={styles.page}>
-      <View style={styles.header} fixed>
-        <View style={styles.headerLeft}>
-          <Text style={styles.brand}>{SME_LEGAL_NAME}</Text>
-          <Text style={styles.brandSub}>
-            Evaluaciones médicas · Outsourcing · Capacitación
-          </Text>
-          <Text style={styles.brandSub}>Ergonomía · Fisioterapia · Nutrición</Text>
-        </View>
-        <View style={styles.headerRight}>
+export const EcgValidatedPDF = ({ data }: { data: EcgValidatedPDFData }) => {
+  const doctorUpper = data.medico.fullName.trim().toUpperCase()
+  const doctorLine = /^(DR\.|DRA\.|DR\(A\))/i.test(doctorUpper)
+    ? doctorUpper
+    : `DR(A). ${doctorUpper}`
+
+  return (
+    <Document
+      title={`ECG-validado-${data.reviewId.slice(0, 8)}`}
+      author={data.medico.fullName}
+      subject="Electrocardiograma en Reposo validado por el médico"
+    >
+      <Page size="LETTER" style={styles.page}>
+        <View style={styles.topBar} fixed>
           {data.logoUrl ? (
+            // eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image does not accept HTML alt prop
             <Image style={styles.logoImage} src={data.logoUrl} />
           ) : (
-            <Text style={styles.logoFallback}>SME</Text>
+            <Text style={styles.logoFallback}>SOLUCIONES MÉDICO EMPRESARIALES</Text>
           )}
         </View>
-      </View>
 
-      <Text style={styles.docTitle}>Reporte de Electrocardiograma Validado</Text>
-
-      <PatientIdentificationPdfBlock
-        patient={data.patient}
-        heading="Identificación del paciente"
-      />
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>I. Interpretación del trazado</Text>
-        <Text style={styles.paragraph}>{data.narrativeParagraph}</Text>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          II. Diagnóstico electrocardiográfico (validado por el médico)
-        </Text>
-        {data.diagnosisItems.length === 0 ? (
-          <View style={styles.verdictBox}>
-            <Text style={styles.paragraph}>—</Text>
-          </View>
-        ) : (
-          data.diagnosisItems.map((item, idx) => (
-            <Text key={`dx-${idx}`} style={styles.bulletItem}>
-              {idx + 1}. {item}
-            </Text>
-          ))
-        )}
-      </View>
-
-      {data.doctorNotes?.trim() ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>III. Notas clínicas</Text>
-          <Text style={styles.paragraph}>{data.doctorNotes.trim()}</Text>
-        </View>
-      ) : null}
-
-      <View style={styles.signatureArea}>
-        <View style={styles.signatureBox}>
-          {data.medico.signatureImageUrl ? (
-            <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
-          ) : (
-            <View style={styles.signatureLine} />
-          )}
-          <Text style={styles.signatureName}>Dr(a). {data.medico.fullName}</Text>
-          <Text style={styles.signatureLicense}>
-            Cédula profesional: {data.medico.professionalLicense}
+        <View style={styles.metaBlock}>
+          <Text style={styles.metaLine}>
+            PACIENTE: {data.patient.fullName.toUpperCase()}
           </Text>
-          <Text style={styles.signatureDate}>Fecha y hora: {formatDate(data.signedAt)}</Text>
+          <Text style={styles.metaLine}>
+            SEXO: {(data.patient.sexLabel || '—').toUpperCase()}
+          </Text>
+          <Text style={styles.metaLine}>
+            EDAD: {(data.patient.ageLabel || '—').toUpperCase()}
+          </Text>
+          <Text style={styles.metaLine}>
+            EMPRESA: {(data.patient.companyName || '—').toUpperCase()}
+          </Text>
         </View>
-      </View>
 
-      <Text style={styles.footer} fixed>
-        {SME_PDF_FOOTER}
-        {'\n'}Evaluaciones médicas · Outsourcing · Capacitación · Ergonomía · Fisioterapia ·
-        Nutrición
-        {'\n'}Este documento es un reporte clínico validado por el médico firmante. Queda
-        prohibida su alteración o reproducción no autorizada.
-      </Text>
-    </Page>
-  </Document>
-)
+        <View style={styles.studyTitleBlock}>
+          <Text style={styles.studyTypeHeading}>TIPO DE ESTUDIO</Text>
+          <Text style={styles.studyTitleMain}>
+            {(data.studyName || 'ELECTROCARDIOGRAMA EN REPOSO').toUpperCase()}
+          </Text>
+        </View>
+
+        <Text style={styles.narrativeParagraph}>{data.narrativeParagraph}</Text>
+
+        <Text style={styles.diagnosisHeading}>DIAGNÓSTICO ELECTROCARDIOGRÁFICO:</Text>
+
+        <View style={styles.diagnosisList}>
+          {data.diagnosisItems.length === 0 ? (
+            <Text style={styles.diagnosisItem}>1.- Sin impresión diagnóstica especificada.</Text>
+          ) : (
+            data.diagnosisItems.map((item, idx) => (
+              <Text key={`dx-${idx}`} style={styles.diagnosisItem}>
+                {idx + 1}.- {item}
+              </Text>
+            ))
+          )}
+        </View>
+
+        {data.recommendations?.trim() ? (
+          <View style={styles.recBlock}>
+            <Text style={styles.recTitle}>OBSERVACIONES Y SEGUIMIENTO</Text>
+            <Text style={styles.recText}>{data.recommendations.trim()}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.signatureArea} wrap={false}>
+          <View style={styles.signatureBox}>
+            {data.medico.signatureImageUrl ? (
+              // eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image does not accept HTML alt prop
+              <Image style={styles.signatureImage} src={data.medico.signatureImageUrl} />
+            ) : (
+              <View style={styles.signatureLine} />
+            )}
+            <Text style={styles.signatureMeta}>{doctorLine}</Text>
+            <Text style={styles.signatureMeta}>
+              CED. PROF. {data.medico.professionalLicense}
+            </Text>
+            <Text style={styles.signatureMeta}>SOLUCIONES MEDICO EMPRESARIALES</Text>
+            <Text style={styles.signatureSubDate}>
+              Validado: {formatDate(data.signedAt)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.footer} fixed>
+          <Text style={styles.footerServices}>
+            Evaluaciones Médicas · Servicio de Personal Médico · Capacitación en salud · Ergonomía · Fisioterapia · Nutrición · Ambulancia
+          </Text>
+          <Text style={styles.footerAddress}>{SME_PDF_FOOTER}</Text>
+        </View>
+      </Page>
+    </Document>
+  )
+}

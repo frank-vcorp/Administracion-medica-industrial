@@ -167,6 +167,7 @@ M3_BASE_URL = os.environ.get("M3_BASE_URL", "https://api.minimax.io/v1").strip()
 from app.services.ai.m3_model import M3_MODEL_FLASH, resolve_m3_model
 from app.audiometry_criteria import enrich_audiometry_extracted_data
 from app.espirometry_criteria import enrich_espirometry_extracted_data
+from app.ecg_criteria import enrich_ecg_extracted_data
 
 M3_DEFAULT_MODEL = resolve_m3_model(os.environ.get("M3_DEFAULT_MODEL", M3_MODEL_FLASH))
 # Con razonamiento bajo la llamada debe cerrar pronto. 90s deja margen
@@ -196,6 +197,9 @@ _KNOWN_CITATION_TITLES: Dict[str, str] = {
     "NOM-022-STPS-2015": "NOM-022-STPS-2015 Electricidad estática en los centros de trabajo",
     "NIOSH-SPIRO-2020": "NIOSH Spirometry Training Guide",
     "GOLD-2024": "Global Strategy for the Diagnosis, Management, and Prevention of COPD (GOLD 2024)",
+    "AHA-ECG-2022": "AHA/ACC/HRS Guideline for ECG Standardization and Interpretation",
+    "AHA-ACC-HRS-ECG-2009": "AHA/ACCF/HRS Recommendations for the Standardization and Interpretation of the Electrocardiogram (2009)",
+    "SME-ECG-REPOSO-2026": "Soluciones Médico Empresariales — Criterios de Reporte de Electrocardiograma en Reposo",
 }
 
 
@@ -949,7 +953,11 @@ class PrediagnosticService(GeminiBase):
             else (
                 enrich_espirometry_extracted_data(extracted_data)
                 if study_type == "Espirometria"
-                else extracted_data
+                else (
+                    enrich_ecg_extracted_data(extracted_data)
+                    if study_type == "Electrocardiograma"
+                    else extracted_data
+                )
             )
         )
         serialized_extracted = json.dumps(

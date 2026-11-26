@@ -44,6 +44,7 @@ export async function GET(
       doctorStatus: true,
       doctorDiagnosis: true,
       doctorNotes: true,
+      doctorRecommendations: true,
       createdAt: true,
       reviewedByUserId: true,
       validatedPdfUrl: true,
@@ -61,6 +62,7 @@ export async function GET(
               eventTest: {
                 select: {
                   testNameSnapshot: true,
+                  clinicalContext: true,
                   eventId: true,
                   event: {
                     select: {
@@ -147,14 +149,17 @@ export async function GET(
           : 'REVIEWED_EDITED',
       doctorDiagnosis: review.doctorDiagnosis,
       doctorNotes: review.doctorNotes,
+      doctorRecommendations: review.doctorRecommendations,
       reviewCreatedAt: review.validatedPdfGeneratedAt ?? review.createdAt,
       prediagnosisData: review.prediagnosisSnapshot?.prediagnosisData,
       extractionStructuredData:
         review.prediagnosisSnapshot?.extractionSnapshot?.structuredData,
+      clinicalContext: eventTest?.clinicalContext ?? null,
       eventId: eventTest?.eventId ?? '',
       patient: {
         firstName: worker?.firstName ?? '',
         lastName: worker?.lastName ?? '',
+        universalId: worker?.universalId ?? null,
         companyName: worker?.company?.name ?? null,
       },
       medico: {

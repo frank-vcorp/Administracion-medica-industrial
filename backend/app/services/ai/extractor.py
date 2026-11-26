@@ -16,6 +16,7 @@ ARCH-20260519-15: ROLLBACK — Featherless/Qwen-VL desactivado del runtime extra
 
 import time
 import os
+import re
 import unicodedata
 from typing import Dict, Any, Union, Optional, Tuple, List
 from .base import GeminiBase, M3VisionBase, M3CredentialsUnavailableError
@@ -1228,12 +1229,36 @@ class ExtractorService(GeminiBase):
             elif doc_type == "Electrocardiograma":
                 for legacy_field in ("diagnostico_ia", "interpretacion", "recomendaciones"):
                     result.pop(legacy_field, None)
-                # Normalizar frecuencia_bpm a int si viene como string
-                if isinstance(result.get("frecuencia_bpm"), str):
-                    try:
-                        result["frecuencia_bpm"] = int(result["frecuencia_bpm"])
-                    except (ValueError, TypeError):
-                        result["frecuencia_bpm"] = None
+                if not isinstance(result.get("paciente"), str):
+                    result["paciente"] = ""
+                if not isinstance(result.get("fecha_estudio"), str):
+                    result["fecha_estudio"] = ""
+
+                for int_field in (
+                    "frecuencia_bpm",
+                    "duracion_p_ms",
+                    "intervalo_pr_ms",
+                    "duracion_qrs_ms",
+                    "qt_ms",
+                    "qtc_ms",
+                ):
+                    result[int_field] = _coerce_ecg_int(result.get(int_field), allow_negative=False)
+                result["eje_grados"] = _coerce_ecg_int(result.get("eje_grados"), allow_negative=True)
+                if result.get("eje_grados") is None and isinstance(result.get("eje_electrico"), str):
+                    result["eje_grados"] = _coerce_ecg_int(result["eje_electrico"], allow_negative=True)
+
+                raw_hallazgos = result.get("hallazgos")
+                if isinstance(raw_hallazgos, str):
+                    result["hallazgos"] = [raw_hallazgos.strip()] if raw_hallazgos.strip() else []
+                elif raw_hallazgos is None:
+                    result["hallazgos"] = []
+
+                raw_deriv = result.get("derivaciones_visibles")
+                if isinstance(raw_deriv, str):
+                    result["derivaciones_visibles"] = [
+                        d.strip() for d in raw_deriv.split(",") if d.strip()
+                    ]
+
                 return ElectrocardiogramaData(**result)
 
             elif doc_type == "RiesgoCardiovascular":
@@ -1253,6 +1278,25 @@ class ExtractorService(GeminiBase):
         except Exception as e:
             print(f"⚠️ Error al parsear {doc_type}: {e}")
             return result
+
+
+def _coerce_ecg_int(value: Any, *, allow_negative: bool = False) -> Optional[int]:
+    """Convierte entero/float o string con unidades (ej. '72 lpm', '+45°', '-15 ms') a int."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        num = int(round(float(value)))
+        return num if (allow_negative or num > 0) else None
+    if isinstance(value, str):
+        match = re.search(r"[-+]?\d+(?:[.,]\d+)?", value.strip())
+        if not match:
+            return None
+        try:
+            num = int(round(float(match.group(0).replace(",", "."))))
+            return num if (allow_negative or num > 0) else None
+        except (ValueError, TypeError):
+            return None
+    return None
 
 
 # FIX-20260821-01 §4.1: Helper determinista para backfill desde `parametros[]`.

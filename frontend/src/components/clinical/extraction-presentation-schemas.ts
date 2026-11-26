@@ -243,11 +243,54 @@ const audiometriaSchema: StudyPresentationSchema = {
   ],
 }
 
+// --- Configuración: Electrocardiograma ---
+
+const electrocardiogramaSchema: StudyPresentationSchema = {
+  studyType: "Electrocardiograma",
+  sections: [
+    {
+      kind: "keyValue",
+      title: "Ritmo y frecuencia",
+      fields: ["ritmicidad", "ritmo", "frecuencia_bpm", "origen_mediciones"],
+    },
+    {
+      kind: "keyValue",
+      title: "Intervalos y eje eléctrico",
+      fields: [
+        "duracion_p_ms",
+        "intervalo_pr_ms",
+        "duracion_qrs_ms",
+        "qt_ms",
+        "qtc_ms",
+        "eje_electrico",
+        "eje_grados",
+      ],
+    },
+    {
+      kind: "keyValue",
+      title: "Morfología del trazado",
+      fields: [
+        "morfologia_p",
+        "segmento_st",
+        "onda_t",
+        "onda_q_patologica",
+        "hallazgos",
+      ],
+    },
+    {
+      kind: "keyValue",
+      title: "Calidad técnica",
+      fields: ["calibracion_papel", "derivaciones_visibles", "notas_calidad"],
+    },
+  ],
+}
+
 // --- Registro central ---
 
 export const STUDY_PRESENTATION_SCHEMAS: Record<string, StudyPresentationSchema> = {
   Espirometria: espirometriaSchema,
   Audiometria: audiometriaSchema,
+  Electrocardiograma: electrocardiogramaSchema,
 }
 
 export function getStudySchema(studyType: string | null | undefined): StudyPresentationSchema | null {

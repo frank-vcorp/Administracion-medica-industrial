@@ -67,6 +67,11 @@ import CampimetriaStudy from "@/components/clinical/studies/CampimetriaStudy"
 import StudyAIPrediagnosisPanel from "@/components/clinical/StudyAIPrediagnosisPanel"
 import StudyDocumentViewer from "@/components/clinical/StudyDocumentViewer"
 import RayosXMultiPlateViewer from "@/components/clinical/RayosXMultiPlateViewer"
+import EcgParametersEditorCard from "@/components/clinical/EcgParametersEditorCard"
+import {
+  isEcgParametersContext,
+  type EcgParametersPayload,
+} from "@/lib/clinical/ecg-parameters"
 import {
   inferRayosXProjectionLabel,
   isRayosXAttachmentsContext,
@@ -207,6 +212,7 @@ type StudyTest = {
     | CampimetriaQuestionnairePayload
     | DictamenLabClinicalContext
     | RayosXAttachmentsContext
+    | EcgParametersPayload
     | null
 }
 
@@ -1063,7 +1069,8 @@ export default function PapeletaWorkspace({
           status: 'PENDING' as StudyStatus,
           extractionSnapshot: null,
           aiSnapshot: null,
-          ...(isRayosXAttachmentsContext(t.clinicalContext)
+          ...(isRayosXAttachmentsContext(t.clinicalContext) ||
+          isEcgParametersContext(t.clinicalContext)
             ? { clinicalContext: null }
             : {}),
         } : t))
@@ -1292,6 +1299,13 @@ export default function PapeletaWorkspace({
                           ),
                         }
                       : t,
+                  ),
+                )
+              }}
+              onEcgParametersSaved={(eventTestId, payload) => {
+                setLocalTests((prev) =>
+                  prev.map((t) =>
+                    t.id === eventTestId ? { ...t, clinicalContext: payload } : t,
                   ),
                 )
               }}
@@ -1720,6 +1734,7 @@ function StudyPanel({
   // gate del CTA PDF/ZIP dentro de ExamenMedicoEstudio.
   hasMedicalVerdict,
   onDictamenLabInclusionSaved,
+  onEcgParametersSaved,
   onPapeletaEventTestsInserted,
   onPapeletaEventTestRemoved,
   registerStudyLeaveGuard,
@@ -1781,6 +1796,10 @@ function StudyPanel({
   onDictamenLabInclusionSaved?: (
     eventTestId: string,
     includeInDictamenGeneral: boolean,
+  ) => void
+  onEcgParametersSaved?: (
+    eventTestId: string,
+    payload: EcgParametersPayload,
   ) => void
   onPapeletaEventTestsInserted?: (rows: PapeletaEventTestSeed[]) => void
   onPapeletaEventTestRemoved?: (eventTestId: string) => void
@@ -2489,6 +2508,19 @@ function StudyPanel({
               />
               </div>
             )}
+
+            {canonicalAIStudyType === 'Electrocardiograma' &&
+              (test.extractionSnapshot || test.fileUrl) && (
+                <EcgParametersEditorCard
+                  key={`${test.id}:ecg:${test.extractionSnapshot?.version ?? 0}`}
+                  eventId={eventId}
+                  eventTestId={test.id}
+                  extractedData={test.extractionSnapshot?.extractedData ?? null}
+                  savedContext={test.clinicalContext ?? null}
+                  readonly={readonly}
+                  onSaved={(payload) => onEcgParametersSaved?.(test.id, payload)}
+                />
+              )}
 
             {/* Acciones de estado */}
             {!readonly && (

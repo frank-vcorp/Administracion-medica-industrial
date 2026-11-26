@@ -1,11 +1,10 @@
 /**
- * PDF validado de electrocardiograma (post revisión médica).
+ * PDF validado de electrocardiograma en reposo (post revisión médica).
  */
 import { mkdir, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { renderToBuffer } from '@react-pdf/renderer'
-import prisma from '@/lib/prisma'
 import { resolveAmiLogoDataUrl } from '@/lib/ami-brand'
 import { EcgValidatedPDF } from '@/components/pdf/EcgValidatedPDF'
 import type { EcgValidatedPDFData } from '@/components/pdf/EcgValidatedPDF'
@@ -15,6 +14,8 @@ import {
   parseEcgFromExtraction,
 } from '@/lib/clinical/ecg-report'
 import { resolvePatientIdentificationForPdf } from '@/lib/pdf/patient-identification'
+import { resolveValidatedRecommendations } from '@/lib/espirometry-pdf'
+import { uploadPdfBuffer } from '@/lib/upload-pdf-buffer'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -23,9 +24,11 @@ export interface BuildEcgPdfInput {
   doctorStatus: 'REVIEWED_ACCEPTED' | 'REVIEWED_EDITED'
   doctorDiagnosis: string | null | undefined
   doctorNotes: string | null | undefined
+  doctorRecommendations?: string | null | undefined
   reviewCreatedAt: Date
   prediagnosisData: unknown
   extractionStructuredData: unknown
+  clinicalContext?: unknown
   eventId: string
   patient: {
     firstName: string
@@ -43,8 +46,17 @@ export interface BuildEcgPdfInput {
 
 export async function buildEcgPdfDataAsync(input: BuildEcgPdfInput): Promise<EcgValidatedPDFData> {
   const ecg = parseEcgFromExtraction(input.extractionStructuredData)
-  const narrativeParagraph = buildEcgNarrativeParagraph(ecg, input.doctorNotes)
+  const narrativeParagraph = buildEcgNarrativeParagraph(
+    ecg,
+    input.doctorNotes,
+    input.clinicalContext,
+  )
   const diagnosisItems = parseEcgDiagnosisItems(input.doctorDiagnosis)
+  const recLines = resolveValidatedRecommendations(
+    (input.prediagnosisData as Record<string, unknown> | null) ?? {},
+    input.doctorStatus,
+    input.doctorRecommendations,
+  )
 
   const patient = await resolvePatientIdentificationForPdf({
     eventId: input.eventId,
@@ -52,18 +64,20 @@ export async function buildEcgPdfDataAsync(input: BuildEcgPdfInput): Promise<Ecg
     lastName: input.patient.lastName,
     universalId: input.patient.universalId,
     companyName: input.patient.companyName,
+    attentionDate: input.reviewCreatedAt,
   })
 
   return {
     reviewId: input.reviewId,
     signedAt: input.reviewCreatedAt,
     doctorStatus: input.doctorStatus,
-    studyName: 'Electrocardiograma en reposo',
+    studyName: 'ELECTROCARDIOGRAMA EN REPOSO',
     studyType: 'Electrocardiograma',
     patient,
     narrativeParagraph,
     diagnosisItems,
     doctorNotes: input.doctorNotes ?? null,
+    recommendations: recLines && recLines.length > 0 ? recLines.join(' ') : null,
     medico: input.medico,
     logoUrl: input.logoDataUrl ?? '',
   }
@@ -80,16 +94,36 @@ export async function generateEcgValidatedPdf(input: {
   const hash = `sha256:${createHash('sha256').update(buffer).digest('hex')}`
 
   let url: string | null = null
+  const key = `ecg-pdfs/${input.reviewId}.pdf`
   try {
     const dir = path.join(REPO_UPLOAD_DIR, 'ecg-pdfs')
     await mkdir(dir, { recursive: true })
     await writeFile(path.join(dir, `${input.reviewId}.pdf`), buffer)
-    url = `ecg-pdfs/${input.reviewId}.pdf`
+    url = key
   } catch (err) {
     console.warn(
       '[ecg-pdf] No se pudo persistir PDF en disco:',
       err instanceof Error ? err.message : err,
     )
+  }
+
+  if (!url) {
+    try {
+      const uploaded = await uploadPdfBuffer(buffer, key)
+      if (uploaded.success) {
+        url = uploaded.key
+      } else {
+        console.warn(
+          '[ecg-pdf] Fallback uploadPdfBuffer no persistió PDF:',
+          uploaded.error || 'error desconocido',
+        )
+      }
+    } catch (err) {
+      console.warn(
+        '[ecg-pdf] Error en fallback uploadPdfBuffer:',
+        err instanceof Error ? err.message : err,
+      )
+    }
   }
 
   return { buffer, hash, url }

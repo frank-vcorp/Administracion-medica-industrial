@@ -312,15 +312,46 @@ class ElectrocardiogramaData(BaseModel):
     Datos EXTRAÍDOS de trazado electrocardiográfico (ECG).
     NOTA: no incluye diagnóstico — esa capa va en AIPrediagnosisSnapshot.
     """
-    paciente: str
-    fecha_estudio: str
+    paciente: str = ""
+    fecha_estudio: str = ""
+    ritmicidad: Optional[str] = Field(
+        default=None, description="Ej: rítmico, arrítmico, irregularmente irregular"
+    )
     ritmo: Optional[str] = Field(default=None, description="Ej: Sinusal, Fibrilación Auricular")
     frecuencia_bpm: Optional[int] = Field(default=None, description="Frecuencia cardíaca en lpm")
+    duracion_p_ms: Optional[int] = Field(default=None, description="Duración de onda P en ms")
+    morfologia_p: Optional[str] = Field(
+        default=None,
+        description="Morfología de onda P (ej. positiva en todas las derivaciones menos en aVR)",
+    )
     intervalo_pr_ms: Optional[int] = Field(default=None, description="Intervalo PR en milisegundos")
     duracion_qrs_ms: Optional[int] = Field(default=None, description="Duración del QRS en ms")
+    qt_ms: Optional[int] = Field(default=None, description="Intervalo QT medido sin corregir en ms")
     qtc_ms: Optional[int] = Field(default=None, description="QTc corregido en ms")
     eje_electrico: Optional[str] = Field(
         default=None, description="Eje eléctrico: Normal, Desviación izquierda/derecha"
+    )
+    eje_grados: Optional[int] = Field(
+        default=None, description="Eje eléctrico aproximado en grados (ej. 45, -15)"
+    )
+    segmento_st: Optional[str] = Field(
+        default=None, description="Estado del segmento ST (ej. isoeléctrico, sin alteraciones significativas)"
+    )
+    onda_t: Optional[str] = Field(
+        default=None, description="Morfología de onda T (ej. positiva en todas las derivaciones excepto en aVR)"
+    )
+    onda_q_patologica: Optional[str] = Field(
+        default=None, description="Presencia o ausencia de onda Q patológica"
+    )
+    calibracion_papel: Optional[str] = Field(
+        default=None, description="Velocidad y voltaje impresos (ej. 25 mm/s, 10 mm/mV)"
+    )
+    derivaciones_visibles: Optional[List[str]] = Field(
+        default=None,
+        description="Derivaciones identificables en el trazado (ej. I, II, III, aVR, aVL, aVF, V1-V6)",
+    )
+    origen_mediciones: Optional[str] = Field(
+        default=None, description="'tabla_equipo' | 'cuadricula_visual' | 'mixto'"
     )
     hallazgos: List[str] = Field(
         default_factory=list,
