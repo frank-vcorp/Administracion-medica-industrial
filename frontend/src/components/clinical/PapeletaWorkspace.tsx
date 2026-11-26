@@ -30,6 +30,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react"
+import { ClipboardList, Eye, Scale } from "lucide-react"
 import { StudyCaptureMissingBanner } from "@/components/clinical/studies/StudyCaptureUi"
 import type { StudyLeaveGuardFn } from "@/components/clinical/studies/useStudyLeaveGuard"
 import { formatStudyMissingFieldsSpanish } from "@/lib/clinical/study-required-fields"
@@ -612,7 +613,12 @@ export default function PapeletaWorkspace({
 
   const handleStatusChange = (testId: string, status: StudyStatus) => {
     startTransition(async () => {
-      const res = await updateEventTestStatus(testId, status as Parameters<typeof updateEventTestStatus>[1], eventId)
+      const res = await updateEventTestStatus(
+        testId,
+        status as Parameters<typeof updateEventTestStatus>[1],
+        eventId,
+        { revalidate: false },
+      )
       if (res.success) {
         // ARCH-20260507-06: Si SAMPLE_TAKEN, propagar localmente a hermanos del mismo grupo
         if (status === 'SAMPLE_TAKEN') {
@@ -1953,8 +1959,8 @@ function StudyPanel({
       {isSomato && (
         <div className="space-y-3">
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-            <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-base shrink-0">
-              ⚖️
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 border border-teal-200 text-teal-700">
+              <Scale className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
             </span>
             <div>
               <p className="text-sm font-bold text-slate-800">Somatometría — Formulario de Captura</p>
@@ -1967,7 +1973,10 @@ function StudyPanel({
             initialData={(examData?.somatometryData as Record<string, unknown>) ?? null}
             readonly={readonly}
             onStatusChange={(status) =>
-              onExamenMedicoStatusChange(status, { advanceToNextStudy: status === 'COMPLETED' })
+              onExamenMedicoStatusChange(status, {
+                advanceToNextStudy: status === 'COMPLETED',
+                skipRefresh: true,
+              })
             }
             registerLeaveGuard={registerStudyLeaveGuard}
           />
@@ -1978,8 +1987,8 @@ function StudyPanel({
       {isAgudeza && (
         <div className="space-y-3">
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-            <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-base shrink-0">
-              👁️
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 border border-teal-200 text-teal-700">
+              <Eye className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
             </span>
             <div>
               <p className="text-sm font-bold text-slate-800">Agudeza Visual — Formulario de Captura</p>
@@ -1992,7 +2001,10 @@ function StudyPanel({
             initialData={(examData?.eyeAcuityData as Record<string, unknown>) ?? null}
             readonly={readonly}
             onStatusChange={(status) =>
-              onExamenMedicoStatusChange(status, { advanceToNextStudy: status === 'COMPLETED' })
+              onExamenMedicoStatusChange(status, {
+                advanceToNextStudy: status === 'COMPLETED',
+                skipRefresh: true,
+              })
             }
             registerLeaveGuard={registerStudyLeaveGuard}
           />
@@ -2089,8 +2101,8 @@ function StudyPanel({
       {isMedico && (
         <div className="space-y-3">
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-            <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-base shrink-0">
-              📋
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 border border-teal-200 text-teal-700">
+              <ClipboardList className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
             </span>
             <div>
               <p className="text-sm font-bold text-slate-800">

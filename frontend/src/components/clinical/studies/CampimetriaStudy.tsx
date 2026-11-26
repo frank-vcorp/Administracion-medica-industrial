@@ -357,6 +357,7 @@ export default function CampimetriaStudy({
       eventTestId,
       status as Parameters<typeof updateEventTestStatus>[1],
       eventId,
+      { revalidate: false },
     )
     if (!statusRes.success) {
       setCompleteBanner(statusRes.error ?? 'No se pudo cerrar el estudio.')

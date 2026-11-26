@@ -307,7 +307,8 @@ async function ensureLabOrderForSampledLabTest(
 export async function updateEventTestStatus(
   eventTestId: string,
   status: EventTestStatus,
-  eventId: string
+  eventId: string,
+  options?: { revalidate?: boolean },
 ) {
   if (!eventTestId || !status || !eventId) {
     return { success: false, error: 'Parámetros incompletos' }
@@ -432,7 +433,9 @@ export async function updateEventTestStatus(
       })
     }
 
-    revalidatePath(`/events/${eventId}`)
+    if (options?.revalidate !== false) {
+      revalidatePath(`/events/${eventId}`)
+    }
     return { success: true }
   } catch (error) {
     console.error("Error updating event test status:", error)

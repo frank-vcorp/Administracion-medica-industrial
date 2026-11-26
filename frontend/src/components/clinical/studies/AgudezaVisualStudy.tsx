@@ -169,11 +169,11 @@ export default function AgudezaVisualStudy({
       }
     }
 
-    const res = await updateAgudezaVisual(eventId, formData)
+    const res = await updateAgudezaVisual(eventId, formData, { revalidate: false })
     if (res.success) {
       markSaved()
       if (markComplete) {
-        const statusRes = await updateEventTestStatus(eventTestId, 'COMPLETED', eventId)
+        const statusRes = await updateEventTestStatus(eventTestId, 'COMPLETED', eventId, { revalidate: false })
         if (!statusRes.success) {
           setCompleteBanner(statusRes.error ?? 'No se pudo cerrar el estudio.')
           setMessage("❌ No se pudo completar.")
@@ -183,7 +183,7 @@ export default function AgudezaVisualStudy({
         onStatusChange?.('COMPLETED')
         setMessage("🏁 Agudeza Visual completada.")
       } else {
-        await updateEventTestStatus(eventTestId, 'RESULT_REGISTERED', eventId)
+        await updateEventTestStatus(eventTestId, 'RESULT_REGISTERED', eventId, { revalidate: false })
         onStatusChange?.('RESULT_REGISTERED')
         setMessage("✅ Datos guardados.")
       }

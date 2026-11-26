@@ -24,6 +24,16 @@ import { saveExamenMedicoPapeleta, updateSomatometria, updateAgudezaVisual } fro
 import { getCatalogEnumDisplayLabel } from '@/lib/clinical/enum-display-labels'
 import { getCurrentDoctorProfile } from "@/actions/doctor-profile.actions"
 import { updateEventTestStatus } from "@/actions/event-test.actions"
+import {
+  Activity,
+  Building2,
+  Eye,
+  FileCheck,
+  HeartPulse,
+  Scale,
+  Stethoscope,
+  UtensilsCrossed,
+} from 'lucide-react'
 // IMPL-20260809-02 (ARCH-20260809-01 v2): "Antecedentes" ya no es outer-tab, ahora es
 // PRIMERA sub-pestaña dentro de "Examen Médico" (componente controlado).
 import { AntecedentesCaptura } from "@/components/clinical/AntecedentesCaptura"
@@ -1280,7 +1290,7 @@ export default function ExamenMedicoEstudio({
       setIsSavingSoma(false)
       return
     }
-    const res = await updateSomatometria(eventId, somaAutosavePayload)
+    const res = await updateSomatometria(eventId, somaAutosavePayload, { revalidate: false })
     if (res.success) {
       const derivedNutri = deriveEstadoNutricionalFromSoma(somaForm.peso_kg, somaForm.talla_m)
       if (derivedNutri) {
@@ -1298,6 +1308,7 @@ export default function ExamenMedicoEstudio({
           somatometryEventTestId,
           newStatus as Parameters<typeof updateEventTestStatus>[1],
           eventId,
+          { revalidate: false },
         )
       }
       if (markComplete) {
@@ -1334,7 +1345,7 @@ export default function ExamenMedicoEstudio({
       setIsSavingVitals(false)
       return
     }
-    const res = await updateSomatometria(eventId, somaAutosavePayload)
+    const res = await updateSomatometria(eventId, somaAutosavePayload, { revalidate: false })
     if (res.success) {
       const derivedPresion = derivePresionArterialResumenFromVitals(
         vitalsForm.ta_sistolica,
@@ -1355,6 +1366,7 @@ export default function ExamenMedicoEstudio({
           somatometryEventTestId,
           newStatus as Parameters<typeof updateEventTestStatus>[1],
           eventId,
+          { revalidate: false },
         )
       }
       if (markComplete) {
@@ -1391,7 +1403,7 @@ export default function ExamenMedicoEstudio({
       setIsSavingAgudeza(false)
       return
     }
-    const res = await updateAgudezaVisual(eventId, agudezaForm)
+    const res = await updateAgudezaVisual(eventId, agudezaForm, { revalidate: false })
     if (res.success) {
       if (derivedAgudezaResumen) {
         setForm(prev =>
@@ -1408,6 +1420,7 @@ export default function ExamenMedicoEstudio({
           agudezaEventTestId,
           newStatus as Parameters<typeof updateEventTestStatus>[1],
           eventId,
+          { revalidate: false },
         )
       }
       if (markComplete) {
@@ -1507,6 +1520,7 @@ export default function ExamenMedicoEstudio({
       eventTestId,
       prepared,
       markComplete,
+      { revalidate: markComplete && !advanceTo },
     )
     if (res.success) {
       setSaveFieldErrors({})
@@ -1530,7 +1544,7 @@ export default function ExamenMedicoEstudio({
         }
         onStatusChange?.(
           res.studyStatus ?? 'RESULT_REGISTERED',
-          markComplete ? undefined : { skipRefresh: true },
+          { skipRefresh: true },
         )
       }
     } else {
@@ -1714,7 +1728,7 @@ export default function ExamenMedicoEstudio({
       {outerTab === 'somatometria' && (
         <div className="space-y-4">
           <ExamSectionHeader
-            icon="⚖️"
+            icon={Scale}
             title="Somatometría"
             subtitle="Registro de peso, talla y cálculo automático de IMC."
             stepNumber={stepNumberFor('somatometria')}
@@ -1820,7 +1834,7 @@ export default function ExamenMedicoEstudio({
       {outerTab === 'signos_vitales' && (
         <div className="space-y-4">
           <ExamSectionHeader
-            icon="💓"
+            icon={HeartPulse}
             title="Signos Vitales"
             subtitle="Tensión arterial, frecuencia cardiaca, temperatura, respiración y saturación."
             stepNumber={stepNumberFor('signos_vitales')}
@@ -1950,7 +1964,7 @@ export default function ExamenMedicoEstudio({
       {outerTab === 'agudeza_visual' && (
         <div className="space-y-4">
           <ExamSectionHeader
-            icon="👁️"
+            icon={Eye}
             title="Agudeza Visual"
             subtitle="Campo visual (Snellen), pruebas complementarias y clasificación automática."
             stepNumber={stepNumberFor('agudeza_visual')}
@@ -2061,7 +2075,7 @@ export default function ExamenMedicoEstudio({
           {activeInnerTab === 'antecedentes' && (
             <div className="space-y-4">
               <ExamSectionHeader
-                icon="🩺"
+                icon={Stethoscope}
                 title="Antecedentes — Captura por cita"
                 subtitle="Cuestionario del paciente, antecedentes gineco/reproductivos e inmunizaciones."
                 stepNumber={stepNumberFor('antecedentes')}
@@ -2111,7 +2125,7 @@ export default function ExamenMedicoEstudio({
           {activeInnerTab === 'exploracion' && (
             <div className="space-y-4">
               <ExamSectionHeader
-                icon="🩻"
+                icon={Activity}
                 title="Exploración Física"
                 subtitle="Hallazgos por aparato, sistema y maniobras osteomusculares."
                 stepNumber={stepNumberFor('exploracion')}
@@ -2393,7 +2407,7 @@ export default function ExamenMedicoEstudio({
           {activeInnerTab === 'extension' && examVariant === 'FLOWSERVE' && (
             <div className="space-y-4">
               <ExamSectionHeader
-                icon="🏭"
+                icon={Building2}
                 title={`Extensión ${examenMedicoVariantLabel(examVariant)}`}
                 subtitle="Campos corporativos específicos requeridos por el cliente."
                 stepNumber={stepNumberFor('extension')}
@@ -2424,7 +2438,7 @@ export default function ExamenMedicoEstudio({
           {activeInnerTab === 'extension' && examVariant === 'SODEXO' && (
             <div className="space-y-4">
               <ExamSectionHeader
-                icon="🍽️"
+                icon={UtensilsCrossed}
                 title={`Extensión ${examenMedicoVariantLabel(examVariant)}`}
                 subtitle="Formato corporativo Sodexo REG-SO-01 integrado con la captura clínica."
                 stepNumber={stepNumberFor('extension')}
@@ -2477,7 +2491,7 @@ export default function ExamenMedicoEstudio({
           {activeInnerTab === 'impresion' && (
             <div className="space-y-4">
               <ExamSectionHeader
-                icon="✅"
+                icon={FileCheck}
                 title="Impresión clínica y recomendaciones"
                 subtitle="Resumen por sistema, impresión diagnóstica, recomendaciones y cierre de captura."
                 stepNumber={stepNumberFor('impresion')}

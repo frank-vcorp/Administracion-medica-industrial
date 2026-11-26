@@ -11,6 +11,7 @@
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { User } from 'lucide-react'
 import EventFlowController from '@/components/EventFlowController'
 import PapeletaWorkspace from '@/components/clinical/PapeletaWorkspace'
 import PapeletaCronograma from '@/components/clinical/PapeletaCronograma'
@@ -75,7 +76,7 @@ function EventView({ data }: EventViewProps) {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-teal-500 text-white rounded-lg flex items-center justify-center text-sm shadow shadow-teal-100 shrink-0">
-              👤
+              <User className="w-4 h-4" strokeWidth={2.25} />
             </div>
             <div>
               <h1 className="text-base font-bold text-slate-800 leading-tight">{event.worker.lastName}, {event.worker.firstName}</h1>

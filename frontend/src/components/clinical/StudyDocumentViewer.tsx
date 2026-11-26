@@ -10,6 +10,8 @@
  * @see context/checkpoints/CHK_ARCH-20260327-04-PDF-SIN-PANEL-LATERAL.md
  */
 
+import { FileText, Image as ImageIcon, Paperclip } from 'lucide-react'
+
 interface StudyDocumentViewerProps {
   /** URL completa ya compuesta (apiUrl + test.fileUrl) */
   fileUrl: string
@@ -37,7 +39,15 @@ export default function StudyDocumentViewer({ fileUrl, fileName }: StudyDocument
       {/* Barra superior: nombre + enlace externo */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-base shrink-0">{isPdfFile ? '📄' : isImageFile ? '🖼️' : '📎'}</span>
+          <span className="shrink-0 text-slate-500">
+            {isPdfFile ? (
+              <FileText className="w-4 h-4 text-teal-600" />
+            ) : isImageFile ? (
+              <ImageIcon className="w-4 h-4 text-teal-600" />
+            ) : (
+              <Paperclip className="w-4 h-4 text-slate-500" />
+            )}
+          </span>
           <p className="text-xs font-mono text-slate-700 truncate" title={fileName}>{fileName}</p>
         </div>
         <a

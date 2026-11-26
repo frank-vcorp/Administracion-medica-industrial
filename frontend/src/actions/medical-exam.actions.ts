@@ -39,6 +39,8 @@ import { denyIfClosedCaptureUnauthorized } from '@/lib/clinical/papeleta-readonl
 export type MedicalExamPersistOptions = {
   /** Guardado en segundo plano: solo persiste datos, sin IA ni cronograma. */
   autosave?: boolean
+  /** Si es false, evita revalidatePath('/events/${eventId}') para no provocar recargas completas en cliente. */
+  revalidate?: boolean
 }
 
 function zodIssuesForClient(err: z.ZodError) {
@@ -76,6 +78,7 @@ export async function updateSomatometria(
   try {
     const data = SomatometriaVitalesSchema.parse(rawData)
     const autosave = options?.autosave === true
+    const shouldRevalidate = options?.revalidate ?? !autosave
 
     await prisma.medicalExam.upsert({
       where: { eventId },
@@ -124,7 +127,7 @@ export async function updateSomatometria(
       })
     }
 
-    if (!autosave) {
+    if (shouldRevalidate) {
       revalidatePath(`/events/${eventId}`)
     }
     return { success: true, aiWarning }
@@ -153,6 +156,7 @@ export async function updateAgudezaVisual(
 ) {
   try {
     const autosave = options?.autosave === true
+    const shouldRevalidate = options?.revalidate ?? !autosave
     const data = AgudezaVisualSchema.parse(rawData)
     const agudezaResumen = deriveAgudezaVisualResumen(
       data.vision_lejana_od,
@@ -215,7 +219,7 @@ export async function updateAgudezaVisual(
       })
     }
 
-    if (!autosave) {
+    if (shouldRevalidate) {
       revalidatePath(`/events/${eventId}`)
     }
     return { success: true, aiWarning }
@@ -386,6 +390,7 @@ export async function saveExamenMedicoPapeleta(
 
     let aiWarning: string | undefined
     const postCloseCorrection = priorCaptureClosed && !markComplete
+    const shouldRevalidate = options?.revalidate ?? (!autosave && !postCloseCorrection)
     if (!autosave && !postCloseCorrection) {
       const aiResult = await triggerStructuredStudyAIPrediagnosis({
         eventTestId,
@@ -408,9 +413,11 @@ export async function saveExamenMedicoPapeleta(
         },
       })
 
-      revalidatePath(`/events/${eventId}`)
-      if (markComplete) {
-        revalidatePath('/reception')
+      if (shouldRevalidate) {
+        revalidatePath(`/events/${eventId}`)
+        if (markComplete) {
+          revalidatePath('/reception')
+        }
       }
 
       await writeTimelineEntry({

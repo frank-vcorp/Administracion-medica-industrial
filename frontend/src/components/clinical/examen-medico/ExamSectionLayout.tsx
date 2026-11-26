@@ -1,6 +1,7 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { createElement, isValidElement, type ComponentType, type ReactNode } from 'react'
+import type { LucideProps } from 'lucide-react'
 
 export const EXAM_CARD_CLASS =
   'bg-white border border-slate-200 rounded-xl p-4 sm:p-5 space-y-4'
@@ -21,7 +22,7 @@ export const EXAM_TEXTAREA_CLASS =
   'w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 resize-none focus:ring-2 focus:ring-teal-500 focus:border-teal-400 outline-none disabled:opacity-60 transition-colors'
 
 export interface ExamSectionHeaderProps {
-  icon: string
+  icon?: ComponentType<LucideProps> | ReactNode
   title: string
   subtitle: string
   stepNumber: number
@@ -30,18 +31,34 @@ export interface ExamSectionHeaderProps {
 }
 
 export function ExamSectionHeader({
-  icon,
+  icon: Icon,
   title,
   subtitle,
   stepNumber,
   totalSteps,
   rightSlot,
 }: ExamSectionHeaderProps) {
+  const renderIcon = () => {
+    if (!Icon) return null
+    if (isValidElement(Icon)) return Icon
+    if (
+      typeof Icon === 'function' ||
+      (typeof Icon === 'object' && Icon !== null && '$$typeof' in Icon)
+    ) {
+      return createElement(Icon as ComponentType<LucideProps>, {
+        className: 'h-4 w-4',
+        strokeWidth: 2.25,
+        'aria-hidden': true,
+      })
+    }
+    return Icon
+  }
+
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
       <div className="flex items-center gap-3 min-w-0">
-        <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-base shrink-0">
-          {icon}
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 border border-teal-200 text-teal-700">
+          {renderIcon()}
         </span>
         <div className="min-w-0">
           <h4 className="text-sm font-bold text-slate-800 leading-tight">{title}</h4>

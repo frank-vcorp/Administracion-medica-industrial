@@ -142,7 +142,7 @@ export default function SomatometriaStudy({
     }
 
     const payload = buildPayload()
-    const res = await updateSomatometria(eventId, payload)
+    const res = await updateSomatometria(eventId, payload, { revalidate: false })
     if (res.success) {
       markSaved()
       if (markComplete) {
@@ -150,6 +150,7 @@ export default function SomatometriaStudy({
           eventTestId,
           'COMPLETED',
           eventId,
+          { revalidate: false },
         )
         if (!statusRes.success) {
           setCompleteBanner(statusRes.error ?? 'No se pudo cerrar el estudio.')
@@ -164,6 +165,7 @@ export default function SomatometriaStudy({
           eventTestId,
           'RESULT_REGISTERED',
           eventId,
+          { revalidate: false },
         )
         onStatusChange?.('RESULT_REGISTERED')
         setMessage("✅ Datos guardados.")

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { Stethoscope } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { saveConsultaMedica } from '@/actions/consulta-medica.actions'
 import ConsultaSeguimientoAgenda from '@/components/clinical/ConsultaSeguimientoAgenda'
@@ -370,7 +371,9 @@ export default function ConsultaMedicaEstudio({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5">
-        <span className="text-teal-700 text-lg">🩺</span>
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-100/70 text-teal-700 shrink-0">
+          <Stethoscope className="w-4 h-4" strokeWidth={2.25} aria-hidden="true" />
+        </span>
         <div>
           <p className="text-sm font-bold text-teal-900">Consulta médica</p>
           <p className="text-xs text-teal-700">
