@@ -180,7 +180,11 @@ export async function deliverExamenMedicoPdf(
         },
       },
       eventTests: {
-        select: { testNameSnapshot: true },
+        select: {
+          testNameSnapshot: true,
+          resultNotes: true,
+          status: true,
+        },
       },
     },
   })
@@ -239,7 +243,7 @@ export async function deliverExamenMedicoPdf(
     ? null
     : deliverable === 'sodexo'
       ? `examen-medico-sodexo-pdfs/${event.id}.pdf`
-      : event.verdict?.pdfUrl
+      : `examen-medico-pdfs/${event.id}.pdf`
 
   if (fastPathRel) {
     try {
@@ -413,6 +417,22 @@ export async function deliverExamenMedicoPdf(
       signatureImageUrl: validator?.signatureImageUrl ?? '',
     }
 
+    const cleanAiPrefix = (val: string | null | undefined): string | null => {
+      if (!val) return null
+      return val
+        .replace(/^IA generada \([^)]+\):\s*/i, '')
+        .replace(/^[A-Za-zÁ-ÿ\s]+:\s*IA generada \([^)]+\):\s*/i, '')
+        .trim() || null
+    }
+
+    const findTestNotes = (keywords: string[]): string | null => {
+      const match = (event.eventTests ?? []).find((t) => {
+        const norm = (t.testNameSnapshot || '').toLowerCase()
+        return keywords.some((kw) => norm.includes(kw))
+      })
+      return cleanAiPrefix(match?.resultNotes)
+    }
+
     // Recomendaciones: el snapshot persistido por el médico
     // (`MedicalVerdict.recommendations`) tiene prioridad sobre el
     // auto-poblamiento. El auto-poblamiento sirve como base si el médico
@@ -577,10 +597,10 @@ export async function deliverExamenMedicoPdf(
       ),
       medico: medicoPreview,
       slots: {
-        audiometria: str(physicalExamData.audiometria_texto),
-        espirometria: str(physicalExamData.espirometria_texto),
-        laboratorios: str(physicalExamData.laboratorios_texto),
-        radiografia: str(physicalExamData.radiografia_texto),
+        audiometria: str(physicalExamData.audiometria_texto) || findTestNotes(['audiometr']),
+        espirometria: str(physicalExamData.espirometria_texto) || findTestNotes(['espirometr']),
+        laboratorios: str(physicalExamData.laboratorios_texto) || findTestNotes(['laboratorio', 'quimica', 'biometria']),
+        radiografia: str(physicalExamData.radiografia_texto) || findTestNotes(['radio', 'rx', 'columna', 'torax']),
         examenMedico: str(physicalExamData.examen_medico_texto),
       },
       ia: {

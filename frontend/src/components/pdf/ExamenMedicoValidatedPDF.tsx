@@ -462,8 +462,8 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
 
   return (
     <Document
-      title={`Reporte de Examen Medico ${data.folio.slice(0, 8)}`}
-      author={data.medico.fullName}
+      title={`Reporte de Examen Medico ${(data.folio || '').slice(0, 8)}`}
+      author={data.medico?.fullName || 'Médico Evaluador'}
       subject="Reporte de examen medico (aptitud)"
     >
       <Page size="LETTER" style={reportStyles.page}>
@@ -606,14 +606,14 @@ export const ExamenMedicoValidatedPDF = ({ data }: { data: ExamenMedicoPDFData }
         ) : null}
 
         <View style={reportStyles.sign}>
-          {data.medico.signatureImageUrl ? (
+          {data.medico?.signatureImageUrl ? (
             <Image style={reportStyles.signImage} src={data.medico.signatureImageUrl} />
           ) : null}
           <Text style={reportStyles.signName}>
-            Realizó EM: {(data.medico.fullName || '').trim().toUpperCase() || '—'}
+            Realizó EM: {(data.medico?.fullName || '').trim().toUpperCase() || '—'}
           </Text>
           <Text style={reportStyles.signMeta}>
-            Ced. Prof.: {v(data.medico.professionalLicense)}
+            Ced. Prof.: {v(data.medico?.professionalLicense)}
           </Text>
         </View>
 
