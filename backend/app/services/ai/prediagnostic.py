@@ -232,11 +232,36 @@ def _normalize_string_list(value: Any) -> list[str]:
     return out
 
 
+_SPANGLISH_REPLACEMENTS = [
+    (re.compile(r'\bessentiallyWithin\b', re.IGNORECASE), 'dentro de'),
+    (re.compile(r'\bessentially within\b', re.IGNORECASE), 'esencialmente dentro de'),
+    (re.compile(r'\bwithin normal limits\b', re.IGNORECASE), 'dentro de límites normales'),
+    (re.compile(r'\bwithin normal parameters\b', re.IGNORECASE), 'dentro de parámetros normales'),
+    (re.compile(r'\bwithin normal range\b', re.IGNORECASE), 'dentro del rango normal'),
+    (re.compile(r'\bunremarkable\b', re.IGNORECASE), 'sin alteraciones relevantes'),
+    (re.compile(r'\bno significant abnormalities\b', re.IGNORECASE), 'sin alteraciones significativas'),
+    (re.compile(r'\bno acute findings\b', re.IGNORECASE), 'sin hallazgos agudos'),
+]
+
+
+def _sanitize_spanish_medical_text(text: Any) -> Any:
+    """Corrige anglicismos o Spanglish que ocasionalmente se filtran de LLMs multilingües."""
+    if not isinstance(text, str):
+        return text
+    result = text
+    for pattern, repl in _SPANGLISH_REPLACEMENTS:
+        result = pattern.sub(repl, result)
+    return result
+
+
 def _normalize_raw_prediagnosis_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Coerciona `citations`, `clinical_basis` y listas si el LLM devolvió strings sueltos."""
     if not isinstance(raw, dict):
         return raw
     data = dict(raw)
+
+    if "summary" in data and isinstance(data["summary"], str):
+        data["summary"] = _sanitize_spanish_medical_text(data["summary"])
 
     raw_citations = data.get("citations")
     if raw_citations is not None:
@@ -287,12 +312,12 @@ def _normalize_raw_prediagnosis_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
         normalized_basis: list[Dict[str, Any]] = []
         for item in basis_items:
             if isinstance(item, str):
-                principle = item.strip()
+                principle = _sanitize_spanish_medical_text(item.strip())
                 if principle:
                     normalized_basis.append({"principle": principle, "applied_parameters": []})
             elif isinstance(item, dict):
                 p_raw = item.get("principle") or item.get("criterion") or item.get("name") or "Criterio clínico"
-                principle = str(p_raw).strip() or "Criterio clínico"
+                principle = _sanitize_spanish_medical_text(str(p_raw).strip() or "Criterio clínico")
                 params_raw = item.get("applied_parameters")
                 if isinstance(params_raw, str):
                     applied = [params_raw.strip()] if params_raw.strip() else []
@@ -305,7 +330,10 @@ def _normalize_raw_prediagnosis_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     for list_field in ("justification", "limitations", "red_flags"):
         if list_field in data:
-            data[list_field] = _normalize_string_list(data.get(list_field))
+            data[list_field] = [
+                _sanitize_spanish_medical_text(s)
+                for s in _normalize_string_list(data.get(list_field))
+            ]
 
     return data
 
@@ -988,6 +1016,14 @@ class PrediagnosticService(GeminiBase):
             if clinical_context_block:
                 prompt = f"{prompt}\n\n{clinical_context_block}"
 
+        prompt = (
+            f"{prompt}\n\n"
+            "REGLA DE IDIOMA ESTRICTA:\n"
+            "Toda la respuesta (summary, justification, limitations, etc.) DEBE ser redactada 100% en español médico estándar.\n"
+            "Queda estrictamente prohibido utilizar palabras en inglés, términos técnicos combinados (como 'essentiallyWithin') o mezcla de idiomas (Spanglish).\n"
+            "Usa siempre frases en español como 'dentro de parámetros normales', 'sin alteraciones relevantes' o 'adecuado'."
+        )
+
         # IMPL-20260516-08: capturar el prompt renderizado antes de la llamada al modelo (ARCH-20260516-08)
         _rendered_prompt = prompt
 
@@ -1205,7 +1241,7 @@ class PrediagnosticService(GeminiBase):
                 {
                     "role": "system",
                     "content": (
-                        "Eres un sistema de apoyo clínico para medicina del trabajo. "
+                        "Eres un sistema de apoyo clínico para medicina del trabajo en México. "
                         "Recibes exclusivamente datos clínicos estructurados ya extraídos de documentos médicos; "
                         "no analizas imágenes ni PDFs y no debes inferir datos ausentes. "
                         "Tu función es generar un prediagnóstico prudente y revisable por un médico, nunca un "
@@ -1215,6 +1251,11 @@ class PrediagnosticService(GeminiBase):
                         "debes devolver un resultado no concluyente con confidence baja y non_conclusive_reason explícita. "
                         "Sigue estrictamente las instrucciones y criterios configurados en el prompt de la prueba. "
                         "No inventes hallazgos, citas ni parámetros no sustentados por la información recibida. "
+                        "IDIOMA OBLIGATORIO: Redacta absolutamente toda tu respuesta 100% en ESPAÑOL médico estándar de México. "
+                        "Está estrictamente prohibido usar términos en inglés, anglicismos o palabras combinadas en camelCase "
+                        "(como 'essentiallyWithin', 'within normal limits', etc.); utiliza siempre expresiones en español "
+                        "como 'dentro de parámetros normales' o 'sin alteraciones relevantes'. "
+                        "Todos los campos de texto ('summary', 'justification', 'limitations', etc.) deben ser exclusivamente en español. "
                         "Responde SIEMPRE en JSON válido, sin markdown ni bloques de código."
                     ),
                 },
