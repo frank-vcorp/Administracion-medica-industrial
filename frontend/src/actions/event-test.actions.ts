@@ -36,7 +36,66 @@ import {
   resolveStudyTypeForEventTestFileValidation,
   validateEventTestUploadFileAsync,
 } from '@/lib/clinical/event-test-file-validation'
-import { eventTestUploadIdsSchema } from '@/schemas/clinical/event-test-upload.schema'
+import {
+  attachRayosXPlatesSchema,
+  eventTestUploadIdsSchema,
+  removeRayosXAttachmentSchema,
+  updateRayosXAttachmentLabelSchema,
+} from '@/schemas/clinical/event-test-upload.schema'
+import {
+  buildRayosXAttachmentsContext,
+  inferRayosXProjectionLabel,
+  isRayosXAttachmentsContext,
+  parseRayosXAttachments,
+  RAYOS_X_MAX_FILES,
+  type RayosXAttachmentItem,
+} from '@/lib/clinical/rayos-x-attachments'
+
+function resolveBackendApiBase(): string {
+  return (
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8000'
+  ).replace(/\/+$/, '')
+}
+
+function parseJsonStringArray(raw: unknown): Array<string | null> {
+  if (typeof raw !== 'string' || !raw.trim()) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed)
+      ? parsed.map((item) => (typeof item === 'string' && item.trim() ? item.trim() : null))
+      : []
+  } catch {
+    return []
+  }
+}
+
+async function downloadRemotePlatesAsFiles(
+  apiBase: string,
+  plates: RayosXAttachmentItem[],
+): Promise<
+  | { ok: true; files: File[] }
+  | { ok: false; error: string; isNotFound: boolean }
+> {
+  const downloaded: File[] = []
+  for (const plate of plates) {
+    const resp = await fetch(`${apiBase}${plate.url}`)
+    if (!resp.ok) {
+      const isNotFound = resp.status === 404
+      const error = isNotFound
+        ? 'El archivo del estudio ya no está disponible en el servidor. Vuelva a subir el archivo para regenerar el análisis IA.'
+        : `No se pudo descargar el archivo (${plate.fileName}): HTTP ${resp.status}`
+      return { ok: false, error, isNotFound }
+    }
+    const blob = await resp.blob()
+    const fileName = plate.fileName || plate.url.split('/').pop() || 'study-file.pdf'
+    downloaded.push(
+      new File([blob], fileName, { type: blob.type || 'application/octet-stream' }),
+    )
+  }
+  return { ok: true, files: downloaded }
+}
 
 async function maybeCropEspirometrySourceAfterUpload(
   eventTestId: string,
@@ -878,6 +937,11 @@ export async function uploadEventTestFile(formData: FormData) {
   const eventTestId = formData.get('eventTestId') as string
   const eventId = formData.get('eventId') as string
   const file = formData.get('file') as File
+  const extraFiles = formData
+    .getAll('extra_files')
+    .filter((item): item is File => item instanceof File && item.size > 0)
+  const uploadMode = (formData.get('upload_mode') as string) === 'append' ? 'append' : 'replace'
+  const incomingLabels = parseJsonStringArray(formData.get('projection_labels_json'))
   const triggeredByUserId = (formData.get('triggeredByUserId') as string) || 'system'
   void triggeredByUserId
 
@@ -888,6 +952,14 @@ export async function uploadEventTestFile(formData: FormData) {
   const idsParsed = eventTestUploadIdsSchema.safeParse({ eventTestId, eventId })
   if (!idsParsed.success) {
     return { success: false, error: 'Parámetros de estudio inválidos' }
+  }
+
+  const submittedFiles = [file, ...extraFiles]
+  if (submittedFiles.length > RAYOS_X_MAX_FILES) {
+    return {
+      success: false,
+      error: `Se permite un máximo de ${RAYOS_X_MAX_FILES} placas por estudio.`,
+    }
   }
 
   // IMPL-20260326-18: Verificar elegibilidad IA usando la matriz central.
@@ -910,6 +982,8 @@ export async function uploadEventTestFile(formData: FormData) {
     const eventTest = await prisma.eventTest.findUnique({
       where: { id: eventTestId },
       select: {
+        fileUrl: true,
+        clinicalContext: true,
         testNameSnapshot: true,
         test: { select: { id: true, code: true, category: { select: { name: true } } } },
       },
@@ -923,14 +997,68 @@ export async function uploadEventTestFile(formData: FormData) {
           ? { enabled: published.enabled, canonicalStudyType: published.canonicalStudyType }
           : null,
       )
-      const fileValidation = await validateEventTestUploadFileAsync(file, studyTypeForFile)
-      if (!fileValidation.valid) {
-        return {
-          success: false,
-          error:
-            fileValidation.message ??
-            'Formato incorrecto: el archivo no es adecuado para este tipo de prueba.',
-          errorCode: fileValidation.errorCode ?? 'FILE_FORMAT_MISMATCH',
+      for (const candidateFile of submittedFiles) {
+        const fileValidation = await validateEventTestUploadFileAsync(
+          candidateFile,
+          studyTypeForFile,
+        )
+        if (!fileValidation.valid) {
+          return {
+            success: false,
+            error:
+              fileValidation.message ??
+              'Formato incorrecto: el archivo no es adecuado para este tipo de prueba.',
+            errorCode: fileValidation.errorCode ?? 'FILE_FORMAT_MISMATCH',
+          }
+        }
+      }
+
+      if (studyTypeForFile === 'Rayos_X') {
+        const submittedLabels = submittedFiles.map(
+          (f, idx) => incomingLabels[idx] ?? inferRayosXProjectionLabel(f.name),
+        )
+        const submittedNames = submittedFiles.map((f) => f.name)
+
+        if (uploadMode === 'append') {
+          const existingPlates = parseRayosXAttachments(
+            eventTest.clinicalContext,
+            eventTest.fileUrl,
+          )
+          if (existingPlates.length + submittedFiles.length > RAYOS_X_MAX_FILES) {
+            return {
+              success: false,
+              error: `Se permite un máximo de ${RAYOS_X_MAX_FILES} placas por estudio.`,
+            }
+          }
+          if (existingPlates.length > 0) {
+            const apiBase = resolveBackendApiBase()
+            const dl = await downloadRemotePlatesAsFiles(apiBase, existingPlates)
+            if (!dl.ok) {
+              return { success: false, error: dl.error }
+            }
+            const combinedFiles = [...dl.files, ...submittedFiles]
+            const combinedLabels = [
+              ...existingPlates.map((p) => p.projectionLabel ?? null),
+              ...submittedLabels,
+            ]
+            const combinedNames = [
+              ...existingPlates.map((p) => p.fileName),
+              ...submittedNames,
+            ]
+            formData.set('file', combinedFiles[0])
+            formData.delete('extra_files')
+            for (const ef of combinedFiles.slice(1)) {
+              formData.append('extra_files', ef)
+            }
+            formData.set('projection_labels_json', JSON.stringify(combinedLabels))
+            formData.set('rayos_x_original_names_json', JSON.stringify(combinedNames))
+          } else {
+            formData.set('projection_labels_json', JSON.stringify(submittedLabels))
+            formData.set('rayos_x_original_names_json', JSON.stringify(submittedNames))
+          }
+        } else {
+          formData.set('projection_labels_json', JSON.stringify(submittedLabels))
+          formData.set('rayos_x_original_names_json', JSON.stringify(submittedNames))
         }
       }
 
@@ -1153,6 +1281,10 @@ export async function uploadEventTestFile(formData: FormData) {
             confidence: v2Result.confidence,
           },
           patientNameWarning: v2Result.patientNameWarning ?? null,
+          ...(v2Result.attachments ? { attachments: v2Result.attachments } : {}),
+          ...(v2Result.clinicalContext !== undefined
+            ? { clinicalContext: v2Result.clinicalContext }
+            : {}),
         }
       }
 
@@ -1298,35 +1430,35 @@ export async function regenerateStudyAI(
       where: { id: eventTestId },
       select: {
         fileUrl: true,
+        clinicalContext: true,
         testNameSnapshot: true,
         test: { select: { id: true, code: true, category: { select: { name: true } } } },
       },
     })
 
-    if (!eventTest?.fileUrl) {
+    if (!eventTest?.fileUrl && !isRayosXAttachmentsContext(eventTest?.clinicalContext)) {
       return { success: false, error: 'El estudio no tiene archivo vinculado' }
     }
 
-    // Descargar el archivo desde el storage del backend
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-    const fileResponse = await fetch(`${apiBase}${eventTest.fileUrl}`)
-    if (!fileResponse.ok) {
-      // FIX ARCH-20260326-04: 404 ocurre cuando fileUrl fue inventada en el fallback anterior.
-      // Dar mensaje claro al usuario en lugar de exponer HTTP 404 internamente.
-      const errMsg = fileResponse.status === 404
-        ? 'El archivo del estudio ya no está disponible en el servidor. Vuelva a subir el archivo para regenerar el análisis IA.'
-        : `No se pudo descargar el archivo para regenerar IA: HTTP ${fileResponse.status}`
-      await prisma.eventTest.update({
-        where: { id: eventTestId },
-        data: { resultNotes: `Error al regenerar IA: ${errMsg}` },
-      })
-      revalidatePath(`/events/${eventId}`)
-      return { success: false, error: errMsg }
+    const plates = parseRayosXAttachments(eventTest?.clinicalContext, eventTest?.fileUrl)
+    if (plates.length === 0) {
+      return { success: false, error: 'El estudio no tiene archivo vinculado' }
     }
 
-    const blob = await fileResponse.blob()
-    const fileName = eventTest.fileUrl.split('/').pop() || 'study-file.pdf'
-    const file = new File([blob], fileName, { type: blob.type || 'application/pdf' })
+    // Descargar todas las placas/archivos desde el storage del backend
+    const apiBase = resolveBackendApiBase()
+    const downloaded = await downloadRemotePlatesAsFiles(apiBase, plates)
+    if (!downloaded.ok) {
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: { resultNotes: `Error al regenerar IA: ${downloaded.error}` },
+      })
+      revalidatePath(`/events/${eventId}`)
+      return { success: false, error: downloaded.error }
+    }
+
+    const file = downloaded.files[0]
+    const extraFiles = downloaded.files.slice(1)
 
     // ARCH-20260820-01 Fase 3 (SPEC §9.1, AC-3.1/AC-3.2/AC-3.3):
     // Antes de la heurística de nombre, consultar la versión published del
@@ -1393,6 +1525,20 @@ export async function regenerateStudyAI(
     formData.set('eventTestId', eventTestId)
     formData.set('eventId', eventId)
     formData.set('file', file)
+    for (const extraFile of extraFiles) {
+      formData.append('extra_files', extraFile)
+    }
+    if (canonicalType === 'Rayos_X') {
+      formData.set(
+        'projection_labels_json',
+        JSON.stringify(plates.map((p) => p.projectionLabel ?? null)),
+      )
+      formData.set(
+        'rayos_x_original_names_json',
+        JSON.stringify(plates.map((p) => p.fileName)),
+      )
+      formData.set('preserve_rayos_x_attachments_json', JSON.stringify(plates))
+    }
     formData.set('triggeredByUserId', triggeredByUserId)
     formData.set('calibration_source', calibrationSource)
     if (publishedVersionId) {
@@ -1526,14 +1672,14 @@ export async function regenerateStudyAI(
       data: { resultNotes },
     })
 
-    if (aiResult.success && canonicalType === 'Audiometria') {
+    if (aiResult.success && canonicalType === 'Audiometria' && eventTest.fileUrl) {
       const fileName = eventTest.fileUrl.split('/').pop() ?? ''
       await maybeCropAudiometrySourceAfterUpload(
         eventTestId,
         fileName,
         'Audiometria',
       )
-    } else if (aiResult.success && canonicalType === 'Espirometria') {
+    } else if (aiResult.success && canonicalType === 'Espirometria' && eventTest.fileUrl) {
       const fileName = eventTest.fileUrl.split('/').pop() ?? ''
       await maybeCropEspirometrySourceAfterUpload(
         eventTestId,
@@ -1623,6 +1769,404 @@ export async function updateEventTestDictamenLabInclusion(
   }
 }
 
+export async function attachAndAnalyzeRayosXPlates(input: {
+  eventTestId: string
+  eventId: string
+  mode: 'replace' | 'append'
+  newPlates: RayosXAttachmentItem[]
+  triggeredByUserId?: string
+}): Promise<{
+  success: boolean
+  error?: string
+  fileUrl?: string | null
+  attachments?: RayosXAttachmentItem[]
+  clinicalContext?: unknown
+  extractionSnapshotData?: {
+    id: string
+    version: number
+    extractedData: unknown
+    missingFields: unknown
+    rawPayload: unknown
+  } | null
+  aiAnalysis?: {
+    extractionSnapshotId?: string
+    prediagnosisSnapshotId?: string
+    clinicalState?: string
+    summary?: string | null
+    confidence?: number | null
+  } | null
+  errorCode?: string
+  message?: string | null
+  selectedStudyType?: string | null
+  detectedStudyType?: string | null
+  patientNameWarning?: PatientNameWarning | null
+}> {
+  const parsed = attachRayosXPlatesSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'Datos inválidos para adjuntar placas',
+    }
+  }
+
+  const {
+    eventTestId,
+    eventId,
+    mode,
+    newPlates,
+    triggeredByUserId = 'system',
+  } = parsed.data
+
+  try {
+    const eventTest = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: {
+        id: true,
+        eventId: true,
+        fileUrl: true,
+        clinicalContext: true,
+        testNameSnapshot: true,
+        test: { select: { id: true, code: true, category: { select: { name: true } } } },
+      },
+    })
+    if (!eventTest || eventTest.eventId !== eventId) {
+      return { success: false, error: 'El estudio no existe o no pertenece al evento.' }
+    }
+
+    const existingPlates =
+      mode === 'append'
+        ? parseRayosXAttachments(eventTest.clinicalContext, eventTest.fileUrl)
+        : []
+
+    const deduped: RayosXAttachmentItem[] = []
+    const seen = new Set<string>()
+    for (const plate of [...existingPlates, ...newPlates]) {
+      if (seen.has(plate.url)) continue
+      seen.add(plate.url)
+      deduped.push({
+        url: plate.url,
+        fileName: plate.fileName,
+        projectionLabel:
+          plate.projectionLabel?.trim() ||
+          inferRayosXProjectionLabel(plate.fileName),
+        addedAt: plate.addedAt || new Date().toISOString(),
+      })
+    }
+
+    if (deduped.length > RAYOS_X_MAX_FILES) {
+      return {
+        success: false,
+        error: `Se permite un máximo de ${RAYOS_X_MAX_FILES} placas por estudio.`,
+      }
+    }
+
+    const newContext = buildRayosXAttachmentsContext(deduped)
+    if (!newContext) {
+      return { success: false, error: 'No hay placas válidas para vincular.' }
+    }
+    const primaryUrl = deduped[0].url
+
+    // Persistir placas inmediatamente para que no se pierdan ante un timeout/mismatch IA
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        fileUrl: primaryUrl,
+        clinicalContext: newContext as unknown as Prisma.InputJsonValue,
+        status: 'RESULT_REGISTERED',
+      },
+    })
+
+    const published = await getPublishedCalibrationForEventTest(eventTestId)
+    if (published && !published.enabled) {
+      const disabled = await persistCalibrationDisabledSnapshot({
+        eventTestId,
+        eventId,
+        triggeredByUserId,
+        versionId: published.versionId,
+        versionNumber: published.versionNumber,
+      })
+      return {
+        success: disabled.success,
+        fileUrl: primaryUrl,
+        attachments: deduped,
+        clinicalContext: newContext,
+        aiAnalysis: disabled.aiAnalysis,
+      }
+    }
+
+    let canonicalType: string | null = 'Rayos_X'
+    let calibrationSource: 'published_v3' | 'legacy_heuristic' = 'legacy_heuristic'
+    let publishedVersionId: string | null = null
+    if (published) {
+      calibrationSource = 'published_v3'
+      publishedVersionId = published.versionId
+      canonicalType = published.canonicalStudyType
+        ? (normalizeStudyTypeForBackend(published.canonicalStudyType) ??
+            published.canonicalStudyType)
+        : (getCanonicalAIStudyType(eventTest) ?? 'Rayos_X')
+    } else {
+      canonicalType = getCanonicalAIStudyType(eventTest) ?? 'Rayos_X'
+    }
+
+    const apiBase = resolveBackendApiBase()
+    const downloaded = await downloadRemotePlatesAsFiles(apiBase, deduped)
+    if (!downloaded.ok) {
+      revalidatePath(`/events/${eventId}`)
+      return {
+        success: false,
+        error: downloaded.error,
+        fileUrl: primaryUrl,
+        attachments: deduped,
+        clinicalContext: newContext,
+      }
+    }
+
+    const formData = new FormData()
+    formData.set('eventTestId', eventTestId)
+    formData.set('eventId', eventId)
+    formData.set('triggeredByUserId', triggeredByUserId)
+    formData.set('file', downloaded.files[0])
+    for (const extraFile of downloaded.files.slice(1)) {
+      formData.append('extra_files', extraFile)
+    }
+    formData.set('calibration_source', calibrationSource)
+    if (publishedVersionId) {
+      formData.set('calibration_version_id', publishedVersionId)
+    }
+    if (canonicalType) {
+      formData.set('study_type', canonicalType)
+    }
+    if (eventTest.test?.id) {
+      formData.set('medical_test_id', eventTest.test.id)
+    }
+    formData.set(
+      'projection_labels_json',
+      JSON.stringify(deduped.map((p) => p.projectionLabel ?? null)),
+    )
+    formData.set(
+      'rayos_x_original_names_json',
+      JSON.stringify(deduped.map((p) => p.fileName)),
+    )
+    formData.set('preserve_rayos_x_attachments_json', JSON.stringify(deduped))
+
+    const v2Result = await triggerStudyAIAnalysis(formData)
+    if (!v2Result.success) {
+      await prisma.eventTest.update({
+        where: { id: eventTestId },
+        data: {
+          resultNotes:
+            v2Result.errorCode === 'STUDY_TYPE_MISMATCH'
+              ? buildMismatchResultNote({
+                  selectedStudyType: v2Result.selectedStudyType ?? null,
+                  detectedStudyType: v2Result.detectedStudyType ?? null,
+                  message: v2Result.message ?? null,
+                })
+              : buildAIResultNote({
+                  success: false,
+                  error: v2Result.error ?? 'Error al analizar placas con IA',
+                }),
+        },
+      })
+      revalidatePath(`/events/${eventId}`)
+      return {
+        success: false,
+        error:
+          v2Result.message ??
+          v2Result.error ??
+          'La IA no pudo procesar las placas de Rayos X.',
+        errorCode: v2Result.errorCode,
+        message: v2Result.message ?? null,
+        selectedStudyType: v2Result.selectedStudyType ?? null,
+        detectedStudyType: v2Result.detectedStudyType ?? null,
+        fileUrl: primaryUrl,
+        attachments: deduped,
+        clinicalContext: newContext,
+      }
+    }
+
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        resultNotes: buildAIResultNote({
+          success: true,
+          summary: v2Result.summary ?? null,
+          clinicalState: v2Result.clinicalState ?? null,
+        }),
+      },
+    })
+
+    revalidatePath(`/events/${eventId}`)
+    return {
+      success: true,
+      fileUrl: v2Result.fileUrl ?? primaryUrl,
+      attachments: v2Result.attachments ?? deduped,
+      clinicalContext: v2Result.clinicalContext ?? newContext,
+      extractionSnapshotData: v2Result.extractionSnapshotId
+        ? {
+            id: v2Result.extractionSnapshotId,
+            version: v2Result.extractionSnapshotVersion ?? 1,
+            extractedData: v2Result.extractedData ?? null,
+            missingFields: v2Result.missingFields ?? null,
+            rawPayload: v2Result.rawPayload ?? null,
+          }
+        : null,
+      aiAnalysis: {
+        extractionSnapshotId: v2Result.extractionSnapshotId,
+        prediagnosisSnapshotId: v2Result.prediagnosisSnapshotId,
+        clinicalState: v2Result.clinicalState,
+        summary: v2Result.summary ?? null,
+        confidence: v2Result.confidence ?? null,
+      },
+      patientNameWarning: v2Result.patientNameWarning ?? null,
+    }
+  } catch (error) {
+    console.error('[rayos-x] attachAndAnalyzeRayosXPlates error:', error)
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Error interno al procesar placas radiográficas',
+    }
+  }
+}
+
+export async function updateRayosXAttachmentLabel(input: {
+  eventTestId: string
+  eventId: string
+  fileUrl: string
+  projectionLabel: string | null
+}): Promise<{
+  success: boolean
+  error?: string
+  attachments?: RayosXAttachmentItem[]
+  clinicalContext?: unknown
+}> {
+  const parsed = updateRayosXAttachmentLabelSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'Parámetros inválidos',
+    }
+  }
+
+  const { eventTestId, eventId, fileUrl, projectionLabel } = parsed.data
+  try {
+    const existing = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: { id: true, eventId: true, fileUrl: true, clinicalContext: true },
+    })
+    if (!existing || existing.eventId !== eventId) {
+      return { success: false, error: 'El estudio no existe o no pertenece al evento.' }
+    }
+
+    const plates = parseRayosXAttachments(existing.clinicalContext, existing.fileUrl)
+    const idx = plates.findIndex((p) => p.url === fileUrl)
+    if (idx === -1) {
+      return { success: false, error: 'Placa radiográfica no encontrada.' }
+    }
+
+    const updated = plates.map((p, i) =>
+      i === idx
+        ? {
+            ...p,
+            projectionLabel: projectionLabel?.trim() || null,
+          }
+        : p,
+    )
+    const newContext = buildRayosXAttachmentsContext(updated)
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        clinicalContext: newContext as unknown as Prisma.InputJsonValue,
+      },
+    })
+    revalidatePath(`/events/${eventId}`)
+    return { success: true, attachments: updated, clinicalContext: newContext }
+  } catch (error) {
+    console.error('[rayos-x] updateRayosXAttachmentLabel error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al actualizar proyección',
+    }
+  }
+}
+
+export async function removeRayosXAttachment(input: {
+  eventTestId: string
+  eventId: string
+  fileUrl: string
+}): Promise<{
+  success: boolean
+  error?: string
+  attachments?: RayosXAttachmentItem[]
+  fileUrl?: string | null
+  clinicalContext?: unknown
+  cleared?: boolean
+}> {
+  const parsed = removeRayosXAttachmentSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'Parámetros inválidos',
+    }
+  }
+
+  const { eventTestId, eventId, fileUrl } = parsed.data
+  try {
+    const existing = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: { id: true, eventId: true, fileUrl: true, clinicalContext: true },
+    })
+    if (!existing || existing.eventId !== eventId) {
+      return { success: false, error: 'El estudio no existe o no pertenece al evento.' }
+    }
+
+    const plates = parseRayosXAttachments(existing.clinicalContext, existing.fileUrl)
+    const remaining = plates.filter((p) => p.url !== fileUrl)
+    if (remaining.length === plates.length) {
+      return { success: false, error: 'Placa radiográfica no encontrada.' }
+    }
+
+    if (remaining.length === 0) {
+      const clearRes = await clearEventTestFile(eventTestId, eventId)
+      if (!clearRes.success) {
+        return { success: false, error: clearRes.error }
+      }
+      return {
+        success: true,
+        attachments: [],
+        fileUrl: null,
+        clinicalContext: null,
+        cleared: true,
+      }
+    }
+
+    const newContext = buildRayosXAttachmentsContext(remaining)
+    await prisma.eventTest.update({
+      where: { id: eventTestId },
+      data: {
+        fileUrl: remaining[0].url,
+        clinicalContext: newContext as unknown as Prisma.InputJsonValue,
+      },
+    })
+    revalidatePath(`/events/${eventId}`)
+    return {
+      success: true,
+      attachments: remaining,
+      fileUrl: remaining[0].url,
+      clinicalContext: newContext,
+      cleared: false,
+    }
+  } catch (error) {
+    console.error('[rayos-x] removeRayosXAttachment error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error al quitar la placa',
+    }
+  }
+}
+
 export async function clearEventTestFile(
   eventTestId: string,
   eventId: string,
@@ -1633,6 +2177,12 @@ export async function clearEventTestFile(
   }
 
   try {
+    const currentTest = await prisma.eventTest.findUnique({
+      where: { id: eventTestId },
+      select: { clinicalContext: true },
+    })
+    const clearRxAttachments = isRayosXAttachmentsContext(currentTest?.clinicalContext)
+
     // 1. Buscar snapshots activos (no superseded) para marcarlos históricos
     const activeExtractions = await prisma.studyExtractionSnapshot.findMany({
       where: { eventTestId, isSuperseded: false },
@@ -1663,6 +2213,7 @@ export async function clearEventTestFile(
         fileUrl: null,
         status: 'PENDING',
         resultNotes: auditNote,
+        ...(clearRxAttachments ? { clinicalContext: Prisma.DbNull } : {}),
       },
     })
 

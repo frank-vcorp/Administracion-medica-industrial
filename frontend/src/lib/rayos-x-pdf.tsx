@@ -16,6 +16,10 @@ import {
   parseRayosXImpressionItems,
   resolveRayosXStudyTypeLabel,
 } from '@/lib/clinical/rayos-x-report'
+import {
+  formatRayosXProjectionsSummary,
+  parseRayosXAttachments,
+} from '@/lib/clinical/rayos-x-attachments'
 import { resolvePatientIdentificationForPdf } from '@/lib/pdf/patient-identification'
 import { resolveValidatedRecommendations } from '@/lib/espirometry-pdf'
 import { uploadPdfBuffer } from '@/lib/upload-pdf-buffer'
@@ -32,6 +36,7 @@ export interface BuildRayosXPdfInput {
   prediagnosisData: unknown
   extractionStructuredData: unknown
   studyName: string | null | undefined
+  clinicalContext?: unknown
   eventId: string
   patient: {
     firstName: string
@@ -60,7 +65,14 @@ export async function buildRayosXPdfDataAsync(
     attentionDate: input.reviewCreatedAt,
   })
 
-  const studyTypeLabel = resolveRayosXStudyTypeLabel(input.studyName, extracted)
+  const attachmentProjections = formatRayosXProjectionsSummary(
+    parseRayosXAttachments(input.clinicalContext, null),
+  )
+  const studyTypeLabel = resolveRayosXStudyTypeLabel(
+    input.studyName,
+    extracted,
+    attachmentProjections,
+  )
   const findingsParagraphs = buildRayosXFindingsParagraphs({
     extracted,
     prediagnosisData: input.prediagnosisData,

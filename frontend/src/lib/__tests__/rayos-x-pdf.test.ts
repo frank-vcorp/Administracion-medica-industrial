@@ -50,6 +50,36 @@ describe('rayos-x-report helpers y plantilla PDF SME', () => {
         notas_calidad: null,
       }),
     ).toBe('TELE DE TORAX PA')
+
+    // Agrega proyecciones evaluadas cuando el nombre base no las incluye
+    expect(
+      resolveRayosXStudyTypeLabel(
+        'RX de columna cervical',
+        {
+          hallazgos: [],
+          localizacion: 'Columna cervical',
+          radiologista: null,
+          fecha_estudio: null,
+          notas_calidad: null,
+        },
+        'AP, LAT',
+      ),
+    ).toBe('RX DE COLUMNA CERVICAL (AP, LAT)')
+
+    // No duplica si el nombre ya incluye las proyecciones
+    expect(
+      resolveRayosXStudyTypeLabel(
+        'RX de columna cervical AP y LAT',
+        {
+          hallazgos: [],
+          localizacion: 'Columna cervical',
+          radiologista: null,
+          fecha_estudio: null,
+          notas_calidad: null,
+        },
+        'AP, LAT',
+      ),
+    ).toBe('RX DE COLUMNA CERVICAL AP Y LAT')
   })
 
   it('buildRayosXFindingsParagraphs usa hallazgos, notas del médico y fallback', () => {

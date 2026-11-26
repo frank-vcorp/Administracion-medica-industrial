@@ -266,6 +266,10 @@ class RayosXData(BaseModel):
     hallazgos: List[str] = Field(
         description="Lista de hallazgos descriptivos sin interpretación clínica final"
     )
+    proyecciones_evaluadas: Optional[List[str]] = Field(
+        default=None,
+        description="Proyecciones/placas evaluadas en conjunto (ej. AP, LAT)",
+    )
     radiologista: Optional[str] = None
     notas_calidad: Optional[str] = None
 

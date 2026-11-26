@@ -65,6 +65,7 @@ export async function GET(
               eventTest: {
                 select: {
                   testNameSnapshot: true,
+                  clinicalContext: true,
                   eventId: true,
                   event: {
                     select: {
@@ -157,6 +158,7 @@ export async function GET(
       extractionStructuredData:
         review.prediagnosisSnapshot?.extractionSnapshot?.structuredData,
       studyName: eventTest?.testNameSnapshot ?? null,
+      clinicalContext: eventTest?.clinicalContext ?? null,
       eventId: eventTest?.eventId ?? '',
       patient: {
         firstName: worker?.firstName ?? '',

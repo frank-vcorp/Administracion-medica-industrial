@@ -46,7 +46,15 @@ import {
   type PapeletaEventTestSeed,
 } from '@/lib/clinical/papeleta-event-tests'
 import type { StudyPresentationSchema } from "@/types/calibration"
-import { updateEventTestStatus, uploadEventTestFile, regenerateStudyAI, clearEventTestFile } from "@/actions/event-test.actions"
+import {
+  attachAndAnalyzeRayosXPlates,
+  clearEventTestFile,
+  regenerateStudyAI,
+  removeRayosXAttachment,
+  updateEventTestStatus,
+  updateRayosXAttachmentLabel,
+  uploadEventTestFile,
+} from "@/actions/event-test.actions"
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
 import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
 import ConsultaMedicaEstudio from "@/components/clinical/ConsultaMedicaEstudio"
@@ -58,6 +66,15 @@ import AgudezaVisualStudy from "@/components/clinical/studies/AgudezaVisualStudy
 import CampimetriaStudy from "@/components/clinical/studies/CampimetriaStudy"
 import StudyAIPrediagnosisPanel from "@/components/clinical/StudyAIPrediagnosisPanel"
 import StudyDocumentViewer from "@/components/clinical/StudyDocumentViewer"
+import RayosXMultiPlateViewer from "@/components/clinical/RayosXMultiPlateViewer"
+import {
+  inferRayosXProjectionLabel,
+  isRayosXAttachmentsContext,
+  parseRayosXAttachments,
+  RAYOS_X_MAX_FILES,
+  type RayosXAttachmentItem,
+  type RayosXAttachmentsContext,
+} from "@/lib/clinical/rayos-x-attachments"
 // IMPL-20260518-13: Renderer clínico general configurable por studyType
 import ClinicalExtractionRenderer from "@/components/clinical/ClinicalExtractionRenderer"
 // IMPL-20260326-18: Helper central de elegibilidad IA (reemplaza reglas dispersas)
@@ -189,6 +206,7 @@ type StudyTest = {
     | AudiometriaQuestionnairePayload
     | CampimetriaQuestionnairePayload
     | DictamenLabClinicalContext
+    | RayosXAttachmentsContext
     | null
 }
 
@@ -452,6 +470,7 @@ export default function PapeletaWorkspace({
   const [audiometriaQuestionnaireEventTestId, setAudiometriaQuestionnaireEventTestId] =
     useState<string | null>(null)
   const [patientNameWarning, setPatientNameWarning] = useState<PatientNameWarning | null>(null)
+  const [rxNeedsReanalysisByTestId, setRxNeedsReanalysisByTestId] = useState<Record<string, boolean>>({})
   const [studyNavBlockMessage, setStudyNavBlockMessage] = useState("")
   const studyLeaveGuardRef = useRef<StudyLeaveGuardFn | null>(null)
 
@@ -565,16 +584,23 @@ export default function PapeletaWorkspace({
   // ARCH-20260518-04: actualización optimista con snapshot vigente (evita depender solo de router.refresh)
   function updateLocalFile(
     id: string,
-    fileUrl: string,
-    extractionSnapshot: StudyTest['extractionSnapshot'] | null = null
+    fileUrl: string | null,
+    extractionSnapshot: StudyTest['extractionSnapshot'] | null = null,
+    options?: {
+      clinicalContext?: StudyTest['clinicalContext']
+      aiSnapshot?: StudyTest['aiSnapshot']
+    },
   ) {
     setLocalTests(prev =>
       prev.map(t => t.id === id ? {
         ...t,
         fileUrl,
-        status: 'RESULT_REGISTERED' as StudyStatus,
+        status: fileUrl ? ('RESULT_REGISTERED' as StudyStatus) : ('PENDING' as StudyStatus),
         extractionSnapshot,
-        aiSnapshot: null,
+        aiSnapshot: options?.aiSnapshot ?? null,
+        ...(options && 'clinicalContext' in options
+          ? { clinicalContext: options.clinicalContext }
+          : {}),
       } : t)
     )
   }
@@ -605,18 +631,170 @@ export default function PapeletaWorkspace({
     })
   }
 
-  // IMPL-20260516-04: Avance progresivo de etapas mientras corre el pipeline IA
-  // FIX-20260516-01: try/catch/finally robusto — sin promesas sin capturar ante ERR_NETWORK_CHANGED
-  const handleFileUpload = async (testId: string, file: File) => {
-    if (isUploading) return
+  const handleRayosXPlatesUpload = async (
+    testId: string,
+    files: File[],
+    mode: 'replace' | 'append' = 'replace',
+  ) => {
+    if (isUploading || isRegenerating || files.length === 0) return
     setUploadFeedbackTestId(testId)
     setUploadError('')
     setUploadMismatch(null)
+
+    const targetTest = localTests.find(t => t.id === testId)
+    const existingCount =
+      mode === 'append' && targetTest
+        ? parseRayosXAttachments(targetTest.clinicalContext, targetTest.fileUrl).length
+        : 0
+    if (existingCount + files.length > RAYOS_X_MAX_FILES) {
+      setUploadError(`Se permite un máximo de ${RAYOS_X_MAX_FILES} placas por estudio.`)
+      return
+    }
+
+    for (const candidateFile of files) {
+      const validation = await validateEventTestUploadFileAsync(candidateFile, 'Rayos_X')
+      if (!validation.valid) {
+        setUploadError(
+          validation.message ??
+            'Formato incorrecto: el archivo no es adecuado para Imagenología (rayos X).',
+        )
+        return
+      }
+    }
+
+    let currentStage: UploadStageId | null = 'uploading'
+    setUploadingTestId(testId)
+    setIsUploading(true)
+    setUploadStage('uploading')
+    const t1 = setTimeout(() => { currentStage = 'classifying';   setUploadStage('classifying') },   3000)
+    const t2 = setTimeout(() => { currentStage = 'extracting';    setUploadStage('extracting') },    7000)
+    const t3 = setTimeout(() => { currentStage = 'prediagnosing'; setUploadStage('prediagnosing') }, 15000)
+    const t4 = setTimeout(() => { currentStage = 'saving';        setUploadStage('saving') },        28000)
+
+    try {
+      const uploadBase = apiUrl ? apiUrl.replace(/\/+$/, '') : ''
+      const uploadedPlates: RayosXAttachmentItem[] = []
+      const ts = Date.now()
+      for (let idx = 0; idx < files.length; idx++) {
+        const f = files[idx]
+        const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_') || `placa_${idx + 1}`
+        const uniqueKey = `rayos-x/${testId}/${ts}-${idx}-${safeName}`
+        const singleForm = new FormData()
+        singleForm.append('file', f)
+        singleForm.append('key', uniqueKey)
+
+        const uploadResp = await fetch(`${uploadBase}/api/v1/upload-only`, {
+          method: 'POST',
+          body: singleForm,
+        })
+        if (!uploadResp.ok) {
+          throw new Error(`No se pudo subir "${f.name}" (HTTP ${uploadResp.status}).`)
+        }
+        const uploadJson = (await uploadResp.json()) as {
+          status?: string
+          file_url?: string
+          error?: string
+        }
+        if (uploadJson.status !== 'success' || !uploadJson.file_url) {
+          throw new Error(uploadJson.error || `No se pudo almacenar "${f.name}".`)
+        }
+        uploadedPlates.push({
+          url: uploadJson.file_url,
+          fileName: f.name,
+          projectionLabel: inferRayosXProjectionLabel(f.name),
+          addedAt: new Date().toISOString(),
+        })
+      }
+
+      const res = await attachAndAnalyzeRayosXPlates({
+        eventTestId: testId,
+        eventId,
+        mode,
+        newPlates: uploadedPlates,
+        triggeredByUserId: reviewerUserId,
+      })
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
+
+      if (res.success && res.fileUrl) {
+        setUploadStage('saving')
+        await new Promise<void>(r => setTimeout(r, 500))
+        updateLocalFile(testId, res.fileUrl, res.extractionSnapshotData ?? null, {
+          clinicalContext: (res.clinicalContext as StudyTest['clinicalContext']) ?? undefined,
+        })
+        setRxNeedsReanalysisByTestId(prev => ({ ...prev, [testId]: false }))
+        if (res.patientNameWarning) setPatientNameWarning(res.patientNameWarning)
+        router.refresh()
+      } else {
+        if (res.fileUrl || res.clinicalContext) {
+          updateLocalFile(
+            testId,
+            res.fileUrl ?? uploadedPlates[0].url,
+            res.extractionSnapshotData ?? null,
+            {
+              clinicalContext: (res.clinicalContext as StudyTest['clinicalContext']) ?? undefined,
+            },
+          )
+        }
+        if (res.errorCode === 'STUDY_TYPE_MISMATCH') {
+          setUploadMismatch({
+            errorCode: 'STUDY_TYPE_MISMATCH',
+            message: res.message ?? res.error ?? '',
+            selectedStudyType: res.selectedStudyType ?? null,
+            detectedStudyType: res.detectedStudyType ?? null,
+          })
+        } else {
+          setUploadError(res.error || 'Error al analizar las placas radiográficas.')
+        }
+      }
+    } catch (err) {
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
+      const isNetworkError = err instanceof TypeError &&
+        (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed'))
+      console.error('[rayos-x][upload] Fallo en upload multiprueba', {
+        eventId,
+        eventTestId: testId,
+        etapaVisible: currentStage,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      setUploadError(
+        isNetworkError
+          ? 'La carga o el procesamiento IA se interrumpieron por un cambio de red. Intenta nuevamente.'
+          : err instanceof Error
+            ? err.message
+            : 'Error al subir placas. Intenta nuevamente.',
+      )
+    } finally {
+      setUploadStage(null)
+      setIsUploading(false)
+      setUploadingTestId(null)
+    }
+  }
+
+  // IMPL-20260516-04: Avance progresivo de etapas mientras corre el pipeline IA
+  // FIX-20260516-01: try/catch/finally robusto — sin promesas sin capturar ante ERR_NETWORK_CHANGED
+  const handleFileUpload = async (
+    testId: string,
+    fileOrFiles: File | File[],
+    options?: { mode?: 'replace' | 'append' },
+  ) => {
+    const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles]
+    const file = files[0]
+    if (!file || isUploading) return
+
     const targetTestForValidation = localTests.find(t => t.id === testId)
     const studyTypeForFile =
       (targetTestForValidation
         ? getCanonicalAIStudyType(targetTestForValidation)
         : null) ?? 'Otro'
+
+    if (studyTypeForFile === 'Rayos_X') {
+      await handleRayosXPlatesUpload(testId, files, options?.mode ?? 'replace')
+      return
+    }
+
+    setUploadFeedbackTestId(testId)
+    setUploadError('')
+    setUploadMismatch(null)
     const fileValidation = await validateEventTestUploadFileAsync(file, studyTypeForFile)
     if (!fileValidation.valid) {
       setUploadError(
@@ -772,6 +950,7 @@ export default function PapeletaWorkspace({
       if (res.success) {
         setRegenStage('saving')
         await new Promise<void>(r => setTimeout(r, 700))
+        setRxNeedsReanalysisByTestId(prev => ({ ...prev, [testId]: false }))
         if (res.patientNameWarning) setPatientNameWarning(res.patientNameWarning)
         router.refresh()
       } else if (res.errorCode === 'STUDY_TYPE_MISMATCH') {
@@ -809,6 +988,66 @@ export default function PapeletaWorkspace({
     }
   }
 
+  const handleRemoveRayosXPlate = async (testId: string, fileUrl: string) => {
+    if (isUploading || isRegenerating) return
+    setUploadFeedbackTestId(testId)
+    setUploadError('')
+    const res = await removeRayosXAttachment({ eventTestId: testId, eventId, fileUrl })
+    if (!res.success) {
+      setUploadError(res.error || 'No se pudo quitar la placa.')
+      return
+    }
+    if (res.cleared) {
+      updateLocalFile(testId, null, null, { clinicalContext: null, aiSnapshot: null })
+      setRxNeedsReanalysisByTestId(prev => ({ ...prev, [testId]: false }))
+      router.refresh()
+      return
+    }
+    setLocalTests(prev =>
+      prev.map(t =>
+        t.id === testId
+          ? {
+              ...t,
+              fileUrl: res.fileUrl ?? t.fileUrl,
+              clinicalContext: (res.clinicalContext as StudyTest['clinicalContext']) ?? null,
+            }
+          : t,
+      ),
+    )
+    setRxNeedsReanalysisByTestId(prev => ({ ...prev, [testId]: true }))
+  }
+
+  const handleUpdateRayosXLabel = async (
+    testId: string,
+    fileUrl: string,
+    projectionLabel: string | null,
+  ) => {
+    if (isUploading || isRegenerating) return
+    setUploadFeedbackTestId(testId)
+    setUploadError('')
+    const res = await updateRayosXAttachmentLabel({
+      eventTestId: testId,
+      eventId,
+      fileUrl,
+      projectionLabel,
+    })
+    if (!res.success) {
+      setUploadError(res.error || 'No se pudo actualizar la proyección.')
+      return
+    }
+    setLocalTests(prev =>
+      prev.map(t =>
+        t.id === testId
+          ? {
+              ...t,
+              clinicalContext: (res.clinicalContext as StudyTest['clinicalContext']) ?? t.clinicalContext,
+            }
+          : t,
+      ),
+    )
+    setRxNeedsReanalysisByTestId(prev => ({ ...prev, [testId]: true }))
+  }
+
   // ARCH-20260518-04: Limpiar archivo activo y análisis vigentes (acción destructiva controlada)
   const handleClearStudy = async (testId: string): Promise<boolean> => {
     setIsClearingStudy(true)
@@ -824,7 +1063,11 @@ export default function PapeletaWorkspace({
           status: 'PENDING' as StudyStatus,
           extractionSnapshot: null,
           aiSnapshot: null,
+          ...(isRayosXAttachmentsContext(t.clinicalContext)
+            ? { clinicalContext: null }
+            : {}),
         } : t))
+        setRxNeedsReanalysisByTestId(prev => ({ ...prev, [testId]: false }))
         setActiveTestId(testId)
         return true
       }
@@ -1010,6 +1253,9 @@ export default function PapeletaWorkspace({
               onStatusChange={handleStatusChange}
               onFileUpload={handleFileUpload}
               onRegenerateAI={handleRegenerateAI}
+              rxNeedsReanalysis={Boolean(rxNeedsReanalysisByTestId[activeTest.id])}
+              onRemoveRayosXPlate={handleRemoveRayosXPlate}
+              onUpdateRayosXLabel={handleUpdateRayosXLabel}
               isClearingStudy={isClearingStudy}
               clearStudyError={clearStudyError}
               onClearStudy={handleClearStudy}
@@ -1459,6 +1705,9 @@ function StudyPanel({
   onStatusChange,
   onFileUpload,
   onRegenerateAI,
+  rxNeedsReanalysis = false,
+  onRemoveRayosXPlate,
+  onUpdateRayosXLabel,
   isClearingStudy,
   clearStudyError,
   onClearStudy,
@@ -1503,8 +1752,19 @@ function StudyPanel({
   /** ARCH-20260507-06: Indica si un estudio hermano del mismo grupo ya tiene muestra tomada */
   groupSampleTaken: boolean
   onStatusChange: (id: string, status: StudyStatus) => void
-  onFileUpload: (id: string, file: File) => void
+  onFileUpload: (
+    id: string,
+    file: File | File[],
+    options?: { mode?: 'replace' | 'append' },
+  ) => void
   onRegenerateAI: (id: string) => void
+  rxNeedsReanalysis?: boolean
+  onRemoveRayosXPlate?: (testId: string, fileUrl: string) => void
+  onUpdateRayosXLabel?: (
+    testId: string,
+    fileUrl: string,
+    projectionLabel: string | null,
+  ) => void
   /** ARCH-20260518-04: limpieza de archivo y análisis vigentes */
   isClearingStudy: boolean
   clearStudyError: string
@@ -1586,6 +1846,12 @@ function StudyPanel({
     })
   }
   // IMPL-20260326-18: Elegibilidad y type canónico desde helper central
+  const canonicalAIStudyType = getCanonicalAIStudyType(test)
+  const isRayosX = canonicalAIStudyType === 'Rayos_X'
+  const rayosXAttachments = isRayosX
+    ? parseRayosXAttachments(test.clinicalContext, test.fileUrl)
+    : []
+  const acceptAttribute = getAcceptAttributeForStudyType(canonicalAIStudyType ?? 'Otro')
   const aiLabel = getAIWorkflowLabel(test)
   const isAIEligible = isAIEligibleEventTest(test) && !isCampi
   // ARCH-20260507-06: sampleTracked incluye muestra tomada por grupo compartido (hermano)
@@ -2015,34 +2281,74 @@ function StudyPanel({
             {!readonly && (
               isUploading && uploadStage ? (
                 <UploadProgressPanel stage={uploadStage} />
+              ) : isRegenerating && regenStage && Boolean(test.aiSnapshot) ? (
+                <UploadProgressPanel stage={regenStage} isRegen />
               ) : (
                 <div className="border-2 border-dashed rounded-xl p-4 text-center transition-colors border-slate-200 hover:border-teal-300 hover:bg-slate-50">
                   <label className="cursor-pointer block">
                     <span className="text-2xl block mb-1">📎</span>
                     <span className="text-sm font-medium text-slate-600">
-                      {test.fileUrl ? 'Reemplazar archivo' : 'Subir resultado'}
+                      {isRayosX
+                        ? (test.fileUrl ? 'Reemplazar todas las placas' : 'Subir placa(s) radiográfica(s)')
+                        : (test.fileUrl ? 'Reemplazar archivo' : 'Subir resultado')}
                     </span>
                     <span className="block text-xs text-slate-400 mt-1">
                       {uploadLocked
                         ? 'Otro estudio de esta papeleta se está procesando.'
-                        : getUploadHintForStudyType(
-                            getCanonicalAIStudyType(test) ?? 'Otro',
-                          )}
+                        : `${getUploadHintForStudyType(
+                            canonicalAIStudyType ?? 'Otro',
+                          )}${
+                            isRayosX
+                              ? ` Puedes seleccionar varias imágenes (AP, LAT, etc., máx. ${RAYOS_X_MAX_FILES} placas).`
+                              : ''
+                          }`}
                     </span>
                     <input
                       type="file"
-                      accept={getAcceptAttributeForStudyType(
-                        getCanonicalAIStudyType(test) ?? 'Otro',
-                      )}
+                      multiple={isRayosX}
+                      accept={acceptAttribute}
                       className="hidden"
-                      disabled={isUploading || uploadLocked}
+                      disabled={isUploading || isRegenerating || uploadLocked}
                       onChange={(e) => {
-                        const file = e.target.files?.[0]
+                        const picked = Array.from(e.target.files ?? [])
                         e.target.value = ''
-                        if (file && !uploadLocked) onFileUpload(test.id, file)
+                        if (picked.length > 0 && !uploadLocked) {
+                          onFileUpload(test.id, isRayosX ? picked : picked[0], {
+                            mode: 'replace',
+                          })
+                        }
                       }}
                     />
                   </label>
+                  {isRayosX && test.fileUrl && rayosXAttachments.length < RAYOS_X_MAX_FILES && (
+                    <div className="mt-3 flex justify-center">
+                      <label
+                        className={`inline-flex items-center gap-1.5 rounded-lg border border-teal-300 bg-teal-50/70 hover:bg-teal-100 px-3 py-1.5 text-xs font-bold text-teal-800 transition-colors ${
+                          isUploading || isRegenerating || uploadLocked
+                            ? 'opacity-50 pointer-events-none'
+                            : 'cursor-pointer'
+                        }`}
+                      >
+                        <span>
+                          ＋ Agregar otra placa / proyección ({rayosXAttachments.length}/{RAYOS_X_MAX_FILES})
+                        </span>
+                        <input
+                          type="file"
+                          multiple
+                          accept={acceptAttribute}
+                          className="hidden"
+                          disabled={isUploading || isRegenerating || uploadLocked}
+                          onChange={(e) => {
+                            const picked = Array.from(e.target.files ?? [])
+                            e.target.value = ''
+                            if (picked.length > 0 && !uploadLocked) {
+                              onFileUpload(test.id, picked, { mode: 'append' })
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
                   {uploadMismatch ? (
                     // SPEC-FIX-20260824-01: rechazo estructurado del proveedor.
                     // El `message` ya viene redactado por el backend; no
@@ -2051,6 +2357,9 @@ function StudyPanel({
                   ) : null}
                   {!uploadMismatch && uploadError && (
                     <p className="text-xs text-red-500 mt-2">{uploadError}</p>
+                  )}
+                  {!regenMismatch && regenError && test.aiSnapshot && (
+                    <p className="text-xs text-red-500 mt-2">{regenError}</p>
                   )}
                   {(test.fileUrl || test.extractionSnapshot || test.aiSnapshot) && (
                     <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
@@ -2246,8 +2555,30 @@ function StudyPanel({
               <EspirometriaVitalsDisplay vitals={espirometriaDisplayVitals} variant="slate" />
             ) : null}
 
-            {/* Archivo vinculado + visor embebido */}
-            {test.fileUrl ? (
+            {/* Archivo vinculado + visor embebido (multiproyección para Rayos_X) */}
+            {isRayosX && test.fileUrl && rayosXAttachments.length > 0 ? (
+              <RayosXMultiPlateViewer
+                testId={test.id}
+                attachments={rayosXAttachments}
+                apiUrl={apiUrl}
+                acceptAttribute={acceptAttribute}
+                readonly={readonly}
+                isBusy={isUploading || isRegenerating}
+                needsReanalysis={rxNeedsReanalysis}
+                onAddPlates={(picked) => {
+                  if (!uploadLocked) {
+                    void onFileUpload(test.id, picked, { mode: 'append' })
+                  }
+                }}
+                onRemovePlate={(fileUrl) => {
+                  onRemoveRayosXPlate?.(test.id, fileUrl)
+                }}
+                onUpdateLabel={(fileUrl, projectionLabel) => {
+                  onUpdateRayosXLabel?.(test.id, fileUrl, projectionLabel)
+                }}
+                onReanalyze={() => onRegenerateAI(test.id)}
+              />
+            ) : test.fileUrl ? (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-emerald-700">Archivo vinculado</p>
                 <StudyDocumentViewer

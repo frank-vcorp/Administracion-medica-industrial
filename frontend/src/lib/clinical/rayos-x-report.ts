@@ -4,6 +4,7 @@
 
 export type RayosXExtracted = {
   hallazgos: string[]
+  proyecciones_evaluadas?: string[] | null
   localizacion: string | null
   radiologista: string | null
   fecha_estudio: string | null
@@ -72,8 +73,16 @@ export function parseRayosXFromExtraction(extractionStructuredData: unknown): Ra
     hallazgos.push(...splitRunOnHallazgos(rawHallazgos))
   }
 
+  const rawProyecciones = data.proyecciones_evaluadas
+  const proyecciones = Array.isArray(rawProyecciones)
+    ? rawProyecciones
+        .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+        .map((p) => p.trim())
+    : []
+
   const parsed: RayosXExtracted = {
     hallazgos,
+    proyecciones_evaluadas: proyecciones.length > 0 ? proyecciones : null,
     localizacion: asString(data.localizacion),
     radiologista: asString(data.radiologista),
     fecha_estudio: asString(data.fecha_estudio),
@@ -82,6 +91,7 @@ export function parseRayosXFromExtraction(extractionStructuredData: unknown): Ra
 
   const hasAny =
     parsed.hallazgos.length > 0 ||
+    (parsed.proyecciones_evaluadas?.length ?? 0) > 0 ||
     parsed.localizacion != null ||
     parsed.radiologista != null ||
     parsed.fecha_estudio != null ||
@@ -90,20 +100,66 @@ export function parseRayosXFromExtraction(extractionStructuredData: unknown): Ra
   return hasAny ? parsed : null
 }
 
+function normalizeUpperAscii(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase()
+}
+
+function isProjectionMentionedInTitle(titleUpper: string, projToken: string): boolean {
+  const tokenUpper = normalizeUpperAscii(projToken)
+  if (!tokenUpper) return true
+  const synonyms =
+    tokenUpper === 'LAT' || tokenUpper === 'LATERAL'
+      ? ['LAT', 'LATERAL']
+      : tokenUpper === 'OBL' || tokenUpper === 'OBLICUA' || tokenUpper === 'OBLICUO'
+        ? ['OBL', 'OBLICUA', 'OBLICUO']
+        : [tokenUpper]
+  return synonyms.some((syn) => {
+    const escaped = syn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`\\b${escaped}\\b`).test(titleUpper)
+  })
+}
+
 /** Resuelve el rótulo de «TIPO DE RADIOGRAFÍA» en mayúsculas. */
 export function resolveRayosXStudyTypeLabel(
   studyName?: string | null,
   extracted?: RayosXExtracted | null,
+  projectionsSummary?: string | null,
 ): string {
   const cleanName = asString(studyName)
-  if (cleanName) {
-    return cleanName.replace(/\s+/g, ' ').toUpperCase()
-  }
   const cleanLoc = asString(extracted?.localizacion)
-  if (cleanLoc) {
-    return cleanLoc.replace(/\s+/g, ' ').toUpperCase()
-  }
-  return 'ESTUDIO RADIOGRÁFICO'
+  const base = cleanName
+    ? cleanName.replace(/\s+/g, ' ').toUpperCase()
+    : cleanLoc
+      ? cleanLoc.replace(/\s+/g, ' ').toUpperCase()
+      : 'ESTUDIO RADIOGRÁFICO'
+
+  const effectiveProjections =
+    asString(projectionsSummary) ??
+    (extracted?.proyecciones_evaluadas?.length
+      ? extracted.proyecciones_evaluadas.join(', ')
+      : null)
+
+  if (!effectiveProjections) return base
+
+  const projTokens = effectiveProjections
+    .split(/\s*,\s*/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (projTokens.length === 0) return base
+
+  const baseNorm = normalizeUpperAscii(base)
+  const allAlreadyPresent = projTokens.every((p) =>
+    isProjectionMentionedInTitle(baseNorm, p),
+  )
+  if (allAlreadyPresent) return base
+
+  const suffix = projTokens.map((p) => p.toUpperCase()).join(', ')
+  return `${base} (${suffix})`
 }
 
 /** Genera los párrafos narrativos del cuerpo del informe radiológico. */

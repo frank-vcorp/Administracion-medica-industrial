@@ -30,6 +30,13 @@ import {
   resolveAiCalibrationForUpload,
 } from '@/lib/clinical/default-ai-calibration'
 import { getCanonicalAIStudyType, normalizeStudyTypeForBackend } from '@/lib/study-ai'
+import {
+  buildRayosXAttachmentsContext,
+  inferRayosXProjectionLabel,
+  isSafeUploadedFileUrl,
+  RAYOS_X_MAX_FILES,
+  type RayosXAttachmentItem,
+} from '@/lib/clinical/rayos-x-attachments'
 import { evaluatePatientNameForEvent } from '@/lib/clinical/patient-name-match'
 import type { PatientNameWarning } from '@/lib/clinical/patient-name-match'
 import prisma from '@/lib/prisma'
@@ -112,6 +119,10 @@ export interface StudyAIAnalysisResult {
   detectedStudyType?: string | null
   /** Aviso no bloqueante: nombre en documento vs expediente. */
   patientNameWarning?: PatientNameWarning | null
+  /** Placas vinculadas de Rayos X (retrocompat + multiproyección). */
+  attachments?: RayosXAttachmentItem[]
+  /** ClinicalContext actualizado (ej. rayos-x-attachments-v1). */
+  clinicalContext?: unknown
 }
 
 export interface DoctorStudyReviewInput {
@@ -225,6 +236,16 @@ export async function triggerStudyAIAnalysis(
   const eventId = formData.get('eventId') as string
   const triggeredByUserId = (formData.get('triggeredByUserId') as string) || 'system'
   const file = formData.get('file') as File | null
+  const extraFiles = formData
+    .getAll('extra_files')
+    .filter((item): item is File => item instanceof File && item.size > 0)
+    .slice(0, RAYOS_X_MAX_FILES - 1)
+  const projectionLabelsJson =
+    (formData.get('projection_labels_json') as string | null) ?? null
+  const originalNamesJson =
+    (formData.get('rayos_x_original_names_json') as string | null) ?? null
+  const preserveAttachmentsJson =
+    (formData.get('preserve_rayos_x_attachments_json') as string | null) ?? null
 
   if (!eventTestId || !eventId) {
     return { success: false, error: 'eventTestId y eventId son obligatorios' }
@@ -282,6 +303,12 @@ export async function triggerStudyAIAnalysis(
 
     const uploadForm = new FormData()
     uploadForm.append('file', file)
+    for (const extraFile of extraFiles) {
+      uploadForm.append('extra_files', extraFile)
+    }
+    if (projectionLabelsJson) {
+      uploadForm.append('projection_labels_json', projectionLabelsJson)
+    }
     uploadForm.append('triggered_by_user_id', triggeredByUserId)
     if (eventTest?.test?.id) {
       uploadForm.append('medical_test_id', eventTest.test.id)
@@ -472,6 +499,127 @@ export async function triggerStudyAIAnalysis(
     const nameEvaluation = await evaluatePatientNameForEvent(eventId, extractedForName)
     const patientNameWarning = nameEvaluation.warning
 
+    const parseStringArrayJson = (raw: string | null): Array<string | null> => {
+      if (!raw) return []
+      try {
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed)
+          ? parsed.map((v) => (typeof v === 'string' && v.trim() ? v.trim() : null))
+          : []
+      } catch {
+        return []
+      }
+    }
+    const parsePreserveAttachments = (raw: string | null): RayosXAttachmentItem[] => {
+      if (!raw) return []
+      try {
+        const parsed = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return []
+        const out: RayosXAttachmentItem[] = []
+        for (const item of parsed) {
+          if (
+            item &&
+            typeof item === 'object' &&
+            typeof item.url === 'string' &&
+            isSafeUploadedFileUrl(item.url)
+          ) {
+            const url = item.url.trim()
+            const fileName =
+              typeof item.fileName === 'string' && item.fileName.trim()
+                ? item.fileName.trim()
+                : url.split('/').pop() || 'radiografia'
+            const proj =
+              typeof item.projectionLabel === 'string' && item.projectionLabel.trim()
+                ? item.projectionLabel.trim()
+                : null
+            out.push({
+              url,
+              fileName,
+              projectionLabel: proj,
+              ...(typeof item.addedAt === 'string' ? { addedAt: item.addedAt } : {}),
+            })
+          }
+        }
+        return out.slice(0, RAYOS_X_MAX_FILES)
+      } catch {
+        return []
+      }
+    }
+
+    const effectiveStudyType =
+      result.extraction_snapshot?.study_type ??
+      studyType ??
+      result.classification?.detected_type ??
+      'Otro'
+
+    const preservedAttachments = parsePreserveAttachments(preserveAttachmentsJson)
+    const labelsFromForm = parseStringArrayJson(projectionLabelsJson)
+    const originalNamesFromForm = parseStringArrayJson(originalNamesJson)
+
+    let persistedRayosXAttachments: RayosXAttachmentItem[] = []
+    if (effectiveStudyType === 'Rayos_X') {
+      if (preservedAttachments.length > 0) {
+        persistedRayosXAttachments = preservedAttachments
+      } else {
+        const backendFiles = Array.isArray(result.files)
+          ? (result.files as Array<{
+              file?: string
+              file_url?: string
+              original_name?: string
+              projection_label?: string | null
+            }>)
+          : []
+        if (backendFiles.length > 0) {
+          persistedRayosXAttachments = backendFiles
+            .map((item, idx): RayosXAttachmentItem | null => {
+              const url =
+                item.file_url || (item.file ? `/uploads/${item.file}` : null)
+              if (!url || !isSafeUploadedFileUrl(url)) return null
+              const fName =
+                originalNamesFromForm[idx] ||
+                item.original_name ||
+                item.file ||
+                url.split('/').pop() ||
+                'radiografia'
+              const label =
+                labelsFromForm[idx] ??
+                item.projection_label ??
+                inferRayosXProjectionLabel(fName)
+              return {
+                url,
+                fileName: fName,
+                projectionLabel: label || null,
+                addedAt: new Date().toISOString(),
+              }
+            })
+            .filter((x): x is RayosXAttachmentItem => x !== null)
+            .slice(0, RAYOS_X_MAX_FILES)
+        } else {
+          const fallbackUrl = result.file_url ?? `/uploads/${result.file}`
+          if (isSafeUploadedFileUrl(fallbackUrl)) {
+            const fName = originalNamesFromForm[0] || file.name || 'radiografia'
+            persistedRayosXAttachments = [
+              {
+                url: fallbackUrl,
+                fileName: fName,
+                projectionLabel: labelsFromForm[0] ?? inferRayosXProjectionLabel(fName),
+                addedAt: new Date().toISOString(),
+              },
+            ]
+          }
+        }
+      }
+    }
+
+    const rayosXClinicalContext =
+      effectiveStudyType === 'Rayos_X' && persistedRayosXAttachments.length > 0
+        ? buildRayosXAttachmentsContext(persistedRayosXAttachments)
+        : null
+    const primaryPersistedFileUrl =
+      persistedRayosXAttachments[0]?.url ??
+      result.file_url ??
+      `/uploads/${result.file}`
+
     // 3-6. Mantener histórico y desplazar la vigencia a la nueva corrida.
     const { extractionSnapshot, prediagnosisSnapshot } = await prisma.$transaction(async (tx) => {
       if (activeExtractionIds.length > 0) {
@@ -495,7 +643,7 @@ export async function triggerStudyAIAnalysis(
           version: extractionVersion,
           studyType: result.extraction_snapshot?.study_type ?? result.classification?.detected_type ?? 'Otro',
           sourceFileName: result.file,
-          sourceFileUrl: result.file_url ?? `/uploads/${result.file}`,
+          sourceFileUrl: primaryPersistedFileUrl,
           sourceFileHash: result.extraction_snapshot?.audit?.source_file_hash ?? null,
           structuredData: mergedExtractionSnapshot,
           clinicalState: 'DRAFT_EXTRACTED',
@@ -536,8 +684,14 @@ export async function triggerStudyAIAnalysis(
       await tx.eventTest.update({
         where: { id: eventTestId },
         data: {
-          fileUrl: result.file_url ?? `/uploads/${result.file}`,
+          fileUrl: primaryPersistedFileUrl,
           status: 'RESULT_REGISTERED',
+          ...(rayosXClinicalContext
+            ? {
+                clinicalContext:
+                  rayosXClinicalContext as unknown as Prisma.InputJsonValue,
+              }
+            : {}),
         },
       })
 
@@ -557,13 +711,19 @@ export async function triggerStudyAIAnalysis(
       summary: predxData.summary ?? null,
       confidence: predxData.confidence ?? null,
       // IMPL-20260513-S3: propagar ruta estable para que uploadEventTestFile actualice estado local
-      fileUrl: result.file_url ?? `/uploads/${result.file}`,
+      fileUrl: primaryPersistedFileUrl,
       // ARCH-20260518-04: datos extractivos para actualización optimista del cliente
       extractionSnapshotVersion: extractionVersion,
       extractedData: (result.extraction_snapshot?.extracted_data ?? null) as unknown,
       missingFields: (result.extraction_snapshot?.missing_fields ?? null) as unknown,
       rawPayload: (result.extraction_snapshot ?? null) as unknown,
       patientNameWarning: patientNameWarning ?? null,
+      ...(persistedRayosXAttachments.length > 0
+        ? {
+            attachments: persistedRayosXAttachments,
+            clinicalContext: rayosXClinicalContext ?? undefined,
+          }
+        : {}),
     }
   } catch (error) {
     console.error('[IMPL-20260326-16] Error en triggerStudyAIAnalysis:', error)
@@ -1077,6 +1237,7 @@ export async function submitDoctorStudyReview(
             prediagnosisData: baseInput.prediagnosisData,
             extractionStructuredData: baseInput.extractionStructuredData,
             studyName: baseInput.studyName,
+            clinicalContext: eventTestData?.clinicalContext ?? null,
             eventId: eventTestData?.eventId ?? eventId,
             patient: baseInput.patient,
             medico: baseInput.medico,

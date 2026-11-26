@@ -1060,6 +1060,8 @@ class V2AnalyzeStudyRequest(BaseModel):
 @app.post("/api/v2/studies/upload-and-analyze")
 async def v2_upload_and_analyze(
     file: UploadFile = File(...),
+    extra_files: Optional[List[UploadFile]] = File(default=None),
+    projection_labels_json: Optional[str] = Form(default=None),
     study_type: Optional[str] = Form(default=None),
     triggered_by_user_id: Optional[str] = Form(default=None),
     medical_test_id: Optional[str] = Form(default=None),
@@ -1264,22 +1266,82 @@ async def v2_upload_and_analyze(
             "(AI_KEYS_FROM_DB_ENABLED no visible para este proceso)"
         )
 
-    filename = f"{int(time.time())}-{file.filename.replace(' ', '_')}"
+    parsed_projection_labels: List[Optional[str]] = []
+    if projection_labels_json:
+        try:
+            _raw_labels = json.loads(projection_labels_json)
+            if isinstance(_raw_labels, list):
+                parsed_projection_labels = [
+                    str(item).strip() if isinstance(item, str) and item.strip() else None
+                    for item in _raw_labels
+                ]
+        except (json.JSONDecodeError, ValueError):
+            parsed_projection_labels = []
+
+    base_ts = int(time.time())
+    safe_primary_name = (file.filename or "study-file").replace(" ", "_")
+    filename = f"{base_ts}-{safe_primary_name}"
     local_path = os.path.join(UPLOAD_DIR, filename)
+    extra_local_paths: List[str] = []
+    uploaded_files_meta: List[Dict[str, Any]] = []
 
     try:
         contents = await file.read()
         with open(local_path, "wb") as f:
             f.write(contents)
 
-        file_hash = f"sha256:{hashlib.sha256(contents).hexdigest()}"
+        file_hashes = [hashlib.sha256(contents).hexdigest()]
         # IMPL-20260513-S3: subir al bucket para persistencia durable (pipeline lee desde local_path)
         _v2_file_url = (
             f"/api/files/{filename}"
             if (_s3_enabled and _upload_file_to_s3(contents, filename))
             else f"/uploads/{filename}"
         )
-        print(f"\n🚀 V2 Upload+Analyze: {filename} ({len(contents)} bytes) → {_v2_file_url}")
+        primary_proj_label = parsed_projection_labels[0] if len(parsed_projection_labels) > 0 else None
+        uploaded_files_meta.append({
+            "file": filename,
+            "file_url": _v2_file_url,
+            "original_name": file.filename or safe_primary_name,
+            "projection_label": primary_proj_label,
+        })
+
+        for idx, extra_upload in enumerate((extra_files or [])[:5], start=1):
+            extra_contents = await extra_upload.read()
+            if not extra_contents:
+                continue
+            safe_extra_name = (extra_upload.filename or f"plate-{idx}").replace(" ", "_")
+            extra_filename = f"{base_ts}-{idx}-{safe_extra_name}"
+            extra_local = os.path.join(UPLOAD_DIR, extra_filename)
+            with open(extra_local, "wb") as ef:
+                ef.write(extra_contents)
+            extra_local_paths.append(extra_local)
+            file_hashes.append(hashlib.sha256(extra_contents).hexdigest())
+            extra_url = (
+                f"/api/files/{extra_filename}"
+                if (_s3_enabled and _upload_file_to_s3(extra_contents, extra_filename))
+                else f"/uploads/{extra_filename}"
+            )
+            extra_label = (
+                parsed_projection_labels[idx]
+                if idx < len(parsed_projection_labels)
+                else None
+            )
+            uploaded_files_meta.append({
+                "file": extra_filename,
+                "file_url": extra_url,
+                "original_name": extra_upload.filename or safe_extra_name,
+                "projection_label": extra_label,
+            })
+
+        if len(file_hashes) == 1:
+            file_hash = f"sha256:{file_hashes[0]}"
+        else:
+            combined_hashes = "|".join(file_hashes)
+            file_hash = f"sha256:{hashlib.sha256(combined_hashes.encode('utf-8')).hexdigest()}"
+        print(
+            f"\n🚀 V2 Upload+Analyze: {filename} ({len(contents)} bytes, "
+            f"total_files={len(uploaded_files_meta)}) → {_v2_file_url}"
+        )
         pipeline_start = time.time()
 
         # PASO 1: CLASIFICACIÓN (si no se provee study_type)
@@ -1424,13 +1486,25 @@ async def v2_upload_and_analyze(
 
         extraction_start = time.time()
         try:
+            extract_kwargs: Dict[str, Any] = {
+                "ai_calibration": effective_ai_calibration,
+                "extraction_provider_override": extraction_provider_override,
+                "extraction_model_override": extraction_model_override,
+                "test_name": resolved_test_name or detected_type,
+            }
+            active_image_labels = [
+                str(item.get("projection_label") or "")
+                for item in uploaded_files_meta
+            ]
+            if extra_local_paths or any(active_image_labels):
+                extract_kwargs["extra_file_paths"] = extra_local_paths or None
+                extract_kwargs["image_labels"] = (
+                    active_image_labels if any(active_image_labels) else None
+                )
             extracted_raw = extractor.extract_by_type(
                 local_path,
                 detected_type,
-                ai_calibration=effective_ai_calibration,
-                extraction_provider_override=extraction_provider_override,
-                extraction_model_override=extraction_model_override,
-                test_name=resolved_test_name or detected_type,
+                **extract_kwargs,
             )
         except ExtractionProviderUnknownError as prov_err:
             print(f"❌ [ARCH-20260809-02] {prov_err}")
@@ -1583,6 +1657,8 @@ async def v2_upload_and_analyze(
             "pipeline_version": PIPELINE_VERSION,
             "file": filename,
             "file_url": _v2_file_url,
+            "files": uploaded_files_meta,
+            "extra_file_urls": [item["file_url"] for item in uploaded_files_meta[1:]],
             "classification": classification_dict,
             "extraction_snapshot": {
                 "study_type": detected_type,

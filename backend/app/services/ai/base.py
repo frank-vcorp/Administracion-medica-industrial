@@ -11,7 +11,7 @@ import mimetypes
 import json
 import re
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pdf2image import convert_from_path
 
 from .keys import key_resolver, KeyResolution, CANONICAL_PROVIDERS
@@ -32,6 +32,7 @@ def _read_env_var(key: str) -> str | None:
 
 # M3-only extracción: reintentos ante salida no-JSON (p. ej. bloques ).
 M3_JSON_MAX_ATTEMPTS = 3
+M3_MAX_VISION_IMAGES = 6
 M3_JSON_RETRY_SUFFIX = (
     "\n\nREGLA FINAL OBLIGATORIA: Devuelve ÚNICAMENTE un objeto JSON válido. "
     "Sin markdown, sin comentarios, sin bloques de razonamiento del modelo, "
@@ -767,31 +768,56 @@ class M3VisionBase:
             f"model mantenido='{self.model}'"
         )
 
-    def get_b64_jpeg(self, file_path: str) -> str:
+    def get_b64_jpegs(
+        self,
+        file_path: str,
+        *,
+        all_pdf_pages: bool = False,
+        max_pages: int = M3_MAX_VISION_IMAGES,
+    ) -> List[str]:
         """
-        Convierte un archivo (imagen o PDF) a base64 JPEG.
-        Los PDFs se convierten a JPEG de primera página antes de codificar.
-        Reutiliza exactamente la misma estrategia que FeatherlessVisionBase.
+        Convierte un archivo (imagen o PDF) a una lista de strings base64 JPEG.
+        Si `all_pdf_pages=True`, convierte hasta `max_pages` páginas del PDF;
+        en caso contrario solo la primera página (retrocompatible).
         """
         mime_type, _ = mimetypes.guess_type(file_path)
 
         if mime_type == "application/pdf" or file_path.lower().endswith(".pdf"):
             try:
-                print(f"📄 Convirtiendo PDF a imagen: {file_path}")
-                pages = convert_from_path(file_path, first_page=1, last_page=1)
-                if pages:
+                cap = max(1, min(int(max_pages), M3_MAX_VISION_IMAGES)) if all_pdf_pages else 1
+                print(f"📄 Convirtiendo PDF a imagen (max_pages={cap}): {file_path}")
+                pages = convert_from_path(file_path, first_page=1, last_page=cap)
+                out: List[str] = []
+                for page in (pages or [])[:cap]:
                     img_byte_arr = io.BytesIO()
-                    pages[0].save(img_byte_arr, format="JPEG", quality=92, subsampling=0)
-                    return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+                    page.save(img_byte_arr, format="JPEG", quality=92, subsampling=0)
+                    out.append(base64.b64encode(img_byte_arr.getvalue()).decode("utf-8"))
+                return out
             except Exception as e:
                 print(f"⚠️ PDF conversion error: {e}")
                 raise
 
         with open(file_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode("utf-8")
+            return [base64.b64encode(image_file.read()).decode("utf-8")]
 
-    def _call_m3_completion(self, file_path: str, prompt: str) -> str:
-        """Una llamada HTTP a M3; retorna texto crudo del modelo."""
+    def get_b64_jpeg(self, file_path: str) -> str:
+        """
+        Convierte un archivo (imagen o PDF de 1ª página) a base64 JPEG.
+        Reutiliza exactamente la misma estrategia que FeatherlessVisionBase.
+        """
+        jpegs = self.get_b64_jpegs(file_path, all_pdf_pages=False, max_pages=1)
+        return jpegs[0] if jpegs else ""
+
+    def _call_m3_completion(
+        self,
+        file_path: str,
+        prompt: str,
+        *,
+        extra_file_paths: Optional[List[str]] = None,
+        image_labels: Optional[List[str]] = None,
+        all_pdf_pages: bool = False,
+    ) -> str:
+        """Una llamada HTTP a M3 (soporta 1 o múltiples placas/páginas); retorna texto crudo del modelo."""
         self._refresh_keys()
         # FIX-20260812-14: si tras `_refresh_keys()` la key sigue vacía, NO
         # instanciar el cliente OpenAI. Antes, `OpenAI(api_key="", base_url=...)`
@@ -821,7 +847,64 @@ class M3VisionBase:
         from app.services.ai.m3_model import m3_performance_body
 
         client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=90)
-        b64_data = self.get_b64_jpeg(file_path)
+        extra_paths = [p for p in (extra_file_paths or []) if isinstance(p, str) and p.strip()]
+        if not extra_paths and not all_pdf_pages:
+            b64_data = self.get_b64_jpeg(file_path)
+            content: List[Dict[str, Any]] = [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{b64_data}",
+                    },
+                },
+            ]
+        else:
+            all_paths = [file_path, *extra_paths]
+            labels_list = list(image_labels or [])
+            encoded_items: List[tuple[Optional[str], str]] = []
+            for idx, path_item in enumerate(all_paths):
+                remaining = M3_MAX_VISION_IMAGES - len(encoded_items)
+                if remaining <= 0:
+                    break
+                raw_label = labels_list[idx] if idx < len(labels_list) else None
+                base_label = raw_label.strip() if isinstance(raw_label, str) and raw_label.strip() else None
+                jpegs = self.get_b64_jpegs(path_item, all_pdf_pages=all_pdf_pages, max_pages=remaining)
+                for page_idx, b64 in enumerate(jpegs):
+                    if len(encoded_items) >= M3_MAX_VISION_IMAGES:
+                        break
+                    page_label = (
+                        f"{base_label} - pág. {page_idx + 1}"
+                        if base_label and len(jpegs) > 1
+                        else base_label
+                    )
+                    encoded_items.append((page_label, b64))
+
+            if len(encoded_items) == 1 and not extra_paths and not encoded_items[0][0]:
+                content = [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{encoded_items[0][1]}",
+                        },
+                    },
+                ]
+            else:
+                total_imgs = len(encoded_items)
+                content = [{"type": "text", "text": prompt}]
+                for img_idx, (lbl, b64) in enumerate(encoded_items, start=1):
+                    label_suffix = f" ({lbl})" if lbl else ""
+                    content.append({
+                        "type": "text",
+                        "text": f"--- Placa / Imagen {img_idx} de {total_imgs}{label_suffix} ---",
+                    })
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{b64}",
+                        },
+                    })
 
         try:
             response = client.chat.completions.create(
@@ -829,15 +912,7 @@ class M3VisionBase:
                 messages=[
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{b64_data}",
-                                },
-                            },
-                        ],
+                        "content": content,
                     }
                 ],
                 temperature=0.1,
@@ -892,18 +967,36 @@ class M3VisionBase:
             print(f"❌ Error parseando JSON de M3: {sanitized[:300]!r}")
             raise ValueError(f"Respuesta de M3 no es JSON válido: {e}") from e
 
-    def call_m3(self, file_path: str, prompt: str) -> Dict[str, Any]:
+    def call_m3(
+        self,
+        file_path: str,
+        prompt: str,
+        *,
+        extra_file_paths: Optional[List[str]] = None,
+        image_labels: Optional[List[str]] = None,
+        all_pdf_pages: bool = False,
+    ) -> Dict[str, Any]:
         """
-        Llama a MiniMax M3 con imagen + prompt y retorna JSON parseado.
+        Llama a MiniMax M3 con imagen(es) + prompt y retorna JSON parseado.
         Reintenta hasta M3_JSON_MAX_ATTEMPTS si la salida no es JSON parseable.
         """
         last_json_err: Optional[ValueError] = None
+        has_extra = bool([p for p in (extra_file_paths or []) if isinstance(p, str) and p.strip()])
         for attempt in range(1, M3_JSON_MAX_ATTEMPTS + 1):
             effective_prompt = prompt
             if attempt > 1:
                 effective_prompt = f"{prompt}{M3_JSON_RETRY_SUFFIX}"
             try:
-                raw = self._call_m3_completion(file_path, effective_prompt)
+                if has_extra or all_pdf_pages:
+                    raw = self._call_m3_completion(
+                        file_path,
+                        effective_prompt,
+                        extra_file_paths=extra_file_paths,
+                        image_labels=image_labels,
+                        all_pdf_pages=all_pdf_pages,
+                    )
+                else:
+                    raw = self._call_m3_completion(file_path, effective_prompt)
                 return self._parse_m3_json_response(raw)
             except ValueError as e:
                 if "no es JSON" not in str(e) and "Respuesta M3 vacía" not in str(e):

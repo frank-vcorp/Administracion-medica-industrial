@@ -17,7 +17,7 @@ ARCH-20260519-15: ROLLBACK — Featherless/Qwen-VL desactivado del runtime extra
 import time
 import os
 import unicodedata
-from typing import Dict, Any, Union, Optional, Tuple
+from typing import Dict, Any, Union, Optional, Tuple, List
 from .base import GeminiBase, M3VisionBase, M3CredentialsUnavailableError
 from .study_type_mismatch import (
     StudyTypeMismatchError,
@@ -863,6 +863,9 @@ class ExtractorService(GeminiBase):
         # necesita un "expected type" para discriminar una mention de tipo en
         # el rechazo).
         selected_study_type: Optional[str] = None,
+        extra_file_paths: Optional[List[str]] = None,
+        image_labels: Optional[List[str]] = None,
+        all_pdf_pages: bool = False,
     ) -> Tuple[Dict[str, Any], str, Optional[str]]:
         """
         ARCH-20260809-02 / M3-ONLY: Ejecuta la extracción únicamente vía MiniMax M3
@@ -897,7 +900,16 @@ class ExtractorService(GeminiBase):
         if provider == "m3":
             try:
                 m3_client = M3VisionBase(model=model)
-                result = m3_client.call_m3(file_path, prompt)
+                if extra_file_paths or all_pdf_pages:
+                    result = m3_client.call_m3(
+                        file_path,
+                        prompt,
+                        extra_file_paths=extra_file_paths,
+                        image_labels=image_labels,
+                        all_pdf_pages=all_pdf_pages,
+                    )
+                else:
+                    result = m3_client.call_m3(file_path, prompt)
                 # Tras call_m3, m3_client tiene key_source actualizado.
                 self._last_call_key_source["m3"] = (
                     getattr(m3_client, "key_source", None),
@@ -966,6 +978,8 @@ class ExtractorService(GeminiBase):
         extraction_provider_override: Optional[str] = None,
         extraction_model_override: Optional[str] = None,
         test_name: Optional[str] = None,
+        extra_file_paths: Optional[List[str]] = None,
+        image_labels: Optional[List[str]] = None,
     ) -> Union[AudiometriaData, LaboratorioData, EspirometriaData, RayosXData, Dict]:
         """
         Extrae datos estructurados según el tipo de documento.
@@ -1059,17 +1073,43 @@ class ExtractorService(GeminiBase):
             f"model='{model}' para tipo: {doc_type}"
         )
 
+        clean_extra_paths = [
+            p for p in (extra_file_paths or []) if isinstance(p, str) and p.strip()
+        ]
+        clean_labels = [
+            lbl.strip() if isinstance(lbl, str) and lbl.strip() else ""
+            for lbl in (image_labels or [])
+        ]
+        all_pdf_pages = doc_type == "Rayos_X"
+        effective_prompt = prompt
+        if doc_type == "Rayos_X" and (clean_extra_paths or any(clean_labels)):
+            total_plates = 1 + len(clean_extra_paths)
+            plate_desc = ", ".join(
+                f"Placa {i + 1}" + (f" ({clean_labels[i]})" if i < len(clean_labels) and clean_labels[i] else "")
+                for i in range(total_plates)
+            )
+            effective_prompt = (
+                f"{prompt}\n\n"
+                f"=== ESTUDIO MULTIPROYECCIÓN ({total_plates} placas: {plate_desc}) ===\n"
+                "Analiza TODAS las placas / proyecciones en conjunto en una sola síntesis radiológica: "
+                "integra en `hallazgos`, `localizacion` y `notas_calidad` lo observado en cada proyección "
+                "(por ejemplo AP, Lateral, Oblicua), sin omitir ninguna placa."
+            )
+
         start_time = time.time()
         try:
-            result, provider_used, fallback_reason = self._call_with_dispatch(
-                file_path=file_path,
-                prompt=prompt,
-                provider=provider,
-                model=model,
-                # SPEC-FIX-20260824-01: pasar `doc_type` como
-                # `selected_study_type` para clasificar rechazos de modalidad.
-                selected_study_type=doc_type,
-            )
+            dispatch_kwargs: Dict[str, Any] = {
+                "file_path": file_path,
+                "prompt": effective_prompt,
+                "provider": provider,
+                "model": model,
+                "selected_study_type": doc_type,
+            }
+            if clean_extra_paths or all_pdf_pages:
+                dispatch_kwargs["extra_file_paths"] = clean_extra_paths or None
+                dispatch_kwargs["image_labels"] = clean_labels if any(clean_labels) else None
+                dispatch_kwargs["all_pdf_pages"] = all_pdf_pages
+            result, provider_used, fallback_reason = self._call_with_dispatch(**dispatch_kwargs)
         except StudyTypeMismatchError as mismatch_err:
             # SPEC-FIX-20260824-01: el dispatcher clasificó el rechazo como
             # mismatch de modalidad. NO es transient (FIX-20260812-12) → NO
@@ -1171,6 +1211,12 @@ class ExtractorService(GeminiBase):
             elif doc_type == "Rayos_X":
                 for legacy_field in ("interpretacion",):
                     result.pop(legacy_field, None)
+                unique_labels: List[str] = []
+                for lbl in clean_labels:
+                    if lbl and lbl not in unique_labels:
+                        unique_labels.append(lbl)
+                if unique_labels and not result.get("proyecciones_evaluadas"):
+                    result["proyecciones_evaluadas"] = unique_labels
                 return RayosXData(**result)
 
             # IMPL-20260326-17: Parseo para estudios GEN-O1WV7, GEN-C85PD, GEN-U5BQX
